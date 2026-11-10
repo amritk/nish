@@ -145,12 +145,90 @@ function may not read `Arena.mark` or `Arena.used`. An arrow the function
 hands to a helper runs inside the region too, so its body is checked the same
 way. The reference lists each refusal with its code.
 
+## A region inside a region
+
+Inside the `f` an `enter` runs, `child(f)` and `childWith(arg, f)` make a
+*child* region of the one entered. A child may point into its parent's memory
+that was there before this `enter`, so it can use the parent's strings and
+objects without copying them, and `free` of the parent frees every child too:
+
+```ts nish:ok
+import { Region, childWith, enter, free, region } from "nish:region";
+
+class Name {
+  text: string;
+  constructor(text: string) {
+    this.text = text;
+  }
+}
+
+class Use {
+  name: Name;
+  constructor(name: Name) {
+    this.name = name;
+  }
+}
+
+const open = (): Name => new Name("total");
+const hold = (name: Name): Use => new Use(name);
+const keep = (name: Name): Region<Use> => childWith(name, hold);
+const length = (u: Use): i32 => u.name.text.length;
+
+export const main = (): i32 => {
+  const parent = region(open);
+  const kid = enter(parent, keep);
+  console.log(enter(kid, length));
+  free(parent);
+  return 0;
+};
+```
+
+That prints `5`, and after `free(parent)` the handle `kid` is dead as well.
+What the parent's `f` made during this `enter` may not go into the child: a
+scope inside the `enter` could give it back while the child still lives.
+
+```ts nish:err NL2610
+import { Region, childWith, enter, free, region } from "nish:region";
+
+class Name {
+  text: string;
+  constructor(text: string) {
+    this.text = text;
+  }
+}
+
+class Use {
+  name: Name;
+  constructor(name: Name) {
+    this.name = name;
+  }
+}
+
+const open = (): Name => new Name("total");
+const hold = (name: Name): Use => new Use(name);
+const keep = (root: Name): Region<Use> => childWith(new Name(root.text), hold);
+
+export const main = (): i32 => {
+  const parent = region(open);
+  enter(parent, keep);
+  free(parent);
+  return 0;
+};
+```
+
+The child's memory may not be stored into the parent's, the child's `f` may
+not grow the parent's arrays, `Map`s or `Set`s, and `child` may be called only
+in the `f` an `enter` runs, never in a function something else also calls
+(NL2697). A plain `region()` made inside `enter` has no parent and keeps the
+rules above.
+
 ## Mistakes stop the program
 
 `enter`, `enterWith` and `free` check the handle each time. A handle that was
 never made, that is freed already or that belongs to another thread stops the
 program with a message, and so does entering a region that is already entered
-or freeing one that is. Freeing twice is a stop, never a corruption. Under
+or freeing one that is (or a parent whose child is entered). Freeing twice
+is a stop, never a corruption. Under
 [`--deny-panics`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites) each of these calls is
 reported.
 

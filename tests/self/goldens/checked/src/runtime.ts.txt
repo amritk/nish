@@ -143,7 +143,7 @@ function RuntimeTable.build(this: RuntimeTable): void -> @RuntimeTable.build [ex
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RuntimeTable.addWrites
   calls: RuntimeFunction.constructor RuntimeTable.add RuntimeTable.addWrites RuntimeTable.buildIntrinsics attrs1 attrs2 attrs3 mayNotReturn nish_alloc_struct nish_str_concat plain
-  pointer this: size=16 writesThrough=false captured=false passedTo=RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.buildIntrinsics#0
+  pointer this: size=16 writesThrough=false captured=false passedTo=RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.buildIntrinsics#0
   stackSites=2 stackLocals=0
   local +0:11 grow: RuntimeFunction (const)
   callee +0:18 new RuntimeFunction -> @RuntimeFunction.constructor
@@ -170,381 +170,383 @@ function RuntimeTable.build(this: RuntimeTable): void -> @RuntimeTable.build [ex
   callee +29:14 plain -> @plain
   callee +30:5 RuntimeTable.add -> @RuntimeTable.add
   callee +30:14 plain -> @plain
-  callee +35:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +36:7 mayNotReturn -> @mayNotReturn
-  callee +42:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +42:14 mayNotReturn -> @mayNotReturn
+  callee +31:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +31:14 plain -> @plain
+  callee +36:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +37:7 mayNotReturn -> @mayNotReturn
   callee +43:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +44:7 mayNotReturn -> @mayNotReturn
-  callee +46:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +46:14 mayNotReturn -> @mayNotReturn
+  callee +43:14 mayNotReturn -> @mayNotReturn
+  callee +44:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +45:7 mayNotReturn -> @mayNotReturn
   callee +47:5 RuntimeTable.add -> @RuntimeTable.add
   callee +47:14 mayNotReturn -> @mayNotReturn
   callee +48:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +49:7 mayNotReturn -> @mayNotReturn
-  callee +51:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +52:7 mayNotReturn -> @mayNotReturn
-  callee +58:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +59:7 mayNotReturn -> @mayNotReturn
-  callee +62:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +63:7 mayNotReturn -> @mayNotReturn
-  callee +69:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +69:14 mayNotReturn -> @mayNotReturn
+  callee +48:14 mayNotReturn -> @mayNotReturn
+  callee +49:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +50:7 mayNotReturn -> @mayNotReturn
+  callee +52:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +53:7 mayNotReturn -> @mayNotReturn
+  callee +59:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +60:7 mayNotReturn -> @mayNotReturn
+  callee +63:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +64:7 mayNotReturn -> @mayNotReturn
   callee +70:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +71:7 mayNotReturn -> @mayNotReturn
-  callee +73:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +74:7 mayNotReturn -> @mayNotReturn
-  callee +76:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +77:7 mayNotReturn -> @mayNotReturn
-  callee +83:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +84:7 mayNotReturn -> @mayNotReturn
-  callee +94:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +95:7 mayNotReturn -> @mayNotReturn
-  callee +101:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +102:7 mayNotReturn -> @mayNotReturn
-  callee +109:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +111:7 plain -> @plain
-  callee +119:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +120:7 plain -> @plain
-  callee +131:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +133:7 plain -> @plain
-  callee +139:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +141:7 mayNotReturn -> @mayNotReturn
-  callee +147:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +148:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +151:9 attrs3 -> @attrs3
-  callee +155:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +156:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +159:9 attrs3 -> @attrs3
-  callee +163:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +164:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +167:9 attrs3 -> @attrs3
-  callee +176:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +177:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +180:9 attrs3 -> @attrs3
-  local +187:16 name: string (const)
-  callee +193:7 RuntimeTable.add -> @RuntimeTable.add
-  callee +194:9 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +197:11 attrs3 -> @attrs3
-  callee +205:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +206:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +209:9 attrs3 -> @attrs3
-  callee +218:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +219:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +222:9 attrs2 -> @attrs2
-  local +233:16 name: string (const)
-  callee +234:7 RuntimeTable.add -> @RuntimeTable.add
-  callee +235:9 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +238:11 attrs3 -> @attrs3
-  callee +245:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +246:7 plain -> @plain
-  callee +252:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +253:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +256:9 attrs3 -> @attrs3
-  callee +260:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +261:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +264:9 attrs3 -> @attrs3
-  callee +268:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +269:7 plain -> @plain
-  callee +275:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +275:14 plain -> @plain
-  callee +276:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +278:7 plain -> @plain
-  callee +284:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +286:7 plain -> @plain
-  callee +293:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +295:7 plain -> @plain
-  callee +304:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +306:7 plain -> @plain
-  callee +313:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +313:14 plain -> @plain
-  local +314:11 exit: RuntimeFunction (const)
-  callee +314:18 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +317:7 attrs2 -> @attrs2
-  callee +321:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +326:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +327:7 mayNotReturn -> @mayNotReturn
-  callee +333:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +334:7 mayNotReturn -> @mayNotReturn
-  callee +340:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +341:7 mayNotReturn -> @mayNotReturn
-  callee +347:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +348:7 mayNotReturn -> @mayNotReturn
-  callee +358:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +359:7 mayNotReturn -> @mayNotReturn
-  callee +365:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +365:14 mayNotReturn -> @mayNotReturn
+  callee +70:14 mayNotReturn -> @mayNotReturn
+  callee +71:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +72:7 mayNotReturn -> @mayNotReturn
+  callee +74:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +75:7 mayNotReturn -> @mayNotReturn
+  callee +77:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +78:7 mayNotReturn -> @mayNotReturn
+  callee +84:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +85:7 mayNotReturn -> @mayNotReturn
+  callee +95:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +96:7 mayNotReturn -> @mayNotReturn
+  callee +102:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +103:7 mayNotReturn -> @mayNotReturn
+  callee +110:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +112:7 plain -> @plain
+  callee +120:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +121:7 plain -> @plain
+  callee +132:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +134:7 plain -> @plain
+  callee +140:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +142:7 mayNotReturn -> @mayNotReturn
+  callee +148:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +149:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +152:9 attrs3 -> @attrs3
+  callee +156:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +157:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +160:9 attrs3 -> @attrs3
+  callee +164:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +165:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +168:9 attrs3 -> @attrs3
+  callee +177:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +178:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +181:9 attrs3 -> @attrs3
+  local +188:16 name: string (const)
+  callee +194:7 RuntimeTable.add -> @RuntimeTable.add
+  callee +195:9 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +198:11 attrs3 -> @attrs3
+  callee +206:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +207:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +210:9 attrs3 -> @attrs3
+  callee +219:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +220:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +223:9 attrs2 -> @attrs2
+  local +234:16 name: string (const)
+  callee +235:7 RuntimeTable.add -> @RuntimeTable.add
+  callee +236:9 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +239:11 attrs3 -> @attrs3
+  callee +246:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +247:7 plain -> @plain
+  callee +253:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +254:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +257:9 attrs3 -> @attrs3
+  callee +261:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +262:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +265:9 attrs3 -> @attrs3
+  callee +269:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +270:7 plain -> @plain
+  callee +276:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +276:14 plain -> @plain
+  callee +277:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +279:7 plain -> @plain
+  callee +285:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +287:7 plain -> @plain
+  callee +294:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +296:7 plain -> @plain
+  callee +305:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +307:7 plain -> @plain
+  callee +314:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +314:14 plain -> @plain
+  local +315:11 exit: RuntimeFunction (const)
+  callee +315:18 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +318:7 attrs2 -> @attrs2
+  callee +322:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +327:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +328:7 mayNotReturn -> @mayNotReturn
+  callee +334:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +335:7 mayNotReturn -> @mayNotReturn
+  callee +341:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +342:7 mayNotReturn -> @mayNotReturn
+  callee +348:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +349:7 mayNotReturn -> @mayNotReturn
+  callee +359:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +360:7 mayNotReturn -> @mayNotReturn
   callee +366:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +367:7 mayNotReturn -> @mayNotReturn
-  callee +375:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +376:7 mayNotReturn -> @mayNotReturn
-  callee +382:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +383:7 mayNotReturn -> @mayNotReturn
-  callee +389:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +390:7 mayNotReturn -> @mayNotReturn
-  callee +396:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +397:7 mayNotReturn -> @mayNotReturn
-  callee +405:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +406:7 plain -> @plain
-  callee +417:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +419:7 plain -> @plain
-  callee +430:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +430:14 plain -> @plain
-  callee +436:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +436:14 plain -> @plain
-  callee +449:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +450:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +453:9 attrs1 -> @attrs1
-  callee +463:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +464:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +467:9 attrs1 -> @attrs1
-  callee +474:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +475:7 plain -> @plain
-  callee +486:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +487:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +490:9 attrs1 -> @attrs1
-  callee +496:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +497:7 plain -> @plain
-  callee +506:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +507:7 mayNotReturn -> @mayNotReturn
-  callee +512:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +513:7 mayNotReturn -> @mayNotReturn
-  callee +525:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +526:7 plain -> @plain
-  callee +537:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +537:14 plain -> @plain
-  callee +539:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +539:14 plain -> @plain
-  callee +549:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +550:7 plain -> @plain
-  callee +559:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +560:7 plain -> @plain
-  callee +568:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +569:7 mayNotReturn -> @mayNotReturn
-  callee +578:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +578:14 plain -> @plain
-  callee +582:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +583:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +586:9 attrs1 -> @attrs1
-  callee +598:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +599:7 plain -> @plain
-  callee +608:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +608:14 plain -> @plain
-  callee +615:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +615:14 plain -> @plain
+  callee +366:14 mayNotReturn -> @mayNotReturn
+  callee +367:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +368:7 mayNotReturn -> @mayNotReturn
+  callee +376:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +377:7 mayNotReturn -> @mayNotReturn
+  callee +383:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +384:7 mayNotReturn -> @mayNotReturn
+  callee +390:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +391:7 mayNotReturn -> @mayNotReturn
+  callee +397:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +398:7 mayNotReturn -> @mayNotReturn
+  callee +406:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +407:7 plain -> @plain
+  callee +418:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +420:7 plain -> @plain
+  callee +431:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +431:14 plain -> @plain
+  callee +437:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +437:14 plain -> @plain
+  callee +450:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +451:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +454:9 attrs1 -> @attrs1
+  callee +464:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +465:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +468:9 attrs1 -> @attrs1
+  callee +475:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +476:7 plain -> @plain
+  callee +487:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +488:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +491:9 attrs1 -> @attrs1
+  callee +497:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +498:7 plain -> @plain
+  callee +507:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +508:7 mayNotReturn -> @mayNotReturn
+  callee +513:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +514:7 mayNotReturn -> @mayNotReturn
+  callee +526:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +527:7 plain -> @plain
+  callee +538:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +538:14 plain -> @plain
+  callee +540:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +540:14 plain -> @plain
+  callee +550:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +551:7 plain -> @plain
+  callee +560:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +561:7 plain -> @plain
+  callee +569:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +570:7 mayNotReturn -> @mayNotReturn
+  callee +579:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +579:14 plain -> @plain
+  callee +583:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +584:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +587:9 attrs1 -> @attrs1
+  callee +599:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +600:7 plain -> @plain
+  callee +609:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +609:14 plain -> @plain
   callee +616:5 RuntimeTable.add -> @RuntimeTable.add
   callee +616:14 plain -> @plain
   callee +617:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +618:7 plain -> @plain
-  callee +622:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +622:14 plain -> @plain
-  callee +624:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +625:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +628:9 attrs1 -> @attrs1
-  callee +642:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +643:7 mayNotReturn -> @mayNotReturn
-  callee +649:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +650:7 mayNotReturn -> @mayNotReturn
-  callee +652:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +652:14 plain -> @plain
+  callee +617:14 plain -> @plain
+  callee +618:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +619:7 plain -> @plain
+  callee +623:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +623:14 plain -> @plain
+  callee +625:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +626:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +629:9 attrs1 -> @attrs1
+  callee +643:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +644:7 mayNotReturn -> @mayNotReturn
+  callee +650:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +651:7 mayNotReturn -> @mayNotReturn
   callee +653:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +654:7 plain -> @plain
-  callee +660:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +661:7 mayNotReturn -> @mayNotReturn
-  callee +667:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +668:7 mayNotReturn -> @mayNotReturn
-  callee +684:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +685:7 plain -> @plain
-  callee +691:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +692:7 plain -> @plain
-  callee +694:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +695:7 plain -> @plain
-  callee +701:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +702:7 plain -> @plain
-  callee +708:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +709:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +712:9 attrs1 -> @attrs1
-  callee +716:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +717:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +720:9 attrs1 -> @attrs1
-  callee +724:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +725:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +728:9 attrs1 -> @attrs1
-  callee +733:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +734:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +737:9 attrs1 -> @attrs1
-  callee +741:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +742:7 plain -> @plain
-  callee +749:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +750:7 plain -> @plain
-  callee +759:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +759:14 plain -> @plain
+  callee +653:14 plain -> @plain
+  callee +654:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +655:7 plain -> @plain
+  callee +661:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +662:7 mayNotReturn -> @mayNotReturn
+  callee +668:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +669:7 mayNotReturn -> @mayNotReturn
+  callee +685:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +686:7 plain -> @plain
+  callee +692:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +693:7 plain -> @plain
+  callee +695:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +696:7 plain -> @plain
+  callee +702:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +703:7 plain -> @plain
+  callee +709:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +710:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +713:9 attrs1 -> @attrs1
+  callee +717:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +718:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +721:9 attrs1 -> @attrs1
+  callee +725:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +726:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +729:9 attrs1 -> @attrs1
+  callee +734:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +735:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +738:9 attrs1 -> @attrs1
+  callee +742:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +743:7 plain -> @plain
+  callee +750:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +751:7 plain -> @plain
   callee +760:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +761:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +764:9 attrs1 -> @attrs1
-  callee +772:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +773:7 plain -> @plain
-  callee +775:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +776:7 plain -> @plain
-  callee +783:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +784:7 plain -> @plain
-  callee +790:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +791:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +794:9 attrs1 -> @attrs1
-  callee +798:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +799:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +802:9 attrs1 -> @attrs1
-  callee +812:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +812:14 plain -> @plain
+  callee +760:14 plain -> @plain
+  callee +761:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +762:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +765:9 attrs1 -> @attrs1
+  callee +773:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +774:7 plain -> @plain
+  callee +776:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +777:7 plain -> @plain
+  callee +784:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +785:7 plain -> @plain
+  callee +791:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +792:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +795:9 attrs1 -> @attrs1
+  callee +799:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +800:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +803:9 attrs1 -> @attrs1
   callee +813:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +814:7 plain -> @plain
-  callee +820:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +821:7 plain -> @plain
-  callee +827:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +828:7 plain -> @plain
-  callee +834:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +835:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +838:9 attrs1 -> @attrs1
-  callee +845:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +846:7 plain -> @plain
-  callee +852:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +853:7 plain -> @plain
-  callee +859:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +859:14 plain -> @plain
+  callee +813:14 plain -> @plain
+  callee +814:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +815:7 plain -> @plain
+  callee +821:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +822:7 plain -> @plain
+  callee +828:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +829:7 plain -> @plain
+  callee +835:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +836:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +839:9 attrs1 -> @attrs1
+  callee +846:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +847:7 plain -> @plain
+  callee +853:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +854:7 plain -> @plain
   callee +860:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +861:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +864:9 attrs1 -> @attrs1
-  callee +868:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +869:7 plain -> @plain
-  callee +878:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +879:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +882:9 attrs1 -> @attrs1
-  callee +886:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +887:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +890:9 attrs1 -> @attrs1
-  callee +894:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +895:7 plain -> @plain
-  callee +908:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +909:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +912:9 attrs3 -> @attrs3
-  callee +916:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +917:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +920:9 attrs3 -> @attrs3
-  callee +929:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +931:7 plain -> @plain
-  callee +942:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +944:7 mayNotReturn -> @mayNotReturn
-  local +953:11 panic: RuntimeFunction (const)
-  callee +953:19 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +956:7 attrs3 -> @attrs3
-  callee +960:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  local +962:11 panicIndex: RuntimeFunction (const)
-  callee +962:24 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +965:7 attrs3 -> @attrs3
-  callee +969:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  local +974:11 panicSlice: RuntimeFunction (const)
-  callee +974:24 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +977:7 attrs3 -> @attrs3
-  callee +981:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  local +983:11 panicDiv: RuntimeFunction (const)
-  callee +983:22 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +986:7 attrs3 -> @attrs3
-  callee +990:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  local +1002:11 panicOverflow: RuntimeFunction (const)
-  callee +1002:27 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1005:7 attrs3 -> @attrs3
-  callee +1009:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1016:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1017:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1020:9 attrs1 -> @attrs1
-  callee +1029:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1030:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1033:9 attrs1 -> @attrs1
-  callee +1037:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1038:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1041:9 attrs1 -> @attrs1
-  callee +1051:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1053:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1056:9 attrs1 -> @attrs1
-  callee +1067:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1069:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1072:9 attrs1 -> @attrs1
-  callee +1076:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1078:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1081:9 attrs1 -> @attrs1
-  callee +1085:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1087:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1090:9 attrs1 -> @attrs1
-  callee +1107:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1109:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1112:9 attrs1 -> @attrs1
-  callee +1116:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1118:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1121:9 attrs1 -> @attrs1
-  callee +1125:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1127:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1130:9 attrs1 -> @attrs1
-  callee +1134:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1136:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1139:9 attrs1 -> @attrs1
-  callee +1143:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1145:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1148:9 attrs1 -> @attrs1
-  callee +1152:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1154:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1157:9 attrs1 -> @attrs1
-  callee +1161:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1163:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1166:9 attrs1 -> @attrs1
-  callee +1170:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1172:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1175:9 attrs1 -> @attrs1
-  callee +1182:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1184:7 plain -> @plain
-  callee +1191:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1193:7 plain -> @plain
-  callee +1195:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee +1197:7 plain -> @plain
-  callee +1204:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1204:14 plain -> @plain
+  callee +860:14 plain -> @plain
+  callee +861:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +862:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +865:9 attrs1 -> @attrs1
+  callee +869:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +870:7 plain -> @plain
+  callee +879:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +880:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +883:9 attrs1 -> @attrs1
+  callee +887:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +888:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +891:9 attrs1 -> @attrs1
+  callee +895:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +896:7 plain -> @plain
+  callee +909:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +910:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +913:9 attrs3 -> @attrs3
+  callee +917:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +918:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +921:9 attrs3 -> @attrs3
+  callee +930:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +932:7 plain -> @plain
+  callee +943:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +945:7 mayNotReturn -> @mayNotReturn
+  local +954:11 panic: RuntimeFunction (const)
+  callee +954:19 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +957:7 attrs3 -> @attrs3
+  callee +961:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  local +963:11 panicIndex: RuntimeFunction (const)
+  callee +963:24 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +966:7 attrs3 -> @attrs3
+  callee +970:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  local +975:11 panicSlice: RuntimeFunction (const)
+  callee +975:24 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +978:7 attrs3 -> @attrs3
+  callee +982:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  local +984:11 panicDiv: RuntimeFunction (const)
+  callee +984:22 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +987:7 attrs3 -> @attrs3
+  callee +991:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  local +1003:11 panicOverflow: RuntimeFunction (const)
+  callee +1003:27 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1006:7 attrs3 -> @attrs3
+  callee +1010:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1017:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1018:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1021:9 attrs1 -> @attrs1
+  callee +1030:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1031:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1034:9 attrs1 -> @attrs1
+  callee +1038:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1039:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1042:9 attrs1 -> @attrs1
+  callee +1052:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1054:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1057:9 attrs1 -> @attrs1
+  callee +1068:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1070:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1073:9 attrs1 -> @attrs1
+  callee +1077:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1079:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1082:9 attrs1 -> @attrs1
+  callee +1086:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1088:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1091:9 attrs1 -> @attrs1
+  callee +1108:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1110:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1113:9 attrs1 -> @attrs1
+  callee +1117:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1119:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1122:9 attrs1 -> @attrs1
+  callee +1126:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1128:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1131:9 attrs1 -> @attrs1
+  callee +1135:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1137:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1140:9 attrs1 -> @attrs1
+  callee +1144:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1146:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1149:9 attrs1 -> @attrs1
+  callee +1153:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1155:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1158:9 attrs1 -> @attrs1
+  callee +1162:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1164:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1167:9 attrs1 -> @attrs1
+  callee +1171:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1173:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1176:9 attrs1 -> @attrs1
+  callee +1183:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1185:7 plain -> @plain
+  callee +1192:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1194:7 plain -> @plain
+  callee +1196:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee +1198:7 plain -> @plain
   callee +1205:5 RuntimeTable.add -> @RuntimeTable.add
   callee +1205:14 plain -> @plain
   callee +1206:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1207:7 plain -> @plain
-  callee +1215:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1216:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1219:9 attrs3 -> @attrs3
-  callee +1232:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1233:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1236:9 attrs2 -> @attrs2
-  callee +1240:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1241:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1244:9 attrs2 -> @attrs2
-  callee +1248:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1249:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1252:9 attrs2 -> @attrs2
-  callee +1256:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1257:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1260:9 attrs2 -> @attrs2
-  callee +1268:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1269:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1272:9 attrs3 -> @attrs3
-  callee +1276:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1277:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1280:9 attrs2 -> @attrs2
-  callee +1287:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1288:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1291:9 attrs3 -> @attrs3
-  callee +1295:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1296:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1299:9 attrs2 -> @attrs2
-  callee +1308:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1309:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1312:9 attrs3 -> @attrs3
-  callee +1316:5 RuntimeTable.add -> @RuntimeTable.add
-  callee +1317:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee +1320:9 attrs2 -> @attrs2
-  callee +1324:5 RuntimeTable.buildIntrinsics -> @RuntimeTable.buildIntrinsics
+  callee +1206:14 plain -> @plain
+  callee +1207:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1208:7 plain -> @plain
+  callee +1216:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1217:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1220:9 attrs3 -> @attrs3
+  callee +1233:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1234:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1237:9 attrs2 -> @attrs2
+  callee +1241:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1242:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1245:9 attrs2 -> @attrs2
+  callee +1249:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1250:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1253:9 attrs2 -> @attrs2
+  callee +1257:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1258:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1261:9 attrs2 -> @attrs2
+  callee +1269:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1270:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1273:9 attrs3 -> @attrs3
+  callee +1277:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1278:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1281:9 attrs2 -> @attrs2
+  callee +1288:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1289:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1292:9 attrs3 -> @attrs3
+  callee +1296:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1297:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1300:9 attrs2 -> @attrs2
+  callee +1309:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1310:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1313:9 attrs3 -> @attrs3
+  callee +1317:5 RuntimeTable.add -> @RuntimeTable.add
+  callee +1318:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee +1321:9 attrs2 -> @attrs2
+  callee +1325:5 RuntimeTable.buildIntrinsics -> @RuntimeTable.buildIntrinsics
 function RuntimeTable.buildIntrinsics(this: RuntimeTable): void -> @RuntimeTable.buildIntrinsics [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RuntimeTable.addIntrinsic

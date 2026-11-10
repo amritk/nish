@@ -63,7 +63,7 @@
  * finishes, so the answer stays readable and is freed with the caller's
  * memory (docs/security/async.md, ASYNC-14). A child region, or a region with
  * children, is never a lane's, and adopting one panics: its chunks would
- * outlive the tree `free` walks (ASYNC-16).
+ * outlive the tree `free` walks (ASYNC-19).
  *
  * **Children.** `nish_region_child_new` makes a region whose parent is the
  * region entered last on this thread (`child` and `childWith`), and panics

@@ -56,11 +56,14 @@ import { capturesOf, isThreadsLayout } from "./parallel"
 import { CheckedProgram, FunctionSig, ParallelCall } from "./program"
 import { FreshResults } from "./secret"
 import {
+  REGION_CHILD,
+  REGION_CHILD_WITH,
   REGION_ENTER,
   REGION_ENTER_WITH,
-  REGION_MAKE,
   REGION_MAKE_WITH,
   REGION_NONE,
+  isChildMaker,
+  isRegionMaker,
   regionRoleOf,
 } from "./region-check"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
@@ -70,12 +73,33 @@ import { T_STRING, TypeTable } from "./types"
 const ORIGIN_NONE: i32 = -1
 /** A number, a boolean, an enum, a `Region` handle, a string literal or `null`: copied, never pointed at. */
 const ORIGIN_SCALAR: i32 = 0
-/** The root, or memory `f` allocated. */
+/** Region memory: memory `f` allocated, or the root's reach once it may be that. */
 const ORIGIN_REGION: i32 = 1
 /** Memory `arg` reaches. */
 const ORIGIN_OUTER: i32 = 2
 /** Either, as far as the walk can tell. */
 const ORIGIN_UNKNOWN: i32 = 3
+/**
+ * Region memory the root `enter` hands `f` reaches: it existed before this
+ * `enter`, so no scope opened in it can release it, and a child region made
+ * here may keep it. Otherwise it is `ORIGIN_REGION`, which it joins to.
+ */
+const ORIGIN_ROOT: i32 = 4
+/**
+ * In a child's `f`, the parent's memory `childWith`'s `arg` reaches, and in a
+ * later `enter` of a child, its root's reach, which may be its parent's. It
+ * outlives the region, so region memory may keep it, but it may keep no
+ * region memory and may not grow.
+ */
+const ORIGIN_PARENT: i32 = 5
+/**
+ * In a child's `f`, a value that is region memory or the parent's: the region
+ * may keep it, but it may keep no region memory and may not grow.
+ */
+const ORIGIN_MIXED: i32 = 6
+
+/** Whether `o` is the region's memory or the parent's, in a child's `f`. */
+const childOrParent = (o: i32): boolean => o === ORIGIN_REGION || o === ORIGIN_PARENT || o === ORIGIN_MIXED
 
 /** The origin of a value that may be `a` or `b`. */
 const joinOrigin = (a: i32, b: i32): i32 => {
@@ -85,14 +109,25 @@ const joinOrigin = (a: i32, b: i32): i32 => {
   if (b === ORIGIN_NONE || b === ORIGIN_SCALAR || a === b) {
     return a
   }
-  return ORIGIN_UNKNOWN
+  if ((a === ORIGIN_ROOT && b === ORIGIN_REGION) || (a === ORIGIN_REGION && b === ORIGIN_ROOT)) {
+    return ORIGIN_REGION
+  }
+  return childOrParent(a) && childOrParent(b) ? ORIGIN_MIXED : ORIGIN_UNKNOWN
 }
 
-/** Whether a value of origin `o` may be outer memory. */
-const mayBeOuter = (o: i32): boolean => o === ORIGIN_OUTER || o === ORIGIN_UNKNOWN
+/** Whether a value of origin `o` may be memory outside the region: what may not grow, nor keep the region's. */
+const mayBeOuter = (o: i32): boolean =>
+  o === ORIGIN_OUTER || o === ORIGIN_UNKNOWN || o === ORIGIN_PARENT || o === ORIGIN_MIXED
+
+/** Whether a value of origin `o` may be outer memory region memory may not keep: any but the parent's. */
+const mayBeReleased = (o: i32): boolean => o === ORIGIN_OUTER || o === ORIGIN_UNKNOWN
 
 /** Whether a value of origin `o` may be region memory. */
-const mayBeRegion = (o: i32): boolean => o === ORIGIN_REGION || o === ORIGIN_UNKNOWN
+const mayBeRegion = (o: i32): boolean =>
+  o === ORIGIN_REGION || o === ORIGIN_UNKNOWN || o === ORIGIN_ROOT || o === ORIGIN_MIXED
+
+/** Whether a value of origin `o` is memory a child region made here may keep: what the root reaches. */
+const outlivesChild = (o: i32): boolean => o === ORIGIN_ROOT || o === ORIGIN_PARENT
 
 /** One refusal, at the node in `f`'s module it is about. */
 export class RegionFinding {
@@ -195,9 +230,18 @@ const threadsMessage = (fn: FunctionSig): string =>
 export const crossingMessage = (table: TypeTable, what: string, type: i32): string =>
   `${what} is \`${table.typeName(type)}\`, which holds a \`Region\`, and a region is entered only on the thread that made it`
 
-const notFreshMessage = (fn: FunctionSig, ref: string): string =>
-  `The function \`region\` or \`regionWith\` runs answers the region's root, which must be memory it allocated, ` +
-  `and ${fnName(fn)} may not: ${ref}`
+const notFreshMessage = (fn: FunctionSig, ref: string, child: boolean): string =>
+  `The function ${child ? "`child` or `childWith`" : "`region` or `regionWith`"} runs answers the region's root, ` +
+  `which must be memory it allocated, and ${fnName(fn)} may not: ${ref}`
+
+/**
+ * NL2697: a child region's parent is whichever region is entered when it is
+ * made, which only the function `enter` or `enterWith` runs knows for certain.
+ * `what` says how `child` or `childWith` is reached otherwise.
+ */
+const childPlacementMessage = (what: string): string =>
+  `${what}: a child region's parent is the region entered when it is made, so \`child\` and \`childWith\` ` +
+  "are called only in the function `enter` or `enterWith` runs, and that function only by them"
 
 const growthMessage = (who: string, what: string): string =>
   `${who}, and ${what}: storage outside the region that grows inside it ` +
@@ -396,6 +440,8 @@ class RegionWalk {
    * so only memory of its own region kept from outside is refused, and growth.
    */
   task: boolean
+  /** An `enter` walk's record of the child regions `fn` makes, or `null`. */
+  sites: ChildSites | null
 
   constructor(
     program: CheckedProgram,
@@ -405,7 +451,8 @@ class RegionWalk {
     fresh: StringSet,
     paramNames: string[],
     paramOrigins: i32[],
-    task: boolean
+    task: boolean,
+    sites: ChildSites | null
   ) {
     this.program = program
     this.table = table
@@ -422,6 +469,7 @@ class RegionWalk {
     this.collect = true
     this.findings = []
     this.task = task
+    this.sites = sites
     this.who = task ? insideTask(fn) : insideRegion(fn)
     this.freed = task ? "the task ends" : "`free` runs"
   }
@@ -612,15 +660,16 @@ class RegionWalk {
     if (value === ORIGIN_NONE || value === ORIGIN_SCALAR) {
       return
     }
-    if (holder === ORIGIN_REGION && mayBeOuter(value)) {
+    if ((holder === ORIGIN_REGION || holder === ORIGIN_ROOT) && mayBeReleased(value)) {
       this.reportOuter(at, what)
-    } else if (holder === ORIGIN_OUTER && mayBeRegion(value)) {
+    } else if ((holder === ORIGIN_OUTER || holder === ORIGIN_PARENT) && mayBeRegion(value)) {
       this.report(at, regionToOuterMessage(this.who, what, this.freed))
-    } else if (holder === ORIGIN_UNKNOWN) {
-      if (value !== ORIGIN_OUTER) {
-        this.report(at, regionToOuterMessage(this.who, what, this.freed))
-      } else {
+    } else if (holder === ORIGIN_UNKNOWN || holder === ORIGIN_MIXED) {
+      // The parent's memory outlives the region, whichever the holder is.
+      if (value === ORIGIN_OUTER) {
         this.reportOuter(at, what)
+      } else if (value !== ORIGIN_PARENT) {
+        this.report(at, regionToOuterMessage(this.who, what, this.freed))
       }
     }
   }
@@ -694,7 +743,7 @@ class RegionWalk {
     for (const child of node.children) {
       const value = child.kind === N_PROPERTY ? child.children[child.children.length - 1] : child
       const o = this.origin(value)
-      if (o !== ORIGIN_NONE && mayBeOuter(o)) {
+      if (o !== ORIGIN_NONE && mayBeReleased(o)) {
         this.reportOuter(child, putsText(this.program, value))
       }
     }
@@ -718,10 +767,21 @@ class RegionWalk {
     }
     // A method's receiver is visited with the callee position it sits in.
     this.visit(node.children[0])
-    if (regionRoleOf(callee) !== REGION_NONE) {
+    const role = regionRoleOf(callee)
+    if (role !== REGION_NONE) {
       // Another region's call is judged at its own call; a nested `region` only makes a handle.
       for (const arg of node.children[1].children) {
         this.visit(arg)
+      }
+      const sites = this.sites
+      if (isChildMaker(role) && sites !== null && !this.collect) {
+        // What `childWith` hands the child's `f` is the parent's to keep only if the root reaches it.
+        const args = node.children[1].children
+        sites.record(
+          node,
+          role === REGION_CHILD || (args.length > 0 && outlivesChild(this.origin(args[0]))),
+          this.fn
+        )
       }
       return
     }
@@ -819,7 +879,7 @@ class RegionWalk {
       // An arrow argument has no pointer facts; what it answers may be stored by the callee.
       const o = a.kind === N_ARROW ? this.arrowResult(a) : this.origin(a)
       origins.push(o)
-      anyOuter = anyOuter || mayBeOuter(o)
+      anyOuter = anyOuter || mayBeReleased(o)
     }
     const name = regionCalleeName(callee)
     for (let i = 0; i < origins.length; i++) {
@@ -831,7 +891,7 @@ class RegionWalk {
       const arg = i < handed.length ? handed[i] : node
       if (pp === null) {
         // A `string` has no pointer facts, so a constructor is taken to keep it.
-        if (isNew && mayBeOuter(o)) {
+        if (isNew && mayBeReleased(o)) {
           this.reportOuter(node, handsText(this.program, arg, name, "which may keep it"))
         }
         continue
@@ -846,7 +906,7 @@ class RegionWalk {
             node,
             handsRegionMessage(this.who, this.freed, this.program, arg, name, "which stores into it")
           )
-        } else if (isNew && (pp.keptInThis || pp.captured)) {
+        } else if (isNew && (pp.keptInThis || pp.captured) && mayBeReleased(o)) {
           this.reportOuter(node, handsText(this.program, arg, name, "which keeps it"))
         } else if (this.task && i > 0 && pp.captured && this.receiverMayBeRegion(node, callee, origins)) {
           // `m.set(k, shared)`: a method of the task's own object may keep it there.
@@ -973,7 +1033,8 @@ export const regionCallFindings = (
   site: Node,
   sig: FunctionSig,
   scopeName: string,
-  freshResults: FreshResults
+  freshResults: FreshResults,
+  sites: ChildSites
 ): RegionFinding[] => {
   const out: RegionFinding[] = []
   const role = regionRoleOf(sig)
@@ -982,6 +1043,17 @@ export const regionCallFindings = (
     return out
   }
   const fn = instance.functionArgs[0]
+  const child = isChildMaker(role)
+  const at = child ? sites.indexOf(site) : -1
+  if (child) {
+    const placed = at < 0 ? "" : sites.misplaced(facts, at)
+    if (at < 0 || placed.length > 0) {
+      const name = role === REGION_CHILD ? "`child`" : "`childWith`"
+      const what = at < 0 ? `${name} is called outside the function \`enter\` or \`enterWith\` runs` : placed
+      out.push(new RegionFinding(program, site, childPlacementMessage(what)))
+      return out
+    }
+  }
   const f = facts.get(fn.name)
   if (f === null) {
     out.push(new RegionFinding(program, site, noFactsMessage(insideRegion(fn), fn)))
@@ -996,28 +1068,49 @@ export const regionCallFindings = (
   if ((role === REGION_ENTER || role === REGION_ENTER_WITH) && !isCopied(table, fn.returnType)) {
     out.push(new RegionFinding(program, site, enterResultMessage(fn, table)))
   }
-  if (role === REGION_MAKE || role === REGION_MAKE_WITH) {
+  if (isRegionMaker(role)) {
     const ref = freshResults.resultRef(fn)
     if (ref.length > 0) {
-      out.push(new RegionFinding(program, site, notFreshMessage(fn, ref)))
+      out.push(new RegionFinding(program, site, notFreshMessage(fn, ref, child)))
     }
   }
   const names = fn.paramNames
   const seedNames: string[] = []
   const seedOrigins: i32[] = []
+  const entered = role === REGION_ENTER || role === REGION_ENTER_WITH
   if (role === REGION_MAKE_WITH && names.length > 0) {
     seedNames.push(names[0])
     seedOrigins.push(ORIGIN_OUTER)
   }
-  if ((role === REGION_ENTER || role === REGION_ENTER_WITH) && names.length > 0) {
+  if (role === REGION_CHILD_WITH && names.length > 0 && at >= 0) {
     seedNames.push(names[0])
-    seedOrigins.push(ORIGIN_REGION)
+    seedOrigins.push(sites.fromRoot[at] ? ORIGIN_PARENT : ORIGIN_OUTER)
+  }
+  if (entered && names.length > 0) {
+    // A child's root may reach its parent's memory, which it may not grow nor keep its own in.
+    const handle = sig.paramTypes.length > 0 ? sig.paramTypes[0] : -1
+    seedNames.push(names[0])
+    seedOrigins.push(sites.childTypes.indexOf(handle) >= 0 ? ORIGIN_PARENT : ORIGIN_ROOT)
   }
   if (role === REGION_ENTER_WITH && names.length > 1) {
     seedNames.push(names[1])
     seedOrigins.push(ORIGIN_OUTER)
   }
-  walkFindings(out, programs, table, facts, fn, freshResults, seedNames, seedOrigins, false)
+  if (entered) {
+    sites.enter(sig.name, fn)
+  }
+  walkFindings(
+    out,
+    programs,
+    table,
+    facts,
+    fn,
+    freshResults,
+    seedNames,
+    seedOrigins,
+    false,
+    entered ? sites : null
+  )
   return out
 }
 
@@ -1034,7 +1127,8 @@ const walkFindings = (
   freshResults: FreshResults,
   seedNames: string[],
   seedOrigins: i32[],
-  task: boolean
+  task: boolean,
+  sites: ChildSites | null
 ): void => {
   const home = regionProgramOf(programs, fn)
   const body = fn.body()
@@ -1061,9 +1155,9 @@ const walkFindings = (
   if (fnInstance !== null) {
     home.enterInstance(fnInstance)
   }
-  const walk = new RegionWalk(home, table, facts, fn, fresh, seedNames, seedOrigins, task)
+  const walk = new RegionWalk(home, table, facts, fn, fresh, seedNames, seedOrigins, task, sites)
   // A run that changes anything adds a binding or raises one a step up
-  // none, scalar, region or outer, unknown, and bindings are finite, so this
+  // none, scalar, root or parent or outer, region, unknown, and bindings are finite, so this
   // reaches the fixpoint; a cap would report from origins not yet settled.
   walk.changed = true
   while (walk.changed) {
@@ -1144,7 +1238,7 @@ export const taskFindings = (
     )
   }
   if (shares) {
-    walkFindings(out, programs, table, facts, task, freshResults, seedNames, seedOrigins, true)
+    walkFindings(out, programs, table, facts, task, freshResults, seedNames, seedOrigins, true, null)
   }
   return out
 }
@@ -1161,4 +1255,80 @@ export const recordRegionCall = (calls: ParallelCall[], node: Node, sig: Functio
     }
   }
   calls.push(new ParallelCall(node, sig, null))
+}
+
+/**
+ * The child regions the program makes, filled in by `Compilation.checkRegions`
+ * before it judges a `child` or `childWith` call: the type of each handle they
+ * answer, then, from each `enter` walk, every call it makes directly and
+ * whether its argument is memory the root reaches.
+ */
+export class ChildSites {
+  /** `Region<T>` types a `child` or `childWith` answers: an `enter` of one sees its parent's memory. */
+  childTypes: i32[]
+  nodes: Node[]
+  /** Whether the call's `arg` is memory the root reaches, in every `enter` walk that met it. */
+  fromRoot: boolean[]
+  /** The function `enter` or `enterWith` runs that makes the call. */
+  holders: FunctionSig[]
+  /** Each `enter` or `enterWith` instance judged, and the function it runs. */
+  enterNames: string[]
+  enterFns: FunctionSig[]
+
+  constructor() {
+    this.childTypes = []
+    this.nodes = []
+    this.fromRoot = []
+    this.holders = []
+    this.enterNames = []
+    this.enterFns = []
+  }
+
+  indexOf(node: Node): i32 {
+    return this.nodes.indexOf(node)
+  }
+
+  record(node: Node, fromRoot: boolean, holder: FunctionSig): void {
+    const at = this.nodes.indexOf(node)
+    if (at < 0) {
+      this.nodes.push(node)
+      this.fromRoot.push(fromRoot)
+      this.holders.push(holder)
+      return
+    }
+    this.fromRoot[at] = this.fromRoot[at] && fromRoot
+  }
+
+  enter(name: string, fn: FunctionSig): void {
+    this.enterNames.push(name)
+    this.enterFns.push(fn)
+  }
+
+  /**
+   * How the holder of call `at` is called other than as the function `enter`
+   * or `enterWith` runs, which would run its child call in another region or
+   * none, or `""`. A callee is known by its facts.
+   */
+  misplaced(facts: FactsTable, at: i32): string {
+    const holder = this.holders[at]
+    for (let i = 0; i < facts.index.size(); i++) {
+      const caller = facts.index.keyAt(i)
+      const own = facts.list[facts.index.valueAt(i)]
+      if (own.callees.has(holder.name) && !this.runs(caller, holder)) {
+        const name = own.sourceName === "" ? caller : own.sourceName
+        return `${fnName(holder)} makes a child region and is called by another function, \`${name}\``
+      }
+    }
+    return ""
+  }
+
+  /** Whether `caller` is an `enter` or `enterWith` instance that runs `fn`. */
+  runs(caller: string, fn: FunctionSig): boolean {
+    for (let i = 0; i < this.enterNames.length; i++) {
+      if (this.enterNames[i] === caller && this.enterFns[i] === fn) {
+        return true
+      }
+    }
+    return false
+  }
 }

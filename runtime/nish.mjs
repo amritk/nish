@@ -342,29 +342,77 @@ const unsafeSource = UNSAFE_EXPORTS.map((name) => `export const ${name} = global
 // table, keyed by its handle (a BigInt, as every `i64` is here), `enter` runs
 // its function on the root, and `free` drops the entry. The handle checks the
 // native runtime makes are made here too, so a freed handle or a second
-// `enter` throws where the native program stops.
+// `enter` throws where the native program stops. A child (`child`,
+// `childWith`) records the region entered last as its parent, as
+// `runtime/runtime-region.c` does; `free` of a parent drops its children,
+// deepest first, and throws before dropping anything if any is entered.
 const regionSource = `
 const roots = new Map();
 const entered = new Set();
+const parents = new Map();
+const children = new Map();
+const stack = [];
 let next = 0n;
 const rootOf = (r) => {
   if (!roots.has(r)) throw new Error("nish:region: the region is freed or was never made");
   if (entered.has(r)) throw new Error("nish:region: the region is entered already");
   return roots.get(r);
 };
+const inside = (r, g) => {
+  entered.add(r);
+  stack.push(r);
+  try { return g(); } finally { stack.pop(); entered.delete(r); }
+};
 const run = (r, f, arg, withArg) => {
   const root = rootOf(r);
-  entered.add(r);
-  try { return withArg ? f(root, arg) : f(root); } finally { entered.delete(r); }
+  return inside(r, () => (withArg ? f(root, arg) : f(root)));
+};
+const make = (parent, build) => {
+  next += 1n;
+  const r = next;
+  roots.set(r, null);
+  children.set(r, new Set());
+  if (parent !== 0n) {
+    parents.set(r, parent);
+    children.get(parent).add(r);
+  }
+  roots.set(r, inside(r, build));
+  return r;
+};
+const parentNow = () => {
+  if (stack.length === 0) throw new Error("nish:region: a child region made with no region entered");
+  return stack[stack.length - 1];
+};
+// The regions under r and r, each after every region under it: deepest first.
+const subtree = (r) => {
+  const out = [];
+  const todo = [r];
+  while (todo.length > 0) {
+    const x = todo.pop();
+    out.push(x);
+    for (const c of children.get(x)) todo.push(c);
+  }
+  return out.reverse();
 };
 export class Region {}
-export const region = (f) => { next += 1n; roots.set(next, f()); return next; };
-export const regionWith = (arg, f) => { next += 1n; roots.set(next, f(arg)); return next; };
+export const region = (f) => make(0n, () => f());
+export const regionWith = (arg, f) => make(0n, () => f(arg));
+export const child = (f) => make(parentNow(), () => f());
+export const childWith = (arg, f) => make(parentNow(), () => f(arg));
 export const enter = (r, f) => run(r, f, undefined, false);
 export const enterWith = (r, arg, f) => run(r, f, arg, true);
 export const free = (r) => {
   if (entered.has(r)) throw new Error("nish:region: the region is freed while it is entered");
-  if (!roots.delete(r)) throw new Error("nish:region: the region is freed or was never made");
+  if (!roots.has(r)) throw new Error("nish:region: the region is freed or was never made");
+  const doomed = subtree(r);
+  if (doomed.some((d) => entered.has(d))) throw new Error("nish:region: the region is freed while it is entered");
+  const parent = parents.get(r);
+  if (parent !== undefined) children.get(parent).delete(r);
+  for (const d of doomed) {
+    roots.delete(d);
+    children.delete(d);
+    parents.delete(d);
+  }
 };
 `;
 const TERM_EXPORTS = ["readStdin", "waitStdin", "isTerminal", "terminalSize", "setRawMode", "setTerminalRestore"];

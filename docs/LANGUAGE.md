@@ -3988,7 +3988,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_par_arena`).
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
@@ -4637,7 +4637,7 @@ element's arena, which a task does not share, and each rule is reported at the
   allocates on the way is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -8451,8 +8451,9 @@ Reference: [`nish:region`](reference/nish-region.md).
 | --- | --- |
 | `Region<T>` | a handle to a region whose root is a `T`: a 64-bit number, not a pointer |
 | `region(f)`, `regionWith(arg, f)` | a new region, whose root is what `f` answers; `f`'s allocations land in it |
+| `child(f)`, `childWith(arg, f)` | a new region whose *parent* is the region entered now; called only in the `f` an `enter` or `enterWith` runs |
 | `enter(r, f)`, `enterWith(r, arg, f)` | `f(root)` (or `f(root, arg)`), allocating in the region |
-| `free(r)` | gives the region's memory back; `r` and every copy of it are dead |
+| `free(r)` | gives the region's memory back; `r` and every copy of it are dead. Freeing a parent frees its children first, deepest first; freeing a child unlinks it from its parent |
 
 `f` is an arrow or a named function, and an arrow captures nothing (NL2335),
 so the ways into a region are its root, `arg` and module state. The checker
@@ -8474,7 +8475,8 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 | a call inside `f` the region rules have no facts for. No program reaches it today, since every function, instantiation, lifted arrow and `declare function` has whole-program facts; it stays so that such a callee is never let through unexamined (`tests/wordings/unreachable.txt`) | **NL2616** |
 | `Arena.mark` or `Arena.used` inside `f`, or a callee reaching one: inside a region they would read the region's own arena, not the thread's | **NL2617** (`reject_region_arena_mark` through `region`, `reject_region_arena_used_callee` through `enter` and a callee) |
 | `new Region<T>()` | **NL2618** (`reject_region_new`) |
-| `region`, `regionWith`, `enter`, `enterWith` or `free` in a parallel body or a spawned function, directly or through a callee | NL2351 (`reject_region_enter_spawned`, `reject_region_parallel_callee`) |
+| `child` or `childWith` outside the `f` an `enter` or `enterWith` runs, or in a function that something other than an `enter` also calls: with no region entered there is no parent | **NL2697** (`reject_region_child_outside`, `reject_region_child_callee`) |
+| `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` in a parallel body or a spawned function, directly or through a callee | NL2351 (`reject_region_enter_spawned`, `reject_region_parallel_callee`, `reject_region_child_parallel`, `reject_region_child_spawned`) |
 | `using r = region(f)`, in any declarator: a block does not free a region | NL2387 (`reject_region_using_first`, `reject_region_using_second`) |
 
 - **`Arena.mark` and `Arena.used` are refused inside `f`** (NL2617). Inside a
@@ -8496,10 +8498,29 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   memory, or answered by `enter`, stays on its thread and is allowed.
 - `using a = arena()` inside `f` is allowed, and so is `enter` of a second
   region: only numbers come out of it.
+- **A child region may point into its parent's memory that existed before the
+  current `enter`**: what the root `enter` handed in reaches, and, in the
+  child's `f`, what `childWith`'s `arg` reaches when the root reaches it
+  (`tests/cases/region_child_keep`, `region_child_chain`, `region_child_map`).
+  The parent outlives the child, since freeing the parent frees the child,
+  and nothing can release that memory while the parent lives: a scope opened
+  during an `enter` rewinds only to a mark taken after the `enter` began, so
+  it releases only what this `enter` allocated. That memory *new in this
+  `enter`* is what the child may not keep (NL2610,
+  `reject_region_child_new_memory`). The other rules hold the parent as outer
+  memory: the child's memory stored into the parent's is NL2609
+  (`reject_region_child_to_parent`), growing a parent array, `Map` or `Set`
+  in the child's `f` is NL2615 (`reject_region_child_grow`), and the parent's
+  memory as the child's root is NL2614 (`reject_region_child_root_parent`).
+  A plain `region()` made inside `enter` stays independent of the region
+  entered, and keeps the rules above.
 - **Every call checks its handle at run time.** `enter`, `enterWith` and
   `free` stop the program on a handle that is 0, freed already, or another
   thread's; `enter` of a region already entered and `free` of an entered one
-  stop it too, so freeing twice is a panic and never a double free. Each call
+  (or of a parent with an entered child) stop it too, so freeing twice is a
+  panic and never a double free. A child's handle is dead once its parent is
+  freed (`tests/link/region_child_stale`), and `child` with no region entered
+  stops the program. Each call
   is a `region` site under [`--deny-panics`](#panic-sites)
   (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
   regions `region` stops the program as well.
