@@ -37,7 +37,7 @@
  *       return live === pool.size ? 0 : 1
  *     }
  *
- * **Why three calls.** A spawned task shares the pool with the function that
+ * **Why separate calls.** A spawned task shares the pool with the function that
  * spawned it, and runs in memory of its own that is freed when it ends
  * (docs/LANGUAGE.md → "What `spawn` may pass"). So a call that writes into
  * the pool may allocate nothing, and one that allocates may not write into
@@ -57,6 +57,30 @@
  * to the ReadyForQuery; `pgAsyncRelease` gives the connection back, or closes
  * it when the query left it unfit to reuse.
  *
+ * **Pipelining.** Many tasks may share one connection instead of claiming
+ * it whole. `pgAsyncPrepare` registers a statement's SQL once, before the
+ * tasks run, and each task then runs it in five calls:
+ *
+ *     const ticket: i32 = await pgAsyncSeat(pool, statement)  // a place in a connection's order
+ *     if (ticket >= 0) {
+ *       const sent: i32 = await pgAsyncSend(pool, ticket, params)  // Bind, Execute, Sync
+ *       const turn: i32 = await pgAsyncTurn(pool, ticket, sent)  // the answers before it, then its own
+ *       const r = await pgAsyncAnswer(pool, ticket, turn)  // its rows, in the task's memory
+ *       pgAsyncDone(pool, ticket, turn, r.reusable)
+ *     }
+ *
+ * Up to `pool.depth` statements are in flight on a connection at once, and
+ * its answers come back in the order they were sent; each task waits for the
+ * answers before its own on the pool's wake and reads its own when its turn
+ * comes, so one read often brings several. Each connection parses a
+ * statement once, named, and sends only Bind and Execute after; a Parse the
+ * server refused is sent again next time. Each statement has its own Sync, so
+ * a statement the server refuses fails alone. A connection is out of step
+ * when an answer behind which others wait is lost (a socket error, a frame
+ * this module does not expect, a task cancelled with its answer unread, an
+ * answer that left a transaction open): every statement behind it fails
+ * `PG_ERR_CLOSED`, and the connection closes once the last is answered.
+ *
  * **Its own encoder and framer.** A query is encoded and its answer framed
  * here (`pgAsyncEncode`, `pgAsyncRead`), not by `PgConnection` or
  * `PgCarrier`: those keep their buffers and rows in objects that outlive a
@@ -65,10 +89,11 @@
  * handed. The framer applies the same checks as `PgConnection`'s (PG-28 in
  * `docs/security/postgres.md`).
  *
- * **Claiming.** When every live connection is claimed, `pgAsyncClaim` sleeps
- * and looks again, 1 ms then doubling to 16 ms, until one is free or it has
- * slept `claimWaitMs` in all; a released connection is not announced, so a
- * waiter finds it on its next look. A ticket names a slot and that slot's
+ * **Claiming.** When every live connection is claimed or in use,
+ * `pgAsyncClaim` (and `pgAsyncSeat`, when none has room) waits on the pool's
+ * wake, a socket pair `pgAsyncRelease` and each answer read write a byte to,
+ * until one is free or it has waited `claimWaitMs` in all; nothing polls on a
+ * clock. A ticket names a slot and that slot's
  * claim: `pgAsyncQuery` and `pgAsyncRelease` panic on one that is not the
  * slot's current claim, so two tasks never share a connection and a
  * connection is given back once.
@@ -83,20 +108,23 @@
  * **Limits.** `PgAsyncPool`'s caps (`maxMessage`, `maxColumns`, `maxRows`,
  * `maxResultBytes`, `claimWaitMs`) bound what one query keeps; rows past
  * `maxRows` or `maxResultBytes` are read and dropped, and the query fails
- * with `PG_ERR_TOO_BIG`. A wait has no deadline of its own: a server that
- * accepts and never answers holds the task until it closes, the task is
- * cancelled, or (in `pgAsyncConnect`) the caller gives up; bound a slow
- * statement with the server's `statement_timeout` too.
+ * with `PG_ERR_TOO_BIG`. `pgAsyncConnect` gives each connection at most
+ * `connectWaitMs` (10 s) to connect and finish its startup. A query's wait
+ * has no deadline of its own: a server that accepts and never answers holds
+ * the task until it closes or the task is cancelled; bound a slow statement
+ * with the server's `statement_timeout` too.
  *
  * **Cancellation.** A task that is cancelled (`nish:async`'s `cancel`, a
  * `cancelAfter` deadline, or `nish/net/serve` when the client hangs up, the
  * request's deadline passes or the server drains) stops waiting at once.
- * `pgAsyncClaim` answers `PG_ASYNC_CANCELLED` and claims nothing; a query
+ * `pgAsyncClaim` and `pgAsyncSeat` answer `PG_ASYNC_CANCELLED` and take
+ * nothing; a query
  * not yet sent fails with nothing written and its connection reusable; a
  * query cut off mid-answer fails with `PG_ERR_CLOSED`, `socketError`
  * `PG_ASYNC_CANCELLED` and `reusable` false, so the task's
  * `pgAsyncRelease` closes the connection, whose unread answer would put the
- * next task out of step. No CancelRequest is sent: the server runs the
+ * next task out of step. A pipelined statement cancelled before its turn
+ * fails the same way and fails the statements behind it. No CancelRequest is sent: the server runs the
  * statement on until it sees the socket closed.
  *
  * **Memory.** Run each query in a spawned task, as `title` does above: the
@@ -117,13 +145,14 @@
  * out of range) panic.
  *
  * `tests/link/std_postgres_async` runs one against a loopback backend;
+ * `tests/link/std_postgres_async_pipeline` pipelines statements from many tasks;
  * `tests/link/std_postgres_async_flat` reads `Arena.used()` across thousands
  * of queries. Caps and findings: `docs/security/postgres.md`.
  *
  * Written for this module; not ported from another implementation.
  */
 
-import { cancelled, readable, readableWithin, sleep, writable } from "nish:async"
+import { cancelled, readable, readableWithin, sleep, writable, writableWithin } from "nish:async"
 import {
   NET_UNIX_STREAM,
   connectResult,
@@ -179,12 +208,14 @@ export const PG_ASYNC_MAX_STATEMENTS: i32 = 64
 export const PG_ASYNC_MAX_DEPTH: i32 = 16
 /**
  * `pgAsyncSend`'s answer for a statement it did not send because a parameter
- * holds a NUL; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`.
+ * holds a NUL; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the
+ * connection is reused.
  */
 export const PG_ASYNC_UNSENT: i32 = -1
 /**
  * `pgAsyncSend`'s answer for a statement it did not send because the task was
- * cancelled; `pgAsyncAnswer` fails it with `PG_ERR_CLOSED` and `PG_ASYNC_CANCELLED`.
+ * cancelled; `pgAsyncAnswer` fails it with `PG_ERR_CLOSED` and
+ * `PG_ASYNC_CANCELLED`, and the connection is reused.
  */
 export const PG_ASYNC_UNSENT_CANCELLED: i32 = -2
 // `pgAsyncSend` answers a write that broke as this plus the socket error (0 or less).
@@ -244,6 +275,14 @@ export class PgAsyncPool {
   waits: i32 = 0
   /** How many connections were closed rather than given back: by `pgAsyncRelease`, or once a lost pipeline emptied. */
   dropped: i32 = 0
+  /**
+   * The most milliseconds `pgAsyncConnect` gives one connection to connect
+   * and finish its startup before it closes it and moves on; 0 or less waits
+   * for as long as the server takes.
+   */
+  connectWaitMs: i32 = 10000
+  /** How many connections `pgAsyncConnect` made, in all. */
+  connects: i32 = 0
   /** Each statement `pgAsyncPrepare` registered: its SQL as UTF-8. */
   readonly statements: u8[][]
   /** Per slot and statement (`slot * PG_ASYNC_MAX_STATEMENTS + statement`): 1 once a Parse for it was sent on that connection. */
@@ -254,6 +293,10 @@ export class PgAsyncPool {
   readonly inStart: i32[]
   /** Per slot: where the unserved bytes in `inputs` end. */
   readonly inEnd: i32[]
+  /** Per slot: where the answer in turn ends in `inputs`, past its ReadyForQuery, or -1 while it is not there whole. */
+  readonly inAnswer: i32[]
+  /** Per slot: 1 when the answer in turn begins with a ParseComplete. */
+  readonly inParsed: u8[]
   /** Per slot: the sequence number the next seated statement takes. */
   readonly nextSeq: i32[]
   /** Per slot: the sequence number whose answer is read next. */
@@ -280,6 +323,8 @@ export class PgAsyncPool {
   readonly wakes: i32[]
   /** Per wake: 1 while a byte is written and not yet read. */
   readonly wakePending: u8[]
+  /** The bytes a wake is rung with and read back into, so neither allocates. */
+  readonly wakeBytes: u8[]
   /** Per wake: the tasks waiting on it. */
   readonly waiters: i32[]
 
@@ -303,6 +348,8 @@ export class PgAsyncPool {
     this.inputs = []
     this.inStart = new Array<i32>(size)
     this.inEnd = new Array<i32>(size)
+    this.inAnswer = new Array<i32>(size)
+    this.inParsed = new Array<u8>(size)
     this.nextSeq = new Array<i32>(size)
     this.served = new Array<i32>(size)
     this.doomAt = new Array<i32>(size)
@@ -316,6 +363,7 @@ export class PgAsyncPool {
     this.seatClaims = new Array<i32>(size * PG_ASYNC_MAX_DEPTH)
     this.wakes = new Array<i32>((size + 1) * 2)
     this.wakePending = new Array<u8>(size + 1)
+    this.wakeBytes = new Array<u8>(8)
     this.waiters = new Array<i32>(size + 1)
     for (let s: i32 = 0; s < size; s++) {
       this.fds[s] = -1
@@ -390,6 +438,8 @@ const pgAsyncForget = (pool: PgAsyncPool, s: i32): void => {
   pool.writing[s] = 0
   pool.inStart[s] = 0
   pool.inEnd[s] = 0
+  pool.inAnswer[s] = -1
+  pool.inParsed[s] = 0
   for (let q: i32 = 0; q < PG_ASYNC_MAX_STATEMENTS; q++) {
     pool.prepared[s * PG_ASYNC_MAX_STATEMENTS + q] = 0
   }
@@ -623,11 +673,12 @@ export const pgAsyncConnect = async (
       conn.dispose()
       continue
     }
-    const made: boolean = await pgAsyncStartup(conn, fd)
+    const made: boolean = await pgAsyncStartup(conn, fd, monotonicNanos(), pool.connectWaitMs)
     conn.dispose()
     if (made) {
       pool.fds[s] = fd
       pool.claimed[s] = 0
+      pool.connects += 1
       pgAsyncForget(pool, s)
     } else {
       netClose(fd)
@@ -636,10 +687,14 @@ export const pgAsyncConnect = async (
   return pool.live()
 }
 
-/** Runs `conn`'s startup on `fd` until it is ready (true) or has failed (false). */
-const pgAsyncStartup = async (conn: PgConnection, fd: i32): Promise<boolean> => {
-  const connected: boolean = await writable(fd)
-  if (pgAsyncWaitFailure(connected) !== 0 || connectResult(fd) !== 0) {
+/**
+ * Runs `conn`'s startup on `fd` until it is ready (true) or has failed
+ * (false), failing too once `waitMs` have passed since `began` (a
+ * `monotonicNanos` reading) when `waitMs` is above 0.
+ */
+const pgAsyncStartup = async (conn: PgConnection, fd: i32, began: i64, waitMs: i32): Promise<boolean> => {
+  const connected: boolean = await pgAsyncWaitUntil(fd, true, began, waitMs)
+  if (!connected || connectResult(fd) !== 0) {
     return false
   }
   while (true) {
@@ -651,8 +706,8 @@ const pgAsyncStartup = async (conn: PgConnection, fd: i32): Promise<boolean> => 
         conn.outputEnd() - conn.outputStart()
       )
       if (n === PG_ASYNC_AGAIN) {
-        const waited: boolean = await writable(fd)
-        if (pgAsyncWaitFailure(waited) !== 0) {
+        const waited: boolean = await pgAsyncWaitUntil(fd, true, began, waitMs)
+        if (!waited) {
           return false
         }
       } else if (n <= 0) {
@@ -675,8 +730,8 @@ const pgAsyncStartup = async (conn: PgConnection, fd: i32): Promise<boolean> => 
       const room: i32 = conn.inputRoom()
       const got: i32 = room > 0 ? netRead(fd, conn.inputBuffer(), conn.inputEnd(), room) : 0
       if (got === PG_ASYNC_AGAIN) {
-        const waited: boolean = await readable(fd)
-        if (pgAsyncWaitFailure(waited) !== 0) {
+        const waited: boolean = await pgAsyncWaitUntil(fd, false, began, waitMs)
+        if (!waited) {
           return false
         }
       } else if (got <= 0) {
@@ -687,6 +742,30 @@ const pgAsyncStartup = async (conn: PgConnection, fd: i32): Promise<boolean> => 
       }
     }
   }
+}
+
+/**
+ * Waits until `fd` is writable (`write`) or readable: true once it is, false
+ * when the wait failed, the task is cancelled, or `waitMs` (when above 0)
+ * have passed since `began`, a `monotonicNanos` reading.
+ */
+const pgAsyncWaitUntil = async (fd: i32, write: boolean, began: i64, waitMs: i32): Promise<boolean> => {
+  let waited: boolean = false
+  if (waitMs <= 0 && write) {
+    waited = await writable(fd)
+  } else if (waitMs <= 0) {
+    waited = await readable(fd)
+  } else {
+    const left: i32 = waitMs - pgAsyncSince(began)
+    if (left <= 0) {
+      return false
+    } else if (write) {
+      waited = await writableWithin(fd, left)
+    } else {
+      waited = await readableWithin(fd, left)
+    }
+  }
+  return pgAsyncWaitFailure(waited) === 0
 }
 
 /** Milliseconds since `began`, a `monotonicNanos` reading. */
@@ -702,8 +781,8 @@ const pgAsyncSince = (began: i64): i32 => {
 const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
   const fd: i32 = pool.wakes[w * 2 + 1]
   if (pool.waiters[w] > 0 && toI32(pool.wakePending[w]) === 0 && fd >= 0) {
-    const one: u8[] = [1]
-    if (netWrite(fd, one, 0, 1) === 1) {
+    pool.wakeBytes[0] = 1
+    if (netWrite(fd, pool.wakeBytes, 0, 1) === 1) {
       pool.wakePending[w] = 1
     }
   }
@@ -713,8 +792,7 @@ const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
 const pgAsyncDrain = (pool: PgAsyncPool, w: i32): void => {
   const fd: i32 = pool.wakes[w * 2]
   if (toI32(pool.wakePending[w]) === 1 && fd >= 0) {
-    const spare: u8[] = new Array<u8>(8)
-    netRead(fd, spare, 0, 8)
+    netRead(fd, pool.wakeBytes, 0, 8)
     pool.wakePending[w] = 0
   }
 }
@@ -831,16 +909,18 @@ export const pgAsyncPrepare = (pool: PgAsyncPool, sql: string): i32 => {
  * Takes a seat for one statement on a shared connection: the live one with
  * the fewest statements in flight, below `pool.depth`, that no task claimed
  * whole and no task is writing to. The seat fixes the statement's place in
- * the connection's order, so the calling task sends it next with
- * `pgAsyncSend` and then reads its answer with `pgAsyncAnswer`, with no other
- * `await` between them. While no connection has room it waits until a seat
+ * the connection's order, so the calling task goes straight on, with no
+ * other `await` between: `pgAsyncSend` writes the statement, `pgAsyncTurn`
+ * waits for its answer, `pgAsyncAnswer` builds it and `pgAsyncDone` spends
+ * the ticket. Until `pgAsyncTurn` no other seat on the connection is taken,
+ * so the statements go out in the order of their seats. While no connection has room it waits until a seat
  * or a connection frees and wakes it, for at most `pool.claimWaitMs` in all.
  * It writes only numbers into the pool, so a spawned task may call it.
  * @param pool The pool.
  * @param statement A number `pgAsyncPrepare` answered; any other panics, as
  *   does a `pool.depth` out of range.
- * @returns A ticket (0 or more) for `pgAsyncSend` and then exactly one
- *   `pgAsyncAnswer`; `PG_POOL_NONE` (-1) when no slot is connected;
+ * @returns A ticket (0 or more) for `pgAsyncSend`, `pgAsyncTurn`,
+ *   `pgAsyncAnswer` and `pgAsyncDone`, each called once; `PG_POOL_NONE` (-1) when no slot is connected;
  *   `PG_CARRIER_FULL` (-2) when no seat came free in time;
  *   `PG_ASYNC_CANCELLED` (-3) when the calling task is cancelled, before or
  *   while it waits.
@@ -934,11 +1014,11 @@ const pgAsyncSeatOf = (pool: PgAsyncPool, ticket: i32): i32 => {
  * the socket while other tasks run. It only reads the pool; its buffer is the
  * calling task's.
  * @param pool The pool the ticket came from.
- * @param ticket A ticket `pgAsyncSeat` answered and no `pgAsyncAnswer` has
+ * @param ticket A ticket `pgAsyncSeat` answered and no `pgAsyncDone` has
  *   spent; any other panics.
  * @param params The parameters, as many as the statement names; a NUL in
  *   one sends nothing.
- * @returns What to hand `pgAsyncAnswer`: the bytes written, or
+ * @returns What to hand `pgAsyncTurn`: the bytes written, or
  *   `PG_ASYNC_UNSENT` or `PG_ASYNC_UNSENT_CANCELLED` when nothing was, or
  *   less than -15 when the write broke.
  */
@@ -1037,51 +1117,69 @@ const pgAsyncFree = (pool: PgAsyncPool, seat: i32): void => {
 }
 
 /**
- * Reads the seat's answer, in its turn: the statements seated on the
- * connection before it are answered first, to their own tasks, and this one's
- * answer is framed from what they read past theirs and then from the socket.
- * A statement the server refuses fails alone (each has its own Sync); one
- * seated behind a refused Parse fails with SQLSTATE `26000` and the next one
- * parses again. A lost connection (a socket error, a frame this module does
- * not expect, a cap past which it cannot be read, or a task cancelled with its
- * answer unread) fails this statement and every one behind it with
- * `PG_ERR_CLOSED`, and closes once the last of them is answered. It writes
- * only numbers into the pool, and builds the answer in the task's memory, so
- * a spawned task may call it.
+ * Whether the answer in turn on slot `s` lies whole in its input, from
+ * `inStart`: `inAnswer` is set to where it ends, past its ReadyForQuery, or
+ * to -1 for a frame length no answer has, which `pgAsyncAnswer` fails.
+ */
+const pgAsyncScan = (pool: PgAsyncPool, s: i32): boolean => {
+  const input: u8[] = pool.inputs[s]
+  const end: i32 = pool.inEnd[s]
+  let at: i32 = pool.inStart[s]
+  pool.inParsed[s] = 0
+  while (end - at >= 5 && at >= 0 && at + 5 <= toI32(input.length)) {
+    const length: i32 = getI32BE(input, at + 1)
+    if (length < 4 || length > pool.maxMessage) {
+      pool.inAnswer[s] = -1
+      return true
+    }
+    if (end - at - 1 < length) {
+      return false
+    }
+    const type: i32 = toI32(input[at])
+    at += 1 + length
+    if (type === 49) {
+      pool.inParsed[s] = 1
+    }
+    if (type === 90) {
+      pool.inAnswer[s] = at
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Waits for the seat's turn and reads its answer off the connection: the
+ * statements seated before it are answered first, to their own tasks, and
+ * what they read past their own answers begins this one. One read takes what
+ * the socket holds, up to the pool's input, so the answers behind this one
+ * often arrive with it. A lost connection (a socket error, or a task
+ * cancelled with its answer unread) fails this statement and every one behind
+ * it. It writes only numbers into the pool, so a spawned task may call it;
+ * `pgAsyncAnswer` then builds the answer in the task's memory.
  * @param pool The pool the ticket came from; a cap out of its range panics.
  * @param ticket The ticket `pgAsyncSeat` answered and `pgAsyncSend` used;
- *   it is spent here, and any other panics.
+ *   any other panics.
  * @param sent What `pgAsyncSend` answered.
- * @returns The answer; `reusable` is false when this statement lost the connection.
+ * @returns What to hand `pgAsyncAnswer` and `pgAsyncDone`: 0 when the answer
+ *   is there to read, else less than 0 for a statement that failed unanswered.
  */
-export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, sent: i32): Promise<PgAsyncResult> => {
+export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Promise<i32> => {
   pgAsyncCheckCaps(pool)
   const seat: i32 = pgAsyncSeatOf(pool, ticket)
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
   const seq: i32 = pool.seatSeq[seat]
-  const result = new PgAsyncResult()
   if (sent === PG_ASYNC_UNSENT || sent === PG_ASYNC_UNSENT_CANCELLED) {
-    // Nothing went out, and no other seat was taken here while it was being
-    // written, so its place in the order is handed back.
-    pool.nextSeq[s] = seq
-    if (toI32(pool.seatParse[seat]) === 1) {
-      pool.prepared[s * PG_ASYNC_MAX_STATEMENTS + pool.seatStatement[seat]] = 0
-    }
-    pool.writing[s] = 0
-    pgAsyncFree(pool, seat)
-    result.code = PG_CARRIER_FAILED
-    result.failure = sent === PG_ASYNC_UNSENT ? PG_ERR_ENCODING : PG_ERR_CLOSED
-    result.socketError = sent === PG_ASYNC_UNSENT ? 0 : PG_ASYNC_CANCELLED
-    result.reusable = true
-    return result
+    // Nothing went out; `pgAsyncDone` hands its place in the order back
+    // while `writing` keeps any other seat from being taken here.
+    return sent
   }
   pool.writing[s] = 0
+  pgAsyncSignal(pool, pool.size)
   if (sent < 0) {
     pgAsyncDoom(pool, s, seq)
-    pgAsyncFree(pool, seat)
-    return pgAsyncLost(result, PG_ERR_CLOSED, sent - PG_ASYNC_BROKEN)
+    return sent <= PG_ASYNC_BROKEN ? sent : PG_ASYNC_BROKEN
   }
-  pgAsyncSignal(pool, pool.size)
   pool.seatWaiting[seat] = 1
   while (pool.served[s] !== seq && !pgAsyncLostSeat(pool, seat)) {
     if (cancelled()) {
@@ -1096,51 +1194,145 @@ export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, sent: i32): 
     pgAsyncDrain(pool, s)
   }
   if (pgAsyncLostSeat(pool, seat)) {
-    pgAsyncFree(pool, seat)
-    return pgAsyncLost(result, PG_ERR_CLOSED, cancelled() ? PG_ASYNC_CANCELLED : 0)
+    return PG_ASYNC_BROKEN + (cancelled() ? PG_ASYNC_CANCELLED : 0)
   }
-  const reading = await pgAsyncRead(
+  const fd: i32 = pool.fds[s]
+  const input: u8[] = pool.inputs[s]
+  while (!pgAsyncScan(pool, s)) {
+    if (pool.inStart[s] > 0) {
+      copyBytes(input, 0, input, pool.inStart[s], pool.inEnd[s] - pool.inStart[s])
+      pool.inEnd[s] -= pool.inStart[s]
+      pool.inStart[s] = 0
+    }
+    if (pool.inEnd[s] >= toI32(input.length)) {
+      // Past the input: `pgAsyncAnswer` reads the rest of it alone.
+      pool.inAnswer[s] = -1
+      return 0
+    }
+    const got: i32 = netRead(fd, input, pool.inEnd[s], toI32(input.length) - pool.inEnd[s])
+    if (got === PG_ASYNC_AGAIN) {
+      const waited: boolean = await readable(fd)
+      const failed: i32 = pgAsyncWaitFailure(waited)
+      if (failed !== 0) {
+        pgAsyncDoom(pool, s, seq)
+        return PG_ASYNC_BROKEN + failed
+      }
+    } else if (got <= 0) {
+      pgAsyncDoom(pool, s, seq)
+      return PG_ASYNC_BROKEN + (got < 0 ? got : 0)
+    } else {
+      pool.inEnd[s] += got
+    }
+  }
+  return 0
+}
+
+/**
+ * Builds the seat's answer, in the calling task's memory, from what
+ * `pgAsyncTurn` read, reading the rest of an answer past the pool's input
+ * from the socket, never past its ReadyForQuery. A statement the server
+ * refuses fails alone (each has its own Sync); one seated behind a refused
+ * Parse fails with SQLSTATE `26000` and the next one parses again. A frame
+ * this module does not expect or a cap past which it cannot be read fails it
+ * with `reusable` false. It only reads the pool, so a spawned task may call
+ * it.
+ * @param pool The pool the ticket came from; a cap out of its range panics.
+ * @param ticket The ticket `pgAsyncTurn` used; any other panics, as does a
+ *   ticket whose turn has not come.
+ * @param turn What `pgAsyncTurn` answered; one below 0 fails the answer
+ *   without reading, with `PG_ERR_ENCODING` for a parameter that could not be
+ *   sent and `PG_ERR_CLOSED` otherwise.
+ * @returns The answer; its `reusable` goes to `pgAsyncDone`.
+ */
+export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, turn: i32): Promise<PgAsyncResult> => {
+  pgAsyncCheckCaps(pool)
+  const seat: i32 = pgAsyncSeatOf(pool, ticket)
+  const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
+  if (turn < 0) {
+    const result = new PgAsyncResult()
+    if (turn === PG_ASYNC_UNSENT || turn === PG_ASYNC_UNSENT_CANCELLED) {
+      result.code = PG_CARRIER_FAILED
+      result.failure = turn === PG_ASYNC_UNSENT ? PG_ERR_ENCODING : PG_ERR_CLOSED
+      result.socketError = turn === PG_ASYNC_UNSENT ? 0 : PG_ASYNC_CANCELLED
+      result.reusable = true
+      return result
+    }
+    return pgAsyncLost(result, PG_ERR_CLOSED, turn <= PG_ASYNC_BROKEN ? turn - PG_ASYNC_BROKEN : 0)
+  }
+  if (pool.served[s] !== pool.seatSeq[seat] || pgAsyncLostSeat(pool, seat)) {
+    panic("nish/net/postgres-async: an answer read before its turn")
+  }
+  // Copied into the task's memory: the spawn rules read an array of the pool
+  // handed across an `await` as one the callee may grow.
+  const input: u8[] = pool.inputs[s]
+  const from: i32 = pool.inStart[s]
+  const to: i32 = pool.inAnswer[s] >= 0 ? pool.inAnswer[s] : pool.inEnd[s]
+  const carried: u8[] = new Array<u8>(from >= 0 && from <= to && to <= toI32(input.length) ? to - from : 0)
+  for (let i: i32 = 0; i < toI32(carried.length); i++) {
+    carried[i] = input[from + i]
+  }
+  return await pgAsyncRead(
     pool.fds[s],
-    pool.inputs[s],
-    pool.inStart[s],
-    pool.inEnd[s],
+    carried,
     true,
     pool.maxMessage,
     pool.maxColumns,
     pool.maxRows,
     pool.maxResultBytes
   )
-  const answer: PgAsyncResult = reading.result
-  const rest: i32 = reading.end - reading.start
-  const input: u8[] = pool.inputs[s]
-  if (!reading.done || rest > toI32(input.length)) {
-    pgAsyncDoom(pool, s, seq)
+}
+
+/**
+ * Spends the seat's ticket once its answer is built: the connection moves
+ * past the answer, the next seat in its order is served, and the tasks
+ * waiting for room are woken. A Parse that failed is sent again by the next
+ * seat that runs the statement; an answer that left the connection unfit
+ * fails the seats behind it, and the connection closes once the last of them
+ * is answered. It writes only numbers into the pool, so a spawned task may
+ * call it.
+ * @param pool The pool the ticket came from.
+ * @param ticket The ticket `pgAsyncAnswer` used; it is spent here, and any
+ *   other panics.
+ * @param turn What `pgAsyncTurn` answered.
+ * @param reusable The answer's `reusable`.
+ */
+export const pgAsyncDone = (pool: PgAsyncPool, ticket: i32, turn: i32, reusable: boolean): void => {
+  const seat: i32 = pgAsyncSeatOf(pool, ticket)
+  const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
+  const seq: i32 = pool.seatSeq[seat]
+  const statement: i32 = s * PG_ASYNC_MAX_STATEMENTS + pool.seatStatement[seat]
+  if (turn === PG_ASYNC_UNSENT || turn === PG_ASYNC_UNSENT_CANCELLED) {
+    // No other seat was taken here while it was being written, so its place
+    // in the order is handed back.
+    pool.nextSeq[s] = seq
+    if (toI32(pool.seatParse[seat]) === 1) {
+      pool.prepared[statement] = 0
+    }
+    pool.writing[s] = 0
     pgAsyncFree(pool, seat)
-    answer.reusable = false
-    return answer
+    return
   }
-  // What was read past this answer begins the next one's.
-  const from: u8[] = reading.buf
-  for (let i: i32 = 0; i < rest && i < toI32(input.length) && reading.start + i < toI32(from.length); i++) {
-    input[i] = from[reading.start + i]
-  }
-  pool.inStart[s] = 0
-  pool.inEnd[s] = rest
-  pool.served[s] = (seq + 1) % PG_ASYNC_SEQ_WRAP
-  if (toI32(pool.seatParse[seat]) === 1 && !reading.parsed) {
-    // The Parse failed: the next seat that runs the statement sends it again.
-    pool.prepared[s * PG_ASYNC_MAX_STATEMENTS + pool.seatStatement[seat]] = 0
-  }
-  if (!answer.reusable) {
-    // A transaction left open or a setting changed: the statements behind
-    // this one would run in a session they did not ask for.
-    pgAsyncDoom(pool, s, pool.served[s])
-  }
-  if (pgAsyncReady(pool, s, seat)) {
-    pgAsyncSignal(pool, s)
+  if (turn >= 0 && pool.served[s] === seq) {
+    pool.inStart[s] = pool.inAnswer[s] >= 0 ? pool.inAnswer[s] : pool.inEnd[s]
+    if (pool.inStart[s] === pool.inEnd[s]) {
+      pool.inStart[s] = 0
+      pool.inEnd[s] = 0
+    }
+    pool.served[s] = (seq + 1) % PG_ASYNC_SEQ_WRAP
+    if (toI32(pool.seatParse[seat]) === 1 && toI32(pool.inParsed[s]) === 0) {
+      pool.prepared[statement] = 0
+    }
+    if (!reusable) {
+      // A lost frame, a transaction left open or a setting changed: the
+      // statements behind this one would be read out of step, or run in a
+      // session they did not ask for.
+      pgAsyncDoom(pool, s, pool.served[s])
+    }
+    if (pgAsyncReady(pool, s, seat)) {
+      pgAsyncSignal(pool, s)
+    }
   }
   pgAsyncFree(pool, seat)
-  return answer
 }
 
 /**
@@ -1198,18 +1390,7 @@ export const pgAsyncQuery = async (
     }
   }
   const none: u8[] = []
-  const reading = await pgAsyncRead(
-    fd,
-    none,
-    0,
-    0,
-    false,
-    pool.maxMessage,
-    pool.maxColumns,
-    pool.maxRows,
-    pool.maxResultBytes
-  )
-  return reading.result
+  return await pgAsyncRead(fd, none, false, pool.maxMessage, pool.maxColumns, pool.maxRows, pool.maxResultBytes)
 }
 
 /**
@@ -1230,12 +1411,6 @@ const pgAsyncCheckCaps = (pool: PgAsyncPool): void => {
   ) {
     panic("nish/net/postgres-async: a PgAsyncPool cap out of range")
   }
-}
-
-/** `reading`'s answer lost the connection, as `pgAsyncLost`. */
-const pgAsyncLosing = (reading: PgAsyncReading, failure: i32, socketError: i32): PgAsyncReading => {
-  pgAsyncLost(reading.result, failure, socketError)
-  return reading
 }
 
 /** `result` failed for `failure`, its socket error `socketError`, and its connection unfit to reuse. */
@@ -1361,52 +1536,29 @@ const pgAsyncBytes = (s: string): u8[] | null => {
 }
 
 /**
- * One answer read: the result, and the input read past its ReadyForQuery at
- * `buf[start, end)`.
- */
-class PgAsyncReading {
-  readonly result: PgAsyncResult
-  buf: u8[]
-  start: i32 = 0
-  end: i32 = 0
-  /** Whether the answer was read to its ReadyForQuery; false when the connection was lost. */
-  done: boolean = false
-  /** Whether a ParseComplete was seen. */
-  parsed: boolean = false
-
-  constructor(result: PgAsyncResult, buf: u8[]) {
-    this.result = result
-    this.buf = buf
-  }
-}
-
-/**
  * Reads the answer to one Parse, Bind, Execute and Sync from `fd`, through
- * its ReadyForQuery, under the caps, starting from `seed[seedStart, seedEnd)`,
- * input an earlier answer read past its own. With `capped` (a pipelined
- * connection), no read takes more than `PG_ASYNC_INPUT_SIZE` bytes, so what
- * is read past the answer fits one pool input; without it, input past the
- * answer leaves the connection unfit to reuse. The result is made here rather than handed in: the spawn
- * rules read a callee that grows an array it was handed across an `await` as
- * one that may grow the caller's pool.
+ * its ReadyForQuery, under the caps, starting from `seed`, the part of it
+ * already read. With `bounded` (a pipelined connection), no read passes the
+ * answer's ReadyForQuery, so the next answer stays on the socket; without
+ * it, input past the answer leaves the connection unfit to reuse. The result
+ * is made here rather than handed in: the spawn rules read a callee that
+ * grows an array it was handed across an `await` as one that may grow the
+ * caller's pool.
  */
 const pgAsyncRead = async (
   fd: i32,
   seed: u8[],
-  seedStart: i32,
-  seedEnd: i32,
-  capped: boolean,
+  bounded: boolean,
   maxMessage: i32,
   maxColumns: i32,
   maxRows: i32,
   maxResultBytes: i32
-): Promise<PgAsyncReading> => {
+): Promise<PgAsyncResult> => {
   const result = new PgAsyncResult()
-  let buf: u8[] = new Array<u8>(PG_ASYNC_INPUT_SIZE)
-  const reading = new PgAsyncReading(result, buf)
+  let buf: u8[] = new Array<u8>(toI32(seed.length) > PG_ASYNC_INPUT_SIZE ? toI32(seed.length) : PG_ASYNC_INPUT_SIZE)
   let start: i32 = 0
   let end: i32 = 0
-  for (let i: i32 = seedStart; i < seedEnd && i >= 0 && i < toI32(seed.length) && end < toI32(buf.length); i++) {
+  for (let i: i32 = 0; i < toI32(seed.length) && end < toI32(buf.length); i++) {
     buf[end] = seed[i]
     end += 1
   }
@@ -1421,15 +1573,15 @@ const pgAsyncRead = async (
     while (end - start >= 5) {
       // Always true, since `end` never passes the buffer; it proves the reads below.
       if (start < 0 || start + 5 > toI32(buf.length)) {
-        return pgAsyncLosing(reading, PG_ERR_FRAME, 0)
+        return pgAsyncLost(result, PG_ERR_FRAME, 0)
       }
       const type: i32 = toI32(buf[start])
       const length: i32 = getI32BE(buf, start + 1)
       if (length < 4) {
-        return pgAsyncLosing(reading, PG_ERR_FRAME, 0)
+        return pgAsyncLost(result, PG_ERR_FRAME, 0)
       }
       if (length > maxMessage) {
-        return pgAsyncLosing(reading, PG_ERR_TOO_BIG, 0)
+        return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
       }
       if (end - start - 1 < length) {
         break
@@ -1440,33 +1592,30 @@ const pgAsyncRead = async (
       if (type === 90) {
         // 'Z': ReadyForQuery, the end of the answer.
         if (stop - body !== 1 || body < 0 || body >= toI32(buf.length)) {
-          return pgAsyncLosing(reading, PG_ERR_FRAME, 0)
+          return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
-        // Unpipelined, bytes after the ReadyForQuery answer no statement
-        // this query sent, so the connection is out of step and closed
-        // rather than given back.
-        result.reusable = toI32(buf[body]) === PG_ASYNC_IDLE && !changed && (capped || start === end)
+        // Bytes after the ReadyForQuery answer no statement this one sent,
+        // so the connection is out of step and closed rather than given
+        // back. A pipelined read stops at the ReadyForQuery, so none are
+        // read here unless the server sent them inside this answer.
+        result.reusable = toI32(buf[body]) === PG_ASYNC_IDLE && !changed && start === end
         if (refused || tooBig) {
           result.code = PG_CARRIER_FAILED
           result.failure = tooBig ? PG_ERR_TOO_BIG : PG_ERR_NONE
         }
-        reading.buf = buf
-        reading.start = start
-        reading.end = end
-        reading.done = true
-        return reading
+        return result
       }
       if (type === 68) {
         // 'D': DataRow, a count then each column's length (-1 for NULL) and bytes.
         if (stop - body < 2) {
-          return pgAsyncLosing(reading, PG_ERR_FRAME, 0)
+          return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
         const columns: i32 = toI32(getU16BE(buf, body))
         if (columns > maxColumns) {
-          return pgAsyncLosing(reading, PG_ERR_TOO_BIG, 0)
+          return pgAsyncLost(result, PG_ERR_TOO_BIG, 0)
         }
         if (shaped && columns !== result.columns) {
-          return pgAsyncLosing(reading, PG_ERR_FRAME, 0)
+          return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
         // The frame's length bounds its cells' bytes; each cell costs its string besides.
         const cost: i32 = stop - body + columns * PG_ASYNC_CELL_COST
@@ -1476,7 +1625,7 @@ const pgAsyncRead = async (
         }
         kept += cost
         if (!pgAsyncRow(buf, body + 2, stop, columns, result)) {
-          return pgAsyncLosing(reading, PG_ERR_FRAME, 0)
+          return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
         result.columns = columns
         shaped = true
@@ -1486,7 +1635,7 @@ const pgAsyncRead = async (
       if (type === 67) {
         // 'C': CommandComplete, a NUL-ended tag.
         if (stop - body < 1 || toI32(buf[stop - 1]) !== 0) {
-          return pgAsyncLosing(reading, PG_ERR_FRAME, 0)
+          return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
         // A tag is kept, so it costs the budget too; past it, the answer fails.
         if (stop - body > maxResultBytes - kept) {
@@ -1507,7 +1656,7 @@ const pgAsyncRead = async (
         }
         kept += stop - body
         if (!pgAsyncError(buf, body, stop, result)) {
-          return pgAsyncLosing(reading, PG_ERR_FRAME, 0)
+          return pgAsyncLost(result, PG_ERR_FRAME, 0)
         }
         continue
       }
@@ -1516,16 +1665,11 @@ const pgAsyncRead = async (
         changed = true
         continue
       }
-      if (type === 49) {
-        // ParseComplete.
-        reading.parsed = true
+      if (type === 49 || type === 50 || type === 73 || type === 78 || type === 65) {
+        // ParseComplete, BindComplete, EmptyQueryResponse, a notice, a notification.
         continue
       }
-      if (type === 50 || type === 73 || type === 78 || type === 65) {
-        // BindComplete, EmptyQueryResponse, a notice, a notification.
-        continue
-      }
-      return pgAsyncLosing(reading, PG_ERR_UNEXPECTED, 0)
+      return pgAsyncLost(result, PG_ERR_UNEXPECTED, 0)
     }
     // Room for the rest of the message at `start`, then more input.
     if (start > 0) {
@@ -1541,15 +1685,25 @@ const pgAsyncRead = async (
       buf = grown
     }
     const room: i32 = toI32(buf.length) - end
-    const got: i32 = netRead(fd, buf, end, capped && room > PG_ASYNC_INPUT_SIZE ? PG_ASYNC_INPUT_SIZE : room)
+    let want: i32 = room
+    if (bounded) {
+      // The rest of the frame at `start`, and the next header unless it is the ReadyForQuery.
+      want = 5 - (end - start)
+      if (end - start >= 5 && start >= 0 && start < toI32(buf.length)) {
+        const length: i32 = getI32BE(buf, start + 1)
+        want = 1 + length - (end - start) + (toI32(buf[start]) === 90 ? 0 : 5)
+      }
+      want = want > room ? room : want < 1 ? 1 : want
+    }
+    const got: i32 = netRead(fd, buf, end, want)
     if (got === PG_ASYNC_AGAIN) {
       const waited: boolean = await readable(fd)
       const failed: i32 = pgAsyncWaitFailure(waited)
       if (failed !== 0) {
-        return pgAsyncLosing(reading, PG_ERR_CLOSED, failed)
+        return pgAsyncLost(result, PG_ERR_CLOSED, failed)
       }
     } else if (got <= 0) {
-      return pgAsyncLosing(reading, PG_ERR_CLOSED, got)
+      return pgAsyncLost(result, PG_ERR_CLOSED, got)
     } else {
       end += got
     }

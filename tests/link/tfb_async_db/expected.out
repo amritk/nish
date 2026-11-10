@@ -16,6 +16,8 @@ PASS  a count of 500 answers 500 rows
 PASS  a count of 501 answers 500 rows
 PASS  a count past i32 answers 500 rows
 PASS  each request is one World read
+PASS  a cached query at a cold start with no connection to seat answers 503 with Server
+PASS  and leaves the cache cold, not loading
 PASS  a cached query at a cold start waits on the one reading the table
 PASS  a refused read of the table answers 503 with Server, to both
 PASS  both are counted as failures
@@ -64,12 +66,19 @@ PASS  the pool closes that connection too
 PASS  tfbKeepPool dials it again
 PASS  the next /updates is served
 PASS  tfbKeepPool dialled two connections again
-tfb async db: client: 65 passed, 0 failed, 0 skipped
+PASS  a connection idle past five seconds still serves /db
+PASS  with no dial
+PASS  a full pool waits `every` to look again
+PASS  a pool still short doubles the wait
+PASS  up to five seconds
+PASS  and no further
+tfb async db: client: 73 passed, 0 failed, 0 skipped
 PASS  serveOn stops once the client's requests are answered
 PASS  every client check passed
 PASS  tfbKeepPool stops with it, having dialled two connections again
 PASS  the server answered each request once
-PASS  no query failed but the seven made to
+PASS  no query failed but the eight made to
 PASS  every statement was one of the entry's four
+PASS  each was prepared once a connection
 PASS  limits asked for 0 slots have one connection
-tfb async db: 8 passed, 0 failed, 0 skipped
+tfb async db: 9 passed, 0 failed, 0 skipped
