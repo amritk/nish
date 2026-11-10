@@ -196,7 +196,8 @@ still does not exist.
 only) designs and measures the next step: a reference to a capture-free
 top-level function held in a local, a field or an array, lowered to a tag and
 a `switch` over a closed set, so the call stays direct and the facts are the
-join of the set's.
+join of the set's. It recommends the compat tier today and strict once a stage
+demonstrates per-place sets.
 
 ### 6.1 The shape that costs nothing
 

@@ -155,10 +155,10 @@ a direct call and nothing lost ([LANGUAGE.md](LANGUAGE.md#function-parameters)).
 
 A function stored, returned or held in a field is still on it;
 [wp51-function-references.md](wp51-function-references.md) (proposed, design
-only) measures a strict lowering for references to capture-free top-level
-functions — a tag and a `switch` — that would take part of this row off the
-list if each call's set is the members that can reach it, and leaves closures
-here.
+only) measures a lowering for references to capture-free top-level
+functions — a tag and a `switch` — that joins this row as compat today, would
+take part of the row off the list once a stage demonstrates that each call's
+set is the members that can reach it, and leaves closures here.
 
 ### 2.2 Tier 3, refused permanently
 
