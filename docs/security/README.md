@@ -56,7 +56,7 @@ the record that found it. The notes below the table name each such finding.
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
 | HTTP/1.1 and WebSocket | [http1-codec.md](http1-codec.md) | `std/net/http1-codec.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 2 ⁷ |
 | HTTP/1.1 client | [http1-client-codec.md](http1-client-codec.md) | `std/net/http1-client-codec.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
-| Blocking HTTP client | [fetch.md](fetch.md) | `std/net/fetch.ts` | 0 / 0 / 0 / 7 | 0 / 0 / 0 / 2 |
+| Blocking HTTP client | [fetch.md](fetch.md) | `std/net/fetch.ts` | 0 / 0 / 0 / 10 | 0 / 0 / 0 / 2 |
 | Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
@@ -74,19 +74,20 @@ the record that found it. The notes below the table name each such finding.
 | Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts`, `src/shm-window.ts`, `src/emit-shm-window.ts` | 0 / 0 / 1 / 3 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
-| PostgreSQL client and its handler carrier | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts` | 0 / 0 / 5 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
+| PostgreSQL client, its handler carrier and async pool | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts` | 0 / 0 / 7 / 5 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
-| DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
+| DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²² |
 | JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
 | HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
+| Async server | [serve.md](serve.md) | `std/net/serve.ts` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 1 |
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
-| The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf`, `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` in `src/emit-strings.ts` and `hostWindowProven` in `src/attributes.ts` | 0 / 1 / 3 / 3 | 0 / 0 / 0 / 1 |
-| Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver (`src/emit-async.ts`) | 0 / 0 / 2 / 1 | 0 / 0 / 1 / 2 |
-| **Total** ⁸ | | | **3 / 12 / 62 / 156** | **0 / 1 / 4 / 32** |
+| The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
+| Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
+| **Total** ⁸ | | | **3 / 15 / 76 / 170** | **0 / 1 / 3 / 42** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -313,6 +314,23 @@ the record that found it. The notes below the table name each such finding.
     holds and is not a finding; PG-26 (Low), no deadline on a query once
     its connection is up, and PG-27 (Low), a connect attempt with no
     backoff while the server is down, are accepted and not counted.
+
+    PG-28 to PG-31, the async pool's framing, its connections never carrying
+    a session to the next task, its tickets and its bounded claim wait, hold
+    and are not findings. PG-32 (Low), a NUL in an async query's text
+    parameter sent to the server, was found as the pool was written and
+    fixed before it merged. PG-33 (Low), no deadline on an async wait, and
+    PG-34 (Low), a query awaited outside a task keeping its memory until its
+    scope ends, are accepted and not counted. PG-35 (Medium), a connection
+    given back as reusable with bytes after its answer, and PG-36 (Medium),
+    a result's memory bounded only by the product of its caps, were found by
+    the pool's first review and fixed before it merged. PG-37 (Low), a
+    cancelled query closing its connection without a CancelRequest, is
+    accepted and not counted; since cancellation, a program bounds PG-33's
+    wait with `cancelAfter`. PG-38 (Low), an async connect reading before it
+    wrote its queued SCRAM answer and so never finishing against a SCRAM
+    server, was found when a serve handler first ran the pool live and is
+    fixed.
 18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
@@ -340,7 +358,10 @@ the record that found it. The notes below the table name each such finding.
     its recursive server, as glibc's and musl's do, and DNS-4 is the second
     literal reader a module that compiles on `wasm32` needs. DNS-5 (Medium),
     a datagram flood holding the caller's loop inside `DnsClient.ready`, was
-    found and fixed by the resolver stage.
+    found and fixed by the resolver stage. DNS-6 (Low), a later search
+    candidate's NODATA masked by an earlier candidate's fallback error, and
+    DNS-7 (Low), `resolveHost` discarding an answered family at its timeout,
+    were found and fixed by the fallback-and-timeout stage.
 23. RSA-1, RSA-3 and RSA-4 (Low), the DigestInfo without its NULL refused,
     the key-size and exponent caps, and a message over 2^31 − 1 bytes
     panicking in the hash, are accepted, with the reason in their record, and
@@ -461,6 +482,7 @@ only.
 | PKI-31 | Low | `std/crypto/pki.ts` | A dNSName subtree with a leading period is read as the names below it, not refused; an excluded one leaves the apex allowed | — |
 | PKI-32 | Low | `std/crypto/pki.ts` | A root without a subjectKeyIdentifier anchors a path, since one root Mozilla ships lacks it | — |
 | SHM-3 | Low | `runtime/runtime-shm.c` (`adopt`) | A same-user peer that shrinks a region with `ftruncate` makes a later access past the new end a `SIGBUS`, not a checked panic | — |
+| SERVE-14 | Low | `std/net/serve.ts` (`serveOn`, `serveFreeSlot`) | No per-peer share of `inFlight`: one client with `inFlight` connections, each holding a slow request, has every other request answered 503 | #1278 |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in

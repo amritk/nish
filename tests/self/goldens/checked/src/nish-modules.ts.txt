@@ -74,6 +74,10 @@ function isAsyncExport(name: string): boolean -> @isAsyncExport
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
+function isExecutorCall(canonical: string): boolean -> @isExecutorCall [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_at nish_str_eq
+  stackSites=0 stackLocals=0
 function isNishModule(specifier: string): boolean -> @isNishModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: specifier

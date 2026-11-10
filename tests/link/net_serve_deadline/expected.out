@@ -1,0 +1,5 @@
+quick: 200 [text/plain; charset=utf-8] quick true, cancelled false
+slow: 503 [text/plain; charset=utf-8] past the deadline
+slow answered within 2 s: true
+after it, same connection: 200 [text/plain; charset=utf-8] quick true, cancelled false
+serve: 0, answered 3

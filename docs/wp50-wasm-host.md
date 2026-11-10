@@ -1,6 +1,6 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: accepted, 2026-11-06; stages 1, 2 and 3 built.** The owner accepted every
+**Status: accepted, 2026-11-06; stages 1 to 4 built.** The owner accepted every
 recommendation in §13, with Q1 revised: the functions a page supplies are an
 `import` from the page's own TypeScript module (§3), not a `declare function`.
 Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
@@ -14,10 +14,24 @@ built: module storage (`src/module-storage.ts`) and its codes, `Layout` and
 `<out>.sites.json`, the loader's re-entry and dead-module guard, `nish/page`
 and `nish/host/ring`, and the storage's TypeScript reading
 (`src/emit-ts-storage.ts`, which departs from §5.4's sketch as it says); its
-security record is `docs/security/wasm-host.md`. Stage 4 is the next. The anchors below are at `39a87b3b`.
+security record is `docs/security/wasm-host.md`. Stage 4 is built: string
+parameters of host imports and string results of exports (§7), `nish/host/text`,
+a module-storage `u8[]` lent to a `u8[]` parameter, and `runtime/runtime-text.c`
+(`tests/run.js`, section `host-import-text`). Stage 5a is built: on a page
+module `Math.sin`, `cos`, `exp`, `log` and `pow` call `std/math.ts`'s fdlibm
+ports and a float `%` its `fmodF64`, so both page profiles link them with no
+import (`tests/run.js`, section `wasm-math`). Stage 5b is built:
+`--deterministic`, which lowers the five on every target to the same
+functions, sends the TypeScript reading to `nish/math`, makes `f64ToBits` and
+`f32ToBits` give the canonical quiet NaN, refuses the nondeterministic
+capabilities (NL2700–NL2701, NL3052–NL3054), reads `Number(s)`,
+`parseFloat` and `parseInt` with the `--emit-ts` grammar, compiles every
+runtime unit with `-ffp-contract=off`, and holds the float corpus
+(`tests/differential/corpus/float/`) to one `expected.txt` natively, on
+wasm32-wasi and under `--emit-ts` (`tests/run.js`, sections `deterministic`
+and `float-corpus`; CI's `simd-arm64` job runs it on AArch64). The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
-the accepted design; `npm test` compiles stage 2's (host modules and
-`HostHandle`) and none of the later stages' yet.
+the accepted design. Stages 1 to 5 are built; stage 6 is next.
 
 cs, a browser arena shooter, is moving the bulk of its client into Nish
 compiled to WebAssembly: the fixed-step simulation (the same source the native
@@ -570,7 +584,7 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
 
 - **Out, to an import.** A `string` parameter of a host import crosses as the
   pointer to its bytes and its length, `(i32, i32)`. The adapter decodes them
-  with the one `TextDecoder` the loader made at `load`,
+  with a `TextDecoder` the loader made at `load`,
   `utf8.decode(U8.subarray(p, p + n))`, and the page's function receives a
   JavaScript `string`. The TS reading passes the string itself, so the page
   sees one signature in both readings. The decode allocates the string, which
@@ -603,8 +617,35 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   IR names one of its symbols, as it does for `runtime-bytes.c`, and
   `--gc-sections` drops what is not called. A module with no string operation
   links byte-identical.
-- **Cost:** zero to a program with no strings. The size of the unit to one
-  that has strings is stage 4's figure, which it measures before it lands.
+- **Cost:** zero to a program with no strings: the `wasm-size` check holds
+  `add.ts`, `arrays.ts` and `results.ts` to the digests they had before
+  stage 4. Measured when stage 4 landed (clang 18, no wasm-opt):
+  `examples/label.ts`, a template with an `i32` and an `f64`, links to 13,046
+  bytes (gzip 11,786). 10,296 of them are the shortest-digits printer's
+  power-of-ten table, and the code is 2,502. The same template with only the
+  `i32` links to 1,111, because `--gc-sections` drops the printer. The
+  `wasm-size` check holds `label.ts` to those bytes
+  (`WASM_HOST_SIZE_BUDGETS`).
+  Those figures are `--profile wasm-host`'s. `--profile wasm` links with
+  `--export-all` (`scripts/build.sh`), which exports, and so keeps, every
+  `runtime-text.c` function the link pulls in: there a string program keeps
+  `nish_f64_format` and its table though it formats no `f64`. The `i32`-only
+  template measured 14,514 bytes under `--profile wasm` against 1,111 under
+  `wasm-host` (the full `label.ts`: 14,590 against 13,046). A page that cares
+  about size builds with `wasm-host`; `wasm` is the profile that answers every
+  symbol for a hand-written loader.
+- **Built (stage 4).** The adapter is `text(p, n)`, a `new Uint8Array` over the
+  memory decoded by a `TextDecoder` made once per load (the export guard and
+  the import adapters each make one), and an export's result is
+  `stringOut`, read inside `guarded` or `scoped`. An export that takes a
+  `string` is left out of the bridge, and its `.d.ts` line tells the page to
+  write module storage instead. `nish/host/text` is the module's half: `textRead`
+  is `String.fromBytes` behind a count check, and `textWrite`,
+  `textWriteInt` and `textWriteF64` chain into a storage `u8[]` and answer -1
+  when the text does not fit. A storage `u8[]` may be passed to a `u8[]`
+  parameter that only indexes it, so these take the storage itself. The
+  security record is `docs/security/wasm-host.md` ("A string crosses as bytes
+  inside memory") and `docs/security/runtime.md` (`runtime-text.c`).
 
 ## 8. W6. Loading with no fetch
 
@@ -680,9 +721,10 @@ What already agrees, and why:
 
 - **`+ - * /` and `Math.sqrt` on `f64`** are IEEE-754 correctly rounded on
   every target. The emitter writes no `contract` or `fast` flag (`src/emit-ops.ts`).
-  Nothing passes `-ffp-contract`, `-ffast-math` or `-march=native` except
-  `--cpu x86-64-v3`, which passes `-ffp-contract=off` (`scripts/build.sh:382`).
-  So the IR's `fmul` and `fadd` are never fused into an FMA on aarch64.
+  Nothing passes `-ffast-math` or `-march=native`, and since stage 5b every
+  C unit and the program's IR are compiled with `-ffp-contract=off`
+  (`scripts/build.sh`). So the IR's `fmul` and `fadd` are never fused into an
+  FMA on aarch64.
 - **`f32`.** Native builds use single-precision instructions. The TS reading
   writes `Math.fround(a op b)` (`src/emit-ts-numbers.ts:392`). Rounding to
   double and then to single gives the same answer as rounding once for
@@ -702,19 +744,24 @@ What does not agree today, and what the flag does about it:
 | NaN bit patterns. x86-64 makes the default NaN with the sign set, aarch64 without it, and wasm leaves the sign and payload of an arithmetic NaN nondeterministic. They differ only where a program reads a float's bits | `f64ToBits` and `f32ToBits` return the canonical quiet NaN (`0x7ff8000000000000`, `0x7fc00000`) for any NaN: one compare and one select. A snapshot codec that writes floats through them sends the same bytes from server and client |
 | The runtime's C units are compiled with clang's default contraction, which may fuse inside C on aarch64 | every runtime unit is compiled with `-ffp-contract=off`. The float code in them today is exact or integer-only, so this is a guard, not a fix |
 | `Math.random`, `Date.now` and every other capability outside the deterministic set | refused: the flag is also the capability policy that denies `clock`, `entropy`, `env`, `ffi`, `fs.*`, `net`, `process.spawn` and `tty`, so the simulation module cannot call a host import either |
-| Parsing a float from text (`Number(s)`), if the corpus finds a target whose parser rounds differently | refused under the flag, with its own code, until it agrees |
+| Parsing a float from text (`Number(s)`, `parseFloat`, `parseInt`). Stage 5b ran 94 strings (0.1, the `DBL_MIN` and `DBL_MAX` edges, 2^53 + 1 and + 3, exact halfway decimals, subnormals and their halfway points, 1e±400, whitespace, signs, `Infinity` spellings, `0b`/`0o`/`0x`) natively (glibc), on wasm32-wasi (musl) and under Node. Every decimal spelling and every `parseInt` agreed: the three libraries round correctly. Only hex differed: a hex float (`0x1p3`) is 8 through `strtod` and NaN (`Number`) or 1 (`parseFloat`) in the `--emit-ts` grammar, and musl's `strtod` misrounds a 57-bit hex integer (`0x1fffffffffffff1`: `0x4380000000000000` on wasm32, `0x437fffffffffffff` on glibc and Node) | under the flag a string `Number(s)` and `parseFloat(s)` call `std/math.ts`'s `numberExact` and `parseFloatExact`, which read the `--emit-ts` grammar (the hex integer, correctly rounded on any libc, and nothing after it) and hand every other spelling to the runtime; `parseInt` already agreed. The runtime is unchanged, so a build without the flag reads hex as before. The 94 strings are in the float corpus, and agree on all three targets. A refusal was the alternative; it would have refused `std/` modules that parse numbers (`std/json`) for a difference only hex floats show |
 
-- **The corpus.** `tests/differential/float-corpus/` runs every operation
+- **The corpus.** `tests/differential/corpus/float/float.ts` runs every operation
   and every `Math` builtin over a fixed set of operands: ±0, ±subnormals, the
   smallest and largest normals, ±Inf, NaN, integers around 2^53, multiples
   of π/4 near the argument-reduction boundaries, and arguments up to 1e300.
-  It prints each result's bits in hex. The test compares the four outputs
-  byte for byte: native x86-64, native aarch64 (Q8), wasm32 under Node, and
-  `--emit-ts` under Node. They are bits, not printed decimals, because
+  It prints each result's bits in hex. `tests/run.js`'s `float-corpus`
+  section holds each output byte for byte to one `expected.txt`: native
+  x86-64 and native aarch64 (Q8, CI's `simd-arm64` job), wasm32-wasi under
+  Node, and `--emit-ts` under Node. It is not a `main.ts`, so the
+  differential runners, which build without the flag, pass it by. They are bits, not printed decimals, because
   printing can hide a last-bit difference.
-- **The speed cost** falls only on programs that pass the flag. Stage 5
-  measures `std/math.ts` `sin` against glibc's on a loop, and reports the
-  ratio with its noise band.
+- **The speed cost** falls only on programs that pass the flag, and it is
+  not a cost: measured on x86-64 against glibc 2.39, 20M calls accumulated,
+  medians of 11 interleaved rounds, `std/math.ts` `sin` takes 0.27× glibc's
+  time over [0, 14620] (0.126 s against 0.472 s) and 0.70× over [0, 0.78)
+  (0.097 s against 0.139 s). The noise band, glibc against a byte-identical
+  copy of itself, is 1.005 and 1.007.
 - **Without the flag, nothing changes.** One exception is Q7: making
   `std/math.ts` the lowering of the five functions on freestanding wasm
   regardless of the flag. That fixes today's link failure, and it costs
@@ -738,10 +785,14 @@ wasm` as it is, then the same IR linked with an explicit export list instead of
 So `--export-all` costs 68% of the hello world and 26% of a module with arrays.
 `--profile wasm-host` exports the program's exported functions, its exported
 module storage, and the runtime entry points the loader calls (the arena mark,
-release and allocation), and nothing else. `--gc-sections` is already applied. `wasm-opt` is not installed here and
-appears nowhere in the repository. `build.sh` runs `wasm-opt -Oz` when it is on
-`PATH`, records in the build line whether it ran, and the size test reports
-both figures.
+release and allocation), and nothing else. `--gc-sections` is already applied.
+`build.sh` runs `wasm-opt -Oz --strip-target-features` when it is on `PATH` and
+records in the build line whether it ran (binaryen 132: `add.wasm` 74 bytes,
+`arrays.wasm` 1,713). clang 18 also runs a `wasm-opt` it finds itself after an
+`-O` link, keeping the `target_features` section, which made `add.wasm` 150
+bytes and broke the guard on a machine with binaryen (#1257).
+`NISH_WASM_OPT=0` links with neither pass; the size test measures that build,
+with a stub `wasm-opt` on `PATH` to prove neither runs.
 
 **The guard.** A `wasm-size` block in `tests/run.js` builds the hello world and
 the W9 example under `--profile wasm-host`. It writes the raw, gzip and brotli
@@ -861,8 +912,8 @@ answered. Stage 5 depends on nothing before it and can run beside stages 1–4.
 | 1 | **Link and load (W6, W8).** `--profile wasm-host`: explicit exports, `--memory`, a fixed stack, `wasm-opt` when present, `--inline`. Loader `load(source, imports)` and `loadSync`. The `nish/vite` plugin for exports (the page imports the module as TypeScript). The Vite-readiness test of the loader's text. The `wasm-size` guard with today's figures | Q5, Q10 | shrinks: −214 B on the hello world, −736 B on `arrays.ts` (raw) |
 | 2 | **Imports and handles (W1, W4).** Host modules (`--host`, `package.json`), reading their signatures and skipping bodies. Import attributes. `HostHandle<K>`. `Imports` in the `.d.ts`. The adapter closures. The TS reading keeps the `import`. The refusals: a `string` result, an object, a function, a `Promise`, `declare function` in a wasm build, a host module in a native build. The plugin gains host modules | Q1, Q2, Q6 | about 20 B per imported function; nothing without one |
 | 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | nothing to a program with no module storage and no host module: its loader, `.d.ts` and `.wasm` are the bytes it had before (`WASM_PLAIN_DIGESTS`, §6). One with either pays the `nish.panic` import and its site arguments. **Built**; record `docs/security/wasm-host.md` |
-| 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | the unit's size, measured before it lands; nothing to a program with no strings |
-| 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured |
+| 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | nothing to a program with no strings (`WASM_PLAIN_DIGESTS`); 1,111 B for an integer template, 13,046 B with an `f64` (10,296 B of it the printer's table). **Built** |
+| 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured over an `x + 1.0` module, raw / gzip / brotli on `wasm-host` with no wasm-opt: `sin` 1,741 / 1,211 / 1,164 B, `cos` 1,755 / 1,219 / 1,176, `exp` 730 / 478 / 502, `log` 610 / 397 / 387, `pow` 2,250 / 1,292 / 1,243, `%` (`fmod`) 710 / 366 / 331, all six 6,250 / 3,490 / 3,352; `--profile wasm` adds the same raw bytes. Nothing to a module that calls none (`WASM_PLAIN_DIGESTS`). **Built** |
 | 6 | **The acceptance example (W9).** `examples/wasm-arena/`, the Chromium job, the ten-minute soak, the size rows for the example, and the guide's browser section | stages 1–5, Q8, Q11 | the example's figures become the guard's second row |
 
 Every stage carries its own definition of done from `CLAUDE.md`. That means a

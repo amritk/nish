@@ -1,13 +1,15 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
-**Status: D1 accepted; stages 1 to 4 built (§10), stage 5 parts 1 and 2
-built, the rest of stage 5 and stage 6 open.** The language half — `async`,
-`await`, `Promise<T>`, `spawn`, `awaitAll` and the frame lowering — compiles.
-Stage 5's executor in `runtime/runtime-async.c` runs its tasks and waits on
-sockets and timers (`sleep`, `readable`, `writable` in `nish:async`), and
-`nish/net/fetch` has an async `fetch`. Parts 3 to 6 — a spawned task reaching
-its spawner's objects, `serve`, the async Postgres pool and cancellation —
-are planned in `.claude/plans/wp49-s5.plan.md` (*2026-11-08*). The anchors below
+**Status: D1 accepted; stages 1 to 5 built (stage 5 in parts 1 to 8, part 8
+#1343), stage 6 open: its gate was measured on 2026-11-10 and is not met
+(§10).** The language half — `async`, `await`, `Promise<T>`, `spawn`,
+`awaitAll` and the frame lowering — compiles, and runs on the executor that
+waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
+tasks that share their spawner's objects (parts 3 and 8), `serve` (part 4), the
+async Postgres pool (part 5), async `fetch` over TLS (part 6) and
+cancellation (part 7). D1's condition does not hold yet: the async TFB entries
+are outside the explicit ones' noise band on `plaintext`, `json` and `db`
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)). The anchors below
 are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
 note beyond what it states is a proposal and is not compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
@@ -228,10 +230,12 @@ requests served. Freed region chunks go back to a free list, so a warm
 server makes no `malloc` per request.
 
 A value a task stores where it outlives the task, such as module state or a
-cache, must not point into the task's region. WP46 stage 2's rules (NL2422,
-NL2557) already refuse that for
+cache, must not point into the task's region. The region rules of
+`nish:region` (NL2609 through NL2618, `src/region-rules.ts`) refuse that for
 `region(...)` blocks, and a task is a region block whose extent ends at the
-task's end. A program that wants a value to outlive the task copies it out.
+task's end: the same walk judges a spawned function's body against the
+objects it was handed ([Stage 5, part 3](#stage-5-part-3-a-task-reaches-what-its-spawner-owns)).
+A program that wants a value to outlive the task copies it out.
 
 **So this work package waits for WP46 stages 1 and 2.**
 
@@ -280,6 +284,37 @@ style of §2. It must stay inside the noise band of the same entry written
 in the explicit style, on `plaintext`, `json` and `db`. If it does not, the
 lowering is fixed before the feature ships. The explicit style stays
 supported regardless.
+
+**The gate, measured (2026-11-10).** `bench/techempower/run.sh` times both
+pairs in one run; the figures are in
+[BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6).
+The async entry is 87–90% below the explicit one on `plaintext` at every
+concurrency, 7–12% below on `json` at five of six (inside the band only at
+256), and 42–91% below on `db`, `query`, `update` and `fortune`; only
+`cached-query` at 256 connections is inside. What is known of the causes, as
+far as the evidence goes (the `strace -c` tables and their commands are in
+BENCHMARKS.md):
+
+- **`plaintext`** has two shares. `serve` keeps one request per connection in
+  flight, so a 16-deep pipelined burst runs as 16 tasks, and `HttpHandler`
+  sends each answer as it ends: one `sendto` per request (44,857 for 43,646)
+  where the explicit loop sends one per burst (25,379 for 402,880). How the
+  loss splits between the two was not measured.
+- **`json`** is not pipelined, so both entries send one answer per `sendto`,
+  and sends do not explain it. The executor adds a fixed cost per turn:
+  `nish_async_wait_fd` duplicates the descriptor (`fcntl(F_DUPFD_CLOEXEC)`) and
+  adds it to epoll, `nish_async_fire` removes and closes it, and `serve` writes
+  and drains a wake byte. At 64 connections that was about 400 turns and 0.1
+  calls a request, too few for 7–12%. The rest is per-request CPU in user
+  space, which was not profiled; the cause is open.
+- **The database tests**, from the code and not from a trace: `PgAsyncPool`
+  sends one query per connection at a time, and a task that finds every
+  connection claimed sleeps (1 ms doubling to 16 ms) rather than waking on a
+  release.
+
+Closing them starts with a batched or pipelined `serve` (more than one request
+of a connection in flight, its answers sent in one write), a profile of `json`'s
+per-request path, and a pipelined, wake-on-release pool.
 
 ## 7. A non-blocking call from a handler today, without `async`
 
@@ -392,14 +427,14 @@ Each stage is one pull request, with the work each one needs:
 `docs/security/` record for anything that reads the network, and a guide
 page for anything a user sees.
 
-| Stage | What | Waits for |
-| --- | --- | --- |
-| 1 | The renames of §8, old paths removed | — |
-| 2 | `nish/net/upstream` (§7) and the Postgres pool and carrier (WP39 E6), explicit style, each on the handler's loop | — |
-| 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 |
-| 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 |
-| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool | 4 |
-| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 |
+| Stage | What | Waits for | Built |
+| --- | --- | --- | --- |
+| 1 | The renames of §8, old paths removed | — | yes |
+| 2 | `nish/net/upstream` (§7) and the Postgres pool and carrier (WP39 E6), explicit style, each on the handler's loop | — | yes |
+| 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
+| 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
+| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314), cancellation (part 7) and a serve handler reaching its spawner's state (part 8, #1343) |
+| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | no: the entries are written (#1354 and before) and `run.sh` measures the gate, which is not met (§6; draft #1367) |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.
@@ -546,6 +581,18 @@ The three debts stage 4 left are paid:
   region (`runtime/runtime-region.c`), entered around every resume and freed
   when the task finishes (`tests/link/async_region_per_task`). `main` keeps
   the arena.
+  An `awaitAll` call gets one too (the `awaitall-regions` stage, HF-13): it
+  ran in its caller's arena before, so the first call to finish and release
+  freed what a sibling still held. Its region is made before its first
+  resume, entered around every resume, and handed to the caller's arena when
+  the call finishes (`nish_region_adopt`, which frees the empty chunk a
+  release at return leaves), so its answer stays readable and its
+  temporaries are freed (`tests/link/async_await_all_lanes`,
+  `async_await_all_lanes_large`, `tests/link/async_await_all_retain`). A
+  call that finishes at once still pays for the region, about 179
+  instructions or 25 to 29 ns (ASYNC-16, open), and a loop that takes no
+  release keeps about 1.3 KB per joined call beyond its answer, the unused
+  end of the region's first chunk (ASYNC-17, open).
 - **(b) Spawn arguments outlive the spawner.** A `string` argument is copied
   into the task's region before the task first runs (`nish_async_copy_str`);
   numbers, booleans and enums are copied by value; any other type is refused,
@@ -570,9 +617,11 @@ to `RUNTIME_ASYNC_TEXT_BUDGET`.
 
 **What it does not do.** A wait has no deadline: a descriptor that never
 becomes ready parks its task, and the program, until the peer sends or
-closes (ASYNC-6, open until cancellation). The executor is cooperative and
+closes (ASYNC-6, fixed in part 7 by `readableWithin`, `writableWithin` and
+cancellation). The executor is cooperative and
 runs on `main`'s thread (ASYNC-5). `--emit-ts` writes `sleep` as a
-`setTimeout` and refuses `readable`/`writable` (NL4017). `async` stays
+`setTimeout` and refuses `readable`/`writable` (NL4017) and the bounded
+waits and task calls of part 7 (NL4018). `async` stays
 refused under the wasm profiles (NL2652).
 
 ## Stage 5, part 2: async `fetch`
@@ -612,6 +661,186 @@ the TLS handshake would block, and a silent block is worse than a stated
 refusal. `--emit-ts` refuses a program that uses it, as it refuses
 `readable` and `writable` (NL4017). The record is
 [`security/fetch.md`](security/fetch.md#the-async-fetch) (HF-10, HF-11).
+
+## Stage 5, part 3: a task reaches what its spawner owns
+
+Until this part `spawn(f(x))` took only numbers, `boolean`s, enums and
+`string`s (NL2673): a handler could not be handed in, and no task could see
+state its spawner set up. A server wants both: `spawn(task(handle, state, i))`,
+where `handle` is the function each connection runs and `state` is a counter
+or a table every task reads.
+
+**The rule as built.**
+
+- **A function argument.** A compile-time function parameter (WP29) of the
+  spawned function is a position, not a value: the call is an instantiation
+  of its own, one task kind each, and nothing crosses at run time. It is
+  capture-free by WP29's rule, so it is accepted. The refusal names any other
+  argument's type as written, never the `void` a compile-time position holds
+  in `paramTypes`. (Superseded by part 8: an arrow at the call may capture
+  the spawner's numbers and the objects a shared argument may be, and is
+  walked with the task's rules.)
+- **A shared argument.** An object, array, `Map` or `Set` argument is
+  accepted when the spawner's memory outlives every task holding it. A
+  spawn retains its argument: the escape analysis reads the argument of a
+  spawned call as retained (`classifyUse`), so an allocation that reaches it
+  *leaks* (`allocLeaks`), and the spawner, every function on the call chain
+  above it and every loop pass around it lose their automatic scope, as a
+  store into module state already makes them. `main`'s own allocations are
+  released only after `@nish.async.drain`, when no task is left. A `using a =
+  arena()` block that releases under a spawn is refused (NL2421, the
+  using-arena rule, for the spawn itself and for a callee that spawns).
+  A shared argument that holds, in any field or element, a `Region`, a
+  `Secret`, a handle class a `using` block closes, or a `nish/threads`
+  scope, lock, guard or channel is refused at the spawn (NL2691,
+  `taskShareObstacle`): its spawner frees, wipes or closes that part on its
+  own schedule.
+- **Only from outside a task.** A function a task may run — a spawned
+  function and everything it calls or awaits — allocates in the task's
+  region, which is freed when the task ends; a nested task could outlive it.
+  So a shared argument there is refused (NL2689), and nested spawns keep
+  taking numbers and strings. A function argument that captures a local is
+  refused as well (NL2690), unless the local is a number, a `boolean`, an
+  enum or an object it may share (part 8, below).
+- **What a task may do with it.** The spawned function is walked by the
+  region rules with each shared parameter as *outer* memory. Storing memory
+  the task allocated into it (a string, an array, an object) is NL2609, and
+  growing it (`push`, `Map.set`, `Set.add`, `spawnPiped` appending to its
+  output arrays) is NL2615, directly or through a callee, a method or an
+  arrow, by the same facts a `region(...)` body is judged by. A callee
+  handed both a shared object it writes into and a string or object of the
+  task's is refused outright: a string has no pointer facts to say it is
+  not kept. Reading it, and writing numbers, `boolean`s and enums into it,
+  is allowed: they are copied.
+- **The task keeps none of it.** Putting the shared object, or anything
+  reachable from it, into the task's own memory is NL2610, as in a
+  `region(...)` body: a constructor argument, an array or object literal, a
+  field or element store, `push`, a container's `set` or `add`, a method
+  that may keep its argument in its receiver, and a callee that stores one
+  argument into another. Kept there, the task could store its own memory
+  into the shared object through the holder, past the direct-store rule.
+  An object a helper makes may hold what the helper was handed, so in a
+  task a fresh helper's answer (other than a string) joins its arguments'
+  origins: a holder a helper, an async helper or `awaitAll` builds from the
+  shared object is not the task's alone, and a store through it is NL2609.
+  The task reads and updates the shared object in place, which is all
+  `serve` and the pool need.
+- **Interleaving.** The executor runs one task at a time on one thread, and
+  a task gives way only at an `await`, so a read-modify-write of a field with
+  no `await` inside it is atomic with respect to every other task.
+
+**Soundness cases** (each has a test):
+
+| Shape | Answer |
+| --- | --- |
+| task stores through a method or a callee | walked through the callee's facts: NL2609 / NL2615 |
+| task hands a callee or method both a shared object it writes into and a string or object of its own | refused (NL2609): a string has no pointer facts, so the callee's facts cannot say the one is not stored into the other |
+| a local bound by `for...of`, a helper's answer, a callback's parameter, narrowing or `const [a, b] = await awaitAll(...)` | carries its value's origin; a local the walk does not bind is unknown, so storing it is NL2609 |
+| the shared object put into the task's own memory: constructor, array or object literal, field or element store, `push`, `Map.set`, `Set.add`, a method that keeps it, a callee that stores it into another argument | refused (NL2610) |
+| a holder of the shared object answered by a helper, an async helper or `awaitAll` | the answer joins its arguments' origins; a store through it is NL2609 |
+| a `using arena()` block inside the task | its memory is the task's; storing it into the shared object is NL2609 |
+| an object reachable through a field of the shared object | outer, as the field read answers outer memory |
+| an array of objects | outer elements; storing a task object into one is NL2609 |
+| the shared parameter aliased into a local, then stored through | the local is outer by the walk's fixpoint |
+| nested spawn from a task | a shared argument is refused (NL2689) |
+| the spawner reassigns its local after the spawn | the task holds the object, not the local; the object stays |
+| `using` disposal of the argument | the spawner's `using arena()` around the spawn, or around a call to a function that spawns, is refused (NL2421) |
+| a `Region`, `Secret`, `using` handle or `nish/threads` value inside the argument | refused at the spawn (NL2691) |
+| `spawnPiped` writing into a shared array | NL2615, as `push` |
+
+**Loose ends.** A binary whose program spawns nothing has no `nish_async`
+symbol: `build.sh` links `runtime-async.c` only when the IR declares one, and
+`tests/run.js` checks it. `tests/nish-cmp.js` compiles the corpus with the
+seed, which does not know what the release after it ships: the 0.37.0 seed
+refuses an object or function argument to `spawn`. Such a program is not
+skipped. `compare` reports it as an `exit` difference ("the candidate
+compiles it and the reference refuses it"), and four `DECLARED` entries,
+one per program and each naming only that `exit` surface, cover
+`async_spawn_fn_arg`, `async_spawn_shared`,
+`tests/link/async_spawn_shared_outlives` and
+`docs/cookbook/async-spawn-shared.ts`. They name this release's note
+("a spawned task may reach the objects its spawner owns") and go at the
+reseed that ships it, when the seed compiles them and they match nothing.
+
+### Part 3, extended by part 8: a serve handler reaches its spawner's state (#1324)
+
+`serveOn` spawns `serveTask(handle, ...)`, so a handler is a function
+argument of a spawned task, and until this part an arrow that captured
+anything was refused (NL2690): a handler could not reach a `PgAsyncPool` its
+spawner made. Two routes were open: relax the capture rule, or give
+`serveOn`/`serve` a context parameter handed to each handler. **The relaxed
+capture rule was built**, because it leaves `std/` untouched (no new
+`serve` signature to document, audit and keep beside the old one) and covers
+any spawned task, not only `serve`.
+
+The rule, in `taskFindings` (`src/region-rules.ts`):
+
+- At the spawn, each capture of the arrows the task is handed (through every
+  level of function argument, `capturesOf`) is a number, `boolean` or enum,
+  or an object or array `sharedWithTask` admits with no `taskShareObstacle`;
+  anything else is NL2690.
+- Captured objects are outer memory. The task's body is walked first; it
+  records, per arrow, the join of what each direct call passes for each
+  written parameter. Each arrow body is then walked with the task's rules,
+  its captures bound outer and its parameters seeded from those joins. An
+  arrow the task hands on to a further function parameter is called where
+  the walk cannot see, so its parameters are unknown: storing one into a
+  capture is NL2609.
+- A call that may run a handed arrow answers unknown memory, since the arrow
+  may answer a capture.
+- `spawnsShared` (`src/attributes.ts`) counts a captured shareable object,
+  so the spawner releases no arena scope over it; an arrow that itself
+  spawns makes the task `feedsTasks`, refused as a nested spawn (NL2689).
+- Each arrow is its own instance (WP29), so the facts are per call site: one
+  refused arrow is not hidden by another admitted at the same callee.
+- A handler builds its `Response` from what a pooled query answers, so in a
+  task `callOrigin` leaves an argument out of a call's answer when the
+  answer's type cannot reach it (`mayShareMemory`): the heap types each side
+  may hold share none, and neither holds a class that implements an
+  interface, since a class converts to an interface it implements. A
+  `PgAsyncResult` holds strings and arrays of numbers and strings and a
+  `PgAsyncPool` numbers and arrays of numbers, so the result is the task's
+  own (`reject_async_spawn_answer_reach` keeps the refusals that matter).
+- Building the live check showed `pgAsyncConnect` hanging against any server
+  that asks for SCRAM: `pgAsyncStartup` read before it wrote the
+  SASLInitialResponse it had queued. It now writes first; the stand-in
+  backend logs in by trust, so only `tests/postgres/live`'s `servepool`
+  check covers it.
+
+## Stage 5, part 7: cancellation
+
+A task can be told to stop, and a wait can be bounded. `nish:async` adds two
+awaited waits, `readableWithin(fd, ms)` and `writableWithin(fd, ms)`, which
+answer false when the time runs out, and four plain calls: `taskId()`,
+`cancel(task)`, `cancelled()` and `cancelAfter(task, ms)`. A cancel is
+cooperative. It sets the task's flag and fails the wait the task is parked
+on; every later wait of that task fails at once, so its code runs on to its
+end and its `using` scopes release. `main` is never cancelled. The rules are
+[LANGUAGE.md](LANGUAGE.md#bounding-a-wait-and-cancelling-a-task)'s.
+
+- **`serve`** cancels a request's task when its client hangs up (the answer
+  is dropped), at `ServeLimits`' handler deadline (the handler's answer is
+  sent and the connection goes on) and on stop (the answer is sent with
+  `Connection: close`). This fixes SERVE-8.
+- **`fetch`** bounds each wait by `readTimeoutMs` and by what is left of
+  `totalTimeoutMs`, and a cancelled fetch answers `HTTP_E_CANCELLED`. This
+  fixes HF-10.
+- **The async Postgres pool** answers -3 to a cancelled claim, and fails a
+  cancelled query with `PG_ERR_CLOSED`, closing its connection. No
+  CancelRequest is sent (PG-37, accepted).
+- **The executor** fixes ASYNC-6. A stale or finished task's handle answers
+  false (ASYNC-18).
+
+`--emit-ts` refuses the new calls (NL4018). A program that does not use
+them compiles to the same IR as before.
+
+Not in this part: a context `serve` hands each handler, such as an async
+Postgres pool. Inside a spawned task, a call through a function-typed
+parameter is judged by facts that assume the worst for every pointer
+argument, so `serve`'s task may not hand its handler anything it shares: the
+region rules refuse `await handle(new Request(r), ctx)` with "may store
+memory outside the region into it" and "may grow it", whatever the handler's
+body. Lifting that needs facts per function value, in `src/region-rules.ts`.
 
 ## Not in this work package
 

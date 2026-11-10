@@ -7,10 +7,16 @@ Tasks for `async` functions: start one and go on, or await two to eight at once.
 ```ts
 import {
   awaitAll,
+  cancel,
+  cancelAfter,
+  cancelled,
   readable,
+  readableWithin,
   sleep,
   spawn,
+  taskId,
   writable,
+  writableWithin,
 } from "nish:async";
 ```
 
@@ -43,9 +49,33 @@ Wait for two calls at once.
 
 </scalar-card>
 
+<scalar-card title="cancel" icon="phosphor/regular/function" href="#cancel">
+
+Cancel a task: every `sleep`, `readable` or `writable` it is waiting on answers `false` at once, and so does every one it makes later, so it runs on to its end, its `using` bindings dispose and its region is freed.
+
+</scalar-card>
+
+<scalar-card title="cancel​After" icon="phosphor/regular/function" href="#cancelafter">
+
+Cancel a task `ms` milliseconds from now, unless it finishes first.
+
+</scalar-card>
+
+<scalar-card title="cancelled" icon="phosphor/regular/function" href="#cancelled">
+
+Whether the running task has been cancelled.
+
+</scalar-card>
+
 <scalar-card title="readable" icon="phosphor/regular/function" href="#readable">
 
 Suspend the task until `fd` has bytes to read, or its peer has hung up, while the executor runs the others.
+
+</scalar-card>
+
+<scalar-card title="readable​Within" icon="phosphor/regular/function" href="#readablewithin">
+
+Suspend the task until `fd` has bytes to read, or its peer has hung up, or `ms` milliseconds pass, whichever comes first.
 
 </scalar-card>
 
@@ -61,9 +91,21 @@ Start `task` as a task of its own and go on without waiting for it.
 
 </scalar-card>
 
+<scalar-card title="task​Id" icon="phosphor/regular/function" href="#taskid">
+
+The running task's handle, to hand to `cancel` or `cancelAfter`.
+
+</scalar-card>
+
 <scalar-card title="writable" icon="phosphor/regular/function" href="#writable">
 
 Suspend the task until `fd` takes bytes without blocking, while the executor runs the others.
+
+</scalar-card>
+
+<scalar-card title="writable​Within" icon="phosphor/regular/function" href="#writablewithin">
+
+Suspend the task until `fd` takes bytes without blocking, or `ms` milliseconds pass, whichever comes first.
 
 </scalar-card>
 
@@ -464,6 +506,77 @@ The answers, in the order the calls are written.
 
 </scalar-field>
 
+### cancel
+
+Cancel a task: every `sleep`, `readable` or `writable` it is waiting on
+answers `false` at once, and so does every one it makes later, so it runs
+on to its end, its `using` bindings dispose and its region is freed. A
+task is never stopped in the middle of its code. Refused under
+`--emit-ts` (NL4018).
+
+```ts
+function cancel(task: i64): boolean
+```
+
+<scalar-field name="task" type="i64" required>
+
+A handle `taskId()` answered.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+`true` while the task is still running, so it is now cancelled
+  (a second `cancel` of it answers `true` too); `false` for a task that
+  has finished, or for `main`.
+
+</scalar-field>
+
+### cancelAfter
+
+Cancel a task `ms` milliseconds from now, unless it finishes first. A
+later call replaces the deadline; a negative `ms` removes it. Refused
+under `--emit-ts` (NL4018).
+
+```ts
+function cancelAfter(task: i64, ms: i32): boolean
+```
+
+<scalar-field name="task" type="i64" required>
+
+A handle `taskId()` answered.
+
+</scalar-field>
+
+<scalar-field name="ms" type="i32" required>
+
+The milliseconds until the task is cancelled.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+`true` when the task is still running and the deadline is set
+  (or removed); `false` for a task that has finished or is `main`.
+
+</scalar-field>
+
+### cancelled
+
+Whether the running task has been cancelled. Refused under `--emit-ts`
+(NL4018).
+
+```ts
+function cancelled(): boolean
+```
+
+<scalar-field name="returns" type="boolean">
+
+`true` once `cancel` was called on it, or its `cancelAfter`
+  deadline passed.
+
+</scalar-field>
+
 ### readable
 
 Suspend the task until `fd` has bytes to read, or its peer has hung up,
@@ -485,6 +598,40 @@ An open descriptor: a socket, a pipe or a terminal.
 
 `true` once `fd` is ready; `false` when the wait could not be
   made (an `fd` that is not open). A regular file is always ready.
+
+</scalar-field>
+
+### readableWithin
+
+Suspend the task until `fd` has bytes to read, or its peer has hung up,
+or `ms` milliseconds pass, whichever comes first. Written only as
+`await readableWithin(fd, ms)` inside an `async` function (NL2671).
+Refused under `--emit-ts` (NL4018).
+
+```ts
+function readableWithin(
+  fd: i32,
+  ms: i32,
+): Promise<boolean>
+```
+
+<scalar-field name="fd" type="i32" required>
+
+An open descriptor: a socket, a pipe or a terminal.
+
+</scalar-field>
+
+<scalar-field name="ms" type="i32" required>
+
+The most milliseconds to wait; a negative `ms` waits without a
+  limit, as `readable` does.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Promise&lt;boolean&gt;">
+
+`true` once `fd` is ready; `false` when `ms` passed first, when
+  the wait could not be made, or when the task is cancelled.
 
 </scalar-field>
 
@@ -529,6 +676,21 @@ A direct call to an `async` function (NL2644). Nothing reads
 
 </scalar-field>
 
+### taskId
+
+The running task's handle, to hand to `cancel` or `cancelAfter`. `main`'s
+handle is 0, which no call cancels. Refused under `--emit-ts` (NL4018).
+
+```ts
+function taskId(): i64
+```
+
+<scalar-field name="returns" type="i64">
+
+The handle, an `i64` that names this task and no later one.
+
+</scalar-field>
+
 ### writable
 
 Suspend the task until `fd` takes bytes without blocking, while the
@@ -549,5 +711,39 @@ An open descriptor: a socket, a pipe or a terminal.
 
 `true` once `fd` is ready; `false` when the wait could not be
   made (an `fd` that is not open). A regular file is always ready.
+
+</scalar-field>
+
+### writableWithin
+
+Suspend the task until `fd` takes bytes without blocking, or `ms`
+milliseconds pass, whichever comes first. Written only as
+`await writableWithin(fd, ms)` inside an `async` function (NL2671).
+Refused under `--emit-ts` (NL4018).
+
+```ts
+function writableWithin(
+  fd: i32,
+  ms: i32,
+): Promise<boolean>
+```
+
+<scalar-field name="fd" type="i32" required>
+
+An open descriptor: a socket, a pipe or a terminal.
+
+</scalar-field>
+
+<scalar-field name="ms" type="i32" required>
+
+The most milliseconds to wait; a negative `ms` waits without a
+  limit, as `writable` does.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Promise&lt;boolean&gt;">
+
+`true` once `fd` is ready; `false` when `ms` passed first, when
+  the wait could not be made, or when the task is cancelled.
 
 </scalar-field>

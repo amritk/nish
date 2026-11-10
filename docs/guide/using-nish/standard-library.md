@@ -130,7 +130,7 @@ shown).
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
-| [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `codePointLength`, `indexOfAny` |
+| [`nish/text`](#nishtext) | `split`, `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `asciiUpper`, `asciiLower`, `padStart`, `padEnd`, `firstDifference`, `codePointLength`, `indexOfAny` |
 | [`nish/regex`](#nishregex) | `regexCompile`: JavaScript-syntax regular expressions, matched in time linear in the input |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
@@ -222,6 +222,74 @@ $ nish run text.ts
 [second  line] has 2 words
 a+b+c
 true
+```
+
+`split(text, sep)` is JavaScript's `text.split(sep)`: a separator at either
+end or two in a row give empty strings, `""` splits to `[""]`, and a
+separator that never occurs gives `[text]`. An empty separator panics
+(`split: an empty separator`) rather than splitting into units, which are
+bytes in a compiled program and UTF-16 units under Node. The answers are the
+same both ways for any text and any non-empty separator.
+
+`asciiUpper(text)` and `asciiLower(text)` change the letters `a` to `z` and
+`A` to `Z` and nothing else, so every other byte, the bytes of `é` and `ß`
+included, passes through. That is why they are not `toUpperCase` and
+`toLowerCase`, which JavaScript has and Nish does not: `"ß".toUpperCase()` is
+`"SS"`, while `asciiUpper("ß")` is `"ß"`. It is the case change an
+identifier wants, and it answers the same compiled and under Node.
+
+`padStart(text, width, fill)` and `padEnd(text, width, fill)` repeat `fill`
+before or after `text` until the result is `width` long, cutting the last
+repeat at the width. A `width` no longer than `text`, or an empty `fill`,
+gives `text` unchanged. For ASCII text they are JavaScript's: `padStart("7",
+3, "0")` is `"007"`. The width counts what `.length` counts, UTF-8 bytes in a
+compiled program and UTF-16 units under Node, so on text that is not ASCII
+the two differ: `padStart("é", 3, " ")` is `" é"` compiled and `"  é"` under
+Node. `--warn-portability` does not flag a pad call, because the length it
+reads is read inside the library and the result is a string
+([portability warnings](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#diagnostics-and-debugging-flags)),
+so pad only ASCII text, or work out the width with `codePointLength`. A
+`fill` that is not ASCII panics, because a cut at a byte width could split a
+character in two.
+
+Together with `nish/regex` they turn a snake_case or kebab-case name into a
+camelCase identifier. A regex template cannot change case, so the regex only
+makes every separator an underscore, and the case helpers do the rest:
+
+```ts nish:ok
+import { asciiLower, asciiUpper, split } from "nish/text";
+import { Regex, regexCompile } from "nish/regex";
+
+const toCamel = (separators: Regex, name: string): string => {
+  const words = split(asciiLower(separators.replaceAll(name, "_")), "_");
+  const camel: string[] = [words[0]];
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    camel.push(asciiUpper(word.substring(0, 1)));
+    camel.push(word.substring(1));
+  }
+  return camel.join("");
+};
+
+export const main = (): i32 => {
+  const compiled = regexCompile("[-\\s]+", "");
+  if (compiled.isErr()) {
+    console.log(compiled.error);
+    return 1;
+  }
+  const separators: Regex = compiled.value;
+  console.log(toCamel(separators, "user_account-ID"));
+  console.log(toCamel(separators, "HTTP status-code"));
+  console.log(toCamel(separators, "already__doubled_"));
+  return 0;
+};
+```
+
+```console
+$ nish run camel.ts
+userAccountId
+httpStatusCode
+alreadyDoubled
 ```
 
 `indexOfAny(text, bytes, from)` finds the first byte at or after `from` that
@@ -3232,11 +3300,12 @@ export const main = (): i32 => {
 `/etc/resolv.conf` and `/etc/hosts` read for you, on a loop of its own: **it
 blocks** until the lookup ends or `timeoutMs` passes
 (`DNS_RESOLVE_TIMEOUT`), so it is for a command-line tool or a program's
-start-up, not a server's loop. It waits for both the A and the AAAA answer, so
-a family that answered is not returned on its own when `timeoutMs` passes. A
-`pollWait` that fails cancels the lookup and its negative errno is the answer;
-a name `start` refuses answers `start`'s code. `dnsLookupWith` is the same with a
-configuration you give it.
+start-up, not a server's loop. It waits for both the A and the AAAA answer
+until `timeoutMs` passes; then a family that answered with addresses is
+returned on its own, and only a lookup with none yet is
+`DNS_RESOLVE_TIMEOUT`. A `pollWait` that fails cancels the lookup and its
+negative errno is the answer; a name `start` refuses answers `start`'s code.
+`dnsLookupWith` is the same with a configuration you give it.
 
 ```ts nish:ok
 import { resolveHost } from "nish/net/dns";

@@ -280,6 +280,22 @@ export class DnsClient {
   }
 
   /**
+   * `DnsResolver.settle`, closing the socket of the query it stops: ends the
+   * lookup with the addresses one family has found when the other is still
+   * asking, so a caller whose time is up keeps them.
+   *
+   * @param lookup An id `start` answered whose answer has not been read.
+   * @param nowNanos The caller's monotonic clock now, in nanoseconds.
+   * @returns Whether the lookup has finished, so `result` answers it rather than
+   *   `DNS_RESOLVE_PENDING`.
+   */
+  settle(lookup: i32, nowNanos: i64): boolean {
+    const done: boolean = this.resolver.settle(lookup)
+    this.pump(nowNanos)
+    return done
+  }
+
+  /**
    * The pair `token`, `events` that `pollWait` reported at `nowNanos`, for a
    * token `owns` answers true for: reads the datagrams (at most
    * `DNS_CLIENT_MAX_DATAGRAMS`) or stream bytes that are waiting, finishes a
@@ -529,9 +545,9 @@ const dnsClientReadStream = (c: DnsClient, q: i32, fd: i32, hungUp: boolean, now
  * The addresses of `name`, looked up as `/etc/resolv.conf` and `/etc/hosts`
  * say (a missing resolv.conf means the defaults, a missing hosts file no
  * entries), each 18 bytes with `port` into `out` and its TTL in seconds into
- * `ttls`. It waits for both the A and the AAAA answer, so a family that
- * answered is not returned on its own once `timeoutMs` passes: it is
- * `DNS_RESOLVE_TIMEOUT`.
+ * `ttls`. It waits for both the A and the AAAA answer until `timeoutMs`
+ * passes; then a family that answered with addresses is returned on its own,
+ * and only a lookup with none yet is `DNS_RESOLVE_TIMEOUT`.
  *
  * **It blocks the thread** until the lookup ends, on a loop of its own, so
  * it is for a CLI or a program's start-up; a server resolves with a
@@ -548,24 +564,41 @@ const dnsClientReadStream = (c: DnsClient, q: i32, fd: i32, hungUp: boolean, now
  *   `DNS_RESOLVE_MAX_ADDRESSES * 18` bytes.
  * @param ttls Where each address's TTL goes, in seconds; at least `DNS_RESOLVE_MAX_ADDRESSES`.
  * @returns The count of addresses written; or a negative code: `DNS_RESOLVE_TIMEOUT` once
- *   `timeoutMs` has passed, `DNS_RESOLVE_NOT_FOUND`, `DNS_RESOLVE_NO_ANSWER` or
+ *   `timeoutMs` has passed with no address found, `DNS_RESOLVE_NOT_FOUND`, `DNS_RESOLVE_NO_ANSWER` or
  *   `DNS_RESOLVE_CNAME` from the lookup, the `DNS_ERR_*` code of a name that is not one, or
  *   the negative errno of a poll loop that cannot be made or waited on.
  */
 export const resolveHost = (name: string, timeoutMs: i32, port: i32, out: u8[], ttls: i32[]): i32 => {
   const config: DnsConfig = new DnsConfig()
-  const conf: u8[] | null = readFileBytesSync("/etc/resolv.conf")
-  if (conf !== null) {
-    dnsParseResolvConf(conf, 0, toI32(conf.length), config)
-  } else {
-    dnsParseResolvConf(new Array<u8>(0), 0, 0, config)
-  }
   const hosts: DnsHosts = new DnsHosts()
+  dnsLoadSystem(config, hosts)
+  return dnsLookupWith(config, hosts, name, timeoutMs, port, out, ttls)
+}
+
+/**
+ * Reads the system's resolver settings the way `resolveHost` does:
+ * `/etc/resolv.conf` into `config` (a missing file means the defaults) and
+ * `/etc/hosts` into `hosts` (a missing file adds no entry). A driver of its
+ * own, such as the async `fetch`'s, starts from this so every lookup in a
+ * program honours the same files. Both reads are synchronous file reads.
+ *
+ * @param config A fresh `DnsConfig` to fill, or null to leave
+ *   `/etc/resolv.conf` unread (a caller with a configuration of its own).
+ * @param hosts A fresh `DnsHosts` to fill.
+ */
+export const dnsLoadSystem = (config: DnsConfig | null, hosts: DnsHosts): void => {
+  if (config !== null) {
+    const conf: u8[] | null = readFileBytesSync("/etc/resolv.conf")
+    if (conf !== null) {
+      dnsParseResolvConf(conf, 0, toI32(conf.length), config)
+    } else {
+      dnsParseResolvConf(new Array<u8>(0), 0, 0, config)
+    }
+  }
   const hostsFile: u8[] | null = readFileBytesSync("/etc/hosts")
   if (hostsFile !== null) {
     dnsParseHosts(hostsFile, 0, toI32(hostsFile.length), hosts)
   }
-  return dnsLookupWith(config, hosts, name, timeoutMs, port, out, ttls)
 }
 
 /**
@@ -618,8 +651,12 @@ export const dnsLookupWith = (
   while (status === DNS_RESOLVE_PENDING) {
     const now: i64 = monotonicNanos()
     if (now >= end) {
-      client.cancel(lookup, now)
-      status = DNS_RESOLVE_TIMEOUT
+      if (client.settle(lookup, now)) {
+        status = client.result(lookup, out, ttls)
+      } else {
+        client.cancel(lookup, now)
+        status = DNS_RESOLVE_TIMEOUT
+      }
       break
     }
     const own: i32 = toI32((end - now + 999999) / 1000000)

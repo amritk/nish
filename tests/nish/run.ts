@@ -521,8 +521,8 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     const own = `${CASES}/${name}.c`;
     link.push(readFileSyncOrNull(own) === null ? "tests/driver.c" : own);
   }
-  // The C runtime is several translation units: the core (arena, strings,
-  // arrays, number formatting, the panics), the syscall wrappers, the worker
+  // The C runtime is several translation units: the core (arena, arrays, the
+  // panics), its strings and number formatting, the syscall wrappers, the worker
   // pool (its sequential fallback without `-pthread`, linked for the CPU count
   // `--sandbox` primes), the host calls (the wall clock, entropy, file times,
   // signals), the sockets of `nish:net`, the byte searches that read a vector
@@ -534,6 +534,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   // A direct `clang` line names them; only `scripts/build.sh` pairs them for
   // its callers.
   link.push("runtime/runtime.c");
+  link.push("runtime/runtime-text.c");
   link.push("runtime/runtime-os.c");
   link.push("runtime/runtime-parallel.c");
   link.push("runtime/runtime-host.c");
@@ -549,6 +550,8 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   link.push("runtime/runtime-shm.c");
   link.push("runtime/runtime-region.c");
   link.push("runtime/runtime-async.c");
+  // As `scripts/build.sh` compiles every unit: no fused multiply-add the C did not write.
+  link.push("-ffp-contract=off");
   link.push("-lm");
   link.push("-o");
   link.push(exe);

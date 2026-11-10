@@ -115,6 +115,12 @@ refuse a program that reaches these
 
 </scalar-field>
 
+<scalar-field name="--deterministic">
+
+same float bits everywhere, no clock or I/O
+
+</scalar-field>
+
 <scalar-field name="--sandbox[=best-effort]">
 
 confine a Linux binary to what main reaches

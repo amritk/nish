@@ -16,10 +16,13 @@
  * **The async `fetch`** answers a `Result`: a `FetchResponse` whose body was
  * read whole before it answered (up to `maxBodyBytes`, 256 MiB by default,
  * else `HTTP_E_BODY_TOO_LARGE`), or a `FetchError` with the `HTTP_E_*` code.
- * The connect, every write and every read wait on the executor; the name
- * lookup still blocks, and only `http://` is driven (an `https://` URL answers
- * `HTTP_E_TLS` naming `fetchSync`, never a silent block). A `FetchPool` handed
- * in through `RequestInit.pool` keeps idle connections per route, capped.
+ * The name lookup, the connect, the TLS handshake, every write and every
+ * read wait on the executor, so a slow resolver or server stalls only its own
+ * task. An `https://` URL is checked as `fetchSync` checks it: the caller's
+ * roots or the system's, the host name and the wall clock, with no setting
+ * that skips it. A `FetchPool` handed in through `RequestInit.pool` keeps
+ * idle http connections per route, capped; an https one is closed after its
+ * fetch, never pooled.
  * Policy, proxies, redirects and error codes are the shared code below, so
  * both clients behave alike. It does not run under `--emit-ts`.
  *
@@ -99,9 +102,15 @@ import {
 } from "nish/net/http1-client-codec"
 import { httpFieldBytes } from "nish/net/http-fields"
 import { Url, urlDecode, urlDefaultPort, urlOrigin, urlParse, urlResolve } from "nish/net/url"
-import { resolveHost } from "nish/net/dns"
+import { DnsClient, dnsLoadSystem, dnsLookupWith, resolveHost } from "nish/net/dns"
+import { DnsConfig, DnsHosts, dnsParseAddress } from "nish/net/dns-config"
 import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
-import { DNS_RESOLVE_MAX_ADDRESSES, DNS_RESOLVE_TIMEOUT } from "nish/net/dns-resolver"
+import {
+  DNS_RESOLVE_MAX_ADDRESSES,
+  DNS_RESOLVE_PENDING,
+  DNS_RESOLVE_TIMEOUT,
+  DnsResolver,
+} from "nish/net/dns-resolver"
 import { OutboundPolicy, outboundAddressText, outboundFilter, outboundHostAllowed } from "nish/net/outbound"
 import {
   connectResult,
@@ -115,7 +124,7 @@ import {
   pollWait,
   tcpConnect,
 } from "nish:net"
-import { readable, writable } from "nish:async"
+import { cancelled, readable, readableWithin, sleep, writable, writableWithin } from "nish:async"
 import { getenv, monotonicNanos, wallClockNanos } from "nish:process"
 import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
 import { TlsClient, TlsClientConfig, tlsClientIsIpLiteral } from "nish/net/tls/client"
@@ -159,6 +168,8 @@ export const HTTP_E_IO: i32 = 15
 export const HTTP_E_PROXY: i32 = 16
 /** The outbound policy refused the URL's host or every address it resolved to. */
 export const HTTP_E_BLOCKED: i32 = 17
+/** The async fetch's task was cancelled (`nish:async`'s `cancel`, or a deadline set with `cancelAfter`). */
+export const HTTP_E_CANCELLED: i32 = 18
 
 /** A typed zero: a bare literal is an `f64` under `--number-mode f64`. */
 const HTTP_CLIENT_ZERO: i32 = 0
@@ -188,6 +199,14 @@ const HTTP_CLIENT_READABLE: i32 = 1
 const HTTP_CLIENT_WRITABLE: i32 = 2
 /** The size of the client random and of each ephemeral private key a TLS handshake draws. */
 const HTTP_CLIENT_TLS_KEY_BYTES: i32 = 32
+/** The longest an async lookup sleeps between checks of its sockets, in milliseconds. */
+const HTTP_CLIENT_DNS_SLICE_MS: i32 = 16
+/**
+ * The async lookup's answer when it cannot wait on its own sockets (its poll
+ * loop could not be made or polled, or its task's sleep failed): below every
+ * `DNS_*` code, so it never reads as one of the resolver's.
+ */
+const HTTP_CLIENT_LOOKUP_WAIT: i32 = -1000
 
 /**
  * A short name for an `HTTP_E_*` code, for messages: "dns", "read timeout",
@@ -217,6 +236,7 @@ export const httpErrorName = (code: i32): string => {
     "io",
     "proxy",
     "blocked",
+    "cancelled",
   ]
   return code >= 0 && code < toI32(names.length) ? names[code] : "unknown"
 }
@@ -281,6 +301,12 @@ export class HttpOptions {
    * `nish/net/outbound`). Null for none.
    */
   outbound: OutboundPolicy | null = null
+  /**
+   * The resolver settings a name is looked up with, as `dnsParseResolvConf`
+   * fills them; null reads `/etc/resolv.conf`. `/etc/hosts` is consulted
+   * either way. Only read, so one config can serve many fetches.
+   */
+  dns: DnsConfig | null = null
   /** The budget for the lookup and the connect together; 0 or less for none but the total. */
   connectTimeoutMs: i32 = 10000
   /** The longest wait for the server to send or take a byte; 0 or less for none. */
@@ -669,14 +695,12 @@ export class FetchSyncClient {
     if (this.trust !== null) {
       return true
     }
-    const path: string | null = this.options.rootsPemPath
-    const roots: PkiRoots = path !== null ? pkiLoadRoots(path, [], []) : pkiLoadSystemRoots()
-    if (toI32(roots.roots.length) === 0) {
-      const where: string = path !== null ? path : "SSL_CERT_FILE, SSL_CERT_DIR or the system's bundle"
-      this.fail(HTTP_E_CERTIFICATE, `no trusted root certificate could be read from ${where}`)
+    const fault: HttpClientFault = new HttpClientFault()
+    this.trust = httpClientLoadTrust(this.options, fault)
+    if (this.trust === null) {
+      this.fail(fault.code, fault.text)
       return false
     }
-    this.trust = tlsClientTrust(roots)
     return true
   }
 
@@ -693,40 +717,17 @@ export class FetchSyncClient {
       this.fail(HTTP_E_CERTIFICATE, "no trusted root certificates are loaded")
       return false
     }
-    const random: u8[] = new Array<u8>(HTTP_CLIENT_TLS_KEY_BYTES)
-    const x25519: u8[] = new Array<u8>(HTTP_CLIENT_TLS_KEY_BYTES)
-    const p256: u8[] = new Array<u8>(HTTP_CLIENT_TLS_KEY_BYTES)
-    crypto.getRandomValues(random)
-    crypto.getRandomValues(x25519)
-    crypto.getRandomValues(p256)
-    // `TlsClient` copies both keys and zeroes these arrays.
-    const conn: TlsRecordClient = new TlsRecordClient(
-      new TlsClient(new TlsClientConfig(host, ["http/1.1"]), random, x25519, p256)
-    )
+    const conn: TlsRecordClient = httpClientTlsStart(host, early)
     this.tls = conn
     if (toI32(this.plain.length) === 0) {
       this.plain = new Array<u8>(HTTP_CLIENT_READ_BYTES)
     }
-    if (toI32(early.length) > 0) {
-      conn.receive(early, HTTP_CLIENT_ZERO, toI32(early.length))
-    }
+    const fault: HttpClientFault = new HttpClientFault()
     // The connection opens on the server's Finished, with the client's own
     // perhaps still queued: it is sent before the request is.
-    while (conn.state !== TLS_RECORD_STATE_OPEN || conn.outputEnd > conn.outputStart) {
-      if ((conn.interest() & TLS_RECORD_AUTH) !== 0) {
-        const verdict: i32 = tlsClientVerdict(conn.tls, trust, wallClockNanos() / HTTP_CLIENT_NS_PER_MS)
-        if (verdict !== 0) {
-          conn.reject(verdict)
-          this.fail(
-            HTTP_E_CERTIFICATE,
-            `the certificate ${host} presented was refused (TLS alert ${verdict})`
-          )
-          return false
-        }
-        conn.authenticate(true)
-      }
-      if (conn.state === TLS_RECORD_STATE_FAILED) {
-        this.failTls(conn)
+    while (httpClientTlsOpening(conn)) {
+      if (!httpClientTlsVerify(conn, trust, host, fault)) {
+        this.fail(fault.code, fault.text)
         return false
       }
       const moved: boolean = conn.outputEnd > conn.outputStart ? this.flushTls(conn) : this.receiveTls(conn)
@@ -742,21 +743,10 @@ export class FetchSyncClient {
    * the proxy answers 2xx, every byte after its head belonging to the tunnel.
    */
   private tunnel(host: string, port: i32, proxy: Url): boolean {
-    const authority: string = `${httpClientHostText(host)}:${port}`
-    const names: string[] = ["Host"]
-    const values: string[] = [authority]
-    const auth: string | null = httpClientProxyAuth(proxy)
-    if (auth === null) {
-      this.fail(HTTP_E_PROXY, "the proxy's user name or password is not valid percent-encoding")
-      return false
-    }
-    if (auth !== "") {
-      names.push("Proxy-Authorization")
-      values.push(auth)
-    }
-    const head: u8[] | null = http1RequestHead("CONNECT", authority, names, values, toI64(-2))
+    const fault: HttpClientFault = new HttpClientFault()
+    const head: u8[] | null = httpClientConnectHead(host, port, proxy, fault)
     if (head === null) {
-      this.fail(HTTP_E_REQUEST, `a CONNECT to ${authority} could not be written`)
+      this.fail(fault.code, fault.text)
       return false
     }
     this.gotByte = false
@@ -770,7 +760,10 @@ export class FetchSyncClient {
     }
     const status: i32 = this.parser.status
     if (status < 200 || status > 299) {
-      this.fail(HTTP_E_PROXY_REFUSED, `the proxy answered CONNECT ${authority} with ${status}`)
+      this.fail(
+        HTTP_E_PROXY_REFUSED,
+        `the proxy answered CONNECT ${httpClientHostText(host)}:${port} with ${status}`
+      )
       return false
     }
     // A 2xx has no body: the parser ends it, then reports the tunnel.
@@ -964,13 +957,9 @@ export class FetchSyncClient {
 
   /** Sets the error for the failed TLS connection `conn`, saying how it failed. */
   private failTls(conn: TlsRecordClient): void {
-    if (conn.ended && !conn.peerClosed) {
-      this.fail(HTTP_E_TLS, "the server closed the connection without a TLS close_notify")
-    } else if (conn.peerAlert > 0) {
-      this.fail(HTTP_E_TLS, `the server sent TLS alert ${conn.peerAlert}`)
-    } else {
-      this.fail(HTTP_E_TLS, `the TLS connection failed (alert ${conn.failure()})`)
-    }
+    const fault: HttpClientFault = new HttpClientFault()
+    httpClientTlsFault(conn, fault)
+    this.fail(fault.code, fault.text)
   }
 
   /** Writes `bytes[off, off + len)` on the connection, through TLS for an https origin; false with the error set. */
@@ -1175,13 +1164,7 @@ export class FetchSyncClient {
   private drop(): void {
     const conn: TlsRecordClient | null = this.tls
     if (conn !== null) {
-      conn.close()
-      // One try, without waiting, so the server sees the close_notify, or
-      // the alert a refusal sealed, when the socket has room for it.
-      if (this.fd >= 0 && conn.outputEnd > conn.outputStart) {
-        netWrite(this.fd, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
-      }
-      conn.wipe()
+      httpClientTlsClose(conn, this.fd)
       this.tls = null
     }
     if (this.fd >= 0) {
@@ -1706,6 +1689,121 @@ class HttpClientFault {
   }
 }
 
+/**
+ * The roots an https fetch verifies against: the caller's `rootsPemPath`, or
+ * the system's bundle without one; null with `fault` set when none could be
+ * read, which fails the fetch rather than trusting nothing.
+ */
+const httpClientLoadTrust = (options: HttpOptions, fault: HttpClientFault): TlsClientTrust | null => {
+  const path: string | null = options.rootsPemPath
+  const roots: PkiRoots = path !== null ? pkiLoadRoots(path, [], []) : pkiLoadSystemRoots()
+  if (toI32(roots.roots.length) === 0) {
+    const where: string = path !== null ? path : "SSL_CERT_FILE, SSL_CERT_DIR or the system's bundle"
+    fault.fail(HTTP_E_CERTIFICATE, `no trusted root certificate could be read from ${where}`)
+    return null
+  }
+  return tlsClientTrust(roots)
+}
+
+/**
+ * A fresh TLS client for `host`, offering http/1.1, its random and key
+ * shares drawn from `crypto.getRandomValues`; `early`, bytes read past a
+ * proxy's CONNECT answer, are fed to it first.
+ */
+const httpClientTlsStart = (host: string, early: u8[]): TlsRecordClient => {
+  const random: u8[] = new Array<u8>(HTTP_CLIENT_TLS_KEY_BYTES)
+  const x25519: u8[] = new Array<u8>(HTTP_CLIENT_TLS_KEY_BYTES)
+  const p256: u8[] = new Array<u8>(HTTP_CLIENT_TLS_KEY_BYTES)
+  crypto.getRandomValues(random)
+  crypto.getRandomValues(x25519)
+  crypto.getRandomValues(p256)
+  // `TlsClient` copies both keys and zeroes these arrays.
+  const conn: TlsRecordClient = new TlsRecordClient(
+    new TlsClient(new TlsClientConfig(host, ["http/1.1"]), random, x25519, p256)
+  )
+  if (toI32(early.length) > 0) {
+    conn.receive(early, HTTP_CLIENT_ZERO, toI32(early.length))
+  }
+  return conn
+}
+
+/** Whether the handshake on `conn` still has a step to take: it is not open, or its last flight is unsent. */
+const httpClientTlsOpening = (conn: TlsRecordClient): boolean =>
+  conn.state !== TLS_RECORD_STATE_OPEN || conn.outputEnd > conn.outputStart
+
+/** Sets `fault` for the failed TLS connection `conn`, saying how it failed. */
+const httpClientTlsFault = (conn: TlsRecordClient, fault: HttpClientFault): void => {
+  if (conn.ended && !conn.peerClosed) {
+    fault.fail(HTTP_E_TLS, "the server closed the connection without a TLS close_notify")
+  } else if (conn.peerAlert > 0) {
+    fault.fail(HTTP_E_TLS, `the server sent TLS alert ${conn.peerAlert}`)
+  } else {
+    fault.fail(HTTP_E_TLS, `the TLS connection failed (alert ${conn.failure()})`)
+  }
+}
+
+/**
+ * One verification step of a handshake: when `conn` waits on the server's
+ * chain, checks it against `trust`, the name `host` and the wall clock, and
+ * refuses it with its alert or accepts it. False with `fault` set when the
+ * chain was refused or `conn` has failed. There is no setting that skips it.
+ */
+const httpClientTlsVerify = (
+  conn: TlsRecordClient,
+  trust: TlsClientTrust,
+  host: string,
+  fault: HttpClientFault
+): boolean => {
+  if ((conn.interest() & TLS_RECORD_AUTH) !== 0) {
+    const verdict: i32 = tlsClientVerdict(conn.tls, trust, wallClockNanos() / HTTP_CLIENT_NS_PER_MS)
+    if (verdict !== 0) {
+      conn.reject(verdict)
+      fault.fail(HTTP_E_CERTIFICATE, `the certificate ${host} presented was refused (TLS alert ${verdict})`)
+      return false
+    }
+    conn.authenticate(true)
+  }
+  if (conn.state === TLS_RECORD_STATE_FAILED) {
+    httpClientTlsFault(conn, fault)
+    return false
+  }
+  return true
+}
+
+/**
+ * Closes the TLS layer of a connection on `fd`: seals a close_notify, tries
+ * one write of what is pending without waiting, so the server sees it or the
+ * alert a refusal sealed when the socket has room, and wipes the keys.
+ */
+const httpClientTlsClose = (conn: TlsRecordClient, fd: i32): void => {
+  conn.close()
+  if (fd >= 0 && conn.outputEnd > conn.outputStart) {
+    netWrite(fd, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
+  }
+  conn.wipe()
+}
+
+/** The head of a CONNECT asking `proxy` for a tunnel to `host:port`, with its credentials; null with `fault` set. */
+const httpClientConnectHead = (host: string, port: i32, proxy: Url, fault: HttpClientFault): u8[] | null => {
+  const authority: string = `${httpClientHostText(host)}:${port}`
+  const names: string[] = ["Host"]
+  const values: string[] = [authority]
+  const auth: string | null = httpClientProxyAuth(proxy)
+  if (auth === null) {
+    fault.fail(HTTP_E_PROXY, "the proxy's user name or password is not valid percent-encoding")
+    return null
+  }
+  if (auth !== "") {
+    names.push("Proxy-Authorization")
+    values.push(auth)
+  }
+  const head: u8[] | null = http1RequestHead("CONNECT", authority, names, values, toI64(-2))
+  if (head === null) {
+    fault.fail(HTTP_E_REQUEST, `a CONNECT to ${authority} could not be written`)
+  }
+  return head
+}
+
 /** Why the outbound policy refuses to let a URL name `url`'s host; "" when there is no policy or it allows the host. */
 const httpClientHostRefusal = (options: HttpOptions, url: Url): string => {
   const policy: OutboundPolicy | null = options.outbound
@@ -1983,7 +2081,8 @@ const httpClientWaitText = (code: i32, options: HttpOptions, text: string): stri
 /**
  * Looks `host` up within `start`..`until` into `addresses` and keeps those
  * the outbound policy allows: how many to try, or -1 with `fault` set (`code`
- * names the deadline a lookup that timed out ran past). The lookup blocks.
+ * names the deadline a lookup that timed out ran past), with `options.dns`
+ * when it is set. The lookup blocks: this is `fetchSync`'s.
  */
 const httpClientResolve = (
   host: string,
@@ -2002,12 +2101,46 @@ const httpClientResolve = (
     lookupMs = toI64(2147483647)
   }
   const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
-  const count: i32 = resolveHost(host, toI32(lookupMs), port, addresses, ttls)
+  const dns: DnsConfig | null = options.dns
+  let count: i32 = 0
+  if (dns === null) {
+    count = resolveHost(host, toI32(lookupMs), port, addresses, ttls)
+  } else {
+    const hosts: DnsHosts = new DnsHosts()
+    dnsLoadSystem(null, hosts)
+    count = dnsLookupWith(dns, hosts, host, toI32(lookupMs), port, addresses, ttls)
+  }
+  return httpClientAnswers(host, count, options, until, code, addresses, fault)
+}
+
+/**
+ * What a lookup of `host` that answered `count` leaves to try: the addresses
+ * the outbound policy allows, kept at the front of `addresses`, or -1 with
+ * `fault` set (`code` names the deadline a lookup that timed out ran past).
+ * The blocking and the async lookup share it, so both refuse alike.
+ */
+const httpClientAnswers = (
+  host: string,
+  count: i32,
+  options: HttpOptions,
+  until: i64,
+  code: i32,
+  addresses: u8[],
+  fault: HttpClientFault
+): i32 => {
   if (count === DNS_RESOLVE_TIMEOUT && until < HTTP_CLIENT_NEVER) {
     fault.fail(
       code,
       httpClientWaitText(code, options, `${host} was not looked up within ${options.connectTimeoutMs} ms`)
     )
+    return -1
+  }
+  if (count === HTTP_CLIENT_LOOKUP_WAIT && cancelled()) {
+    fault.fail(HTTP_E_CANCELLED, `the lookup of ${host} was cancelled with its task`)
+    return -1
+  }
+  if (count === HTTP_CLIENT_LOOKUP_WAIT) {
+    fault.fail(HTTP_E_DNS, `${host} could not be looked up (the lookup could not wait on its sockets)`)
     return -1
   }
   if (count <= 0) {
@@ -2118,7 +2251,8 @@ export class FetchResponse {
  * place, held by the caller and handed in through `RequestInit.pool`. At
  * most `maxIdlePerOrigin` wait per route and 64 in all; a kept connection
  * the server closed, or sent a byte on unasked, is closed when it is next
- * looked at. A fetch under an outbound policy never keeps or takes one.
+ * looked at. A fetch under an outbound policy never keeps or takes one, and
+ * nor does an https fetch: the pool holds sockets, not their TLS state.
  */
 export class FetchPool {
   /** The most idle connections kept for one route (origin, or proxy). */
@@ -2214,11 +2348,13 @@ export class FetchPool {
 
 /**
  * What an async `fetch` sends and how it behaves. `options` are
- * `HttpOptions` as `fetchSync` reads them, except that `readTimeoutMs`
- * bounds no wait (a wait has no deadline yet), `connectTimeoutMs` bounds
- * only the name lookup, and `totalTimeoutMs` is checked each time a wait
- * ends. `pool` keeps connections for later fetches; null closes each one
- * when its fetch is done.
+ * `HttpOptions` as `fetchSync` reads them, with the same deadlines:
+ * `connectTimeoutMs` bounds the lookup and the connect, `readTimeoutMs`
+ * each wait on the server, and `totalTimeoutMs` the whole fetch, each wait
+ * parked with `readableWithin` or `writableWithin` until the nearest of
+ * them. A fetch whose task is cancelled fails with `HTTP_E_CANCELLED`.
+ * `pool` keeps connections for later fetches; null closes each one when
+ * its fetch is done.
  */
 export class RequestInit {
   /** The request method, sent as given; `GET` by default. */
@@ -2254,6 +2390,67 @@ export class RequestInit {
   }
 }
 
+/**
+ * Parks the task until `fd` is ready to read (or, with `write`, to write) or
+ * `until` passes: `HTTP_E_NONE` when it is ready, `code` once `until` has
+ * passed, `HTTP_E_CANCELLED` when the task was cancelled, or `HTTP_E_IO`
+ * when the wait itself failed. A deadline past `HTTP_CLIENT_MAX_WAIT_MS` is
+ * waited for in slices of that, so the milliseconds fit an `i32`.
+ */
+const httpClientWaitAsync = async (fd: i32, write: boolean, until: i64, code: i32): Promise<i32> => {
+  while (true) {
+    let ready: boolean = false
+    let bounded: boolean = false
+    let sliceEnd: i64 = 0
+    if (until >= HTTP_CLIENT_NEVER) {
+      if (write) {
+        ready = await writable(fd)
+      } else {
+        ready = await readable(fd)
+      }
+    } else {
+      const left: i64 = until - monotonicNanos()
+      if (left <= 0) {
+        return code
+      }
+      let ms: i64 = (left + HTTP_CLIENT_NS_PER_MS - 1) / HTTP_CLIENT_NS_PER_MS
+      if (ms > HTTP_CLIENT_MAX_WAIT_MS) {
+        ms = HTTP_CLIENT_MAX_WAIT_MS
+      }
+      bounded = true
+      sliceEnd = monotonicNanos() + ms * HTTP_CLIENT_NS_PER_MS
+      if (write) {
+        ready = await writableWithin(fd, toI32(ms))
+      } else {
+        ready = await readableWithin(fd, toI32(ms))
+      }
+    }
+    if (ready) {
+      return HTTP_E_NONE
+    }
+    if (cancelled()) {
+      return HTTP_E_CANCELLED
+    }
+    if (!bounded || monotonicNanos() < sliceEnd) {
+      // The wait failed before its time was up (a descriptor the poller
+      // refused): waiting again would fail again at once, and spin.
+      return HTTP_E_IO
+    }
+    // The timer fired: the deadline, or one slice of a far one.
+  }
+}
+
+/** The sentence for an async wait that ended with `code`; `text` says what timed out. */
+const httpClientAsyncWaitText = (code: i32, options: HttpOptions, text: string): string => {
+  if (code === HTTP_E_CANCELLED) {
+    return "the fetch's task was cancelled"
+  }
+  if (code === HTTP_E_IO) {
+    return "the wait for the server failed"
+  }
+  return httpClientWaitText(code, options, text)
+}
+
 /** One connection an async fetch drives, and the state of the exchange on it. */
 class HttpClientConn {
   deadline: i64
@@ -2269,12 +2466,19 @@ class HttpClientConn {
   gotByte: boolean = false
   lost: boolean = false
   reused: boolean = false
+  /** The TLS layer of an https connection; null on a plain one. */
+  tls: TlsRecordClient | null = null
+  /** Where TLS opens records into, before the parser sees them; empty until a handshake starts. */
+  plain: u8[]
+  /** The roots https servers are checked against, read once per fetch, before its first dial. */
+  trust: TlsClientTrust | null = null
 
   constructor(options: HttpOptions) {
     this.options = options
     this.deadline = httpClientDeadline(options)
     this.parser = httpClientParser(options)
     this.rbuf = new Array<u8>(HTTP_CLIENT_READ_BYTES)
+    this.plain = []
     this.fault = new HttpClientFault()
     const proxies: string[] = httpClientEnvProxies(options)
     this.httpProxy = proxies[0]
@@ -2291,19 +2495,29 @@ class HttpClientConn {
     return false
   }
 
-  /** Closes the connection, if one is open. */
+  /** Closes the connection, if one is open: an https one with its close_notify, its keys wiped. */
   close(): void {
+    const conn: TlsRecordClient | null = this.tls
+    if (conn !== null) {
+      httpClientTlsClose(conn, this.fd)
+      this.tls = null
+    }
     if (this.fd >= 0) {
       netClose(this.fd)
       this.fd = -1
     }
   }
 
-  /** Hands the connection back to `pool` when the response left it clean to reuse, else closes it. */
+  /**
+   * Hands the connection back to `pool` when the response left it clean to
+   * reuse, else closes it. An https connection is never pooled: the pool
+   * keeps fds, and its TLS state lives with this task, so it is closed.
+   */
   release(pool: FetchPool | null): void {
     if (
       pool !== null &&
       this.fd >= 0 &&
+      this.tls === null &&
       this.options.outbound === null &&
       this.parser.keepAlive() &&
       this.parser.buffered() === 0
@@ -2316,34 +2530,249 @@ class HttpClientConn {
   }
 }
 
-/** One read of the response into the parser, parking the task until the socket has bytes; false with the fault set. */
-const httpClientFillAsync = async (conn: HttpClientConn): Promise<boolean> => {
-  if (conn.overdue()) {
-    return false
+/**
+ * Parks the task until `conn`'s socket is ready to read (or, with `write`,
+ * to write), within `readTimeoutMs` and the fetch's deadline: false with the
+ * fault set when the wait timed out, was cancelled or failed.
+ */
+const httpClientWaitPeerAsync = async (conn: HttpClientConn, write: boolean): Promise<boolean> => {
+  const ms: i32 = conn.options.readTimeoutMs
+  let until: i64 = ms > 0 ? monotonicNanos() + toI64(ms) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
+  let code: i32 = HTTP_E_READ_TIMEOUT
+  if (conn.deadline < until) {
+    until = conn.deadline
+    code = HTTP_E_TOTAL_TIMEOUT
   }
-  let n: i32 = netRead(conn.fd, conn.rbuf, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
+  const waited = await httpClientWaitAsync(conn.fd, write, until, code)
+  if (waited === HTTP_E_NONE) {
+    return true
+  }
+  const what: string = write ? "took" : "sent"
+  conn.fault.fail(
+    waited,
+    httpClientAsyncWaitText(waited, conn.options, `the server ${what} nothing for ${ms} ms`)
+  )
+  return false
+}
+
+/**
+ * One read of up to `want` bytes from the socket into `rbuf`, parking the
+ * task until it has some: the count, 0 at the end of the stream, or -1 with
+ * the fault set.
+ */
+const httpClientReadRawAsync = async (conn: HttpClientConn, want: i32): Promise<i32> => {
+  if (conn.overdue()) {
+    return -1
+  }
+  let n: i32 = netRead(conn.fd, conn.rbuf, HTTP_CLIENT_ZERO, want)
   while (n === HTTP_CLIENT_WOULD_BLOCK) {
-    const ready = await readable(conn.fd)
+    const ready = await httpClientWaitPeerAsync(conn, false)
     if (!ready) {
-      conn.fault.fail(HTTP_E_IO, "the wait for the server failed")
-      return false
+      return -1
     }
+    if (conn.overdue()) {
+      return -1
+    }
+    n = netRead(conn.fd, conn.rbuf, HTTP_CLIENT_ZERO, want)
+  }
+  if (n < 0) {
+    conn.lost = true
+    conn.fault.fail(HTTP_E_IO, `reading from the server failed (errno ${-n})`)
+    return -1
+  }
+  return n
+}
+
+/** Writes `bytes[off, off + len)` to the socket, parking the task while it is full; false with the fault set. */
+const httpClientWriteRawAsync = async (
+  conn: HttpClientConn,
+  bytes: u8[],
+  off: i32,
+  len: i32
+): Promise<boolean> => {
+  let at: i32 = off
+  const end: i32 = off + len
+  while (at < end) {
     if (conn.overdue()) {
       return false
     }
-    n = netRead(conn.fd, conn.rbuf, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
+    const n: i32 = netWrite(conn.fd, bytes, at, end - at)
+    if (n > 0) {
+      at += n
+    } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
+      const ready = await httpClientWaitPeerAsync(conn, true)
+      if (!ready) {
+        return false
+      }
+    } else {
+      conn.lost = true
+      conn.fault.fail(HTTP_E_IO, `writing to the server failed (errno ${-n})`)
+      return false
+    }
   }
-  if (n > 0) {
-    conn.gotByte = true
-    conn.parser.feed(conn.rbuf, HTTP_CLIENT_ZERO, n)
-    return true
+  return true
+}
+
+/** Feeds `tls` the next bytes the server sent, or the end of its stream; false with the fault set. */
+const httpClientReceiveTlsAsync = async (conn: HttpClientConn, tls: TlsRecordClient): Promise<boolean> => {
+  const room: i32 = tls.space()
+  const want: i32 = room < HTTP_CLIENT_READ_BYTES ? room : HTTP_CLIENT_READ_BYTES
+  if (want <= 0) {
+    conn.fault.fail(HTTP_E_TLS, "the TLS connection has no room for the server's next record")
+    return false
+  }
+  const n = await httpClientReadRawAsync(conn, want)
+  if (n < 0) {
+    tls.abort()
+    return false
   }
   if (n === 0) {
+    // Before the server's close_notify this is truncation, which fails `tls`.
+    tls.end()
+  } else {
+    tls.receive(conn.rbuf, HTTP_CLIENT_ZERO, n)
+  }
+  return true
+}
+
+/** Sends everything `tls` has sealed, parking the task while the socket is full; false with the fault set. */
+const httpClientFlushTlsAsync = async (conn: HttpClientConn, tls: TlsRecordClient): Promise<boolean> => {
+  while (tls.outputEnd > tls.outputStart) {
+    const len: i32 = tls.outputEnd - tls.outputStart
+    const wrote = await httpClientWriteRawAsync(conn, tls.output, tls.outputStart, len)
+    if (!wrote) {
+      tls.abort()
+      return false
+    }
+    tls.consume(len)
+  }
+  return true
+}
+
+/**
+ * Runs the TLS handshake for `host` on the connected socket, `early` being
+ * bytes already read past a proxy's CONNECT answer: the server's chain is
+ * checked as `fetchSync` checks it. False with the fault set.
+ */
+const httpClientSecureAsync = async (conn: HttpClientConn, host: string, early: u8[]): Promise<boolean> => {
+  const trust: TlsClientTrust | null = conn.trust
+  if (trust === null) {
+    conn.fault.fail(HTTP_E_CERTIFICATE, "no trusted root certificates are loaded")
+    return false
+  }
+  const tls: TlsRecordClient = httpClientTlsStart(host, early)
+  conn.tls = tls
+  if (toI32(conn.plain.length) === 0) {
+    conn.plain = new Array<u8>(HTTP_CLIENT_READ_BYTES)
+  }
+  while (httpClientTlsOpening(tls)) {
+    if (!httpClientTlsVerify(tls, trust, host, conn.fault)) {
+      return false
+    }
+    let moved: boolean = false
+    if (tls.outputEnd > tls.outputStart) {
+      moved = await httpClientFlushTlsAsync(conn, tls)
+    } else {
+      moved = await httpClientReceiveTlsAsync(conn, tls)
+    }
+    if (!moved) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Asks `proxy`, on the fresh socket, for a tunnel to `host:port`. True once
+ * the proxy answers 2xx, every byte after its head belonging to the tunnel.
+ */
+const httpClientTunnelAsync = async (
+  conn: HttpClientConn,
+  host: string,
+  port: i32,
+  proxy: Url
+): Promise<boolean> => {
+  const head: u8[] | null = httpClientConnectHead(host, port, proxy, conn.fault)
+  if (head === null) {
+    return false
+  }
+  conn.gotByte = false
+  conn.parser.expect(false, true)
+  const wrote = await httpClientWriteRawAsync(conn, head, HTTP_CLIENT_ZERO, toI32(head.length))
+  if (!wrote) {
+    return false
+  }
+  let event: i32 = await httpClientPumpAsync(conn)
+  while (event === HTTP1_INFORMATIONAL) {
+    event = await httpClientPumpAsync(conn)
+  }
+  if (event < 0) {
+    return false
+  }
+  if (event !== HTTP1_HEAD) {
+    conn.fault.fail(HTTP_E_PROTOCOL, `the response ended before its head (event ${event})`)
+    return false
+  }
+  const status: i32 = conn.parser.status
+  if (status < 200 || status > 299) {
+    conn.fault.fail(
+      HTTP_E_PROXY_REFUSED,
+      `the proxy answered CONNECT ${httpClientHostText(host)}:${port} with ${status}`
+    )
+    return false
+  }
+  // A 2xx has no body: the parser ends it, then reports the tunnel.
+  event = await httpClientPumpAsync(conn)
+  while (event >= 0 && event !== HTTP1_UPGRADE) {
+    event = await httpClientPumpAsync(conn)
+  }
+  return event === HTTP1_UPGRADE
+}
+
+/**
+ * One read of the response into the parser, through TLS on an https
+ * connection, parking the task until the socket has bytes; false with the
+ * fault set. Over TLS the stream ends only at the server's close_notify.
+ */
+const httpClientFillAsync = async (conn: HttpClientConn): Promise<boolean> => {
+  const tls: TlsRecordClient | null = conn.tls
+  if (tls === null) {
+    const n = await httpClientReadRawAsync(conn, HTTP_CLIENT_READ_BYTES)
+    if (n > 0) {
+      conn.gotByte = true
+      conn.parser.feed(conn.rbuf, HTTP_CLIENT_ZERO, n)
+    } else if (n === 0) {
+      conn.parser.finish()
+    }
+    return n >= 0
+  }
+  if (conn.overdue()) {
+    return false
+  }
+  let got: i32 = tls.read(conn.plain, HTTP_CLIENT_ZERO, toI32(conn.plain.length))
+  while (got === TLS_RECORD_AGAIN) {
+    const flushed = await httpClientFlushTlsAsync(conn, tls)
+    if (!flushed) {
+      return false
+    }
+    const received = await httpClientReceiveTlsAsync(conn, tls)
+    if (!received) {
+      return false
+    }
+    got = tls.read(conn.plain, HTTP_CLIENT_ZERO, toI32(conn.plain.length))
+  }
+  if (got > 0) {
+    conn.gotByte = true
+    conn.parser.feed(conn.plain, HTTP_CLIENT_ZERO, got)
+    return true
+  }
+  if (got === 0) {
+    // The server's close_notify: the orderly end of its stream.
     conn.parser.finish()
     return true
   }
   conn.lost = true
-  conn.fault.fail(HTTP_E_IO, `reading from the server failed (errno ${-n})`)
+  httpClientTlsFault(tls, conn.fault)
   return false
 }
 
@@ -2364,36 +2793,138 @@ const httpClientPumpAsync = async (conn: HttpClientConn): Promise<i32> => {
   return event
 }
 
-/** Writes `bytes`, parking the task while the socket is full; false with the fault set. */
+/** Writes `bytes`, through TLS on an https connection, parking the task while the socket is full; false with the fault set. */
 const httpClientWriteAsync = async (conn: HttpClientConn, bytes: u8[]): Promise<boolean> => {
+  const tls: TlsRecordClient | null = conn.tls
+  if (tls === null) {
+    const wrote = await httpClientWriteRawAsync(conn, bytes, HTTP_CLIENT_ZERO, toI32(bytes.length))
+    return wrote
+  }
   let at: i32 = 0
   const end: i32 = toI32(bytes.length)
   while (at < end) {
-    if (conn.overdue()) {
-      return false
-    }
-    const n: i32 = netWrite(conn.fd, bytes, at, end - at)
+    const n: i32 = tls.write(bytes, at, end - at)
     if (n > 0) {
       at += n
-    } else if (n === HTTP_CLIENT_WOULD_BLOCK || n === 0) {
-      const ready = await writable(conn.fd)
-      if (!ready) {
-        conn.fault.fail(HTTP_E_IO, "the wait for the server failed")
-        return false
-      }
-    } else {
+    } else if (n !== TLS_RECORD_AGAIN || tls.outputEnd === tls.outputStart) {
       conn.lost = true
-      conn.fault.fail(HTTP_E_IO, `writing to the server failed (errno ${-n})`)
+      httpClientTlsFault(tls, conn.fault)
+      return false
+    }
+    const flushed = await httpClientFlushTlsAsync(conn, tls)
+    if (!flushed) {
       return false
     }
   }
-  return true
+  const done = await httpClientFlushTlsAsync(conn, tls)
+  return done
 }
 
 /**
- * Looks `host` up (blocking, within `connectTimeoutMs`) and connects to its
- * addresses in turn, parking the task while each connect is in flight: the
- * connected fd, or -1 with the fault set.
+ * Looks `host` up without blocking the process: a `DnsClient` on its own
+ * poll loop, with `dns` (or the system's resolv.conf) and the hosts file, sends the queries
+ * over non-blocking sockets and the task sleeps between non-blocking checks
+ * of that loop, a slice that grows from 1 ms to `HTTP_CLIENT_DNS_SLICE_MS`
+ * and never passes the resolver's next retry. No network wait blocks; the
+ * hosts file (and resolv.conf, when `dns` is null) is read synchronously,
+ * once per lookup, as `resolveHost` reads them. An address literal (ASCII
+ * only, as the resolver's own check) is parsed here, with no resolver and
+ * no file read; localhost or a hosts entry answers without a query. Past `until` the lookup is cancelled
+ * and answers `DNS_RESOLVE_TIMEOUT`. `readable` on the loop is not used: it
+ * has no deadline, and a lookup must stop at `until` even when nothing comes.
+ *
+ * @returns The resolver's answer, as `resolveHost`'s, into `addresses` and
+ * `ttls`, or `HTTP_CLIENT_LOOKUP_WAIT` when the lookup could not wait.
+ */
+const httpClientLookupAsync = async (
+  host: string,
+  port: i32,
+  dns: DnsConfig | null,
+  until: i64,
+  addresses: u8[],
+  ttls: i32[]
+): Promise<i32> => {
+  let high: i32 = 0
+  const name: u8[] = new Array<u8>(host.length)
+  for (let i: i32 = 0; i < toI32(host.length); i += 1) {
+    const c: i32 = toI32(host.charCodeAt(i))
+    high = high | c
+    if (i < toI32(name.length)) {
+      name[i] = toU8(c & 0x7f)
+    }
+  }
+  if (high <= 127 && dnsParseAddress(name, 0, toI32(name.length), addresses, 0, port)) {
+    ttls[0] = 0
+    return 1
+  }
+  const hosts: DnsHosts = new DnsHosts()
+  let config: DnsConfig = new DnsConfig()
+  if (dns !== null) {
+    dnsLoadSystem(null, hosts)
+    config = dns
+  } else {
+    dnsLoadSystem(config, hosts)
+  }
+  const loop: i32 = pollCreate()
+  if (loop < 0) {
+    return HTTP_CLIENT_LOOKUP_WAIT
+  }
+  const client: DnsClient = new DnsClient(new DnsResolver(config, hosts, 1), loop, 0)
+  const lookup: i32 = client.start(host, port, monotonicNanos())
+  if (lookup < 0) {
+    netClose(loop)
+    return lookup
+  }
+  const ready: i32[] = new Array<i32>(8)
+  let slice: i32 = 1
+  let status: i32 = client.result(lookup, addresses, ttls)
+  while (status === DNS_RESOLVE_PENDING) {
+    const now: i64 = monotonicNanos()
+    if (now >= until) {
+      client.cancel(lookup, now)
+      status = DNS_RESOLVE_TIMEOUT
+      break
+    }
+    let own: i32 = slice
+    if (until < HTTP_CLIENT_NEVER) {
+      const left: i64 = (until - now + HTTP_CLIENT_NS_PER_MS - toI64(1)) / HTTP_CLIENT_NS_PER_MS
+      if (left < toI64(own)) {
+        own = toI32(left)
+      }
+    }
+    const wait: i32 = client.timeoutMs(now, own)
+    if (wait > 0) {
+      const slept = await sleep(wait)
+      if (!slept) {
+        client.cancel(lookup, monotonicNanos())
+        status = HTTP_CLIENT_LOOKUP_WAIT
+        break
+      }
+    }
+    const count: i32 = pollWait(loop, ready, 0)
+    const after: i64 = monotonicNanos()
+    if (count < 0) {
+      client.cancel(lookup, after)
+      status = HTTP_CLIENT_LOOKUP_WAIT
+      break
+    }
+    for (let k: i32 = 0; k < count && 2 * k + 1 < toI32(ready.length); k += 1) {
+      if (client.owns(ready[2 * k])) {
+        client.ready(ready[2 * k], ready[2 * k + 1], after)
+      }
+    }
+    client.tick(after)
+    status = client.result(lookup, addresses, ttls)
+    slice = slice * 2 < HTTP_CLIENT_DNS_SLICE_MS ? slice * 2 : HTTP_CLIENT_DNS_SLICE_MS
+  }
+  netClose(loop)
+  return status
+}
+
+/**
+ * Looks `host` up within `connectTimeoutMs` and connects to its addresses in
+ * turn, parking the task while the lookup and each connect are in flight:
+ * the connected fd, or -1 with the fault set.
  */
 const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32): Promise<i32> => {
   const start: i64 = monotonicNanos()
@@ -2409,7 +2940,9 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
     return -1
   }
   const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
-  const usable: i32 = httpClientResolve(host, port, conn.options, start, until, code, addresses, conn.fault)
+  const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
+  const count = await httpClientLookupAsync(host, port, conn.options.dns, until, addresses, ttls)
+  const usable: i32 = httpClientAnswers(host, count, conn.options, until, code, addresses, conn.fault)
   if (usable < 0) {
     return -1
   }
@@ -2422,12 +2955,20 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
       last = fd
       continue
     }
-    const ready = await writable(fd)
-    if (conn.overdue()) {
+    const waited = await httpClientWaitAsync(fd, true, until, code)
+    if (waited !== HTTP_E_NONE) {
       netClose(fd)
+      conn.fault.fail(
+        waited,
+        httpClientAsyncWaitText(
+          waited,
+          conn.options,
+          `no address of ${host} answered on port ${port} within ${budget} ms`
+        )
+      )
       return -1
     }
-    const result: i32 = ready ? connectResult(fd) : -5
+    const result: i32 = connectResult(fd)
     if (result === 0) {
       return fd
     }
@@ -2440,9 +2981,9 @@ const httpClientDialAsync = async (conn: HttpClientConn, host: string, port: i32
 
 /**
  * Makes `conn` a connection to where `url` goes: one the pool kept when
- * there is one, else a new one, through an http proxy when the settings say
- * so. False with the fault set; an https URL is refused before anything is
- * dialled, since its TLS handshake would block the process.
+ * there is one, else a new one, through a proxy when the settings say so.
+ * An https URL gets a TLS handshake, tunnelled through an https proxy's
+ * CONNECT, and is never taken from the pool. False with the fault set.
  */
 const httpClientOpenAsync = async (
   conn: HttpClientConn,
@@ -2450,13 +2991,7 @@ const httpClientOpenAsync = async (
   pool: FetchPool | null,
   fresh: boolean
 ): Promise<boolean> => {
-  if (url.scheme === "https") {
-    conn.fault.fail(
-      HTTP_E_TLS,
-      `${httpClientRedact(url)} is https, which the async fetch does not drive yet; use fetchSync`
-    )
-    return false
-  }
+  const secure: boolean = url.scheme === "https"
   const way: HttpClientRoute | null = httpClientRoute(
     url,
     conn.options,
@@ -2471,7 +3006,7 @@ const httpClientOpenAsync = async (
   conn.route = way.route
   conn.parser = httpClientParser(conn.options)
   conn.reused = false
-  if (pool !== null && !fresh && conn.options.outbound === null) {
+  if (pool !== null && !fresh && !secure && conn.options.outbound === null) {
     const kept: i32 = pool.take(way.route)
     if (kept >= 0) {
       conn.fd = kept
@@ -2479,11 +3014,37 @@ const httpClientOpenAsync = async (
       return true
     }
   }
+  // The roots come first, so a fetch with none never reaches the network.
+  if (secure && conn.trust === null) {
+    conn.trust = httpClientLoadTrust(conn.options, conn.fault)
+    if (conn.trust === null) {
+      return false
+    }
+  }
   const fd: i32 = await httpClientDialAsync(conn, way.dialHost, way.dialPort)
   if (fd < 0) {
     return false
   }
   conn.fd = fd
+  if (!secure) {
+    return true
+  }
+  let early: u8[] = []
+  const proxy: Url | null = way.proxy
+  if (proxy !== null) {
+    const tunnelled = await httpClientTunnelAsync(conn, url.host, way.port, proxy)
+    if (!tunnelled) {
+      conn.close()
+      return false
+    }
+    early = conn.parser.tunnelBytes()
+    conn.parser = httpClientParser(conn.options)
+  }
+  const secured = await httpClientSecureAsync(conn, url.host, early)
+  if (!secured) {
+    conn.close()
+    return false
+  }
   return true
 }
 
@@ -2680,12 +3241,13 @@ const httpClientFetchAsync = async (
  * Fetches `url` without blocking the process: the task waits on the
  * executor while the connection is made, the request written and the
  * response read, so other tasks run meanwhile and `awaitAll(fetch(a),
- * fetch(b))` overlaps the two. The body is read whole, up to
- * `maxBodyBytes`, before the answer comes. Only http is driven this way: an
- * https URL answers `HTTP_E_TLS` (use `fetchSync`). The name lookup still
- * blocks. Policy, proxy, redirect and error rules are `fetchSync`'s.
+ * fetch(b))` overlaps the two. The name lookup does not block either: it
+ * runs on non-blocking sockets within `connectTimeoutMs`. An https URL gets
+ * the TLS handshake and checks `fetchSync` gives it. The body is read whole,
+ * up to `maxBodyBytes`, before the answer comes. Policy, proxy, redirect and
+ * error rules are `fetchSync`'s.
  *
- * @param url The absolute `http://` URL to fetch.
+ * @param url The absolute `http://` or `https://` URL to fetch.
  * @param init The method, fields, body, options and pool; null for a plain `GET`.
  * @returns The response with its body, or the failure: never a panic.
  */

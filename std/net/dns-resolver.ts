@@ -766,6 +766,41 @@ export class DnsResolver {
   }
 
   /**
+   * Ends `lookup` now with the addresses it already has, when one of its
+   * current name's two queries has answered with addresses and the other is
+   * still asking; the one still asking is owed a `DNS_CLOSE`, as `cancel`
+   * owes one. Otherwise the lookup is left as it was. A driver whose own time
+   * is up calls this before `cancel`, so a network that never answers AAAA
+   * still gives the A addresses it found. Panics when `lookup` is not a
+   * lookup in progress, as `result` does.
+   *
+   * @param lookup The slot `start` answered.
+   * @returns Whether the lookup has now finished, its answer for `result`
+   *   to read; true for one that had finished already.
+   */
+  settle(lookup: i32): boolean {
+    if (lookup < 0 || lookup >= this.maxLookups || this.lookupState[lookup] === DNS_L_FREE) {
+      panic(`DnsResolver.settle: ${lookup} is not a lookup in progress`)
+    }
+    if (this.lookupState[lookup] === DNS_L_DONE) {
+      return true
+    }
+    const a: i32 = lookup * 2
+    let open: i32 = -1
+    if (this.state[a] === DNS_Q_DONE && this.outcome[a] > 0) {
+      open = a + 1
+    } else if (this.state[a + 1] === DNS_Q_DONE && this.outcome[a + 1] > 0) {
+      open = a
+    }
+    if (open < 0 || this.state[open] === DNS_Q_DONE) {
+      return false
+    }
+    // The other has addresses, so this finishes the lookup and never reaches a next name, which alone reads the clock.
+    dnsResolverDone(this, open, DNS_RESOLVE_NO_ANSWER, 0)
+    return true
+  }
+
+  /**
    * How many slots are taken.
    *
    * @returns How many lookups are in progress or hold an answer not yet read,
@@ -1163,7 +1198,9 @@ const dnsResolverSameName = (a: u8[], b: u8[]): boolean => {
  * an NXDOMAIN, such an error is the lookup's, since the name may well exist.
  * Otherwise the name has no address: NXDOMAIN from both moves the search on,
  * and NODATA ends it, as musl's resolver does, since the name exists and only
- * lacks the type asked.
+ * lacks the type asked. NODATA is `DNS_RESOLVE_NOT_FOUND` even after an
+ * earlier candidate left an error to fall back on: that error stands only
+ * when no later candidate answers.
  */
 const dnsResolverDone = (r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): void => {
   if (r.state[q] === DNS_Q_UDP || r.state[q] === DNS_Q_TCP) {
@@ -1196,14 +1233,17 @@ const dnsResolverDone = (r: DnsResolver, q: i32, outcome: i32, nowNanos: i64): v
     dnsResolverFinish(r, l, error)
     return
   }
+  if (error === 0 && !(r.nxdomain[a] && r.nxdomain[a + 1])) {
+    // NODATA answers for the name, so an earlier candidate's fallback does not stand.
+    dnsResolverFinish(r, l, DNS_RESOLVE_NOT_FOUND)
+    return
+  }
   if (error !== 0 && r.fallback[l] === 0) {
     r.fallback[l] = error
   }
-  if (error !== 0 || (r.nxdomain[a] && r.nxdomain[a + 1])) {
-    r.candidate[l] = r.candidate[l] + 1
-    if (dnsResolverNextCandidate(r, l, nowNanos)) {
-      return
-    }
+  r.candidate[l] = r.candidate[l] + 1
+  if (dnsResolverNextCandidate(r, l, nowNanos)) {
+    return
   }
   dnsResolverFinish(r, l, r.fallback[l] !== 0 ? r.fallback[l] : DNS_RESOLVE_NOT_FOUND)
 }

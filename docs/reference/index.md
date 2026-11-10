@@ -20,7 +20,7 @@ The globals and the 10 `nish:` modules that come with the compiler.
 
 <scalar-card title="Core" icon="phosphor/regular/atom" href="#core">
 
-Numbers, bytes, sorting, randomness and the test runner: 7 modules.
+Numbers, bytes, array loops, sorting, randomness and the test runner: 8 modules.
 
 </scalar-card>
 
@@ -44,7 +44,7 @@ Terminal output and input, and command-line parsing: 8 modules.
 
 <scalar-card title="Concurrency" icon="phosphor/regular/arrows-split" href="#concurrency">
 
-Threads, locks, shared memory and queues between processes or a wasm page: 4 modules.
+Threads, locks, shared memory and queues between processes or a wasm page: 5 modules.
 
 </scalar-card>
 
@@ -56,7 +56,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 49 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 51 modules.
 
 </scalar-card>
 
@@ -90,8 +90,8 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish:io`](nish-io.md) | Text and bytes to stdout and stderr with nothing added, and the panic that ends a program on an unmet invariant. |
 | [`nish:net`](nish-net.md) | Non-blocking sockets for a program that owns its loop: TCP, UDP, Unix-domain sockets, and a level-triggered readiness loop to wait on them. |
 | [`nish:process`](nish-process.md) | The process and its host: exit, the environment, children, signals, the clocks, scheduling, and the size of the machine. |
-| [`nish:region`](nish-region.md) | Memory a program frees when it says so (docs/LANGUAGE.md, "Regions"). |
-| [`nish:secret`](nish-secret.md) | Key material, and the rules that keep it in (docs/LANGUAGE.md, "Secrets"). |
+| [`nish:region`](nish-region.md) | Memory a program frees when it says so: an arena of its own, reached through a handle, so that what lives and dies together goes back with one `free` where the thread's arena would hold it until the program ends. |
+| [`nish:secret`](nish-secret.md) | Key material as an opaque value that the checker keeps from leaving the program by any road but one, and that is zeroed, with a store no optimiser may remove, before the function that made it lets go of it. |
 | [`nish:simd`](nish-simd.md) | Sixteen-byte vectors of one lane type, and the lane-wise operations on them, each lowered to target-independent LLVM vector IR. |
 | [`nish:term`](nish-term.md) | Terminal input for a full-screen program: read a key the moment it is pressed, wait for one with a timeout that doubles as a frame clock, and ask the terminal whether it is one, how big it is, and to stop echoing. |
 | [`nish:unsafe`](nish-unsafe.md) | Element access with no bounds check, signed arithmetic that wraps, and a C string read through a pointer nothing proves. |
@@ -102,9 +102,10 @@ Every diagnostic code, what it means and a program that provokes it.
 
 | Module | |
 | --- | --- |
+| [`nish/array`](array.md) | The array methods that take a callback, and `slice`, in Nish: each a plain loop, compiled once per callback. |
 | [`nish/base64`](base64.md) | Standard base64 (RFC 4648 §4) with `=` padding, the encoding kitty graphics frames are sent in. |
 | [`nish/bytes`](bytes.md) | Fixed-width integers and doubles read from, and written into, a byte array at an offset, in either byte order. |
-| [`nish/math`](math.md) | `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish rather than libm, so a program answers the same on every target, wasm included, and the optimiser sees the whole function. |
+| [`nish/math`](math.md) | `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, and on a freestanding wasm build `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow` and the `%` of two `f64`s, in Nish rather than libm, so a program answers the same on every target and the optimiser sees the whole function. |
 | [`nish/pair`](pair.md) | Two values answered by one call. |
 | [`nish/random`](random.md) | A seeded generator of pseudo-random numbers whose every answer is the same natively and under Node. |
 | [`nish/sort`](sort.md) | `xs.sort(cmp)` on an array, in Nish: a stable merge sort, compiled once per comparator. |
@@ -154,6 +155,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | Module | |
 | --- | --- |
 | [`nish/host/ring`](host/ring.md) | A single-producer, single-consumer ring of `i32` words over module storage, shared by a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §11). |
+| [`nish/host/text`](host/text.md) | Text in module storage, for a wasm module and the page that drives it (`docs/wp50-wasm-host.md` §7). |
 | [`nish/sync/ring`](sync/ring.md) | Bounded lock-free queues of byte records in a shared region, for handing work between processes on different cores. |
 | [`nish/sync/shm`](sync/shm.md) | Memory that several processes map at once, and the atomics that order what they write to it. |
 | [`nish/threads`](threads.md) | Data parallelism, a scope for heterogeneous tasks, and a lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3). |
@@ -192,6 +194,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/http3-server`](net/http3-server.md) | HTTP/3 over QUIC on one UDP socket: a pool of slots, each a reusable `QuicConnection` with an `Http3Connection` beside it, a `QuicListener` in front for the datagrams no slot owns, for a program that owns its readiness loop. |
 | [`nish/net/http3`](net/http3.md) | The server side of an HTTP/3 connection (RFC 9114) on the streams of a `QuicConnection` (`nish/net/quic`): the control stream and SETTINGS both ways, the QPACK encoder and decoder streams (opened, at dynamic table capacity 0), requests and responses on bidirectional streams with their bodies streamed both ways, GOAWAY, and RFC 9114's error codes. |
 | [`nish/net/outbound`](net/outbound.md) | The policy for a program that fetches URLs it did not choose: a webhook sender, a link previewer, an importer that takes a URL from a form. |
+| [`nish/net/postgres-async`](net/postgres-async.md) | `PgAsyncPool`, PostgreSQL connections an `async` task awaits a query on, so a task's query waits on its socket while the executor runs the others. |
 | [`nish/net/postgres-carrier`](net/postgres-carrier.md) | `PgCarrier`, a `PgPool`'s queries on an `HttpHandler`'s loop, so a route handler queries PostgreSQL without blocking its worker. |
 | [`nish/net/postgres`](net/postgres.md) | The client side of PostgreSQL's frontend/backend protocol, version 3.0: a sans-IO connection that writes the frontend's messages into an output buffer and reads the backend's from an input buffer, for a program that owns its socket (`nish:net`) and its loop. |
 | [`nish/net/prefork`](net/prefork.md) | Run a server on every core: a supervisor process that starts one worker process per core, restarts one that dies, and stops them all on SIGTERM or SIGINT (`docs/wp42-multicore-server.md` §2.3). |
@@ -207,6 +210,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/quic-stream`](net/quic-stream.md) | The streams of one QUIC version 1 connection (RFC 9000 §2-§4): stream IDs and their four types, the sending and receiving state machines, reassembly, flow control per stream and for the connection, and the stream limits. |
 | [`nish/net/quic`](net/quic.md) | The server side of a QUIC version 1 connection (RFC 9000, RFC 9001, RFC 9221): the TLS 1.3 handshake carried in CRYPTO frames at three encryption levels, transport parameters both ways, acknowledgements per packet number space, the connection-ID table, streams both ways (`nish/net/quic-stream`) and DATAGRAM frames once the handshake is done. |
 | [`nish/net/router`](net/router.md) | A method and path router for HTTP servers, independent of the carrier: the same table answers an HTTP/1 request line and an HTTP/2 or HTTP/3 `:path`. |
+| [`nish/net/serve`](net/serve.md) | An HTTP/1.1 server for an `async` program: one task and one region per request, answers in request order. |
 | [`nish/net/tls-tcp`](net/tls-tcp.md) | TLS 1.3 over TCP (WP34 T2): a pool of server connections on `nish:net`, each a `TlsRecordServer` driving a `TlsServer`, for a program that owns its readiness loop; and `TlsTcpClient`, one client connection that authenticates the server (`nish/net/tls/verify`) and is driven by the same kind of loop or, through `tlsConnect`, `readWait` and `writeAll`, by none (its own comment, below, says how). |
 | [`nish/net/tls`](net/tls.md) | The server side of a TLS 1.3 handshake (RFC 8446), from the client's first ClientHello to its Finished, carrier-agnostic and sans-IO. |
 | [`nish/net/tls/client`](net/tls/client.md) | The client side of a TLS 1.3 handshake (RFC 8446), from its ClientHello to its Finished, carrier-agnostic and sans-IO: the mirror of `nish/net/tls`'s `TlsServer`. |

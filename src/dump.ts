@@ -23,7 +23,7 @@
 // biggest single difference between the two compilers: 193 of its 206 rows.
 
 import { FactsTable, FunctionFacts } from "./attributes"
-import { Compilation, ModuleUnit } from "./compilation"
+import { Compilation, isUnusedArrayImport, ModuleUnit } from "./compilation"
 import { SourceFile } from "./diagnostics"
 import { EFFECT_READ, EFFECT_WRITE } from "./runtime"
 import { StringSet } from "./map"
@@ -325,6 +325,9 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   const pkg = program.packageName.length === 0 ? "" : ` [package ${program.packageName}]`
   out.push(`module ${unit.name}${unit.isEntry ? " (entry)" : ""}${pkg}`)
   for (const imp of program.imports) {
+    if (isUnusedArrayImport(imp.specifier, imp.localName, imp.template)) {
+      continue
+    }
     const struct = imp.struct
     const constant = imp.constant
     const builtin = imp.builtin
@@ -433,6 +436,9 @@ export const checkedText = (compilation: Compilation): string => {
   const facts = compilation.analyze()
   const out: string[] = []
   for (const unit of compilation.modules) {
+    if (compilation.isUnusedArrayModule(unit)) {
+      continue
+    }
     dumpModule(unit, compilation.table, facts, out)
   }
   return `${out.join("\n")}\n`

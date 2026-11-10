@@ -1,0 +1,4 @@
+runs as a spawned task, in a region of its own that is freed when it ends
+stores `a` into `tally.label`
+stores `b` into `tally.names[0]`
+region memory kept by memory outside the region points at freed memory once the task ends

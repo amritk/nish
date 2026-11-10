@@ -22,7 +22,7 @@ import { CheckContext } from "./context"
 import { SourceFile } from "./diagnostics"
 import { BuiltinExport } from "./nish-modules"
 import { StringMap, StringSet } from "./map"
-import { FLAG_ASYNC, FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_MEMBER, Node } from "./nodes"
+import { FLAG_ASYNC, FLAG_FOREIGN, N_BINARY, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_MEMBER, Node } from "./nodes"
 import { packageSymbolPrefix } from "./packages"
 import { PanicSite } from "./panics"
 import {
@@ -30,11 +30,12 @@ import {
   isJsonTypedModule,
   isMapExtrasModule,
   isMathModule,
+  isArrayModule,
   isSortModule,
   isSecretModule,
 } from "./std-modules"
 import { Local } from "./symbols"
-import { TypeTable } from "./types"
+import { T_F32, T_F64, TypeTable } from "./types"
 
 /** What a `FunctionSig` is: a free function, a method, or a constructor. */
 export const ROLE_FUNCTION: i32 = 0
@@ -1590,6 +1591,14 @@ export class CheckedProgram {
   /** Whether `--number-mode f64` is in force, where a `.length` is an `f64`. */
   f64Mode: boolean
   /**
+   * Which of the names a bounds guard calls this module declares anywhere,
+   * as bits: 1 for `panic`, 2 for `toI32`, 4 for `toU32`. -1 until
+   * `shadowsGuardName` in `src/checker.ts` first asks, which walks the module
+   * once for all three, so a module with many NL9007 warnings is not walked
+   * again for each.
+   */
+  guardShadows: i32
+  /**
    * The `nish:unsafe` imports of this module, in source order, and every call
    * of one of its functions, in the order the checker met them (each once,
    * however many instantiations check the body it is in). Nothing in the
@@ -1608,6 +1617,11 @@ export class CheckedProgram {
   exposeCalls: ParallelCall[]
   /** `nish:region`: every `region`, `regionWith`, `enter` and `enterWith` call, judged once the facts are in (`Compilation.checkRegions`). */
   regionCalls: ParallelCall[]
+  /**
+   * WP49 stage 5, part 3: every `spawn` from `nish:async`, whose task is walked
+   * by the region rules once the facts are in (`Compilation.checkRegions`).
+   */
+  asyncSpawns: ParallelCall[]
   /** `nish:region`: every `Channel.send`, whose value may not hold a `Region` (`Compilation.checkRegions`). */
   channelSends: ParallelCall[]
   /** `nish:secret`: what each `secret(v)` asks of the whole-program facts (`Compilation.checkSecrets`). */
@@ -1661,6 +1675,11 @@ export class CheckedProgram {
   jsonTypedLibrary: boolean
   /** `isMathLibrary()`, decided once, as `collectionsLibrary` is. */
   mathLibrary: boolean
+  /**
+   * `nish/math`'s `fmodF64`, when a page module imported it for its float `%`
+   * (`Checker.importMath`), and `null` everywhere else: there `%` stays `frem`.
+   */
+  floatRemainder: FunctionSig | null
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */
   nodeTypes: i32[]
@@ -1834,6 +1853,7 @@ export class CheckedProgram {
     this.panicSites = []
     this.exposeCalls = []
     this.regionCalls = []
+    this.asyncSpawns = []
     this.channelSends = []
     this.secretNeeds = []
     this.spawnCalls = []
@@ -1847,17 +1867,23 @@ export class CheckedProgram {
     this.jsonTypedLibrary = isJsonTypedModule(packageName, source.path)
     this.secretLibrary = isSecretModule(packageName, source.path)
     this.regionLibrary = isRegionModule(packageName, source.path)
-    // `std/sort.ts` is copied the same way: its only code is `sortWith`'s
-    // instantiations, one per comparator, which belong in the module that sorts.
-    this.mathLibrary = isMathModule(packageName, source.path) || isSortModule(packageName, source.path)
+    // `std/sort.ts` and `std/array.ts` are copied the same way: their only code
+    // is their templates' instantiations, one per callback, which belong in the
+    // module that calls them.
+    this.mathLibrary =
+      isMathModule(packageName, source.path) ||
+      isSortModule(packageName, source.path) ||
+      isArrayModule(packageName, source.path)
     this.usesArgv = false
     this.f64Mode = false
+    this.guardShadows = -1
     this.unsafeImports = []
     this.unsafeCalls = []
     this.nodeTypes = new Array<i32>(nodeCount)
     this.nodeLocals = new Array<Local | null>(nodeCount)
     this.nodeConstants = new Array<ConstInfo | null>(nodeCount)
     this.nodeCallees = new Array<FunctionSig | null>(nodeCount)
+    this.floatRemainder = null
     this.nodeBuiltins = []
     this.builtinImports = new StringMap()
     this.builtinImportList = []
@@ -1912,7 +1938,7 @@ export class CheckedProgram {
 
   /**
    * Whether this module writes no `.ll` of its own: `std/collections.ts`, `std/math.ts`,
-   * `std/sort.ts` and `std/secret.ts`, whose code is copied into each module that uses it, and
+   * `std/sort.ts`, `std/array.ts` and `std/secret.ts`, whose code is copied into each module that uses it, and
    * `std/map.ts`, whose every call is lowered in place at the call
    * (docs/wp32-map.md §4.1, §9.2).
    */
@@ -1936,7 +1962,22 @@ export class CheckedProgram {
     return this.regionLibrary
   }
 
-  /** Whether this module is `std/math.ts` (`nish/math`) or `std/sort.ts`, copied like `std/collections.ts`. */
+  /**
+   * The function a float `%` or `%=` at `node` calls in place of `frem`, or
+   * `null` for every other node: `floatRemainder` on a page module, whose
+   * freestanding link has no `fmod` for `frem` to become. An `f32` remainder
+   * calls it on the widened operands, which is exact.
+   */
+  floatRemainderOf(node: Node): FunctionSig | null {
+    const rem = this.floatRemainder
+    if (rem === null || node.kind !== N_BINARY || (node.text !== "%" && node.text !== "%=")) {
+      return null
+    }
+    const ty = this.nodeTypes[node.children[0].id]
+    return ty === T_F64 || ty === T_F32 ? rem : null
+  }
+
+  /** Whether this module is `std/math.ts` (`nish/math`), `std/sort.ts` or `std/array.ts`, copied like `std/collections.ts`. */
   isMathLibrary(): boolean {
     return this.mathLibrary
   }

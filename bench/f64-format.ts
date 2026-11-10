@@ -1,5 +1,5 @@
 // `String(x)` for an f64: the runtime's shortest-digits formatter
-// (`nish_f64_format`, runtime/runtime.c), timed per number.
+// (`nish_f64_format`, runtime/runtime-text.c), timed per number.
 //
 //   build/nish bench/f64-format.ts -o build/bench/f64-format/ --link build/bench/f64-format/app
 //   build/bench/f64-format/app

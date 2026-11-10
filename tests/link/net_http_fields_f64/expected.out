@@ -65,6 +65,10 @@ PASS  an uppercase name is refused
 PASS  so is a pseudo-header, which the version writes itself
 PASS  a value that would end a line once turned back into HTTP/1.1 is refused
 PASS  a connection-specific field is refused
+PASS  one date passes
+PASS  two are refused: Date is a singleton (RFC 9110 §5.3)
+PASS  even when they agree
+PASS  a second in another case is refused too, as an uppercase name
 PASS  and two lists of different lengths
 PASS  clear empties every field
-http fields: 69 passed, 0 failed, 0 skipped
+http fields: 73 passed, 0 failed, 0 skipped

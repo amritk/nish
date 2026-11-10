@@ -127,6 +127,7 @@ struct TypeTable (class) size=96 align=8 exported
   method secretInner -> @TypeTable.secretInner
   method isSecret -> @TypeTable.isSecret
   method holdsSecret -> @TypeTable.holdsSecret
+  method sharedWithTask -> @TypeTable.sharedWithTask
   method holdsUnion -> @TypeTable.holdsUnion
   method packablePayload -> @TypeTable.packablePayload
   method resultByValue -> @TypeTable.resultByValue
@@ -790,6 +791,16 @@ function TypeTable.holdsSecret(this: TypeTable, type: i32): boolean -> @TypeTabl
   callee +5:14 TypeTable.holdsSecret -> @TypeTable.holdsSecret
   callee +8:14 TypeTable.holdsSecret -> @TypeTable.holdsSecret
   callee +8:51 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+function TypeTable.sharedWithTask(this: TypeTable, type: i32): boolean -> @TypeTable.sharedWithTask [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: TypeTable.holdsSecret TypeTable.isArray TypeTable.isRegion TypeTable.isStruct
+  pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.isArray#0 TypeTable.holdsSecret#0 TypeTable.isRegion#0
+  stackSites=0 stackLocals=0
+  callee +0:13 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +0:36 TypeTable.isArray -> @TypeTable.isArray
+  callee +0:60 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee +0:87 TypeTable.isRegion -> @TypeTable.isRegion
 function TypeTable.holdsUnion(this: TypeTable, type: i32): boolean -> @TypeTable.holdsUnion [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

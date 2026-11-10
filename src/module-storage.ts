@@ -30,7 +30,7 @@
 
 import { parameterSpelling } from "./checker"
 import { CheckContext } from "./context"
-import { isAssignmentOperator, storesInlineElements, unwrapParens } from "./emit-util"
+import { dottedName, isAssignmentOperator, storesInlineElements, unwrapParens } from "./emit-util"
 import {
   N_BINARY,
   N_CALL,
@@ -55,8 +55,8 @@ import {
   elementStride,
   inlineElementStruct,
 } from "./program"
-import { SORT_LOCAL } from "./std-modules"
-import { T_BOOL, TypeTable, isHostWindow, isNumeric } from "./types"
+import { rewrittenArrayMethod } from "./std-modules"
+import { T_BOOL, T_U8, TypeTable, isHostWindow, isNumeric } from "./types"
 
 /** The most elements one storage may hold. */
 const STORAGE_MAX_LENGTH: i32 = 16777216
@@ -386,7 +386,7 @@ export const checkStorageUses = (ctx: CheckContext, node: Node): void => {
       if (info !== null) {
         ctx.error(
           node,
-          `Module storage \`${info.name}\` is a place, not a value: index it (\`${info.name}[i]\`) or read \`${info.name}.length\`, lend it only to a parameter declared \`Int32Array\`, \`Float32Array\`, \`Float64Array\` or \`BigInt64Array\` or to a host function's buffer window, and never alias, return or store the array itself`
+          `Module storage \`${info.name}\` is a place, not a value: index it (\`${info.name}[i]\`) or read \`${info.name}.length\`, lend it only to a parameter declared \`u8[]\`, \`Int32Array\`, \`Float32Array\`, \`Float64Array\` or \`BigInt64Array\` or to a host function's buffer window, and never alias, return or store the array itself`
         )
       }
       return
@@ -486,11 +486,13 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
   const callee = call.children[0]
   const args = call.children[1]
   let pushesCopy = false
-  if (callee.kind === N_IDENT && callee.text === SORT_LOCAL && args.children.length > 0) {
-    // `xs.sort(cmp)` was rewritten to the std sort over `xs` (`arrays.ts`).
+  const method = callee.kind === N_IDENT && args.children.length > 0 ? rewrittenArrayMethod(callee.text) : ""
+  if (method !== "") {
+    // `xs.sort(cmp)`, `xs.map(f)` and the rest were rewritten to a std
+    // template called on `xs` (`arrays.ts`).
     const sorted = storageNamed(ctx, args.children[0])
     if (sorted !== null) {
-      refuseMethod(ctx, sorted, callee, "sort")
+      refuseMethod(ctx, sorted, callee, method)
       return
     }
   }
@@ -554,10 +556,10 @@ const lendsStorage = (ctx: CheckContext, call: Node, i: i32, arg: Node): boolean
   if (origin !== null && origin.host) {
     return isHostWindow(ctx.table, sig.paramTypes[i])
   }
-  const name = sig.paramNames[i]
-  if (parameterSpelling(ctx, sig, name) === "") {
+  if (!lendableParameter(ctx, sig, i)) {
     return false
   }
+  const name = sig.paramNames[i]
   if (!lentParamStays(ctx, sig, name)) {
     ctx.error(
       arg,
@@ -565,6 +567,22 @@ const lendsStorage = (ctx: CheckContext, call: Node, i: i32, arg: Node): boolean
     )
   }
   return true
+}
+
+/**
+ * Whether parameter `at` of `sig` can take lent storage at all: one spelled
+ * with a typed-array name, or a byte array (`u8[]`, `readonly u8[]`), which
+ * has no such name (`Uint8Array` is not spelled) and which `nish/host/text`
+ * writes through. Neither may be resized, rebound or let go:
+ * `lentParamStays` judges the body, and refuses `length =` for the byte array
+ * no spelling stops.
+ */
+const lendableParameter = (ctx: CheckContext, sig: FunctionSig, at: i32): boolean => {
+  const type = sig.paramTypes[at]
+  if (ctx.table.isArray(type) && ctx.table.refOf(type) === T_U8) {
+    return true
+  }
+  return parameterSpelling(ctx, sig, sig.paramNames[at]) !== ""
 }
 
 /** How many parameters `lentParamStays` follows a lent array through before it gives up. */
@@ -697,7 +715,12 @@ const lentUseStays = (
     if (parent.children[0] !== use) {
       return false
     }
-    if (parent.text === "length" || lendSafeMethod(parent.text)) {
+    if (parent.text === "length") {
+      // Read, never written: `xs.length = n` and `xs.length++` resize an
+      // array parameter that no typed-array name stops.
+      return !lengthWritten(parent, grand)
+    }
+    if (lendSafeMethod(parent.text)) {
       return true
     }
     // `xs.fill(0);` as a statement: its answer, the array itself, is dropped.
@@ -711,10 +734,37 @@ const lentUseStays = (
     )
   }
   if (parent.kind === N_LIST && grand !== null && grand.kind === N_CALL && grand.children[1] === parent) {
-    return lentOnStays(ctx, sig, grand, use, queue)
+    // `xs.slice(0, 2)` or `xs.sort(cmp)` in a body checked before this lend
+    // was rewritten in place to a std template called on `xs` (`arrays.ts`):
+    // judged as the method it was written as, so declaration order is moot.
+    const callee = grand.children[0]
+    const method =
+      callee.kind === N_IDENT && parent.children[0] === use ? rewrittenArrayMethod(callee.text) : ""
+    if (method !== "") {
+      return (
+        lendSafeMethod(method) || (lendInPlaceMethod(method) && great !== null && great.kind === N_EXPR_STMT)
+      )
+    }
+    // `String.fromBytes(xs, start, end)` copies the bytes into a new string.
+    return copiesBytes(grand, parent, use) || lentOnStays(ctx, sig, grand, use, queue)
   }
   return false
 }
+
+/** Whether `member`, a `.length` under `grand`, is the target of an assignment or `++`/`--`. */
+const lengthWritten = (member: Node, grand: Node | null): boolean => {
+  if (grand === null) {
+    return false
+  }
+  if (grand.kind === N_BINARY) {
+    return isAssignmentOperator(grand.text) && grand.children[0] === member
+  }
+  return grand.kind === N_UNARY && (grand.text === "++" || grand.text === "--")
+}
+
+/** Whether `use` is the bytes argument, in `args`, of `call`, a `String.fromBytes`. */
+const copiesBytes = (call: Node, args: Node, use: Node): boolean =>
+  dottedName(call.children[0]) === "String.fromBytes" && args.children.length > 0 && args.children[0] === use
 
 /**
  * Whether `decl`, a function, mentions `name` anywhere but as the callee of a
@@ -795,11 +845,10 @@ const lentOnStays = (
   if (origin !== null && origin.host) {
     return isHostWindow(ctx.table, next.paramTypes[at])
   }
-  const name = next.paramNames[at]
-  if (parameterSpelling(ctx, next, name) === "") {
+  if (!lendableParameter(ctx, next, at)) {
     return false
   }
-  queue.add(next, name)
+  queue.add(next, next.paramNames[at])
   return true
 }
 

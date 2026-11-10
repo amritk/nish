@@ -1,0 +1,4 @@
+slow: the sleep answered false, cancelled true
+quick: 200 [text/plain; charset=utf-8] quick
+serve: 0, answered 2, returned within 2 s: true
+slow: 503 [text/plain; charset=utf-8] the server is stopping

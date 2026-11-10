@@ -885,7 +885,10 @@ jobs:
     # than a job with no rows, which is why the `if` is on the job.
     if: needs.seeds.outputs.cmp != '[]'
     runs-on: ${{ matrix.seed.runner }}
-    timeout-minutes: 20
+    # About 8 minutes on the slower x86_64 runners since nish-cmp compiles four
+    # programs at a time; the serial run took 12 to 20 and timed out the 0.37.0
+    # release at 20. The margin is for a slow runner and a growing corpus.
+    timeout-minutes: 30
     strategy:
       # x86_64 and aarch64 have different registers and different calling
       # conventions, so one row failing must not cancel the row that would say
@@ -1158,6 +1161,16 @@ jobs:
           grep -E '^PASS  simd: sha256 native arm64: [0-9]+ cases agree across armv8-sha2;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: chacha20 native arm64: [0-9]+ cases agree across neon;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: crc32 native arm64: [0-9]+ cases agree across armv8-crc32' "$RUNNER_TEMP/simd.log"
+
+      # WP50 S5's float corpus on AArch64: the `--deterministic` build's bits
+      # held to the expected.txt the x86-64 rows hold theirs to. FMA is where
+      # this target could part ways, so the gate is the native line, not the
+      # section's exit status: a skip cannot pass.
+      - name: The float corpus, natively on AArch64
+        run: |
+          set -o pipefail
+          node tests/run.js float-corpus | tee "$RUNNER_TEMP/float-corpus.log"
+          grep -E '^PASS  float-corpus: native arm64: [0-9]+ lines of bits agree with expected\.txt' "$RUNNER_TEMP/float-corpus.log"
 
       # WP38 S5's lowering on AArch64: the compiler's branch to the ARMv8 AES and
       # PMULL kernels, run end to end against the bitsliced walker, the 8- and
@@ -1450,10 +1463,10 @@ jobs:
 
   # Every fuzz target in tests/fuzz/targets/ built under
   # -fsanitize=fuzzer,address,undefined, replayed over its seed corpus and
-  # regressions, then fuzzed for 30 seconds from a fixed -seed. The run is
-  # bounded by wall clock, so how far it gets varies from push to push
-  # (tests/fuzz/README.md). Plus the runtime unit test
-  # under ASan and UBSan. Long campaigns are fuzz.yml's, weekly.
+  # regressions, then fuzzed for 30 seconds from a fixed -seed, one target per
+  # core. The run is bounded by wall clock, so how far it gets varies from
+  # push to push (tests/fuzz/README.md). Plus the runtime unit test under ASan
+  # and UBSan. Long campaigns are fuzz.yml's, weekly.
   fuzz-smoke:
     name: fuzz-smoke
     runs-on: ubuntu-latest
@@ -1495,8 +1508,11 @@ jobs:
         timeout-minutes: 10
         run: npm run build
 
-      # Five targets at 60 seconds each, under ten minutes with the builds.
-      # A crash leaves its input in build/fuzz/artifacts/<target>/, uploaded
+      # Every target at 30 seconds, as many at once as the runner has cores
+      # (FUZZ_JOBS, scripts/fuzz.sh). One at a time, 18 targets took 595 to
+      # 625 s and made this the run's last job; four at a time they take
+      # about a quarter of that, with as many inputs run per target. The
+      # timeout keeps room for targets still to come. A crash leaves its input in build/fuzz/artifacts/<target>/, uploaded
       # below; `bash scripts/fuzz.sh --replay <target>` after copying it into
       # tests/fuzz/regressions/<target>/ reproduces it.
       - name: Fuzz smoke
@@ -1614,24 +1630,13 @@ jobs:
         run: npm ci
 
       # package-lock.json agrees with package.json, read from the two files
-      # alone. `npm ci` above is not this check, and 0.11.0 is why: it asks
-      # the registry, and an optional dependency whose pinned version is not
-      # published yet is dropped rather than refused. The release commit pins
-      # the platform packages at a version release.yml publishes only after
-      # the tag is built, so `npm ci` passed on that commit, went red on main
-      # once the publish landed, and nothing re-ran to say so until the next
-      # pull request merged main. `npm ls --package-lock-only` never asks the
-      # registry, so the release commit is red here on its own push and stays
-      # red until release.yml's `lockfile` job's pull request merges.
-      #
-      # Skipped exactly where that disagreement is the release working: on
-      # the Release PR, which carries the bump but cannot carry the entries,
-      # and on a tag, where release.yml runs this workflow before publishing
-      # and a red here would stop the publish that fixes it. In the merge
-      # queue `head_ref` is empty, so the Release PR is known there by the
-      # subject of the commit the queue built for it.
+      # alone: `npm ls --package-lock-only` never asks the registry, where
+      # `npm ci` above does and quietly drops an optional dependency it cannot
+      # find. Every commit is held to it, the Release PR and tags included,
+      # because the lockfile no longer names anything a release publishes:
+      # the platform packages are written into the packed package.json by
+      # release.yml (scripts/pin-platform-packages.mjs), never into this one.
       - name: Lockfile agrees with package.json
-        if: ${{ !startsWith(github.ref, 'refs/tags/') && github.head_ref != 'release/next' && !startsWith(github.event.merge_group.head_commit.message, 'chore(release):') }}
         run: npm ls --package-lock-only --all > /dev/null
 
       - name: Lint (only when package.json defines a lint script)

@@ -230,7 +230,8 @@ compressed form only when it is worth it:
   head included, it takes fewer TCP segments than the plain one. Segments
   are this many bytes, the first of these that is set: the connection's own
   `mss`, if you set it after accepting it; the compressor's `mss`, if you
-  set it to other than its default `HTTP_DEFAULT_MSS`; the MSS
+  set it (it starts at 0, unset; a value you set, even 1448, wins over the
+  socket's); the MSS
   `Http1Server` read from the connection's socket when it accepted it,
   where the platform reports one (`TCP_INFO` on Linux, `TCP_MAXSEG` on
   macOS; `Http1TlsServer` reads none); otherwise `HTTP_DEFAULT_MSS` (1448,

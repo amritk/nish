@@ -588,7 +588,9 @@ export const emitForeignBuffers = (
   const fn = emitter.fn
   let i = 0
   while (i < callee.paramTypes.length && i < values.length) {
-    if (hostFunction(callee) && lentBuffer(emitter.table, callee, i)) {
+    if (hostFunction(callee) && callee.paramTypes[i] === T_STRING) {
+      emitHostString(emitter, i, operands, values)
+    } else if (hostFunction(callee) && lentBuffer(emitter.table, callee, i)) {
       emitHostWindow(emitter, call, callee, i, operands, values)
     } else if (isForeignBuffer(emitter.table, callee.paramTypes[i])) {
       const buffer = values[i]
@@ -620,6 +622,21 @@ export const emitForeignBuffers = (
     }
     i = i + 1
   }
+}
+
+/**
+ * String argument `i` of a host call (WP50 S4, `docs/wp50-wasm-host.md` §7):
+ * two wasm values, the address of its bytes and their count, which the
+ * loader decodes as UTF-8 before the page's function runs. A string's length
+ * fits a wasm32 address, so the count is the header's `i64` truncated.
+ */
+const emitHostString = (emitter: Emitter, i: i32, operands: string[], values: string[]): void => {
+  if (i >= operands.length) {
+    return
+  }
+  const str = values[i]
+  const n = emitter.fn.emitValue(`trunc i64 ${loadStringLength(emitter, str)} to i32`)
+  operands[i] = `i8* ${stringData(emitter, str)}, i32 ${n}`
 }
 
 /**

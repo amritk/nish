@@ -10,6 +10,7 @@ import {
   HTTP_FIELDS_BAD_PSEUDO_VALUE,
   HTTP_FIELDS_BAD_VALUE,
   HTTP_FIELDS_CONNECTION_SPECIFIC,
+  HTTP_FIELDS_DATE_REPEATED,
   HTTP_FIELDS_NO_LENGTH,
   HTTP_FIELDS_OK,
   HTTP_FIELDS_PSEUDO_AFTER_FIELD,
@@ -235,6 +236,17 @@ export const fieldsChecks = (): i32 => {
   t.eqI32("a value that would end a line once turned back into HTTP/1.1 is refused", httpFieldsCheckOutgoing(outSplit.names, outSplit.values), HTTP_FIELDS_BAD_VALUE);
   const outConn: Section = new Section().add("transfer-encoding", "chunked");
   t.eqI32("a connection-specific field is refused", httpFieldsCheckOutgoing(outConn.names, outConn.values), HTTP_FIELDS_CONNECTION_SPECIFIC);
+  const outDate: Section = new Section().add("date", "Thu, 01 Jan 1970 00:00:00 GMT").add("x-a", "b");
+  t.eqI32("one date passes", httpFieldsCheckOutgoing(outDate.names, outDate.values), HTTP_FIELDS_OK);
+  const outDates: Section = new Section()
+    .add("date", "Thu, 01 Jan 1970 00:00:00 GMT")
+    .add("x-a", "b")
+    .add("date", "Fri, 16 Oct 2026 08:11:54 GMT");
+  t.eqI32("two are refused: Date is a singleton (RFC 9110 §5.3)", httpFieldsCheckOutgoing(outDates.names, outDates.values), HTTP_FIELDS_DATE_REPEATED);
+  const outSame: Section = new Section().add("date", "Thu, 01 Jan 1970 00:00:00 GMT").add("date", "Thu, 01 Jan 1970 00:00:00 GMT");
+  t.eqI32("even when they agree", httpFieldsCheckOutgoing(outSame.names, outSame.values), HTTP_FIELDS_DATE_REPEATED);
+  const outCased: Section = new Section().add("date", "Thu, 01 Jan 1970 00:00:00 GMT").add("Date", "Thu, 01 Jan 1970 00:00:00 GMT");
+  t.eqI32("a second in another case is refused too, as an uppercase name", httpFieldsCheckOutgoing(outCased.names, outCased.values), HTTP_FIELDS_BAD_NAME);
   const outShort = new Section();
   outShort.names.push(httpFieldBytes("x-a"));
   t.eqI32("and two lists of different lengths", httpFieldsCheckOutgoing(outShort.names, outShort.values), HTTP_FIELDS_BAD_VALUE);

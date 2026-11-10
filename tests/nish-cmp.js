@@ -85,7 +85,9 @@
  * **A difference must be named in the release notes.** `DECLARED` below is
  * how: an entry names the program and the file that may differ, the sentence
  * saying why, and the words the notes have to carry for the declaration to
- * hold. The notes are `CHANGELOG.md` for what has been released, and for what
+ * hold. It names at least a program, a file or an `undo`: one naming none
+ * would excuse every difference in every program, and `selfCheckDeclarations`
+ * refuses it before anything is compiled. The notes are `CHANGELOG.md` for what has been released, and for what
  * has not, the section `scripts/changelog-gen.mjs` would render from the
  * commits since the last release tag — the words a pull request's own subject
  * will land as. `CHANGELOG.md` is written by that generator when a release is
@@ -100,564 +102,237 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { spawnSync } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
 
-/**
- * #382: the programs each codegen fix moves, one list per finding, so that a
- * program none of them names is still compared byte for byte. A fix that
- * changes an attribute or a lowering everywhere it applies moves most of the
- * corpus, and naming the programs rather than declaring every one keeps the
- * other half watched. Each list holds only what its own commit newly moved:
- * a program an earlier list already names is covered by that declaration.
- * The words are the finding's id, which both the fix's own commit subject and
- * the pull request's subject carry.
- */
-const declareMoved = (moved, changelog, why) => moved.map((program) => ({ program, changelog, why }))
+/** The two `--emit-header` comment lines the 0.37.0 seed writes. */
+const SEED_HEADER_LINES = [
+  " * C ABI of the Nish modules listed below. Link the .ll module(s) and",
+  " * runtime/runtime.c next to your C code; include runtime/nish.h's",
+].join("\n")
 
-/** CG-8: the calls that can exit or block are no longer `willreturn`, nor is any caller of one. */
-const CG8_MOVED = [
-  "bench/awfy/main.ts",
-  "bench/cursor.ts",
-  "bench/getbyte.ts",
-  "bench/map-presize.ts",
-  "bench/map-proto-ordered-fp.ts",
-  "bench/map-proto-ordered-fp32.ts",
-  "bench/map-proto-ordered.ts",
-  "bench/map-proto-unordered.ts",
-  "bench/map-vs-stringmap.ts",
-  "bench/map-wordcount.ts",
-  "bench/par-alloc.ts",
-  "bench/par-compute.ts",
-  "bench/par-nbody.ts",
-  "bench/par-short.ts",
-  "bench/substr.ts",
-  "docs/cookbook/builtin-capabilities.ts",
-  "docs/cookbook/builtin-driver.ts",
-  "docs/cookbook/builtin-env.ts",
-  "docs/cookbook/builtin-files.ts",
-  "docs/cookbook/builtin-host.ts",
-  "docs/cookbook/builtin-nish-modules.ts",
-  "docs/cookbook/builtin-read-bytes.ts",
-  "docs/cookbook/builtin-realpath.ts",
-  "docs/cookbook/builtin-streams.ts",
-  "docs/cookbook/decl-const.ts",
-  "docs/cookbook/decl-enum.ts",
-  "docs/cookbook/decl-type-alias.ts",
-  "docs/cookbook/mem-arena-scope.ts",
-  "docs/cookbook/mem-reclaim.ts",
-  "docs/cookbook/mem-tail-release.ts",
-  "docs/cookbook/par-alloc.ts",
-  "docs/cookbook/par-map.ts",
-  "docs/cookbook/runtime-prelude.ts",
-  "docs/cookbook/str-ops.ts",
-  "docs/cookbook/str-template.ts",
-  "docs/cookbook/thread-scope.ts",
-  "examples/argv.ts",
-  "examples/tasks.ts",
-  "tests/cases/argv_echo.ts",
-  "tests/cases/arr_bounds_continue_proven.ts",
-  "tests/cases/arr_bounds_ranged.ts",
-  "tests/cases/arr_for_of.ts",
-  "tests/cases/arr_header_hoist_record_class.ts",
-  "tests/cases/arr_path_callee_pop.ts",
-  "tests/cases/arr_range_call_countdown.ts",
-  "tests/cases/arr_range_call_loop.ts",
-  "tests/cases/arr_sort.ts",
-  "tests/cases/bytes_fill.ts",
-  "tests/cases/bytes_offset_float.ts",
-  "tests/cases/bytes_read.ts",
-  "tests/cases/bytes_read_import.ts",
-  "tests/cases/bytes_set_end.ts",
-  "tests/cases/caps_fs_read.ts",
-  "tests/cases/caps_fs_write.ts",
-  "tests/cases/caps_generic.ts",
-  "tests/cases/cf_return_void_call.ts",
-  "tests/cases/cg_sec_exiting_runtime.ts",
-  "tests/cases/cg_sec_new_array_guard.ts",
-  "tests/cases/cg_sec_readdir_pass.ts",
-  "tests/cases/cg_sec_readdir_return.ts",
-  "tests/cases/cls_inline_array.ts",
-  "tests/cases/cls_inline_array_call.ts",
-  "tests/cases/cls_inline_array_dynamic.ts",
-  "tests/cases/cls_inline_array_local.ts",
-  "tests/cases/cls_inline_array_order.ts",
-  "tests/cases/cls_inline_array_passed.ts",
-  "tests/cases/cls_inline_array_push.ts",
-  "tests/cases/cls_readonly_ok.ts",
-  "tests/cases/ct_asm_p256.ts",
-  "tests/cases/ct_asm_x25519.ts",
-  "tests/cases/ct_eq_u32.ts",
-  "tests/cases/ct_select_u32.ts",
-  "tests/cases/ct_u64.ts",
-  "tests/cases/dbg_locals.ts",
-  "tests/cases/div_checked.ts",
-  "tests/cases/f32_print.ts",
-  "tests/cases/f32_struct.ts",
-  "tests/cases/fn_arrow_concise_flow.ts",
-  "tests/cases/fnarg_arrow.ts",
-  "tests/cases/fnarg_forward.ts",
-  "tests/cases/fnarg_generic.ts",
-  "tests/cases/fnarg_named.ts",
-  "tests/cases/gen_method_generic_class.ts",
-  "tests/cases/i64_basic.ts",
-  "tests/cases/int_min_literal.ts",
-  "tests/cases/io_files.ts",
-  "tests/cases/io_getenv.ts",
-  "tests/cases/io_host.ts",
-  "tests/cases/io_is_directory.ts",
-  "tests/cases/io_mkdir.ts",
-  "tests/cases/io_monotonic.ts",
-  "tests/cases/io_nish_import.ts",
-  "tests/cases/io_nish_import_global.ts",
-  "tests/cases/io_nish_rename.ts",
-  "tests/cases/io_readdir.ts",
-  "tests/cases/io_readdir_null.ts",
-  "tests/cases/io_realpath.ts",
-  "tests/cases/io_spawn_to.ts",
-  "tests/cases/io_spawn_to_inherit.ts",
-  "tests/cases/io_streams.ts",
-  "tests/cases/leading_zero_legal.ts",
-  "tests/cases/map_fused_no_alias.ts",
-  "tests/cases/map_fused_no_assign.ts",
-  "tests/cases/map_fused_no_call.ts",
-  "tests/cases/map_fused_no_element_receiver.ts",
-  "tests/cases/map_fused_no_key_spelling.ts",
-  "tests/cases/map_fused_no_other_map.ts",
-  "tests/cases/map_fused_no_statement_before.ts",
-  "tests/cases/map_fused_no_template.ts",
-  "tests/cases/map_type_param_shadow.ts",
-  "tests/cases/map_value_result.ts",
-  "tests/cases/map_value_result_by_value.ts",
-  "tests/cases/math_literal_operand_forms.ts",
-  "tests/cases/math_numeric_separators.ts",
-  "tests/cases/mem_loop_scope.ts",
-  "tests/cases/mem_loop_scope_control.ts",
-  "tests/cases/mem_loop_scope_escape.ts",
-  "tests/cases/mem_loop_scope_forof.ts",
-  "tests/cases/mem_loop_scope_interior.ts",
-  "tests/cases/mem_loop_scope_threads.ts",
-  "tests/cases/mem_read_bytes_scope.ts",
-  "tests/cases/mem_read_import_scope.ts",
-  "tests/cases/mem_read_or_null_scope.ts",
-  "tests/cases/mem_reclaim_argument.ts",
-  "tests/cases/mem_reclaim_guards.ts",
-  "tests/cases/mem_reclaim_no_stack_alloc.ts",
-  "tests/cases/mem_scope_string_temp.ts",
-  "tests/cases/mem_scope_tail_call.ts",
-  "tests/cases/mem_scope_tail_call_guards.ts",
-  "tests/cases/neg_literal_i64_min.ts",
-  "tests/cases/neg_literal_int_min_hex.ts",
-  "tests/cases/neg_literal_unsigned.ts",
-  "tests/cases/net_dual_stack.ts",
-  "tests/cases/net_loop_calls.ts",
-  "tests/cases/net_loop_two.ts",
-  "tests/cases/net_tcp_echo.ts",
-  "tests/cases/net_tcp_import.ts",
-  "tests/cases/net_udp_calls.ts",
-  "tests/cases/net_udp_echo.ts",
-  "tests/cases/net_udp_offload.ts",
-  "tests/cases/panics_io_exit.ts",
-  "tests/cases/parse_numbers.ts",
-  "tests/cases/perf_arena_drop.ts",
-  "tests/cases/perf_clamp_order.ts",
-  "tests/cases/perf_clamp_rebind.ts",
-  "tests/cases/perf_rng_getbyte.ts",
-  "tests/cases/perf_rng_loop.ts",
-  "tests/cases/perf_str_concat_loop.ts",
-  "tests/cases/perf_str_concat_quiet.ts",
-  "tests/cases/port_num_div_quiet.ts",
-  "tests/cases/port_num_libm.ts",
-  "tests/cases/port_num_wrap.ts",
-  "tests/cases/port_num_wrap_quiet.ts",
-  "tests/cases/port_str_ascii_literal_quiet.ts",
-  "tests/cases/port_str_length_printed.ts",
-  "tests/cases/res_result_store.ts",
-  "tests/cases/res_result_store_flow.ts",
-  "tests/cases/rng_bitwise.ts",
-  "tests/cases/rng_entries.ts",
-  "tests/cases/rng_generic.ts",
-  "tests/cases/rng_param.ts",
-  "tests/cases/rng_widen.ts",
-  "tests/cases/stage1_probe.ts",
-  "tests/cases/str_concat.ts",
-  "tests/cases/str_f64_mode.ts",
-  "tests/cases/str_template.ts",
-  "tests/cases/u_arith_wrap.ts",
-  "tests/cases/u_compare_above_intmax.ts",
-  "tests/cases/u_conv_roundtrip.ts",
-  "tests/cases/u_print.ts",
-  "tests/cases/u_struct_pack.ts",
-  "tests/cases/u_udiv_urem.ts",
-  "tests/differential/corpus/argv_words.ts",
-  "tests/differential/corpus/arr_bounds_edge.ts",
-  "tests/differential/corpus/arr_for_of.ts",
-  "tests/differential/corpus/arr_methods.ts",
-  "tests/differential/corpus/arr_push_growth.ts",
-  "tests/differential/corpus/bit_compound_target.ts",
-  "tests/differential/corpus/bit_fnv1a.ts",
-  "tests/differential/corpus/bit_ops.ts",
-  "tests/differential/corpus/bit_shifts.ts",
-  "tests/differential/corpus/bool_logic.ts",
-  "tests/differential/corpus/cf_switch.ts",
-  "tests/differential/corpus/collatz.ts",
+/**
+ * The five lines WP50 writes in their place: stage 4 names `runtime-text.c`
+ * and `runtime-os.c`, stage 5 the `-ffp-contract=off` every unit is compiled with.
+ */
+const STAGE4_HEADER_LINES = [
+  " * C ABI of the Nish modules listed below. Link the .ll module(s),",
+  " * runtime/runtime.c, runtime/runtime-text.c (strings and number formatting)",
+  " * and runtime/runtime-os.c, compiled with -ffp-contract=off, next to your C",
+  " * code, or hand runtime/runtime.c to scripts/build.sh, which does both;",
+  " * include runtime/nish.h's",
+].join("\n")
+
+/**
+ * `text` with the stage 4 header comment put back as the seed wrote it. A
+ * declaration's `undo`: it touches only those five lines, so any other change
+ * to a `.h` still differs.
+ */
+const withoutStage4Header = (text) => text.split(STAGE4_HEADER_LINES).join(SEED_HEADER_LINES)
+
+/** The `--emit-dts` preamble lines the 0.37.0 seed writes about string functions. */
+const SEED_DTS_PREAMBLE = [
+  "// String functions are not callable from the freestanding wasm profile and",
+  "// are listed below as comments.",
+].join("\n")
+
+/** The two lines WP50 stage 4 writes in their place. */
+const STAGE4_DTS_PREAMBLE = [
+  "// A string result is decoded into a JS string; a function that takes a",
+  "// string, or answers what needs the full runtime, is listed below as a comment.",
+].join("\n")
+
+/** The reason the 0.37.0 seed gives for leaving a string argument out of the wasm bridge. */
+const SEED_DTS_STRING_ARG = "which needs the Nish runtime the freestanding wasm profile does not include"
+
+/** The reason WP50 stage 4 gives for the same argument, naming the page's way in. */
+const STAGE4_DTS_STRING_ARG =
+  "which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`)"
+
+/**
+ * `text` with the stage 4 `--emit-dts` comments put back as the seed wrote
+ * them: the preamble and the reason a string argument is left out. A
+ * declaration's `undo`: a `.d.ts` that also gained an export, such as a string
+ * result the bridge now decodes, still differs and is named below.
+ */
+const withoutStage4Dts = (text) =>
+  text
+    .split(STAGE4_DTS_PREAMBLE)
+    .join(SEED_DTS_PREAMBLE)
+    .split(`\`string\`, ${STAGE4_DTS_STRING_ARG}`)
+    .join(`\`string\`, ${SEED_DTS_STRING_ARG}`)
+
+/**
+ * The programs with a function that returns a `string` and so, since WP50
+ * stage 4, export it to the page: the `--emit-dts` reading gains the function
+ * (and `nish_reset_arena` / `nish_free_arena`, since the module now links
+ * `runtime-wasm.c`), and the `.mjs` loader gains the decoder, the arena
+ * helpers and the build line naming `runtime-wasm.c`. Each is declared for
+ * those two files only, so its IR and header are still compared.
+ */
+const STAGE4_STRING_EXPORTS = [
+  "bench/http1-parse/main.ts",
+  "bench/lexer.ts",
+  "docs/cookbook/mem-join-parts.ts",
+  "docs/cookbook/mem-return-array.ts",
+  "examples/label.ts",
+  "examples/relay/main.ts",
+  "src/annotations.ts",
+  "src/arena-report.ts",
+  "src/arrays.ts",
+  "src/assignment.ts",
+  "src/ast-text.ts",
+  "src/async-check.ts",
+  "src/attributes.ts",
+  "src/bounds.ts",
+  "src/break-game.ts",
+  "src/break-intro.ts",
+  "src/break-levels.ts",
+  "src/break-menu.ts",
+  "src/break-sound.ts",
+  "src/break.ts",
+  "src/build-cache.ts",
+  "src/builtins.ts",
+  "src/capabilities.ts",
+  "src/capability-lock.ts",
+  "src/capability-report.ts",
+  "src/checker.ts",
+  "src/cli-style.ts",
+  "src/compilation.ts",
+  "src/compile.ts",
+  "src/constants.ts",
+  "src/context.ts",
+  "src/debug.ts",
+  "src/declarations.ts",
+  "src/diagnostics.ts",
+  "src/dump-ast.ts",
+  "src/dump-checked.ts",
+  "src/dump-tokens.ts",
+  "src/dump.ts",
+  "src/emit-arrays.ts",
+  "src/emit-async.ts",
+  "src/emit-builtins.ts",
+  "src/emit-classes.ts",
+  "src/emit-control.ts",
+  "src/emit-json.ts",
+  "src/emit-map.ts",
+  "src/emit-ops.ts",
+  "src/emit-parallel.ts",
+  "src/emit-region.ts",
+  "src/emit-result.ts",
+  "src/emit-secret.ts",
+  "src/emit-shm-window.ts",
+  "src/emit-strings.ts",
+  "src/emit-ts-control.ts",
+  "src/emit-ts-edits.ts",
+  "src/emit-ts-numbers.ts",
+  "src/emit-ts-records.ts",
+  "src/emit-ts-storage.ts",
+  "src/emit-ts-strings.ts",
+  "src/emit-ts.ts",
+  "src/emit-util.ts",
+  "src/emit.ts",
+  "src/escape.ts",
+  "src/expressions.ts",
+  "src/fix.ts",
+  "src/fusion.ts",
+  "src/generics.ts",
+  "src/handles.ts",
+  "src/host-module.ts",
+  "src/ice.ts",
+  "src/inline-arrays.ts",
+  "src/interop-abi.ts",
+  "src/interop-dts.ts",
+  "src/interop-header.ts",
+  "src/interop-napi.ts",
+  "src/interop-wasm.ts",
+  "src/ir.ts",
+  "src/json-typed.ts",
+  "src/kernels.ts",
+  "src/lexer.ts",
+  "src/loop-flow.ts",
+  "src/manifest.ts",
+  "src/members.ts",
+  "src/module-storage.ts",
+  "src/nish-modules.ts",
+  "src/nodes.ts",
+  "src/options.ts",
+  "src/packages.ts",
+  "src/panics.ts",
+  "src/parallel.ts",
+  "src/parents.ts",
+  "src/parser.ts",
+  "src/paths.ts",
+  "src/portability-numbers.ts",
+  "src/portability-records.ts",
+  "src/portability-strings.ts",
+  "src/portability.ts",
+  "src/program.ts",
+  "src/ranges.ts",
+  "src/region-check.ts",
+  "src/region-rules.ts",
+  "src/region.ts",
+  "src/result.ts",
+  "src/run-cache.ts",
+  "src/script.ts",
+  "src/secret.ts",
+  "src/shm-window.ts",
+  "src/simd.ts",
+  "src/statements.ts",
+  "src/std-modules.ts",
+  "src/strings.ts",
+  "src/structs.ts",
+  "src/symbols.ts",
+  "src/tbaa.ts",
+  "src/tokens.ts",
+  "src/types.ts",
+  "src/validator.ts",
+  "src/visibility.ts",
+  "src/watch.ts",
+  "tests/cases/ct_asm_refused.ts",
+  "tests/cases/diag_order.ts",
+  "tests/cases/diag_order_pass1.ts",
   "tests/differential/corpus/const_modules/main.ts",
-  "tests/differential/corpus/exit_code.ts",
-  "tests/differential/corpus/f32_round.ts",
-  "tests/differential/corpus/f64_arith.ts",
-  "tests/differential/corpus/f64_format.ts",
-  "tests/differential/corpus/f64_i32_mixed.ts",
-  "tests/differential/corpus/f64_libm.ts",
-  "tests/differential/corpus/f64_math.ts",
-  "tests/differential/corpus/i64_arith.ts",
-  "tests/differential/corpus/int_div_overflow.ts",
-  "tests/differential/corpus/int_div_zero.ts",
-  "tests/differential/corpus/int_divmod.ts",
-  "tests/differential/corpus/int_incdec.ts",
-  "tests/differential/corpus/int_wrap.ts",
-  "tests/differential/corpus/io_missing_file.ts",
-  "tests/differential/corpus/io_panic.ts",
-  "tests/differential/corpus/io_streams.ts",
-  "tests/differential/corpus/loops_break_continue.ts",
-  "tests/differential/corpus/loops_nested.ts",
-  "tests/differential/corpus/main_return_code.ts",
-  "tests/differential/corpus/modules_basic/main.ts",
-  "tests/differential/corpus/modules_diamond/main.ts",
-  "tests/differential/corpus/parse_argv_sum.ts",
-  "tests/differential/corpus/parse_strings.ts",
-  "tests/differential/corpus/prng_lcg.ts",
-  "tests/differential/corpus/recursion.ts",
-  "tests/differential/corpus/scopes_shadow.ts",
-  "tests/differential/corpus/short_circuit.ts",
-  "tests/differential/corpus/str_large.ts",
-  "tests/differential/corpus/str_nul_escapes.ts",
-  "tests/differential/corpus/str_slice.ts",
-  "tests/differential/corpus/str_unicode.ts",
-  "tests/differential/corpus/u_convert_shift.ts",
-  "tests/differential/corpus/u_div_cmp.ts",
-  "tests/link/alias_export_array/main.ts",
-  "tests/link/alias_export_chain/main.ts",
-  "tests/link/alias_export_class/main.ts",
-  "tests/link/alias_export_imported_class/main.ts",
-  "tests/link/alias_export_nullable/main.ts",
-  "tests/link/alias_export_result/main.ts",
-  "tests/link/argv_import/main.ts",
-  "tests/link/caps_package/main.ts",
-  "tests/link/caps_parallel/main.ts",
-  "tests/link/cg_sec_new_array_f64/main.ts",
-  "tests/link/cg_sec_new_array_i64/main.ts",
-  "tests/link/cg_sec_push_limit/main.ts",
-  "tests/link/cls_inline_array_exported/main.ts",
-  "tests/link/cls_inline_array_header/main.ts",
-  "tests/link/crypto_aes/main.ts",
-  "tests/link/crypto_aes_f64/main.ts",
-  "tests/link/crypto_base64url/main.ts",
-  "tests/link/crypto_base64url_encode_long_f64/main.ts",
-  "tests/link/crypto_base64url_k1_copies/main.ts",
-  "tests/link/crypto_base64url_long_f64/main.ts",
-  "tests/link/crypto_chacha20poly1305/main.ts",
-  "tests/link/crypto_chacha20poly1305_f64/main.ts",
-  "tests/link/crypto_ct/main.ts",
-  "tests/link/crypto_ct_k1_copies/main.ts",
-  "tests/link/crypto_ct_long_f64/main.ts",
-  "tests/link/crypto_hkdf/main.ts",
-  "tests/link/crypto_hkdf_f64/main.ts",
-  "tests/link/crypto_hkdf_k1_bounds/main.ts",
-  "tests/link/crypto_hkdf_k1_bounds_f64/main.ts",
-  "tests/link/crypto_hkdf_long_f64/main.ts",
-  "tests/link/crypto_hmac/main.ts",
-  "tests/link/crypto_hmac_f64/main.ts",
-  "tests/link/crypto_hmac_k1_verify/main.ts",
-  "tests/link/crypto_hmac_k1_verify_f64/main.ts",
-  "tests/link/crypto_hmac_sha256_digest_twice/main.ts",
-  "tests/link/crypto_hmac_sha256_long_f64/main.ts",
-  "tests/link/crypto_hmac_sha256_update_after_digest/main.ts",
-  "tests/link/crypto_hmac_sha384_digest_twice/main.ts",
-  "tests/link/crypto_hmac_sha384_long_f64/main.ts",
-  "tests/link/crypto_hmac_sha384_update_after_digest/main.ts",
-  "tests/link/crypto_p256/main.ts",
-  "tests/link/crypto_p256_f64/main.ts",
-  "tests/link/crypto_sha256/main.ts",
-  "tests/link/crypto_sha256_copy_after_digest/main.ts",
-  "tests/link/crypto_sha256_digest_twice/main.ts",
-  "tests/link/crypto_sha256_f64/main.ts",
-  "tests/link/crypto_sha256_long_f64/main.ts",
-  "tests/link/crypto_sha256_update_after_digest/main.ts",
-  "tests/link/crypto_sha2_lengths/main.ts",
-  "tests/link/crypto_sha2_lengths_f64/main.ts",
-  "tests/link/crypto_sha384_long_f64/main.ts",
-  "tests/link/crypto_sha512/main.ts",
-  "tests/link/crypto_sha512_digest_twice/main.ts",
-  "tests/link/crypto_sha512_f64/main.ts",
-  "tests/link/crypto_sha512_long_f64/main.ts",
-  "tests/link/crypto_sha512_spent/main.ts",
-  "tests/link/crypto_x25519/main.ts",
-  "tests/link/crypto_x25519_f64/main.ts",
+  "tests/link/async_await_all_lanes/main.ts",
+  "tests/link/break_intro/main.ts",
+  "tests/link/break_menu/main.ts",
+  "tests/link/break_settings/main.ts",
+  "tests/link/break_sound/main.ts",
+  "tests/link/crypto_held_derive/main.ts",
+  "tests/link/crypto_hkdf_expand_label/main.ts",
+  "tests/link/crypto_hkdf_expand_label_f64/main.ts",
+  "tests/link/crypto_hkdf_expand_label_long_label/main.ts",
   "tests/link/crypto_x509/main.ts",
   "tests/link/crypto_x509_audit/main.ts",
   "tests/link/crypto_x509_f64/main.ts",
   "tests/link/crypto_x509_malformed/main.ts",
-  "tests/link/enum_export_uses/main.ts",
-  "tests/link/fnarg_private/main.ts",
-  "tests/link/map_extras_user_names/main.ts",
+  "tests/link/generic_method_import/main.ts",
+  "tests/link/generic_two_importers/main.ts",
   "tests/link/module_stem_clash/main.ts",
-  "tests/link/package_symlink/main.ts",
-  "tests/link/package_workspace/main.ts",
-  "tests/link/panics_parallel_length/main.ts",
-  "tests/link/par_alloc/main.ts",
-  "tests/link/par_dst_short/main.ts",
-  "tests/link/par_map/main.ts",
-  "tests/link/par_map_large/main.ts",
-  "tests/link/par_reduce/main.ts",
-  "tests/link/par_reduce_blocks/main.ts",
-  "tests/link/reachable_struct_return/main.ts",
-  "tests/link/rt_sec_path_nul/main.ts",
-  "tests/link/rt_sec_read_cap/main.ts",
-  "tests/link/rt_sec_wasm_arena/main.ts",
-  "tests/link/std_package_scope/main.ts",
-  "tests/link/std_pair_array/main.ts",
-  "tests/link/std_pair_f64/main.ts",
-  "tests/link/std_pair_scalar/main.ts",
-  "tests/link/std_testing/main.ts",
-  "tests/link/tail_call_depth/main.ts",
-  "tests/link/thread_scope_basic/main.ts",
-  "tests/link/thread_scope_exit_paths/main.ts",
-  "tests/link/thread_scope_many_arrays/main.ts",
-  "tests/link/thread_scope_nested_arena/main.ts",
-  "tests/parser/names-bindings.ts",
-  "tests/parser/names-classes.ts",
-  "tests/parser/names-declaration-calls.ts",
-  "tests/parser/names-declarations.ts",
-  "tests/parser/names-meta.ts",
-  "tests/parser/names-object-literals.ts",
-  "tests/parser/names-operator-calls.ts",
-  "tests/parser/names-operators.ts",
-]
-
-/** CG-4: a function on a call-graph cycle, and every caller of one, is no longer `willreturn`. */
-const CG4_MOVED = [
-  "bench/fib.ts",
-  "tests/cases/arr_range_call.ts",
-  "tests/cases/cf_fib.ts",
-  "tests/cases/cg_sec_recursion_willreturn.ts",
-  "tests/cases/cls_this_method_call.ts",
-  "tests/cases/fn_arrow.ts",
-  "tests/cases/fn_arrow_hoisting.ts",
-  "tests/cases/gen_recursive_ground.ts",
-  "tests/cases/mem_callee_scope.ts",
-  "tests/link/tail_call_depth_debug/main.ts",
-]
-
-/** CG-2: `new Array(n)` checks an `i32` `n`, and a ranged one that reaches below zero, before it allocates. */
-const CG2_MOVED = [
-  "bench/sieve.ts",
-  "docs/cookbook/arr-new.ts",
-  "docs/cookbook/arr-range-call.ts",
-  "examples/arrays.ts",
-  "tests/cases/arr_new_zeroed.ts",
-  "tests/cases/arr_repeat_check.ts",
-  "tests/cases/arr_sum.ts",
-  "tests/cases/arr_typed_views.ts",
-  "tests/cases/cg_sec_new_array_negative.ts",
-  "tests/cases/cg_sec_new_array_negative_f64.ts",
-  "tests/cases/map_fused_no_two_gets.ts",
-  "tests/cases/mem_loop_scope_chunk.ts",
-  "tests/cases/mem_scope_dynamic_array.ts",
-  "tests/cases/port_array_quiet.ts",
-  "tests/cases/port_array_zero_fill.ts",
-  "tests/link/cg_sec_new_array_negative/main.ts",
-  "tests/link/crypto_hmac_sha256_window/main.ts",
-  "tests/link/crypto_hmac_sha384_window/main.ts",
-  "tests/link/crypto_sha256_window/main.ts",
-  "tests/link/crypto_sha256_window_wrap/main.ts",
-  "tests/link/crypto_sha512_window/main.ts",
-  "tests/link/crypto_sha512_window_wrap/main.ts",
-]
-
-/** CG-3: `join` refuses a result past 2^31 - 1 bytes before it allocates. */
-const CG3_MOVED = [
-  "docs/cookbook/arr-join.ts",
-  "tests/cases/arr_join.ts",
-  "tests/cases/arr_readonly_param.ts",
-  "tests/cases/bytes_offset_u64.ts",
-  "tests/cases/bytes_set_disjoint.ts",
-  "tests/cases/bytes_set_self.ts",
-  "tests/cases/cg_sec_join_limit.ts",
-  "tests/cases/net_tcp_calls.ts",
-  "tests/cases/os_random.ts",
-  "tests/link/caps_package_named_nish/main.ts",
-  "tests/link/cg_sec_join_limit/main.ts",
-]
-
-/** CG-10: a compound element assignment whose right side can resize the array takes the slot again after it. */
-const CG10_MOVED = ["tests/cases/cg_sec_compound_element_order.ts", "tests/cases/panics_index_recheck.ts"]
-
-/**
- * Output differences that are decided rather than broken, each with the words
- * `CHANGELOG.md` must carry before this run can go green. Shape:
- *
- *   {
- *     program: "tests/cases/str_concat.ts",  // omit for every program
- *     file: "str_concat.ll",                 // omit for every file of it
- *     changelog: "string concatenation now calls `nish_str_concat2`",
- *     why: "one sentence somebody is willing to sign, in their own words",
- *   }
- *
- * `changelog` is matched against `CHANGELOG.md` and against the pending
- * release section (`pendingNotes`), so for an unreleased change it is the
- * pull request's subject as the generator renders it: the scope dropped, the
- * first letter raised, and no `(#N)`.
- *
- * A declaration is deliberately narrow — one program, one file — so that the
- * *next* difference in the same place is still reported. A release that
- * changes the IR of the whole corpus is a declaration with no `program` and a
- * paragraph in `CHANGELOG.md` to match, and it should feel like a bigger thing
- * to write than five narrow ones, because it is.
- */
-/**
- * The no-panic scope's proofs: a divisor proven to be neither 0 nor -1 (a
- * constant, a declared range, or a guard such as `d !== 0 && d !== -1`), and a
- * `pop` behind a test that its array holds an element, are left unchecked, so
- * the `div.fail` or `pop.empty` block goes, and with it the `nish_panic_*`
- * callee its function no longer reaches.
- */
-const DENY_PANICS_MOVED = [
-  "bench/result.ts",
-  "docs/cookbook/expr-logical.ts",
-  "docs/cookbook/stmt-break-continue.ts",
-  "docs/cookbook/stmt-do.ts",
-  "docs/cookbook/stmt-result-by-value.ts",
-  "docs/cookbook/stmt-result.ts",
-  "docs/cookbook/stmt-while.ts",
-  "docs/cookbook/types-i64.ts",
-  "tests/cases/arr_path_cond_call.ts",
-  "tests/cases/arr_path_cond_f64.ts",
-  "tests/cases/arr_path_cond_generic.ts",
-  "tests/cases/arr_path_cond_or.ts",
-  "tests/cases/arr_path_cond_ternary.ts",
-  "tests/cases/arr_pop_index.ts",
-  "tests/cases/cf_break_continue.ts",
-  "tests/cases/cf_collatz.ts",
-  "tests/cases/cf_compound_assign.ts",
-  "tests/cases/cf_do_while.ts",
-  "tests/cases/cf_logical.ts",
-  "tests/cases/cf_nested.ts",
-  "tests/cases/cf_sum_loop.ts",
-  "tests/cases/cf_while.ts",
-  "tests/cases/cls_compound_field.ts",
-  "tests/cases/dbg_result.ts",
-  "tests/cases/gen_result_payload.ts",
-  "tests/cases/interop_rng_host.ts",
-  "tests/cases/mem_stack_loop.ts",
-  "tests/cases/opt_nsw.ts",
-  "tests/cases/opt_target_triple.ts",
-  "tests/cases/panics_divide.ts",
-  "tests/cases/panics_pop.ts",
-  "tests/cases/perf_overflow_quiet.ts",
-  "tests/cases/port_num_div.ts",
-  "tests/cases/res_basic.ts",
-  "tests/cases/res_by_value.ts",
-  "tests/cases/res_by_value_propagate.ts",
-  "tests/cases/res_export.ts",
-  "tests/cases/res_stack.ts",
-  "tests/differential/corpus/digits.ts",
-  "tests/differential/corpus/int_literal_edges.ts",
-  "tests/link/std_pair_held/main.ts",
-]
-
-/** Programs new with the no-panic scope, whose exit the reference cannot share: it does not know the flag or the field. */
-const DENY_PANICS_NEW = [
-  "tests/cases/deny_panics_clean.ts",
-  "tests/link/no_panic_module/main.ts",
-  "tests/link/no_panic_transitive/main.ts",
-  "tests/link/no_panic_unknown_entry/main.ts",
-]
-
-/** Programs new with the capability policy (WP36), whose exit the reference cannot share: it does not know the flags or the field. */
-const CAPABILITY_POLICY_NEW = [
-  "tests/link/caps_policy_granted/main.ts",
-  "tests/link/caps_policy_manifest/main.ts",
-  "tests/link/caps_policy_manifest_both/main.ts",
-  "tests/link/caps_policy_manifest_broken_json/main.ts",
-  "tests/link/caps_policy_manifest_escaped_in_second_nish/main.ts",
-  "tests/link/caps_policy_manifest_not_array/main.ts",
-  "tests/link/caps_policy_manifest_policy_in_second_nish/main.ts",
-  "tests/link/caps_policy_manifest_repeated_deny/main.ts",
-  "tests/link/caps_policy_manifest_unknown_key/main.ts",
-  "tests/link/caps_policy_manifest_escaped_nish/main.ts",
-  "tests/link/caps_policy_manifest_escaped_entry/main.ts",
-  "tests/link/caps_policy_manifest_escaped_policy/main.ts",
-  "tests/link/caps_policy_manifest_escaped_second_nish/main.ts",
-  "tests/link/caps_policy_manifest_non_string/main.ts",
-  "tests/link/caps_policy_manifest_repeated/main.ts",
-  "tests/link/caps_policy_manifest_repeated_nish/main.ts",
-  "tests/link/caps_policy_manifest_repeated_policy/main.ts",
-  "tests/link/caps_policy_manifest_shape/main.ts",
-  "tests/link/caps_policy_manifest_unknown/main.ts",
-  "tests/link/caps_policy_manifest_unsafe/main.ts",
-]
-
-/** Programs new with `nish/net/qpack` (WP34 R1, first part), which the reference refuses: its std/ has no such module. */
-const QPACK_NEW = [
-  "tests/link/net_qpack/main.ts",
-  "tests/link/net_qpack_f64/main.ts",
-  "tests/link/net_qpack_bad_decoder_stream_window/main.ts",
-  "tests/link/net_qpack_bad_encoder_stream_window/main.ts",
-  "tests/link/net_qpack_bad_field_window/main.ts",
-  "tests/link/net_qpack_bad_limit/main.ts",
-  "tests/link/net_qpack_bad_stream_id/main.ts",
-  "tests/link/net_qpack_bad_value_window/main.ts",
-  "tests/link/net_qpack_bad_window/main.ts",
-]
-
-/** Programs new with `nish/net/router` (#485), which the reference refuses: its std/ has no such module. */
-const ROUTER_NEW = [
-  "bench/router.ts",
-  "tests/link/net_router/main.ts",
-  "tests/link/net_router_f64/main.ts",
-  "tests/link/net_router_negative_ambiguous/main.ts",
-  "tests/link/net_router_negative_duplicate/main.ts",
-  "tests/link/net_router_negative_limits/main.ts",
-  "tests/link/net_router_negative_too_long/main.ts",
-  "tests/link/net_router_negative_too_many_params/main.ts",
-]
-
-/**
- * Programs that reach `nish/net/fetch`, `nish/net/http1-codec` or
- * `nish/net/http1-client-codec`, directly or through another module. The
- * reference ships the same code as `nish/net/http-client`, `nish/net/http1` and
- * `nish/net/http1-client`, so it refuses each of them for the import.
- */
-const HTTP_MODULES_RENAMED = [
-  "examples/http-app/main.ts",
-  "examples/http-get-json.ts",
-  "examples/prefork-server.ts",
-  "examples/relay/main.ts",
-  "bench/http-app-carrier.ts",
-  "bench/http1-server.ts",
-  "bench/techempower/main.ts",
-  "tests/link/net_handler/main.ts",
-  "tests/link/net_handler_descriptors/main.ts",
-  "tests/link/net_handler_overlong/main.ts",
-  "tests/link/net_handler_short/main.ts",
-  "tests/link/net_handler_unbegun/main.ts",
-  "tests/link/net_http1_client/main.ts",
-  "tests/link/net_http1_client_f64/main.ts",
-  "tests/link/net_http1_client_feed_window/main.ts",
-  "tests/link/net_http1_client_feed_window_len/main.ts",
-  "tests/link/net_http1_client_feed_window_off/main.ts",
+  "tests/link/net_fetch_async/main.ts",
+  "tests/link/net_fetch_async_flat/main.ts",
+  "tests/link/net_fetch_async_https/main.ts",
+  "tests/link/net_fetch_async_https_flat/main.ts",
+  "tests/link/net_fetch_async_overlap/main.ts",
+  "tests/link/net_fetch_async_policy/main.ts",
+  "tests/link/net_hpack/main.ts",
+  "tests/link/net_hpack_f64/main.ts",
+  "tests/link/net_http1_parse_diff/main.ts",
   "tests/link/net_http1_server/main.ts",
-  "tests/link/net_http1_server_bad_config/main.ts",
-  "tests/link/net_http1_server_bad_head/main.ts",
-  "tests/link/net_http1_server_bad_head_timeout/main.ts",
-  "tests/link/net_http1_server_bad_message/main.ts",
   "tests/link/net_http1_server_f64/main.ts",
-  "tests/link/net_http1_server_feed_window/main.ts",
-  "tests/link/net_http1_server_frame_window/main.ts",
-  "tests/link/net_http1_server_write_window/main.ts",
-  "tests/link/net_http1_write_chunk_window/main.ts",
+  "tests/link/net_http2/main.ts",
   "tests/link/net_http2_bad_config_tls/main.ts",
+  "tests/link/net_http2_errors/main.ts",
+  "tests/link/net_http2_errors_f64/main.ts",
+  "tests/link/net_http2_f64/main.ts",
+  "tests/link/net_http2_frame/main.ts",
+  "tests/link/net_http2_frame_f64/main.ts",
+  "tests/link/net_http2_hpack_bomb/main.ts",
+  "tests/link/net_http2_hpack_bomb_f64/main.ts",
+  "tests/link/net_http2_hpack_table/main.ts",
+  "tests/link/net_http2_hpack_table_f64/main.ts",
+  "tests/link/net_http2_reset/main.ts",
   "tests/link/net_http2_tls/main.ts",
   "tests/link/net_http2_tls_f64/main.ts",
   "tests/link/net_http3/main.ts",
@@ -672,24 +347,52 @@ const HTTP_MODULES_RENAMED = [
   "tests/link/net_http3_errors/main.ts",
   "tests/link/net_http3_errors_f64/main.ts",
   "tests/link/net_http3_f64/main.ts",
+  "tests/link/net_http3_frame/main.ts",
+  "tests/link/net_http3_frame_f64/main.ts",
   "tests/link/net_http3_server/main.ts",
   "tests/link/net_http3_server_bad_config/main.ts",
   "tests/link/net_http3_server_f64/main.ts",
   "tests/link/net_http3_write_window/main.ts",
-  "tests/link/net_http_app/main.ts",
-  "tests/link/net_http_date/main.ts",
-  "tests/link/net_http_date_f64/main.ts",
-  "tests/link/net_http_fetch/main.ts",
-  "tests/link/net_http_fetch_f64/main.ts",
   "tests/link/net_http_fetch_tls/main.ts",
   "tests/link/net_interop_server/main.ts",
   "tests/link/net_interop_server_f64/main.ts",
   "tests/link/net_loopback/main.ts",
   "tests/link/net_loopback_f64/main.ts",
-  "tests/link/net_outbound/main.ts",
-  "tests/link/net_outbound_f64/main.ts",
+  "tests/link/net_qpack/main.ts",
+  "tests/link/net_qpack_f64/main.ts",
+  "tests/link/net_quic_conn/main.ts",
+  "tests/link/net_quic_conn_f64/main.ts",
+  "tests/link/net_quic_conn_parts/main.ts",
+  "tests/link/net_quic_conn_parts_f64/main.ts",
+  "tests/link/net_quic_conn_replay/main.ts",
+  "tests/link/net_quic_conn_replay_f64/main.ts",
+  "tests/link/net_quic_datagram/main.ts",
+  "tests/link/net_quic_datagram_f64/main.ts",
+  "tests/link/net_quic_ecn/main.ts",
+  "tests/link/net_quic_ecn_f64/main.ts",
+  "tests/link/net_quic_frame/main.ts",
+  "tests/link/net_quic_frame_f64/main.ts",
+  "tests/link/net_quic_lifecycle/main.ts",
+  "tests/link/net_quic_lifecycle_f64/main.ts",
+  "tests/link/net_quic_lifecycle_replay/main.ts",
+  "tests/link/net_quic_lifecycle_replay_f64/main.ts",
+  "tests/link/net_quic_listener/main.ts",
+  "tests/link/net_quic_listener_bad_window/main.ts",
+  "tests/link/net_quic_listener_f64/main.ts",
+  "tests/link/net_quic_memory/main.ts",
+  "tests/link/net_quic_memory_f64/main.ts",
+  "tests/link/net_quic_packet/main.ts",
+  "tests/link/net_quic_packet_f64/main.ts",
+  "tests/link/net_quic_path/main.ts",
+  "tests/link/net_quic_path_f64/main.ts",
+  "tests/link/net_quic_recovery/main.ts",
+  "tests/link/net_quic_recovery_f64/main.ts",
   "tests/link/net_quic_server_wipes/main.ts",
   "tests/link/net_quic_server_wipes_f64/main.ts",
+  "tests/link/net_quic_stream/main.ts",
+  "tests/link/net_quic_stream_f64/main.ts",
+  "tests/link/net_quic_wipes/main.ts",
+  "tests/link/net_quic_wipes_f64/main.ts",
   "tests/link/net_relay/main.ts",
   "tests/link/net_relay_bad_hello/main.ts",
   "tests/link/net_relay_bad_idle/main.ts",
@@ -700,18 +403,37 @@ const HTTP_MODULES_RENAMED = [
   "tests/link/net_relay_bad_sessions/main.ts",
   "tests/link/net_relay_bad_spare/main.ts",
   "tests/link/net_relay_bad_stats/main.ts",
-  "tests/link/net_relay_encode_window/main.ts",
   "tests/link/net_relay_f64/main.ts",
   "tests/link/net_relay_forged/main.ts",
-  "tests/link/net_relay_frame_window/main.ts",
-  "tests/link/net_relay_grant_window/main.ts",
-  "tests/link/net_relay_json_window/main.ts",
   "tests/link/net_relay_soak/main.ts",
-  "tests/link/net_router/main.ts",
-  "tests/link/net_router_f64/main.ts",
-  "tests/link/net_upstream/main.ts",
-  "tests/link/net_upstream_release/main.ts",
-  "tests/link/net_websocket_write_window/main.ts",
+  "tests/link/net_tls_client_handshake/main.ts",
+  "tests/link/net_tls_client_record/main.ts",
+  "tests/link/net_tls_client_refusals/main.ts",
+  "tests/link/net_tls_client_tcp/main.ts",
+  "tests/link/net_tls_ecdsa/main.ts",
+  "tests/link/net_tls_ecdsa_f64/main.ts",
+  "tests/link/net_tls_ext_alpn/main.ts",
+  "tests/link/net_tls_ext_f64/main.ts",
+  "tests/link/net_tls_ext_hrr/main.ts",
+  "tests/link/net_tls_ext_quic/main.ts",
+  "tests/link/net_tls_ext_refusals/main.ts",
+  "tests/link/net_tls_ext_sni/main.ts",
+  "tests/link/net_tls_memory/main.ts",
+  "tests/link/net_tls_memory_f64/main.ts",
+  "tests/link/net_tls_psk_wire/main.ts",
+  "tests/link/net_tls_psk_wire_f64/main.ts",
+  "tests/link/net_tls_record_f64/main.ts",
+  "tests/link/net_tls_record_refusals/main.ts",
+  "tests/link/net_tls_record_rfc8448/main.ts",
+  "tests/link/net_tls_record_tcp/main.ts",
+  "tests/link/net_tls_record_tcp_f64/main.ts",
+  "tests/link/net_tls_resume/main.ts",
+  "tests/link/net_tls_resume_bench/main.ts",
+  "tests/link/net_tls_resume_f64/main.ts",
+  "tests/link/net_tls_rfc8448/main.ts",
+  "tests/link/net_tls_rfc8448_f64/main.ts",
+  "tests/link/net_tls_wipes/main.ts",
+  "tests/link/net_tls_wipes_f64/main.ts",
   "tests/link/net_webtransport/main.ts",
   "tests/link/net_webtransport_bad_datagrams/main.ts",
   "tests/link/net_webtransport_bad_datagrams_off/main.ts",
@@ -726,2569 +448,1140 @@ const HTTP_MODULES_RENAMED = [
   "tests/link/net_webtransport_f64/main.ts",
   "tests/link/net_webtransport_stream_window/main.ts",
   "tests/link/net_webtransport_whole_window/main.ts",
-  "tests/link/std_http1_end_head/main.ts",
-  "tests/link/std_http1_mss/main.ts",
-  "tests/link/std_http_compress/main.ts",
-  "tests/link/std_postgres_carrier/main.ts",
-  "tests/link/std_postgres_carrier_attach_panic/main.ts",
-  "tests/link/std_postgres_carrier_batcher_panic/main.ts",
-  "tests/link/std_postgres_carrier_connection_panic/main.ts",
-  "tests/link/std_postgres_carrier_limits_panic/main.ts",
-  "tests/link/std_postgres_carrier_next_panic/main.ts",
-  "tests/link/std_postgres_carrier_request_panic/main.ts",
-  "tests/link/std_postgres_carrier_send_panic/main.ts",
+  "tests/link/std_json_conformance/main.ts",
+  "tests/link/std_json_value/main.ts",
+  "tests/link/std_json_writer/main.ts",
+  "tests/link/std_regex_unicode/main.ts",
+  "tests/link/std_testing/main.ts",
+  "tests/link/std_yaml/main.ts",
   "tests/link/tfb_entry/main.ts",
 ]
 
-const DECLARED = [
-  {
-    program: "tests/link/par_map_new/main.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new program: it imports `parallelMap` from `nish/threads`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/par_from/main.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new program: it imports `parallelFrom` from `nish/threads`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/par_capture/main.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new program: it imports `parallelMap` and `parallelFrom`, which the reference compiler's `nish/threads` does not have, and passes `parallelMapInto` and `parallelReduce` arrows that read their function's `const` locals, which it refuses",
-  },
-  {
-    program: "tests/link/par_capture_large/main.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new program: it imports `parallelMap` and `parallelFrom`, which the reference compiler's `nish/threads` does not have, and its arrows read their function's `const` locals across a region large enough to split, which it refuses",
-  },
-  {
-    program: "tests/link/port_rec_capture_copy/main.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new program: it imports `parallelFrom`, which the reference compiler's `nish/threads` does not have, to pin NL8003 at a record read through a capture",
-  },
-  {
-    program: "tests/link/port_rec_capture_quiet/main.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new program: it imports `parallelFrom`, which the reference compiler's `nish/threads` does not have, to pin the quiet side of NL8003 through a capture",
-  },
-  {
-    program: "tests/link/port_str_capture_offset/main.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new program: it imports `parallelFrom`, which the reference compiler's `nish/threads` does not have, to pin NL8001 at a byte offset read through a capture",
-  },
-  {
-    program: "tests/link/port_num_capture_wide/main.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new program: it imports `parallelMap` from `nish/threads`, which the reference compiler's standard library does not have, to pin NL8009 on the written parameters of an arrow that captures",
-  },
-  {
-    program: "tests/link/port_str_capture_result/main.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new program: it imports `parallelFrom` from `nish/threads`, which the reference compiler's standard library does not have, to pin NL8001 on a captured offset an arrow answers with",
-  },
-  {
-    program: "docs/cookbook/par-capture.ts",
-    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
-    why: "a new cookbook entry: it imports `parallelMap` and `parallelFrom`, which the reference compiler's `nish/threads` does not have",
-  },
-  {
-    program: "tests/cases/math_clz32.ts",
-    changelog: "Add `Math.clz32`, the leading zero bits of a 32-bit integer",
-    why: "a new program: it calls `Math.clz32`, which the reference compiler refuses as an unknown builtin",
-  },
-  {
-    program: "docs/cookbook/builtin-math-clz32.ts",
-    changelog: "Add `Math.clz32`, the leading zero bits of a 32-bit integer",
-    why: "a new cookbook entry: it calls `Math.clz32`, which the reference compiler refuses as an unknown builtin",
-  },
-  {
-    program: "tests/cases/net_mss.ts",
-    changelog: "Read a connected socket's MSS from nish:net",
-    why: "a new program: it calls `netMss`, which the reference compiler refuses as an unknown export of `nish:net`",
-  },
-  {
-    program: "docs/cookbook/builtin-net-mss.ts",
-    changelog: "Read a connected socket's MSS from nish:net",
-    why: "a new cookbook entry: it calls `netMss`, which the reference compiler refuses as an unknown export of `nish:net`",
-  },
-  {
-    program: "tests/link/net_hpack/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_f64/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_bad_huffman_window/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_bad_indexing/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_bad_prefix_decode/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_bad_prefix_encode/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_bad_window/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_negative_list_limit/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_negative_resize/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_negative_settings_limit/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/link/net_hpack_negative_table_size/main.ts",
-    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
-    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
-  },
-  {
-    program: "tests/cases/entry_shebang.ts",
-    changelog: "shebang line",
-    why: "it opens with `#!/usr/bin/env -S nish run`, which the reference lexes as a `#` token and refuses",
-  },
-  {
-    program: "docs/cookbook/decl-shebang.ts",
-    changelog: "shebang line",
-    why: "it opens with `#!/usr/bin/env -S nish run`, which the reference lexes as a `#` token and refuses",
-  },
-  {
-    program: "tests/cases/asi_statements.ts",
-    changelog: "Make semicolons optional, by TypeScript's insertion rule",
-    why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
-  },
-  {
-    program: "tests/cases/asi_continuation.ts",
-    changelog: "Make semicolons optional, by TypeScript's insertion rule",
-    why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
-  },
-  {
-    program: "docs/cookbook/fn-add-no-semicolons.ts",
-    changelog: "Make semicolons optional, by TypeScript's insertion rule",
-    why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
-  },
-  {
-    program: "tests/cases/map_fused_generic.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_fused_guard_has.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_fused_guard_not_has.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_fused_literal_key.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_fused_no_else_branch.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_fused_set_insert.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_fused_this_field.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_fused_update_has.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_fused_walk.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_fused_wordcount.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_get_nullish.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "its word count, `counts.set(w, (counts.get(w) ?? 0) + 1)`, is now one probe",
-  },
-  {
-    program: "docs/cookbook/map-get.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "its `bump` is the word-count update, now one probe",
-  },
-  {
-    program: "tests/link/map_two_modules/main.ts",
-    file: "tally.ll",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "`tally.ts` is a guarded insert, `if (!m.has(w)) { m.set(w, 1); }`, now one probe",
-  },
-  {
-    program: "docs/cookbook/map-fused.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
-  },
-  {
-    program: "tests/cases/map_dbg.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "under `-g` the `Set` methods' DWARF lines move: `Map.reserveSlots` now sits above `Set` in `std/collections.ts`",
-  },
-  {
-    program: "tests/cases/map_extras_generic.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it imports `nish/map`, which the reference compiler does not have",
-  },
-  {
-    program: "tests/cases/map_extras_get_or_insert.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it imports `nish/map`, which the reference compiler does not have",
-  },
-  {
-    program: "tests/cases/map_extras_reserve.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it imports `nish/map`, which the reference compiler does not have",
-  },
-  {
-    program: "tests/cases/map_extras_walk.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it imports `nish/map`, which the reference compiler does not have",
-  },
-  {
-    program: "tests/link/map_extras_two_modules/main.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it imports `nish/map`, which the reference compiler does not have",
-  },
-  {
-    program: "examples/wordcount.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it imports `nish/map`, which the reference compiler does not have",
-  },
-  {
-    program: "docs/cookbook/map-fused-extras.ts",
-    changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
-    why: "it imports `nish/map`, which the reference compiler does not have",
-  },
-  {
-    program: "tests/cases/map_iter_exit_edges.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/link/map_walk_two_modules/main.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_generic.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/dbg_map_iter.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_break.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_callee.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_clear.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_compaction_deferred.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_delete_ahead.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_delete_reset.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_growth.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_keys.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_nested.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_or_return.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_return.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_set_existing.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_set_new.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_iter_values.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/set_iter.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/set_iter_keys.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/set_iter_values.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "docs/cookbook/map-iter.ts",
-    changelog: "For...of over Map keys() and values() and over a Set",
-    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_default_escapes.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_narrow.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_nullish.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_pointer_value.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_value_bool.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_value_f64.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_value_i32.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_value_string.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_interface.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_narrowed_again.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/dbg_map_get.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_get_value_widths.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "docs/cookbook/map-get.ts",
-    changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
-    why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
-  },
-  {
-    program: "tests/cases/map_annotated_new.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_arena_callee.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_compaction.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_dbg.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_delete_reinsert.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_fingerprint_miss.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_growth.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_bool.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_class.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_enum.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_f32.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_f64.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_f32_negzero.ts",
-    changelog: "Store a -0 Map key or Set element as +0, as JavaScript does",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_negzero.ts",
-    changelog: "Store a -0 Map key or Set element as +0, as JavaScript does",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_i32.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_i64.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_str.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_u16.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_u32.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_u64.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/map_key_u8.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/set_i32.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/set_str.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "examples/sets.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "docs/cookbook/map-has.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/link/map_two_modules/main.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/link/map_own_class/main.ts",
-    changelog: "The global Map and Set, backed by std/collections.ts",
-    why: "a new program: its entry declares its own `Map` and `unique.ts` names the global `Set`, which the reference compiler refuses as an unknown class",
-  },
-  {
-    program: "tests/cases/perf_bounds_toi32.ts",
-    file: "perf_bounds_toi32.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "a new program: the `toI32(w.length)` hoist proven in i32 mode, which the reference compiler still checks",
-  },
-  {
-    program: "tests/cases/perf_bounds_toi32_f64.ts",
-    file: "perf_bounds_toi32_f64.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "a new program: the same hoist under --number-mode f64, which the reference compiler still checks",
-  },
-  {
-    program: "tests/cases/perf_bounds_toi32_loop.ts",
-    file: "perf_bounds_toi32_loop.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "a new program; its two loop checks stay, but `xs[0]` loses its check: the builtin `toI32` calls before it no longer drop the length its array literal proved",
-  },
-  {
-    program: "docs/cookbook/str-bounds-toi32.ts",
-    file: "str-bounds-toi32.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "the cookbook snippet for the `toI32(s.length)` hoist, whose check the reference compiler keeps",
-  },
-  {
-    program: "tests/link/std_text/main.ts",
-    file: "text.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/text's checks and clamps are proven through `toI32(w.length)` and its rewritten guards",
-  },
-  {
-    program: "tests/link/std_text/main.ts",
-    file: "testing.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/testing hoists `toI32(x.length)` too, so its checks are now proven",
-  },
-  {
-    program: "tests/link/std_text/main.ts",
-    file: "main.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "the imported std/text and std/testing functions' attributes change with their dropped panics",
-  },
-  {
-    program: "tests/link/std_text_f64/main.ts",
-    file: "text.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/text's checks and clamps are proven under --number-mode f64 as well",
-  },
-  {
-    program: "tests/link/std_text_f64/main.ts",
-    file: "testing.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/testing's `toI32(x.length)` hoists are proven under --number-mode f64 as well",
-  },
-  {
-    program: "tests/link/std_text_f64/main.ts",
-    file: "main.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "the imported std/text and std/testing functions' attributes change with their dropped panics",
-  },
-  {
-    program: "tests/link/std_testing/main.ts",
-    file: "testing.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/testing hoists `toI32(x.length)`, so its checks are now proven",
-  },
-  {
-    program: "tests/link/std_testing_fail/main.ts",
-    file: "testing.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/testing hoists `toI32(x.length)`, so its checks are now proven",
-  },
-  {
-    program: "tests/link/std_json/main.ts",
-    file: "testing.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/testing hoists `toI32(x.length)`, so its checks are now proven",
-  },
-  {
-    program: "tests/link/std_bare_specifier/main.ts",
-    file: "text.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/text's checks and clamps are proven through `toI32(w.length)` and its rewritten guards",
-  },
-  {
-    program: "tests/link/std_bare_specifier/main.ts",
-    file: "testing.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/testing hoists `toI32(x.length)`, so its checks are now proven",
-  },
-  {
-    program: "tests/link/std_package_scope/main.ts",
-    file: "text.ll",
-    changelog: "Prove bounds through toI32(length) and compile std/text silent",
-    why: "std/text's checks and clamps are proven through `toI32(w.length)` and its rewritten guards",
-  },
-  {
-    program: "tests/link/std_json/main.ts",
-    file: "json.ll",
-    changelog: "Fold a negated integer literal into its constant",
-    why: "std/json's `return -1` is the constant `-1` rather than a `sub nsw i32 0, 1`, and the values after it renumber",
-  },
-  {
-    program: "tests/link/std_text_f64/main.ts",
-    file: "json.ll",
-    changelog: "Fold a negated integer literal into its constant",
-    why: "the same std/json constants under --number-mode f64",
-  },
-  {
-    program: "tests/link/std_json/main.ts",
-    file: "json.ll",
-    changelog: "Hold std/ and examples/ to zero performance warnings and ratchet src/",
-    why: "std/json's reads and `substring` clamps are proven by the guards it now states, through `toI32(w.length)`, which the reference compiler still checks",
-  },
-  {
-    program: "tests/link/std_text_f64/main.ts",
-    file: "json.ll",
-    changelog: "Hold std/ and examples/ to zero performance warnings and ratchet src/",
-    why: "the same std/json proofs under --number-mode f64",
-  },
-  {
-    program: "tests/cases/gen_constraint.ts",
-    file: "exit",
-    changelog: "Constrained type parameters (WP18 G6)",
-    why: "a new program: `<T extends Shape>` at two implementers, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/gen_constraint_class.ts",
-    file: "exit",
-    changelog: "Constrained type parameters (WP18 G6)",
-    why: "a new program: a generic class with a constrained parameter, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/gen_constraint_generic_bound.ts",
-    file: "exit",
-    changelog: "Constrained type parameters (WP18 G6)",
-    why: "a new program: a constraint that is an instantiation, `T extends Container<i32>`, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/gen_constraint_method.ts",
-    file: "exit",
-    changelog: "Constrained type parameters (WP18 G6)",
-    why: "a new program: a method called through a class constraint, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/gen_constraint_two.ts",
-    file: "exit",
-    changelog: "Constrained type parameters (WP18 G6)",
-    why: "a new program: two parameters with different constraints, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/gen_constraint_write.ts",
-    file: "exit",
-    changelog: "Constrained type parameters (WP18 G6)",
-    why: "a new program: a field written through a constrained parameter, which the reference compiler refuses to parse",
-  },
-  {
-    program: "docs/cookbook/gen-constraint.ts",
-    file: "exit",
-    changelog: "Constrained type parameters (WP18 G6)",
-    why: "a new cookbook snippet: the constrained-parameter lowering, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/link/generic_constraint_import/main.ts",
-    file: "exit",
-    changelog: "Constrained type parameters (WP18 G6)",
-    why: "a new program: constrained templates imported from another module, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/interop_generic_collision.ts",
-    file: "interop_generic_collision.d.ts",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation is declared under its `nish_gen_` C name, since the mangled symbol is not always a JavaScript identifier",
-  },
-  {
-    program: "tests/cases/interop_generic_collision.ts",
-    file: "interop_generic_collision.h",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword",
-  },
-  {
-    program: "tests/cases/interop_generic_collision.ts",
-    file: "interop_generic_collision.mjs",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the loader exports an instantiation under its `nish_gen_` C name, and still calls the raw export by its symbol",
-  },
-  {
-    program: "tests/cases/interop_generic_collision.ts",
-    file: "interop_generic_collision.napi.c",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`",
-  },
-  {
-    program: "tests/cases/interop_generic_fn.ts",
-    file: "interop_generic_fn.d.ts",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation is declared under its `nish_gen_` C name, since the mangled symbol is not always a JavaScript identifier",
-  },
-  {
-    program: "tests/cases/interop_generic_fn.ts",
-    file: "interop_generic_fn.h",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword",
-  },
-  {
-    program: "tests/cases/interop_generic_fn.ts",
-    file: "interop_generic_fn.mjs",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the loader exports an instantiation under its `nish_gen_` C name, and still calls the raw export by its symbol",
-  },
-  {
-    program: "tests/cases/interop_generic_fn.ts",
-    file: "interop_generic_fn.napi.c",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`",
-  },
-  {
-    program: "tests/link/generic_constraint_import_back/main.ts",
-    file: "main.h",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword",
-  },
-  {
-    program: "tests/link/generic_constraint_same_name_fields/main.ts",
-    file: "exit",
-    changelog: "Hold a constraint to its declaration, not its name",
-    why: "a new negative: a class implementing the importer's own same-named `Shape`, with lib's fields, which the reference compiler took for lib's `Shape` and compiled",
-  },
-  {
-    program: "tests/link/generic_constraint_same_name_itself/main.ts",
-    file: "exit",
-    changelog: "Hold a constraint to its declaration, not its name",
-    why: "a new negative: the importer's own same-named `Shape` passed as the argument, which shares lib's type id and which the reference compiler compiled",
-  },
-  {
-    program: "tests/link/generic_constraint_same_name_class/main.ts",
-    file: "exit",
-    changelog: "Hold a constraint to its declaration, not its name",
-    why: "a new negative: the importer's own same-named `Base` class passed to a `T extends Base` bound on lib's class, which shares its type id and which the reference compiler compiled",
-  },
-  {
-    program: "tests/link/iface_same_name_class/main.ts",
-    file: "exit",
-    changelog: "Same-named interfaces and classes across modules keep their identity",
-    why: "a new negative: lib's `Circle` converted to the importer's own same-named `Shape`, which shares lib's `Shape`'s type id and which the reference compiler compiled, reading `Circle`'s layout as the wrong `Shape`'s",
-  },
-  {
-    program: "tests/link/package_engines_floor/main.ts",
-    file: "exit",
-    changelog: "WP21 S3 — specific diagnostics at the package boundary",
-    why: "a new negative: a package whose `engines.nish` floor is above this compiler, which the reference compiler does not read and so compiled",
-  },
-  {
-    program: "tests/link/package_engines_range/main.ts",
-    file: "exit",
-    changelog: "WP21 S3 — specific diagnostics at the package boundary",
-    why: "a new negative: an `engines.nish` range that is not a floor, refused rather than taken as met, which the reference compiler does not read and so compiled",
-  },
-  {
-    program: "tests/cases/dbg_generic.ts",
-    file: "dbg_generic.ll",
-    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
-    why: "a new program: with -g the reference compiler names the class `Box$i32` and its methods `Box$i32.get`, where HEAD writes `Box<i32>`, `Box<i32>.get` and `identity<Box<i32>>`",
-  },
-  {
-    program: "tests/cases/perf_padding_quiet.ts",
-    file: "perf_padding_quiet.h",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword",
-  },
-  {
-    program: "tests/link/generic_constraint_import/main.ts",
-    file: "main.h",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword",
-  },
-  {
-    program: "tests/cases/perf_padding_quiet.ts",
-    file: "perf_padding_quiet.d.ts",
-    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
-    why: "the comment above the exported `Cell<f64>` constructor names it as written, where the reference wrote the symbol `Cell$f64.constructor`",
-  },
-  {
-    program: "tests/cases/perf_padding_quiet.ts",
-    file: "perf_padding_quiet.napi.c",
-    changelog: "Spell an instantiated class as written, in diagnostics and -g (WP18 G8)",
-    why: "the comment above the exported `Cell<f64>` constructor names it as written, where the reference wrote the symbol `Cell$f64.constructor`",
-  },
-  {
-    program: "tests/link/generic_import/main.ts",
-    file: "main.h",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword; and the comments above the methods of `Box<i32>` and `Box<Point>` name them as written, where the reference wrote their mangled symbols",
-  },
-  {
-    program: "tests/link/generic_import/main.ts",
-    file: "main.d.ts",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation is declared under its `nish_gen_` C name, since the mangled symbol is not always a JavaScript identifier",
-  },
-  {
-    program: "tests/link/generic_import/main.ts",
-    file: "main.mjs",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the loader exports an instantiation under its `nish_gen_` C name, and still calls the raw export by its symbol",
-  },
-  {
-    program: "tests/link/generic_import/main.ts",
-    file: "main.napi.c",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`; and the comments above the methods of `Box<i32>` and `Box<Point>` name them as written, where the reference wrote their mangled symbols",
-  },
-  {
-    program: "tests/link/generic_import_chain/main.ts",
-    file: "main.h",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword; and the comments above the methods of `Box<Pair<i32>>` and `Pair<i32>` name them as written, where the reference wrote their mangled symbols",
-  },
-  {
-    program: "tests/link/generic_import_chain/main.ts",
-    file: "main.d.ts",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation is declared under its `nish_gen_` C name, since the mangled symbol is not always a JavaScript identifier",
-  },
-  {
-    program: "tests/link/generic_import_chain/main.ts",
-    file: "main.mjs",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the loader exports an instantiation under its `nish_gen_` C name, and still calls the raw export by its symbol",
-  },
-  {
-    program: "tests/link/generic_import_chain/main.ts",
-    file: "main.napi.c",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`",
-  },
-  {
-    program: "tests/link/generic_two_importers/main.ts",
-    file: "main.d.ts",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation is declared under its `nish_gen_` C name, since the mangled symbol is not always a JavaScript identifier",
-  },
-  {
-    program: "tests/link/generic_two_importers/main.ts",
-    file: "main.h",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "an instantiation's C name is now `nish_gen_` and the escaped collapse, and its comment says it is an instantiation rather than a C keyword",
-  },
-  {
-    program: "tests/link/generic_two_importers/main.ts",
-    file: "main.mjs",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the loader exports an instantiation under its `nish_gen_` C name, and still calls the raw export by its symbol",
-  },
-  {
-    program: "tests/link/generic_two_importers/main.ts",
-    file: "main.napi.c",
-    changelog: "Export generic instantiations under valid, injective names (WP18 G8)",
-    why: "the addon exports and wraps an instantiation under its `nish_gen_` C name, so no C identifier holds `$` or `.`",
-  },
-  {
-    program: "tests/cases/gen_method.ts",
-    file: "exit",
-    changelog: "Generic methods on classes (WP18 §14 q7)",
-    why: "a new program: `Chooser.pick<T>` on a non-generic class, which the reference compiler refuses at the `<` after the method name (`a type annotation is required`) and HEAD compiles to `@Chooser.pick$i32` and `@Chooser.pick$str`",
-  },
-  {
-    program: "tests/cases/gen_method_generic_class.ts",
-    file: "exit",
-    changelog: "Generic methods on classes (WP18 §14 q7)",
-    why: "a new program: `Box<T>.pair<U>` at two receivers and two method tuples, which the reference compiler refuses at the method's type parameter list and HEAD compiles to four defines",
-  },
-  {
-    program: "tests/cases/gen_method_constraint.ts",
-    file: "exit",
-    changelog: "Generic methods on classes (WP18 §14 q7)",
-    why: "a new program: `apply<U extends Shape>` on a plain class and `plus<U extends Shape>` on a generic one, which the reference compiler refuses at the method's type parameter list and HEAD compiles to direct field reads",
-  },
-  {
-    program: "tests/cases/gen_method_export.ts",
-    file: "exit",
-    changelog: "Generic methods on classes (WP18 §14 q7)",
-    why: "a new program: an exported class's generic methods, which the reference compiler refuses at the method's type parameter list and HEAD compiles, with each instantiation in the header as `nish_gen_Holder_pick_i32` and the like",
-  },
-  {
-    program: "tests/cases/dbg_generic_method.ts",
-    file: "exit",
-    changelog: "Generic methods on classes (WP18 §14 q7)",
-    why: "a new program: `Box<i32>.pair<U>` under -g, which the reference compiler refuses at the method's type parameter list and HEAD compiles with `DISubprogram`s named `Box<i32>.pair<string>` and `Box<i32>.pair<i32>`",
-  },
-  {
-    program: "docs/cookbook/gen-method.ts",
-    file: "exit",
-    changelog: "Generic methods on classes (WP18 §14 q7)",
-    why: "the cookbook snippet for a generic method, which the reference compiler refuses at the method's type parameter list and HEAD compiles to `@Chooser.pick$i32`, `@Chooser.pick$str` and `@Box$i32.keep$str`",
-  },
-  {
-    program: "tests/link/generic_method_import/main.ts",
-    file: "exit",
-    changelog: "Generic methods on classes (WP18 §14 q7)",
-    why: "a new program: an exported class's generic methods called from two importers, which the reference compiler refuses at the method's type parameter list in lib.ts and HEAD compiles with one `define` per instantiation, in lib.ll",
-  },
-  // #106: `src/bounds.ts` proves `h.xs[i]` from `h.xs.length`, so the compiler's
-  // own accesses through a field lose their checks and every module of it moves,
-  // bounds checks and the attributes a dropped panic frees alike. One entry per
-  // `src/` program, read from the corpus rather than listed, because the reason
-  // is the same for all of them.
-  ...programs()
-    .map((file) => path.relative(root, file))
-    .filter((program) => program.startsWith("src/"))
-    .map((program) => ({
+/** One declaration per program and sidecar `STAGE4_STRING_EXPORTS` names. */
+const declareStringExports = (moved, changelog, why) =>
+  moved.flatMap((program) => {
+    const stem = path.basename(program, ".ts")
+    return [`${stem}.d.ts`, `${stem}.mjs`].map((file) => ({
       program,
-      changelog: "Key bounds length facts by property path",
-      why: "the compiler's own field-held accesses are proven by property-path length facts, so their checks and the attributes a dropped panic frees move in every module",
-    })),
-  {
-    program: "bench/hoist-field.ts",
-    file: "hoist-field.ll",
-    changelog: "Key bounds length facts by property path",
-    why: "`fieldScan`'s `h.xs[i]` is proven by `i < h.xs.length`, the check the reference compiler keeps and the 2.38x this change measures",
-  },
-  {
-    program: "tests/cases/arr_header_hoist.ts",
-    file: "arr_header_hoist.ll",
-    changelog: "Key bounds length facts by property path",
-    why: "`@fieldScale`'s `h.xs[i]` loses its check, so its loop is `@constScale`'s register for register",
-  },
-  {
-    program: "tests/cases/arr_path_hold.ts",
-    file: "arr_path_hold.ll",
-    changelog: "Key bounds length facts by property path",
-    why: "a new program: the accesses a property-path fact proves, whose checks the reference compiler keeps",
-  },
-  {
-    program: "tests/cases/arr_path_nullable.ts",
-    file: "arr_path_nullable.ll",
-    changelog: "Key bounds length facts by property path",
-    why: "a new program: `@plain`'s path from a `Holder` is proven where the reference compiler keeps the check; `@narrowed`'s, from a `Holder | null`, keeps it in both",
-  },
-  {
-    program: "tests/link/reachable_struct/main.ts",
-    changelog: "Key bounds length facts by property path",
-    why: "`this.entries.length > 0 ? this.entries[0] : null` in lib.ts is proven by the guard on the path, so lib.ll drops its `nish_panic_index` and main.ll's declarations of lib's methods regroup their attributes",
-  },
-  // The local forms of the two ordering holes #179's review found. The seed
-  // proves each of these accesses and reads or writes past the array; HEAD keeps
-  // the check, so the difference is the fix.
-  {
-    program: "tests/cases/arr_bounds_cond_effect.ts",
-    file: "arr_bounds_cond_effect.ll",
-    changelog: "Key bounds length facts by property path",
-    why: "a new program: `i < xs.length && drain(xs) > 0` no longer proves `xs[i]`, which the reference compiler proves and reads past",
-  },
-  {
-    program: "tests/cases/arr_bounds_cond_assign.ts",
-    file: "arr_bounds_cond_assign.ll",
-    changelog: "Key bounds length facts by property path",
-    why: "a new program: `i < xs.length && (xs = short).length > 0` no longer proves `xs[i]`, which the reference compiler proves and reads past",
-  },
-  {
-    program: "tests/cases/arr_bounds_store_rhs.ts",
-    file: "arr_bounds_store_rhs.ll",
-    changelog: "Key bounds length facts by property path",
-    why: "a new program: `xs[i] = (i = 0)` keeps its check, which the reference compiler drops and writes past the array",
-  },
-  {
-    program: "tests/cases/arr_path_continue_for.ts",
-    file: "arr_path_continue_for.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a `continue` that stores `h.xs` keeps the check on the `for` update's `h.xs[i]`, which the reference compiler drops and writes past the array",
-  },
-  {
-    program: "tests/cases/arr_path_continue_do.ts",
-    file: "arr_path_continue_do.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a call before `continue` keeps the check on the `do/while` condition's `h.xs[i]`, which the reference compiler drops and reads past the array",
-  },
-  {
-    program: "tests/cases/arr_bounds_continue_for.ts",
-    file: "arr_bounds_continue_for.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a `continue` that rebinds `xs` keeps the check on the `for` update's `xs[i]`, which the reference compiler drops and writes past the array",
-  },
-  {
-    program: "tests/cases/arr_bounds_continue_do.ts",
-    file: "arr_bounds_continue_do.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a `continue` that rebinds `xs` keeps the check on the `do/while` condition's `xs[i]`, which the reference compiler drops and reads past the array",
-  },
-  {
-    program: "tests/cases/arr_bounds_lazy_unwrap_or.ts",
-    file: "arr_bounds_lazy_unwrap_or.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: an `unwrapOr` fallback that never ran proves nothing, so `s.charCodeAt(i)` keeps the check the reference compiler drops",
-  },
-  {
-    program: "tests/cases/arr_bounds_lazy_expect.ts",
-    file: "arr_bounds_lazy_expect.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: an `expect` message that never ran proves nothing, so `s.charCodeAt(i)` keeps the check the reference compiler drops",
-  },
-  {
-    program: "tests/cases/arr_header_hoist_record_store.ts",
-    file: "arr_header_hoist_record_store.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a whole-record store into `rs` keeps `r.xs` from being hoisted, where the reference compiler hoists it and reads the replaced array",
-  },
-  {
-    program: "tests/cases/arr_bounds_continue_nested.ts",
-    file: "arr_bounds_continue_nested.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: an outer `continue` that rebinds `xs`, followed by an inner loop with its own `continue`, keeps the check on the outer `for` update's `xs[i]`, which the reference compiler drops and writes past the array",
-  },
-  {
-    program: "tests/cases/arr_bounds_continue_switch.ts",
-    file: "arr_bounds_continue_switch.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a `continue` in a `switch` clause that rebinds `xs` keeps the check on the `for` update's `xs[i]`, which the reference compiler drops and writes past the array",
-  },
-  {
-    program: "tests/cases/arr_bounds_break_for.ts",
-    file: "arr_bounds_break_for.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a `break` after the body moves `i` keeps the check on `xs[i]` after the `for`, which the reference compiler drops because the condition proved it",
-  },
-  {
-    program: "tests/cases/arr_bounds_break_while.ts",
-    file: "arr_bounds_break_while.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a `break` after the body rebinds `xs` keeps the check on `xs[5]` after the `while`, which the reference compiler drops because the condition proved it",
-  },
-  {
-    program: "tests/cases/arr_bounds_break_for_string.ts",
-    file: "arr_bounds_break_for_string.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a guarded `break` after the body moves `k` keeps the check on `s.charCodeAt(i)` under `i < k`, which the reference compiler drops",
-  },
-  {
-    program: "tests/cases/arr_bounds_break_while_string.ts",
-    file: "arr_bounds_break_while_string.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a `break` after the body moves `k` keeps the check on `s.charCodeAt(i)` under `i < k`, which the reference compiler drops",
-  },
-  {
-    program: "tests/cases/arr_bounds_generic_instances.ts",
-    file: "arr_bounds_generic_instances.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: `walk<Box>` proves `r.xs[i]` and `walk<Rec>`, whose whole-record store replaces the array under `r`, keeps the check, where the reference compiler judges both instantiations from one shared table and reads past the array",
-  },
-  {
-    program: "tests/cases/arr_bounds_generic_instances_prim.ts",
-    file: "arr_bounds_generic_instances_prim.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: `walk<i32>` proves `r.xs[i]` and `walk<Rec>` keeps the check, where the reference compiler judges both instantiations from one shared table and reads past the array",
-  },
-  {
-    program: "tests/cases/arr_bounds_generic_instances_method.ts",
-    file: "arr_bounds_generic_instances_method.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: `Store<Box>.walk` proves `r.xs[i]` and `Store<Rec>.walk` keeps the check, where the reference compiler judges both instantiations from one shared table and reads past the array",
-  },
-  {
-    program: "tests/cases/arr_bounds_generic_instances_iface.ts",
-    file: "arr_bounds_generic_instances_iface.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: `walk` over `Cell<string>` proves `r.xs[i]` and over `Cell<Rec>` keeps the check, where the reference compiler judges both instantiations from one shared table and reads past the array",
-  },
-  {
-    program: "tests/cases/arr_header_hoist_record_view.ts",
-    file: "arr_header_hoist_record_view.ll",
-    changelog: "Bounds proofs see continue edges, lazy Result arguments and whole-record stores",
-    why: "a new program: a whole-record store into `rs` keeps `c.rec.xs`, read off a `Rec` view in a class field, from being hoisted and keeps its check, where the reference compiler hoists it and reads the replaced array",
-  },
-  {
-    program: "docs/cookbook/arr-bounds-path.ts",
-    file: "arr-bounds-path.ll",
-    changelog: "Key bounds length facts by property path",
-    why: "the cookbook snippet for a property-path fact, whose `h.xs[i]` check the reference compiler keeps",
-  },
-  {
-    program: "tests/link/std_pair_scalar/main.ts",
-    file: "exit",
-    changelog: "Pair<A, B> as a standard-library type",
-    why: "a new program: a `Pair<i32, boolean>` returned across a module boundary, which the reference compiler refuses because its std/ has no pair.ts",
-  },
-  {
-    program: "tests/link/std_pair_f64/main.ts",
-    file: "exit",
-    changelog: "Pair<A, B> as a standard-library type",
-    why: "a new program: a `Pair<string, f64>` under --number-mode f64, which the reference compiler refuses because its std/ has no pair.ts",
-  },
-  {
-    program: "tests/link/std_pair_array/main.ts",
-    file: "exit",
-    changelog: "Pair<A, B> as a standard-library type",
-    why: "a new program: a `Pair<i32[], string>`, which the reference compiler refuses because its std/ has no pair.ts",
-  },
-  {
-    program: "tests/link/std_pair_nested/main.ts",
-    file: "exit",
-    changelog: "Pair<A, B> as a standard-library type",
-    why: "a new program: a nested `Pair<Pair<i32, i32>, string>`, which the reference compiler refuses because its std/ has no pair.ts",
-  },
-  {
-    program: "tests/link/std_pair_held/main.ts",
-    file: "exit",
-    changelog: "Pair<A, B> as a standard-library type",
-    why: "a new program: a `Pair<i32, boolean>` held in a class field and pushed into an array, which the reference compiler refuses because its std/ has no pair.ts",
-  },
-  {
-    program: "tests/cases/attr_panic_charcodeat.ts",
-    file: "attr_panic_charcodeat.ll",
-    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
-    why: "a new program: `@at` and `@nish_main` reach `nish_panic_index` through an unproven `charCodeAt` and are not `willreturn`, where the reference compiler marks both and the speed profile deletes the panic",
-  },
-  {
-    program: "tests/cases/str_bytes.ts",
-    file: "str-bytes.ll",
-    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
-    why: "`@firstByte`'s unproven `charCodeAt(0)` can reach `nish_panic_index`, so it and `@test` lose `willreturn`, and `@firstByte` its `readonly`, as an unproven `a[i]` already does",
-  },
-  {
-    program: "docs/cookbook/str-bytes.ts",
-    file: "str-bytes.ll",
-    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
-    why: "`@firstByte`'s unproven `charCodeAt(0)` can reach `nish_panic_index`, so it loses `willreturn` and `readonly` and the attribute groups renumber",
-  },
-  {
-    program: "tests/cases/arr_path_cond_string.ts",
-    file: "arr_path_cond_string.ll",
-    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
-    why: "`@code`'s unproven `t.s.charCodeAt(i)` can reach `nish_panic_index`, so it and `@nish_main` lose `willreturn`",
-  },
-  {
-    program: "tests/differential/corpus/str_methods.ts",
-    file: "str_methods.ll",
-    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
-    why: "`@nish_main`'s unproven `charCodeAt` can reach `nish_panic_index`, so it loses `willreturn` and the attribute groups renumber",
-  },
-  {
-    program: "tests/link/result_import/main.ts",
-    file: "lib.ll",
-    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
-    why: "`@parseDigit`'s unproven `text.charCodeAt(at)` can reach `nish_panic_index`, so it loses `willreturn`",
-  },
-  {
-    program: "tests/link/result_import/main.ts",
-    file: "main.ll",
-    changelog: "A function whose unproven charCodeAt can panic is not willreturn",
-    why: "the importer's `declare` of `@parseDigit` loses `willreturn` with its definition, and the attribute groups renumber",
-  },
-  {
-    program: "tests/link/class_clash_fields/main.ts",
-    file: "exit",
-    changelog: "Refuse two same-named classes or interfaces in one package",
-    why: "a new program: #193's two same-named classes with fields only, which the reference compiler merges into one type and compiles, and HEAD refuses at the second declaration",
-  },
-  {
-    program: "tests/link/iface_clash_private/main.ts",
-    file: "exit",
-    changelog: "Refuse two same-named classes or interfaces in one package",
-    why: "a new program: #193's private interface passed across modules as a same-named one, which the reference compiler compiles and HEAD refuses at the second declaration",
-  },
-  {
-    program: "tests/link/class_dollar_name/main.ts",
-    file: "exit",
-    changelog: "Refuse two same-named classes or interfaces in one package",
-    why: "a new program: a declared `class Box$i32` beside the instantiation `Box<i32>`, which the reference compiler merges into one type and compiles, and HEAD refuses for its `$`",
-  },
-  {
-    program: "tests/link/class_dollar_name_imported/main.ts",
-    file: "exit",
-    changelog: "Refuse two same-named classes or interfaces in one package",
-    why: "a new program: `class_dollar_name` in the other load order, which the reference compiler compiles and HEAD refuses for the `$` in the name it was written with",
-  },
-  {
-    program: "tests/link/package_symlink/main.ts",
-    file: "exit",
-    changelog: "Module and package identity is the real path",
-    why: "pnpm's layout, one package reached through a symlink, which the reference compiler loads as two copies and refuses as a clash on `val`, and HEAD compiles as one package (#198)",
-  },
-  {
-    program: "tests/link/identity_symlink_cwd/main.ts",
-    file: "exit",
-    changelog: "Module and package identity is the real path",
-    why: "a new program: one file named as a root through a linked directory beside an import of it, which the reference compiler loads as two modules and refuses as a duplicate export, and HEAD loads once (#198)",
-  },
-  {
-    program: "tests/link/identity_symlink_dotdot/main.ts",
-    file: "types.ll",
-    changelog: "Module and package identity is the real path",
-    why: "a new program: `types.ts` and `far/../types.ts` are two files whose stems meet, and the reference compiler writes the second over the first, so its `types.ll` is the root's where HEAD's is the import's (#198)",
-  },
-  {
-    program: "tests/link/identity_symlink_dotdot/main.ts",
-    file: "types_2.ll",
-    changelog: "Module and package identity is the real path",
-    why: "the same program: HEAD names the second module `types_2.ll` rather than overwriting the first, and the reference compiler writes no such file (#198)",
-  },
-  {
-    program: "tests/link/package_workspace/main.ts",
-    file: "index.ll",
-    changelog: "Module and package identity is the real path",
-    why: "a new program: a workspace link `node_modules/foo -> ../packages/foo`, whose modules HEAD names under the package's real directory, `packages/foo/index.ts`, where the reference compiler names them through the link (#198)",
-  },
-  {
-    program: "tests/link/package_workspace/main.ts",
-    file: "node_modules_foo_helper.ll",
-    changelog: "Module and package identity is the real path",
-    why: "the same program: the reference compiler stems `foo`'s own `helper.ts` from the link's spelling, and HEAD writes it as `packages_foo_helper.ll` (#198)",
-  },
-  {
-    program: "tests/link/package_workspace/main.ts",
-    file: "packages_foo_helper.ll",
-    changelog: "Module and package identity is the real path",
-    why: "the same program: HEAD stems `foo`'s own `helper.ts` from the package's real directory, a file the reference compiler does not write (#198)",
-  },
-  {
-    program: "tests/cases/fnarg_named.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "a new program: a function-typed parameter given two named callees, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/fnarg_arrow.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "a new program: arrows written as function arguments, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/fnarg_generic.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "a new program: generic templates whose function argument binds a type parameter, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/fnarg_forward.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "a new program: a function parameter passed on to another template, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/dbg_fnarg_arrow.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "a new program: a lifted arrow under -g, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/parser/fnarg.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "a new parser fixture for the function type and the arrow expression, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/link/fnarg_private/main.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "a new program: a private function and arrows passed to another module's templates, which the reference compiler refuses to parse",
-  },
-  {
-    program: "docs/cookbook/fnarg-named.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "the cookbook snippet for a function parameter given two named callees, which the reference compiler refuses to parse",
-  },
-  {
-    program: "docs/cookbook/fnarg-arrow.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "the cookbook snippet for a lifted arrow argument, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/fnarg_loop_hoist.ts",
-    file: "exit",
-    changelog: "Compile-time function parameters, monomorphised per callee",
-    why: "a new program: an arrow argument written inside a loop whose headers are hoisted, which the reference compiler refuses to parse",
-  },
-  {
-    program: "tests/cases/arr_readonly_field.ts",
-    file: "arr_readonly_field.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/arr_strings.ts",
-    file: "arr_strings.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/cls_interface_literal.ts",
-    file: "cls_interface_literal.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/conv_f64_context.ts",
-    file: "conv_f64_context.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/diag_order.ts",
-    file: "diag_order.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`test` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/diag_order_pass1.ts",
-    file: "diag_order_pass1.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`test` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/fn_arrow_concise.ts",
-    file: "fn_arrow_concise.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/io_spawn.ts",
-    file: "io_spawn.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "docs/cookbook/mem-callee-scope.ts",
-    file: "mem-callee-scope.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "the cookbook snippet for the callee scope: `size` brackets itself, which the reference compiler does not give it",
-  },
-  {
-    program: "tests/cases/mem_callee_scope.ts",
-    file: "mem-callee-scope.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program: `List.benchmark` brackets itself with the callee scope, which the reference compiler does not give it",
-  },
-  {
-    program: "tests/cases/mem_callee_scope_escape.ts",
-    file: "mem_callee_scope_escape.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program whose functions correctly get no callee scope; its `main` gets one, its parameters holding no pointer",
-  },
-  {
-    program: "tests/cases/mem_callee_scope_nested.ts",
-    file: "mem_callee_scope_nested.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program whose `keep` correctly gets no callee scope; its `main` gets one, its parameters holding no pointer",
-  },
-  {
-    program: "tests/cases/mem_callee_scope_return.ts",
-    file: "mem_callee_scope_return.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program whose `summary` correctly gets no callee scope; its `main` gets one, its parameters holding no pointer",
-  },
-  {
-    program: "tests/cases/mem_callee_scope_tree.ts",
-    file: "mem_callee_scope_tree.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program: `Storage.benchmark` brackets itself with the callee scope, which the reference compiler does not give it",
-  },
-  {
-    program: "tests/cases/mem_getenv_scope.ts",
-    file: "mem_getenv_scope.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/mem_nullable.ts",
-    file: "mem_nullable.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/mem_readdir_scope.ts",
-    file: "mem_readdir_scope.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/mem_reclaim_call.ts",
-    file: "mem_reclaim_call.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/mem_stack_ctor_capture.ts",
-    file: "mem_stack_ctor_capture.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/mem_stack_escape.ts",
-    file: "mem_stack_escape.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/mem_threads_arena.ts",
-    file: "mem_threads_arena.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/perf_arena_loop.ts",
-    file: "perf_arena_loop.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program: `quiet` gets the callee scope, and the two functions the new warning names do not",
-  },
-  {
-    program: "tests/cases/perf_arena_quiet.ts",
-    file: "perf_arena_quiet.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`test` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/perf_padding_suffix_gap.ts",
-    file: "perf_padding_suffix_gap.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`test` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/res_by_value_param.ts",
-    file: "res_by_value_param.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/res_propagate.ts",
-    file: "res_propagate.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/res_struct_error.ts",
-    file: "res_struct_error.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "bench/strbuild.ts",
-    file: "strbuild.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/differential/corpus/arr_2d.ts",
-    file: "arr_2d.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/differential/corpus/arr_sort_reverse.ts",
-    file: "arr_sort_reverse.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/differential/corpus/class_prefix.ts",
-    file: "class_prefix.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/differential/corpus/io_roundtrip.ts",
-    file: "io_roundtrip.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/differential/corpus/str_basic.ts",
-    file: "str_basic.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/differential/corpus/str_build_loop.ts",
-    file: "str_build_loop.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/differential/corpus/str_template.ts",
-    file: "str_template.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/differential/corpus/ternary_chain.ts",
-    file: "ternary_chain.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/link/reachable_struct_chain/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/link/std_bare_specifier/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/link/std_json/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/link/std_pair_array/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/link/std_pair_held/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/link/std_pair_nested/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/link/std_testing/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/link/std_testing_fail/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/link/struct_array_field/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
-  },
-  {
-    program: "tests/cases/arr_repeat_check.ts",
-    file: "arr-repeat-check.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "a new program: AWFY Permute's `swap` on a field array keeps two of its four checks, and `double`'s repeated `this.v[i]` one of three",
-  },
-  {
-    program: "tests/cases/arr_repeat_check_local.ts",
-    file: "arr_repeat_check_local.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "a new program: a repeated `xs[i]`, `s.charCodeAt(k)` and literal `xs[0]`/`xs[1]` after `xs[2]` are proven by the check before them",
-  },
-  {
-    program: "tests/cases/arr_repeat_check_field_store.ts",
-    file: "arr_repeat_check_field_store.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "a new program: `elementStore`'s repeat is proven by the read before it, and the repeats after `this.v = fresh` and `other.v = fresh` keep their checks",
-  },
-  {
-    program: "tests/cases/arr_repeat_check_flow.ts",
-    file: "arr_repeat_check_flow.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "a new program: only `inCondition`'s repeats, dominated by the check in the condition, lose their checks",
-  },
-  {
-    program: "tests/cases/arr_element_bitwise_assign.ts",
-    file: "arr_element_bitwise_assign.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "`a[2] >>>= 1` and `a[0]` are proven by the checked `a[2] <<= 33` before them, with no call between",
-  },
-  {
-    program: "tests/cases/arr_header_hoist_record_class_root.ts",
-    file: "arr_header_hoist_record_class_root.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "`rs[0].b` and `rs[1].b` are proven by the checked `rs[0].a` and `rs[1].a` in the same template",
-  },
-  {
-    program: "tests/cases/arr_strings.ts",
-    file: "arr_strings.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: '`words[0]` is proven by the checked store `words[0] = "goodbye"` before it',
-  },
-  {
-    program: "tests/cases/arr_u8.ts",
-    file: "arr_u8.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "`bytes[3]` is proven by the checked store `bytes[3] = bytes[0] + one` before it",
-  },
-  {
-    program: "tests/cases/cls_parenthesized_type.ts",
-    file: "cls_parenthesized_type.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "`slots[0]` is proven by the checked store `slots[0] = first` before it",
-  },
-  {
-    program: "tests/cases/perf_alloc_loop.ts",
-    file: "perf_alloc_loop.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "the reads `row[0]` and `row[1]` are proven by the checked stores to them",
-  },
-  {
-    program: "tests/cases/perf_alloc_quiet.ts",
-    file: "perf_alloc_quiet.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "`once[0]` in the `return` is proven by the checked store `once[0] = 7` before it",
-  },
-  {
-    program: "docs/cookbook/arr-repeat-check.ts",
-    file: "arr-repeat-check.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "the cookbook snippet for the rule: `swap` keeps two of its four checks",
-  },
-  {
-    program: "bench/nbody.ts",
-    file: "nbody.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "the momentum loop's `bodies[i].mass` reads are proven by the checked `bodies[i].vx`/`vy`/`vz` before them",
-  },
-  {
-    program: "bench/spectral.ts",
-    file: "spectral.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "the final loop's second and third `v[i]` are proven by the checked first one",
-  },
-  {
-    program: "tests/differential/corpus/arr_2d.ts",
-    file: "arr_2d.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "`grid[1]` in `console.log(grid[1][1])` is proven by the checked `grid[1][1] = true` before it",
-  },
-  {
-    program: "tests/differential/corpus/arr_sort_reverse.ts",
-    file: "arr_sort_reverse.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "the swaps: `xs[j]` after the condition's check and `xs[lo]`/`xs[hi]` after the reads of them are proven",
-  },
-  {
-    program: "tests/differential/corpus/int_compound.ts",
-    file: "int_compound.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "`xs[i] += i` is proven by the checked `xs[i] *= 1000000` before it",
-  },
-  {
-    program: "tests/cases/arr_repeat_check_call.ts",
-    file: "arr_repeat_check_call.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program: `test` only calls allocating functions and gets the arena scope; its bounds checks are the reference compiler's",
-  },
-  {
-    program: "tests/cases/arr_repeat_check_panic.ts",
-    file: "arr_repeat_check_panic.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program: `test`, `callStorePastEnd` and `fieldStorePastEnd` only call allocating functions and get the arena scope; its bounds checks are the reference compiler's",
-  },
-  {
-    program: "tests/cases/arr_repeat_check_push.ts",
-    file: "arr_repeat_check_push.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program: `test` only calls allocating functions and gets the arena scope; its bounds checks are the reference compiler's",
-  },
-  {
-    program: "bench/awfy/main.ts",
-    file: "list.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program, the Are We Fast Yet ports: `List.benchmark` brackets itself with the callee scope, which the reference compiler does not give it",
-  },
-  {
-    program: "bench/awfy/main.ts",
-    file: "storage.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program, the Are We Fast Yet ports: `Storage.benchmark`, its manual `Arena` calls removed, brackets itself with the callee scope",
-  },
-  {
-    program: "bench/awfy/main.ts",
-    file: "bounce.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program, the Are We Fast Yet ports: `Bounce.innerBenchmarkLoop` brackets itself with the callee scope, the balls each run makes dying with the call",
-  },
-  {
-    program: "bench/awfy/main.ts",
-    file: "main.ll",
-    changelog: "Give a function the arena scope when only its callees allocate",
-    why: "a new program, the Are We Fast Yet ports: the harness's `innerBenchmarkLoop` brackets itself with the callee scope around the benchmark object it makes",
-  },
-  {
-    program: "bench/awfy/main.ts",
-    file: "permute.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "a new program, the Are We Fast Yet ports: `Permute.swap` keeps two of its four checks",
-  },
-  // Issue #246: a high-surrogate escape before a low one is now the one code
-  // point it spells, four UTF-8 bytes, where the reference encodes each half
-  // on its own. Only the three cases that spell a surrogate escape move.
-  {
-    program: "tests/cases/str_surrogate_pair.ts",
-    changelog: "A surrogate-pair escape is the code point it spells",
-    why: "its pair escapes are the four bytes of U+1F600 and share the emoji's constant, where the reference writes six bytes of two lone surrogates",
-  },
-  {
-    program: "tests/cases/str_surrogate_map_key.ts",
-    changelog: "A surrogate-pair escape is the code point it spells",
-    why: "its pair-escape key is the four bytes of U+1F600 and shares the emoji's constant, where the reference writes six bytes of two lone surrogates",
-  },
-  {
-    program: "tests/cases/str_surrogate_lone.ts",
-    changelog: "A surrogate-pair escape is the code point it spells",
-    why: "the one pair escape it compares against is the four bytes of U+1F600, where the reference writes six bytes of two lone surrogates; its lone surrogates are the reference's bytes",
-  },
-  {
-    program: "tests/cases/reject_surrogate_escape_too_large.ts",
-    changelog: "A surrogate-pair escape is the code point it spells",
-    why: "a `\\u{...}` escape above 0x10FFFF is refused with TypeScript's words, where the reference encodes it",
-  },
-  {
-    program: "tests/cases/reject_surrogate_escape_wraps.ts",
-    changelog: "A surrogate-pair escape is the code point it spells",
-    why: "`\\u{10000D800}` is refused as above 0x10FFFF, where the reference wraps it in i32 to a lone high surrogate",
-  },
-  // WP34 H1: three std/ modules the released compiler does not ship, so it
-  // refuses every program that imports one. These go one release later,
-  // when the seed carries the modules.
-  {
-    program: "tests/link/crypto_sha1/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/crypto/sha1`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/crypto_sha1_f64/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/crypto/sha1`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/crypto_sha1_long_f64/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/crypto/sha1`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/net_http1/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/net/http1-codec`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/net_http1_chunk_window/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/net/http1-codec`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/net_http1_f64/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/net/http1-codec`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/net_http1_feed_window/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/net/http1-codec`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/net_websocket/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/net_websocket_f64/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/net_websocket_feed_window/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/net_websocket_frame_window/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/link/net_websocket_utf8_window/main.ts",
-    file: "exit",
-    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
-    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
-  },
-  {
-    program: "tests/cases/obj_lit_nullable_ternary.ts",
-    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
-    why: "it builds an object literal in a ternary arm beside `null` where `Box | null` is declared, which the reference types as the union and stops on with an internal error (`unknown struct`)",
-  },
-  {
-    program: "tests/cases/obj_lit_nullable_return.ts",
-    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
-    why: "it builds an object literal in a `return` in a function returning `E | null`, which the reference types as the union and stops on with an internal error (`unknown struct`)",
-  },
-  {
-    program: "tests/cases/obj_lit_nullable_arrow.ts",
-    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
-    why: "it builds an object literal in an arrow's concise body returning `E | null`, alone and as a ternary arm, which the reference types as the union and stops on with an internal error (`unknown struct`)",
-  },
-  {
-    program: "tests/cases/obj_lit_nullable_local.ts",
-    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
-    why: "it builds an object literal in a local declared `E | null`, which the reference types as the union and stops on with an internal error (`unknown struct`)",
-  },
-  {
-    program: "tests/cases/obj_lit_nullable_field.ts",
-    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
-    why: "it builds an object literal in a parameter, an enclosing literal's field and a field store that expect `E | null`, which the reference types as the union and stops on with an internal error (`unknown struct`)",
-  },
-  {
-    program: "tests/link/crypto_hkdf/main.ts",
-    file: "hkdf.ll",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings; with this tree's hkdf.ts the reference compiler writes the same bytes",
-  },
-  {
-    program: "tests/link/crypto_hkdf_f64/main.ts",
-    file: "hkdf.ll",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings under --number-mode f64; with this tree's hkdf.ts the reference compiler writes the same bytes",
-  },
-  {
-    program: "tests/link/crypto_hkdf_k1_bounds/main.ts",
-    file: "hkdf.ll",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings; with this tree's hkdf.ts the reference compiler writes the same bytes",
-  },
-  {
-    program: "tests/link/crypto_hkdf_k1_bounds_f64/main.ts",
-    file: "hkdf.ll",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings under --number-mode f64; with this tree's hkdf.ts the reference compiler writes the same bytes",
-  },
-  {
-    program: "tests/link/crypto_hkdf_long_f64/main.ts",
-    file: "hkdf.ll",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings under --number-mode f64; with this tree's hkdf.ts the reference compiler writes the same bytes",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: the RFC 8448 and RFC 9001 vectors through `hkdfExpandLabelSha256` and `hkdfExpandLabelSha384`, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label_f64/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: the same vectors under --number-mode f64, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label_empty_label/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: an empty label's panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label_long_context/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: a context past 255 bytes' panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label_long_context_f64/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: a context past 255 bytes' panic under --number-mode f64, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label_long_label/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: a label past 249 bytes' panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label_long_length/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: a length past 255's panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label_negative_length/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: a negative length's panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label_short_secret/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: a secret shorter than HashLen's panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/link/crypto_hkdf_expand_label_short_secret_sha384/main.ts",
-    file: "exit",
-    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
-    why: "a new program: a SHA-256 secret handed to `hkdfExpandLabelSha384`'s panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
-  },
-  {
-    program: "tests/cases/mem_using_arena.ts",
-    file: "exit",
-    changelog: "a checked arena bracket",
-    why: "a new program: a `using a = arena()` block whose allocations are released when it ends, which the reference compiler refuses because it has no `arena()` builtin",
-  },
-  {
-    program: "tests/cases/mem_using_arena_or_return.ts",
-    file: "exit",
-    changelog: "a checked arena bracket",
-    why: "a new program: `orReturn()` out of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
-  },
-  {
-    program: "tests/cases/mem_using_arena_tail.ts",
-    file: "exit",
-    changelog: "a checked arena bracket",
-    why: "a new program: a tail call out of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
-  },
-  {
-    program: "tests/cases/perf_arena_using.ts",
-    file: "exit",
-    changelog: "a checked arena bracket",
-    why: "a new program: the arena-loop warning's shape with the loop body in a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
-  },
-  {
-    program: "docs/cookbook/mem-using-arena.ts",
-    file: "exit",
-    changelog: "a checked arena bracket",
-    why: "a new cookbook snippet: a `using a = arena()` block in a scoped loop pass, which the reference compiler refuses because it has no `arena()` builtin",
-  },
-  {
-    program: "tests/link/arena_using_exit_paths/main.ts",
-    file: "exit",
-    changelog: "a checked arena bracket",
-    why: "a new program: every exit of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
-  },
-  {
-    program: "tests/cases/mem_loop_scope.ts",
-    file: "exit",
-    changelog: "Arena.release and Arena.reset in favour of using a = arena()",
-    why: "measures the arena inside a `using a = arena()` block instead of between `Arena.mark` and `Arena.release`, since removed, which the reference compiler refuses because it has no `arena()` builtin",
-  },
-  {
-    program: "tests/cases/mem_loop_scope_forof.ts",
-    file: "exit",
-    changelog: "Arena.release and Arena.reset in favour of using a = arena()",
-    why: "measures the arena inside two `using a = arena()` blocks instead of between `Arena.mark` and `Arena.release`, since removed, which the reference compiler refuses because it has no `arena()` builtin",
-  },
-  {
-    program: "tests/link/reject_typed_push_alias/main.ts",
-    file: "exit",
-    changelog: "push and pop on typed arrays reached through Map/Set reads, generics and imported aliases",
-    why: "a new negative: `pop` on a return type and a field spelled through another module's `Float64Array` alias, which the reference compiler compiled",
-  },
-  {
-    program: "tests/cases/unsafe_get_set.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "a new program that imports `nish:unsafe`, which the reference compiler does not have and refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/unsafe_wrapping.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "a new program that imports `nish:unsafe`, which the reference compiler does not have and refuses as an unknown builtin module",
-  },
-  {
-    program: "docs/cookbook/unsafe-unchecked-get.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "a new program that imports `nish:unsafe`, which the reference compiler does not have and refuses as an unknown builtin module",
-  },
-  {
-    program: "docs/cookbook/unsafe-wrapping.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "a new program that imports `nish:unsafe`, which the reference compiler does not have and refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/ct_asm_aes.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "its indexing moved from `--unchecked-indexing` to `uncheckedGet` and `uncheckedSet` from `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/ct_asm_chacha20poly1305.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "its indexing moved from `--unchecked-indexing` to `uncheckedGet` and `uncheckedSet` from `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/ct_asm_k1_base64url.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "its indexing moved from `--unchecked-indexing` to `uncheckedGet` and `uncheckedSet` from `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/ct_asm_k1_ct.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "its indexing moved from `--unchecked-indexing` to `uncheckedGet` and `uncheckedSet` from `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/ct_asm_mac.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "its indexing moved from `--unchecked-indexing` to `uncheckedGet` and `uncheckedSet` from `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/ct_asm_p256.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "its indexing moved from `--unchecked-indexing` to `uncheckedGet` and `uncheckedSet` from `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/ct_asm_refused.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "its indexing moved from `--unchecked-indexing` to `uncheckedGet` and `uncheckedSet` from `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/ct_asm_x25519.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "its indexing moved from `--unchecked-indexing` to `uncheckedGet` and `uncheckedSet` from `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/link/crypto_aes/main.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "it imports a `tests/cases/ct_asm_*` copy whose indexing moved to `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/link/crypto_aes_f64/main.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "it imports a `tests/cases/ct_asm_*` copy whose indexing moved to `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/link/crypto_base64url_k1_copies/main.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "it imports a `tests/cases/ct_asm_*` copy whose indexing moved to `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/link/crypto_chacha20poly1305/main.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "it imports a `tests/cases/ct_asm_*` copy whose indexing moved to `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/link/crypto_chacha20poly1305_f64/main.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "it imports a `tests/cases/ct_asm_*` copy whose indexing moved to `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/link/crypto_ct_k1_copies/main.ts",
-    file: "exit",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "it imports a `tests/cases/ct_asm_*` copy whose indexing moved to `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/cases/secret_wipe.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "a new program: `nish:secret`'s `secret`, `expose`, `exposeWith` and `wipe`, which the reference compiler refuses because it has no `nish:secret`",
-  },
-  {
-    program: "tests/cases/secret_flow.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "a new program: the ownership shapes `nish:secret` accepts, which the reference compiler refuses because it has no `nish:secret`",
-  },
-  {
-    program: "tests/cases/secret_wipe_o2.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "a new program: a `wipe` of bytes nothing reads again, whose volatile store survives `opt -O2`; the reference compiler refuses it because it has no `nish:secret`",
-  },
-  {
-    program: "docs/cookbook/builtin-secret.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "a new cookbook entry for `nish:secret`, which the reference compiler refuses because it has no `nish:secret`",
-  },
-  {
-    program: "tests/link/crypto_p256/main.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
-  },
-  {
-    program: "tests/link/crypto_p256_f64/main.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
-  },
-  {
-    program: "tests/link/crypto_x25519/main.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
-  },
-  {
-    program: "tests/link/crypto_x25519_f64/main.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
-  },
-  {
-    program: "tests/link/crypto_x509/main.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
-  },
-  {
-    program: "tests/link/crypto_x509_audit/main.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
-  },
-  {
-    program: "tests/link/crypto_x509_f64/main.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
-  },
-  {
-    program: "tests/link/crypto_x509_malformed/main.ts",
-    changelog: "key material the checker keeps in and wipes",
-    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
-  },
-  {
-    program: "tests/cases/wipe_bytes.ts",
-    changelog: "A secure-wipe builtin the optimiser cannot drop",
-    why: "it calls `secureZero`, which this tree adds and the reference does not know, so the reference refuses it with `Unknown function` and this tree lowers it to a call to `nish_wipe`",
-  },
-  {
-    program: "docs/cookbook/builtin-wipe.ts",
-    changelog: "A secure-wipe builtin the optimiser cannot drop",
-    why: "the cookbook entry for `secureZero`, which this tree adds and the reference refuses with `Unknown function`",
-  },
-  {
-    program: "tests/cases/net_tcp_connect.ts",
-    file: "exit",
-    changelog: "Nish:net tcpConnect — the client half of TCP",
-    why: "a new program: a Nish client and server in one loop through `tcpConnect` and `connectResult`, which the reference compiler refuses because it has neither builtin",
-  },
-  {
-    program: "tests/cases/net_tcp_connect_import.ts",
-    file: "exit",
-    changelog: "Nish:net tcpConnect — the client half of TCP",
-    why: "a new program: `tcpConnect` and `connectResult` imported from `nish:net`, which the reference compiler refuses because the module exports neither",
-  },
-  {
-    program: "docs/cookbook/runtime-prelude.ts",
-    file: "runtime-prelude.ll",
-    changelog: "A secure-wipe builtin the optimiser cannot drop",
-    why: "`--runtime-decls` declares every runtime function, and this tree's runtime gains `nish_wipe`, so the prelude has one more `declare` line and every line after it moves down one",
-  },
-  {
-    program: "docs/cookbook/runtime-prelude.ts",
-    file: "runtime-prelude.ll",
-    changelog: "Nish:net tcpConnect — the client half of TCP",
-    why: "`--runtime-decls` declares every runtime function in table order, and the table gains `nish_tcp_connect` and `nish_connect_result` after `nish_net_close`, which moves every declaration after them",
-  },
-  {
-    program: "tests/cases/owner_checks.ts",
-    changelog: "for the owner checks, and a cryptographic run-cache name",
-    why: "it calls `geteuid`, `lstatOwnerModeSync` and `isExecutableSync`, which this tree adds and the reference does not know, so the reference refuses it with `Unknown function` and this tree lowers each to one call into runtime-host.c",
-  },
-  {
-    program: "docs/cookbook/builtin-owner.ts",
-    changelog: "for the owner checks, and a cryptographic run-cache name",
-    why: "the cookbook entry for the owner builtins, which this tree adds and the reference refuses with `Unknown function`",
-  },
-  {
-    program: "tests/link/net_tls_rfc8448/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: RFC 8448 §3 replayed through the server, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_rfc8448_f64/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: RFC 8448 §3 replayed through the server under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_ecdsa/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: a P-256-signed handshake under the three suites, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_ecdsa_f64/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: a P-256-signed handshake under the three suites, under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_ext_alpn/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: ALPN negotiation, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_ext_sni/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: server_name read and acknowledged, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_ext_quic/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: quic_transport_parameters carried for QUIC only, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_ext_hrr/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: HelloRetryRequest and its transcript, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_ext_refusals/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: every refusal as its alert, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_ext_f64/main.ts",
-    file: "exit",
-    changelog: "the TLS 1.3 server handshake",
-    why: "a new program: the extension, retry and refusal checks under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls",
-  },
-  {
-    program: "tests/link/net_tls_record_rfc8448/main.ts",
-    file: "exit",
-    changelog: "records over TCP (WP34 T2)",
-    why: "a new program: RFC 8448 §3's records sealed, opened and replayed through the record server, which the reference compiler refuses because its std/ has no nish/net/tls/record",
-  },
-  {
-    program: "tests/link/net_tls_record_refusals/main.ts",
-    file: "exit",
-    changelog: "records over TCP (WP34 T2)",
-    why: "a new program: every refusal of the record layer and the record server as its alert, which the reference compiler refuses because its std/ has no nish/net/tls/record",
-  },
-  {
-    program: "tests/link/net_tls_client_handshake/main.ts",
-    file: "exit",
-    changelog: "The sans-IO TLS 1.3 client handshake and record layer",
-    why: "a new program: the TLS client's handshake against the TLS server, which the reference compiler refuses because its std/ has no nish/net/tls/client",
-  },
-  {
-    program: "tests/link/net_tls_client_record/main.ts",
-    file: "exit",
-    changelog: "The sans-IO TLS 1.3 client handshake and record layer",
-    why: "a new program: the record client against the record server, every suite, a retry, KeyUpdate and close_notify, which the reference compiler refuses because its std/ has no nish/net/tls/record-client",
-  },
-  {
-    program: "tests/link/net_tls_client_refusals/main.ts",
-    file: "exit",
-    changelog: "The sans-IO TLS 1.3 client handshake and record layer",
-    why: "a new program: the server flights the TLS client refuses, each with its alert, which the reference compiler refuses because its std/ has no nish/net/tls/client",
-  },
-  {
-    program: "tests/link/net_tls_client_tcp/main.ts",
-    file: "exit",
-    changelog: "The TLS client over TCP, server authentication and a blocking connect",
-    why: "a new program: TlsTcpClient against TlsTcpServer over loopback, tlsConnect's failures and the CertificateVerify check, which the reference compiler refuses because its std/ has no nish/net/tls-tcp client or nish/net/tls/verify",
-  },
-  {
-    program: "tests/link/net_tls_record_f64/main.ts",
-    file: "exit",
-    changelog: "records over TCP (WP34 T2)",
-    why: "a new program: the record layer's RFC 8448 and refusal checks under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls/record",
-  },
-  {
-    program: "tests/link/net_tls_record_tcp/main.ts",
-    file: "exit",
-    changelog: "records over TCP (WP34 T2)",
-    why: "a new program: a Nish client against the TLS-over-TCP carrier over loopback, which the reference compiler refuses because its std/ has no nish/net/tls-tcp",
-  },
-  {
-    program: "tests/link/net_tls_record_tcp_f64/main.ts",
-    file: "exit",
-    changelog: "records over TCP (WP34 T2)",
-    why: "a new program: the TLS-over-TCP loopback checks under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls-tcp",
-  },
-  ...declareMoved(
-    CG8_MOVED,
-    "CG-8",
-    "a string concatenation, a file read or write, or a call that reaches one is no longer `willreturn`, because each can exit or block"
+      file,
+      changelog,
+      why,
+    }))
+  })
+
+/**
+ * Output differences that are decided rather than broken, each with the words
+ * `CHANGELOG.md` must carry before this run can go green. Shape:
+ *
+ *   {
+ *     program: "tests/cases/str_concat.ts",  // omit only with a `file` or an `undo`
+ *     file: "str_concat.ll",                 // omit for every file of it
+ *     changelog: "string concatenation now calls `nish_str_concat2`",
+ *     why: "one sentence somebody is willing to sign, in their own words",
+ *   }
+ *
+ * `changelog` is matched against `CHANGELOG.md` and against the pending
+ * release section (`pendingNotes`), so for an unreleased change it is the
+ * pull request's subject as the generator renders it: the scope dropped, the
+ * first letter raised, and no `(#N)`.
+ *
+ * A declaration is deliberately narrow — one program, one file — so that the
+ * *next* difference in the same place is still reported. A change that moves
+ * the IR of the whole corpus names the programs it moves, or carries an `undo`
+ * that turns the candidate's file back into the reference's and so excuses
+ * nothing else; an entry naming neither a program, a file nor an `undo` would
+ * excuse every difference, and `selfCheckDeclarations` refuses it. The list is
+ * for one release: the reseed that ships a change makes its entries match
+ * nothing, the full run says so, and they go.
+ */
+const DNS_FALLBACK =
+  "A DNS search fallback no longer masks a later NODATA, and resolveHost keeps an answered family at its timeout"
+const dnsFallback = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: DNS_FALLBACK, why }))
+  )
+const ASYNC_FETCH = "Async fetch speaks https and resolves names without blocking"
+const asyncFetch = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
+  )
+const RESULT_LOOP =
+  "Keep a Result made in a loop body and stored in an outer let alive past the pass's arena rewind"
+const resultLoop = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: RESULT_LOOP, why }))
+  )
+const AWAIT_ALL_LANES = "Give each awaitAll lane its own region"
+const awaitAllLanes = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: AWAIT_ALL_LANES, why }))
+  )
+const PAGE_MATH = "transcendentals"
+const pageMath = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: PAGE_MATH, why }))
+  )
+const SERVE_CANCEL = "Cancel a task on hang-up, deadline or shutdown"
+const serveCancel = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
+  )
+const DATE_SINGLETON = "Refuse a response that carries two Date fields"
+const dateSingleton = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
+  )
+const MSS_UNSET = "explicitly set enc.mss wins over the socket MSS"
+const mssUnset = (why, moved) =>
+  moved.map((program) => ({ program, file: "http-compress.ll", changelog: MSS_UNSET, why }))
+const DECLARED = [
+  // std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd.
+  {
+    file: "text.ll",
+    changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
+    why: "std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd, so the module every importer of nish/text writes has new functions and renumbered string constants; no importer's own module moves",
+  },
+  {
+    program: "tests/link/std_text_camel_case/main.ts",
+    file: "exit",
+    changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
+    why: "the program imports asciiLower, asciiUpper and split from nish/text, which the 0.37.0 seed's std/text.ts does not export, so only the candidate compiles it",
+  },
+  // Stage 5a: an --emit-dts compile is a page module, so Math.sin, cos, exp,
+  // log, pow and a float % in it call std/math.ts's copies (`@nish.<name>F64`)
+  // instead of an intrinsic or `frem` a page could not link.
+  ...pageMath(
+    "on a page module (here the --emit-dts compile) Math.sin, cos, exp, log, pow and float % call copies of std/math.ts instead of an LLVM intrinsic or frem",
+    {
+      "bench/math.ts": ["math.ll"],
+      "bench/pg-batch-clock.ts": ["pg-batch-clock.ll"],
+      "examples/tasks.ts": ["tasks.ll"],
+      "src/annotations.ts": ["constants.ll", "expressions.ll"],
+      "src/arena-report.ts": ["constants.ll", "expressions.ll"],
+      "src/arrays.ts": ["constants.ll", "expressions.ll"],
+      "src/assignment.ts": ["constants.ll", "expressions.ll"],
+      "src/async-check.ts": ["constants.ll", "expressions.ll"],
+      "src/attributes.ts": ["constants.ll", "expressions.ll"],
+      "src/bounds.ts": ["constants.ll", "expressions.ll"],
+      "src/break-game.ts": ["break-game.ll", "break-levels.ll"],
+      "src/break-intro.ts": ["break-game.ll", "break-levels.ll", "break-menu.ll"],
+      "src/break-levels.ts": ["break-levels.ll"],
+      "src/break-menu.ts": ["break-menu.ll"],
+      "src/break-sound.ts": ["break-game.ll", "break-levels.ll", "break-sound.ll"],
+      "src/break.ts": ["break-game.ll", "break-levels.ll", "break-menu.ll", "break-sound.ll"],
+      "src/build-cache.ts": ["constants.ll", "expressions.ll"],
+      "src/builtins.ts": ["constants.ll", "expressions.ll"],
+      "src/capability-report.ts": ["constants.ll", "expressions.ll"],
+      "src/checker.ts": ["constants.ll", "expressions.ll"],
+      "src/compilation.ts": ["constants.ll", "expressions.ll"],
+      "src/compile.ts": [
+        "break-game.ll",
+        "break-levels.ll",
+        "break-menu.ll",
+        "break-sound.ll",
+        "constants.ll",
+        "expressions.ll",
+      ],
+      "src/constants.ts": ["constants.ll", "expressions.ll"],
+      "src/context.ts": ["constants.ll", "expressions.ll"],
+      "src/debug.ts": ["constants.ll", "expressions.ll"],
+      "src/declarations.ts": ["constants.ll", "expressions.ll"],
+      "src/dump-checked.ts": ["constants.ll", "expressions.ll"],
+      "src/dump.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-arrays.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-async.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-builtins.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-classes.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-control.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-json.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-map.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-ops.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-parallel.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-region.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-result.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-secret.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-shm-window.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-strings.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-ts-control.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-ts-edits.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-ts-numbers.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-ts-records.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-ts-storage.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-ts-strings.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-ts.ts": ["constants.ll", "expressions.ll"],
+      "src/emit-util.ts": ["constants.ll", "expressions.ll"],
+      "src/emit.ts": ["constants.ll", "expressions.ll"],
+      "src/escape.ts": ["constants.ll", "expressions.ll"],
+      "src/expressions.ts": ["constants.ll", "expressions.ll"],
+      "src/fix.ts": ["constants.ll", "expressions.ll"],
+      "src/fusion.ts": ["constants.ll", "expressions.ll"],
+      "src/generics.ts": ["constants.ll", "expressions.ll"],
+      "src/handles.ts": ["constants.ll", "expressions.ll"],
+      "src/inline-arrays.ts": ["constants.ll", "expressions.ll"],
+      "src/interop-abi.ts": ["constants.ll", "expressions.ll"],
+      "src/interop-dts.ts": ["constants.ll", "expressions.ll"],
+      "src/interop-header.ts": ["constants.ll", "expressions.ll"],
+      "src/interop-napi.ts": ["constants.ll", "expressions.ll"],
+      "src/interop-wasm.ts": ["constants.ll", "expressions.ll"],
+      "src/json-typed.ts": ["constants.ll", "expressions.ll"],
+      "src/kernels.ts": ["constants.ll", "expressions.ll"],
+      "src/loop-flow.ts": ["constants.ll", "expressions.ll"],
+      "src/members.ts": ["constants.ll", "expressions.ll"],
+      "src/module-storage.ts": ["constants.ll", "expressions.ll"],
+      "src/options.ts": ["constants.ll", "expressions.ll"],
+      "src/panics.ts": ["constants.ll", "expressions.ll"],
+      "src/parallel.ts": ["constants.ll", "expressions.ll"],
+      "src/portability-numbers.ts": ["constants.ll", "expressions.ll"],
+      "src/portability-records.ts": ["constants.ll", "expressions.ll"],
+      "src/portability-strings.ts": ["constants.ll", "expressions.ll"],
+      "src/portability.ts": ["constants.ll", "expressions.ll"],
+      "src/program.ts": ["constants.ll", "expressions.ll"],
+      "src/ranges.ts": ["constants.ll", "expressions.ll"],
+      "src/region-check.ts": ["constants.ll", "expressions.ll"],
+      "src/region-rules.ts": ["constants.ll", "expressions.ll"],
+      "src/result.ts": ["constants.ll", "expressions.ll"],
+      "src/run-cache.ts": ["constants.ll", "expressions.ll"],
+      "src/secret.ts": ["constants.ll", "expressions.ll"],
+      "src/shm-window.ts": ["constants.ll", "expressions.ll"],
+      "src/simd.ts": ["constants.ll", "expressions.ll"],
+      "src/statements.ts": ["constants.ll", "expressions.ll"],
+      "src/structs.ts": ["constants.ll", "expressions.ll"],
+      "src/tbaa.ts": ["constants.ll", "expressions.ll"],
+      "src/validator.ts": ["constants.ll", "expressions.ll"],
+      "src/visibility.ts": ["constants.ll", "expressions.ll"],
+      "src/watch.ts": ["constants.ll", "expressions.ll"],
+      "tests/cases/arr_sort_cmp_f64.ts": ["arr_sort_cmp_f64.ll"],
+      "tests/cases/arr_sort_edge.ts": ["arr_sort_edge.ll"],
+      "tests/cases/f32_arith.ts": ["f32_arith.ll"],
+      "tests/cases/map_iter_compaction_deferred.ts": ["map_iter_compaction_deferred.ll"],
+      "tests/cases/math_intrinsics.ts": ["math_intrinsics.ll"],
+      "tests/cases/math_split_member.ts": ["math_split_member.ll"],
+      "tests/cases/math_std_edges.ts": ["math_std_edges.ll"],
+      "tests/cases/math_tan.ts": ["math_tan.ll"],
+      "tests/cases/math_ulp_samples.ts": ["math_ulp_samples.ll"],
+      "tests/cases/wasm_math_exp.ts": ["wasm_math_exp.ll"],
+      "tests/cases/wasm_math_rem.ts": ["wasm_math_rem.ll"],
+      "tests/differential/corpus/f32_round.ts": ["f32_round.ll"],
+      "tests/differential/corpus/f64_arith.ts": ["f64_arith.ll"],
+      "tests/differential/corpus/f64_format.ts": ["f64_format.ll"],
+      "tests/differential/corpus/f64_libm.ts": ["f64_libm.ll"],
+      "tests/differential/corpus/f64_math.ts": ["f64_math.ll"],
+      "tests/differential/corpus/f64_pow_spec.ts": ["f64_pow_spec.ll"],
+      "tests/link/break_intro/main.ts": ["break-game.ll", "break-levels.ll", "break-menu.ll"],
+      "tests/link/break_menu/main.ts": ["break-menu.ll"],
+      "tests/link/break_settings/main.ts": ["break-menu.ll"],
+      "tests/link/break_sound/main.ts": ["break-game.ll", "break-levels.ll", "break-sound.ll"],
+    }
   ),
-  ...declareMoved(
-    CG4_MOVED,
-    "CG-4",
-    "a recursive function, or a caller of one, is no longer `willreturn`: nothing proves that a recursion ends"
+  ...pageMath(
+    "the reference's std/math.ts does not export the six functions the program imports from nish/math, so only the candidate compiles it",
+    {
+      "tests/cases/wasm_math_std.ts": ["exit"],
+    }
   ),
-  ...declareMoved(
-    CG2_MOVED,
-    "CG-2",
-    "its `new Array(n)` takes an `i32` `n`, which is now compared against the length limit, so a negative one panics with `array length out of range`"
-  ),
-  ...declareMoved(
-    CG3_MOVED,
-    "CG-3",
-    "it calls `join`, whose allocation size is now selected against 2^31 - 1 bytes so that a longer result fails as an allocation does"
-  ),
-  ...declareMoved(
-    CG10_MOVED,
-    "CG-10",
-    "a new program: its compound element assignments resize the array on their right side, and the reference stores into the old block"
+  // WP49 stage 5, part 7: `Http1Connection` gains `ended()` and
+  // `HttpHandler` `hungUp()`, so every program that reaches
+  // std/net/http1-server.ts or std/net/handler.ts lays both out again.
+  ...serveCancel(
+    "Http1Connection gains ended() and HttpHandler hungUp(), so serve can cancel a task whose client hung up; both modules' IR moves",
+    {
+      "examples/http-app/main.ts": ["app.ll", "handler.ll", "http1-server.ll", "main.ll"],
+      "examples/prefork-server.ts": ["http1-server.ll", "prefork-server.ll"],
+      "examples/relay/main.ts": ["http1-server.ll"],
+      "bench/http-app-carrier.ts": ["http-app-carrier.ll", "http1-server.ll"],
+      "bench/http1-request/main.ts": ["http1-server.ll", "main.ll"],
+      "bench/http1-server.ts": ["handler.ll", "http1-server.ll", "std_net_http1-server.ll"],
+      "bench/techempower/main.ts": ["http1-server.ll", "main.ll", "server.ll"],
+      "tests/link/net_handler/main.ts": ["handler.ll", "http1-server.ll", "main.ll"],
+      "tests/link/net_handler_descriptors/main.ts": ["handler.ll", "http1-server.ll", "main.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_handler_short/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http1_server/main.ts": [
+        "checks.ll",
+        "conn.ll",
+        "harness.ll",
+        "http1-server.ll",
+        "main.ll",
+      ],
+      "tests/link/net_http1_server_bad_config/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_f64/main.ts": [
+        "checks.ll",
+        "http1-server.ll",
+        "net_http1_server_harness.ll",
+      ],
+      "tests/link/net_http1_server_feed_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_send_body/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http1_server_write_window/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/net_http2_bad_config_tls/main.ts": ["http1-server.ll"],
+      "tests/link/net_http2_tls/main.ts": ["http1-server.ll"],
+      "tests/link/net_http2_tls_f64/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_bad_body_chunk/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_bad_config/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_bad_credit/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_bad_local_limit/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_bad_uni_limit/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_bad_write_chunk/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_ecn/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_ecn_f64/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_errors/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_errors_f64/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_f64/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_server/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_server_bad_config/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_server_f64/main.ts": ["http1-server.ll"],
+      "tests/link/net_http3_write_window/main.ts": ["http1-server.ll"],
+      "tests/link/net_http_app/main.ts": ["app.ll", "handler.ll", "http1-server.ll", "main.ll"],
+      "tests/link/net_http_date/main.ts": ["http1-server.ll"],
+      "tests/link/net_http_date_f64/main.ts": ["http1-server.ll"],
+      "tests/link/net_interop_server/main.ts": [
+        "checks.ll",
+        "cli.ll",
+        "client.ll",
+        "http1-server.ll",
+        "load.ll",
+        "net_http1_server_checks.ll",
+        "net_http1_server_harness.ll",
+        "server.ll",
+      ],
+      "tests/link/net_interop_server_f64/main.ts": [
+        "cli.ll",
+        "http1-server.ll",
+        "net_http1_server_checks.ll",
+        "net_http1_server_harness.ll",
+        "net_interop_server_checks.ll",
+        "net_interop_server_client.ll",
+        "net_interop_server_server.ll",
+      ],
+      "tests/link/net_loopback/main.ts": [
+        "apps.ll",
+        "carrier-http1.ll",
+        "carrier-http2.ll",
+        "carrier-tls.ll",
+        "carrier-websocket.ll",
+        "http1-server.ll",
+        "net_http1_server_harness.ll",
+        "tcp.ll",
+        "tls-client.ll",
+      ],
+      "tests/link/net_loopback_f64/main.ts": [
+        "apps.ll",
+        "carrier-http1.ll",
+        "carrier-http2.ll",
+        "carrier-tls.ll",
+        "carrier-websocket.ll",
+        "http1-server.ll",
+        "net_http1_server_harness.ll",
+        "tcp.ll",
+        "tls-client.ll",
+      ],
+      "tests/link/net_quic_server_wipes/main.ts": ["http1-server.ll"],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_bad_hello/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_bad_idle/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_bad_path/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_bad_per_peer/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_bad_pool/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_bad_rate/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_bad_sessions/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_bad_spare/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_bad_stats/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_f64/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_forged/main.ts": ["http1-server.ll"],
+      "tests/link/net_relay_soak/main.ts": ["http1-server.ll"],
+      "tests/link/net_upstream/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "upstream.ll"],
+      "tests/link/net_upstream_release/main.ts": ["handler.ll", "http1-server.ll", "main.ll", "upstream.ll"],
+      "tests/link/net_webtransport/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_bad_layer/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_close_window/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_f64/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_stream_window/main.ts": ["http1-server.ll"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["http1-server.ll"],
+      "tests/link/std_http1_end_head/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/std_http1_mss/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/std_http_compress/main.ts": ["http1-server.ll", "main.ll"],
+      "tests/link/std_postgres_carrier/main.ts": [
+        "handler.ll",
+        "http1-server.ll",
+        "main.ll",
+        "postgres-carrier.ll",
+      ],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": [
+        "handler.ll",
+        "http1-server.ll",
+        "main.ll",
+        "postgres-carrier.ll",
+      ],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": [
+        "handler.ll",
+        "http1-server.ll",
+        "main.ll",
+        "postgres-carrier.ll",
+      ],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": [
+        "handler.ll",
+        "http1-server.ll",
+        "main.ll",
+        "postgres-carrier.ll",
+      ],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": [
+        "handler.ll",
+        "http1-server.ll",
+        "main.ll",
+        "postgres-carrier.ll",
+      ],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": [
+        "handler.ll",
+        "http1-server.ll",
+        "main.ll",
+        "postgres-carrier.ll",
+      ],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": [
+        "handler.ll",
+        "http1-server.ll",
+        "main.ll",
+        "postgres-carrier.ll",
+      ],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": [
+        "handler.ll",
+        "http1-server.ll",
+        "main.ll",
+        "postgres-carrier.ll",
+      ],
+      "tests/link/tfb_db/main.ts": [
+        "db-server.ll",
+        "handler.ll",
+        "http1-server.ll",
+        "main.ll",
+        "postgres-carrier.ll",
+      ],
+      "tests/link/tfb_entry/main.ts": ["bench_techempower_server.ll", "http1-server.ll", "main.ll"],
+    }
   ),
   {
-    program: "tests/link/net_quic_packet/main.ts",
+    program: "tests/link/net_fetch_async_deadline/main.ts",
     file: "exit",
-    changelog: "Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1)",
-    why: "a new program over the new `nish/net/quic-packet` module, which the released compiler's library does not have",
+    changelog: SERVE_CANCEL,
+    why: "the program imports cancelAfter from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
   },
   {
-    program: "tests/link/net_quic_packet_f64/main.ts",
+    program: "tests/link/net_serve_deadline/main.ts",
     file: "exit",
-    changelog: "Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1)",
-    why: "a new program over the new `nish/net/quic-packet` module, which the released compiler's library does not have",
+    changelog: SERVE_CANCEL,
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 5, part 7)",
   },
   {
-    program: "tests/link/net_quic_frame/main.ts",
+    program: "tests/link/net_serve_hangup/main.ts",
     file: "exit",
-    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
-    why: "a new program: every frame of RFC 9000 §19 read and written, which the released compiler refuses because its std/ has no nish/net/quic",
+    changelog: SERVE_CANCEL,
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 5, part 7)",
   },
   {
-    program: "tests/link/net_quic_frame_f64/main.ts",
+    program: "tests/link/net_serve_shutdown/main.ts",
     file: "exit",
-    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
-    why: "a new program: the frame checks under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic",
+    changelog: SERVE_CANCEL,
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 5, part 7)",
   },
   {
-    program: "tests/link/net_quic_conn_parts/main.ts",
+    program: "tests/link/tfb_async_entry/main.ts",
     file: "exit",
-    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
-    why: "a new program: transport parameters, ACK ranges and the connection-ID table, which the released compiler refuses because its std/ has no nish/net/quic",
+    changelog: "TechEmpower plaintext and json entry as serve handlers",
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 6, part 1)",
   },
   {
-    program: "tests/link/net_quic_conn_parts_f64/main.ts",
+    program: "tests/link/tfb_async_db/main.ts",
     file: "exit",
-    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
-    why: "a new program: the transport-parameter, ACK and connection-ID checks under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic",
+    changelog: "TechEmpower database entry on the async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 6, part 2)",
   },
   {
-    program: "tests/link/net_quic_conn/main.ts",
+    program: "tests/link/net_serve_server_field/main.ts",
     file: "exit",
-    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
-    why: "a new program: the QUIC connection's handshakes, data path and refusals, which the released compiler refuses because its std/ has no nish/net/quic",
+    changelog: "TechEmpower plaintext and json entry as serve handlers",
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 6, part 1)",
   },
   {
-    program: "tests/link/net_quic_conn_f64/main.ts",
+    program: "tests/link/net_serve_server_panic/main.ts",
     file: "exit",
-    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
-    why: "a new program: the QUIC connection checks under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic",
+    changelog: "TechEmpower plaintext and json entry as serve handlers",
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 6, part 1)",
   },
   {
-    program: "tests/link/net_quic_conn_replay/main.ts",
+    program: "tests/link/std_postgres_async_cancel/main.ts",
     file: "exit",
-    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
-    why: "a new program: an aioquic handshake and echo replayed over loopback, which the released compiler refuses because its std/ has no nish/net/quic",
+    changelog: SERVE_CANCEL,
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, so only the candidate compiles the program (WP49 stage 5, part 7)",
   },
   {
-    program: "tests/link/net_quic_conn_replay_f64/main.ts",
+    program: "tests/cases/async_cancel.ts",
     file: "exit",
-    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
-    why: "a new program: the aioquic replay under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic",
+    changelog: SERVE_CANCEL,
+    why: "the case imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
   },
   {
-    program: "tests/link/net_quic_lifecycle/main.ts",
+    program: "docs/cookbook/async-cancel.ts",
     file: "exit",
-    changelog:
-      "Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
-    why: "a new program: Version Negotiation, Retry tokens, stateless resets, the idle timeout and key update, which the released compiler refuses because its std/ has no nish/net/quic-listener",
+    changelog: SERVE_CANCEL,
+    why: "the cookbook entry imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
   },
   {
-    program: "tests/link/net_quic_lifecycle_f64/main.ts",
+    program: "tests/cases/async_spawn_handler_reach.ts",
     file: "exit",
-    changelog:
-      "Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
-    why: "a new program: the lifecycle checks under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic-listener",
+    changelog: "reaches its spawner's state and awaits the async Postgres pool",
+    why: "the 0.37.0 seed refuses a task call's argument the answer cannot reach; the candidate leaves it out, so only the candidate compiles the case (WP49 stage 5, part 8)",
   },
   {
-    program: "tests/link/net_quic_lifecycle_replay/main.ts",
+    program: "tests/link/net_serve_pg/main.ts",
     file: "exit",
-    changelog:
-      "Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
-    why: "a new program: five aioquic scenarios replayed over loopback, which the released compiler refuses because its std/ has no nish/net/quic-listener",
+    changelog: "reaches its spawner's state and awaits the async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, so only the candidate compiles the program (WP49 stage 5, part 8)",
   },
-  {
-    program: "tests/link/net_quic_lifecycle_replay_f64/main.ts",
-    file: "exit",
-    changelog:
-      "Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
-    why: "a new program: the aioquic lifecycle replay under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic-listener",
-  },
-  ...declareMoved(
-    DENY_PANICS_MOVED,
-    "--deny-panics and noPanic refuse every remaining panic site",
-    "a divisor proven to be neither 0 nor -1, or a `pop` behind a test that its array holds an element, is left unchecked, so its `div.fail` or `pop.empty` block is gone"
+  // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
+  // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
+  // program that reaches them. These come first: dns.ll also carries this
+  // PR's `dnsLoadSystem` change, and the first entry that matches is the one
+  // reported, so #1304's line is never swallowed by the async fetch line.
+  ...dnsFallback(
+    "#1304 adds settle to DnsResolver and DnsClient so a search fallback waits out a NODATA, which moves both DNS modules' IR",
+    {
+      "examples/http-get-json.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_http_fetch/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_http_fetch_f64/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_outbound/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_outbound_f64/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_upstream/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/net_upstream_release/main.ts": ["dns-resolver.ll", "dns.ll"],
+      "tests/link/std_dns/main.ts": ["dns-resolver.ll", "dns.ll", "main.ll"],
+      "tests/link/std_dns_caps/main.ts": ["dns-resolver.ll", "dns.ll", "main.ll"],
+      "tests/link/std_dns_soak/main.ts": ["dns-resolver.ll", "dns.ll", "main.ll"],
+    }
   ),
-  ...declareMoved(
-    DENY_PANICS_NEW,
-    "--deny-panics and noPanic refuse every remaining panic site",
-    "a new program: it is compiled under `--deny-panics` or a `noPanic` list, which the reference compiler does not read"
+  ...dnsFallback(
+    "#1304's test calls DnsResolver.settle, a method the reference's std/net/dns-resolver.ts does not have, so only the candidate compiles it",
+    {
+      "tests/link/std_dns_resolver/main.ts": ["exit"],
+    }
   ),
-  ...declareMoved(
-    CAPABILITY_POLICY_NEW,
-    "a program that reaches a capability its policy does not grant",
-    "a new program: it is compiled under `--allow`, or its root `package.json` carries a `capabilities` policy, which the reference compiler does not read"
+  // `HttpOptions` gains `dns` and `HttpClientConn` the TLS session, so every
+  // program that reaches std/net/fetch.ts lays both out again. dns.ts's
+  // `dnsLoadSystem` change lands in dns.ll, which #1304 moves too; that file
+  // is declared above under #1304's line.
+  ...asyncFetch(
+    "async fetch speaks https and takes a DNS config, so HttpOptions and HttpClientConn grow fields",
+    {
+      "examples/http-get-json.ts": ["fetch.ll", "http-get-json.h", "http-get-json.ll"],
+      "tests/link/net_fetch_async/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_http_fetch/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_tls/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_outbound/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_outbound_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+    }
   ),
-  ...declareMoved(
-    QPACK_NEW,
-    "QPACK with the static table and dynamic capacity 0",
-    "a new program: it imports `nish/net/qpack`, which the reference compiler's standard library does not have"
-  ),
-  ...declareMoved(
-    ROUTER_NEW,
-    "HTTP router in nish/net/router",
-    "a new program: it imports `nish/net/router`, which the reference compiler's standard library does not have"
-  ),
-  ...declareMoved(
-    HTTP_MODULES_RENAMED,
-    "Name the HTTP clients fetchSync and the codecs http1-codec",
-    "it reaches `nish/net/fetch`, `nish/net/http1-codec` or `nish/net/http1-client-codec`, which the reference compiler's standard library has under the names `nish/net/http-client`, `nish/net/http1` and `nish/net/http1-client`"
+  ...asyncFetch(
+    "the program sets HttpOptions.dns, a field the reference's std/net/fetch.ts does not have, so only the candidate compiles it",
+    {
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["exit"],
+    }
   ),
   {
-    program: "tests/cases/str_index_of_from.ts",
-    changelog: "start position in s.indexOf",
-    why: "it calls `s.indexOf(sub, from)`, which the reference refuses with `expects exactly 1 argument` and this tree lowers to a clamp and a call to `nish_str_index_of_from`",
+    program: "tests/cases/async_spawn_fn_arg.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
   },
   {
-    program: "tests/cases/str_index_of_from_port.ts",
-    changelog: "start position in s.indexOf",
-    why: "it calls `s.indexOf(sub, from)` to pin NL8001 on the new form, which the reference refuses with `expects exactly 1 argument`",
+    program: "tests/cases/async_spawn_shared.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
   },
   {
-    program: "docs/cookbook/str-index-of-from.ts",
-    changelog: "start position in s.indexOf",
-    why: "the cookbook entry for `s.indexOf(sub, from)`, which the reference refuses with `expects exactly 1 argument`",
+    program: "tests/link/async_spawn_shared_outlives/main.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
   },
   {
-    program: "docs/cookbook/runtime-prelude.ts",
-    file: "runtime-prelude.ll",
-    changelog: "start position in s.indexOf",
-    why: "`--runtime-decls` declares every runtime function in table order, and the table gains `nish_str_index_of_from` after `nish_str_index_of`, which moves every declaration after it",
+    program: "tests/cases/async_await_all_arrays.ts",
+    file: "exit",
+    changelog: "awaitAlls whose lanes return arrays no longer crash the compiler",
+    why: "the 0.37.0 seed lifts an `a[0]` header load above the `awaitAll` that binds `a` in a loop and stops with an internal compiler error (#1326)",
   },
   {
-    program: "tests/cases/cg_sec_hoist_new_resize.ts",
-    changelog: "Do not hoist a loop's array header across a new whose constructor resizes it",
-    why: "the case for CG-11 (#435): `whileLoop` reloads `len` and `data` every pass, because `new P(xs)` runs a constructor that pushes, where the reference hoisted them; and `forOfGrows`, whose `new R(xs)` pushes on every pass, loses the `willreturn` the reference gave it; and `compoundKeeps`, whose `new Q(xs)` cannot move `xs`, stores into the slot it read where the reference checked the index and took the address a second time",
+    program: "tests/link/std_postgres_async/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
   },
   {
-    changelog: "Harden every native binary",
-    why: 'every native module carries the control-flow and stack-clash module flags, numbered last, and every definition `"probe-stack"="inline-asm"`; `undo` removes exactly those, so a file that differs in anything else is still a difference',
-    // An arrow, because `withoutHardening` is defined further down.
-    undo: (text) => withoutHardening(text),
+    program: "tests/link/std_postgres_async_flat/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
   },
-  // Last, because it covers every program and a narrower entry above must
-  // still be the one a difference is reported under.
   {
-    changelog: "Make signed integer overflow a checked panic by default",
-    why: "every signed `+ - *`, negation and step the compiler cannot prove fits is now `llvm.s*.with.overflow` and a branch to `nish_panic_overflow`, and one it can is `nsw` beside its proof, where the reference flagged every one `nsw` unproven",
+    program: "tests/link/std_postgres_async_caps_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
   },
+  {
+    program: "tests/link/std_postgres_async_double_release_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_release_closed_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_release_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "tests/link/std_postgres_async_size_panic/main.ts",
+    file: "exit",
+    changelog: "async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, which this release adds, so only the candidate compiles the program (WP49 stage 5, part 5)",
+  },
+  {
+    program: "docs/cookbook/async-spawn-shared.ts",
+    file: "exit",
+    changelog: "spawned task may reach the objects its spawner owns",
+    why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
+  },
+  {
+    program: "tests/link/net_serve/main.ts",
+    file: "exit",
+    changelog: "one task and one region per request",
+    why: "`nish/net/serve` is new in this release, so the 0.37.0 seed's standard library has no such module (WP49 stage 5, part 4)",
+  },
+  {
+    program: "tests/link/net_serve_pipelined_flat/main.ts",
+    file: "exit",
+    changelog: "one task and one region per request",
+    why: "`nish/net/serve` is new in this release, so the 0.37.0 seed's standard library has no such module (WP49 stage 5, part 4)",
+  },
+  // #899: a loop pass now keeps its arena scope where a register `Result`
+  // leaves it, so these loops gain the pass's mark and rewind.
+  ...resultLoop(
+    "a loop pass keeps its rewind when the Result it builds is packed into a register or returned, so these loops gain a pass scope",
+    {
+      "tests/cases/result_loop_outer_let.ts": ["result_loop_outer_let.ll"],
+      "tests/cases/result_loop_payloads.ts": ["result_loop_payloads.ll"],
+      "tests/cases/result_loop_return_alloc.ts": ["result_loop_return_alloc.ll"],
+    }
+  ),
+  // WP49 stage 5: an awaitAll member that waits runs in a region of its own,
+  // so every function holding an awaitAll of a suspending call gains a lane
+  // slot per member, the region calls and the lane poll.
+  ...awaitAllLanes(
+    "an awaitAll member that waits gets a region its poll enters and adopts, so each awaiting function gains lane slots and region calls",
+    {
+      "tests/cases/async_await_all.ts": ["async_await_all.ll"],
+      "tests/cases/async_await_all_lanes_large.ts": ["async_await_all_lanes_large.ll"],
+      "tests/link/async_await_all_lanes/main.ts": ["lib.ll", "main.ll"],
+      "tests/link/async_await_all_retain/main.ts": ["main.ll"],
+      "tests/link/async_await_all_small/main.ts": ["main.ll"],
+      "tests/link/async_across_modules/main.ts": ["main.ll"],
+      "docs/cookbook/async-await-all.ts": ["async-await-all.ll"],
+      "docs/cookbook/runtime-prelude.ts": ["runtime-prelude.ll"],
+    }
+  ),
+  {
+    changelog: "Strings cross between a wasm module and its page",
+    why: "the --emit-header comment names the three core runtime files a C caller links, since runtime.c alone no longer defines nish_str_new",
+    undo: (text) => withoutStage4Header(text),
+  },
+  {
+    changelog: "Strings cross between a wasm module and its page",
+    why: "the --emit-dts comments say a string result now crosses to the page and how a string argument is passed instead",
+    undo: (text) => withoutStage4Dts(text),
+  },
+  ...declareStringExports(
+    STAGE4_STRING_EXPORTS,
+    "Strings cross between a wasm module and its page",
+    "a string result is decoded into a JS string, so a function returning one is exported to the page instead of listed as a comment"
+  ),
+  {
+    program: "tests/cases/deterministic_bits.ts",
+    file: "exit",
+    changelog: "the same float bits on every target",
+    why: "the case is compiled with --deterministic, a flag the seed does not know",
+  },
+  {
+    program: "tests/cases/deterministic_parse.ts",
+    file: "exit",
+    changelog: "the same float bits on every target",
+    why: "the case is compiled with --deterministic, a flag the seed does not know",
+  },
+  {
+    program: "tests/cases/host_import_string.ts",
+    file: "exit",
+    changelog: "Strings cross between a wasm module and its page",
+    why: "a host function may now take a string parameter, which the seed refused until stage 4",
+  },
+  {
+    program: "tests/cases/storage_lend_bytes.ts",
+    file: "exit",
+    changelog: "Strings cross between a wasm module and its page",
+    why: "byte module storage may now be lent to a u8[] or readonly u8[] parameter, which the seed refused until stage 4",
+  },
+  {
+    program: "tests/link/reject_host_manifest_absolute/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that is an absolute path is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_empty/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that is empty is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_missing/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that names no file is refused where package.json writes it (NL2696), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_not_string/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that is not a string is refused where package.json writes it (NL2694), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_escape/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  // Parent/child regions: the 0.38.0 seed's nish:region has no child or
+  // childWith, so only the candidate compiles these programs.
+  ...[
+    "tests/cases/region_child_builder_list.ts",
+    "tests/cases/region_child_chain.ts",
+    "tests/cases/region_child_fresh_list.ts",
+    "tests/cases/region_child_keep.ts",
+    "tests/cases/region_child_local_map.ts",
+    "tests/cases/region_child_map.ts",
+    "tests/cases/region_child_plain.ts",
+    "docs/cookbook/mem-region-child.ts",
+    "tests/link/region_child_stale/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "Add parent/child regions",
+    why: "the program imports child or childWith from nish:region, which the 0.38.0 seed does not have, so only the candidate compiles it",
+  })),
+  {
+    program: "tests/cases/arr_filter.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `filter` and `map` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_find_index.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `findIndex` on an array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_map.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `map` on an array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_map_f64.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `map` on an f64 array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_map_template.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case imports `map` from nish/array, a module the 0.37.0 seed's std does not have, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_slice.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `slice` and `map` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_slice_bounds.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `slice` and `map` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_slice_saturate.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `slice` on an array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_named_predicates.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case passes named functions to `some`, `every` and `findIndex` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/deny_panics_arr_map.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `map`, `filter`, `some`, `every` and `findIndex` on an array under `--deny-panics`, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/storage_lend_methods_after.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case lends module storage to functions that call `slice`, `map` and the other methods, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/storage_lend_methods_before.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case lends module storage to functions that call `slice`, `map` and the other methods, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_some_every.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `some` and `every` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "docs/cookbook/arr-map.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the cookbook entry calls `map` on an array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  // #696 item 1: httpFieldsCheckOutgoing and the HTTP/1.1 response writers
+  // refuse a second `date` field, so every program that reaches
+  // std/net/http-fields.ts or std/net/http1-codec.ts lays both out again.
+  ...dateSingleton(
+    "httpFieldsCheckOutgoing and the HTTP/1.1 response writers refuse a second Date field; both modules' IR moves",
+    {
+      "examples/http-app/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "examples/http-get-json.ts": ["http-fields.ll", "http1-codec.ll"],
+      "examples/prefork-server.ts": ["http-fields.ll", "http1-codec.ll"],
+      "examples/relay/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "bench/http-app-carrier.ts": ["http-fields.ll", "http1-codec.ll"],
+      "bench/http1-parse/main.ts": ["http1-codec.ll"],
+      "bench/http1-request/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "bench/http1-server.ts": ["http-fields.ll", "http1-codec.ll"],
+      "bench/router.ts": ["http-fields.ll"],
+      "bench/techempower/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_flat/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_https/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_fetch_async_policy/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_handler/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_handler_descriptors/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_handler_short/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_chunk_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_client/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_client_f64/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_client_feed_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_client_feed_window_len/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_client_feed_window_off/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_f64/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_feed_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_parse_diff/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http1_server/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_bad_config/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_feed_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_send_body/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_server_write_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http1_write_chunk_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_http2/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_bad_config/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_bad_config_tls/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http2_errors/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_errors_f64/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_f64/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_hpack_bomb/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_hpack_bomb_f64/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_hpack_table/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_hpack_table_f64/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_reset/main.ts": ["http-fields.ll"],
+      "tests/link/net_http2_tls/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http2_tls_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_body_chunk/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_config/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_credit/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_local_limit/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_uni_limit/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_bad_write_chunk/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_ecn/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_ecn_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_errors/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_errors_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_server/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_server_bad_config/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_server_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http3_write_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http_app/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http_date/main.ts": ["http-fields.ll", "http1-codec.ll", "main.d.ts", "main.mjs"],
+      "tests/link/net_http_date_f64/main.ts": ["http-fields.ll", "http1-codec.ll", "main.d.ts", "main.mjs"],
+      "tests/link/net_http_fetch/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http_fetch_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_http_fetch_tls/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_interop_server/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_interop_server_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_loopback/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_loopback_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_outbound/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_outbound_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_quic_server_wipes/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_hello/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_idle/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_path/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_per_peer/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_pool/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_rate/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_sessions/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_spare/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_bad_stats/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_encode_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_relay_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_forged/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_relay_frame_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_relay_grant_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_relay_json_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_relay_soak/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_router/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_router_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_router_negative_too_many_params/main.ts": ["http-fields.ll"],
+      "tests/link/net_upstream/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_upstream_release/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_websocket/main.ts": ["http1-codec.ll"],
+      "tests/link/net_websocket_f64/main.ts": ["http1-codec.ll"],
+      "tests/link/net_websocket_feed_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_websocket_frame_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_websocket_utf8_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_websocket_write_window/main.ts": ["http1-codec.ll"],
+      "tests/link/net_webtransport/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_layer/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_close_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_f64/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_stream_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_http1_end_head/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_http1_mss/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_http_compress/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/tfb_db/main.ts": ["http-fields.ll", "http1-codec.ll"],
+      "tests/link/tfb_entry/main.ts": ["http-fields.ll", "http1-codec.ll"],
+    }
+  ),
+  ...dateSingleton(
+    "the 0.37.0 seed's std/net/http-fields.ts has no HTTP_FIELDS_DATE_REPEATED, so only the candidate compiles the program",
+    {
+      "tests/link/net_http_fields/main.ts": ["exit"],
+      "tests/link/net_http_fields_f64/main.ts": ["exit"],
+    }
+  ),
+  // HttpCompressor.mss starts at 0, unset, instead of HTTP_DEFAULT_MSS, so
+  // every program that reaches std/net/http-compress.ts stores 0 in its
+  // constructor; http1-server.ll moves too, where serveCancel already covers it.
+  ...mssUnset("HttpCompressor's constructor stores 0 (unset) in mss instead of HTTP_DEFAULT_MSS", [
+    "examples/http-app/main.ts",
+    "examples/prefork-server.ts",
+    "examples/relay/main.ts",
+    "bench/http-app-carrier.ts",
+    "bench/http1-request/main.ts",
+    "bench/http1-server.ts",
+    "bench/techempower/main.ts",
+    "tests/link/net_handler/main.ts",
+    "tests/link/net_handler_descriptors/main.ts",
+    "tests/link/net_handler_overlong/main.ts",
+    "tests/link/net_handler_short/main.ts",
+    "tests/link/net_handler_unbegun/main.ts",
+    "tests/link/net_http1_server/main.ts",
+    "tests/link/net_http1_server_bad_config/main.ts",
+    "tests/link/net_http1_server_bad_head/main.ts",
+    "tests/link/net_http1_server_bad_head_timeout/main.ts",
+    "tests/link/net_http1_server_bad_message/main.ts",
+    "tests/link/net_http1_server_f64/main.ts",
+    "tests/link/net_http1_server_feed_window/main.ts",
+    "tests/link/net_http1_server_frame_window/main.ts",
+    "tests/link/net_http1_server_send_body/main.ts",
+    "tests/link/net_http1_server_send_body_window/main.ts",
+    "tests/link/net_http1_server_write_window/main.ts",
+    "tests/link/net_http2_bad_config_tls/main.ts",
+    "tests/link/net_http2_tls/main.ts",
+    "tests/link/net_http2_tls_f64/main.ts",
+    "tests/link/net_http3/main.ts",
+    "tests/link/net_http3_bad_body_chunk/main.ts",
+    "tests/link/net_http3_bad_config/main.ts",
+    "tests/link/net_http3_bad_credit/main.ts",
+    "tests/link/net_http3_bad_local_limit/main.ts",
+    "tests/link/net_http3_bad_uni_limit/main.ts",
+    "tests/link/net_http3_bad_write_chunk/main.ts",
+    "tests/link/net_http3_ecn/main.ts",
+    "tests/link/net_http3_ecn_f64/main.ts",
+    "tests/link/net_http3_errors/main.ts",
+    "tests/link/net_http3_errors_f64/main.ts",
+    "tests/link/net_http3_f64/main.ts",
+    "tests/link/net_http3_server/main.ts",
+    "tests/link/net_http3_server_bad_config/main.ts",
+    "tests/link/net_http3_server_f64/main.ts",
+    "tests/link/net_http3_write_window/main.ts",
+    "tests/link/net_http_app/main.ts",
+    "tests/link/net_http_date/main.ts",
+    "tests/link/net_http_date_f64/main.ts",
+    "tests/link/net_interop_server/main.ts",
+    "tests/link/net_interop_server_f64/main.ts",
+    "tests/link/net_loopback/main.ts",
+    "tests/link/net_loopback_f64/main.ts",
+    "tests/link/net_quic_server_wipes/main.ts",
+    "tests/link/net_quic_server_wipes_f64/main.ts",
+    "tests/link/net_relay/main.ts",
+    "tests/link/net_relay_bad_hello/main.ts",
+    "tests/link/net_relay_bad_idle/main.ts",
+    "tests/link/net_relay_bad_path/main.ts",
+    "tests/link/net_relay_bad_per_peer/main.ts",
+    "tests/link/net_relay_bad_pool/main.ts",
+    "tests/link/net_relay_bad_rate/main.ts",
+    "tests/link/net_relay_bad_sessions/main.ts",
+    "tests/link/net_relay_bad_spare/main.ts",
+    "tests/link/net_relay_bad_stats/main.ts",
+    "tests/link/net_relay_f64/main.ts",
+    "tests/link/net_relay_forged/main.ts",
+    "tests/link/net_relay_soak/main.ts",
+    "tests/link/net_upstream/main.ts",
+    "tests/link/net_upstream_release/main.ts",
+    "tests/link/net_webtransport/main.ts",
+    "tests/link/net_webtransport_bad_datagrams/main.ts",
+    "tests/link/net_webtransport_bad_datagrams_off/main.ts",
+    "tests/link/net_webtransport_bad_layer/main.ts",
+    "tests/link/net_webtransport_bad_pending/main.ts",
+    "tests/link/net_webtransport_bad_pending_high/main.ts",
+    "tests/link/net_webtransport_bad_sessions/main.ts",
+    "tests/link/net_webtransport_bad_streams/main.ts",
+    "tests/link/net_webtransport_bad_streams_high/main.ts",
+    "tests/link/net_webtransport_close_window/main.ts",
+    "tests/link/net_webtransport_datagram_window/main.ts",
+    "tests/link/net_webtransport_f64/main.ts",
+    "tests/link/net_webtransport_stream_window/main.ts",
+    "tests/link/net_webtransport_whole_window/main.ts",
+    "tests/link/std_compress_f64/main.ts",
+    "tests/link/std_http1_end_head/main.ts",
+    "tests/link/std_http1_mss/main.ts",
+    "tests/link/std_http_compress/main.ts",
+    "tests/link/std_postgres_carrier/main.ts",
+    "tests/link/std_postgres_carrier_attach_panic/main.ts",
+    "tests/link/std_postgres_carrier_batcher_panic/main.ts",
+    "tests/link/std_postgres_carrier_connection_panic/main.ts",
+    "tests/link/std_postgres_carrier_limits_panic/main.ts",
+    "tests/link/std_postgres_carrier_next_panic/main.ts",
+    "tests/link/std_postgres_carrier_request_panic/main.ts",
+    "tests/link/std_postgres_carrier_send_panic/main.ts",
+    "tests/link/tfb_db/main.ts",
+    "tests/link/tfb_entry/main.ts",
+  ]),
 ]
+
+/**
+ * The programs that reach one `std/` module by two routes: by a relative path
+ * into the checkout's `std/` (`../../../std/term`), and through another `std/`
+ * module's `nish/<name>` import. HEAD's compiler is built in the checkout, so
+ * its own package root is the checkout and both routes name one file. The
+ * seed's is where the seed is unpacked, so `nish/term` is the seed's copy, the
+ * program declares `Screen` twice, and the seed refuses it as two packages
+ * declaring one class. That is where each compiler is installed, not what it
+ * does, so no release retires it and these are not `DECLARED` entries: each is
+ * set aside only for that one refusal (`TWO_STDS_REFUSAL`), counted in the
+ * summary, and a full run notes one that stops needing it.
+ */
+const TWO_STDS = new Set([
+  "tests/link/break_game/main.ts",
+  "tests/link/std_json_tokenizer/main.ts",
+  "tests/link/std_yaml_conformance/main.ts",
+  "tests/link/std_yaml_write/main.ts",
+])
+
+/** The reference's refusal of a class or interface reached once through each copy of `std/`. */
+const TWO_STDS_REFUSAL =
+  /^the candidate compiles it and the reference refuses it \(reference: error: (?:Class|Interface) `[^`]+` is declared in package (?:`nish`|the program itself) and again in package (?:`nish`|the program itself);/
+
+/**
+ * Whether one difference is the two-copies refusal in a program `TWO_STDS` names.
+ *
+ * @param {string} program the program, relative to the repository root
+ * @param {{ surface: string, detail: string }} difference one difference `compare` reported
+ * @param {Set<string>} allowed the programs allowed it
+ * @returns {boolean} true only for that refusal in a listed program
+ */
+const isTwoStds = (program, difference, allowed = TWO_STDS) =>
+  allowed.has(program) && difference.surface === "exit" && TWO_STDS_REFUSAL.test(difference.detail)
 
 /** Differing files printed in full before the rest are only counted. */
 const MAX_ROWS = 20
@@ -3706,6 +1999,79 @@ const selfCheckNotes = () => {
 }
 
 /**
+ * Why a list of declarations may not stand, or null. `declaredFor` matches an
+ * entry on whatever it names, so one that names no `program`, no `file` and no
+ * `undo` matches every difference in every program, a refusal included: with
+ * it in the list nothing the candidate emits can fail the run. Its words being
+ * in the release notes says the change was meant, not that this difference is
+ * that change, so such an entry is refused however true its `why` is.
+ */
+const declarationsProblem = (entries) => {
+  for (const entry of entries) {
+    if (entry.program === undefined && entry.file === undefined && entry.undo === undefined) {
+      return `the declaration for "${entry.changelog}" names no program, file or undo, so it excuses every difference in every program`
+    }
+  }
+  return null
+}
+
+/**
+ * `declarationsProblem` over fabricated lists, then over `DECLARED` itself, on
+ * every run, for the reason `selfCheckRoots` gives: an entry that covers
+ * everything turns the comparison into a pass whatever HEAD emits. The
+ * fabricated half first shows that such an entry really does excuse an
+ * arbitrary difference, so the refusal is guarding a hole that exists. Returns
+ * the reason it failed, or null.
+ */
+const selfCheckDeclarations = () => {
+  const words = { changelog: "Stand-in change", why: "a stand-in" }
+  const everything = { ...words }
+  if (declaredFor("tests/cases/add.ts", "exit", [everything]) !== everything) {
+    return "an entry naming no program, file or undo no longer matches every difference, so the refusal below guards nothing"
+  }
+  const cases = [
+    [[{ ...words, program: "tests/cases/add.ts" }], true],
+    [[{ ...words, file: "add.ll" }], true],
+    [[{ ...words, undo: (text) => text }], true],
+    [[], true],
+    [[everything], false],
+    [[{ ...words, program: "tests/cases/add.ts" }, everything], false],
+  ]
+  for (const [entries, want] of cases) {
+    const got = declarationsProblem(entries) === null
+    if (got !== want) {
+      return `declarationsProblem(${JSON.stringify(entries)}) ${got ? "accepts" : "refuses"} it`
+    }
+  }
+  // The two-copies allowance is a second door past `DECLARED`, so its edges are
+  // driven too: only the one refusal, only on the exit, only in a listed program.
+  const listed = new Set(["tests/link/x/main.ts"])
+  const twice =
+    "the candidate compiles it and the reference refuses it (reference: error: Class `Screen` is declared in " +
+    "package `nish` and again in package the program itself; a class or interface name is still program-wide)"
+  const doors = [
+    ["tests/link/x/main.ts", { surface: "exit", detail: twice }, true],
+    ["tests/link/y/main.ts", { surface: "exit", detail: twice }, false],
+    ["tests/link/x/main.ts", { surface: "main.ll", detail: twice }, false],
+    [
+      "tests/link/x/main.ts",
+      {
+        surface: "exit",
+        detail: "the candidate compiles it and the reference refuses it (reference: error: x)",
+      },
+      false,
+    ],
+    ["tests/link/x/main.ts", { surface: "exit", detail: "the candidate refuses it: error: x" }, false],
+  ]
+  for (const [program, difference, want] of doors) {
+    if (isTwoStds(program, difference, listed) !== want) {
+      return `isTwoStds(${JSON.stringify(program)}, ${JSON.stringify(difference)}) is ${!want}, not ${want}`
+    }
+  }
+  return declarationsProblem(DECLARED)
+}
+
+/**
  * A compiler as something spawnable: `cmd` plus the arguments that come before
  * the program's own. `label` is what the report calls it — the path as the
  * caller spelled it rather than the absolute one, so a summary line stays
@@ -3771,6 +2137,44 @@ const compile = (compiler, args) =>
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   })
+
+/** `compile` as a promise, answering the same `{ status, stdout, stderr }` shape `spawnSync` does. */
+const compileAsync = (compiler, args) =>
+  new Promise((resolve) => {
+    const child = spawn(compiler.cmd, [...compiler.prefix, ...args], { cwd: root })
+    const stdout = []
+    const stderr = []
+    child.stdout.on("data", (chunk) => stdout.push(chunk))
+    child.stderr.on("data", (chunk) => stderr.push(chunk))
+    // A compiler that cannot be started answers as `spawnSync` would: no
+    // status, and the reason where a diagnostic would be.
+    child.on("error", (error) => resolve({ status: null, stdout: "", stderr: String(error) }))
+    child.on("close", (status) =>
+      resolve({
+        status,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      })
+    )
+  })
+
+/**
+ * `task(item, slot)` over every item with at most `jobs` in flight, answers in
+ * the items' order. `slot` is the worker's index, below `jobs`, so a task can
+ * own a directory no other task in flight writes to.
+ */
+const pooled = async (items, jobs, task) => {
+  const results = new Array(items.length)
+  let next = 0
+  const worker = async (slot) => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await task(items[index], slot)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(jobs, items.length) }, (_, slot) => worker(slot)))
+  return results
+}
 
 /** `--emit-header <dir>/<stem>.h ...`: the flags that ask for all four WP8 sidecars. */
 const sidecarFlags = (dir, stem) => [
@@ -3865,7 +2269,34 @@ const excerpt = (want, got, limit) => {
  * is not in the comparison at all.
  */
 const compare = (pair, work, file, options = {}) => {
-  const limit = options.lines ?? 3
+  const job = prepare(work, file, options)
+  if (job.dump !== undefined) {
+    return job
+  }
+  const reference = compile(pair.reference, job.argv(job.referenceDir))
+  const candidate = compile(pair.candidate, job.argv(job.candidateDir))
+  return judge(pair, job, reference, candidate, options.lines ?? 3)
+}
+
+/**
+ * `compare`, with each compiler run as a child the event loop waits on rather
+ * than one that blocks it, so `main` can keep several programs in flight. The
+ * two compilers still run one after the other within a program: the heaviest
+ * entries (`src/*.ts` reaches most of the compiler) peak at about 1.6 GiB each,
+ * and a pair at a time per slot is what keeps four slots inside a 16 GB runner.
+ */
+const compareAsync = async (pair, work, file, options = {}) => {
+  const job = prepare(work, file, options)
+  if (job.dump !== undefined) {
+    return job
+  }
+  const reference = await compileAsync(pair.reference, job.argv(job.referenceDir))
+  const candidate = await compileAsync(pair.candidate, job.argv(job.candidateDir))
+  return judge(pair, job, reference, candidate, options.lines ?? 3)
+}
+
+/** The output directories and the argv for one program, or `{ dump }` when it writes no artefact. */
+const prepare = (work, file, options) => {
   const flags = extraArgs(file)
   const dump = flags.find((flag) => DUMP_FLAGS.has(flag))
   if (dump !== undefined) {
@@ -3891,9 +2322,12 @@ const compare = (pair, work, file, options = {}) => {
     ...(options.extraFlags ?? []),
     ...(options.sidecars === false || sandboxed ? [] : sidecarFlags(dir, stem)),
   ]
+  return { referenceDir, candidateDir, argv }
+}
 
-  const reference = compile(pair.reference, argv(referenceDir))
-  const candidate = compile(pair.candidate, argv(candidateDir))
+/** What the two compilers' runs over one prepared program say: agreement, a refusal by both, or the differences. */
+const judge = (pair, job, reference, candidate, limit) => {
+  const { referenceDir, candidateDir } = job
   if (reference.status !== 0 && candidate.status !== 0) {
     return { refused: firstLine(reference.stderr) || `exit ${reference.status}` }
   }
@@ -4008,8 +2442,8 @@ const compare = (pair, work, file, options = {}) => {
  * the file, both optional, so a declaration says exactly as much as its author
  * meant it to and no more.
  */
-const declaredFor = (program, surface) => {
-  for (const entry of DECLARED) {
+const declaredFor = (program, surface, entries = DECLARED) => {
+  for (const entry of entries) {
     // An `undo` covers a file only when it turns one side into the other,
     // which `compare` decides with both texts in hand.
     if (entry.undo !== undefined) {
@@ -4074,6 +2508,9 @@ usage: node tests/nish-cmp.js [options] [program.ts ...]
                               for the commits since the last v* tag
       --no-sidecars           compare only the IR, not the four WP8 sidecars
       --lines <n>             differing lines to print per file (default: 3)
+  -j, --jobs <n>              programs compiled at once (default: the number
+                              of cores; each compile uses one, and the largest
+                              peak at about 1.6 GiB per compiler)
       --verbose               name every program, not only the differences
   -h, --help                  this text
 
@@ -4085,8 +2522,9 @@ With no programs named, the whole corpus is compared (tests/self/corpus.js).
 exit codes: 0 agreed (or skipped for want of a seed), 1 undeclared difference,
 2 usage or a compiler that would not build`
 
-const main = (argv) => {
+const main = async (argv) => {
   const options = { lines: 3, sidecars: true }
+  let jobs = os.availableParallelism()
   let referenceSpec = seedFromEnvironment()
   let candidateSpec = null
   let changelog = "CHANGELOG.md"
@@ -4108,6 +2546,8 @@ const main = (argv) => {
       options.sidecars = false
     } else if (arg === "--lines") {
       options.lines = Number(argv[++i])
+    } else if (arg === "-j" || arg === "--jobs") {
+      jobs = Number(argv[++i])
     } else if (arg === "--verbose") {
       verbose = true
     } else if (arg.startsWith("-")) {
@@ -4117,7 +2557,13 @@ const main = (argv) => {
       named.push(arg)
     }
   }
-  if (referenceSpec === undefined || candidateSpec === undefined || Number.isNaN(options.lines)) {
+  if (
+    referenceSpec === undefined ||
+    candidateSpec === undefined ||
+    Number.isNaN(options.lines) ||
+    !Number.isInteger(jobs) ||
+    jobs < 1
+  ) {
     process.stderr.write(`nish-cmp: an option is missing its value\n${HELP}\n`)
     return 2
   }
@@ -4159,6 +2605,11 @@ const main = (argv) => {
     process.stderr.write(`nish-cmp: its own release-note lookup is wrong: ${selfCheckNote}\n`)
     return 2
   }
+  const selfCheckDeclaration = selfCheckDeclarations()
+  if (selfCheckDeclaration !== null) {
+    process.stderr.write(`nish-cmp: its own declarations are wrong: ${selfCheckDeclaration}\n`)
+    return 2
+  }
 
   // The corpus is settled before a compiler is built, so that a mistyped
   // program name costs a message rather than the link that precedes it.
@@ -4194,20 +2645,31 @@ const main = (argv) => {
   const declared = []
   const dumps = []
   const refused = []
+  const twoStds = []
   let agreed = 0
   let files = 0
   let lines = 0
   let rooted = 0
   let versioned = 0
-  for (const file of inputs) {
+  // Each compile is one process on one core, so the corpus runs `jobs` programs
+  // at a time, each in its own slot's directory. The results come back in the
+  // corpus's order, so the report reads the same at any `--jobs`.
+  const results = await pooled(inputs, jobs, (file, slot) =>
+    compareAsync(pair, path.join(work, String(slot)), file, options)
+  )
+  for (const [index, file] of inputs.entries()) {
     const program = path.relative(root, file)
-    const result = compare(pair, work, file, options)
+    const result = results[index]
     if (result.dump !== undefined) {
       dumps.push(`${program}: ${result.dump}`)
     } else if (result.refused !== undefined) {
       refused.push(`${program}: both refuse it: ${result.refused}`)
     } else if (result.differences !== undefined) {
       for (const difference of result.differences) {
+        if (isTwoStds(program, difference)) {
+          twoStds.push(program)
+          continue
+        }
         const entry = difference.undone ?? declaredFor(program, difference.surface)
         const row = { program, ...difference, declared: entry }
         ;(entry === null ? undeclared : declared).push(row)
@@ -4279,6 +2741,11 @@ const main = (argv) => {
         process.stdout.write(`note: nothing differs at ${where}; the declaration can go\n`)
       }
     }
+    for (const program of TWO_STDS) {
+      if (!twoStds.includes(program)) {
+        process.stdout.write(`note: ${program} no longer reaches two copies of std/; it can leave TWO_STDS\n`)
+      }
+    }
   }
   if (verbose) {
     for (const row of refused) {
@@ -4309,26 +2776,28 @@ const main = (argv) => {
     )
   }
 
-  const compared = inputs.length - refused.length - dumps.length
+  const compared = inputs.length - refused.length - dumps.length - twoStds.length
   // Each outcome is counted apart and named, for the reason the oracles count
   // their skips apart (`.claude/selfhost.md`): a program neither compiler
   // compiles proves nothing about either, and must not be able to hide inside
   // a number that reads like agreement.
   const refusedNote = refused.length > 0 ? `, ${refused.length} refused by both` : ""
   const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : ""
+  const twoStdsNote =
+    twoStds.length > 0 ? `, ${twoStds.length} refused by the reference for two copies of std/` : ""
   const declaredNote = declared.length > 0 ? `, ${declared.length} declared difference(s)` : ""
   const rootedNote = rooted > 0 ? `, ${rooted} equal after each compiler's own root` : ""
   const versionedNote = versioned > 0 ? `, ${versioned} equal after each compiler's own producer version` : ""
   process.stdout.write(
     `nish-cmp: ${agreed}/${compared} programs agree (${files} files, ${lines} IR lines) — ` +
       `reference ${pair.reference.label}, candidate ${pair.candidate.label}` +
-      `${refusedNote}${dumpNote}${rootedNote}${versionedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
+      `${refusedNote}${twoStdsNote}${dumpNote}${rootedNote}${versionedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
   )
   return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  process.exit(main(process.argv.slice(2)))
+  process.exit(await main(process.argv.slice(2)))
 }
 export {
   buildCandidate,
@@ -4339,6 +2808,7 @@ export {
   resolveCompiler,
   resolvePair,
   seedFromEnvironment,
+  selfCheckDeclarations,
   selfCheckHardening,
   selfCheckNotes,
   selfCheckRoots,

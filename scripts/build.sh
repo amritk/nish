@@ -3,8 +3,9 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasm-host|wasi|napi]
 #
-# The C runtime is sixteen translation units and is named as one: an input
-# <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
+# The C runtime is seventeen translation units and is named as one: an input
+# <dir>/runtime.c also compiles <dir>/runtime-text.c, the strings and the digits
+# of numbers, <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
 # threads, <dir>/runtime-cross.c, the copies that carry a string or an array
@@ -41,10 +42,13 @@
 #          when runtime-wasm.c is linked, the arena entry points the
 #          `--emit-dts` loader calls (nish_arena_mark, nish_arena_release,
 #          nish_alloc_array, nish_reset_arena, nish_free_arena). The stack is
-#          a fixed 64 KiB (-z stack-size=65536). Runs `wasm-opt -Oz` on the
-#          module when wasm-opt (binaryen) is on PATH; the build line says
-#          whether it ran. Two flags take this profile alone, and any other
-#          refuses them with exit 2:
+#          a fixed 64 KiB (-z stack-size=65536). Runs `wasm-opt -Oz
+#          --strip-target-features` on the module when wasm-opt (binaryen)
+#          is on PATH; the build line says whether it ran. NISH_WASM_OPT=0
+#          links without it even when it is installed (clang's own wasm-opt
+#          call too): the module a machine without binaryen builds, which
+#          the size guard measures. Two flags take this profile alone, and
+#          any other refuses them with exit 2:
 #            --memory <MiB>       memory fixed at <MiB> MiB (1 to 4096), the
 #                                 initial size and the maximum both, so it
 #                                 never grows and `memory.buffer` is one
@@ -122,7 +126,7 @@
 #
 # The runtime compiled once (the debug, speed and size profiles only; `nish
 # --link` and `nish run` use these through their runtime cache, src/compile.ts):
-#   --runtime-objects <dir>  compile the runtime.c input and its seven siblings,
+#   --runtime-objects <dir>  compile the runtime.c input, its sixteen halves and runtime-async.c,
 #                            one $CC -c each and all at once, into
 #                            <dir>/<unit>.o with the profile's compile flags,
 #                            and link nothing. speed and size store LTO bitcode,
@@ -267,8 +271,8 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is sixteen translation units, and a caller names one: whoever passes
-# <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
+# The runtime is seventeen translation units, and a caller names one: whoever passes
+# <dir>/runtime.c gets <dir>/runtime-text.c, <dir>/runtime-os.c, <dir>/runtime-parallel.c,
 # <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
 # <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-chacha20.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c,
 # <dir>/runtime-bytes.c, <dir>/runtime-sandbox.c, <dir>/runtime-shm.c and <dir>/runtime-region.c compiled beside it, on every profile,
@@ -280,7 +284,7 @@ fi
 # compiles to two functions that refuse to run, which no wasm build calls, and
 # runtime-shm.c answers -95 for every region. They were one file until the
 # operating-system half was split out for its own size budget, and the parallel
-# half followed for the same reason (each file's header comment says why), and
+# and text halves followed for the same reason (each file's header comment says why), and
 # a link line is where those splits
 # would otherwise leak: `nish --link` builds its command line in
 # src/compile.ts, the published package's recipe in every document and
@@ -288,7 +292,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-chacha20.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c runtime-region.c"
+halves="runtime-text.c runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-chacha20.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c runtime-region.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
@@ -376,6 +380,12 @@ fi
 
 CC=${CC:-clang}
 common=(-Wno-override-module)          # our IR is target-neutral; clang fills the triple in
+# -ffp-contract=off on every unit, every profile (WP50 S5): clang's default
+# contracts a*b+c in C into one fused multiply-add wherever the target has one
+# (arm64 always, x86-64 at v3), which rounds once where the source rounds
+# twice, so the runtime would print another float on arm64 than on x86-64.
+# Nish's own IR asks for no contraction, so the flag changes only the C units.
+common+=(-ffp-contract=off)
 elf=()                                 # flags that only make sense for ELF targets
 lld=0                                  # 1 when the link goes through ld.lld
 
@@ -447,10 +457,10 @@ if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 # runtime-parallel.c compiles to its sequential fallback because it tests
 # __wasi__ and __wasm__ as well as the macro.
 # --cpu: every unit at the one level, so the module, the runtime and the link
-# (LTO generates code there) agree. -ffp-contract=off keeps the meaning fixed:
-# v3 has FMA, and contracting a*b+c into one rounding would print a different
-# float than the baseline build (docs/LANGUAGE.md, "The CPU level").
-if [ -n "$cpu" ]; then common+=(-march=x86-64-v3 -ffp-contract=off); fi
+# (LTO generates code there) agree. v3 has FMA, and the -ffp-contract=off every
+# unit has above keeps a*b+c two roundings, so it prints the float the baseline
+# build does (docs/LANGUAGE.md, "The CPU level").
+if [ -n "$cpu" ]; then common+=(-march=x86-64-v3); fi
 
 # Hardening, on every native profile (the wasm and wasi ones build their own
 # command line and have none of these to give). docs/security/runtime.md
@@ -808,6 +818,21 @@ case "$profile" in
     if [ "$bytes_wanted" = 1 ] && [ "$bytes_named" = 0 ]; then
       inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-bytes.c")
     fi
+    # IR that builds a string (`+`, a template, `String(x)`, a number's digits)
+    # calls runtime-text.c, which compiles freestanding for wasm32 (WP50 stage 4).
+    # It is added the same way, only for such IR and only when the caller has not
+    # named it; it allocates through runtime-wasm.c's arena, so that is linked too.
+    text_named=0
+    text_wanted=0
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        */runtime-text.c|runtime-text.c) text_named=1 ;;
+        *.ll) if grep -qE '@nish_(str_|f64_format|json_put_f64)' "$i"; then text_wanted=1; fi ;;
+      esac
+    done
+    if [ "$text_wanted" = 1 ] && [ "$text_named" = 0 ]; then
+      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-text.c")
+    fi
     # IR compiled for the host rounds through runtime-simd.c's `nish_floor` and its
     # kin behind the constructor `nish_round_init` (#943). runtime-wasm.c has their
     # wasm32 bodies, and it is added the same way when such IR does not name it.
@@ -819,6 +844,7 @@ case "$profile" in
         *.ll) if grep -q '@nish_round_init' "$i"; then round_wanted=1; fi ;;
       esac
     done
+    if [ "$text_wanted" = 1 ]; then round_wanted=1; fi
     # Under wasm-host a program whose loader guards panics (one with module
     # storage or a host module: the compiler ends its IR with a
     # `; nish.sites <count>` line) reports each panic through the page's
@@ -849,7 +875,7 @@ case "$profile" in
     fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
-    wasm_compile=(-Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory)
+    wasm_compile=(-Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory -ffp-contract=off)
     if [ "$profile" = wasm ]; then
       "$CC" "${wasm_compile[@]}" \
         ${tls[@]+"${tls[@]}"} \
@@ -967,17 +993,49 @@ case "$profile" in
         bytes=$((memory_mib * 1048576))
         memory+=("-Wl,--initial-memory=$bytes" "-Wl,--max-memory=$bytes")
       fi
-      "$CC" "${wasm_compile[@]}" ${host_define[@]+"${host_define[@]}"} \
-        ${tls[@]+"${tls[@]}"} \
-        -Wl,--no-entry ${exports[@]+"${exports[@]}"} "${memory[@]}" -Wl,--strip-all -Wl,--gc-sections \
-        "${host_inputs[@]}" -o "$out"
       # binaryen's size pass is optional: the module is complete without it.
-      if command -v wasm-opt >/dev/null 2>&1; then
-        wasm-opt -Oz --enable-bulk-memory "$out" -o "$out"
-        wasm_opt="wasm-opt -Oz"
-      else
-        wasm_opt="no wasm-opt"
-      fi
+      # It runs twice when wasm-opt is installed. clang 18 runs it itself after
+      # any link with an -O flag, finding it on PATH, and has wasm-ld keep the
+      # `target_features` section for it: 48 bytes or more that nothing at
+      # run time reads, which put add.wasm at 150 bytes against 102 without
+      # wasm-opt (#1257). The pass below drops that section again.
+      # NISH_WASM_OPT=0 runs neither: each source is compiled alone and the
+      # objects linked with no -O flag, so clang starts no wasm-opt and the
+      # module is byte for byte the one a machine without binaryen links.
+      # That is the build the size guard pins.
+      case "${NISH_WASM_OPT:-1}" in
+        0)
+          make_work
+          host_objects=()
+          for i in "${host_inputs[@]}"; do
+            # What clang compiles in a one-step link is compiled here (.ll, .c,
+            # .bc, .s, ...); what it hands straight to wasm-ld passes through.
+            case "$i" in
+              *.o|*.a) host_objects+=("$i") ;;
+              *)
+                object="$work/host-${#host_objects[@]}.o"
+                "$CC" "${wasm_compile[@]}" ${host_define[@]+"${host_define[@]}"} \
+                  ${tls[@]+"${tls[@]}"} -c "$i" -o "$object"
+                host_objects+=("$object") ;;
+            esac
+          done
+          "$CC" --target=wasm32-unknown-unknown -nostdlib \
+            -Wl,--no-entry ${exports[@]+"${exports[@]}"} "${memory[@]}" -Wl,--strip-all -Wl,--gc-sections \
+            "${host_objects[@]}" -o "$out"
+          wasm_opt="no wasm-opt, NISH_WASM_OPT=0" ;;
+        1)
+          "$CC" "${wasm_compile[@]}" ${host_define[@]+"${host_define[@]}"} \
+            ${tls[@]+"${tls[@]}"} \
+            -Wl,--no-entry ${exports[@]+"${exports[@]}"} "${memory[@]}" -Wl,--strip-all -Wl,--gc-sections \
+            "${host_inputs[@]}" -o "$out"
+          if command -v wasm-opt >/dev/null 2>&1; then
+            wasm-opt -Oz --enable-bulk-memory --strip-target-features "$out" -o "$out"
+            wasm_opt="wasm-opt -Oz"
+          else
+            wasm_opt="no wasm-opt"
+          fi ;;
+        *) echo "error: NISH_WASM_OPT must be 0 or 1, not '$NISH_WASM_OPT'" >&2; exit 2 ;;
+      esac
       if [ -n "$inline_to" ]; then
         # Decimal, one array literal: of the inline forms the smallest after
         # compression (docs/wp50-wasm-host.md, Q10). od prints each byte as an
@@ -1027,9 +1085,9 @@ case "$profile" in
     fi
     # SQLite builds on wasi-libc as it is: the amalgamation sees __wasi__ and
     # takes dot-file locking, no mmap and no WAL shared memory.
-    sqlite_objects --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG \
+    sqlite_objects --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG -ffp-contract=off \
       ${tls[@]+"${tls[@]}"} -ffunction-sections -fdata-sections
-    "$CC" -Wno-override-module --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG \
+    "$CC" -Wno-override-module --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG -ffp-contract=off \
       ${tls[@]+"${tls[@]}"} \
       -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all \
       "${inputs[@]}" ${libs[@]+"${libs[@]}"} -o "$out" ;;

@@ -1,0 +1,2 @@
+`spawn` hands `later` its parameter `s` of type Shared
+of `nish/threads`, a scope, a lock, a guard or a channel

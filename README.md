@@ -175,7 +175,7 @@ ship in the npm package, and [llms.txt](llms.txt) indexes them.
 | Control flow | `if`/`else`, `while`, `do`, `for`, `for...of` (arrays, `Map` keys and values, `Set`), `switch` (exhaustive over a union's tag, a clause may fall into the next), `break`/`continue`, labelled or not, boolean-only conditions, definite return, unreachable-code errors | [Statements](docs/LANGUAGE.md#statements) |
 | Expressions | `+ - * / %` (integer `/` and `%` checked: zero divisor or `MIN / -1` panics), shifts and bitwise operators, numeric-only ordering, `=== !==` (strings by content), `&& \|\|`, `?:`, `??` on a `T \| null` and a `?.` chain that ends in `??`, `op=`, `++`/`--`, template literals, contextual numeric literals | [Expressions](docs/LANGUAGE.md#expressions) |
 | Strings | immutable UTF-8 (`.length` is the byte length), literals as constant data, `+`, `===`, templates, `console.log` | [Builtins](docs/LANGUAGE.md#builtins), [Semantics](docs/LANGUAGE.md#semantics-decisions) |
-| Arrays | `T[]` with one element type, literals, `new Array<T>(n)` zero-filled, bounds-checked `a[i]` (panic, or `uncheckedGet` from `nish:unsafe`), `.length`, `push`/`pop`, `set`/`fill`, `for...of`; arrays of records stored contiguously and fixed-length array fields inline | [Arrays](docs/LANGUAGE.md#array-literals) |
+| Arrays | `T[]` with one element type, literals, `new Array<T>(n)` zero-filled, bounds-checked `a[i]` (panic, or `uncheckedGet` from `nish:unsafe`), `.length`, `push`/`pop`, `set`/`fill`, `sort`, `map`/`filter`/`some`/`every`/`findIndex`/`slice`, `for...of`; arrays of records stored contiguously and fixed-length array fields inline | [Arrays](docs/LANGUAGE.md#array-literals) |
 | `Map` and `Set` | the global `Map<K, V>` and `Set<T>`, insertion-ordered, one probe per `get`/`set`/`has`/`delete`; `get` is `V \| undefined` and narrowed as TypeScript does | [`Map` and `Set`](docs/LANGUAGE.md#map-and-set) |
 | Classes and interfaces | LLVM structs with clang's layout, constructors, methods, `readonly`, definite assignment, object literals, `implements` by identical layout; no inheritance | [Classes](docs/LANGUAGE.md#classes) |
 | Generics | generic functions, classes, interfaces and methods by monomorphisation: one specialised `define` per instantiation, type arguments inferred at a call and written after `new` or in an annotation, `<T extends Shape>` constraints, exported instantiations callable from C and JavaScript as `nish_gen_identity_i32` | [Generic functions](docs/LANGUAGE.md#generic-functions) |
@@ -393,7 +393,7 @@ recompile of the runtime. `-o`, `--link`, `--target`, the `--emit-*` sidecars an
 errors there, and performance warnings are not printed, because stderr belongs
 to the program.
 
-Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime-os.c -o app`
+Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c -ffp-contract=off -o app`
 (a program that uses threads, the host calls or `nish:net` also names
 `runtime/runtime-parallel.c`, `runtime-host.c` or `runtime-net.c`; the
 `overriding the module target triple` warning is harmless: the IR is
@@ -424,13 +424,14 @@ dynamically linked (`npm run size-report`):
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,712 bytes. The runtime is sixteen translation units
+`hello.ts` with `--link` is 4,712 bytes. The runtime is seventeen translation units
 with a measured ceiling each, so that the core does not grow every time the
 language reaches further into the operating system, and section GC drops
-whatever a program does not call: `runtime.c` is the 3,606 bytes every program
-touches (one chunked bump arena with O(1) reset and mark/release, strings,
-JavaScript-exact number formatting, string parsing, `Math.random`,
-`process.argv`, array growth, the panic paths), `runtime-os.c` the 1,530 bytes
+whatever a program does not call: `runtime.c` is the 1,723 bytes every program
+touches (one chunked bump arena with O(1) reset and mark/release, string
+parsing, `Math.random`, `process.argv`, array growth, the panic paths),
+`runtime-text.c` the 1,787 bytes of strings and JavaScript-exact number
+formatting, which a wasm module links too, `runtime-os.c` the 1,530 bytes
 that wrap a system call (exit, files, directories, subprocesses, the
 environment, the clock), and `runtime-parallel.c`, `runtime-cross.c`,
 `runtime-host.c`, `runtime-net.c`, `runtime-simd.c`, `runtime-aes.c`,

@@ -75,12 +75,21 @@ bash bench/techempower/run.sh        # 3 interleaved rounds of 10 s
 bash bench/techempower/run.sh --quick
 ```
 
-`run.sh` times the entry, a byte-identical copy of it (the noise band), and
-every built HTTP twin, under `wrk`: `/plaintext` 16-deep pipelined (with
-`pipeline.lua`) at 256, 1024, 4096 and 16384 connections, and `/json` at 16, 32,
-64, 128, 256 and 512. The server is pinned to CPU 0 and `wrk` to the others.
-Its header says the rest of the method. The recorded figures are in
-[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext).
+`run.sh` times the entry, a byte-identical copy of it (the noise band), its
+async twin (`async-main.ts`) and every built HTTP twin, under `wrk`:
+`/plaintext` 16-deep pipelined (with `pipeline.lua`) at 256, 1024, 4096 and
+16384 connections, and `/json` at 16, 32, 64, 128, 256 and 512. It then times
+the database entry, a byte-identical copy of it and its async twin
+(`async-db-main.ts`) on `/db`, `/queries`, `/updates`, `/fortunes` and
+`/cached-queries` at 16, 64 and 256 connections, against a throwaway Postgres
+it starts in `build/tfb/pg` (`PG_BIN` names its binaries; `--only db` runs
+these alone). The server is pinned to CPU 0, Postgres to CPU 1 and `wrk` to the
+rest. Each server's peak RSS is recorded beside its figures, and the report
+says, per concurrency, whether the async twin is inside the band: WP49 stage
+6's gate. Its header says the rest of the method. The recorded figures are in
+[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext)
+and, for the gate,
+[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6).
 
 ## The database entry
 
@@ -159,15 +168,17 @@ curl -i 'http://127.0.0.1:8080/queries?queries=5'
 resolves no names. The image resolves `tfb-database` with `getent` when it
 starts.
 
-### Not measured here
+### Not a rank
 
-`run.sh` times `json` and `plaintext` with `wrk`. No load generator has
-measured the database tests, and none can be trusted to. TFB runs its load
-generator, its server and its database on three machines. This project has one,
-and a client that shares the server's cores measures their contention, not the
-server. The database tests have been checked for correctness only. No figure
-for them is recorded in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md), and no
-rank is claimed.
+`run.sh` measures the database tests only relatively: the async entry against
+the explicit one and the explicit one against its own copy, on one machine
+where `wrk`, Postgres and the server share four cores. TFB runs its load
+generator, its server and its database on three machines, and a client that
+shares the server's cores measures their contention as well as the server. So
+the figures in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) compare builds
+with each other; they are not a TechEmpower rank, and none is claimed (WP49
+D6). Correctness is checked by `tests/link/tfb_db` against a stand-in Postgres
+and by `tests/postgres/live/run.mjs tfb` against a real one.
 
 ### Pinning workers to cores
 

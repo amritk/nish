@@ -166,7 +166,12 @@ is listed with a reproducer in
 [wp13-differential.md](wp13-differential.md) and
 `tests/differential/known-failures.txt`: 1-ulp libm differences in
 `sin`/`cos`/`log`/`pow`, `Math.min`/`max` with NaN, `Math.round(-0.3)`,
-and the division panics above.
+and the division panics above. A program built with `--deterministic`
+avoids the libm differences: `sin`, `cos`, `exp`, `log`, `pow` and a float `%`
+are the standard library's own on every target, and its `--emit-ts` reading
+calls the same functions, so x86-64, AArch64, wasm32 and Node print the same
+bits for everything the float corpus (`tests/differential/corpus/float/`)
+covers ([`--deterministic`](LANGUAGE.md#--deterministic)).
 
 ### How do I call Nish code from Node?
 
@@ -178,8 +183,10 @@ Two ways, both generated from the same signatures as the IR
   scalar function is callable directly (`examples/node-host.mjs`).
   `--emit-dts a.d.ts` writes the typings and `a.mjs`, a loader that passes
   `Int32Array` / `Float64Array` / `BigInt64Array` arguments by copying them
-  into the module's memory (link `runtime/runtime-wasm.c`). Strings are not
-  available in this profile because it has no WASI runtime.
+  into the module's memory (link `runtime/runtime-wasm.c`). An export that
+  returns a `string` hands the page a JS string, and a host import can take
+  one; an export that *takes* a string is not callable from the page (write
+  the text into module storage with `nish/host/text` instead).
 - **Native addon**: `--emit-napi a_napi.c` writes an N-API shim,
   `scripts/build.sh a.ll runtime/runtime.c a_napi.c -o a.node --profile napi`
   builds the addon, and `require("./a.node")` loads it

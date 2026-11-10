@@ -9,6 +9,7 @@ import {
   DNS_CLIENT_MAX_DATAGRAMS,
   DNS_UDP_MAX_REPLY,
   DnsClient,
+  dnsLoadSystem,
   dnsLookupWith,
   resolveHost,
 } from "nish/net/dns";
@@ -59,6 +60,12 @@ if (lookup >= 0) {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="dns​Load​System" icon="phosphor/regular/function" href="#dnsloadsystem">
+
+Reads the system's resolver settings the way `resolveHost` does: `/etc/resolv.conf` into `config` (a missing file means the defaults) and `/etc/hosts` into `hosts` (a missing file adds no entry).
+
+</scalar-card>
 
 <scalar-card title="dns​Lookup​With" icon="phosphor/regular/function" href="#dnslookupwith">
 
@@ -125,6 +132,34 @@ Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
 
 ## Functions
+
+### dnsLoadSystem
+
+Reads the system's resolver settings the way `resolveHost` does:
+`/etc/resolv.conf` into `config` (a missing file means the defaults) and
+`/etc/hosts` into `hosts` (a missing file adds no entry). A driver of its
+own, such as the async `fetch`'s, starts from this so every lookup in a
+program honours the same files. Both reads are synchronous file reads.
+
+```ts
+function dnsLoadSystem(
+  config: DnsConfig | null,
+  hosts: DnsHosts,
+): void
+```
+
+<scalar-field name="config" type="DnsConfig | null" required>
+
+A fresh `DnsConfig` to fill, or null to leave
+  `/etc/resolv.conf` unread (a caller with a configuration of its own).
+
+</scalar-field>
+
+<scalar-field name="hosts" type="DnsHosts" required>
+
+A fresh `DnsHosts` to fill.
+
+</scalar-field>
 
 ### dnsLookupWith
 
@@ -201,9 +236,9 @@ What `resolveHost` answers: the address count, or a negative `DNS_RESOLVE_*`,
 The addresses of `name`, looked up as `/etc/resolv.conf` and `/etc/hosts`
 say (a missing resolv.conf means the defaults, a missing hosts file no
 entries), each 18 bytes with `port` into `out` and its TTL in seconds into
-`ttls`. It waits for both the A and the AAAA answer, so a family that
-answered is not returned on its own once `timeoutMs` passes: it is
-`DNS_RESOLVE_TIMEOUT`.
+`ttls`. It waits for both the A and the AAAA answer until `timeoutMs`
+passes; then a family that answered with addresses is returned on its own,
+and only a lookup with none yet is `DNS_RESOLVE_TIMEOUT`.
 
 **It blocks the thread** until the lookup ends, on a loop of its own, so
 it is for a CLI or a program's start-up; a server resolves with a
@@ -257,7 +292,7 @@ Where each address's TTL goes, in seconds; at least `DNS_RESOLVE_MAX_ADDRESSES`.
 <scalar-field name="returns" type="i32">
 
 The count of addresses written; or a negative code: `DNS_RESOLVE_TIMEOUT` once
-  `timeoutMs` has passed, `DNS_RESOLVE_NOT_FOUND`, `DNS_RESOLVE_NO_ANSWER` or
+  `timeoutMs` has passed with no address found, `DNS_RESOLVE_NOT_FOUND`, `DNS_RESOLVE_NO_ANSWER` or
   `DNS_RESOLVE_CNAME` from the lookup, the `DNS_ERR_*` code of a name that is not one, or
   the negative errno of a poll loop that cannot be made or waited on.
 
@@ -286,6 +321,7 @@ class DnsClient
 | `owns(token: i32): boolean` | Whether `token` is one of the client's, so the caller knows which ready pairs from `pollWait` to hand to `ready`. |
 | `ready(token: i32, events: i32, nowNanos: i64): void` | The pair `token`, `events` that `pollWait` reported at `nowNanos`, for a token `owns` answers true for: reads the datagrams (at most `DNS_CLIENT_MAX_DATAGRAMS`) or stream bytes that are waiting, finishes a connection or a write, and sends whatever the core asks next. Panics for a token that is not the client's. A token whose try has already ended is ignored. |
 | `result(lookup: i32, out: u8[], ttls: i32[]): i32` | `DnsResolver.result`; a finished lookup's sockets are already closed. Answering a finished lookup frees its slot, so a second call for it, or one for an id `start` did not give out, panics. |
+| `settle(lookup: i32, nowNanos: i64): boolean` | `DnsResolver.settle`, closing the socket of the query it stops: ends the lookup with the addresses one family has found when the other is still asking, so a caller whose time is up keeps them. |
 | `start(name: string, port: i32, nowNanos: i64): i32` | `DnsResolver.start`, with its first packets sent. `localhost`, an address literal and a hosts entry finish at once, so `result` has their answer straight away. |
 | `tick(nowNanos: i64): void` | `DnsResolver.tick`, then whatever it asks to send: every try past its deadline moves to the next server. Call it after each wake of the loop. |
 | `timeoutMs(nowNanos: i64, ownMs: i32): i32` | The `pollWait` timeout for a caller who would otherwise wait `ownMs` (negative for ever): the smaller of it and the milliseconds, rounded up, to the core's next deadline after `nowNanos`. |

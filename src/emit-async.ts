@@ -231,6 +231,61 @@ const emitPoll = (emitter: Emitter, group: i32, names: string[]): void => {
   fn.placeBlock(ready)
 }
 
+/**
+ * `awaitAll`'s poll: resume each member still waiting inside its own region,
+ * so no lane bumps, rewinds or frees memory another lane still holds, and
+ * leave the function pending unless every lane slot is 0. A member that
+ * finishes has its region adopted by the arena the poll runs in, where its
+ * answer, and whatever that answer points at, lives on after the join.
+ */
+const emitLanePoll = (emitter: Emitter, group: i32, names: string[]): void => {
+  const fn = emitter.fn
+  const poll = fn.newBlock("await.poll")
+  fn.emit(`br label %${poll.label}`)
+  fn.placeBlock(poll)
+  let j = 0
+  while (j < names.length && j < emitter.asyncLanes.length) {
+    // Read before the call, which ends the length facts.
+    const name = names[j]
+    const lane = emitter.asyncLanes[j]
+    const base = kidBase(emitter, group, j)
+    const region = fn.emitValue(`load i64, i64* ${lane}`)
+    const idle = fn.emitValue(`icmp eq i64 ${region}, 0`)
+    const run = fn.newBlock("lane.run")
+    const finish = fn.newBlock("lane.finish")
+    const next = fn.newBlock("lane.next")
+    fn.emit(`br i1 ${idle}, label %${next.label}, label %${run.label}`)
+    fn.placeBlock(run)
+    fn.emitValue(`call i8* ${emitter.useRuntime("nish_region_enter")}(i64 ${region})`)
+    const finished = fn.emitValue(`call i1 @${name}.resume(i8* ${base})`)
+    fn.emit(`call void ${emitter.useRuntime("nish_region_leave")}(i64 ${region}, i8* null)`)
+    fn.emit(`br i1 ${finished}, label %${finish.label}, label %${next.label}`)
+    fn.placeBlock(finish)
+    fn.emit(`call void ${emitter.useRuntime("nish_region_adopt")}(i64 ${region})`)
+    fn.emit(`store i64 0, i64* ${lane}`)
+    fn.emit(`br label %${next.label}`)
+    fn.placeBlock(next)
+    j = j + 1
+  }
+  let done = ""
+  j = 0
+  while (j < emitter.asyncLanes.length) {
+    const lane = emitter.asyncLanes[j]
+    const region = fn.emitValue(`load i64, i64* ${lane}`)
+    const idle = fn.emitValue(`icmp eq i64 ${region}, 0`)
+    done = j === 0 ? idle : fn.emitValue(`and i1 ${done}, ${idle}`)
+    j = j + 1
+  }
+  const ready = fn.newBlock("await.ready")
+  const pending = fn.newBlock("await.pending")
+  fn.emit(`br i1 ${done}, label %${ready.label}, label %${pending.label}`)
+  fn.placeBlock(pending)
+  emitter.asyncPolls.push(poll.label)
+  fn.emit(`store i32 ${emitter.asyncPolls.length}, i32* %async.state`)
+  fn.emit("br label %async.suspend")
+  fn.placeBlock(ready)
+}
+
 /** The answer a finished kid left in its frame, unpacked as an ordinary call's would be. */
 const loadAnswer = (
   emitter: Emitter,
@@ -278,10 +333,34 @@ export const emitAsyncCall = (
   if (mode === ASYNC_ALL) {
     const base = kidBase(emitter, emitter.asyncGroup, emitter.asyncMember)
     storeHead(emitter, base, head, operandTypes, operandValues)
-    // Each member starts here, in argument order as Node starts them; its
-    // answer is ignored, because the poll re-resumes every member and a
-    // finished frame (state -1) answers true at once.
-    fn.emitValue(`call i1 @${sig.name}.resume(i8* ${base})`)
+    // Each member starts here, in argument order as Node starts them, already
+    // in a region of its own, its lane, as a spawned task starts in its node's:
+    // the marks its scopes take are the region's, so what it releases after an
+    // await is freed there. Started in the awaiting function's arena instead,
+    // its first mark named that arena, the release at its return found no
+    // chunk of the region and did nothing, and every temporary it made after
+    // its first await stayed until the caller released (ASYNC-15). One that
+    // finished at once has its region adopted here and its lane slot holds 0,
+    // so the poll passes it by; one that waits keeps the region, which the
+    // poll enters around each resume.
+    const region = fn.emitValue(`call i64 ${emitter.useRuntime("nish_region_new")}()`)
+    fn.emitValue(`call i8* ${emitter.useRuntime("nish_region_enter")}(i64 ${region})`)
+    const finished = fn.emitValue(`call i1 @${sig.name}.resume(i8* ${base})`)
+    fn.emit(`call void ${emitter.useRuntime("nish_region_leave")}(i64 ${region}, i8* null)`)
+    const lane = fn.emitAlloca("async.lane", "i64", 8)
+    const waits = fn.newBlock("lane.new")
+    const ran = fn.newBlock("lane.ran")
+    const started = fn.newBlock("lane.started")
+    fn.emit(`br i1 ${finished}, label %${ran.label}, label %${waits.label}`)
+    fn.placeBlock(waits)
+    fn.emit(`store i64 ${region}, i64* ${lane}`)
+    fn.emit(`br label %${started.label}`)
+    fn.placeBlock(ran)
+    fn.emit(`call void ${emitter.useRuntime("nish_region_adopt")}(i64 ${region})`)
+    fn.emit(`store i64 0, i64* ${lane}`)
+    fn.emit(`br label %${started.label}`)
+    fn.placeBlock(started)
+    emitter.asyncLanes.push(lane)
     emitter.asyncHeads.push(head)
     emitter.asyncCounts.push(operandTypes.length)
     emitter.asyncPrivates.push(calleePrivate)
@@ -336,15 +415,22 @@ const emitSpawnedFrame = (
   )
   const prev = fn.emitValue(`call i8* ${emitter.useRuntime("nish_async_enter")}(i8* ${node})`)
   const values: string[] = []
+  // Operand `k` is parameter `p`: a compile-time function argument has no
+  // operand (WP29), so the two part at the first one.
   let k = 0
+  let p = 0
   while (k < operandValues.length) {
+    while (p < sig.paramTypes.length && sig.isCompileTime(p)) {
+      p = p + 1
+    }
     // Read before the call, which ends the length facts.
     let value = operandValues[k]
-    if (k < sig.paramTypes.length && sig.paramTypes[k] === T_STRING) {
+    if (p < sig.paramTypes.length && sig.paramTypes[p] === T_STRING) {
       value = fn.emitValue(`call i8* ${emitter.useRuntime("nish_async_copy_str")}(i8* ${value})`)
     }
     values.push(value)
     k = k + 1
+    p = p + 1
   }
   const frame = fn.emitValue(`getelementptr inbounds i8, i8* ${node}, i64 ${NODE_HEADER}`)
   storeHead(emitter, frame, head, operandTypes, values)
@@ -374,10 +460,17 @@ export const emitKernelWait = (emitter: Emitter, expr: Node, builtin: string): s
     asyncFail(emitter, `\`${builtin}\` outside a suspending function`)
     return ""
   }
-  const arg = emitter.emitExpression(expr.children[1].children[0])
+  const args = expr.children[1].children
+  const arg = emitter.emitExpression(args[0])
   let token = ""
   if (builtin === "async.sleep") {
     token = fn.emitValue(`call i64 ${emitter.useRuntime("nish_async_sleep")}(i32 ${arg})`)
+  } else if (builtin === "async.readableWithin" || builtin === "async.writableWithin") {
+    const ms = emitter.emitExpression(args[1])
+    const dir = builtin === "async.writableWithin" ? 1 : 0
+    token = fn.emitValue(
+      `call i64 ${emitter.useRuntime("nish_async_wait_fd_within")}(i32 ${arg}, i32 ${dir}, i32 ${ms})`
+    )
   } else {
     const dir = builtin === "async.writable" ? 1 : 0
     token = fn.emitValue(`call i64 ${emitter.useRuntime("nish_async_wait_fd")}(i32 ${arg}, i32 ${dir})`)
@@ -398,6 +491,40 @@ export const emitKernelWait = (emitter: Emitter, expr: Node, builtin: string): s
   fn.emit(`store i32 ${emitter.asyncPolls.length}, i32* %async.state`)
   fn.emit("br label %async.suspend")
   fn.placeBlock(ready)
+  return fn.emitValue(`icmp ne i32 ${answer}, 0`)
+}
+
+/** Whether `builtin`, a canonical name, is one of `nish:async`'s cancellation calls. */
+export const isTaskCallName = (builtin: string): boolean =>
+  builtin === "async.taskId" ||
+  builtin === "async.cancel" ||
+  builtin === "async.cancelled" ||
+  builtin === "async.cancelAfter"
+
+/**
+ * `taskId()`, `cancel(task)`, `cancelled()`, `cancelAfter(task, ms)` from
+ * `nish:async` (WP49 stage 5, part 7): a call to the executor's entry point
+ * of the same meaning. Each answers at once and suspends nothing, so it is
+ * written in any function; the boolean ones answer an `i32` the call turns
+ * into an `i1`.
+ */
+export const emitTaskCall = (emitter: Emitter, expr: Node, builtin: string): string => {
+  const fn = emitter.fn
+  const args = expr.children[1].children
+  if (builtin === "async.taskId") {
+    return fn.emitValue(`call i64 ${emitter.useRuntime("nish_async_task_id")}()`)
+  }
+  let answer = ""
+  if (builtin === "async.cancelled") {
+    answer = fn.emitValue(`call i32 ${emitter.useRuntime("nish_async_cancelled")}()`)
+  } else if (builtin === "async.cancel") {
+    const task = emitter.emitExpression(args[0])
+    answer = fn.emitValue(`call i32 ${emitter.useRuntime("nish_async_cancel")}(i64 ${task})`)
+  } else {
+    const task = emitter.emitExpression(args[0])
+    const ms = emitter.emitExpression(args[1])
+    answer = fn.emitValue(`call i32 ${emitter.useRuntime("nish_async_cancel_after")}(i64 ${task}, i32 ${ms})`)
+  }
   return fn.emitValue(`icmp ne i32 ${answer}, 0`)
 }
 
@@ -455,6 +582,7 @@ export const emitAwaitAll = (emitter: Emitter, decl: Node): void => {
   emitter.asyncHeads = []
   emitter.asyncCounts = []
   emitter.asyncPrivates = []
+  emitter.asyncLanes = []
   let member = 0
   for (const call of calls) {
     if (suspends(emitter.program.nodeCallees[call.id])) {
@@ -466,7 +594,7 @@ export const emitAwaitAll = (emitter: Emitter, decl: Node): void => {
     values.push(emitter.emitExpression(call))
   }
   if (memberNames.length > 0) {
-    emitPoll(emitter, group, memberNames)
+    emitLanePoll(emitter, group, memberNames)
   }
   const names = decl.children[0].children
   member = 0

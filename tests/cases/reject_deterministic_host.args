@@ -1,0 +1,1 @@
+--deterministic --target wasm32 --host tests/host-import/golden.ts

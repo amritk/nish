@@ -1,0 +1,7 @@
+{
+  "name": "reject-host-manifest-absolute",
+  "private": true,
+  "nish": {
+    "host": ["/srv/page/host.ts"]
+  }
+}

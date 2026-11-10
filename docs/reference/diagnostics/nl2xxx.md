@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 680 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 694 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -5418,7 +5418,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`)
+` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`)
 ```
 
 ## NL2352
@@ -7247,7 +7247,7 @@ export const tidy = (s: string): string => trim(s);
 ```
 
 ```text
-This call to `trim` may panic: it reaches the `index` site at std/text.ts:157:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+This call to `trim` may panic: it reaches the `index` site at std/text.ts:163:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
 ```
 
 ## NL2459
@@ -11888,7 +11888,7 @@ A rest parameter copies each `Cell` record it gathers, so a write through the co
 The message of an error contains:
 
 ```text
-…region memory kept by memory outside the region points at freed memory once `free` runs
+…region memory kept by memory outside the region points at freed memory once …
 ```
 
 ## NL2610
@@ -11928,7 +11928,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-The function `region` or `regionWith` runs answers the region's root
+… runs answers the region's root, which must be memory it allocated, and …
 ```
 
 ## NL2615
@@ -12459,21 +12459,10 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
+` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
 ```
 
-[`nl2665_host_string_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2665_host_string_parameter.ts) (compiled with `--target wasm32 --host tests/wordings/host/text.ts`):
-
-```ts
-import { log } from "./host/text"
-export function f(): i32 {
-  return 0
-}
-```
-
-```text
-Parameter `s` of host function `log` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
-```
+**Retired**: a `string` parameter of a host function, refused until strings crossed (WP50 S4); it passes as its UTF-8 bytes' address and count, which the loader decodes
 
 ## NL2666
 
@@ -12665,7 +12654,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region
+…, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region, and objects and arrays, which it shares with the spawner
 ```
 
 ## NL2674
@@ -12825,4 +12814,177 @@ The message of an error contains:
 
 ```text
 ` is not available: index it, and keep a count beside it for the slots in use
+```
+
+## NL2689
+
+The message of an error contains:
+
+```text
+…what a task hands on may be memory of its own region, freed while the task it spawned still holds it
+```
+
+[`nl2689_task_nested_spawn.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2689_task_nested_spawn.ts):
+
+```ts
+// NL2689: a spawned task may not itself spawn a task with an object or an
+// array: what it hands on may be memory of its own region, which is freed when
+// it ends while the task it spawned still holds it.
+import { sleep, spawn } from "nish:async"
+
+class Box {
+  n: i32 = 0
+}
+
+async function inner(box: Box): Promise<void> {
+  await sleep(1)
+  console.log(`${box.n}`)
+}
+
+async function outer(n: i32): Promise<void> {
+  const box = new Box()
+  box.n = n
+  spawn(inner(box))
+}
+
+export async function main(): Promise<i32> {
+  spawn(outer(3))
+  return 0
+}
+```
+
+```text
+`outer` runs as a spawned task, in a region of its own that is freed when it ends, and spawns a task with an object or an array, itself or through a callee: what a task hands on may be memory of its own region, freed while the task it spawned still holds it
+```
+
+## NL2690
+
+The message of an error contains:
+
+```text
+…a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share…
+```
+
+[`nl2690_spawn_capture.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2690_spawn_capture.ts):
+
+```ts
+// NL2690: a spawned task's function argument captures only numbers, booleans,
+// enums and objects or arrays it may share. The arrow reads the string `tag`
+// of `start`, which the task may not share.
+import { sleep, spawn } from "nish:async"
+
+async function later(f: (n: i32) => i32, n: i32): Promise<void> {
+  await sleep(1)
+  console.log(`${f(n)}`)
+}
+
+async function start(base: i32): Promise<void> {
+  const tag = `n${base}`
+  spawn(later((n: i32): i32 => n + tag.length, 2))
+}
+
+export async function main(): Promise<i32> {
+  await start(40)
+  return 0
+}
+```
+
+```text
+`spawn` hands `later<(n) => ...>` an arrow that reads `tag` of type string of the function it is written in: a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share, because the task may run after that function returns; pass the value to the task as an argument of its own, or hand it a top-level function
+```
+
+## NL2691
+
+The message of an error contains:
+
+```text
+…a task shares with its spawner only objects and arrays whose every part outlives the spawner's call; pass the task what it needs of it instead
+```
+
+## NL2692
+
+The message of an error contains:
+
+```text
+` takes two `i32`s: the descriptor it waits on, and the milliseconds it waits at most before it answers false
+```
+
+## NL2693
+
+The message of an error contains:
+
+```text
+` from `nish:async` takes …
+```
+
+## NL2694
+
+The message of an error contains:
+
+```text
+`nish.host` is an array of strings, each the path of a host module relative to `package.json`
+```
+
+## NL2695
+
+The message of an error contains:
+
+```text
+…a `nish.host` entry is a host module's path relative to the directory `package.json` is in
+```
+
+## NL2696
+
+The message of an error contains:
+
+```text
+…a `nish.host` entry names a host module the package has
+```
+
+## NL2697
+
+The message of an error contains:
+
+```text
+`find` is not supported: TypeScript types its answer `T | undefined`, and Nish has no `undefined`, so a test of it would pass `tsc` and mean something else under Node; use `findIndex` and index the array, `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`
+```
+
+## NL2698
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes at most two, the element and its index: JavaScript's third, the array itself, is the receiver the call already names, so read that instead
+```
+
+## NL2699
+
+The message of an error contains:
+
+```text
+`slice` on an array expects 0 to 2 arguments, got …
+```
+
+## NL2700
+
+The message of an error contains:
+
+```text
+…the clock and the random source answer differently on every run
+```
+
+## NL2701
+
+The message of an error contains:
+
+```text
+…the environment and the terminal answer differently on every host
+```
+
+## NL2702
+
+The message of an error contains:
+
+```text
+…: a child region's parent is the region entered when it is made, so `child` and `childWith` are called only in the function `enter` or `enterWith` runs, and that function only by them
 ```

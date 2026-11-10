@@ -1,8 +1,8 @@
 # Arrays and strings
 
-An array holds values of one type and can grow; a string is immutable UTF-8
-text. Both have a short, fixed list of methods — far fewer than in
-JavaScript — and both are bounds-checked. The normative rules are in the
+An array holds values of one type and can grow; a string is immutable
+bytes, usually UTF-8 text. Both have a short, fixed list of methods — far
+fewer than in JavaScript — and both are bounds-checked. The normative rules are in the
 reference's [Array literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#array-literals),
 [Element access](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#element-access),
 [Arrays and strings as receivers](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#arrays-and-strings-as-receivers)
@@ -32,9 +32,10 @@ export const main = (): i32 => {
 ```
 
 Those — `length` (read-only), `push`, `pop`, `indexOf` and `join` (on a
-`string[]` only) — with `set` and `fill` on arrays of numbers and `sort`
-(below), are every array method there is. There is no `map`, `filter`,
-`reduce`, `forEach` or `slice`, and no spread. Write the loop, or a function that takes
+`string[]` only) — with `set` and `fill` on arrays of numbers, `sort`,
+`map`, `filter`, `some`, `every`, `findIndex` and `slice` (below), are every
+array method there is. There is no `find`, `reduce` or `forEach`, and no
+spread. Write the loop, or a function that takes
 [a function argument](functions.md#passing-a-function-to-a-function).
 
 `const` fixes the binding, not the contents: `primes.push(11)` and
@@ -100,6 +101,42 @@ Each comparator compiles to its own copy of the sort, with the comparator
 called directly in the inner loop. A sort uses one temporary copy of the
 array, given back before `sort` returns, so sorting in a loop does not grow
 memory.
+
+### `map`, `filter` and `slice`
+
+`map`, `filter`, `some`, `every` and `findIndex` take a callback, which gets
+the element, or the element and its index, as in TypeScript. `slice` copies a
+range into a new array.
+
+```ts nish:ok
+export const main = (): i32 => {
+  const xs: i32[] = [3, 8, 1, 6];
+  const doubled = xs.map((x) => x * 2);
+  const big = xs.filter((x) => x > 2);
+  const labels = xs.map((x, i) => `${i}:${x}`);
+  const middle = xs.slice(1, 3);
+  console.log(`${doubled[1]} ${big.length} ${middle[0]}`);   // 16 3 8
+  console.log(labels.join(" "));                            // 0:3 1:8 2:1 3:6
+  console.log(`${xs.some((x) => x > 7)} ${xs.every((x) => x > 0)}`); // true true
+  console.log(`${xs.findIndex((x) => x === 1)}`);           // 2
+  return 0;
+};
+```
+
+The callback follows the comparator's rule above: a top-level function, or an
+arrow that reads only `const` locals and parameters. Each callback compiles to
+its own loop that calls it directly. Three things differ from JavaScript:
+
+- **There is no `find`.** TypeScript says it answers `T | undefined`, and Nish
+  has no `undefined`. Use `findIndex` and index the array:
+  `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`.
+- **A callback takes at most two parameters.** JavaScript passes the array as
+  a third; read the array you called the method on instead.
+- **`slice` stops the program on a bad range**, as string `slice` does:
+  `xs.slice(start, end)` needs `0 <= start <= end <= xs.length`. A negative
+  index does not count from the end, and an end past the length is not
+  clamped. `xs.slice()` copies the whole array, and `xs.slice(start)` copies
+  from `start` to the end.
 
 ### Walking an array
 
@@ -220,7 +257,8 @@ reads and writes directly
 
 ## Strings
 
-A `string` is immutable UTF-8. `+` joins two strings, `===` compares them by
+A `string` is immutable bytes, usually UTF-8 text, and Nish does not check that
+they are valid UTF-8. `+` joins two strings, `===` compares them by
 content, and these are its methods, all of them:
 
 | Member | Answers |

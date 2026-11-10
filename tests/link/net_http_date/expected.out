@@ -32,4 +32,13 @@ PASS  it takes the last millisecond of the last second
 PASS  which is that second
 PASS  unpinned, it reads the clock: a date after this test was written
 PASS  formatted once for the change
-http date: 34 passed, 0 failed, 0 skipped
+PASS  HTTP/1.1: the program's one date replaces the server's, and one Date goes out
+PASS  two date fields are HTTP1_REFUSED, and nothing is written
+PASS  in any case, the server's own date or none
+PASS  http1ResponseHead refuses two as well
+PASS  and writes one
+PASS  HTTP/3: a head with two date fields is H3_INVALID
+PASS  and nothing went out for it
+PASS  the stream still takes a head with one
+PASS  which goes out with that date alone
+http date: 43 passed, 0 failed, 0 skipped

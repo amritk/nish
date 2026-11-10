@@ -33,7 +33,9 @@ node bench/jwt-verify/run.mjs --only decode --instructions
 ```
 
 Each case calibrates one iteration count to about 200 ms a run. Every column
-runs that count in at least 11 interleaved rounds, and the median is reported.
+runs that count in at least 11 interleaved rounds. A column's row gives its
+min, median and max ns/op over the rounds, and its spread: max less min over
+the median, a build's own scatter beside the copy's band.
 
 The columns are:
 

@@ -38,7 +38,7 @@ const work = path.join(root, "build", "test", "unmodified")
  * Programs whose native and unmodified-Node runs differ on purpose. Each one is
  * a semantic that lives below the globals this prelude can install, so the entry
  * is a statement about the language and not a bug to fix. They are the same
- * decisions `known-failures.txt` records for the rewritten runner, plus the two
+ * decisions `known-failures.txt` records for the rewritten runner, plus those
  * the rewriter can reach and a prelude cannot.
  */
 const KNOWN = new Map([
@@ -47,6 +47,10 @@ const KNOWN = new Map([
   [
     "rng_entry_panic_f64",
     "a value leaving `integer<Lo, Hi>` panics natively; under Node the type is a `number` alias",
+  ],
+  [
+    "arr_slice_saturate",
+    "an array `slice` bound out of range panics natively; unmodified Node's `slice` clamps",
   ],
 ])
 

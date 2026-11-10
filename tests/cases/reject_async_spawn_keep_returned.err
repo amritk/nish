@@ -1,0 +1,6 @@
+runs as a spawned task, in a region of its own that is freed when it ends
+stores ``a ${ms}`` into `a.t.label`
+stores ``b ${ms}`` into `b.t.label`
+stores ``c ${ms}`` into `c.t.label`
+stores ``d ${ms}`` into `d.t.label`
+region memory kept by memory outside the region points at freed memory once the task ends
