@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- examples/wasm-arena: served from the directory build.mjs writes, beside page.js and client.wasm. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>wasm-arena</title>
+    <style>
+      body { margin: 0; background: #05050f; display: grid; place-items: center; height: 100vh; }
+      canvas { width: 960px; height: 540px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="arena" width="960" height="540"></canvas>
+    <script type="module">
+      import { main } from "./page.js"
+      const query = new URLSearchParams(location.search)
+      const options = {
+        seed: Number(query.get("seed") ?? "1"),
+        logCap: 1 << 18,
+        webgpu: query.get("gl") === null,
+        afterFrame: globalThis.arenaAfterFrame,
+      }
+      globalThis.arena = main(document.getElementById("arena"), "./client.wasm", options)
+    </script>
+  </body>
+</html>
