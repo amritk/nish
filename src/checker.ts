@@ -113,7 +113,13 @@ import {
 import { StringSet } from "./map"
 import { checkStorageUses, isStorageNew, recheckStorage, storageNewNode } from "./module-storage"
 import { declarationName, lateUses, scriptMain } from "./script"
-import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER, SORT_LOCAL, SORT_SPECIFIER } from "./std-modules"
+import {
+  COLLECTIONS_SPECIFIER,
+  FLOAT_REM_LOCAL,
+  MATH_SPECIFIER,
+  SORT_LOCAL,
+  SORT_SPECIFIER,
+} from "./std-modules"
 import {
   AliasInfo,
   CheckedProgram,
@@ -396,26 +402,37 @@ export class Checker {
    * is an ordinary call into a library copied like `nish/collections`. A
    * module that calls none of the three loads nothing. The gate is the scan
    * itself, not the source text, so `Math\n  .tan(x)` is found too.
+   *
+   * A page module (`--profile wasm`, `wasm-host`) links no libm, so there
+   * `Math.sin`, `cos`, `exp`, `log` and `pow` are `std/math.ts`'s too, and a
+   * `%` or `%=` imports `fmodF64` under `FLOAT_REM_LOCAL` for the emitter to
+   * call on a float remainder. The scan is syntax, so an integer `%` loads the
+   * library and copies nothing from it.
    */
   importMath(): void {
     if (this.program.isMathLibrary()) {
       return
     }
     const calls: Node[] = []
-    scanMathCalls(this.program.file, calls)
+    const rems: Node[] = []
+    scanMathCalls(this.program.file, calls, this.ctx.pageModule ? rems : null)
     for (const call of calls) {
       const name = call.children[0].text
-      const local = `Math.${name}`
-      let bound = false
-      for (const imp of this.program.imports) {
-        if (imp.localName === local) {
-          bound = true
-        }
-      }
-      if (!bound) {
-        this.program.imports.push(new ImportBinding(MATH_SPECIFIER, `${name}F64`, local, call, call))
+      this.bindMath(`${name}F64`, `Math.${name}`, call)
+    }
+    if (rems.length > 0) {
+      this.bindMath("fmodF64", FLOAT_REM_LOCAL, rems[0])
+    }
+  }
+
+  /** Import `name` from `nish/math` as `local`, once per module. */
+  bindMath(name: string, local: string, at: Node): void {
+    for (const imp of this.program.imports) {
+      if (imp.localName === local) {
+        return
       }
     }
+    this.program.imports.push(new ImportBinding(MATH_SPECIFIER, name, local, at, at))
   }
 
   /**
@@ -1171,6 +1188,11 @@ export class Checker {
     while (i < this.program.imports.length) {
       this.bindImport(i, targets[i])
       i = i + 1
+    }
+    // A page module's float `%` calls `fmodF64` (`importMath`).
+    const rem = this.ctx.sigs.get(FLOAT_REM_LOCAL, -1)
+    if (rem >= 0) {
+      this.program.floatRemainder = this.program.functions[rem]
     }
   }
 
@@ -1957,7 +1979,7 @@ export const indexGuardAdvice = (
     )
   }
   const convert = unsigned ? "toU32" : "toI32"
-  if ((unsigned || f64Mode) && declaresName(program.file, convert)) {
+  if ((unsigned || f64Mode) && shadowsGuardName(program, convert)) {
     return (
       "no guard removes the check here, because the one the compiler credits for this index calls the builtin " +
       `\`${convert}\`, which this module's own \`${convert}\` hides: rename it to guard the access`
@@ -1987,7 +2009,7 @@ const offsetSpelling = (index: Node, offset: Offset): string =>
  */
 const offsetGuardAdvice = (program: CheckedProgram, offset: Offset, sum: string, holder: string): string => {
   const f64Mode = program.f64Mode
-  if (f64Mode && declaresName(program.file, "toI32")) {
+  if (f64Mode && shadowsGuardName(program, "toI32")) {
     return (
       "no guard removes the check here, because the one the compiler credits for this index calls the builtin " +
       "`toI32`, which this module's own `toI32` hides: rename it to guard the access"
@@ -2035,7 +2057,7 @@ const boundsGuardEdits = (
     return none
   }
   const convert = unsigned ? "toU32" : "toI32"
-  if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, convert)) {
+  if (shadowsGuardName(ctx.program, "panic") || shadowsGuardName(ctx.program, convert)) {
     return none
   }
   // A statement that declares the index or the receiver (`const j = i, v = xs[j]`)
@@ -2168,16 +2190,10 @@ const hasEffectOffPath = (node: Node, path: Node[]): boolean => {
   return false
 }
 
-/**
- * Whether the module declares `name` anywhere: a function, a class, a
- * constant, a local, a parameter or an import. A guard calls `panic` and
- * `toI32` by name, so any such declaration might be what the call reaches
- * instead of the builtin, and the fix is not offered at all rather than
- * reasoning about scopes.
- */
-const declaresName = (node: Node, name: string): boolean => {
+/** Whether `node` is a declaration whose name `declaresName` reads from its children. */
+const isNameDeclaration = (node: Node): boolean => {
   const k = node.kind
-  const declares =
+  return (
     k === N_VAR_DECL ||
     k === N_PARAM ||
     k === N_FUNCTION ||
@@ -2186,7 +2202,19 @@ const declaresName = (node: Node, name: string): boolean => {
     k === N_ENUM ||
     k === N_TYPE_ALIAS ||
     k === N_IMPORT_SPEC
-  if (declares) {
+  )
+}
+
+/**
+ * Whether `node` declares `name` anywhere inside it: a function, a class, a
+ * constant, a local, a parameter or an import. A guard calls `panic` and
+ * `toI32` by name, so any such declaration might be what the call reaches
+ * instead of the builtin, and the fix is not offered at all rather than
+ * reasoning about scopes. A question about the whole module goes through
+ * `shadowsGuardName`, which walks it once.
+ */
+const declaresName = (node: Node, name: string): boolean => {
+  if (isNameDeclaration(node)) {
     for (const child of node.children) {
       if (child.kind === N_IDENT && child.text === name) {
         return true
@@ -2199,6 +2227,46 @@ const declaresName = (node: Node, name: string): boolean => {
     }
   }
   return false
+}
+
+/** The `CheckedProgram.guardShadows` bit for `name`, or 0 for a name a guard does not call. */
+const guardNameBit = (name: string): i32 => {
+  if (name === "panic") {
+    return 1
+  }
+  if (name === "toI32") {
+    return 2
+  }
+  return name === "toU32" ? 4 : 0
+}
+
+/** The `guardShadows` bits of every name `node` declares anywhere inside it, as `declaresName` reads a declaration. */
+const guardNamesDeclared = (node: Node): i32 => {
+  let bits = 0
+  if (isNameDeclaration(node)) {
+    for (const child of node.children) {
+      if (child.kind === N_IDENT) {
+        bits = bits | guardNameBit(child.text)
+      }
+    }
+  }
+  for (const child of node.children) {
+    bits = bits | guardNamesDeclared(child)
+  }
+  return bits
+}
+
+/**
+ * `declaresName(program.file, name)` for `panic`, `toI32` or `toU32`, the
+ * names a bounds guard calls. The first question walks the module once for
+ * all three and keeps the answer in `guardShadows`; every NL9007 warning
+ * after it reads the bits, where it used to walk the module twice.
+ */
+const shadowsGuardName = (program: CheckedProgram, name: string): boolean => {
+  if (program.guardShadows < 0) {
+    program.guardShadows = guardNamesDeclared(program.file)
+  }
+  return (program.guardShadows & guardNameBit(name)) !== 0
 }
 
 /** The test that proves `name` into `[lo, hi]`, for a range starting at 0 or at `-2147483648`. */
@@ -3267,21 +3335,33 @@ const hasSortCall = (node: Node): boolean => {
   return false
 }
 
-/** The `Math.atan2`, `Math.tan` and `Math.hypot` calls under `node`, in source order (`importMath`). */
-const scanMathCalls = (node: Node, calls: Node[]): void => {
+/**
+ * The `Math` calls under `node` that `std/math.ts` answers, in source order
+ * (`importMath`): `atan2`, `tan` and `hypot`. On a page module, where `rems`
+ * is not `null`, `sin`, `cos`, `exp`, `log` and `pow` too, and every `%` and
+ * `%=` goes to `rems`.
+ */
+const scanMathCalls = (node: Node, calls: Node[], rems: Node[] | null): void => {
+  if (rems !== null && node.kind === N_BINARY && (node.text === "%" || node.text === "%=")) {
+    rems.push(node)
+  }
   if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
     const callee = node.children[0]
     const name = callee.text
     if (
       callee.children[0].kind === N_IDENT &&
       callee.children[0].text === "Math" &&
-      (name === "atan2" || name === "tan" || name === "hypot")
+      (name === "atan2" ||
+        name === "tan" ||
+        name === "hypot" ||
+        (rems !== null &&
+          (name === "sin" || name === "cos" || name === "exp" || name === "log" || name === "pow")))
     ) {
       calls.push(node)
     }
   }
   for (const child of node.children) {
-    scanMathCalls(child, calls)
+    scanMathCalls(child, calls, rems)
   }
 }
 

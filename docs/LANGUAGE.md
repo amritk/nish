@@ -3580,8 +3580,15 @@ async function run(): Promise<void> {
   what the helper was handed, so in a task a fresh helper's answer other
   than a string, awaited or not, carries its arguments' origins too, and a
   store through a holder a helper built from the shared object is NL2609
-  (`reject_async_spawn_keep_returned`). Read and update the shared object
-  in place instead. Three refusals are conservative, and known to refuse
+  (`reject_async_spawn_keep_returned`). An argument is left out of that
+  join only when the answer's type cannot reach it: no class, array or
+  string type the answer may hold (through fields, elements, a nullable or a
+  union) is one the argument may hold, and neither side holds a class that
+  implements an interface. So a `PgAsyncResult` awaited from a query on a
+  shared `PgAsyncPool` is the task's own, while a `Holder` of a shared
+  `Tally` or a `Badge` of an interface `Tally` implements is still the
+  shared object's (`reject_async_spawn_answer_reach`). Read and update the
+  shared object in place instead. Three refusals are conservative, and known to refuse
   sound programs: a call that hands a callee both a shared object it writes
   into and any string or object of the task's, even when the callee writes
   only numbers; a store into the shared object of what an `await` answers
@@ -3591,13 +3598,32 @@ async function run(): Promise<void> {
   which may be the task's alone. A task may not itself spawn a task with an
   object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
   `reject_async_spawn_nested`); a task with only copied arguments may.
-- **A spawned task takes a function argument that captures nothing.** A
-  top-level function, or an arrow written at the call that reads only its own
-  parameters, is a compile-time argument: the call is an instance with the
-  function in its body, and nothing of it is in the task's frame
-  (`async_spawn_fn_arg`). An arrow that reads a local of the function it is
-  written in is NL2690 (`reject_async_spawn_block_arg`): what it captures
-  would ride in the task's frame, past the rules above.
+- **A spawned task's function argument captures only what the task may
+  share.** A top-level function, or an arrow written at the call, is a
+  compile-time argument: the call is an instance with the function in its
+  body (`async_spawn_fn_arg`). The arrow may read locals of the function it
+  is written in when each is a number, a `boolean` or an enum, copied into
+  the task's frame, or an object or array that holds, through any field or
+  element, no `Region`, no `Secret`, no handle class and no `nish/threads`
+  scope, lock, guard or channel. Its strings and nested objects are fine (a
+  `PgAsyncPool` holds both). Any other capture is NL2690: a `string`, a
+  nullable value or a union itself, or an object holding a `Region`
+  (`reject_async_spawn_block_arg`, `reject_async_spawn_handler_holds_region`).
+  A capture of a handle, or of an object holding a `Secret`, is refused
+  sooner, by the rule for any arrow argument (NL2588,
+  `reject_async_spawn_handler_holds_handle`,
+  `reject_async_spawn_handler_holds_secret`); the capture rule refuses them
+  as well, a check behind that one. A captured object is shared with
+  the task as if handed to it: the spawner releases no arena scope over it,
+  and the arrow's body is walked with the task's rules, the capture as memory
+  the task does not own, so the arrow may update its numbers and call its
+  methods (a serve handler awaiting a query on a captured `PgAsyncPool`) but
+  may not store the task's memory into it or grow it (NL2609, NL2615,
+  `async_spawn_handler_reach`, `reject_async_spawn_handler_*`). The arrow's
+  parameters carry what the task passes at each direct call; one it reaches
+  through a further function parameter is unknown, so storing it into a
+  capture is refused. Each arrow is an instance of its own, so a refused
+  arrow at one call site is not hidden by an admitted one at another.
 - **Each spawned task has a region of its own**, entered whenever the task
   runs and freed when it finishes, so what a task allocates is given back
   when it ends, not when `main` does (`tests/link/async_region_per_task`).
@@ -6839,7 +6865,7 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
+| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on a page module (above, `Math.sin`) a float `%` or `%=` is a call to `std/math.ts`'s `fmodF64` in place of `frem`, whose libm `fmod` that link lacks, an `f32` widened to `f64` and the exact result narrowed back; on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`, `wasm_math_rem`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
 | `+` | two `string` | `string` | `nish_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
@@ -7575,10 +7601,10 @@ The reference for each member of `Math`, with its parameters, its answer and its
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path | none | `math_intrinsics`, `math_rounding`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
+| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path. On a page module (a wasm build with no WASI, or an `--emit-dts` compile, whose IR `--profile wasm` or `wasm-host` links with no libm), `sin`, `cos`, `exp` and `log` are calls to `std/math.ts`'s `sinF64`, `cosF64`, `expF64` and `logF64` instead, fdlibm's, copied in like `tan`, within one ulp of V8; `--profile wasi` keeps the intrinsics | none | `math_intrinsics`, `math_rounding`, `wasm_math_exp`, `wasm_math_std`; `reject_wasm_math_f32` (`` `Math.sin` requires an f64 argument, got f32 ``); `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
 | `Math.tan(x: f64): f64` | a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the module as `internal @nish.tanF64`, so no target calls libm; exact near every multiple of π/2 and within one ulp | none | `math_tan`, `math_std_edges` |
 | `Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64` | calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in like `tan`; ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is −π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two arguments, not JavaScript's any number | none | `math_atan2`, `math_hypot`; `reject_math_atan2_f32` (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``), `reject_math_hypot_arity` (`` `Math.hypot` expects exactly 2 arguments, got 3 ``) |
-| `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C | none | `math_intrinsics`; `tests/differential/corpus/f64_pow_spec` |
+| `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C. On a page module it is a call to `std/math.ts`'s `powF64`, copied in like `tan`, which answers ECMAScript's cases itself, within one ulp of V8 | none | `math_intrinsics`, `wasm_math_std`; `tests/differential/corpus/f64_pow_spec`; `reject_wasm_math_arity` (`` `Math.pow` expects exactly 2 arguments, got 1 ``) |
 | `Math.round(x: f64): f64` | JavaScript's round-half-up (`Math.floor`'s `floor` + compare + `select`), then `llvm.copysign.f64` puts `x`'s sign back: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a value in `[-0.5, 0)` or `-0` itself -> `-0`, as in JavaScript; `NaN` -> `NaN` | none | `math_intrinsics`, `math_round_negzero`, `math_rounding` |
 | `Math.abs(x: T): T` for any numeric `T` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` / `llvm.fabs.f64`; on an unsigned type, no instruction at all (the value is its own magnitude) | none | `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned widths *(CLI only)* |
 | `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: JavaScript's answer, a NaN operand gives NaN and `-0` is below `+0` (`Math.min(0, -0)` is `-0`). A native build branches as clang compiles the C a programmer writes for it: `fcmp uno` to a quiet NaN, else `fcmp olt`/`ogt` and a `select`, and on `fcmp oeq` the operand whose sign bit is set (`min`) or clear (`max`), the three joined by a `phi`; x86 has no instruction for `llvm.minimum`, whose expansion measured 25–55% slower in `bench/math`. A wasm build keeps `llvm.minimum/maximum.<f32\|f64>`, which are wasm's `f64.min`/`f64.max`, so no libm is linked for them | none | `math_i32`, `math_intrinsics`, `math_minmax_float`, `math_minmax_nan`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |

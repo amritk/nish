@@ -104,7 +104,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | --- | --- |
 | [`nish/base64`](base64.md) | Standard base64 (RFC 4648 §4) with `=` padding, the encoding kitty graphics frames are sent in. |
 | [`nish/bytes`](bytes.md) | Fixed-width integers and doubles read from, and written into, a byte array at an offset, in either byte order. |
-| [`nish/math`](math.md) | `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish rather than libm, so a program answers the same on every target, wasm included, and the optimiser sees the whole function. |
+| [`nish/math`](math.md) | `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, and on a freestanding wasm build `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow` and the `%` of two `f64`s, in Nish rather than libm, so a program answers the same on every target and the optimiser sees the whole function. |
 | [`nish/pair`](pair.md) | Two values answered by one call. |
 | [`nish/random`](random.md) | A seeded generator of pseudo-random numbers whose every answer is the same natively and under Node. |
 | [`nish/sort`](sort.md) | `xs.sort(cmp)` on an array, in Nish: a stable merge sort, compiled once per comparator. |

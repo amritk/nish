@@ -63,11 +63,19 @@ import TOK_TEMPLATE_TAIL from "./tokens" -> const TOK_TEMPLATE_TAIL
 import TOK_THROW from "./tokens" -> const TOK_THROW
 import TOK_USHR_ASSIGN from "./tokens" -> const TOK_USHR_ASSIGN
 const SPACES: string = "                                                                "
-struct HostText (class) size=24 align=8 exported
+struct HostRefusal (class) size=32 align=8 exported
+  field name: string index=0 offset=0
+  field message: string index=1 offset=8
+  field start: i32 index=2 offset=16
+  field end: i32 index=3 offset=20
+  field reported: boolean index=4 offset=24
+  constructor -> @HostRefusal.constructor
+struct HostText (class) size=32 align=8 exported
   field text: string index=0 offset=0
   field problem: string index=1 offset=8
   field start: i32 index=2 offset=16
   field end: i32 index=3 offset=20
+  field refusals: HostRefusal[] index=4 offset=24
   constructor -> @HostText.constructor
 struct Tokens (class) size=32 align=8
   field kinds: i32[] index=0 offset=0
@@ -75,22 +83,21 @@ struct Tokens (class) size=32 align=8
   field ends: i32[] index=2 offset=16
   field values: string[] index=3 offset=24
   constructor -> @Tokens.constructor
-struct Kept (class) size=32 align=8
+struct Kept (class) size=24 align=8
   field firsts: i32[] index=0 offset=0
   field lasts: i32[] index=1 offset=8
-  field problem: string index=2 offset=16
-  field start: i32 index=3 offset=24
-  field end: i32 index=4 offset=28
+  field refusals: HostRefusal[] index=2 offset=16
   constructor -> @Kept.constructor
   method keep -> @Kept.keep
-struct HostProblem (class) size=16 align=8 exported
-  field message: string index=0 offset=0
-  field node: Node index=1 offset=8
-  constructor -> @HostProblem.constructor
-function HostText.constructor(this: HostText, text: string, problem: string, start: i32, end: i32): void -> @HostText.constructor [exported constructor]
+function HostRefusal.constructor(this: HostRefusal, name: string, message: string, start: i32, end: i32): void -> @HostRefusal.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: end message name start
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function HostText.constructor(this: HostText, text: string, problem: string, start: i32, end: i32): void -> @HostText.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: end problem start text
-  pointer this: size=24 writesThrough=true captured=false
+  pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function unreadable(what: string): string -> @unreadable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -133,7 +140,8 @@ function withoutByteOrderMark(text: string): string -> @withoutByteOrderMark
   local +4:9 blanks: string[] (const)
   local +5:7 i: i32 (let)
 function hostModuleText(page: string): HostText -> @hostModuleText [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
+  sharedWrite: via keepExports
   escaping: page
   calls: HostText.constructor Lexer.constructor Lexer.next REGEX_WORDS Tokens.constructor keepExports nish_alloc_struct nish_array_grow nish_str_concat regexPosition unreadable withoutByteOrderMark
   stackSites=2 stackLocals=2
@@ -168,14 +176,14 @@ function closing(tokens: Tokens, i: i32): i32 -> @closing
   callee +5:16 closes -> @closes
 function Kept.constructor(this: Kept): void -> @Kept.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=32 writesThrough=true captured=false
+  pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Kept.keep(this: Kept, first: i32, last: i32): void -> @Kept.keep [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: first last
   calls: nish_array_grow
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function isWord(tokens: Tokens, i: i32, word: string): boolean -> @isWord
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -185,29 +193,35 @@ function isWord(tokens: Tokens, i: i32, word: string): boolean -> @isWord
   stackSites=0 stackLocals=0
 function keepFunction(tokens: Tokens, i: i32, kept: Kept): i32 -> @keepFunction
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
+  sharedWrite: +0:11
   escaping: i
-  calls: Kept.keep closing hostTypeProblem isWord nish_panic_index nish_panic_overflow typePosition
-  pointer tokens: size=32 writesThrough=false captured=false passedTo=closing#0 isWord#0 closing#0 closing#0
-  pointer kept: size=32 writesThrough=true captured=false passedTo=Kept.keep#0 Kept.keep#0
+  calls: HostRefusal.constructor Kept.keep closing hostTypeProblem isWord nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow typePosition
+  pointer tokens: size=32 writesThrough=false captured=false passedTo=closing#0 closing#0 isWord#0 closing#0
+  pointer kept: size=24 writesThrough=false captured=false passedTo=Kept.keep#0 Kept.keep#0
   stackSites=0 stackLocals=0
-  local -14:7 depth: i32 (let)
-  local -13:7 params: boolean (let)
-  local -12:7 k: i32 (let)
-  local -10:11 kind: i32 (const)
-  callee -9:43 typePosition -> @typePosition
-  callee -6:11 closing -> @closing
-  callee -2:24 typePosition -> @typePosition
-  local -1:15 name: string (const)
-  callee -1:22 isWord -> @isWord
-  callee +0:24 hostTypeProblem -> @hostTypeProblem
-  callee +2:32 closing -> @closing
-  local +5:13 body: i32 (const)
-  callee +5:20 closing -> @closing
-  callee +6:7 Kept.keep -> @Kept.keep
-  callee +7:7 Kept.keep -> @Kept.keep
+  local -19:7 depth: i32 (let)
+  local -18:7 params: boolean (let)
+  local -17:7 refused: boolean (let)
+  local -16:7 k: i32 (let)
+  local -14:11 kind: i32 (const)
+  callee -13:43 typePosition -> @typePosition
+  callee -10:11 closing -> @closing
+  callee -6:24 typePosition -> @typePosition
+  local -5:15 last: i32 (const)
+  callee -5:22 closing -> @closing
+  local -3:17 name: string (const)
+  callee -3:24 isWord -> @isWord
+  local -2:17 where: string (const)
+  local -1:17 message: string (const)
+  callee -1:27 hostTypeProblem -> @hostTypeProblem
+  callee +0:30 new HostRefusal -> @HostRefusal.constructor
+  local +6:13 body: i32 (const)
+  callee +6:20 closing -> @closing
+  callee +8:9 Kept.keep -> @Kept.keep
+  callee +9:9 Kept.keep -> @Kept.keep
 function keepExports(text: string, tokens: Tokens): HostText -> @keepExports
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
+  sharedWrite: via keepFunction
   escaping: text
   calls: HostText.constructor Kept.constructor Kept.keep StringBuilder.add StringBuilder.constructor StringBuilder.toText blank closing isWord keepFunction nish_alloc_struct nish_panic_index nish_panic_overflow nish_panic_slice nish_str_index_of nish_str_index_of_from nish_str_new opens
   pointer tokens: size=32 writesThrough=false captured=false passedTo=isWord#0 keepFunction#0 isWord#0 closing#0 isWord#0 isWord#0 closing#0
@@ -221,35 +235,35 @@ function keepExports(text: string, tokens: Tokens): HostText -> @keepExports
   local +7:13 after: i32 (const)
   callee +7:21 isWord -> @isWord
   callee +9:13 keepFunction -> @keepFunction
-  callee +11:18 new HostText -> @HostText.constructor
-  local +15:13 enumAt: i32 (const)
-  callee +16:11 isWord -> @isWord
-  local +17:15 last: i32 (const)
-  callee +17:22 closing -> @closing
+  local +12:13 enumAt: i32 (const)
+  callee +13:11 isWord -> @isWord
+  local +14:15 last: i32 (const)
+  callee +14:22 closing -> @closing
+  callee +18:11 Kept.keep -> @Kept.keep
+  callee +19:11 Kept.keep -> @Kept.keep
   callee +21:11 Kept.keep -> @Kept.keep
-  callee +22:11 Kept.keep -> @Kept.keep
-  callee +24:11 Kept.keep -> @Kept.keep
-  callee +30:9 isWord -> @isWord
-  callee +34:9 isWord -> @isWord
-  local +41:15 next: i32 (const)
-  local +42:15 lineEnds: boolean (const)
-  callee +45:11 Kept.keep -> @Kept.keep
-  callee +50:11 Kept.keep -> @Kept.keep
-  callee +56:9 opens -> @opens
-  callee +56:23 closing -> @closing
-  local +58:9 out: StringBuilder (const)
-  callee +58:15 new StringBuilder -> @StringBuilder.constructor
-  local +59:7 at: i32 (let)
-  local +60:7 k: i32 (let)
-  local +62:11 from: i32 (const)
-  local +63:11 to: i32 (const)
-  callee +64:5 StringBuilder.add -> @StringBuilder.add
-  callee +64:13 blank -> @blank
-  callee +65:5 StringBuilder.add -> @StringBuilder.add
-  callee +69:3 StringBuilder.add -> @StringBuilder.add
-  callee +69:11 blank -> @blank
-  callee +70:10 new HostText -> @HostText.constructor
-  callee +70:23 StringBuilder.toText -> @StringBuilder.toText
+  callee +27:9 isWord -> @isWord
+  callee +31:9 isWord -> @isWord
+  local +38:15 next: i32 (const)
+  local +39:15 lineEnds: boolean (const)
+  callee +42:11 Kept.keep -> @Kept.keep
+  callee +47:11 Kept.keep -> @Kept.keep
+  callee +53:9 opens -> @opens
+  callee +53:23 closing -> @closing
+  local +55:9 out: StringBuilder (const)
+  callee +55:15 new StringBuilder -> @StringBuilder.constructor
+  local +56:7 at: i32 (let)
+  local +57:7 k: i32 (let)
+  local +59:11 from: i32 (const)
+  local +60:11 to: i32 (const)
+  callee +61:5 StringBuilder.add -> @StringBuilder.add
+  callee +61:13 blank -> @blank
+  callee +62:5 StringBuilder.add -> @StringBuilder.add
+  callee +66:3 StringBuilder.add -> @StringBuilder.add
+  callee +66:11 blank -> @blank
+  local +67:9 read: HostText (const)
+  callee +67:16 new HostText -> @HostText.constructor
+  callee +67:29 StringBuilder.toText -> @StringBuilder.toText
 function blank(text: string, from: i32, to: i32): string -> @blank
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from
@@ -285,6 +299,20 @@ function markHostFunctions(file: Node): void -> @markHostFunctions [exported]
   stackSites=0 stackLocals=0
   local -2:14 stmt: Node (const)
   local +1:13 body: Node (const)
+function dropRefused(file: Node, refusals: HostRefusal[]): void -> @dropRefused [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: StringSet.add StringSet.constructor StringSet.has nish_array_grow nish_panic_index
+  pointer file: size=40 writesThrough=true captured=false
+  pointer refusals: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local -10:9 names: StringSet (const)
+  callee -10:17 new StringSet -> @StringSet.constructor
+  local -9:14 refusal: HostRefusal (const)
+  callee -8:5 StringSet.add -> @StringSet.add
+  local -6:9 kept: Node[] (const)
+  local -5:14 stmt: Node (const)
+  callee -4:38 StringSet.has -> @StringSet.has
 function hostTypeProblem(where: string, name: string, spelled: string): string -> @hostTypeProblem [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -305,20 +333,21 @@ function SCALAR_NAMES(): StringSet -> @SCALAR_NAMES
   callee +0:17 new StringSet -> @StringSet.constructor
   local +1:14 name: string (const)
   callee +16:5 StringSet.add -> @StringSet.add
-function HostProblem.constructor(this: HostProblem, message: string, node: Node): void -> @HostProblem.constructor [exported constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  escaping: message node
-  pointer this: size=16 writesThrough=true captured=false
-  pointer node: size=40 writesThrough=true captured=true
+function refusalAt(name: string, message: string, node: Node): HostRefusal -> @refusalAt
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  escaping: message name
+  calls: HostRefusal.constructor nish_alloc_struct
+  pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function hostSignatureProblems(file: Node, parser: Parser): HostProblem[] -> @hostSignatureProblems [exported]
+  callee +0:3 new HostRefusal -> @HostRefusal.constructor
+function hostSignatureProblems(file: Node, parser: Parser): HostRefusal[] -> @hostSignatureProblems [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via asWindow
-  calls: HostProblem.constructor SCALAR_NAMES StringSet.add StringSet.constructor TYPED_ARRAYS asWindow crosses isBuffer isTypeNamed nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq typeProblem unparen windowElement windowElementProblem windowPairProblem
+  calls: SCALAR_NAMES StringSet.add StringSet.constructor TYPED_ARRAYS asWindow crosses isBuffer isTypeNamed nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq refusalAt typeProblem unparen windowElement windowElementProblem windowPairProblem
   pointer file: size=40 writesThrough=false captured=false
   pointer parser: size=112 writesThrough=true captured=false passedTo=asWindow#1
   stackSites=1 stackLocals=1
-  local +0:9 problems: HostProblem[] (const)
+  local +0:9 problems: HostRefusal[] (const)
   local +1:9 local: StringSet (const)
   callee +1:17 new StringSet -> @StringSet.constructor
   local +2:14 stmt: Node (const)
@@ -329,31 +358,31 @@ function hostSignatureProblems(file: Node, parser: Parser): HostProblem[] -> @ho
   callee +8:19 SCALAR_NAMES -> @SCALAR_NAMES
   local +9:14 stmt: Node (const)
   local +13:11 name: string (const)
-  callee +16:9 new HostProblem -> @HostProblem.constructor
-  local +23:11 result: Node (const)
-  callee +24:44 isTypeNamed -> @isTypeNamed
-  callee +26:9 new HostProblem -> @HostProblem.constructor
-  local +33:11 params: Node[] (const)
-  local +34:9 k: i32 (let)
-  local +36:13 param: Node (const)
-  local +38:13 type: Node (const)
-  callee +38:20 unparen -> @unparen
-  local +39:13 p: string (const)
-  callee +43:11 isTypeNamed -> @isTypeNamed
-  callee +46:11 isBuffer -> @isBuffer
-  callee +47:13 windowElement -> @windowElement
-  callee +48:25 windowElementProblem -> @windowElementProblem
-  local +51:15 pair: HostProblem | null (const)
-  callee +51:22 windowPairProblem -> @windowPairProblem
-  callee +56:9 asWindow -> @asWindow
-  callee +58:19 crosses -> @crosses
-  callee +59:23 typeProblem -> @typeProblem
-  local +62:11 answer: Node (const)
-  callee +62:20 unparen -> @unparen
-  callee +66:9 isTypeNamed -> @isTypeNamed
-  callee +68:9 new HostProblem -> @HostProblem.constructor
-  callee +73:17 crosses -> @crosses
-  callee +74:21 typeProblem -> @typeProblem
+  callee +16:9 refusalAt -> @refusalAt
+  local +24:11 result: Node (const)
+  callee +25:44 isTypeNamed -> @isTypeNamed
+  callee +27:9 refusalAt -> @refusalAt
+  local +35:11 params: Node[] (const)
+  local +36:9 k: i32 (let)
+  local +38:13 param: Node (const)
+  local +40:13 type: Node (const)
+  callee +40:20 unparen -> @unparen
+  local +41:13 p: string (const)
+  callee +45:11 isTypeNamed -> @isTypeNamed
+  callee +48:11 isBuffer -> @isBuffer
+  callee +49:13 windowElement -> @windowElement
+  callee +50:25 windowElementProblem -> @windowElementProblem
+  local +53:15 pair: HostRefusal | null (const)
+  callee +53:22 windowPairProblem -> @windowPairProblem
+  callee +58:9 asWindow -> @asWindow
+  callee +60:19 crosses -> @crosses
+  callee +61:23 typeProblem -> @typeProblem
+  local +64:11 answer: Node (const)
+  callee +64:20 unparen -> @unparen
+  callee +68:9 isTypeNamed -> @isTypeNamed
+  callee +70:9 refusalAt -> @refusalAt
+  callee +76:17 crosses -> @crosses
+  callee +77:21 typeProblem -> @typeProblem
 function windowElement(type: Node): string -> @windowElement
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -371,10 +400,10 @@ function typedElement(name: string): string -> @typedElement
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function windowPairProblem(params: Node[], next: i32, p: string, name: string): HostProblem | null -> @windowPairProblem
+function windowPairProblem(params: Node[], next: i32, p: string, name: string): HostRefusal | null -> @windowPairProblem
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name next p
-  calls: HostProblem.constructor isTypeNamed nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat unparen windowMissing
+  calls: isTypeNamed nish_panic_index nish_panic_overflow nish_str_concat refusalAt unparen windowMissing
   pointer params: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
@@ -384,15 +413,16 @@ function windowPairProblem(params: Node[], next: i32, p: string, name: string): 
   callee +6:9 isTypeNamed -> @isTypeNamed
   callee +6:37 isTypeNamed -> @isTypeNamed
   local +7:13 role: string (const)
-  callee +8:14 new HostProblem -> @HostProblem.constructor
-  callee +13:10 isTypeNamed -> @isTypeNamed
-  callee +14:14 windowMissing -> @windowMissing
-function windowMissing(p: string, name: string, param: Node): HostProblem -> @windowMissing
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
-  calls: HostProblem.constructor nish_alloc_struct nish_str_concat
-  pointer param: size=40 writesThrough=true captured=true passedTo=HostProblem.constructor#2
+  callee +8:14 refusalAt -> @refusalAt
+  callee +14:10 isTypeNamed -> @isTypeNamed
+  callee +15:14 windowMissing -> @windowMissing
+function windowMissing(p: string, name: string, param: Node): HostRefusal -> @windowMissing
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  escaping: name
+  calls: nish_str_concat refusalAt
+  pointer param: size=40 writesThrough=false captured=false passedTo=refusalAt#2
   stackSites=0 stackLocals=0
-  callee +0:3 new HostProblem -> @HostProblem.constructor
+  callee +0:3 refusalAt -> @refusalAt
 function asWindow(type: Node, parser: Parser): void -> @asWindow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -404,20 +434,21 @@ function asWindow(type: Node, parser: Parser): void -> @asWindow
   callee -1:19 Parser.node -> @Parser.node
   callee +0:18 typedElement -> @typedElement
   callee +1:23 Parser.list -> @Parser.list
-function windowElementProblem(p: string, name: string, type: Node): HostProblem -> @windowElementProblem
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
-  calls: HostProblem.constructor nish_alloc_struct nish_str_concat spell
-  pointer type: size=40 writesThrough=true captured=true passedTo=spell#0 HostProblem.constructor#2
+function windowElementProblem(p: string, name: string, type: Node): HostRefusal -> @windowElementProblem
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  escaping: name
+  calls: nish_str_concat refusalAt spell
+  pointer type: size=40 writesThrough=false captured=false passedTo=spell#0 refusalAt#2
   stackSites=0 stackLocals=0
-  callee +0:3 new HostProblem -> @HostProblem.constructor
-  callee +1:59 spell -> @spell
-function typeProblem(where: string, name: string, type: Node): HostProblem -> @typeProblem
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  callee +0:3 refusalAt -> @refusalAt
+  callee +2:59 spell -> @spell
+function typeProblem(where: string, name: string, type: Node): HostRefusal -> @typeProblem
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
   escaping: name where
-  calls: HostProblem.constructor hostTypeProblem nish_alloc_struct spell
-  pointer type: size=40 writesThrough=true captured=true passedTo=spell#0 HostProblem.constructor#2
+  calls: hostTypeProblem refusalAt spell
+  pointer type: size=40 writesThrough=false captured=false passedTo=spell#0 refusalAt#2
   stackSites=0 stackLocals=0
-  callee +0:3 new HostProblem -> @HostProblem.constructor
+  callee +0:3 refusalAt -> @refusalAt
   callee +0:19 hostTypeProblem -> @hostTypeProblem
   callee +0:48 spell -> @spell
 function unparen(type: Node): Node -> @unparen

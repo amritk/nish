@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 685 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 688 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12862,16 +12862,15 @@ export async function main(): Promise<i32> {
 The message of an error contains:
 
 ```text
-…a spawned task takes a function argument only when it captures nothing…
+…a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share…
 ```
 
 [`nl2690_spawn_capture.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2690_spawn_capture.ts):
 
 ```ts
-// NL2690: a spawned task takes a function argument only when it captures
-// nothing. The arrow reads `base` of `start`, a value that would ride in the
-// task's frame where neither the spawn's argument rule nor the task's region
-// rules see it.
+// NL2690: a spawned task's function argument captures only numbers, booleans,
+// enums and objects or arrays it may share. The arrow reads the string `tag`
+// of `start`, which the task may not share.
 import { sleep, spawn } from "nish:async"
 
 async function later(f: (n: i32) => i32, n: i32): Promise<void> {
@@ -12880,7 +12879,8 @@ async function later(f: (n: i32) => i32, n: i32): Promise<void> {
 }
 
 async function start(base: i32): Promise<void> {
-  spawn(later((n: i32): i32 => n + base, 2))
+  const tag = `n${base}`
+  spawn(later((n: i32): i32 => n + tag.length, 2))
 }
 
 export async function main(): Promise<i32> {
@@ -12890,7 +12890,7 @@ export async function main(): Promise<i32> {
 ```
 
 ```text
-`spawn` hands `later<(n) => ...>` an arrow that reads `base` of the function it is written in: a spawned task takes a function argument only when it captures nothing, because the task may run after that function returns; pass the value to the task as an argument of its own, or hand it a top-level function
+`spawn` hands `later<(n) => ...>` an arrow that reads `tag` of type string of the function it is written in: a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share, because the task may run after that function returns; pass the value to the task as an argument of its own, or hand it a top-level function
 ```
 
 ## NL2691
@@ -12915,4 +12915,28 @@ The message of an error contains:
 
 ```text
 ` from `nish:async` takes …
+```
+
+## NL2694
+
+The message of an error contains:
+
+```text
+`nish.host` is an array of strings, each the path of a host module relative to `package.json`
+```
+
+## NL2695
+
+The message of an error contains:
+
+```text
+…a `nish.host` entry is a host module's path relative to the directory `package.json` is in
+```
+
+## NL2696
+
+The message of an error contains:
+
+```text
+…a `nish.host` entry names a host module the package has
 ```

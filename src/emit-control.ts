@@ -16,7 +16,8 @@ import { Emitter, LoopTarget } from "./emit"
 import { emitScopeJoins } from "./emit-parallel"
 import { emitRangedStore } from "./emit-builtins"
 import {
-  compoundFloatOpcode,
+  emitFloatArithmetic,
+  withoutEquals,
   compoundIntegerOpcode,
   emitIntBinary,
   loadLocal,
@@ -485,9 +486,7 @@ export const emitCompoundAssignment = (emitter: Emitter, expr: Node): string => 
   const old = loadLocal(emitter, local)
   const rhs = emitter.emitExpression(expr.children[1])
   const value = isFloat(local.type)
-    ? emitter.fn.emitValue(
-        `${compoundFloatOpcode(expr.text, emitter.opts.json)} ${emitter.llvm(local.type)} ${old}, ${rhs}`
-      )
+    ? emitFloatArithmetic(emitter, withoutEquals(expr.text), local.type, old, rhs, expr)
     : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), local.type, old, rhs, expr)
   emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)

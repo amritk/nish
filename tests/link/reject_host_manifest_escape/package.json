@@ -1,0 +1,7 @@
+{
+  "name": "reject-host-manifest-escape",
+  "private": true,
+  "nish": {
+    "host": ["web/../../host.ts"]
+  }
+}

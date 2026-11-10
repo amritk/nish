@@ -141,6 +141,7 @@ import {
   CaptureTarget,
   arrowCallee,
   captureTarget,
+  capturesOf,
   isAtomicMethod,
   isChannelReader,
   isChannelSend,
@@ -1398,6 +1399,12 @@ const spawnsShared = (program: CheckedProgram, table: TypeTable, node: Node): bo
   }
   for (let i = 0; i < callee.paramTypes.length; i++) {
     if (!callee.isCompileTime(i) && table.sharedWithTask(callee.paramTypes[i])) {
+      return true
+    }
+  }
+  // WP49 stage 5, part 8: an arrow the task is handed may capture an object it shares.
+  for (const slot of capturesOf(callee)) {
+    if (table.sharedWithTask(slot.type())) {
       return true
     }
   }
@@ -3090,6 +3097,11 @@ class FactCollector {
         this.noteCall(node, reads)
         this.noteWholeReach(reads.name, methodReceiver(node))
       }
+    }
+    // WP50 S5: a page module's float `%` calls `fmodF64` (`floatRemainderOf`).
+    const rem = program.floatRemainderOf(node)
+    if (rem !== null) {
+      this.addUserCallee(rem.name, node)
     }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
     // (`emitWalk`); the loop records the reader, and the rest are its owner's.

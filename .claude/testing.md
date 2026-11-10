@@ -568,9 +568,10 @@ corpus, CI's jobs, and "Reading a crash". The rules a change has to keep:
   ASan and UBSan, single-threaded and `-DNISH_THREADS`. Both skip, with a
   reason, when clang cannot link the sanitizers. Read the skip line.
 - **CI**: `fuzz-smoke` (`ci.yml`, every PR) runs `fuzz.sh --smoke` for 30
-  seconds a target from `-seed=1`, then `runtime_sanitize`, and fails on a
-  skip. `fuzz.yml` (Saturdays and on dispatch) fuzzes each target for 30
-  minutes and uploads crashes and the grown corpus as `fuzz-<name>`.
+  seconds a target from `-seed=1`, one target per core (`FUZZ_JOBS`), then
+  `runtime_sanitize`, and fails on a skip. `fuzz.yml` (Saturdays and on
+  dispatch) fuzzes each target for 30 minutes and uploads crashes and the
+  grown corpus as `fuzz-<name>`.
 
 ## Example case
 
