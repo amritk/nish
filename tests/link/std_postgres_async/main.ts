@@ -203,7 +203,7 @@ export async function main(): Promise<i32> {
   const held: i32 = await pgAsyncClaim(pool)
   const before: i32 = pool.waits
   const late: i32 = await pgAsyncClaim(pool)
-  console.log(`a claim with every connection held: ${late} after ${pool.waits - before} sleeps`)
+  console.log(`a claim with every connection held: ${late} after ${pool.waits - before} wait`)
   pgAsyncRelease(pool, held, true)
   console.log(`statements seen: ${board.seen}`)
   pool.close()
