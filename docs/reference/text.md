@@ -6,11 +6,16 @@ The string operations a program has to write itself.
 
 ```ts
 import {
+  asciiLower,
+  asciiUpper,
   codePointLength,
   contains,
   firstDifference,
   indexOfAny,
+  padEnd,
+  padStart,
   replaceAll,
+  split,
   splitLines,
   splitWhitespace,
   trim,
@@ -22,13 +27,16 @@ import {
 <scalar-code-group>
 
 ```ts example.ts
-import { replaceAll, splitLines, splitWhitespace, trim } from "nish/text";
+import { asciiUpper, padStart, replaceAll, split, splitLines, splitWhitespace, trim } from "nish/text";
 
 export const main = (): i32 => {
   const lines: string[] = splitLines("a b\n  c  \n"); // ["a b", "  c  "]
   const words: string[] = splitWhitespace(lines[0]); // ["a", "b"]
   const c: string = trim(lines[1]); // "c"
   const dashed: string = replaceAll("a b", " ", "-"); // "a-b"
+  const fields: string[] = split("a,,b", ","); // ["a", "", "b"]
+  const loud: string = asciiUpper("get_id"); // "GET_ID"
+  const code: string = padStart("7", 3, "0"); // "007"
   return toI32(words.length);
 };
 ```
@@ -36,6 +44,18 @@ export const main = (): i32 => {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="ascii​Lower" icon="phosphor/regular/function" href="#asciilower">
+
+`text` with its ASCII letters `A` to `Z` made `a` to `z`, and nothing else changed: every other byte, a UTF-8 sequence's included, passes through.
+
+</scalar-card>
+
+<scalar-card title="ascii​Upper" icon="phosphor/regular/function" href="#asciiupper">
+
+`text` with its ASCII letters `a` to `z` made `A` to `Z`, and nothing else changed: every other byte, a UTF-8 sequence's included, passes through.
+
+</scalar-card>
 
 <scalar-card title="code​Point​Length" icon="phosphor/regular/function" href="#codepointlength">
 
@@ -61,9 +81,27 @@ The first index at or after `from` whose byte is one of `bytes`, or -1.
 
 </scalar-card>
 
+<scalar-card title="pad​End" icon="phosphor/regular/function" href="#padend">
+
+`text` with `fill` repeated after it until it is `width` units long: JavaScript's `text.padEnd(width, fill)` for ASCII text, with `padStart`'s rules.
+
+</scalar-card>
+
+<scalar-card title="pad​Start" icon="phosphor/regular/function" href="#padstart">
+
+`text` with `fill` repeated in front of it until it is `width` units long: JavaScript's `text.padStart(width, fill)` for ASCII text.
+
+</scalar-card>
+
 <scalar-card title="replace​All" icon="phosphor/regular/function" href="#replaceall">
 
 `text` with every occurrence of `needle` replaced by `replacement`.
+
+</scalar-card>
+
+<scalar-card title="split" icon="phosphor/regular/function" href="#split">
+
+The pieces of `text` between the occurrences of `sep`: JavaScript's `text.split(sep)` for a separator that is not empty.
 
 </scalar-card>
 
@@ -115,10 +153,13 @@ several need a locale or a character table this runtime has no room for
 This
 module is that loop, written once. Every offset here is a **byte** offset,
 like `s.length` itself, and every function but one is ASCII-only where it
-inspects characters at all — a UTF-8 string passes through `splitLines` and
-`split` untouched, because a newline and a space cannot appear inside a
-multi-byte sequence. The one is `codePointLength`, which counts code points
-rather than bytes and answers the same natively and under Node; it says how.
+inspects characters at all — a UTF-8 string passes through `splitLines`,
+`splitWhitespace`, `asciiUpper` and `asciiLower` untouched, because an ASCII
+byte cannot appear inside a multi-byte sequence. The one is
+`codePointLength`, which counts code points rather than bytes and answers the
+same natively and under Node; it says how. `padStart` and `padEnd` count a
+width in `s.length`'s units, so they are the two whose answers differ under
+Node on text that is not ASCII; each says by how much.
 
 </scalar-detail>
 
@@ -138,6 +179,60 @@ immutable, so its length cannot change underneath the local.
 </scalar-detail>
 
 ## Functions
+
+### asciiLower
+
+`text` with its ASCII letters `A` to `Z` made `a` to `z`, and nothing else
+changed: every other byte, a UTF-8 sequence's included, passes through.
+
+This is not JavaScript's `toLowerCase`, for the reason `asciiUpper` gives:
+`"É"` stays `"É"` here. On ASCII text the two agree, and this answers the
+same natively and under Node for any text.
+
+```ts
+function asciiLower(text: string): string
+```
+
+<scalar-field name="text" type="string" required>
+
+The text whose ASCII letters are lower-cased.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string">
+
+A fresh string as long as `text`.
+
+</scalar-field>
+
+### asciiUpper
+
+`text` with its ASCII letters `a` to `z` made `A` to `Z`, and nothing else
+changed: every other byte, a UTF-8 sequence's included, passes through.
+
+This is not JavaScript's `toUpperCase`, which knows Unicode's case table:
+that gives `"SS"` for `"ß"` and `"É"` for `"é"`, where this gives `"ß"` and
+`"é"`. That table is more than this runtime has room for, and the text this
+is for, identifiers, keywords and protocol tokens, is ASCII. On ASCII text
+the two agree, and this answers the same natively and under Node for any
+text, since a byte or unit from 97 to 122 is always the letter itself, so
+NL8001 (`--warn-portability`) has nothing to warn about, and does not.
+
+```ts
+function asciiUpper(text: string): string
+```
+
+<scalar-field name="text" type="string" required>
+
+The text whose ASCII letters are upper-cased.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string">
+
+A fresh string as long as `text`.
+
+</scalar-field>
 
 ### codePointLength
 
@@ -300,14 +395,108 @@ The byte offset of the first match at or after `from`, or -1 when
 
 </scalar-field>
 
+### padEnd
+
+`text` with `fill` repeated after it until it is `width` units long:
+JavaScript's `text.padEnd(width, fill)` for ASCII text, with `padStart`'s
+rules. `padEnd("7", 4, "ab")` is `"7aba"`, and `padEnd("é", 3, " ")` is
+`"é "` natively and `"é  "` under Node.
+
+```ts
+function padEnd(
+  text: string,
+  width: i32,
+  fill: string,
+): string
+```
+
+<scalar-field name="text" type="string" required>
+
+The text to pad.
+
+</scalar-field>
+
+<scalar-field name="width" type="i32" required>
+
+The length the answer is padded to, in `text.length`'s units.
+
+</scalar-field>
+
+<scalar-field name="fill" type="string" required>
+
+The ASCII text repeated as the padding.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string">
+
+`text` with the padding after it; `text` unchanged when no
+  padding is needed.
+
+</scalar-field>
+
+### padStart
+
+`text` with `fill` repeated in front of it until it is `width` units long:
+JavaScript's `text.padStart(width, fill)` for ASCII text. A `width` no
+longer than `text`, or an empty `fill`, gives `text` unchanged, and a fill of
+several characters repeats and is cut at the width, so
+`padStart("7", 4, "ab")` is `"aba7"`.
+
+**`width` counts the units `text.length` counts**: bytes natively and UTF-16
+units under Node. So on text that is not ASCII the two answers differ:
+`padStart("é", 3, " ")` is `" é"` natively, where `é` is two bytes, and
+`"  é"` under Node, where it is one unit. NL8001 (`--warn-portability`)
+does not warn about it: the warning reads offsets in the program it is given,
+the library's own `text.length` is not walked, and what reaches the caller is
+a string rather than a number. Pad ASCII text, or count the width with
+`codePointLength` yourself, when the answer must be the same on both.
+
+**A fill that is not ASCII panics**, for the reason `indexOfAny`'s set must
+be ASCII: natively it would be cut in the middle of a UTF-8 sequence.
+
+```ts
+function padStart(
+  text: string,
+  width: i32,
+  fill: string,
+): string
+```
+
+<scalar-field name="text" type="string" required>
+
+The text to pad.
+
+</scalar-field>
+
+<scalar-field name="width" type="i32" required>
+
+The length the answer is padded to, in `text.length`'s units.
+
+</scalar-field>
+
+<scalar-field name="fill" type="string" required>
+
+The ASCII text repeated as the padding; `" "` and `"0"` are
+  the usual ones.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string">
+
+`text` with the padding in front; `text` unchanged when no
+  padding is needed.
+
+</scalar-field>
+
 ### replaceAll
 
 `text` with every occurrence of `needle` replaced by `replacement`.
 
-The parts are collected and `join`ed once rather than concatenated in the loop:
-`s = s + t` inside a loop is quadratic in time *and* in arena, which is the one
-string mistake this project has measured the cost of — 180 MB of peak memory
-for 88 KB of output (`docs/wp14-selfhost.md` §3).
+The pieces between the occurrences are `split`'s, `join`ed once rather than
+concatenated in a loop: `s = s + t` inside a loop is quadratic in time *and*
+in arena, which is the one string mistake this project has measured the cost
+of — 180 MB of peak memory for 88 KB of output (`docs/wp14-selfhost.md` §3).
 
 An empty `needle` answers `text` unchanged, because every other answer is a
 choice about how many empty matches a string contains.
@@ -342,6 +531,55 @@ The text each occurrence becomes; it is not searched.
 <scalar-field name="returns" type="string">
 
 The text with every occurrence replaced.
+
+</scalar-field>
+
+### split
+
+The pieces of `text` between the occurrences of `sep`: JavaScript's
+`text.split(sep)` for a separator that is not empty. A separator at the
+start, at the end or next to another gives an empty piece, so
+`split(",a,,b,", ",")` is `["", "a", "", "b", ""]`; `split("", ",")` is
+`[""]`; and a separator that never occurs gives `[text]`. Compare
+`splitWhitespace`, which drops the empty pieces.
+
+The pieces are the same natively and under Node for any text and any
+separator, multi-byte ones included: a match is a whole UTF-8 sequence
+natively and a whole run of UTF-16 units under Node, and a well-formed
+string holds a code point's encoding only where that code point is. So
+there is nothing for NL8001 (`--warn-portability`) to warn about, and it
+does not; the pieces' own `.length`s are still counted in each platform's
+units, and NL8001 reads those where the program does.
+
+**An empty separator panics.** JavaScript splits a string on `""` into its
+UTF-16 units, which natively would be its bytes, and the two answers differ
+on any text that is not ASCII. A separator is almost always a literal the
+caller chose, so an empty one is a mistake in the program, like an index out
+of range, and not a condition a caller could recover from.
+
+```ts
+function split(
+  text: string,
+  sep: string,
+): string[]
+```
+
+<scalar-field name="text" type="string" required>
+
+The text to split.
+
+</scalar-field>
+
+<scalar-field name="sep" type="string" required>
+
+The separator, compared byte for byte; it must not be empty.
+  Occurrences are found left to right and do not overlap.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string[]">
+
+A fresh array of the pieces, in order; never empty.
 
 </scalar-field>
 

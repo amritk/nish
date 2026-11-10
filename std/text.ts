@@ -198,7 +198,10 @@ export const contains = (haystack: string, needle: string): boolean => toI32(hay
  * The pieces are the same natively and under Node for any text and any
  * separator, multi-byte ones included: a match is a whole UTF-8 sequence
  * natively and a whole run of UTF-16 units under Node, and a well-formed
- * string holds a code point's encoding only where that code point is.
+ * string holds a code point's encoding only where that code point is. So
+ * there is nothing for NL8001 (`--warn-portability`) to warn about, and it
+ * does not; the pieces' own `.length`s are still counted in each platform's
+ * units, and NL8001 reads those where the program does.
  *
  * **An empty separator panics.** JavaScript splits a string on `""` into its
  * UTF-16 units, which natively would be its bytes, and the two answers differ
@@ -522,7 +525,8 @@ const shiftTextAsciiRange = (text: string, low: i32, high: i32, delta: i32): str
  * `"é"`. That table is more than this runtime has room for, and the text this
  * is for, identifiers, keywords and protocol tokens, is ASCII. On ASCII text
  * the two agree, and this answers the same natively and under Node for any
- * text, since a byte or unit from 97 to 122 is always the letter itself.
+ * text, since a byte or unit from 97 to 122 is always the letter itself, so
+ * NL8001 (`--warn-portability`) has nothing to warn about, and does not.
  *
  * @param text The text whose ASCII letters are upper-cased.
  * @returns A fresh string as long as `text`.
