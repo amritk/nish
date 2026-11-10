@@ -28,20 +28,49 @@ fragment `tests/run.js` matches and the case that proves it.
 
 ## Declarations
 
-| Construct | Message | Test |
-| --- | --- | --- |
-| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists `` | `reject_type_alias_generic` |
-| type parameters on a constructor | `` a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`) `` (a syntax error; a *method* may declare its own, see [Generic methods](declarations.md#generic-methods)) | `reject_generic_method_constructor` |
-| a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
-| type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |
-| generators (`function*`, `*m()`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator`, `reject_generator_method` |
-| an `async` method, field or constructor ([Async functions](declarations.md#async-functions-async-and-await) has the rest) | `` Only a top-level function or an arrow may be `async` `` (NL1063) | `reject_async_method` |
-| `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
-| enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed`; the numeric form compiles ([Enums](declarations.md#enums)) |
-| `namespace` / `module` blocks, `declare module "m"` | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace`, `reject_module_declared` |
-| `declare global` | `` `declare global` is forbidden in Nish (no global object to augment) `` | `reject_declare_global` |
-| decorators, on a class, a member or a parameter | `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) `` | `reject_decorator`, `reject_decorator_member`, `reject_decl_shapes` |
-| computed property names, in an object literal (`{ [k]: 1 }`, `{ [k]() { } }`), a class (`[k]: i32`, `[Symbol.iterator]() { }`) or an interface (`[k]: i32`) | `Computed property names are forbidden in Nish (member names are fixed at compile time)` (NL1041, Phase 0; before a method in an object literal is refused) | `reject_computed_property`, `reject_computed_method`, `reject_cls_computed_field`, `reject_cls_computed_method`, `reject_iface_computed_member` |
+- **type parameters on a type alias**:
+  `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists ``
+  (`reject_type_alias_generic`)
+- **type parameters on a constructor**:
+  `` a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`) ``
+  (a syntax error; a *method* may declare its own, see [Generic
+  methods](declarations.md#generic-methods)) (`reject_generic_method_constructor`)
+- **a generic class or interface named without its type arguments**:
+  `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` ``
+  (`reject_generic_class`)
+- **type *arguments* on `new` of a class that is not generic**:
+  `` `Point` is not generic, so `new Point` takes no type arguments ``
+  (`reject_cls_new_generic`)
+- **generators (`function*`, `*m()`)**:
+  `` Generators are forbidden in Nish (no coroutine runtime) ``
+  (`reject_generator`, `reject_generator_method`)
+- **an `async` method, field or constructor ([Async
+  functions](declarations.md#async-functions-async-and-await) has the rest)**:
+  `` Only a top-level function or an arrow may be `async` `` (NL1063)
+  (`reject_async_method`)
+- **`var`**: `` `var` is forbidden; use `let` or `const` ``
+  (`reject_var_keyword`, `reject_var_in_for`)
+- **enum members that are not numeric literals**:
+  `` Enum members must be numeric literals in Nish (enums lower to plain integers) ``
+  (`reject_enum_string`, `reject_enum_computed`; the numeric form compiles
+  ([Enums](declarations.md#enums)))
+- **`namespace` / `module` blocks, `declare module "m"`**:
+  `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) ``
+  (`reject_namespace`, `reject_module_declared`)
+- **`declare global`**:
+  `` `declare global` is forbidden in Nish (no global object to augment) ``
+  (`reject_declare_global`)
+- **decorators, on a class, a member or a parameter**:
+  `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) ``
+  (`reject_decorator`, `reject_decorator_member`, `reject_decl_shapes`)
+- **computed property names, in an object literal (`{ [k]: 1 }`,
+  `{ [k]() { } }`), a class (`[k]: i32`, `[Symbol.iterator]() { }`) or an
+  interface (`[k]: i32`)**:
+  `Computed property names are forbidden in Nish (member names are fixed at compile time)`
+  (NL1041, Phase 0; before a method in an object literal is refused)
+  (`reject_computed_property`, `reject_computed_method`,
+  `reject_cls_computed_field`, `reject_cls_computed_method`,
+  `reject_iface_computed_member`)
 
 ## Imports
 
@@ -55,14 +84,22 @@ fragment `tests/run.js` matches and the case that proves it.
 
 ## Statements
 
-| Construct | Message | Test |
-| --- | --- | --- |
-| `with` | `` `with` is forbidden in Nish (no dynamic scope) `` | `reject_with_statement` |
-| `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in Nish (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
-| `throw` | `` `throw` is forbidden in Nish (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
-| `debugger` | `` `debugger` is forbidden in Nish (no debugger hook) `` | `reject_debugger` |
-| a label on another statement | `` Labeled statements are forbidden in Nish except on a loop, a block or a `switch` `` | `reject_label_if` |
-| `for...in` | `` `for...in` is forbidden in Nish (it enumerates property names, and object layout is fixed at compile time); use `for...of` `` | `reject_for_in`, `reject_map_iter_for_in` |
+- **`with`**: `` `with` is forbidden in Nish (no dynamic scope) ``
+  (`reject_with_statement`)
+- **`try` / `catch` / `finally`**:
+  `` `try`/`catch`/`finally` is forbidden in Nish (no unwinding; use `Result<T, E>`) ``
+  (`reject_try_catch`)
+- **`throw`**:
+  `` `throw` is forbidden in Nish (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process ``
+  (`reject_throw`)
+- **`debugger`**: `` `debugger` is forbidden in Nish (no debugger hook) ``
+  (`reject_debugger`)
+- **a label on another statement**:
+  `` Labeled statements are forbidden in Nish except on a loop, a block or a `switch` ``
+  (`reject_label_if`)
+- **`for...in`**:
+  `` `for...in` is forbidden in Nish (it enumerates property names, and object layout is fixed at compile time); use `for...of` ``
+  (`reject_for_in`, `reject_map_iter_for_in`)
 
 <a id="expressions-1" style="scroll-margin-top: 65px"></a>
 

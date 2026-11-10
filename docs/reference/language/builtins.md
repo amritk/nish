@@ -20,18 +20,77 @@ the call checks through the same rule and emits the same IR as the global
 spelling, which `tests/run.js` pins by compiling `tests/cases/io_nish_import`
 and `io_nish_import_global` and comparing the two bodies.
 
-| Module | Exports |
+| Module | For |
 | --- | --- |
-| [`nish:fs`](../nish-fs.md) | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`, `mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| [`nish:process`](../nish-process.md) | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `setCpuAffinity`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
-| [`nish:io`](../nish-io.md) | `write`, `writeError`, `writeBytes`, `panic` |
-| [`nish:secret`](../nish-secret.md) | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| [`nish:region`](../nish-region.md) | `Region`, `region`, `regionWith`, `enter`, `enterWith`, `free` — source behind it too ([Regions](#regions-nishregion)) |
-| [`nish:net`](../nish-net.md) | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netWrite2`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
-| [`nish:term`](../nish-term.md) | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
-| [`nish:unsafe`](../nish-unsafe.md) | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
-| [`nish:async`](../nish-async.md) | `spawn`, `awaitAll` — **reached only through the import** ([Async functions](declarations.md#async-functions-async-and-await)) |
-| [`nish:simd`](../nish-simd.md) | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace`; the masks `mask8x16` … `mask64x2`; the lane operations `add` … `asF64x2`, among them `shl`, `shr`, `rotl` and `rotr` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors), [lane operations](#nishsimd-lane-operations-and-masks)) |
+| [`nish:fs`](../nish-fs.md) | files and directories |
+| [`nish:process`](../nish-process.md) | processes, environment, clocks |
+| [`nish:io`](../nish-io.md) | standard output and error, panic |
+| [`nish:secret`](../nish-secret.md) | secrets that are wiped |
+| [`nish:region`](../nish-region.md) | region allocation |
+| [`nish:net`](../nish-net.md) | sockets and the readiness loop |
+| [`nish:term`](../nish-term.md) | terminal input |
+| [`nish:unsafe`](../nish-unsafe.md) | unchecked access, wrapping arithmetic |
+| [`nish:async`](../nish-async.md) | spawning and awaiting tasks |
+| [`nish:simd`](../nish-simd.md) | sixteen-byte vectors |
+
+**[`nish:fs`](../nish-fs.md)** exports `readFileSync`,
+`readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`,
+`appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`,
+`writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`,
+`mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`,
+`statMtimeSync`.
+
+**[`nish:process`](../nish-process.md)** exports `exit` (the global
+`process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`,
+`spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`,
+`totalMemory`, `setNice`, `setIdlePriority`, `setCpuAffinity`,
+`monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`,
+`platform`, `arch`.
+
+**[`nish:io`](../nish-io.md)** exports `write`, `writeError`,
+`writeBytes`, `panic`.
+
+**[`nish:secret`](../nish-secret.md)** exports `Secret`, `secret`,
+`expose`, `exposeWith`, `wipe`. It is the one module with source behind it
+([Secrets](#secrets-nishsecret)).
+
+**[`nish:region`](../nish-region.md)** exports `Region`, `region`,
+`regionWith`, `enter`, `enterWith`, `free`. It has source behind it too
+([Regions](#regions-nishregion)).
+
+**[`nish:net`](../nish-net.md)** exports `netAddress`,
+`netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`,
+`netWrite`, `netWrite2`, `netShutdown`, `netClose`, `netMss`,
+`netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`,
+`NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`,
+`connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`,
+`pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`,
+`unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`,
+`recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`,
+`NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET`. Each is a global too
+([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
+
+**[`nish:term`](../nish-term.md)** exports `readStdin`, `waitStdin`,
+`isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore`. Each is a
+global too ([`nish:term`](#nishterm-terminal-input)).
+
+**[`nish:unsafe`](../nish-unsafe.md)** exports `uncheckedGet`,
+`uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`,
+`readCString`. They are **reached only through the import**
+([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
+
+**[`nish:async`](../nish-async.md)** exports `spawn`, `awaitAll`.
+They are **reached only through the import**
+([Async functions](declarations.md#async-functions-async-and-await)).
+
+**[`nish:simd`](../nish-simd.md)** exports the vector types `u8x16`,
+`u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors,
+`splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`,
+`replace`; the masks `mask8x16` … `mask64x2`; the lane operations `add` …
+`asF64x2`, among them `shl`, `shr`, `rotl` and `rotr`. They are **reached
+only through the import**
+([`nish:simd`](#nishsimd-sixteen-byte-vectors),
+[lane operations](#nishsimd-lane-operations-and-masks)).
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -75,14 +134,61 @@ import { write } from "nish:io";
 
 The reference for each of these, with its parameters, its answer and its capability, is its doc comment in [`runtime/nish.d.ts`](https://github.com/amritk/nish/blob/main/runtime/nish.d.ts); the rules are here.
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `console.log(x: string \| number \| i64 \| f64 \| boolean): void` | Writes `x` and a newline to stdout with one `write(2)`; statement position only; exactly one argument | write | `str_console_log`, `i64_basic`; `reject_console_log_noargs`, `reject_console_log_two_args`, `reject_console_log_as_value`; arrays and objects are rejected (`` `console.log` accepts string, number, or boolean, got i32[] `` *(CLI only)*) |
-| `console.error(x): void` | the same, on **stderr** — the stream a compiler's diagnostics belong on (WP14 B2). Identical rules and identical messages under its own name | write | `io_streams`; `reject_console_error_type` |
-| `write(s: string): void` | `s` to stdout with **no** trailing newline and no conversion (a `string` only); statement position | write | `io_streams` |
-| `writeError(s: string): void` | the same, on stderr | write | `io_streams` |
-| `writeBytes(bytes: readonly u8[], off: i32, len: i32): i32` | the bytes of `bytes[off..off+len)` to stdout as they are, answering `len` or a **negative errno** if the stream refuses them, never a panic; a pipe whose reader has gone raises SIGPIPE natively, where Node answers `-32` EPIPE. A range outside `bytes` **panics** with `slice out of range: [off, off+len) of length n` and exits 1 (a `slice` site), under Node too. No capability, as for `write`. A `wasm32` build has no stdout to reach and refuses it | write | `io_write_bytes`, `io_write_bytes_bounds`; `reject_write_bytes_arity`, `reject_write_bytes_type` (NL2268), `reject_write_bytes_wasm` |
-| `panic(message: string): void` | `message` and a newline to stderr, then exit 1 — the same ending an out-of-range index has. Statement position, and it **terminates control flow** like `process.exit`, so a non-`void` function may end with it (WP14 D1, WP16) | write | `io_streams`; `reject_panic_value` |
+| `console.log` | `string \| number \| i64 \| f64 \| boolean` | `void` | write |
+| `console.error` | as `console.log` | `void` | write |
+| `write` | `string` | `void` | write |
+| `writeError` | `string` | `void` | write |
+| `writeBytes` | `readonly u8[], i32, i32` | `i32` | write |
+| `panic` | `string` | `void` | write |
+
+**`console.log(x: string | number | i64 | f64 | boolean): void`** writes `x`
+and a newline to stdout. It is allowed in statement position only, and takes
+exactly one argument.
+
+- *Lowering:* one `write(2)`.
+- *Tests:* `str_console_log`, `i64_basic`; `reject_console_log_noargs`,
+  `reject_console_log_two_args`, `reject_console_log_as_value`; arrays and
+  objects are rejected
+  (`` `console.log` accepts string, number, or boolean, got i32[] ``
+  *(CLI only)*).
+
+**`console.error(x): void`** is the same, on **stderr**: the stream a
+compiler's diagnostics belong on (WP14 B2). It has identical rules and
+identical messages under its own name.
+
+- *Tests:* `io_streams`; `reject_console_error_type`.
+
+**`write(s: string): void`** writes `s` to stdout with **no** trailing
+newline and no conversion (a `string` only). It is allowed in statement
+position.
+
+- *Tests:* `io_streams`.
+
+**`writeError(s: string): void`** is the same, on stderr.
+
+- *Tests:* `io_streams`.
+
+**`writeBytes(bytes: readonly u8[], off: i32, len: i32): i32`** writes the
+bytes of `bytes[off..off+len)` to stdout as they are. It answers `len`, or a
+**negative errno** if the stream refuses them, never a panic. A pipe whose
+reader has gone raises SIGPIPE natively, where Node answers `-32` EPIPE. A
+range outside `bytes` **panics** with
+`slice out of range: [off, off+len) of length n` and exits 1 (a `slice`
+site), under Node too. It needs no capability, as for `write`. A `wasm32`
+build has no stdout to reach and refuses it.
+
+- *Tests:* `io_write_bytes`, `io_write_bytes_bounds`;
+  `reject_write_bytes_arity`, `reject_write_bytes_type` (NL2268),
+  `reject_write_bytes_wasm`.
+
+**`panic(message: string): void`** writes `message` and a newline to stderr,
+then exits 1: the same ending an out-of-range index has. It is allowed in
+statement position, and it **terminates control flow** like `process.exit`,
+so a non-`void` function may end with it (WP14 D1, WP16).
+
+- *Tests:* `io_streams`; `reject_panic_value`.
 
 Numbers print as JavaScript's `String(x)`: exact decimal for `i32`/`i64`,
 shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
@@ -95,20 +201,135 @@ Reference: [`nish:io`](../nish-io.md).
 
 The reference for each member of `Math`, with its parameters, its answer and its capability, is its doc comment in [`runtime/nish.d.ts`](https://github.com/amritk/nish/blob/main/runtime/nish.d.ts); the rules are here.
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path | none | `math_intrinsics`, `math_rounding`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
-| `Math.tan(x: f64): f64` | a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the module as `internal @nish.tanF64`, so no target calls libm; exact near every multiple of π/2 and within one ulp | none | `math_tan`, `math_std_edges` |
-| `Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64` | calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in like `tan`; ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is −π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two arguments, not JavaScript's any number | none | `math_atan2`, `math_hypot`; `reject_math_atan2_f32` (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``), `reject_math_hypot_arity` (`` `Math.hypot` expects exactly 2 arguments, got 3 ``) |
-| `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C | none | `math_intrinsics`; `tests/differential/corpus/f64_pow_spec` |
-| `Math.round(x: f64): f64` | JavaScript's round-half-up (`Math.floor`'s `floor` + compare + `select`), then `llvm.copysign.f64` puts `x`'s sign back: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a value in `[-0.5, 0)` or `-0` itself -> `-0`, as in JavaScript; `NaN` -> `NaN` | none | `math_intrinsics`, `math_round_negzero`, `math_rounding` |
-| `Math.abs(x: T): T` for any numeric `T` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` / `llvm.fabs.f64`; on an unsigned type, no instruction at all (the value is its own magnitude) | none | `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned widths *(CLI only)* |
-| `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: JavaScript's answer, a NaN operand gives NaN and `-0` is below `+0` (`Math.min(0, -0)` is `-0`). A native build branches as clang compiles the C a programmer writes for it: `fcmp uno` to a quiet NaN, else `fcmp olt`/`ogt` and a `select`, and on `fcmp oeq` the operand whose sign bit is set (`min`) or clear (`max`), the three joined by a `phi`; x86 has no instruction for `llvm.minimum`, whose expansion measured 25–55% slower in `bench/math`. A wasm build keeps `llvm.minimum/maximum.<f32\|f64>`, which are wasm's `f64.min`/`f64.max`, so no libm is linked for them | none | `math_i32`, `math_intrinsics`, `math_minmax_float`, `math_minmax_nan`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
-| `Math.clz32(x: i32 \| u32): integer<0, 32>` | the leading zero bits of `x`'s 32 bits, JavaScript's answer (an `i32` and a `u32` are the bits ToUint32 gives): `llvm.ctlz.i32` with `i1 false`, so `0` answers `32`. The answer is ranged (`integer<Lo, Hi>`, see [Types](types.md)), so `31 - Math.clz32(word & (0 - word))`, the index of a word's lowest set bit, needs no overflow check. Any other operand type is refused rather than converted | none | `math_clz32`; `reject_math_clz32_type` (`` `Math.clz32` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``) |
-| `Math.sign(x: T): T` for any numeric `T` | `-1`, `0` or `1` in `x`'s own type (a ranged `x` answers its base type). A float answers `llvm.copysign(1.0, x)` unless `fcmp ueq x, 0.0`, when it answers `x` itself, so `-0` and `NaN` come back as JavaScript gives them; a signed integer is `zext (x > 0) - zext (x < 0)`, an unsigned one `zext (x != 0)` | none | `math_sign`; `reject_math_sign_type` (`` `Math.sign` expects a number, got string ``) |
-| `Math.imul(a: i32 \| u32, b: i32 \| u32): i32` | the low 32 bits of the product, read signed: one wrapping `mul i32`, with no overflow check, which is JavaScript's answer for any operands an `i32` or a `u32` holds (`Math.imul(0x7fffffff, 2)` is `-2`). Any other operand type is refused rather than converted, for `Math.clz32`'s reason | none | `math_imul`; `reject_math_imul_f64` (`` `Math.imul` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``) |
-| `Math.random(): f64` | xorshift64\* in the runtime (`nish_random`), 53 random bits in `[0, 1)`, seeded from time and pid | write | `math_random` |
-| `Math.PI: f64`, `Math.E: f64` | constants, also in i32 mode | none | `math_i32`, `math_intrinsics` |
+| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log` | `f64` | `f64` | none |
+| `Math.tan` | `f64` | `f64` | none |
+| `Math.atan2`, `Math.hypot` | `f64, f64` | `f64` | none |
+| `Math.pow` | `f64, f64` | `f64` | none |
+| `Math.round` | `f64` | `f64` | none |
+| `Math.abs` | any numeric `T` | `T` | none |
+| `Math.min`, `Math.max` | `T, T` | `T` | none |
+| `Math.clz32` | `i32 \| u32` | `integer<0, 32>` | none |
+| `Math.sign` | any numeric `T` | `T` | none |
+| `Math.imul` | two of `i32 \| u32` | `i32` | none |
+| `Math.random` | nothing | `f64` | write |
+| `Math.PI`, `Math.E` | — | `f64` | none |
+
+**`Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64`** take and
+answer an `f64`. `floor`, `ceil` and `trunc` have two paths on x86-64 (see
+*Lowering*), and the answers are the same bits on either path.
+
+- *Lowering:* LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`,
+  `ceil` and `trunc` in an x86-64 module that is not a wasm build: there
+  they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which
+  run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that
+  does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with
+  no `--target` that is an x86-64 host.
+- *Tests:* `math_intrinsics`, `math_rounding`; `reject_math_i32`
+  (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``).
+
+**`Math.tan(x: f64): f64`** is exact near every multiple of π/2 and within
+one ulp.
+
+- *Lowering:* a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the
+  module as `internal @nish.tanF64`, so no target calls libm.
+- *Tests:* `math_tan`, `math_std_edges`.
+
+**`Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64`**
+follow ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is
+−π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two
+arguments, not JavaScript's any number.
+
+- *Lowering:* calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in
+  like `tan`.
+- *Tests:* `math_atan2`, `math_hypot`; `reject_math_atan2_f32`
+  (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``),
+  `reject_math_hypot_arity`
+  (`` `Math.hypot` expects exactly 2 arguments, got 3 ``).
+
+**`Math.pow(x: f64, y: f64): f64`** gives ECMAScript's answer where it and
+C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`);
+`pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case
+agrees with C.
+
+- *Lowering:* `llvm.pow.f64` plus a `select` for the cases where ECMAScript
+  and C99 differ.
+- *Tests:* `math_intrinsics`; `tests/differential/corpus/f64_pow_spec`.
+
+**`Math.round(x: f64): f64`** is JavaScript's round-half-up, and keeps `x`'s
+sign: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a
+value in `[-0.5, 0)` or `-0` itself -> `-0`, as in JavaScript; `NaN` ->
+`NaN`.
+
+- *Lowering:* `Math.floor`'s `floor` + compare + `select`, then
+  `llvm.copysign.f64` puts `x`'s sign back.
+- *Tests:* `math_intrinsics`, `math_round_negzero`, `math_rounding`.
+
+**`Math.abs(x: T): T` for any numeric `T`** answers the magnitude, wrapping
+for `INT_MIN`. On an unsigned type the value is its own magnitude.
+
+- *Lowering:* `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` /
+  `llvm.fabs.f64`; on an unsigned type, no instruction at all.
+- *Tests:* `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned
+  widths *(CLI only)*.
+
+**`Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T`** take exactly two
+operands of one numeric type. On floats they give JavaScript's answer: a NaN
+operand gives NaN and `-0` is below `+0` (`Math.min(0, -0)` is `-0`).
+
+- *Lowering:* signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`.
+  A native float build branches as clang compiles the C a programmer writes
+  for it: `fcmp uno` to a quiet NaN, else `fcmp olt`/`ogt` and a `select`,
+  and on `fcmp oeq` the operand whose sign bit is set (`min`) or clear
+  (`max`), the three joined by a `phi`; x86 has no instruction for
+  `llvm.minimum`, whose expansion measured 25–55% slower in `bench/math`. A
+  wasm build keeps `llvm.minimum/maximum.<f32|f64>`, which are wasm's
+  `f64.min`/`f64.max`, so no libm is linked for them.
+- *Tests:* `math_i32`, `math_intrinsics`, `math_minmax_float`,
+  `math_minmax_nan`; `reject_math_min_arity`
+  (`` `Math.min` expects exactly 2 arguments, got 1 ``).
+
+**`Math.clz32(x: i32 | u32): integer<0, 32>`** answers the leading zero bits
+of `x`'s 32 bits, JavaScript's answer (an `i32` and a `u32` are the bits
+ToUint32 gives), so `0` answers `32`. The answer is ranged
+(`integer<Lo, Hi>`, see [Types](types.md)), so `31 - Math.clz32(word & (0 - word))`,
+the index of a word's lowest set bit, needs no overflow check. Any other
+operand type is refused rather than converted.
+
+- *Lowering:* `llvm.ctlz.i32` with `i1 false`.
+- *Tests:* `math_clz32`; `reject_math_clz32_type`
+  (`` `Math.clz32` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``).
+
+**`Math.sign(x: T): T` for any numeric `T`** answers `-1`, `0` or `1` in
+`x`'s own type (a ranged `x` answers its base type). A float `-0` and `NaN`
+come back as JavaScript gives them.
+
+- *Lowering:* a float answers `llvm.copysign(1.0, x)` unless
+  `fcmp ueq x, 0.0`, when it answers `x` itself; a signed integer is
+  `zext (x > 0) - zext (x < 0)`, an unsigned one `zext (x != 0)`.
+- *Tests:* `math_sign`; `reject_math_sign_type`
+  (`` `Math.sign` expects a number, got string ``).
+
+**`Math.imul(a: i32 | u32, b: i32 | u32): i32`** answers the low 32 bits of
+the product, read signed, with no overflow check, which is JavaScript's
+answer for any operands an `i32` or a `u32` holds
+(`Math.imul(0x7fffffff, 2)` is `-2`). Any other operand type is refused
+rather than converted, for `Math.clz32`'s reason.
+
+- *Lowering:* one wrapping `mul i32`.
+- *Tests:* `math_imul`; `reject_math_imul_f64`
+  (`` `Math.imul` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``).
+
+**`Math.random(): f64`** answers 53 random bits in `[0, 1)`, seeded from
+time and pid.
+
+- *Lowering:* xorshift64\* in the runtime (`nish_random`).
+- *Tests:* `math_random`.
+
+**`Math.PI: f64`, `Math.E: f64`** are constants, also in i32 mode.
+
+- *Tests:* `math_i32`, `math_intrinsics`.
 
 The f64-only functions reject `i32`/`i64` arguments; `number` in i32 mode is
 an `i32`, so write `Math.sqrt(toF64(n))` or use f64 mode. A numeric literal
@@ -118,20 +339,121 @@ argument is typed `f64` by context (`Math.sqrt(2)` works in both modes).
 
 The reference for each conversion, with its parameter and its answer, is its doc comment in [`runtime/nish.d.ts`](https://github.com/amritk/nish/blob/main/runtime/nish.d.ts); the rules are here.
 
-| Signature | Semantics | Test |
+| Function | Takes | Gives |
 | --- | --- | --- |
-| `toI32(x): i32` | narrower or equal width: `trunc` (wraps); wider signed source: `sext`, wider unsigned source: `zext`; a float source (`f32` or `f64`): saturating `llvm.fptosi.sat.i32.<f32\|f64>` (NaN -> 0, out of range clamps); `i32`: identity | `conversions`, `u_conv_roundtrip`; `reject_toi32_string` |
-| `toI64(x): i64` | signed source: `sign-extend`; unsigned source: `zext`; `f64`: saturating; `i64`: identity | `conversions`, `u_conv_widths` |
-| `toU8`, `toU16`, `toU32`, `toU64` | widening: `zext` from an unsigned source, `sext` from a signed one (so `toU64(-1: i32)` is 2^64 - 1, as `-1i32 as u64` is in Rust); narrowing: `trunc`; a float source: saturating `llvm.fptoui.sat`, whose clamp is `0 .. 2^bits-1`, so a negative value is `0` | `u_conv_widths`, `u_conv_f64`, `u_conv_roundtrip`; `reject_u_conversion_arg` |
-| any integer -> an integer of the **same width** and other signedness | **no instruction at all**: signedness is not part of the LLVM type and the bits do not move (`toU32(i)` on an `i32`, `toI64(q)` on a `u64`) | `u_conv_same_width` |
-| `toF32(x): f32` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f64`: `fptrunc` (rounds to nearest); `f32`: identity | `f32_conversions`, `f32_constant` |
-| `toF64(x): f64` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f32`: `fpext` (exact); `f64`: identity | `conversions`, `u_conv_f64`, `f32_conversions` |
-| `f64ToBits(x: f64): i64` | reinterpret the 64 bits, never convert the value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`. One `bitcast`, so a function that only reinterprets bits stays `readnone` | `conv_f64_bits`; `reject_f64tobits_type`, `reject_f64tobits_arity` |
-| `f32ToBits(x: f32): i32` | the same for an `f32`'s 32 bits, signed as an `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is `-2147483648`. One `bitcast float to i32`; under Node, `runtime/nish.mjs` supplies it from a `DataView` | `f32_to_bits`; `reject_f32_to_bits_f64` (`` `f32ToBits` expects an argument of type f32, got f64 ``) |
-| `bitsToF64(b: i64): f64` | the inverse. `bitsToF64(f64ToBits(x)) === x` for every `x` except `NaN`, which is not `===` to itself | `conv_f64_bits`; `reject_bitstof64_type` |
-| `Number(x: string \| i32 \| i64 \| f64 \| boolean): f64` | a string is parsed with JavaScript's `Number(s)` rules (below); `i32`/`i64`: `sitofp`; `boolean`: `uitofp` (`true` is `1`); `f64`: identity. A numeric literal argument is typed `f64` (`Number(2.5)` works in i32 mode) | `parse_numbers`; `reject_number_array` (`` `Number` expects a string, number, or boolean, got i32[] ``) |
-| `parseInt(s: string): i32` | base 10 only: ASCII whitespace, an optional sign, then digits (`strtoll`); stops at the first other character. **Deviations from JavaScript:** no `NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`, `parseInt("")`); values beyond the `i32` range saturate exactly like `toI32` (`parseInt("99999999999")` is `2147483647`); a `0x` prefix is not hexadecimal (`parseInt("0x10")` is `0`). Always `i32`, also under `--number-mode f64` (use `Number` there) | `parse_numbers`; `reject_parseint_number` (`` `parseInt` expects a string, got i32 ``) |
-| `parseFloat(s: string): f64` | ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded by `strtod`; `NaN` when there is none (`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`, `"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like `strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and gives `0`) | `parse_numbers` |
+| `toI32` | any number | `i32` |
+| `toI64` | any number | `i64` |
+| `toU8`, `toU16`, `toU32`, `toU64` | any number | that unsigned type |
+| same width, other signedness | any integer | the other integer |
+| `toF32` | any number | `f32` |
+| `toF64` | any number | `f64` |
+| `f64ToBits` | `f64` | `i64` |
+| `f32ToBits` | `f32` | `i32` |
+| `bitsToF64` | `i64` | `f64` |
+| `Number` | `string \| i32 \| i64 \| f64 \| boolean` | `f64` |
+| `parseInt` | `string` | `i32` |
+| `parseFloat` | `string` | `f64` |
+
+**`toI32(x): i32`** at narrower or equal width wraps. A float source (`f32` or `f64`) saturates: NaN -> 0, and out of range clamps.
+On an `i32` it is the identity.
+
+- *Lowering:* narrower or equal width: `trunc` (wraps); wider signed
+  source: `sext`, wider unsigned source: `zext`; a float source: saturating
+  `llvm.fptosi.sat.i32.<f32|f64>`; `i32`: identity.
+- *Tests:* `conversions`, `u_conv_roundtrip`; `reject_toi32_string`.
+
+**`toI64(x): i64`** saturates from an `f64`, and on an `i64` it is the
+identity.
+
+- *Lowering:* signed source: `sign-extend`; unsigned source: `zext`; `f64`:
+  saturating; `i64`: identity.
+- *Tests:* `conversions`, `u_conv_widths`.
+
+**`toU8`, `toU16`, `toU32`, `toU64`** widen a signed source by its sign, so
+`toU64(-1: i32)` is 2^64 - 1, as `-1i32 as u64` is in Rust. Narrowing
+truncates. A float source saturates, clamped to `0 .. 2^bits-1`, so a
+negative value is `0`.
+
+- *Lowering:* widening: `zext` from an unsigned source, `sext` from a signed
+  one; narrowing: `trunc`; a float source: saturating `llvm.fptoui.sat`,
+  whose clamp is `0 .. 2^bits-1`.
+- *Tests:* `u_conv_widths`, `u_conv_f64`, `u_conv_roundtrip`;
+  `reject_u_conversion_arg`.
+
+**any integer -> an integer of the same width and other signedness** keeps
+the bits as they are (`toU32(i)` on an `i32`, `toI64(q)` on a `u64`).
+
+- *Lowering:* **no instruction at all**: signedness is not part of the LLVM
+  type and the bits do not move.
+- *Tests:* `u_conv_same_width`.
+
+**`toF32(x): f32`** rounds an `f64` to nearest, and on an `f32` it is the
+identity.
+
+- *Lowering:* signed integers: `sitofp`; unsigned integers: `uitofp`; `f64`:
+  `fptrunc` (rounds to nearest); `f32`: identity.
+- *Tests:* `f32_conversions`, `f32_constant`.
+
+**`toF64(x): f64`** widens an `f32` exactly, and on an `f64` it is the
+identity.
+
+- *Lowering:* signed integers: `sitofp`; unsigned integers: `uitofp`; `f32`:
+  `fpext` (exact); `f64`: identity.
+- *Tests:* `conversions`, `u_conv_f64`, `f32_conversions`.
+
+**`f64ToBits(x: f64): i64`** reinterprets the 64 bits and never converts the
+value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`.
+
+- *Lowering:* one `bitcast`, so a function that only reinterprets bits stays
+  `readnone`.
+- *Tests:* `conv_f64_bits`; `reject_f64tobits_type`,
+  `reject_f64tobits_arity`.
+
+**`f32ToBits(x: f32): i32`** is the same for an `f32`'s 32 bits, signed as an
+`i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is
+`-2147483648`.
+
+- *Lowering:* one `bitcast float to i32`; under Node, `runtime/nish.mjs`
+  supplies it from a `DataView`.
+- *Tests:* `f32_to_bits`; `reject_f32_to_bits_f64`
+  (`` `f32ToBits` expects an argument of type f32, got f64 ``).
+
+**`bitsToF64(b: i64): f64`** is the inverse. `bitsToF64(f64ToBits(x)) === x`
+for every `x` except `NaN`, which is not `===` to itself.
+
+- *Tests:* `conv_f64_bits`; `reject_bitstof64_type`.
+
+**`Number(x: string | i32 | i64 | f64 | boolean): f64`** parses a string with
+JavaScript's `Number(s)` rules (below). A `boolean` converts with `true` as
+`1`, and an `f64` is the identity. A numeric literal argument is typed `f64`
+(`Number(2.5)` works in i32 mode).
+
+- *Lowering:* `i32`/`i64`: `sitofp`; `boolean`: `uitofp`; `f64`: identity.
+- *Tests:* `parse_numbers`; `reject_number_array`
+  (`` `Number` expects a string, number, or boolean, got i32[] ``).
+
+**`parseInt(s: string): i32`** reads base 10 only: ASCII whitespace, an
+optional sign, then digits; it stops at the first other character.
+**Deviations from JavaScript:** no `NaN` in an `i32`, so no digits give `0`
+(`parseInt("abc")`, `parseInt("")`); values beyond the `i32` range saturate
+exactly like `toI32` (`parseInt("99999999999")` is `2147483647`); a `0x`
+prefix is not hexadecimal (`parseInt("0x10")` is `0`). It is always `i32`,
+also under `--number-mode f64` (use `Number` there).
+
+- *Lowering:* `strtoll`.
+- *Tests:* `parse_numbers`; `reject_parseint_number`
+  (`` `parseInt` expects a string, got i32 ``).
+
+**`parseFloat(s: string): f64`** reads ASCII whitespace, then the longest
+decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`,
+or `[sign] Infinity`), correctly rounded. It answers `NaN` when there is none
+(`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`,
+`"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like
+`strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and
+gives `0`).
+
+- *Lowering:* `strtod`.
+- *Tests:* `parse_numbers`.
 
 The string parsers accept only ASCII whitespace (` \t\n\v\f\r`), not the
 Unicode spaces JavaScript also trims. `Number(s)` trims it on both sides and
@@ -252,14 +574,54 @@ table below spells each family with `i32x4`.
 
 Reference: [`nish:simd`](../nish-simd.md).
 
-| Signature | Lowering | Test |
+| Function | Takes | Gives |
 | --- | --- | --- |
-| `i32x4(a, b, c, d)`, one argument per lane | one `insertelement` per lane into `undef`, which `opt` folds to a constant vector when every lane is one | `simd_lanes`; `reject_simd_arity`, `reject_simd_lane_type` |
-| `splatI32x4(x)` | one `insertelement` into lane 0 and a `shufflevector` whose mask is `zeroinitializer` | `simd_lanes` |
-| `loadI32x4(xs, i)` | one bounds check for the whole vector, `i < len` and `i + N <= len`, branching to `nish_panic_index(i, len)`; then the element's address bitcast to `<N x T>*` and one `load` aligned to the lane | `simd_access`, `simd_access_oob`, `simd_access_oob_first`, `simd_access_oob_negative`; `reject_simd_lane_type` |
-| `store(v, xs, i)` | the same check, then one `store`; a statement | `simd_access`, `simd_store_oob`; `reject_simd_lane_type`, `reject_simd_arity` |
-| `extract(v, k)` | `extractelement` at the constant `k` | `simd_lanes`; `reject_simd_lane_index` |
-| `replace(v, k, x)` | `insertelement` at the constant `k`: a new vector, `v` unchanged | `simd_lanes`, `simd_values`; `reject_simd_lane_index` |
+| `i32x4` | one `i32` per lane | `i32x4` |
+| `splatI32x4` | one `i32` | `i32x4` |
+| `loadI32x4` | `readonly i32[], i32` | `i32x4` |
+| `store` | `i32x4, i32[], i32` | `void` |
+| `extract` | `i32x4`, constant `k` | one lane |
+| `replace` | `i32x4`, constant `k`, lane | `i32x4` |
+
+**`i32x4(a, b, c, d)`, one argument per lane** makes a vector of its
+arguments.
+
+- *Lowering:* one `insertelement` per lane into `undef`, which `opt` folds
+  to a constant vector when every lane is one.
+- *Tests:* `simd_lanes`; `reject_simd_arity`, `reject_simd_lane_type`.
+
+**`splatI32x4(x)`** makes a vector with `x` in every lane.
+
+- *Lowering:* one `insertelement` into lane 0 and a `shufflevector` whose
+  mask is `zeroinitializer`.
+- *Tests:* `simd_lanes`.
+
+**`loadI32x4(xs, i)`** reads a vector out of `xs` at `i`, after one bounds
+check for the whole vector, `i < len` and `i + N <= len`.
+
+- *Lowering:* the bounds check branches to `nish_panic_index(i, len)`; then
+  the element's address bitcast to `<N x T>*` and one `load` aligned to the
+  lane.
+- *Tests:* `simd_access`, `simd_access_oob`, `simd_access_oob_first`,
+  `simd_access_oob_negative`; `reject_simd_lane_type`.
+
+**`store(v, xs, i)`** writes `v` back into `xs` at `i` after the same check.
+It is a statement.
+
+- *Lowering:* the same check, then one `store`.
+- *Tests:* `simd_access`, `simd_store_oob`; `reject_simd_lane_type`,
+  `reject_simd_arity`.
+
+**`extract(v, k)`** takes lane `k` out of `v`; `k` is a constant.
+
+- *Lowering:* `extractelement` at the constant `k`.
+- *Tests:* `simd_lanes`; `reject_simd_lane_index`.
+
+**`replace(v, k, x)`** puts `x` in lane `k`, a constant, and answers a new
+vector: `v` is unchanged.
+
+- *Lowering:* `insertelement` at the constant `k`.
+- *Tests:* `simd_lanes`, `simd_values`; `reject_simd_lane_index`.
 
 - **The import is required.** The six types and every call are declared in
   `runtime/nish.d.ts` under `declare module "nish:simd"` only, and a module
@@ -406,10 +768,27 @@ it can prove is a boolean may become a `select`. These two builtins are how a
 program selects and compares on a secret without giving the optimiser that
 choice (WP34 N6).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `ctSelect(mask: T, a: T, b: T): T` | `(a & mask) \| (b & ~mask)`: `a` when `mask` is all-ones, `b` when it is zero | none | `ct_select_u32`, `ct_u64`; `reject_ct_select_i32`, `reject_ct_select_i32_literal`, `reject_ct_select_f64`, `reject_ct_select_f32`, `reject_ct_select_bool_mask`, `reject_ct_select_mixed`, `reject_ct_select_arity`, `reject_ct_select_float_mask` |
-| `ctEq(a: T, b: T): T` | all-ones of `T` when `a === b`, zero otherwise | none | `ct_eq_u32`, `ct_u64`; `reject_ct_eq_i64`, `reject_ct_eq_u8`, `reject_ct_eq_f64`, `reject_ct_eq_f32`, `reject_ct_eq_bool`, `reject_ct_eq_ranged`, `reject_ct_eq_mixed`, `reject_ct_eq_arity`, `reject_ct_eq_literals`, `reject_ct_eq_value` |
+| `ctSelect` | `T, T, T` | `T` | none |
+| `ctEq` | `T, T` | `T` | none |
+
+**`ctSelect(mask: T, a: T, b: T): T`** answers `(a & mask) | (b & ~mask)`:
+`a` when `mask` is all-ones, `b` when it is zero.
+
+- *Tests:* `ct_select_u32`, `ct_u64`; `reject_ct_select_i32`,
+  `reject_ct_select_i32_literal`, `reject_ct_select_f64`,
+  `reject_ct_select_f32`, `reject_ct_select_bool_mask`,
+  `reject_ct_select_mixed`, `reject_ct_select_arity`,
+  `reject_ct_select_float_mask`.
+
+**`ctEq(a: T, b: T): T`** answers all-ones of `T` when `a === b`, zero
+otherwise.
+
+- *Tests:* `ct_eq_u32`, `ct_u64`; `reject_ct_eq_i64`, `reject_ct_eq_u8`,
+  `reject_ct_eq_f64`, `reject_ct_eq_f32`, `reject_ct_eq_bool`,
+  `reject_ct_eq_ranged`, `reject_ct_eq_mixed`, `reject_ct_eq_arity`,
+  `reject_ct_eq_literals`, `reject_ct_eq_value`.
 
 - **`T` is `u32` or `u64`, one type for every operand.** A mask is a bit
   pattern, and the unsigned words are the only types whose all-ones is not also
@@ -571,11 +950,32 @@ What a driver asks before it trusts a directory or a program it found on its
 own: who owns this path, may anyone else write to it, and will the shell run
 it (#386; [security/cli.md](../../security/cli.md), CLI-7 and CLI-9).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `lstatOwnerModeSync(path: string): i64` | one `lstat` of `path`: the owner's uid in the high 32 bits and `st_mode` (the file type and the permission bits) in the low 32, or **-1** when the path does not resolve or holds a NUL. A symbolic link answers for **itself**, not for what it names | write | `owner_checks`; `reject_owner_arity`, `reject_owner_i32`, `reject_owner_wasm` |
-| `geteuid(): i64` | the effective user id, the one to compare an owner with | write | `owner_checks`; `reject_owner_euid_arity`, `reject_owner_euid_wasm` |
-| `isExecutableSync(path: string): boolean` | `access(path, X_OK)`: whether the real user may run `path`. `false` for a path that does not resolve or holds a NUL | write | `owner_checks`; `reject_owner_type`, `reject_owner_exec_wasm` |
+| `lstatOwnerModeSync` | `string` | `i64` | write |
+| `geteuid` | nothing | `i64` | write |
+| `isExecutableSync` | `string` | `boolean` | write |
+
+**`lstatOwnerModeSync(path: string): i64`** does one `lstat` of `path`. It
+answers the owner's uid in the high 32 bits and `st_mode` (the file type and
+the permission bits) in the low 32, or **-1** when the path does not resolve
+or holds a NUL. A symbolic link answers for **itself**, not for what it
+names.
+
+- *Tests:* `owner_checks`; `reject_owner_arity`, `reject_owner_i32`,
+  `reject_owner_wasm`.
+
+**`geteuid(): i64`** answers the effective user id, the one to compare an
+owner with.
+
+- *Tests:* `owner_checks`; `reject_owner_euid_arity`,
+  `reject_owner_euid_wasm`.
+
+**`isExecutableSync(path: string): boolean`** is `access(path, X_OK)`:
+whether the real user may run `path`. It answers `false` for a path that
+does not resolve or holds a NUL.
+
+- *Tests:* `owner_checks`; `reject_owner_type`, `reject_owner_exec_wasm`.
 
 - **The owner and the mode are one answer.** Both come out of one `lstat`, so
   they describe the same file however the path changes in between; two calls
@@ -1032,12 +1432,42 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 
 The reference for each member of `process`, with its parameters, its answer and its capability, is its doc comment in [`runtime/nish.d.ts`](https://github.com/amritk/nish/blob/main/runtime/nish.d.ts); the rules are here.
 
-| Signature | Semantics | Effect | Test |
+| Member | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `process.exit(code: i32): void` | `nish_exit` -> libc `exit(code)` (stdio buffers of linked C code are flushed; the arena is abandoned); statement position; a terminator | write, `noreturn` | `process_exit`, `reject_exit_unreachable` |
-| `process.argv: string[]` | the command line: `process.argv[0]` is the program path (C's `argv[0]`, one index earlier than Node, whose `argv[0]` is the `node` binary and `argv[1]` the script) and the rest are the arguments as UTF-8 byte strings; read-only | read | `argv_echo` (run with `argv_echo.argv`), `link/argv_import`; `reject_argv_assign`, `reject_argv_push` (`` `process.argv` is read-only ``) |
-| `process.platform: string` | the operating system the **program** is running on, spelled as Node spells it: `"linux"`, `"darwin"`, or `"unknown"` for anything this compiler has no target triple for (every WASI build included) | none | `io_host`; `reject_platform_assign` (`` Cannot assign to `process.platform` ``) |
-| `process.arch: string` | the architecture, likewise: `"x64"`, `"arm64"`, or `"unknown"` | none | `io_host`; `reject_arch_call` (`` Unknown builtin `process.arch` ``) |
+| `process.exit` | `i32` | `void` | write, `noreturn` |
+| `process.argv` | (property) | `string[]` | read |
+| `process.platform` | (property) | `string` | none |
+| `process.arch` | (property) | `string` | none |
+
+**`process.exit(code: i32): void`** ends the program with `code`. The stdio
+buffers of linked C code are flushed; the arena is abandoned. It is used in
+statement position, and it is a terminator.
+
+- *Lowering:* `nish_exit` -> libc `exit(code)`.
+- *Tests:* `process_exit`, `reject_exit_unreachable`.
+
+**`process.argv: string[]`** is the command line. `process.argv[0]` is the
+program path (C's `argv[0]`, one index earlier than Node, whose `argv[0]` is
+the `node` binary and `argv[1]` the script), and the rest are the arguments
+as UTF-8 byte strings. It is read-only.
+
+- *Tests:* `argv_echo` (run with `argv_echo.argv`), `link/argv_import`;
+  `reject_argv_assign`, `reject_argv_push`
+  (`` `process.argv` is read-only ``).
+
+**`process.platform: string`** is the operating system the **program** is
+running on, spelled as Node spells it: `"linux"`, `"darwin"`, or
+`"unknown"` for anything this compiler has no target triple for (every WASI
+build included).
+
+- *Tests:* `io_host`; `reject_platform_assign`
+  (`` Cannot assign to `process.platform` ``).
+
+**`process.arch: string`** is the architecture, likewise: `"x64"`,
+`"arm64"`, or `"unknown"`.
+
+- *Tests:* `io_host`; `reject_arch_call`
+  (`` Unknown builtin `process.arch` ``).
 
 `process.platform` and `process.arch` are what `--target host` asks the
 machine (WP14 §7a): the pair maps to `x86_64`/`aarch64` plus
@@ -1069,19 +1499,122 @@ Reference: [`nish:process`](../nish-process.md).
 
 Reference: [`nish:fs`](../nish-fs.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `readFileSync(path: string): string` | whole file as one arena string; failure prints `nish: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
-| `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits (WP14 B3): `null` for exactly the set of paths `readFileSync` prints `nish: cannot read <path>` for, a **directory** included. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
-| `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk, or `null` for exactly the paths `readFileSyncOrNull` answers `null` for; there is no exiting twin. An ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no `readFileBytesSync`, as it has no `readFileSync`. The TypeScript reading is class A (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked`, `reject_bytes_read_arity` (NL2061), `reject_bytes_read_type` (NL2268) |
-| `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position. A symbolic link as the last component of `path` is refused (`nish: cannot write <path>`), where Node follows it | write | `io_files` |
-| `appendFileSync(path: string, data: string): void` | create/append and write; statement position. A symbolic link as the last component is refused, as for `writeFileSync` | write | `io_files` |
-| `writeFileBytesSync(path: string, bytes: readonly u8[]): i32` | create/truncate (`0644`) and write the array's bytes as they are. A symbolic link as the last component is refused (`-40` ELOOP). Where `writeFileSync` exits, this **answers** `bytes.length` or a negative errno, never a panic | write | `io_write_file_bytes`, `io_write_bytes`; `reject_write_file_bytes_arity`, `reject_write_file_bytes_type` (NL2268), `reject_write_file_bytes_wasm` |
-| `renameSync(from: string, to: string): i32` | `rename(2)`: `from` replaces `to` in one step, so a reader sees the old file or the new one and never neither. `0`, or a negative errno; `-18` **EXDEV** across file systems, since nothing is copied. Never a panic | write | `io_rename`, `caps_fs_replace`; `reject_rename_arity`, `reject_rename_type`, `reject_rename_wasm` |
-| `unlinkSync(path: string): i32` | `unlink(2)`: removes the name, and a symbolic link itself rather than what it names. A **directory is refused** (`-21` EISDIR on Linux, `-1` EPERM where the kernel answers so), with no fallback to `rmdir`. `0`, or a negative errno. Never a panic | write | `io_unlink`, `caps_fs_replace`; `reject_unlink_arity`, `reject_unlink_type`, `reject_unlink_wasm` |
-| `writeFileSyncMode(path: string, data: string, mode: i32): i32` | `writeFileSync` with the file left at exactly `mode`: an `fchmod(2)` sets it **before the first byte is written**, so the umask cannot widen it and a wider existing file is narrowed before it holds the new contents. A descriptor opened before is not revoked. The file is written **in place**: a failure leaves it empty or partial, and a file this process may write but does not own is emptied before `-1` EPERM, so a secret that replaces another goes through a temporary and `renameSync`. A symbolic link as the last component is refused (`-40` ELOOP), its target untouched. A mode outside `0..0o777` is `-22` (the setuid, setgid and sticky bits are refused, not applied). The length written, or a negative errno. Never a panic | write | `io_write_file_mode`, `caps_fs_mode`, `fs_mode` (modes read back by `stat`, umask `022` and `077`); `reject_write_file_mode_arity`, `reject_write_file_mode_type`, `reject_write_file_mode_wasm` |
-| `createFileExclusiveSync(path: string, data: string, mode: i32): i32` | `O_CREAT\|O_EXCL` at exactly `mode`, set as for `writeFileSyncMode`: `-17` **EEXIST** when any name is already there, a dangling symbolic link included, which is never followed. Exactly one of any number of racing processes wins, so it is a lock file; a winner whose write fails removes the file before it answers. The length written, or a negative errno. Never a panic | write | `io_create_exclusive`, `fs_mode` (eight children race, one wins; a failed write leaves no file); `reject_create_exclusive_arity`, `reject_create_exclusive_type`, `reject_create_exclusive_mode_type`, `reject_create_exclusive_wasm` |
-| `mkdirSyncMode(path: string, mode: i32): i32` | `mkdir(2)` of one level at `mode`, with the process umask applied. An existing name is `-17` EEXIST, its mode never changed; a mode outside `0..0o777` (the sticky, setuid and setgid bits included) is `-22`. `0`, or a negative errno. Never a panic | write | `io_mkdir_mode`, `caps_fs_mode`, `fs_mode`; `reject_mkdir_mode_arity`, `reject_mkdir_mode_type`, `reject_mkdir_mode_mode_type`, `reject_mkdir_mode_wasm` |
+| `readFileSync` | `string` | `string` | write |
+| `readFileSyncOrNull` | `string` | `string \| null` | write |
+| `readFileBytesSync` | `string` | `u8[] \| null` | write |
+| `writeFileSync` | `string, string` | `void` | write |
+| `appendFileSync` | `string, string` | `void` | write |
+| `writeFileBytesSync` | `string, readonly u8[]` | `i32` | write |
+| `renameSync` | `string, string` | `i32` | write |
+| `unlinkSync` | `string` | `i32` | write |
+| `writeFileSyncMode` | `string, string, i32` | `i32` | write |
+| `createFileExclusiveSync` | `string, string, i32` | `i32` | write |
+| `mkdirSyncMode` | `string, i32` | `i32` | write |
+
+**`readFileSync(path: string): string`** reads the whole file as one arena
+string. A failure prints `nish: cannot read <path>` to stderr and exits 1.
+
+- *Tests:* `io_files`; `reject_readfile_number`
+  (`` `readFileSync` expects an argument of type string, got i32 ``).
+
+**`readFileSyncOrNull(path: string): string | null`** is the same read,
+with `null` where the other exits (WP14 B3): `null` for exactly the set of
+paths `readFileSync` prints `nish: cannot read <path>` for, a **directory**
+included. The result is narrowed with `if (text !== null)` like any other
+nullable.
+
+- *Tests:* `io_streams`; `reject_readfile_or_null_unchecked`.
+
+**`readFileBytesSync(path: string): u8[] | null`** answers the file's
+**bytes**, as they are on disk, or `null` for exactly the paths
+`readFileSyncOrNull` answers `null` for; there is no exiting twin. The
+result is an ordinary arena `u8[]` with `length === capacity`, narrowed with
+`if (b !== null)`. A `wasm32` build has no `readFileBytesSync`, as it has no
+`readFileSync`. The TypeScript reading is class A (WP34 N2).
+
+- *Tests:* `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`;
+  `reject_bytes_read_unchecked`, `reject_bytes_read_arity` (NL2061),
+  `reject_bytes_read_type` (NL2268).
+
+**`writeFileSync(path: string, data: string): void`** creates or truncates
+the file (`0644`) and writes; it is used in statement position. A symbolic
+link as the last component of `path` is refused
+(`nish: cannot write <path>`), where Node follows it.
+
+- *Tests:* `io_files`.
+
+**`appendFileSync(path: string, data: string): void`** creates or appends
+and writes; it is used in statement position. A symbolic link as the last
+component is refused, as for `writeFileSync`.
+
+- *Tests:* `io_files`.
+
+**`writeFileBytesSync(path: string, bytes: readonly u8[]): i32`** creates or
+truncates the file (`0644`) and writes the array's bytes as they are. A
+symbolic link as the last component is refused (`-40` ELOOP). Where
+`writeFileSync` exits, this **answers** `bytes.length` or a negative errno,
+never a panic.
+
+- *Tests:* `io_write_file_bytes`, `io_write_bytes`;
+  `reject_write_file_bytes_arity`, `reject_write_file_bytes_type` (NL2268),
+  `reject_write_file_bytes_wasm`.
+
+**`renameSync(from: string, to: string): i32`** is `rename(2)`: `from`
+replaces `to` in one step, so a reader sees the old file or the new one and
+never neither. It answers `0`, or a negative errno; `-18` **EXDEV** across
+file systems, since nothing is copied. Never a panic.
+
+- *Tests:* `io_rename`, `caps_fs_replace`; `reject_rename_arity`,
+  `reject_rename_type`, `reject_rename_wasm`.
+
+**`unlinkSync(path: string): i32`** is `unlink(2)`: it removes the name, and
+a symbolic link itself rather than what it names. A **directory is refused**
+(`-21` EISDIR on Linux, `-1` EPERM where the kernel answers so), with no
+fallback to `rmdir`. It answers `0`, or a negative errno. Never a panic.
+
+- *Tests:* `io_unlink`, `caps_fs_replace`; `reject_unlink_arity`,
+  `reject_unlink_type`, `reject_unlink_wasm`.
+
+**`writeFileSyncMode(path: string, data: string, mode: i32): i32`** is
+`writeFileSync` with the file left at exactly `mode`. An `fchmod(2)` sets it
+**before the first byte is written**, so the umask cannot widen it and a
+wider existing file is narrowed before it holds the new contents. A
+descriptor opened before is not revoked. The file is written **in place**: a
+failure leaves it empty or partial, and a file this process may write but
+does not own is emptied before `-1` EPERM, so a secret that replaces another
+goes through a temporary and `renameSync`. A symbolic link as the last
+component is refused (`-40` ELOOP), its target untouched. A mode outside
+`0..0o777` is `-22` (the setuid, setgid and sticky bits are refused, not
+applied). It answers the length written, or a negative errno. Never a panic.
+
+- *Tests:* `io_write_file_mode`, `caps_fs_mode`, `fs_mode` (modes read back
+  by `stat`, umask `022` and `077`); `reject_write_file_mode_arity`,
+  `reject_write_file_mode_type`, `reject_write_file_mode_wasm`.
+
+**`createFileExclusiveSync(path: string, data: string, mode: i32): i32`** is
+`O_CREAT|O_EXCL` at exactly `mode`, set as for `writeFileSyncMode`. It
+answers `-17` **EEXIST** when any name is already there, a dangling symbolic
+link included, which is never followed. Exactly one of any number of racing
+processes wins, so it is a lock file; a winner whose write fails removes the
+file before it answers. It answers the length written, or a negative errno.
+Never a panic.
+
+- *Tests:* `io_create_exclusive`, `fs_mode` (eight children race, one wins;
+  a failed write leaves no file); `reject_create_exclusive_arity`,
+  `reject_create_exclusive_type`, `reject_create_exclusive_mode_type`,
+  `reject_create_exclusive_wasm`.
+
+**`mkdirSyncMode(path: string, mode: i32): i32`** is `mkdir(2)` of one level
+at `mode`, with the process umask applied. An existing name is `-17` EEXIST,
+its mode never changed; a mode outside `0..0o777` (the sticky, setuid and
+setgid bits included) is `-22`. It answers `0`, or a negative errno. Never a
+panic.
+
+- *Tests:* `io_mkdir_mode`, `caps_fs_mode`, `fs_mode`;
+  `reject_mkdir_mode_arity`, `reject_mkdir_mode_type`,
+  `reject_mkdir_mode_mode_type`, `reject_mkdir_mode_wasm`.
 
 The ones that answer an `i32` answer the platform's errno values,
 untranslated, and the same numbers under Node; the ones shown here are
@@ -1116,15 +1649,87 @@ wins, as it does for every identifier builtin.
 
 Reference: [`nish:fs`](../nish-fs.md), [`nish:process`](../nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `mkdirSync(path: string): boolean` | create **one** directory, mode `0777 & ~umask`, not recursive, exactly like Node's `fs.mkdirSync(p)` with no options. `true` when a directory exists at `path` once the call returns, whoever made it; `false` for every other outcome, a plain file at `path` included | write | `io_mkdir`; `reject_mkdir_arity`, `reject_mkdir_type` |
-| `isDirectorySync(path: string): boolean` | one `stat`: `true` when a directory exists at `path` as the call runs, `false` for everything else. It is the question `-o <dir>` asks of a path, and the `stat` half of `mkdirSync`, which calls it (WP14 §7a) | write | `io_is_directory`; `reject_is_directory_arity`, `reject_is_directory_type` |
-| `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, and wait for it: its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` for an **empty** vector, a child that cannot be started or waited for, and always on WASI, which has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
-| `spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number` | the same run, with each stream sent to a file created or truncated at `0644`; an **empty** path leaves that stream inherited, and a symbolic link as a path's last component is refused, which answers `-1`. The two paths must not name one file; capture them apart and concatenate | write | `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`, `reject_spawn_to_type` |
-| `spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32` | the same run, with every stream a pipe: the child reads `stdin` and then end of file, and its stdout and stderr are **appended** to `stdout` and `stderr`. The status, `128 + n`, or `-1` as for `spawnSync` (and for a failed pipe or `poll`); a stream past **16 MiB** (`NISH_PIPED_CAP`) kills the child with `SIGKILL` and answers `-2`. The child holds no descriptor of the program but its three streams, and the program's SIGPIPE from a child that stopped reading is absorbed. The two output arrays are grown by the runtime, so they are push receivers to the arena analysis, and `readonly` is refused for them, as is a typed-array spelling (`Int32Array`, ...), whose length is fixed | write | `io_spawn_piped`, `mem_spawn_piped_scope`; `reject_spawn_piped_arity`, `reject_spawn_piped_element_type`, `reject_spawn_piped_stdin_type`, `reject_spawn_piped_output`, `reject_spawn_piped_typed_output`, `reject_spawn_piped_wasm`, `reject_using_arena_spawn_piped` |
-| `readdirSync(path: string): string[] \| null` | the directory's entries, **sorted ascending by bytes**, without `.` and `..`. `null` when the directory cannot be read at all, a *different* answer from the empty array of an empty directory. A WASI build always answers `null`: `fd_readdir` lists a preopened directory rather than a path, which is a different contract and not a port of this one | write | `io_readdir`, `io_readdir_null`; `reject_readdir_arity`, `reject_readdir_type`, `reject_readdir_unchecked` |
-| `realpathSync(path: string): string \| null` | `path` resolved to an **absolute** path with no symbolic link, `.`, `..` or repeated separator, or `null` when it does not resolve. POSIX `realpath` needs every component but the last to exist, so "does not resolve" is one answer rather than several, and the answer the caller asked for rather than an error. Copied into the arena and narrowed with `if (p !== null)` like any other nullable (WP19 §5a item 4) | write | `io_realpath`; `reject_realpath_arity`, `reject_realpath_type` |
+| `mkdirSync` | `string` | `boolean` | write |
+| `isDirectorySync` | `string` | `boolean` | write |
+| `spawnSync` | `string[]` | `number` | write |
+| `spawnSyncTo` | `string[], string, string` | `number` | write |
+| `spawnPiped` | `string[], readonly u8[], u8[], u8[]` | `i32` | write |
+| `readdirSync` | `string` | `string[] \| null` | write |
+| `realpathSync` | `string` | `string \| null` | write |
+
+**`mkdirSync(path: string): boolean`** creates **one** directory, mode
+`0777 & ~umask`, not recursive, exactly like Node's `fs.mkdirSync(p)` with
+no options. It answers `true` when a directory exists at `path` once the
+call returns, whoever made it; `false` for every other outcome, a plain file
+at `path` included.
+
+- *Tests:* `io_mkdir`; `reject_mkdir_arity`, `reject_mkdir_type`.
+
+**`isDirectorySync(path: string): boolean`** does one `stat`: `true` when a
+directory exists at `path` as the call runs, `false` for everything else. It
+is the question `-o <dir>` asks of a path, and the `stat` half of
+`mkdirSync`, which calls it (WP14 §7a).
+
+- *Tests:* `io_is_directory`; `reject_is_directory_arity`,
+  `reject_is_directory_type`.
+
+**`spawnSync(argv: string[]): number`** runs `argv[0]`, searched on `PATH`,
+and waits for it. It answers its exit status, or `128 + n` when signal `n`
+killed it (the shell's convention). It answers `-1` for an **empty** vector,
+a child that cannot be started or waited for, and always on WASI, which has
+no processes. The child inherits this process's environment, streams and
+working directory.
+
+- *Tests:* `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type`.
+
+**`spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number`**
+is the same run, with each stream sent to a file created or truncated at
+`0644`. An **empty** path leaves that stream inherited, and a
+symbolic link as a path's last component is refused, which answers `-1`.
+The two paths must not name one file; capture them apart and concatenate.
+
+- *Tests:* `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`,
+  `reject_spawn_to_type`.
+
+**`spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32`**
+is the same run, with every stream a pipe: the child reads
+`stdin` and then end of file, and its stdout and stderr are **appended** to
+`stdout` and `stderr`. It answers the status, `128 + n`, or `-1` as for
+`spawnSync` (and for a failed pipe or `poll`). A stream past **16 MiB**
+(`NISH_PIPED_CAP`) kills the child with `SIGKILL` and answers `-2`. The
+child holds no descriptor of the program but its three streams, and the
+program's SIGPIPE from a child that stopped reading is absorbed. The two
+output arrays are grown by the runtime, so they are push receivers to the
+arena analysis, and `readonly` is refused for them, as is a typed-array
+spelling (`Int32Array`, ...), whose length is fixed.
+
+- *Tests:* `io_spawn_piped`, `mem_spawn_piped_scope`;
+  `reject_spawn_piped_arity`, `reject_spawn_piped_element_type`,
+  `reject_spawn_piped_stdin_type`, `reject_spawn_piped_output`,
+  `reject_spawn_piped_typed_output`, `reject_spawn_piped_wasm`,
+  `reject_using_arena_spawn_piped`.
+
+**`readdirSync(path: string): string[] | null`** answers the directory's
+entries, **sorted ascending by bytes**, without `.` and `..`. It answers
+`null` when the directory cannot be read at all, a *different* answer from
+the empty array of an empty directory. A WASI build always answers `null`:
+`fd_readdir` lists a preopened directory rather than a path, which is a
+different contract and not a port of this one.
+
+- *Tests:* `io_readdir`, `io_readdir_null`; `reject_readdir_arity`,
+  `reject_readdir_type`, `reject_readdir_unchecked`.
+
+**`realpathSync(path: string): string | null`** answers `path` resolved to
+an **absolute** path with no symbolic link, `.`, `..` or repeated
+separator, or `null` when it does not resolve. POSIX `realpath` needs every
+component but the last to exist, so "does not resolve" is one answer rather
+than several, and the answer the caller asked for rather than an error. The
+result is copied into the arena and narrowed with `if (p !== null)` like any
+other nullable (WP19 §5a item 4).
+
+- *Tests:* `io_realpath`; `reject_realpath_arity`, `reject_realpath_type`.
 
 All five answer a value where they could have exited, for the reason
 `readFileSyncOrNull` answers `null` (WP14 B3): the language has no exceptions,
@@ -1190,9 +1795,18 @@ differ for names that are not (`docs/wp13-differential.md`).
 
 Reference: [`nish:process`](../nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `getenv(name: string): string \| null` | the value of environment variable `name` as the call runs, or `null` when it is **unset**; a variable set to nothing (`CC=`) answers a zero-length string. The bytes are copied into the arena, so the result outlives any later change to the environment; it is narrowed with `if (cc !== null)` like any other nullable (WP19 R1) | write | `io_getenv`; `reject_getenv_arity`, `reject_getenv_type`, `reject_getenv_unchecked` |
+| `getenv` | `string` | `string \| null` | write |
+
+**`getenv(name: string): string | null`** answers the value of environment
+variable `name` as the call runs, or `null` when it is **unset**; a variable
+set to nothing (`CC=`) answers a zero-length string. The bytes are copied
+into the arena, so the result outlives any later change to the environment.
+It is narrowed with `if (cc !== null)` like any other nullable (WP19 R1).
+
+- *Tests:* `io_getenv`; `reject_getenv_arity`, `reject_getenv_type`,
+  `reject_getenv_unchecked`.
 
 It is a **call and not `process.env.CC`**, and that is a language decision
 rather than a spelling: `process.env.NAME` is member access on a key chosen at
@@ -1227,10 +1841,23 @@ it is a byte offset.
 
 Reference: [`nish:process`](../nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `monotonicNanos(): i64` | `CLOCK_MONOTONIC` in nanoseconds; the origin is arbitrary, so only the **difference** between two reads means anything | write | `io_monotonic`; `reject_monotonic_arity` |
-| `wallClockNanos(): i64` | `CLOCK_REALTIME` in nanoseconds since 1970-01-01 UTC, as an `i64`. It can go backwards when the system time is set, so a duration is `monotonicNanos`'s job. Not refused on wasm, as the monotonic clock is | write | `wall_clock`; `reject_wall_clock_arity` |
+| `monotonicNanos` | nothing | `i64` | write |
+| `wallClockNanos` | nothing | `i64` | write |
+
+**`monotonicNanos(): i64`** reads `CLOCK_MONOTONIC` in nanoseconds. The
+origin is arbitrary, so only the **difference** between two reads means
+anything.
+
+- *Tests:* `io_monotonic`; `reject_monotonic_arity`.
+
+**`wallClockNanos(): i64`** reads `CLOCK_REALTIME` in nanoseconds since
+1970-01-01 UTC, as an `i64`. It can go backwards when the system time is
+set, so a duration is `monotonicNanos`'s job. It is not refused on wasm, as
+the monotonic clock is.
+
+- *Tests:* `wall_clock`; `reject_wall_clock_arity`.
 
 It is an `i64` in both number modes and not a `number`, because a `number` is an
 `i32` by default and would overflow inside a tenth of a second, and an `f64`
@@ -1258,13 +1885,78 @@ beside `runtime.c` as it does the others.
 
 Reference: [`nish:fs`](../nish-fs.md), [`nish:process`](../nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `Date.now(): f64` | the wall clock, `CLOCK_REALTIME`, in **whole milliseconds** since 1970-01-01 UTC, as JavaScript answers it: the milliseconds are counted as integers and then converted, so the value is exact and a time before 1970 floors. An `f64` in both number modes, because an `i32` of milliseconds overflowed in January 1970. It can go backwards when the clock is corrected, so an interval is `monotonicNanos`'s job, not this one's | write | `os_now`, `os_now_i32`; `reject_os_date_now_arity` |
-| `crypto.getRandomValues(bytes: u8[]): void` | every byte of `bytes` from the kernel's CSPRNG: `getrandom(2)` on Linux, looping over `EINTR` and short reads, and `getentropy(3)` in 256-byte chunks on macOS. **A `u8[]` only**, where the Web API takes any integer typed array: the byte is the unit a key or a nonce is written in, and a wider element would make the answer's byte order a fact about the machine. **A statement**, where the Web API also answers its argument, which the caller already holds. An empty array is filled with nothing. **At most 65,536 bytes a call**, the Web API's limit: more is a panic, `crypto.getRandomValues: <n> bytes asked for, and one call fills at most 65536`, exit 1. A source that fails is a panic too; nothing weaker is ever substituted | write | `os_random`, `os_random_limit`; `reject_os_random_i32`, `reject_os_random_u32`, `reject_os_random_string`, `reject_os_random_readonly`, `reject_os_random_value`, `reject_os_random_arity`, `reject_os_crypto_member`, `reject_os_crypto_value`, `reject_thread_region_random` |
-| `statMtimeSync(path: string): f64` | the modification time in milliseconds since the epoch, **with the sub-millisecond fraction** kept, computed as Node's `mtimeMs` is (seconds × 1e3 plus nanoseconds ÷ 1e6, in doubles), so the two print the same digits. **NaN** when the path cannot be stat'd, because an `f64` has no `null` ([Nullable types](types.md#nullable-types)); test it with `m !== m`. `stat` follows a symbolic link, and a directory has a time of its own. Also exported by `nish:fs` | write | `os_mtime`, `os_mtime_import`; `reject_os_mtime_type`, `reject_os_mtime_arity`, `reject_os_mtime_nullable` |
-| `signalFd(): i32` | a descriptor that becomes readable when **SIGTERM or SIGINT** arrives: the read end of a pipe a `sigaction` handler writes one byte to per signal, so the signals' default action never runs. The handler runs in whichever thread the signal lands on, so a `scope()` task or a parallel worker running when `signalFd()` is called cannot take the signal and end the process, and nothing is blocked for a spawned child to inherit. It overrides a disposition the process started with, as `process.on("SIGTERM")` does under Node. Made **once**; `-1` when it cannot be made. Also exported by `nish:process` | write | `os_signal`, `os_signal_import`; `reject_os_signal_fd_arity` |
-| `readSignal(fd: i32): i32` | block until one of the two signals arrives and answer **15** or **2**; `-1` for an `fd` that is not `signalFd()`'s and for a read that fails. The argument is an `i32` in both number modes, and an `f64`, an `i64` or a string is refused rather than converted. Not `willreturn`. Also exported by `nish:process` | write | `os_signal`, `os_signal_import`; `reject_os_signal_f64`, `reject_os_signal_i64`, `reject_os_signal_string`, `reject_os_signal_arity` |
+| `Date.now` | nothing | `f64` | write |
+| `crypto.getRandomValues` | `u8[]` | `void` | write |
+| `statMtimeSync` | `string` | `f64` | write |
+| `signalFd` | nothing | `i32` | write |
+| `readSignal` | `i32` | `i32` | write |
+
+**`Date.now(): f64`** answers the wall clock, `CLOCK_REALTIME`, in **whole
+milliseconds** since 1970-01-01 UTC, as JavaScript answers it. The
+milliseconds are counted as integers and then converted, so the value is
+exact and a time before 1970 floors. It is an `f64` in both number modes,
+because an `i32` of milliseconds overflowed in January 1970. It can go
+backwards when the clock is corrected, so an interval is
+`monotonicNanos`'s job, not this one's.
+
+- *Tests:* `os_now`, `os_now_i32`; `reject_os_date_now_arity`.
+
+**`crypto.getRandomValues(bytes: u8[]): void`** fills every byte of `bytes`
+from the kernel's CSPRNG. It takes **a `u8[]` only**, where the Web API
+takes any integer typed array: the byte is the unit a key or a nonce is
+written in, and a wider element would make the answer's byte order a fact
+about the machine. It is **a statement**, where the Web API also answers its
+argument, which the caller already holds. An empty array is filled with
+nothing. It fills **at most 65,536 bytes a call**, the Web API's limit: more
+is a panic,
+`crypto.getRandomValues: <n> bytes asked for, and one call fills at most 65536`,
+exit 1. A source that fails is a panic too; nothing weaker is ever
+substituted.
+
+- *Lowering:* `getrandom(2)` on Linux, looping over `EINTR` and short reads,
+  and `getentropy(3)` in 256-byte chunks on macOS.
+- *Tests:* `os_random`, `os_random_limit`; `reject_os_random_i32`,
+  `reject_os_random_u32`, `reject_os_random_string`,
+  `reject_os_random_readonly`, `reject_os_random_value`,
+  `reject_os_random_arity`, `reject_os_crypto_member`,
+  `reject_os_crypto_value`, `reject_thread_region_random`.
+
+**`statMtimeSync(path: string): f64`** answers the modification time in
+milliseconds since the epoch, **with the sub-millisecond fraction** kept. It
+is computed as Node's `mtimeMs` is (seconds × 1e3 plus nanoseconds ÷ 1e6,
+in doubles), so the two print the same digits. It answers **NaN** when the
+path cannot be stat'd, because an `f64` has no `null`
+([Nullable types](types.md#nullable-types)); test it with `m !== m`. `stat` follows a
+symbolic link, and a directory has a time of its own. Also exported by
+`nish:fs`.
+
+- *Tests:* `os_mtime`, `os_mtime_import`; `reject_os_mtime_type`,
+  `reject_os_mtime_arity`, `reject_os_mtime_nullable`.
+
+**`signalFd(): i32`** answers a descriptor that becomes readable when
+**SIGTERM or SIGINT** arrives: the read end of a pipe a `sigaction` handler
+writes one byte to per signal, so the signals' default action never runs.
+The handler runs in whichever thread the signal lands on, so a `scope()`
+task or a parallel worker running when `signalFd()` is called cannot take
+the signal and end the process, and nothing is blocked for a spawned child
+to inherit. It overrides a disposition the process started with, as
+`process.on("SIGTERM")` does under Node. It is made **once**; `-1` when it
+cannot be made. Also exported by `nish:process`.
+
+- *Tests:* `os_signal`, `os_signal_import`; `reject_os_signal_fd_arity`.
+
+**`readSignal(fd: i32): i32`** blocks until one of the two signals arrives
+and answers **15** or **2**; `-1` for an `fd` that is not `signalFd()`'s and
+for a read that fails. The argument is an `i32` in both number modes, and an
+`f64`, an `i64` or a string is refused rather than converted. Also exported
+by `nish:process`.
+
+- *Lowering:* not `willreturn`.
+- *Tests:* `os_signal`, `os_signal_import`; `reject_os_signal_f64`,
+  `reject_os_signal_i64`, `reject_os_signal_string`,
+  `reject_os_signal_arity`.
 
 **`Date` has one member.** `new Date()`, `Date()`, `Date.parse`, `Date.UTC`,
 any other member, and `Date` or `Date.now` used as a value are all refused under
@@ -1325,14 +2017,68 @@ exported by `nish:process` as well as being a global.
 
 Reference: [`nish:process`](../nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `spawn(argv: string[]): i32` | start `argv[0]` exactly as `spawnSync` does and answer the child's **pid** at once, **without waiting**, or a **negative errno** (-22 for an empty vector or an argument holding a NUL). **Test `pid > 0` before handing the answer on**: a failure passed to `waitPid` reads as "any child". A child never reaped stays a zombie until the program exits | write | `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm` |
-| `spawnWithFds(argv: string[], fds: readonly i32[]): i32` | `spawn`, with the child holding `fds[i]` as descriptor **`3 + i`**, close-on-exec cleared there. **No other descriptor** of this process reaches it but one opened without close-on-exec, which nothing the runtime opens is. More than **64** descriptors, or a negative one, is `-22` before anything is opened or started. The child shares each descriptor's open file, offset and status flags, and this process keeps its own. Its pid, or a negative errno | write | `spawn_fds_child`, `caps_process_spawn_fds`; `reject_spawn_fds_arity`, `reject_spawn_fds_element`, `reject_spawn_fds_argv`, `reject_spawn_fds_wasm` |
-| `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, and so is a `pid` of 0 or below, which `kill(2)` reads as more than one process. A positive pid may be any process of this user, not only a child ([RT-19](../../security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
-| `waitPid(pid: i32, flags: i32): i32[]` | reap a child (`pid` a child's or **-1 for any child**; flag **1 is WNOHANG**) and answer a fresh **`[pid, status]`**, the status as `spawnSync`'s; a failure puts the negative errno first. After `signalFd()` a blocking wait never sees EINTR, because that handler is installed with `SA_RESTART` and the wait restarts. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
-| `availableParallelism(): i32` | the CPUs this program may use, **at least 1**: the smallest of the CPUs online, its affinity mask or cpuset, a cgroup v2 CPU quota rounded up, and a positive `NISH_NUM_THREADS`, which can lower the count and never raise it. It needs no `--threads` | none | `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm` |
-| `totalMemory(): i64` | bytes of **physical memory**, or **-1** where the host does not say. The machine's, not a cgroup's limit | none | `os_memory`; `reject_os_memory_wasm` |
+| `spawn` | `string[]` | `i32` | write |
+| `spawnWithFds` | `string[], readonly i32[]` | `i32` | write |
+| `kill` | `i32, i32` | `i32` | write |
+| `waitPid` | `i32, i32` | `i32[]` | write |
+| `availableParallelism` | nothing | `i32` | none |
+| `totalMemory` | nothing | `i64` | none |
+
+**`spawn(argv: string[]): i32`** starts `argv[0]` exactly as `spawnSync`
+does and answers the child's **pid** at once, **without waiting**, or a
+**negative errno** (-22 for an empty vector or an argument holding a NUL).
+**Test `pid > 0` before handing the answer on**: a failure passed to
+`waitPid` reads as "any child". A child never reaped stays a zombie until the
+program exits.
+
+- *Tests:* `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm`.
+
+**`spawnWithFds(argv: string[], fds: readonly i32[]): i32`** is `spawn`,
+with the child holding `fds[i]` as descriptor **`3 + i`**, close-on-exec
+cleared there. **No other descriptor** of this process reaches it but one
+opened without close-on-exec, which nothing the runtime opens is. More than
+**64** descriptors, or a negative one, is `-22` before anything is opened or
+started. The child shares each descriptor's open file, offset and status
+flags, and this process keeps its own. It answers its pid, or a negative
+errno.
+
+- *Tests:* `spawn_fds_child`, `caps_process_spawn_fds`;
+  `reject_spawn_fds_arity`, `reject_spawn_fds_element`,
+  `reject_spawn_fds_argv`, `reject_spawn_fds_wasm`.
+
+**`kill(pid: i32, sig: i32): i32`** sends `sig` to `pid` and answers 0, or a
+negative errno. It takes **only 0, 2 (SIGINT), 9 (SIGKILL) and 15
+(SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig`
+is -22, and so is a `pid` of 0 or below, which `kill(2)` reads as more than
+one process. A positive pid may be any process of this user, not only a
+child ([RT-19](../../security/runtime.md)).
+
+- *Tests:* `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm`.
+
+**`waitPid(pid: i32, flags: i32): i32[]`** reaps a child (`pid` a child's or
+**-1 for any child**; flag **1 is WNOHANG**) and answers a fresh
+**`[pid, status]`**, the status as `spawnSync`'s; a failure puts the
+negative errno first. After `signalFd()` a blocking wait never sees EINTR,
+because that handler is installed with `SA_RESTART` and the wait restarts.
+It is an array because the language has no tuple.
+
+- *Tests:* `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`,
+  `reject_os_wait_wasm`.
+
+**`availableParallelism(): i32`** answers the CPUs this program may use,
+**at least 1**: the smallest of the CPUs online, its affinity mask or
+cpuset, a cgroup v2 CPU quota rounded up, and a positive
+`NISH_NUM_THREADS`, which can lower the count and never raise it. It needs
+no `--threads`.
+
+- *Tests:* `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm`.
+
+**`totalMemory(): i64`** answers bytes of **physical memory**, or **-1**
+where the host does not say. It is the machine's, not a cgroup's limit.
+
+- *Tests:* `os_memory`; `reject_os_memory_wasm`.
 
 **Capabilities.** `spawn`, `kill` and `waitPid` carry `process.spawn`, the
 label `spawnSync` carries: each reaches other processes — `kill` any process of
@@ -1375,11 +2121,37 @@ being a global.
 
 Reference: [`nish:process`](../nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `setNice(n: i32): i32` | set the **nice value** with `setpriority(PRIO_PROCESS, 0, n)` and answer 0, or a negative errno. **Lower-only**, even as root: outside 0..19 is `-22` and below the current value is `-13`, both with no system call, so the priority never rises. Children started afterwards inherit it | write | `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task` |
-| `setIdlePriority(): i32` | move the program to **`SCHED_IDLE`** with `sched_setscheduler(0, SCHED_IDLE, …)` and answer 0 or a negative errno. **Linux only**: Darwin answers -95 (Linux's EOPNOTSUPP, as `nish:net` spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an idle process can **starve** on a saturated machine, so a caller keeps a normal-priority fallback for work that must finish | write | `os_nice`; `reject_os_idle_wasm` |
-| `setCpuAffinity(cpu: i32): i32` | pin the calling process to the one CPU `cpu` with `sched_setaffinity` and answer 0, or a negative errno. **Narrow-only**: a `cpu` outside the CPUs the process may already run on (`taskset`, a cgroup) is `-22` with no change. `availableParallelism()` answers 1 afterwards. **Linux only**: -95 on Darwin and under Node | write | `link/net_prefork_pin`; `reject_os_affinity_wasm`, `reject_os_affinity_task` |
+| `setNice` | `i32` | `i32` | write |
+| `setIdlePriority` | nothing | `i32` | write |
+| `setCpuAffinity` | `i32` | `i32` | write |
+
+**`setNice(n: i32): i32`** sets the **nice value** with
+`setpriority(PRIO_PROCESS, 0, n)` and answers 0, or a negative errno. It is
+**lower-only**, even as root: outside 0..19 is `-22` and below the current
+value is `-13`, both with no system call, so the priority never rises.
+Children started afterwards inherit it.
+
+- *Tests:* `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task`.
+
+**`setIdlePriority(): i32`** moves the program to **`SCHED_IDLE`** with
+`sched_setscheduler(0, SCHED_IDLE, …)` and answers 0 or a negative errno. It
+is **Linux only**: Darwin answers -95 (Linux's EOPNOTSUPP, as `nish:net`
+spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an
+idle process can **starve** on a saturated machine, so a caller keeps a
+normal-priority fallback for work that must finish.
+
+- *Tests:* `os_nice`; `reject_os_idle_wasm`.
+
+**`setCpuAffinity(cpu: i32): i32`** pins the calling process to the one CPU
+`cpu` with `sched_setaffinity` and answers 0, or a negative errno. It is
+**narrow-only**: a `cpu` outside the CPUs the process may already run on
+(`taskset`, a cgroup) is `-22` with no change. `availableParallelism()`
+answers 1 afterwards. It is **Linux only**: -95 on Darwin and under Node.
+
+- *Tests:* `link/net_prefork_pin`; `reject_os_affinity_wasm`,
+  `reject_os_affinity_task`.
 
 **Per thread.** Linux keeps both the nice value and the policy per thread: a
 call sets the calling thread's and every thread started after it. So both
@@ -1422,28 +2194,183 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 
 Reference: [`nish:net`](../nish-net.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host and `port` into `out`: `0`, or `-22`, leaving `out` as it was. No `nish:net` call looks a name up; [`nish/net/dns`](https://github.com/amritk/nish/blob/main/std/net/dns.ts) resolves it first | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
-| `netLocalPort(fd: i32): i32` | the port the socket is bound to, the one the kernel chose for a listen on port `0` | write | `net_tcp_calls`, `net_tcp_echo` |
-| `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`; `"::"` hears both families, and on a kernel without IPv6 it is IPv4's `0.0.0.0`. `-98` when the port is in use | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
-| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags: `1` `SO_REUSEPORT`, which differs by platform as the table below shows; `2` `TCP_NODELAY`, which the runtime sets on every accepted connection, on every platform, closing one on which it cannot; `4`, with `1`, steers each connection to the listener of the CPU that received it, Linux only (`-95` elsewhere, `-22` without `1`). Any other bit is `-22` before a socket is made | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
-| `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection, non-blocking and close-on-exec, with the peer's address in `peer`; `-11` when none is waiting, and a `peer` shorter than 18 bytes is `-22` before a connection is taken. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
-| `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
-| `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be short. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
-| `netWrite2(fd: i32, a: readonly u8[], aOff: i32, aLen: i32, b: readonly u8[], bOff: i32, bLen: i32): i32` | two ranges in **one system call** (`sendmsg` with two `iovec`s), answered as `netWrite` is, `-32` and never SIGPIPE included. Both ranges are [checked](#bounds), `a`'s first. As for every call here, a `wasm32` build refuses it and Node throws | write | `tests/link/net_write2`, `net_write2_bounds`; `reject_net_write2_element`, `reject_net_write2_element_a`, `reject_net_write2_wasm` |
-| `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`) | write | `net_tcp_calls` |
-| `netClose(fd: i32): i32` | closes the descriptor, which is gone after the call whatever the answer. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
-| `netSetOption(fd: i32, option: i32, value: i32): i32` | sets one [socket option](#socket-options) from a whitelist; any other `option` is **`-22`**, so there is no way to pass a raw level and name through. `NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere** | write | `net_set_option`; `reject_net_set_option_wasm` |
-| `netMss(fd: i32): i32` | the maximum segment size a connected TCP socket sends, or **a plain `-1`, never an errno,** for every other descriptor and every call on wasm. It never panics | write | `net_mss`; `reject_net_mss_arity`, `reject_net_mss_type`; `net_mss` in `tests/run.js` for wasm32 and WASI |
-| `unixListen(path: string, backlog: i32, flags: i32): i32` | a listening [Unix-domain](#unix-domain-sockets) stream socket at `path`, whose file only its owner may connect to (`0600`); its paths and refusals are under that heading | write | `net_unix_calls`, `net_unix_paths`, `net_unix_fds`; `reject_net_unix_arity`, `reject_net_unix_wasm` |
-| `unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32` | `unixListen`'s socket with the file's mode chosen, `0` to `0o777`, set before the listen so no connect gets in under a wider one; an abstract name is `-22` | write | `net_unix_paths`, `net_unix_calls` |
-| `unixConnect(path: string): i32` | a new socket, non-blocking and close-on-exec, connected to the listener at `path`; a full backlog is `-11` on Linux and `-111` on Darwin | write | `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type` |
-| `unixAccept(fd: i32): i32` | the next waiting connection, non-blocking and close-on-exec; no peer address is written | write | `net_unix_calls` |
-| `unixSocketPair(kind: i32, fds: i32[]): i32` | two connected sockets into `fds`, non-blocking and close-on-exec, of kind `1` (`NET_UNIX_STREAM`) or `2` (`NET_UNIX_SEQPACKET`). Kind `2` is **`-95` on Darwin** | write | `net_unix_calls`, `net_unix_fds`; `reject_net_unix_pair_element`, `reject_net_unix_pair_readonly` |
-| `sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | bytes over the Unix socket `sock` with one copy of `fd` riding on them (`SCM_RIGHTS`). A `len` of `0` is **`-22`**, a socket of another family **`-95`**, and a gone peer `-32`, never SIGPIPE. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_arity`, `reject_net_unix_scm_wasm` |
-| `recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32` | bytes from the Unix socket `sock`, with the first descriptor the message carried in `fd[0]`, or **`-1`**; every further one is closed before the answer. The one kept is close-on-exec and **not** made non-blocking. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_element`, `reject_net_unix_scm_readonly`, `reject_net_unix_scm_buf_readonly`, `reject_net_unix_scm_wasm` |
-| `peerCredentials(fd: i32, out: i32[]): i32` | the pid, uid and gid of the process at the other end of a connected Unix socket, as the kernel recorded them **when the connection was made**, not who holds the other end now. A socket with no peer is **`-107`** on every platform; on Darwin the pid is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it | write | `net_unix_scm`, `caps_net_peer`; `reject_net_unix_peer_arity`, `reject_net_unix_peer_readonly`, `reject_net_unix_peer_element`, `reject_net_unix_scm_wasm` |
+| `netAddress` | `u8[], string, i32` | `i32` | write |
+| `netLocalPort` | `i32` | `i32` | write |
+| `tcpListen` | `string, i32, i32` | `i32` | write |
+| `tcpListenFlags` | `string, i32, i32, i32` | `i32` | write |
+| `tcpAccept` | `i32, u8[]` | `i32` | write |
+| `netRead` | `i32, u8[], i32, i32` | `i32` | write |
+| `netWrite` | `i32, readonly u8[], i32, i32` | `i32` | write |
+| `netWrite2` | `i32`, two ranges | `i32` | write |
+| `netShutdown` | `i32, i32` | `i32` | write |
+| `netClose` | `i32` | `i32` | write |
+| `netSetOption` | `i32, i32, i32` | `i32` | write |
+| `netMss` | `i32` | `i32` | write |
+| `unixListen` | `string, i32, i32` | `i32` | write |
+| `unixListenMode` | `string, i32, i32, i32` | `i32` | write |
+| `unixConnect` | `string` | `i32` | write |
+| `unixAccept` | `i32` | `i32` | write |
+| `unixSocketPair` | `i32, i32[]` | `i32` | write |
+| `sendFd` | `i32, i32, readonly u8[], i32, i32` | `i32` | write |
+| `recvFd` | `i32, u8[], i32, i32, i32[]` | `i32` | write |
+| `peerCredentials` | `i32, i32[]` | `i32` | write |
+
+**`netAddress(out: u8[], host: string, port: i32): i32`** writes the
+[address form](#the-address-form) of a **numeric** host and `port` into
+`out`. It answers `0`, or `-22`, leaving `out` as it was. No `nish:net` call
+looks a name up; [`nish/net/dns`](https://github.com/amritk/nish/blob/main/std/net/dns.ts) resolves it first.
+
+- *Tests:* `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export`.
+
+**`netLocalPort(fd: i32): i32`** answers the port the socket is bound to: the
+one the kernel chose for a listen on port `0`.
+
+- *Tests:* `net_tcp_calls`, `net_tcp_echo`.
+
+**`tcpListen(host: string, port: i32, backlog: i32): i32`** answers a
+listening socket on a numeric host with `SO_REUSEADDR`. `"::"` hears both
+families, and on a kernel without IPv6 it is IPv4's `0.0.0.0`. It answers
+`-98` when the port is in use.
+
+- *Tests:* `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`;
+  `reject_net_arity`, `reject_net_wasm`.
+
+**`tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32`**
+answers `tcpListen`'s socket, with flags. `1` is `SO_REUSEPORT`, which
+differs by platform as the table below shows. `2` is `TCP_NODELAY`, which the
+runtime sets on every accepted connection, on every platform, closing one on
+which it cannot. `4`, with `1`, steers each connection to the listener of the
+CPU that received it, Linux only (`-95` elsewhere, `-22` without `1`). Any
+other bit is `-22` before a socket is made.
+
+- *Tests:* `net_tcp_reuseport`, `net_tcp_nodelay`,
+  `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`;
+  `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm`.
+
+**`tcpAccept(fd: i32, peer: u8[]): i32`** answers the next waiting
+connection, non-blocking and close-on-exec, with the peer's address in
+`peer`. It answers `-11` when none is waiting, and a `peer` shorter than 18
+bytes is `-22` before a connection is taken.
+
+- *Lowering:* not `willreturn`: on a blocking socket the program inherited it
+  waits.
+- *Tests:* `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly`.
+
+**`netRead(fd: i32, buf: u8[], off: i32, len: i32): i32`** reads at most
+`len` bytes into `buf[off, off + len)`. It answers the count, `0` at the end
+of the stream, or `-11` when nothing is waiting. The range is
+[checked](#bounds).
+
+- *Tests:* `net_tcp_echo`, `net_tcp_bounds`; `reject_net_readonly`,
+  `reject_net_element`, `reject_net_import_wasm`.
+
+**`netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32`** writes
+at most `len` bytes of `buf[off, off + len)`. It answers the count, which may
+be short. A peer that has gone is **`-32`, never SIGPIPE**, so a closed
+connection cannot end the process. The range is [checked](#bounds).
+
+- *Tests:* `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element`.
+
+**`netWrite2(fd: i32, a: readonly u8[], aOff: i32, aLen: i32, b: readonly u8[], bOff: i32, bLen: i32): i32`**
+writes two ranges in **one system call**, answered as `netWrite` is, `-32`
+and never SIGPIPE included. Both ranges are [checked](#bounds), `a`'s first.
+As for every call here, a `wasm32` build refuses it and Node throws.
+
+- *Lowering:* `sendmsg` with two `iovec`s.
+- *Tests:* `tests/link/net_write2`, `net_write2_bounds`;
+  `reject_net_write2_element`, `reject_net_write2_element_a`,
+  `reject_net_write2_wasm`.
+
+**`netShutdown(fd: i32, how: i32): i32`** shuts the read side (`0`), the
+write side (`1`) or both (`2`).
+
+- *Tests:* `net_tcp_calls`.
+
+**`netClose(fd: i32): i32`** closes the descriptor, which is gone after the
+call whatever the answer.
+
+- *Lowering:* not `willreturn`, because a socket the program inherited with a
+  linger time can wait.
+- *Tests:* `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type`.
+
+**`netSetOption(fd: i32, option: i32, value: i32): i32`** sets one
+[socket option](#socket-options) from a whitelist. Any other `option` is
+**`-22`**, so there is no way to pass a raw level and name through.
+`NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere**.
+
+- *Tests:* `net_set_option`; `reject_net_set_option_wasm`.
+
+**`netMss(fd: i32): i32`** answers the maximum segment size a connected TCP
+socket sends, or **a plain `-1`, never an errno,** for every other descriptor
+and every call on wasm. It never panics.
+
+- *Tests:* `net_mss`; `reject_net_mss_arity`, `reject_net_mss_type`;
+  `net_mss` in `tests/run.js` for wasm32 and WASI.
+
+**`unixListen(path: string, backlog: i32, flags: i32): i32`** answers a
+listening [Unix-domain](#unix-domain-sockets) stream socket at `path`, whose
+file only its owner may connect to (`0600`). Its paths and refusals are under
+that heading.
+
+- *Tests:* `net_unix_calls`, `net_unix_paths`, `net_unix_fds`;
+  `reject_net_unix_arity`, `reject_net_unix_wasm`.
+
+**`unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32`**
+answers `unixListen`'s socket with the file's mode chosen, `0` to `0o777`,
+set before the listen so no connect gets in under a wider one. An abstract
+name is `-22`.
+
+- *Tests:* `net_unix_paths`, `net_unix_calls`.
+
+**`unixConnect(path: string): i32`** answers a new socket, non-blocking and
+close-on-exec, connected to the listener at `path`. A full backlog is `-11`
+on Linux and `-111` on Darwin.
+
+- *Tests:* `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type`.
+
+**`unixAccept(fd: i32): i32`** answers the next waiting connection,
+non-blocking and close-on-exec; no peer address is written.
+
+- *Tests:* `net_unix_calls`.
+
+**`unixSocketPair(kind: i32, fds: i32[]): i32`** writes two connected
+sockets into `fds`, non-blocking and close-on-exec, of kind `1`
+(`NET_UNIX_STREAM`) or `2` (`NET_UNIX_SEQPACKET`). Kind `2` is **`-95` on
+Darwin**.
+
+- *Tests:* `net_unix_calls`, `net_unix_fds`; `reject_net_unix_pair_element`,
+  `reject_net_unix_pair_readonly`.
+
+**`sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32`**
+sends bytes over the Unix socket `sock` with one copy of `fd` riding on them
+(`SCM_RIGHTS`). A `len` of `0` is **`-22`**, a socket of another family
+**`-95`**, and a gone peer `-32`, never SIGPIPE. The range is
+[checked](#bounds).
+
+- *Tests:* `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_arity`,
+  `reject_net_unix_scm_wasm`.
+
+**`recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32`**
+receives bytes from the Unix socket `sock`, with the first descriptor the
+message carried in `fd[0]`, or **`-1`**; every further one is closed before
+the answer. The one kept is close-on-exec and **not** made non-blocking. The
+range is [checked](#bounds).
+
+- *Tests:* `net_unix_scm`, `net_unix_scm_bounds`;
+  `reject_net_unix_scm_element`, `reject_net_unix_scm_readonly`,
+  `reject_net_unix_scm_buf_readonly`, `reject_net_unix_scm_wasm`.
+
+**`peerCredentials(fd: i32, out: i32[]): i32`** writes the pid, uid and gid
+of the process at the other end of a connected Unix socket, as the kernel
+recorded them **when the connection was made**, not who holds the other end
+now. A socket with no peer is **`-107`** on every platform. On Darwin the pid
+is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it.
+
+- *Tests:* `net_unix_scm`, `caps_net_peer`; `reject_net_unix_peer_arity`,
+  `reject_net_unix_peer_readonly`, `reject_net_unix_peer_element`,
+  `reject_net_unix_scm_wasm`.
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -1520,10 +2447,27 @@ than counting a skip. CI's `ubuntu-latest` has IPv6 and runs it.
 
 ### The client half
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `tcpConnect(addr: readonly u8[]): i32` | a new TCP socket, non-blocking and close-on-exec, that starts connecting to the [address](#the-address-form) in `addr` and answers its descriptor **at once, while the connection is still being made**; the loop reports it writable when that has finished. Any other failure closes the socket and is answered instead of it | write | `net_tcp_connect`, `net_tcp_connect_import`; `reject_net_connect_element`, `reject_net_connect_arity` |
-| `connectResult(fd: i32): i32` | how the connection went, asked once `fd` is writable: `0`, or its failure from `SO_ERROR`, such as **`-111` for a port nobody listens on**. The kernel clears the failure as it is read | write | `net_tcp_connect`, `net_tcp_connect_import`; `reject_net_connect_wasm` |
+| `tcpConnect` | `readonly u8[]` | `i32` | write |
+| `connectResult` | `i32` | `i32` | write |
+
+**`tcpConnect(addr: readonly u8[]): i32`** makes a new TCP socket,
+non-blocking and close-on-exec, that starts connecting to the
+[address](#the-address-form) in `addr`, and answers its descriptor **at once,
+while the connection is still being made**; the loop reports it writable when
+that has finished. Any other failure closes the socket and is answered
+instead of it.
+
+- *Tests:* `net_tcp_connect`, `net_tcp_connect_import`;
+  `reject_net_connect_element`, `reject_net_connect_arity`.
+
+**`connectResult(fd: i32): i32`** answers how the connection went, asked once
+`fd` is writable: `0`, or its failure from `SO_ERROR`, such as **`-111` for a
+port nobody listens on**. The kernel clears the failure as it is read.
+
+- *Tests:* `net_tcp_connect`, `net_tcp_connect_import`;
+  `reject_net_connect_wasm`.
 
 A connection is made the way everything else here waits: in the loop. Linux
 answers `EINPROGRESS` even over loopback, so a program asks for writability and
@@ -1547,11 +2491,42 @@ if (connectResult(fd) === 0) {
 
 ### UDP
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `udpBind(host: string, port: i32, flags: i32): i32` | a datagram socket, non-blocking and close-on-exec, bound as `tcpListen`'s is, `"::"` and its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, flag `2` is `UDP_GRO`, and any other bit is `-22` | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_dual_stack`; `reject_net_udp_wasm`, `reject_net_udp_parallel` |
-| `udpSendTo(fd: i32, buf: readonly u8[], off: i32, len: i32, to: readonly u8[], segment: i32, ecn: i32): i32` | `buf[off, off + len)` to `to` in one `sendmsg`, cut by the kernel into datagrams of `segment` bytes when that is above `0` (**GSO**), with `ecn` as the IP header's two ECN bits. Not `willreturn`: on a blocking socket the program inherited it waits. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`; `reject_net_udp_send_element`, `reject_net_udp_arity`, `reject_net_udp_task` |
-| `udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32` | the next datagram into `buf[off, off + len)`, cut to `len`, in one `recvmsg`, with its sender in `from`, its **GRO** segment size in `meta[0]` and its ECN bits in `meta[1]`; `-11` when none is waiting. Not `willreturn`, as `udpSendTo`. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`; `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`, `reject_net_udp_meta_element`, `reject_net_udp_element`, `reject_net_udp_region` |
+| `udpBind` | `string, i32, i32` | `i32` | write |
+| `udpSendTo` | `i32`, a range, `to`, `segment`, `ecn` | `i32` | write |
+| `udpRecvFrom` | `i32`, a range, `from`, `meta` | `i32` | write |
+
+**`udpBind(host: string, port: i32, flags: i32): i32`** answers a datagram
+socket, non-blocking and close-on-exec, bound as `tcpListen`'s is, `"::"` and
+its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, flag `2` is
+`UDP_GRO`, and any other bit is `-22`.
+
+- *Tests:* `net_udp_calls`, `net_udp_echo`, `net_udp_offload`,
+  `net_dual_stack`; `reject_net_udp_wasm`, `reject_net_udp_parallel`.
+
+**`udpSendTo(fd: i32, buf: readonly u8[], off: i32, len: i32, to: readonly u8[], segment: i32, ecn: i32): i32`**
+sends `buf[off, off + len)` to `to`, cut by the kernel into datagrams of
+`segment` bytes when that is above `0` (**GSO**), with `ecn` as the IP
+header's two ECN bits. The range is [checked](#bounds).
+
+- *Lowering:* one `sendmsg`. Not `willreturn`: on a blocking socket the
+  program inherited it waits.
+- *Tests:* `net_udp_calls`, `net_udp_echo`, `net_udp_offload`,
+  `net_udp_bounds`; `reject_net_udp_send_element`, `reject_net_udp_arity`,
+  `reject_net_udp_task`.
+
+**`udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32`**
+receives the next datagram into `buf[off, off + len)`, cut to `len`, with its
+sender in `from`, its **GRO** segment size in `meta[0]` and its ECN bits in
+`meta[1]`. It answers `-11` when none is waiting. The range is
+[checked](#bounds).
+
+- *Lowering:* one `recvmsg`. Not `willreturn`, as `udpSendTo`.
+- *Tests:* `net_udp_calls`, `net_udp_echo`, `net_udp_offload`,
+  `net_udp_bounds`; `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`,
+  `reject_net_udp_meta_element`, `reject_net_udp_element`,
+  `reject_net_udp_region`.
 
 A datagram carries no stream, so an echo is `udpRecvFrom` and then `udpSendTo`
 back to `from`, which is already an address; the `net_` block of
@@ -1590,13 +2565,49 @@ by `tcpAccept` on a datagram socket instead, above.
 
 ### The readiness loop
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `pollCreate(): i32` | a loop: a descriptor, close-on-exec, that watches others — epoll on Linux, kqueue on Darwin | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_wasm` |
-| `pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32` | watches `fd` for `events` (`1` readable, `2` writable) and reports it under `token`, an `i32` of the program's choosing; `-17` for a descriptor the loop already watches | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`, `reject_net_poll_parallel` |
-| `pollModify(loop: i32, fd: i32, events: i32, token: i32): i32` | new events or a new token for a watched descriptor; `-2` for one the loop does not watch | write | `net_loop_calls`, `net_loop_two` |
-| `pollRemove(loop: i32, fd: i32): i32` | stops watching `fd`; `-2` for one the loop does not watch. Closing a descriptor stops the watching too | write | `net_loop_calls`, `net_loop_two` |
-| `pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32` | waits until a watched descriptor is ready or `timeoutMs` passes, **forever for a negative one**, and writes a token and events pair per ready descriptor into `ready`, **`4` added for a hang-up or an error**: the count, at most 64, or **`0` on a timeout**. Not `willreturn`, because it can wait forever | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_readonly`, `reject_net_poll_element`, `reject_net_poll_task`, `reject_net_poll_region` |
+| `pollCreate` | nothing | `i32` | write |
+| `pollAdd` | `i32, i32, i32, i32` | `i32` | write |
+| `pollModify` | `i32, i32, i32, i32` | `i32` | write |
+| `pollRemove` | `i32, i32` | `i32` | write |
+| `pollWait` | `i32, i32[], i32` | `i32` | write |
+
+**`pollCreate(): i32`** answers a loop: a descriptor, close-on-exec, that
+watches others.
+
+- *Lowering:* epoll on Linux, kqueue on Darwin.
+- *Tests:* `net_loop_calls`, `net_loop_two`; `reject_net_poll_wasm`.
+
+**`pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32`** watches `fd`
+for `events` (`1` readable, `2` writable) and reports it under `token`, an
+`i32` of the program's choosing. It answers `-17` for a descriptor the loop
+already watches.
+
+- *Tests:* `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`,
+  `reject_net_poll_parallel`.
+
+**`pollModify(loop: i32, fd: i32, events: i32, token: i32): i32`** sets new
+events or a new token for a watched descriptor. It answers `-2` for one the
+loop does not watch.
+
+- *Tests:* `net_loop_calls`, `net_loop_two`.
+
+**`pollRemove(loop: i32, fd: i32): i32`** stops watching `fd`. It answers
+`-2` for one the loop does not watch. Closing a descriptor stops the watching
+too.
+
+- *Tests:* `net_loop_calls`, `net_loop_two`.
+
+**`pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32`** waits until a
+watched descriptor is ready or `timeoutMs` passes, **forever for a negative
+one**, and writes a token and events pair per ready descriptor into `ready`,
+**`4` added for a hang-up or an error**. It answers the count, at most 64, or
+**`0` on a timeout**.
+
+- *Lowering:* not `willreturn`, because it can wait forever.
+- *Tests:* `net_loop_calls`, `net_loop_two`; `reject_net_poll_readonly`,
+  `reject_net_poll_element`, `reject_net_poll_task`, `reject_net_poll_region`.
 
 **Level-triggered.** A descriptor that is still ready when the program waits
 again is reported again, so a loop that handles one pair of several, or leaves
@@ -1855,14 +2866,61 @@ only, and WASI as below.
 
 Reference: [`nish:term`](../nish-term.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `readStdin(buf: u8[], off: i32, len: i32): i32` | at most `len` bytes of stdin into `buf[off, off + len)`, **without waiting**: the count, `0` at the end of the stream, or `-11` when nothing is waiting. The range is [checked](#bounds), and the buffer is a writable `u8[]` | write | `term_calls`, `term_import`; `reject_term_read_arity`, `reject_term_read_i32_buffer`, `reject_term_read_readonly` |
-| `waitStdin(timeoutMs: i32): boolean` | waits until stdin is readable, its end and an error included, or `timeoutMs` passes, for ever for a negative one; `false` when the time ran out or a signal ended the wait early, but not for a Ctrl-Z and `fg` once `setRawMode(true)` has caught SIGTSTP, after which the wait goes on for what is left. Before raw mode Linux goes on with what is left and Darwin ends the wait. Not `willreturn` | write | `term_calls`, `term_import`, `term_pty`; `reject_term_wait_string` |
-| `isTerminal(fd: i32): boolean` | whether the descriptor is a terminal (`isatty`) | write | `term_calls`, `term_pty`; `reject_term_is_terminal_arity` |
-| `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stderr when stdout is not one; **`[-25, 0]` for "not a terminal"** | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
-| `setRawMode(on: boolean): i32` | puts stdin's terminal in raw mode (`true`) or back as it was (`false`): `0`, or `-25` when stdin is not a terminal. `setRawMode(false)` is always safe | write | `term_calls`, `term_pty`; `reject_term_raw_number`, `reject_term_unknown_export` |
-| `setTerminalRestore(bytes: string): i32` | keeps a copy of `bytes` for the runtime to write to the terminal on stdout as the program ends, **replacing** what it kept before: `0`, `-25` when stdout is not a terminal and `-7` (E2BIG) past `NISH_TERM_RESTORE_MAX`, 4096 bytes, both keeping what was there. When they go out is under [Raw mode](#raw-mode) | write | `term_restore`; `reject_term_restore_arity`, `reject_term_restore_number`, `reject_term_restore_wasm` |
+| `readStdin` | `u8[], i32, i32` | `i32` | write |
+| `waitStdin` | `i32` | `boolean` | write |
+| `isTerminal` | `i32` | `boolean` | write |
+| `terminalSize` | nothing | `i32[]` | write |
+| `setRawMode` | `boolean` | `i32` | write |
+| `setTerminalRestore` | `string` | `i32` | write |
+
+**`readStdin(buf: u8[], off: i32, len: i32): i32`** reads at most `len` bytes
+of stdin into `buf[off, off + len)`, **without waiting**. It answers the
+count, `0` at the end of the stream, or `-11` when nothing is waiting. The
+range is [checked](#bounds), and the buffer is a writable `u8[]`.
+
+- *Tests:* `term_calls`, `term_import`; `reject_term_read_arity`,
+  `reject_term_read_i32_buffer`, `reject_term_read_readonly`.
+
+**`waitStdin(timeoutMs: i32): boolean`** waits until stdin is readable, its
+end and an error included, or `timeoutMs` passes, for ever for a negative
+one. It answers `false` when the time ran out or a signal ended the wait
+early, but not for a Ctrl-Z and `fg` once `setRawMode(true)` has caught
+SIGTSTP, after which the wait goes on for what is left. Before raw mode Linux
+goes on with what is left and Darwin ends the wait.
+
+- *Lowering:* not `willreturn`.
+- *Tests:* `term_calls`, `term_import`, `term_pty`; `reject_term_wait_string`.
+
+**`isTerminal(fd: i32): boolean`** answers whether the descriptor is a
+terminal.
+
+- *Lowering:* `isatty`.
+- *Tests:* `term_calls`, `term_pty`; `reject_term_is_terminal_arity`.
+
+**`terminalSize(): i32[]`** answers a fresh `[columns, rows]` of the terminal
+on stdout, or on stderr when stdout is not one; **`[-25, 0]` for "not a
+terminal"**.
+
+- *Tests:* `term_calls`, `term_pty`, `mem_terminal_size_scope`;
+  `reject_term_size_arity`.
+
+**`setRawMode(on: boolean): i32`** puts stdin's terminal in raw mode (`true`)
+or back as it was (`false`). It answers `0`, or `-25` when stdin is not a
+terminal. `setRawMode(false)` is always safe.
+
+- *Tests:* `term_calls`, `term_pty`; `reject_term_raw_number`,
+  `reject_term_unknown_export`.
+
+**`setTerminalRestore(bytes: string): i32`** keeps a copy of `bytes` for the
+runtime to write to the terminal on stdout as the program ends, **replacing**
+what it kept before. It answers `0`, `-25` when stdout is not a terminal and
+`-7` (E2BIG) past `NISH_TERM_RESTORE_MAX`, 4096 bytes, both keeping what was
+there. When they go out is under [Raw mode](#raw-mode).
+
+- *Tests:* `term_restore`; `reject_term_restore_arity`,
+  `reject_term_restore_number`, `reject_term_restore_wasm`.
 
 **Errors are numbers**, in `nish:net`'s shape: `>= 0` is success and a negative
 number the failure's errno, negated. The two a program branches on are the
@@ -2016,25 +3074,244 @@ bytes — natively and under WASI, and expect the same lines from both.
 
 The reference for each member, with its parameters and its answer, is its doc comment on `Array`, `ReadonlyArray` or `String` in [`runtime/nish.d.ts`](https://github.com/amritk/nish/blob/main/runtime/nish.d.ts); the rules are here.
 
-| Member | Semantics | Test |
+| Member | On | Gives |
 | --- | --- | --- |
-| `a.length` | `number`; read-only | `arr_length`, `reject_arr_length_assign` |
-| `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `nish_array_grow`; returns the new length. An array never grows past 2^31 − 1 elements, in either number mode: the push that would fails as an allocation does, `nish: out of memory` and exit 1 (`tests/link/cg_sec_push_limit`) | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
-| `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return; behind a test that the array holds an element, such as `if (a.length > 0)`, the check is proven away (`panics_pop`). The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
-| `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
-| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](https://github.com/amritk/nish/blob/main/docs/wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](../../security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
-| `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
-| `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
-| `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2620); a second argument is refused too (`` `sort` takes one comparator ``, NL2619). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](declarations.md#function-parameters)): a top-level function, or an arrow, which may read the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused (`reject_arr_sort_capture_let`). Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
-| `s.length` | `number`, the UTF-8 byte length | `str_length` |
-| `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
-| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](expressions.md#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
-| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy` Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](https://github.com/amritk/nish/blob/main/docs/wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
-| `s.indexOf(sub: string[, from: number]): number` | the first **byte** offset at or after `from` at which `sub` occurs, or `-1`; `from` defaults to `0`. `from` is clamped into `[0, s.length]` first, as in JavaScript: a negative start searches from `0`, and a start past the end finds nothing, except that the empty needle answers the clamped start, so `s.indexOf("")` is `0`, `s.indexOf("", 3)` is `3` and `s.indexOf("", 99)` is `s.length`. A float start converts as JavaScript's `ToIntegerOrInfinity` does — a fraction truncates and `NaN` is `0` — and an unsigned one is clamped from above only, so a `u64` past 2^63 is past the end. Under Node the program is the same call to `String.prototype.indexOf`, whose answers differ only where every offset does, on text that is not ASCII (NL8001, under "Portability warnings"). One `nish_str_index_of` or `nish_str_index_of_from` call and no allocation: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c), and the clamp is a `llvm.smin` / `llvm.smax` pair in the caller, which a literal `0` does without. A loop that walks every match, `at = s.indexOf(sub, at + sub.length)`, therefore copies nothing | `str_search`, `str_index_of_from`, `str_index_of_from_port`; `reject_str_index_of_type`, `reject_str_index_of_arity`, `reject_str_index_of_from_type` |
-| `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
-| `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
-| `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
-| `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Natively the string's bytes are the array's, so `write` or `writeFileSync` sends any bytes back out unchanged ([File I/O](#file-io), `io_write_bytes`). Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.2); under `--emit-ts` the bytes decode as UTF-8, a sequence that is not UTF-8 to U+FFFD. Bytes that are not text go out through `writeBytes` and `writeFileBytesSync`, which agree on every host. `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
+| `length` | arrays | `number` |
+| `push(v)` | arrays | `number` |
+| `pop()` | arrays | `T` |
+| `indexOf(v)` | arrays | `number` |
+| `join(sep?)` | arrays | `string` |
+| `set(src, offset?)` | arrays | `void` |
+| `fill(value, start?, end?)` | arrays | `void` |
+| `sort(cmp)` | arrays | `T[]` |
+| `length` | strings | `number` |
+| `charCodeAt(i)` | strings | `number` |
+| `substring(start, end?)` | strings | `string` |
+| `slice(start, end?)` | strings | `string` |
+| `indexOf(sub, from?)` | strings | `number` |
+| `startsWith(sub)`, `endsWith(sub)` | strings | `boolean` |
+| `String.fromCharCode(c)` | strings | `string` |
+| `String.fromBytes(bytes, start, end)` | strings | `string` |
+
+**`a.length`** is a `number`; read-only.
+
+- *Tests:* `arr_length`, `reject_arr_length_assign`.
+
+**`a.push(v: T): number`** appends and returns the new length. An array
+never grows past 2^31 − 1 elements, in either number mode: the push that
+would fails as an allocation does, `nish: out of memory` and exit 1
+(`tests/link/cg_sec_push_limit`).
+
+- *Lowering:* grows capacity by doubling (4 from 0) through
+  `nish_array_grow`.
+- *Tests:* `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`).
+
+**`a.pop(): T`** removes and returns the last element. An empty array
+**panics** and exits 1 (`index out of range: 0 >= 0`) — there is no
+`undefined` to return; behind a test that the array holds an element, such
+as `if (a.length > 0)`, the check is proven away (`panics_pop`). The
+capacity is untouched, so the next `push` reuses the storage.
+
+- *Tests:* `arr_pop_index`; `reject_arr_pop_arity`.
+
+**`a.indexOf(v: T): number`** answers the first index whose element is
+`=== v`, or `-1`: strings by content, classes / interfaces / arrays by
+identity, floats with `fcmp oeq` (a `NaN` element is never found, as in
+JavaScript).
+
+- *Lowering:* a scan in the emitted code.
+- *Tests:* `arr_pop_index`; `reject_arr_index_of_type`.
+
+**`a.join(sep: string = ","): string`** is for **`string[]` only**
+(`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`). Element
+conversion would allocate per element, which is the quadratic shape `join`
+exists to replace ([wp14-selfhost.md](https://github.com/amritk/nish/blob/main/docs/wp14-selfhost.md) §3). Like a
+concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as
+an allocation does, `nish: out of memory` and exit 1, before anything is
+allocated ([CG-3](../../security/codegen.md)).
+
+- *Lowering:* one pass summing the lengths, one allocation, one `memcpy` per
+  part.
+- *Tests:* `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem`.
+
+**`a.set(src: T[], offset: number = 0): void`** copies every element of
+`src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning.
+**Arrays of numbers only**, of any width and ranged integers included, and
+`src` has `a`'s own element type. A statement. See
+[Bulk writes](#bulk-writes-set-and-fill).
+
+- *Tests:* `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`,
+  `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`,
+  `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`,
+  `reject_bytes_set_arity`, `reject_bytes_set_readonly`,
+  `reject_bytes_set_value`.
+
+**`a.fill(value: T, start: number = 0, end: number = a.length): void`**
+stores `value` into every slot of `[start, end)`, each end relative and
+clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A
+statement. See [Bulk writes](#bulk-writes-set-and-fill).
+
+- *Tests:* `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`,
+  `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`,
+  `reject_bytes_fill_value`, `reject_bytes_fill_index`,
+  `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly`.
+
+**`a.sort(cmp: (a: T, b: T) => number): T[]`** sorts `a` in place,
+**stably**, and answers `a` itself, as `Array.prototype.sort` does: the
+order is element for element Node's for any consistent comparator. `cmp`
+answers a negative number, zero or a positive number, and only "positive or
+not" is read, so `-0` and `NaN` count as zero.
+
+**The comparator is required**: `a.sort()` compares as strings in
+JavaScript and is refused
+(`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2620);
+a second argument is refused too (`` `sort` takes one comparator ``,
+NL2619). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``),
+and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is).
+`a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`);
+`(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow.
+
+The comparator is a compile-time function argument
+([Function parameters](declarations.md#function-parameters)): a top-level function, or an
+arrow, which may read the `const` locals and parameters of the function it
+is written in; an arrow reading a `let` is refused
+(`reject_arr_sort_capture_let`). See [Sorting](#sorting-with-a-comparator).
+
+- *Lowering:* compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs
+  of 32 sorted by insertion, instantiated once per comparator with the
+  comparator called directly; it is copied into the module that sorts.
+- *Tests:* `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`,
+  `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`;
+  `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`,
+  `reject_arr_sort_readonly`, `reject_arr_sort_argv`,
+  `reject_arr_sort_capture_let`.
+
+**`s.length`** is a `number`, the UTF-8 byte length.
+
+- *Tests:* `str_length`.
+
+**`s.charCodeAt(i: number): number`** answers the **byte** at `i`,
+bounds-checked against `s.length` exactly as `a[i]` is — out of range
+panics and exits 1, where JavaScript answers `NaN`, which `number` cannot
+hold.
+
+- *Lowering:* no call: a `load i8`.
+- *Tests:* `str_bytes`; `reject_str_char_code_arity`.
+
+**`s.substring(start: number[, end: number]): string`** answers the bytes
+of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped
+into `[0, s.length]` and then swapped into order, as in JavaScript, so
+`s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`.
+
+- *Lowering:* one allocation and one `memcpy` (`nish_str_new`). The clamp is
+  two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a
+  bound the compiler can place in `[0, s.length]`, because a clamp cannot
+  move a value that is already inside its range: the proof is the same one
+  that removes a bounds check ([Element access](expressions.md#element-access)), and a
+  literal `0` is proven for every string, since none has a negative length.
+  Each bound is proven against the facts that hold **where that
+  bound is evaluated** — the arguments run left to right and the receiver's
+  length is read before either of them, so an assignment in argument 1
+  cannot prove argument 0 and an argument that rebinds the receiver takes the
+  proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could
+  not prove keeps the clamp and is reported by the performance warning
+  below.
+- *Tests:* `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`,
+  `perf_clamp_rebind`; `reject_str_substring_arity`.
+
+**`s.slice(start: number[, end: number]): string`** answers the same bytes,
+without the clamp: `start` and `end` must satisfy
+`0 <= start <= end <= s.length` and anything else **panics** with
+`slice out of range: [start, end) of length len` and exits 1, where
+JavaScript would count a negative offset from the end and answer `""` for a
+reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an
+in-range non-negative pair gives exactly what JavaScript's
+`String.prototype.slice` gives.
+
+- *Lowering:* two `icmp ule` against a cold panic block, one allocation and
+  one `memcpy`. Measured 1.18x over `substring` on a lexer-shaped scan
+  ([wp15-performance.md](https://github.com/amritk/nish/blob/main/docs/wp15-performance.md) §4).
+- *Tests:* `str_slice`, `str_slice_panic`; `reject_str_slice_arity`,
+  `reject_str_slice_type`.
+
+**`s.indexOf(sub: string[, from: number]): number`** answers the first
+**byte** offset at or after `from` at which `sub` occurs, or `-1`; `from`
+defaults to `0`.
+
+`from` is clamped into `[0, s.length]` first, as in JavaScript: a negative
+start searches from `0`, and a start past the end finds nothing, except that
+the empty needle answers the clamped start, so `s.indexOf("")` is `0`,
+`s.indexOf("", 3)` is `3` and `s.indexOf("", 99)` is `s.length`. A float
+start converts as JavaScript's `ToIntegerOrInfinity` does — a fraction
+truncates and `NaN` is `0` — and an unsigned one is clamped from above only,
+so a `u64` past 2^63 is past the end.
+
+Under Node the program is the same call to `String.prototype.indexOf`,
+whose answers differ only where every offset does, on text that is not ASCII
+(NL8001, under "Portability warnings").
+
+- *Lowering:* one `nish_str_index_of` or `nish_str_index_of_from` call and no
+  allocation: the search is the runtime's, so it is the libc's vectorised
+  one rather than a probe per offset (WP15 §7c), and the clamp is a
+  `llvm.smin` / `llvm.smax` pair in the caller, which a literal `0` does
+  without. A loop that walks every match,
+  `at = s.indexOf(sub, at + sub.length)`, therefore copies nothing.
+- *Tests:* `str_search`, `str_index_of_from`, `str_index_of_from_port`;
+  `reject_str_index_of_type`, `reject_str_index_of_arity`,
+  `reject_str_index_of_from_type`.
+
+**`s.startsWith(sub: string): boolean`** answers whether `sub`'s bytes are a
+prefix.
+
+- *Lowering:* `nish_str_at`.
+- *Tests:* `str_search`.
+
+**`s.endsWith(sub: string): boolean`** answers whether they are a suffix; a
+`sub` longer than `s` is `false`.
+
+- *Tests:* `str_search`.
+
+**`String.fromCharCode(c: number): string`** answers the one-byte string of
+`c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that
+is not valid UTF-8 on its own; nothing validates it.
+
+- *Tests:* `str_search`.
+
+**`String.fromBytes(bytes: u8[], start: number, end: number): string`**
+answers the bytes of `bytes[start..end)` as one string, where a loop of
+`String.fromCharCode` and a `join` allocates once per byte. `bytes` is a
+`u8[]` reached any way an array is (a local, a field, a call, a ternary, a
+literal), `readonly` or not, since the call only reads it; anything else,
+a wider element or a `u8[] | null` included, is
+`` `String.fromBytes` expects an argument of type u8[], got i32[] ``
+(NL2268). Both ends are required (NL2060) and are numbers (NL2058).
+
+The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once
+after all three arguments are evaluated, so an argument that grows or
+shrinks the array is checked against what it left; anything else **panics**
+with `slice out of range: [start, end) of length len` and exits 1.
+
+As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte
+character copied whole is that character, and a range that cuts one is bytes
+that are not a valid string. Natively the string's bytes are the array's, so
+`write` or `writeFileSync` sends any bytes back out unchanged
+([File I/O](#file-io), `io_write_bytes`). Under Node, where
+`String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one
+UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above
+127 does not (a C row, [wp33-round-trip.md](https://github.com/amritk/nish/blob/main/docs/wp33-round-trip.md) §3.2); under
+`--emit-ts` the bytes decode as UTF-8, a sequence that is not UTF-8 to
+U+FFFD. Bytes that are not text go out through `writeBytes` and
+`writeFileBytesSync`, which agree on every host. `src/` does not call it
+until the release that ships it (the rolling freeze).
+
+- *Lowering:* one range check, one allocation and one `memcpy`
+  (`nish_str_new`).
+- *Tests:* `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`,
+  `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`;
+  `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`,
+  `reject_str_from_bytes_start`, `reject_str_from_bytes_index`,
+  `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`,
+  `reject_deny_panics_from_bytes`.
 
 Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
 and a code-point index would need a decode per access (`codePointLength` in

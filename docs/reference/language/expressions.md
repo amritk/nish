@@ -8,32 +8,235 @@ under [Semantics decisions](semantics-decisions.md).
 
 ## Operators
 
-| Operator | Operand types | Result | Lowering | Test |
-| --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](semantics-decisions.md)), plain through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
-| `+` | two `string` | `string` | `nish_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
-| unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
-| unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
-| `& \| ^` | two integers of one type | that type | `and` / `or` / `xor`, one instruction, no panic path | `bit_and_or_xor`, `bit_i64`, `bit_attributes`; `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_boolean` (`` Operator `&` is not available on boolean (use `&&`) ``) |
-| `<< >> >>>` | two integers of one type | that type | `shl`; `>>` is `ashr` (sign-filling) on a signed type and `lshr` (zero-filling) on an unsigned one, so `>>` and `>>>` are the same instruction there; `>>>` is always `lshr`. The count is masked to the operand width (31, 63, or 7/15 on the narrow unsigned widths); a constant count is masked at compile time and emits no `and` (see [Shifts](types.md#shifts)) | `bit_shifts`, `bit_shift_const`, `bit_shift_fill`, `bit_shift_narrow`, `bit_i64`, `u_shift_logical`; `reject_u_shift_mixed`; `tests/differential/corpus/bit_shifts` |
-| unary `~` | any integer type | same | `xor x, -1` (LLVM has no `not`) | `bit_not`; `reject_bit_not` (`` Operator `~` requires an integer operand, got f64 ``) |
-| `< <= > >=` | two numbers of one type (`i32`, `i64`, the unsigned widths, `f32`, or `f64`); nothing else | `boolean` | `icmp slt ...` signed, `icmp ult ...` unsigned, `fcmp olt ...` for both float widths | `cf_if`, `f64_mode`, `u_compare_above_intmax`, `f32_arith`; booleans (`reject_bool_ordering`), strings (`reject_str_lt`, `reject_str_lt_str`), and structs (`reject_cls_ordering`) are `` Operator `<` requires two numeric operands, got boolean and boolean `` |
-| `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `nish_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null`; `a === undefined`, for a `Map.get` result only: its found bit, negated | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`, `map_get_narrow`; arrays *(CLI only)*; `reject_null_compare_two`, `reject_map_get_undefined_compare` |
-| `== !=` | – | – | forbidden | `reject_loose_equality`, `reject_loose_inequality` |
-| `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
-| `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch`, `reject_cf_ternary_void` |
-| `a ?? d` | `a` a `Map.get` result (`V \| undefined`), `d` a `V`; the level of `\|\|`, not mixed with `\|\|` or `&&` unparenthesised | `V` | `br` to `valueAt` or `d`, then `phi`; `select` for a `const` with a literal or a name as `d` | `map_get_nullish`, `map_get_narrow`, `map_get_pointer_value`; `reject_nullish`, `reject_nullish_default_type`, `reject_nullish_mixed_or` ([`Map` and `Set`](builtins.md#map-and-set)) |
-| `a ?? d` | `a` a `T \| null` that is not an element read, `d` a `T` or a `T \| null`; the same precedence | `T`, or `T \| null` for a nullable `d` | `icmp ne` against `null`, then `select` for a literal or a name as `d`; otherwise `br` to `d` and `phi` | `nullish_nullable`, `nullish_nullable_field`, `nullish_nullable_default_null`, `nullish_nullable_default_context`, `nullish_nullable_escapes`; `reject_nullish_nullable`, `reject_nullish_element`, `reject_nullish_nullable_default_type` ([Nullable types](types.md#nullable-types)) |
-| `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
-| `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const`, `reject_cf_compound_string`, `reject_cf_compound_widths` |
-| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
-| `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
-| `,` | – | – | forbidden | `reject_comma_expression` |
-| `a?.b ?? d`, `a?.m() ?? d` | `a` a `T \| null`; a chain of `?.` and `.` links, field reads, `length` and method calls, that is the left operand of `??` | the last link's type, as `a ?? d` on a `T \| null` types it | `icmp eq` against `null` at each `?.` link's receiver, then `br` to `nullish.default`; `phi` at `nullish.end` | `optional_chain_field`, `optional_chain_order`, `optional_chain_generic`, `optional_chain_bounds`; `reject_optional_chain`, `reject_optional_chain_never_null` ([Nullable types](types.md#nullable-types)) |
-| `await f(x)` | a direct call to an `async` function, at the top of a statement in an `async` function | the call's `T` | a call when `f` awaits nothing; otherwise `f`'s frame is laid out in the caller's, `@f.resume` is called, and the caller saves its state and answers `false` while it pends | `async_await_single`, `async_await_chain`, `async_lowered`; `reject_await`, `reject_async_await_value`, `reject_async_await_nested` ([Async functions](declarations.md#async-functions-async-and-await)) |
-| `== != ?.[ ?.() in instanceof typeof delete void yield` | – | – | forbidden by the validator ([Forbidden constructs](forbidden-constructs-phase-0-validator.md#expressions-1)) | `reject_loose_equality`, `reject_optional_chain_element`, `reject_optional_call`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_yield` |
-| `** **=` | – | – | not supported: `` Unsupported binary operator `**` `` / `` Unsupported assignment operator `**=` `` | `reject_op_exponent`, `reject_op_exponent_template`, `reject_exponent_assign_local`, `reject_cls_compound_operator` |
-| `+x` | – | – | not supported | `Unsupported unary operator` *(CLI only)* |
+| Operator | Works on | Gives |
+| --- | --- | --- |
+| `+ - * / %` | two numbers of one type | that type |
+| `+` | two `string` | `string` |
+| unary `-` | any numeric type | same |
+| unary `!` | `boolean` | `boolean` |
+| `& \| ^` | two integers of one type | that type |
+| `<< >> >>>` | two integers of one type | that type |
+| unary `~` | any integer type | same |
+| `< <= > >=` | two numbers of one type | `boolean` |
+| `=== !==` | two values of one type | `boolean` |
+| `== !=` | forbidden | – |
+| `&& \|\|` | two `boolean` | `boolean` |
+| `c ? a : b` | `boolean`, two of one type | that type |
+| `a ?? d` | a `Map.get` result | `V` |
+| `a ?? d` | a `T \| null` | `T` or `T \| null` |
+| `x = e` | a mutable target | the target's type |
+| `x op= e` (`+= -= *= /= %=`) | a numeric mutable target | the target's type |
+| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | an integer mutable target | the target's type |
+| `++x --x x++ x--` | numeric mutable local | new / old value |
+| `,` | forbidden | – |
+| `a?.b ?? d`, `a?.m() ?? d` | a `T \| null` chain | the last link's type |
+| `await f(x)` | a direct `async` call | the call's `T` |
+| `== != ?.[ ?.() in instanceof typeof delete void yield` | forbidden | – |
+| `** **=` | not supported | – |
+| `+x` | not supported | – |
+
+**`+ - * / %`** take two numbers of one type (`i32`, `i64`, `u8`, `u16`,
+`u32`, `u64`, `f32`, or `f64`) and give that type. On the signed integer
+widths an overflow branches to `nish_panic_overflow`
+([Semantics decisions](semantics-decisions.md)); it is plain through a
+`nish:unsafe` `wrapping*` call. An integer division is preceded by a divisor
+check that branches to `nish_panic_div`
+([Checked integer division](#checked-integer-division)).
+
+- *Lowering:* `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an
+  `f32`, `double` for an `f64`); on the signed integer widths `nsw` where
+  proven to fit and otherwise `llvm.s*.with.overflow` and a branch to
+  `nish_panic_overflow`, plain through a `nish:unsafe` `wrapping*` call,
+  never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type)
+  are preceded by a divisor check that branches to `nish_panic_div`.
+- *Tests:* `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`,
+  `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`;
+  `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed`
+
+**`+`** on two `string` gives a `string`.
+
+- *Lowering:* `nish_str_concat`.
+- *Tests:* `str_concat`; `reject_str_plus_number`
+  (`no implicit string conversion`)
+
+**unary `-`** takes any numeric type and gives the same type.
+
+- *Lowering:* `sub <T> 0, x` for an integer, `fneg float` / `fneg double`
+  for a float.
+- *Tests:* `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)*
+
+**unary `!`** takes a `boolean` and gives a `boolean`.
+
+- *Lowering:* `xor i1 x, true`.
+- *Tests:* `cf_logical`; `!s` on a string is
+  `` Unsupported unary operator `!` on string `` *(CLI only)*
+
+**`& | ^`** take two integers of one type and give that type.
+
+- *Lowering:* `and` / `or` / `xor`, one instruction, no panic path.
+- *Tests:* `bit_and_or_xor`, `bit_i64`, `bit_attributes`; `reject_bit_f64`,
+  `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_boolean`
+  (`` Operator `&` is not available on boolean (use `&&`) ``)
+
+**`<< >> >>>`** take two integers of one type and give that type. `>>` is
+sign-filling on a signed type and zero-filling on an unsigned one, so `>>`
+and `>>>` are the same instruction there; `>>>` is always zero-filling. The
+count is masked to the operand width (31, 63, or 7/15 on the narrow unsigned
+widths); see [Shifts](types.md#shifts).
+
+- *Lowering:* `shl`; `>>` is `ashr` (sign-filling) on a signed type and
+  `lshr` (zero-filling) on an unsigned one; `>>>` is always `lshr`. A
+  constant count is masked at compile time and emits no `and`.
+- *Tests:* `bit_shifts`, `bit_shift_const`, `bit_shift_fill`,
+  `bit_shift_narrow`, `bit_i64`, `u_shift_logical`; `reject_u_shift_mixed`;
+  `tests/differential/corpus/bit_shifts`
+
+**unary `~`** takes any integer type and gives the same type.
+
+- *Lowering:* `xor x, -1` (LLVM has no `not`).
+- *Tests:* `bit_not`; `reject_bit_not`
+  (`` Operator `~` requires an integer operand, got f64 ``)
+
+**`< <= > >=`** take two numbers of one type (`i32`, `i64`, the unsigned
+widths, `f32`, or `f64`), and nothing else, and give a `boolean`.
+
+- *Lowering:* `icmp slt ...` signed, `icmp ult ...` unsigned, `fcmp olt ...`
+  for both float widths.
+- *Tests:* `cf_if`, `f64_mode`, `u_compare_above_intmax`, `f32_arith`;
+  booleans (`reject_bool_ordering`), strings (`reject_str_lt`,
+  `reject_str_lt_str`), and structs (`reject_cls_ordering`) are
+  `` Operator `<` requires two numeric operands, got boolean and boolean ``
+
+**`=== !==`** take any two values of the same type except `void`, and give a
+`boolean`. A `T | null` compares only against the literal `null`. Strings
+compare by content; arrays and objects by identity (the pointer). On an
+`f64`, `x !== x` is true for NaN. `a === undefined` is allowed for a
+`Map.get` result only, and tests its found bit, negated.
+
+- *Lowering:* integers and booleans: `icmp eq` / `icmp ne`; `f64`:
+  `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings:
+  `nish_str_eq` (content); arrays and objects: `icmp eq` on the pointer
+  (identity); `p === null`: `icmp eq` against `null`; `a === undefined`, for
+  a `Map.get` result only: its found bit, negated.
+- *Tests:* `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`,
+  `map_get_narrow`; arrays *(CLI only)*; `reject_null_compare_two`,
+  `reject_map_get_undefined_compare`
+
+**`== !=`** are forbidden.
+
+- *Tests:* `reject_loose_equality`, `reject_loose_inequality`
+
+**`&& ||`** take two `boolean` and give a `boolean`, short-circuit.
+
+- *Lowering:* short-circuit: `br` + `phi`.
+- *Tests:* `cf_logical`; `reject_cf_logical_numbers`
+  (`requires boolean operands`)
+
+**`c ? a : b`** takes `c: boolean`, and `a`, `b` of the same non-`void`
+type, and gives that type.
+
+- *Lowering:* `br` + `phi`.
+- *Tests:* `cf_ternary`; `reject_cf_ternary_mismatch`,
+  `reject_cf_ternary_void`
+
+**`a ?? d`** on a `Map.get` result: `a` is a `Map.get` result
+(`V | undefined`) and `d` a `V`; it gives a `V`. It sits at the level of
+`||`, and is not mixed with `||` or `&&` unparenthesised
+([`Map` and `Set`](builtins.md#map-and-set)).
+
+- *Lowering:* `br` to `valueAt` or `d`, then `phi`; `select` for a `const`
+  with a literal or a name as `d`.
+- *Tests:* `map_get_nullish`, `map_get_narrow`, `map_get_pointer_value`;
+  `reject_nullish`, `reject_nullish_default_type`, `reject_nullish_mixed_or`
+
+**`a ?? d`** on a nullable: `a` is a `T | null` that is not an element
+read, and `d` a `T` or a `T | null`, with the same precedence. It gives a
+`T`, or a `T | null` for a nullable `d`
+([Nullable types](types.md#nullable-types)).
+
+- *Lowering:* `icmp ne` against `null`, then `select` for a literal or a
+  name as `d`; otherwise `br` to `d` and `phi`.
+- *Tests:* `nullish_nullable`, `nullish_nullable_field`,
+  `nullish_nullable_default_null`, `nullish_nullable_default_context`,
+  `nullish_nullable_escapes`; `reject_nullish_nullable`,
+  `reject_nullish_element`, `reject_nullish_nullable_default_type`
+
+**`x = e`** assigns to a mutable local, field, or element; `e` is of the
+target's type, and the expression gives the target's type.
+
+- *Lowering:* `store`.
+- *Tests:* `locals`, `cls_field_write`, `arr_index_read_write`
+
+**`x op= e` (`+= -= *= /= %=`)** works on a numeric mutable local, numeric
+field, or numeric element, with `e` of the same type, and gives the target's
+type.
+
+- *Lowering:* load, op, store.
+- *Tests:* `cf_compound_assign`, `cls_compound_field`,
+  `arr_index_read_write`; `reject_cf_compound_const`,
+  `reject_cf_compound_string`, `reject_cf_compound_widths`
+
+**`x op= e` (`&= |= ^= <<= >>= >>>=`)** works on a mutable local, field, or
+element of integer type, with `e` of the same type, and gives the target's
+type. The shift forms use the same shift-count mask. The target expression
+is evaluated exactly once.
+
+- *Lowering:* load, op, store, with the same shift-count mask; a field is
+  addressed by one GEP and an element bounds-checked once, so the target
+  expression is evaluated exactly once.
+- *Tests:* `bit_compound`, `cls_field_bitwise_assign`,
+  `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`,
+  `reject_arr_element_bitwise_f64`;
+  `tests/differential/corpus/bit_compound_target`
+
+**`++x --x x++ x--`** work on a numeric mutable local only, and give the new
+/ old value.
+
+- *Lowering:* load, `add 1`, store.
+- *Tests:* `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec`
+
+**`,`** is forbidden.
+
+- *Tests:* `reject_comma_expression`
+
+**`a?.b ?? d`, `a?.m() ?? d`** take `a`, a `T | null`, and a chain of `?.`
+and `.` links, field reads, `length` and method calls, that is the left
+operand of `??`. It gives the last link's type, as `a ?? d` on a `T | null`
+types it ([Nullable types](types.md#nullable-types)).
+
+- *Lowering:* `icmp eq` against `null` at each `?.` link's receiver, then
+  `br` to `nullish.default`; `phi` at `nullish.end`.
+- *Tests:* `optional_chain_field`, `optional_chain_order`,
+  `optional_chain_generic`, `optional_chain_bounds`;
+  `reject_optional_chain`, `reject_optional_chain_never_null`
+
+**`await f(x)`** takes a direct call to an `async` function, at the top of a
+statement in an `async` function, and gives the call's `T`
+([Async functions](declarations.md#async-functions-async-and-await)).
+
+- *Lowering:* a call when `f` awaits nothing; otherwise `f`'s frame is laid
+  out in the caller's, `@f.resume` is called, and the caller saves its state
+  and answers `false` while it pends.
+- *Tests:* `async_await_single`, `async_await_chain`, `async_lowered`;
+  `reject_await`, `reject_async_await_value`, `reject_async_await_nested`
+
+**`== != ?.[ ?.() in instanceof typeof delete void yield`** are forbidden by
+the validator ([Forbidden constructs](forbidden-constructs-phase-0-validator.md#expressions-1)).
+
+- *Tests:* `reject_loose_equality`, `reject_optional_chain_element`,
+  `reject_optional_call`, `reject_in_operator`, `reject_instanceof`,
+  `reject_typeof_operator`, `reject_delete`, `reject_void_expression`,
+  `reject_yield`
+
+**`** **=`** are not supported: `` Unsupported binary operator `**` `` /
+`` Unsupported assignment operator `**=` ``.
+
+- *Tests:* `reject_op_exponent`, `reject_op_exponent_template`,
+  `reject_exponent_assign_local`, `reject_cls_compound_operator`
+
+**`+x`** is not supported.
+
+- *Tests:* `Unsupported unary operator` *(CLI only)*
 
 ## Checked integer division
 
