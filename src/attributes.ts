@@ -141,6 +141,7 @@ import {
   CaptureTarget,
   arrowCallee,
   captureTarget,
+  capturesOf,
   isAtomicMethod,
   isChannelReader,
   isChannelSend,
@@ -1383,6 +1384,12 @@ const spawnsShared = (program: CheckedProgram, table: TypeTable, node: Node): bo
   }
   for (let i = 0; i < callee.paramTypes.length; i++) {
     if (!callee.isCompileTime(i) && table.sharedWithTask(callee.paramTypes[i])) {
+      return true
+    }
+  }
+  // WP49 stage 5, part 8: an arrow the task is handed may capture an object it shares.
+  for (const slot of capturesOf(callee)) {
+    if (table.sharedWithTask(slot.type())) {
       return true
     }
   }

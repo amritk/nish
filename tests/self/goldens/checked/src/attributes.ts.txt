@@ -105,6 +105,7 @@ import Options from "./options" -> struct Options
 import CaptureTarget from "./parallel" -> struct CaptureTarget
 import arrowCallee from "./parallel" -> function @arrowCallee
 import captureTarget from "./parallel" -> function @captureTarget
+import capturesOf from "./parallel" -> function @capturesOf
 import isAtomicMethod from "./parallel" -> function @isAtomicMethod
 import isChannelReader from "./parallel" -> function @isChannelReader
 import isChannelSend from "./parallel" -> function @isChannelSend
@@ -776,10 +777,11 @@ function isInlineField(program: CheckedProgram, table: TypeTable, access: Node):
   callee +12:17 StructInfo.field -> @StructInfo.field
   callee +13:28 FieldInfo.inline -> @FieldInfo.inline
 function spawnsShared(program: CheckedProgram, table: TypeTable, node: Node): boolean -> @spawnsShared
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: FunctionSig.isCompileTime TypeTable.sharedWithTask nish_panic_index unwrapParens
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via capturesOf
+  calls: CaptureSlot.type FunctionSig.isCompileTime TypeTable.sharedWithTask capturesOf nish_panic_index unwrapParens
   pointer program: size=704 writesThrough=false captured=false
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.sharedWithTask#0
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.sharedWithTask#0 TypeTable.sharedWithTask#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
@@ -788,6 +790,10 @@ function spawnsShared(program: CheckedProgram, table: TypeTable, node: Node): bo
   local +8:12 i: i32 (let)
   callee +9:10 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
   callee +9:37 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
+  local +14:14 slot: CaptureSlot (const)
+  callee +14:22 capturesOf -> @capturesOf
+  callee +15:9 TypeTable.sharedWithTask -> @TypeTable.sharedWithTask
+  callee +15:30 CaptureSlot.type -> @CaptureSlot.type
 function isSpawnedTask(unit: AnalysisUnit, call: Node): boolean -> @isSpawnedTask
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: call

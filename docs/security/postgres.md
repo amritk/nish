@@ -157,11 +157,12 @@ PG-18 to PG-20 are the shapes a URL can take, checked as the parser was
 written; PG-21 and PG-22 are accepted. PG-23 to PG-27 are the carrier's
 (`std/net/postgres-carrier.ts`): PG-23 and PG-24 were found as it was written
 and fixed before it merged, PG-25 holds, and PG-26 and PG-27 are accepted.
-PG-28 to PG-37 are the async pool's (`std/net/postgres-async.ts`): PG-28 to
+PG-28 to PG-38 are the async pool's (`std/net/postgres-async.ts`): PG-28 to
 PG-31 hold, PG-32 was found as it was written and fixed before it merged,
 PG-33 and PG-34 are accepted, PG-35 and PG-36 were found by its first
-review and fixed before it merged, and PG-37, from the cancellation stage of
-WP49, is accepted.
+review and fixed before it merged, PG-37, from the cancellation stage of
+WP49, is accepted, and PG-38, found when a serve handler first ran the pool
+against a live server, is fixed.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -202,6 +203,7 @@ WP49, is accepted.
 | PG-34 | Low | `pgAsyncQuery` | A query awaited outside a spawned task, through a function that is handed the pool, keeps the buffers, rows and strings it built until an enclosing scope ends: about 9 KB a query in `main`, so a loop of queries in `main` grows the arena without bound. | **Accepted.** The compiler gives such a function no scope of its own; a spawned task's region is freed when the task ends, so the module and the guide say to run each query in a task, which `link/std_postgres_async_flat` does: "Arena.used() flat over 2000 queries: true". |
 | PG-35 | Medium | `pgAsyncRead` | A ReadyForQuery is the end of a query's answer, so a connection was given back as reusable however many bytes followed it in the same read; those bytes were dropped, and the next task's answer would be read out of step, or a message the server sent after it read as the next query's. | **Fixed** in review: a query is `reusable` only when its ReadyForQuery is the last byte read, so a connection with bytes after it is closed and counted in `dropped`. Before, "trail: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=true first=t"; after, "trail: ok=true failure=0 socket=0 rows=1 tag=SELECT 1 reusable=false first=t", and the next query on the pool runs on a fresh connection: "quick: ok=true ... reusable=true first=q" (`link/std_postgres_async`). The check sees only bytes that arrived in the same read as the ReadyForQuery: a byte the server sends in a later segment stays in the socket until the next query on that connection reads it first. A whole notice or notification there is skipped; a partial message or a type no query expects fails that query (`PG_ERR_FRAME` or `PG_ERR_UNEXPECTED`) and closes the connection; but a well-formed answer sent late, a whole `C` or `Z` among them, is read as part of the next query's answer. Recorded open: only a server that already speaks out of turn can do it, and it can then answer any query wrongly anyway. |
 | PG-36 | Medium | `pgAsyncRead`, `pgAsyncQuery`, `pgAsyncCheckCaps` | A result was bounded only by `maxRows` × `maxColumns` × `maxMessage`, about 2^60 bytes at the defaults, so a server could make one query keep the task's memory without bound; and a cap set out of range (a `maxColumns` of 0, a negative `maxMessage`) went unchecked into the framer's arithmetic. | **Fixed** in review: `maxResultBytes` (16 MiB by default) bounds a result's kept bytes, counting each row's bytes and 16 for each cell, and each CommandComplete's and ErrorResponse's bytes, since each keeps a fresh string; rows, tags and errors past it are read and dropped as rows past `maxRows` are, the query failing `PG_ERR_TOO_BIG` with its connection still in step. (A first fix counted only rows, so a server could send `C` or `E` messages without end; the second review found it.) `pgAsyncQuery` first checks every cap is in range (`maxMessage` and `maxResultBytes` 1024 to 2^30-1, `maxColumns` 1 to 65535, `maxRows` 1 to 2^24) and panics if not, so `row * columns` cannot overflow: the cells kept number fewer than `maxResultBytes / 16`. "fat: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true" (five rows of 300 bytes under a `maxResultBytes` of 1024; `link/std_postgres_async`); "manyc: ok=false failure=2 socket=0 rows=0 tag=UPDATE 1 reusable=true" (150 tags of 9 bytes) and "manye: ok=false failure=2 socket=0 rows=0 tag= reusable=true" (100 errors of 14 bytes; uncounted, it would fail 0 as a refused query); `link/std_postgres_async_caps_panic` ("claimed 64, maxMessage 1023", then the panic: the ticket is claimed on a pool with a connection, so without the check the query would fail on the socket and print "not reached"). |
+| PG-38 | Low | `pgAsyncStartup`, `pgAsyncConnect` | A connect must not wait on a server that is itself waiting for the client: against a server that asks for SCRAM-SHA-256, the startup queued the SASLInitialResponse (and, a step later, the SASLResponse) and then read before writing it, so client and server each waited for the other and `pgAsyncConnect` never returned. A denial of service on the client's own pool, not a disclosure: nothing was sent that should not be. The stand-in backend of `link/std_postgres_async` logs in by trust, so only a live server showed it. | **Fixed** in the WP49 stage 5, part 8 change: a startup step that queued an answer writes it before it reads, so the exchange runs in the order the protocol sets. Before, `tests/postgres/live` `servepool` printed no "listening" line in 30 s, its connect still waiting on the SCRAM exchange; after, "listening\nserve 0: answered 3, served 1, refused 1" with the answers "200 42", "400 refused: 22P02" and "404" (`tests/postgres/live` `servepool`, against PostgreSQL 18 with `scram-sha-256` authentication). |
 
 `keys`, the 64 bytes `pgScramKeys` answers, the proof taken from it and the
 server signature kept for the final message are none of them secret (the
@@ -741,14 +743,16 @@ twice, give one back after `close()` (PG-30), and set a cap out of range
 (PG-36).
 `tests/link/std_postgres_async_flat` runs 2000 queries, each in its own
 spawned task, and reads `Arena.used()` before and after: "Arena.used() flat
-over 2000 queries: true" (PG-34). The async pool is not yet run against a live
-server.
+over 2000 queries: true" (PG-34). `tests/postgres/live`'s `servepool` runs the
+pool against a live server: a serve handler awaits a query on a pool its
+spawner connected, logging in by SCRAM (PG-38).
 
 The async pool's tests:
 
 - `tests/link/std_postgres_async` (PG-28 to PG-32, PG-35, PG-36)
 - `tests/link/std_postgres_async_flat` (PG-34)
 - `tests/link/std_postgres_async_cancel` (PG-33, PG-37)
+- `tests/postgres/live` `servepool` (PG-38)
 - `tests/link/std_postgres_async_double_release_panic`,
   `tests/link/std_postgres_async_release_closed_panic` (PG-30)
 - `tests/link/std_postgres_async_caps_panic` (PG-36)
