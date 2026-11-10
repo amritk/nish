@@ -1637,8 +1637,11 @@ export const checkGenericCall = (
   }
   // A generic method's signature starts with `this` (WP18 G8).
   const offset = template.owner === null ? 0 : 1
+  // The first argument its parameter refuses, reported after the loop so a
+  // pass allocates nothing.
+  let bad = -1
   i = 0
-  while (i < args.children.length && i < argTypes.length) {
+  while (bad < 0 && i < args.children.length && i < argTypes.length) {
     if (
       !sig.isCompileTime(i + offset) &&
       argTypes[i] !== T_ERROR &&
@@ -1646,18 +1649,22 @@ export const checkGenericCall = (
       !recordMemberEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
       !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])
     ) {
-      if (ctx.table.isEnumMemberType(sig.paramTypes[i + offset])) {
-        enterMember(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset])
-        return T_ERROR
-      }
-      const want = ctx.table.typeName(sig.paramTypes[i + offset])
-      ctx.error(
-        args.children[i],
-        `${argumentLead(expr, sig.sourceName, i)}: expected ${want}, got ${ctx.table.typeName(argTypes[i])}`
-      )
-      return T_ERROR
+      bad = i
     }
     i = i + 1
+  }
+  if (bad >= 0) {
+    const param = sig.paramTypes[bad + offset]
+    if (ctx.table.isEnumMemberType(param)) {
+      enterMember(ctx, args.children[bad], argTypes[bad], param)
+      return T_ERROR
+    }
+    const want = ctx.table.typeName(param)
+    ctx.error(
+      args.children[bad],
+      `${argumentLead(expr, sig.sourceName, bad)}: expected ${want}, got ${ctx.table.typeName(argTypes[bad])}`
+    )
+    return T_ERROR
   }
   ctx.program.nodeCallees[expr.id] = sig
   // WP29 P1: whether the body may run on several threads at once is a
@@ -1936,7 +1943,8 @@ const writtenNames = (fn: FunctionSig): string[] => {
  * How a refusal names argument `index` of a call of the function `name`. A call
  * written `xs.map(f)` arrives rewritten to a std template called on `xs`
  * (`arrays.ts`), so it is named as written: the method, counting the arguments
- * after the receiver.
+ * after the receiver. The receiver itself is never refused here: the rewrite
+ * happens only on an array, which always matches the template's `T[]`.
  */
 const argumentOf = (call: Node, name: string, index: i32): string => argumentWords(call, name, index, false)
 
@@ -1948,9 +1956,6 @@ const argumentWords = (call: Node, name: string, index: i32, capital: boolean): 
   const method = callee.kind === N_IDENT ? rewrittenArrayMethod(callee.text) : ""
   if (method === "") {
     return `${capital ? "A" : "a"}rgument ${index + 1} of \`${name}\``
-  }
-  if (index === 0) {
-    return `${capital ? "T" : "t"}he array \`${method}\` is called on`
   }
   return `${capital ? "A" : "a"}rgument ${index} of \`${method}\``
 }

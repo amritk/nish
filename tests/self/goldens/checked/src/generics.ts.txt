@@ -918,26 +918,28 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   callee +117:14 CheckContext.errorType -> @CheckContext.errorType
   callee +119:5 noteJsonRoute -> @noteJsonRoute
   local +122:9 offset: i32 (const)
-  callee +126:8 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  callee +128:8 recordRangeEntry -> @recordRangeEntry
-  callee +129:8 recordMemberEntry -> @recordMemberEntry
-  callee +130:8 TypeTable.assignable -> @TypeTable.assignable
-  callee +132:11 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  callee +133:9 enterMember -> @enterMember
-  local +136:13 want: string (const)
-  callee +136:20 TypeTable.typeName -> @TypeTable.typeName
-  callee +137:7 CheckContext.error -> @CheckContext.error
-  callee +139:12 argumentLead -> @argumentLead
-  callee +139:76 TypeTable.typeName -> @TypeTable.typeName
-  local +151:9 caller: FunctionSig | null (const)
-  callee +152:27 isParallelEntry -> @isParallelEntry
-  callee +153:5 recordParallelCall -> @recordParallelCall
-  local +156:9 role: i32 (const)
-  callee +156:16 secretRoleOf -> @secretRoleOf
-  callee +158:5 recordExposeCall -> @recordExposeCall
-  local +161:9 regionRole: i32 (const)
-  callee +161:22 regionRoleOf -> @regionRoleOf
-  callee +163:5 recordRegionCall -> @recordRegionCall
+  local +125:7 bad: i32 (let)
+  callee +129:8 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee +131:8 recordRangeEntry -> @recordRangeEntry
+  callee +132:8 recordMemberEntry -> @recordMemberEntry
+  callee +133:8 TypeTable.assignable -> @TypeTable.assignable
+  local +140:11 param: i32 (const)
+  callee +141:9 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee +142:7 enterMember -> @enterMember
+  local +145:11 want: string (const)
+  callee +145:18 TypeTable.typeName -> @TypeTable.typeName
+  callee +146:5 CheckContext.error -> @CheckContext.error
+  callee +148:10 argumentLead -> @argumentLead
+  callee +148:76 TypeTable.typeName -> @TypeTable.typeName
+  local +158:9 caller: FunctionSig | null (const)
+  callee +159:27 isParallelEntry -> @isParallelEntry
+  callee +160:5 recordParallelCall -> @recordParallelCall
+  local +163:9 role: i32 (const)
+  callee +163:16 secretRoleOf -> @secretRoleOf
+  callee +165:5 recordExposeCall -> @recordExposeCall
+  local +168:9 regionRole: i32 (const)
+  callee +168:22 regionRoleOf -> @regionRoleOf
+  callee +170:5 recordRegionCall -> @recordRegionCall
 function unwrapTypeParens(node: Node): Node -> @unwrapTypeParens
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: node

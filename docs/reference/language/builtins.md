@@ -2154,8 +2154,10 @@ saturates to the `i64` limits, so it fails the check and the message prints
 the limit (`slice out of range: [-9223372036854775808, 9223372036854775807) of
 length 3`; `arr_map_f64`, `arr_slice_saturate`). The bounds are `number`
 only, where string `slice` takes any integer type: an `i64` or `u32` bound is
-refused (`` Argument 2 of `slice`: expected f64, got i64 `` under
-`--number-mode f64`), so convert it with `Number(n)` first. An array's `slice` is not a
+refused (`` Argument 2 of `slice`: expected i32, got i64 ``;
+`reject_arr_slice_i64_bound`), so convert it first: with `toI32(n)` in the
+default i32 mode, and with `Number(n)` under `--number-mode f64`, where the
+message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is not a
 `slice` [panic site](semantics-decisions.md#panic-sites): its check is `std/array.ts`'s own
 `panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
 proof at the call removes, and `--deny-panics` refuses it
