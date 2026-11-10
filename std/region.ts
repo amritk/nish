@@ -1,6 +1,12 @@
 /**
- * `nish:region` — memory a program frees when it says so (docs/LANGUAGE.md,
- * "Regions").
+ * `nish:region` — the source behind the builtin module: memory a program frees
+ * when it says so.
+ *
+ * **What the module means is documented once, in `runtime/nish.d.ts`**: the
+ * `declare module "nish:region"` block there is what an editor shows and what
+ * `docs/reference/nish-region.md` is generated from, and `docs/LANGUAGE.md`
+ * ("Regions") holds the rules. The comments in this file say how the module
+ * is built; change a meaning there first.
  *
  *     import { Region, enter, free, regionWith } from "nish:region"
  *
