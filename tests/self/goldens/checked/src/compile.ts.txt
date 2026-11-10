@@ -3657,52 +3657,52 @@ function main(): i32 -> @nish_main [exported entry]
   callee +730:37 Compilation.entry -> @Compilation.entry
   callee +737:29 Compilation.entry -> @Compilation.entry
   callee +739:92 Compilation.entry -> @Compilation.entry
-  callee +753:19 capabilitySummary -> @capabilitySummary
-  callee +756:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +759:5 writeCapabilityReport -> @writeCapabilityReport
-  callee +768:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +771:36 Compilation.panicsText -> @Compilation.panicsText
-  callee +777:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +780:35 Compilation.arenaText -> @Compilation.arenaText
-  callee +786:19 Compilation.explainMemoryText -> @Compilation.explainMemoryText
-  callee +791:11 checkedText -> @checkedText
-  callee +800:14 internalErrorFor -> @internalErrorFor
-  callee +807:7 report -> @report
-  local +821:16 file: EmittedFile (const)
-  local +822:13 target: string | null (const)
-  callee +822:35 joinPath -> @joinPath
-  local +826:18 unit: ModuleUnit (const)
-  local +827:15 source: string | null (const)
-  local +836:16 file: EmittedFile (const)
-  local +837:13 path: string (const)
-  callee +837:20 joinPath -> @joinPath
-  callee +838:12 makeDirectoryFor -> @makeDirectoryFor
-  local +849:9 anySidecar: boolean (const)
-  local +854:9 fns: ExternalFunction[] (const)
-  callee +854:48 externalFunctions -> @externalFunctions
-  callee +855:22 acceptsSidecars -> @acceptsSidecars
-  callee +855:56 cDeclared -> @cDeclared
-  callee +856:5 report -> @report
-  local +859:9 emitted: EmittedModule[] (const)
-  callee +859:19 Compilation.emit -> @Compilation.emit
-  local +861:11 cached: CachedBinary (const)
-  callee +861:20 cachedBinary -> @cachedBinary
-  callee +864:7 basenameWithout -> @basenameWithout
-  callee +872:37 watchState -> @watchState
-  callee +872:76 isCheckout -> @isCheckout
-  callee +877:12 runProgram -> @runProgram
-  callee +880:7 basenameWithout -> @basenameWithout
-  local +889:9 stems: string[] (const)
-  local +890:9 paths: string[] (const)
-  local +893:14 module: EmittedModule (const)
-  local +897:9 outputs: string[] (const)
-  callee +897:19 planOutputs -> @planOutputs
-  local +902:7 i: i32 (let)
-  local +904:11 file: string (const)
-  callee +905:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +914:22 writeSidecars -> @writeSidecars
-  callee +920:10 linkProgram -> @linkProgram
-  callee +929:5 anyCallsSqlite -> @anyCallsSqlite
+  callee +753:19 Compilation.explainMemoryText -> @Compilation.explainMemoryText
+  callee +759:19 capabilitySummary -> @capabilitySummary
+  callee +762:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +765:5 writeCapabilityReport -> @writeCapabilityReport
+  callee +774:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +777:36 Compilation.panicsText -> @Compilation.panicsText
+  callee +783:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +786:35 Compilation.arenaText -> @Compilation.arenaText
+  callee +792:11 checkedText -> @checkedText
+  callee +801:14 internalErrorFor -> @internalErrorFor
+  callee +808:7 report -> @report
+  local +822:16 file: EmittedFile (const)
+  local +823:13 target: string | null (const)
+  callee +823:35 joinPath -> @joinPath
+  local +827:18 unit: ModuleUnit (const)
+  local +828:15 source: string | null (const)
+  local +837:16 file: EmittedFile (const)
+  local +838:13 path: string (const)
+  callee +838:20 joinPath -> @joinPath
+  callee +839:12 makeDirectoryFor -> @makeDirectoryFor
+  local +850:9 anySidecar: boolean (const)
+  local +855:9 fns: ExternalFunction[] (const)
+  callee +855:48 externalFunctions -> @externalFunctions
+  callee +856:22 acceptsSidecars -> @acceptsSidecars
+  callee +856:56 cDeclared -> @cDeclared
+  callee +857:5 report -> @report
+  local +860:9 emitted: EmittedModule[] (const)
+  callee +860:19 Compilation.emit -> @Compilation.emit
+  local +862:11 cached: CachedBinary (const)
+  callee +862:20 cachedBinary -> @cachedBinary
+  callee +865:7 basenameWithout -> @basenameWithout
+  callee +873:37 watchState -> @watchState
+  callee +873:76 isCheckout -> @isCheckout
+  callee +878:12 runProgram -> @runProgram
+  callee +881:7 basenameWithout -> @basenameWithout
+  local +890:9 stems: string[] (const)
+  local +891:9 paths: string[] (const)
+  local +894:14 module: EmittedModule (const)
+  local +898:9 outputs: string[] (const)
+  callee +898:19 planOutputs -> @planOutputs
+  local +903:7 i: i32 (let)
+  local +905:11 file: string (const)
+  callee +906:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +915:22 writeSidecars -> @writeSidecars
+  callee +921:10 linkProgram -> @linkProgram
+  callee +930:5 anyCallsSqlite -> @anyCallsSqlite
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv

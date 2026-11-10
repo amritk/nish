@@ -1339,6 +1339,12 @@ export const main = (): number => {
     writeFileSync(compilation.capabilityLockPath, compilation.capabilityLockText)
     console.error(`wrote ${compilation.capabilityLockPath}`)
   }
+  // The memory report goes to stderr with the warnings, read off the facts
+  // the check settled, and ahead of the capability line, which stays the last
+  // thing before the program's own output.
+  if (opts.explainMemory) {
+    console.error(compilation.explainMemoryText())
+  }
   // WP35: read off the checked program, so answered here, before the dump
   // returns and before `run` starts the program -- the line is the last
   // thing on stderr before the program's own output.
@@ -1372,11 +1378,6 @@ export const main = (): number => {
     }
     writeFileSync(opts.emitArena, compilation.arenaText())
     console.error(`wrote ${opts.emitArena}`)
-  }
-  // The memory report goes to stderr with the warnings, for the reason the
-  // arena placements are written here.
-  if (opts.explainMemory) {
-    console.error(compilation.explainMemoryText())
   }
   // The checked dump is what pass 2 leaves behind, so it is written here
   // rather than after `emit`: nothing about the IR changes it.

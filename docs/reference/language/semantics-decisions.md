@@ -1343,13 +1343,16 @@ function, an arena scope of its own when it can prove what they allocated is
 unreachable at the end; one stored allocation, in the loop or in any callee,
 refuses the scope, and the memory the pass allocated then stays until the next
 bracket out. The warnings name such a refusal only where they can also name a
-rewrite; this report names every one, on stderr, after the warnings:
+rewrite; this report names every one, on stderr, after the warnings (an
+excerpt of `tests/cases/explain_memory`):
 
 ```
-tests/cases/explain_memory.ts:18:1: memory: `remember` keeps what it allocates until the memory of its caller is released, because the allocation on line 19 is stored into memory, where this analysis stops following it
-tests/cases/explain_memory.ts:36:3: memory: this loop keeps what each pass allocates until `main` returns, because line 37 keeps what the pass allocated in `last`, which is declared outside the loop
-tests/cases/explain_memory.ts:52:10: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `main` returns
-explain-memory: 4 of 5 allocating loops keep what a pass allocates past the pass; 1 of 3 allocating functions with a scalar result keep what they allocate past the call
+tests/cases/explain_memory.ts:21:1: memory: `remember` keeps what it allocates until the memory of its caller is released, because the allocation on line 22 is stored into memory, where this analysis stops following it
+tests/cases/explain_memory.ts:43:20: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `extra` returns
+tests/cases/explain_memory.ts:43:40: memory: this loop's update allocates on every pass, outside the scope a pass takes, and keeps it until `extra` returns
+tests/cases/explain_memory.ts:60:3: memory: this loop keeps what each pass allocates until `main` returns, because line 61 keeps what the pass allocated in `last`, which is declared outside the loop
+tests/cases/explain_memory.ts:76:10: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `main` returns
+explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass; 1 of 4 allocating functions with a scalar result keep what they allocate past the call
 ```
 
 - **A loop** is listed when its passes allocate — themselves, or through a
@@ -1358,10 +1361,12 @@ explain-memory: 4 of 5 allocating loops keep what a pass allocates past the pass
   scoped loop around it, at the end of the `using a = arena()` block around it,
   when the function returns, or, in a function with no scope, when its caller's
   memory is (in `main`, never: "for the rest of the run"). The reason is the
-  first refusal the analysis met, the one NL9011 names. A loop whose body opens
-  with `using a = arena()` is the program's own bracket and is not listed. A
-  condition or `for` update that allocates is listed on its own line, because
-  it runs outside the bracket a pass takes whether or not the body has one.
+  first refusal the analysis met, the one NL9011 names. A loop whose body
+  declares `using a = arena()` before anything it allocates is the program's
+  own bracket and is not listed. A condition or `for` update that allocates is
+  listed on its own line — both, when both do — because it runs outside the
+  bracket a pass takes whether or not the body has one; a `do...while`
+  condition's line follows the lines of the loops in its body.
 - **A function** is listed when it answers a number, a `boolean`, an enum or
   nothing, leaves memory behind, and has no scope of its own. A function that
   answers memory (a string, an array, an object) is not: what it allocates goes

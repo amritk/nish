@@ -2406,7 +2406,7 @@ const decidePass = (
   const body = scope.body
   if (f.managesArena) {
     walk.refuse(LOOP_CONTROL, null, "")
-    scope.allocates = passCallsAllocate(f, facts, body)
+    scope.allocates = passCallsAllocate(unit, f, facts, body)
     return
   }
   for (const node of f.escapingNodes) {
@@ -2428,18 +2428,38 @@ const decidePass = (
 /**
  * Whether `body` allocates, read off the facts without the walk: an
  * allocation of the function's own inside it, or a call inside it to a
- * function that leaves memory behind. What a pass that is refused before its
- * walk (`LOOP_CONTROL`) records for `--explain-memory`.
+ * function that leaves memory behind, whatever the call answers. What a pass
+ * that is refused before its walk (`LOOP_CONTROL`) records, and what
+ * `--explain-memory` asks of a loop's condition and update.
  */
-const passCallsAllocate = (f: FunctionFacts, facts: FactsTable, body: Node): boolean => {
+const passCallsAllocate = (unit: AnalysisUnit, f: FunctionFacts, facts: FactsTable, body: Node): boolean => {
   for (const node of f.arenaNodes) {
     if (within(body, node)) {
       return true
     }
   }
-  for (const site of f.callSites) {
-    const g = facts.get(site.callee)
-    if (g !== null && g.netAllocates && within(body, site.node)) {
+  return callsLeaveMemory(unit.program, facts, body)
+}
+
+/**
+ * A call under `node` to a function that leaves memory behind. An arrow's
+ * body is another function's, and a `new` is an arena node of its own.
+ */
+const callsLeaveMemory = (program: CheckedProgram, facts: FactsTable, node: Node): boolean => {
+  if (node.kind === N_ARROW) {
+    return false
+  }
+  if (node.kind === N_CALL) {
+    const callee = program.nodeCallees[node.id]
+    if (callee !== null) {
+      const g = facts.get(callee.name)
+      if (g !== null && g.netAllocates) {
+        return true
+      }
+    }
+  }
+  for (const child of node.children) {
+    if (callsLeaveMemory(program, facts, child)) {
       return true
     }
   }
@@ -3023,7 +3043,9 @@ export const explainMemory = (
         )
       }
     }
-    if (f.loopScopes.length > 0) {
+    // `f.allocates` rather than `f.loopScopes`: a loop the scope decision
+    // never reached has no entry there and is still explained.
+    if (f.allocates) {
       explainLoops(unit, facts, f, noElision, isMain, body, null, null, out)
     }
   }
@@ -3060,7 +3082,8 @@ const keptReason = (unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts, noE
  * Every loop under `node` whose passes allocate: counted, and explained when
  * it keeps what a pass allocated. `pass` is the innermost scoped loop around
  * `node` and `block` the innermost `using a = arena()` declaration whose block
- * holds it, either of which is where kept memory goes back.
+ * holds it, either of which is where kept memory goes back. Lines go out in
+ * source order, so a `do...while` condition follows its body.
  */
 const explainLoops = (
   unit: AnalysisUnit,
@@ -3077,41 +3100,61 @@ const explainLoops = (
     return
   }
   const isLoop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
-  const scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
+  let scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
+  // A loop the scope decision never reached has no pass scope, and what its
+  // passes allocate is read off the facts instead, so a statement position
+  // `collectLoopScopes` does not walk shows up here rather than as a gap.
+  let unreached = false
+  if (isLoop && scope === null) {
+    const fresh = new LoopScope(node, loopBody(node))
+    fresh.allocates = passCallsAllocate(unit, f, facts, fresh.body)
+    scope = fresh
+    unreached = true
+  }
   let inner = pass
-  const head: Node | null = scope === null ? null : headAllocates(f, facts, node)
-  if (scope !== null && (scope.allocates || head !== null)) {
-    out.loops = out.loops + 1
-    // A pass whose body opens with `using a = arena()` is bracketed by the
-    // program: what it allocates goes back at the end of every pass.
-    const bodyKeeps = scope.allocates && !scope.scoped && !opensWithArena(unit, scope.body)
-    if (bodyKeeps || head !== null) {
-      out.loopsKept = out.loopsKept + 1
-    }
-    if (bodyKeeps) {
-      out.notes.push(
-        new ArenaFinding(
-          node,
-          `this loop keeps what each pass allocates ${keptUntil(unit, f, isMain, pass, block)}, because ` +
-            `${loopKeptReason(unit, scope, noElision)}`
-        )
-      )
-    }
+  let lateCondition: Node | null = null
+  if (scope !== null) {
     // The condition and the update run outside the bracket the body takes,
     // so what they allocate stays whether or not the body is scoped.
-    if (head !== null) {
-      const update = loopUpdate(node)
-      const part = update !== null && update === head ? "update" : "condition"
-      out.notes.push(
-        new ArenaFinding(
-          head,
-          `this loop's ${part} allocates on every pass, outside ` +
-            `the scope a pass takes, and keeps it ${keptUntil(unit, f, isMain, pass, block)}`
+    const condition = loopCondition(node)
+    const update = loopUpdate(node)
+    const conditionKeeps = condition !== null && passCallsAllocate(unit, f, facts, condition)
+    const updateKeeps = update !== null && passCallsAllocate(unit, f, facts, update)
+    // The pass decision read `netAllocates` with every scope in place;
+    // `--no-elision` took them away, so a call into a function a scope had
+    // emptied allocates again.
+    const allocates = scope.allocates || (noElision && passCallsAllocate(unit, f, facts, scope.body))
+    if (allocates || conditionKeeps || updateKeeps) {
+      out.loops = out.loops + 1
+      const bodyKeeps = allocates && !scope.scoped && !bracketsItself(unit, f, facts, scope.body)
+      if (bodyKeeps || conditionKeeps || updateKeeps) {
+        out.loopsKept = out.loopsKept + 1
+      }
+      const until = keptUntil(unit, f, isMain, pass, block)
+      if (bodyKeeps) {
+        let reason = ""
+        if (unreached) {
+          reason = unreachedReason(noElision)
+        } else {
+          reason = loopKeptReason(unit, scope, noElision)
+        }
+        out.notes.push(
+          new ArenaFinding(node, `this loop keeps what each pass allocates ${until}, because ${reason}`)
         )
-      )
-    }
-    if (scope.scoped) {
-      inner = scope
+      }
+      if (conditionKeeps && condition !== null) {
+        if (node.kind === N_DO) {
+          lateCondition = condition
+        } else {
+          out.notes.push(headNote(condition, "condition", until))
+        }
+      }
+      if (updateKeeps && update !== null) {
+        out.notes.push(headNote(update, "update", until))
+      }
+      if (scope.scoped) {
+        inner = scope
+      }
     }
   }
   let held = block
@@ -3119,18 +3162,30 @@ const explainLoops = (
     if (node.kind === N_BLOCK && isArenaUsing(unit.program, child)) {
       held = child
     }
-    explainLoops(
-      unit,
-      facts,
-      f,
-      noElision,
-      isMain,
-      child,
-      scope !== null && child === scope.body ? inner : pass,
-      held,
-      out
-    )
+    let childPass = pass
+    if (scope !== null && child === scope.body) {
+      childPass = inner
+    }
+    explainLoops(unit, facts, f, noElision, isMain, child, childPass, held, out)
   }
+  if (lateCondition !== null) {
+    out.notes.push(headNote(lateCondition, "condition", keptUntil(unit, f, isMain, pass, block)))
+  }
+}
+
+/** The line for a loop condition or update that allocates on every pass. */
+const headNote = (head: Node, part: string, until: string): ArenaFinding =>
+  new ArenaFinding(
+    head,
+    `this loop's ${part} allocates on every pass, outside the scope a pass takes, and keeps it ${until}`
+  )
+
+/** Why a loop the scope decision never reached keeps what a pass allocated. */
+const unreachedReason = (noElision: boolean): string => {
+  if (noElision) {
+    return "`--no-elision` takes no automatic scope"
+  }
+  return "the compiler takes no automatic scope for the passes of a loop in this position"
 }
 
 /** The node of `loop` that is tested before or after every pass, or null for a `for...of`. */
@@ -3151,22 +3206,25 @@ const loopCondition = (loop: Node): Node | null => {
 const loopUpdate = (loop: Node): Node | null =>
   loop.kind === N_FOR && loop.children.length > 2 ? loop.children[2] : null
 
-/** The first of `loop`'s condition and update that bumps the arena, itself or through a callee, or null. */
-const headAllocates = (f: FunctionFacts, facts: FactsTable, loop: Node): Node | null => {
-  const condition = loopCondition(loop)
-  if (condition !== null && passCallsAllocate(f, facts, condition)) {
-    return condition
+/**
+ * The body brackets each pass itself: a statement of its block declares
+ * `using a = arena()`, and nothing before that statement allocates, so what
+ * the pass allocates goes back when the block ends.
+ */
+const bracketsItself = (unit: AnalysisUnit, f: FunctionFacts, facts: FactsTable, body: Node): boolean => {
+  if (body.kind !== N_BLOCK) {
+    return false
   }
-  const update = loopUpdate(loop)
-  if (update !== null && passCallsAllocate(f, facts, update)) {
-    return update
+  for (const stmt of body.children) {
+    if (isArenaUsing(unit.program, stmt)) {
+      return true
+    }
+    if (passCallsAllocate(unit, f, facts, stmt)) {
+      return false
+    }
   }
-  return null
+  return false
 }
-
-/** The body is a block whose first statement is `using a = arena()`. */
-const opensWithArena = (unit: AnalysisUnit, body: Node): boolean =>
-  body.kind === N_BLOCK && body.children.length > 0 && isArenaUsing(unit.program, body.children[0])
 
 /** Where a loop's kept memory goes back: the nearest bracket around it, or the function's own end. */
 const keptUntil = (

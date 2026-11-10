@@ -20599,7 +20599,12 @@ if (dealtHere("cliChecks")) {
       ["--fix", "`--explain-memory` cannot be used with --fix"],
       ["--json", "`--explain-memory` prints a report for people, and --json keeps stderr to diagnostics"],
     ]) {
-      const refused = spawnSync(NISH, [explainSource, flag, "--explain-memory"], { cwd: root, encoding: "utf8" })
+      // A copy, so a `--fix` that stopped refusing rewrites no case of the suite.
+      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "nish-explain-"))
+      const copy = path.join(scratch, "explain_memory.ts")
+      fs.copyFileSync(explainSource, copy)
+      const refused = spawnSync(NISH, [copy, flag, "--explain-memory"], { cwd: root, encoding: "utf8" })
+      fs.rmSync(scratch, { recursive: true, force: true })
       check(
         `explain memory: --explain-memory with ${flag} is a usage error, exit 2`,
         refused.status === 2 && refused.stdout === "" && refused.stderr.includes(refusal),
@@ -20611,9 +20616,40 @@ if (dealtHere("cliChecks")) {
     check(
       "explain memory: `nish run --explain-memory` prints the report and runs the program",
       explainRun.status === 0 &&
-        explainRun.stdout === "item 2 3 24 12 n2 10\n" &&
-        explainRun.stderr.includes("explain-memory: 4 of 5 allocating loops"),
+        explainRun.stdout === "item 2 3 24 12 n2 10 28\n" &&
+        explainRun.stderr.includes("explain-memory: 7 of 9 allocating loops"),
       shown(explainRun)
+    )
+    // The capability line stays the last thing on stderr before the program's
+    // own output (WP35): the report is printed ahead of it.
+    const explainCaps = spawnSync(NISH, ["run", "--capabilities", "--explain-memory", explainSource], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const explainCapsLines = explainCaps.stderr.trimEnd().split("\n")
+    check(
+      "explain memory: under `nish run --capabilities` the capability line still comes last",
+      explainCaps.status === 0 &&
+        explainCaps.stderr.includes("explain-memory: ") &&
+        explainCapsLines[explainCapsLines.length - 1].startsWith("capabilities: "),
+      shown(explainCaps)
+    )
+    // `--no-elision` takes every scope away, so a loop whose only allocation is
+    // a call into a function a scope had emptied (`counted`'s, through `width`)
+    // allocates again and is listed.
+    const bareDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-explain-"))
+    const explainBare = spawnSync(
+      NISH,
+      [explainSource, "-o", path.join(bareDir, "explain_memory.ll"), "--no-elision", "--explain-memory"],
+      { cwd: root, encoding: "utf8" }
+    )
+    fs.rmSync(bareDir, { recursive: true, force: true })
+    check(
+      "explain memory: under `--no-elision` a loop that calls an emptied function is listed",
+      explainBare.status === 0 &&
+        explainBare.stderr.includes("explain_memory.ts:30:3: memory: this loop keeps what each pass allocates") &&
+        explainBare.stderr.includes("explain-memory: 8 of 10 allocating loops"),
+      shown(explainBare)
     )
     // `--deny-retention` turns the arena-retention warnings into errors (NL2462),
     // and those are found by the body checks and the whole-program facts, which

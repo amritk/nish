@@ -631,7 +631,7 @@ leaves the IR unchanged.
 - **`--explain-memory`** prints every loop and function that keeps the memory
   it allocates past its arena scope, and why
   ([Memory](../language/memory.md#what-you-do-have-to-think-about)). `nish run`
-  takes the flag; `--emit-ast` and `--json` do not.
+  takes the flag; `--emit-ast`, `--json` and `--fix` do not.
 - **`--emit-ast`** and **`--emit-checked`** print what the compiler parsed and
   what its checker recorded, one line per node.
 

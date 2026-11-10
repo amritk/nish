@@ -29,10 +29,24 @@ function counted(n: i32): i32 -> @counted
   local +0:7 total: i32 (let)
   local +1:12 i: i32 (let)
   callee +2:21 width -> @width
+function extra(): i32 -> @extra
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_arena_release
+  calls: named nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local +0:7 total: i32 (let)
+  local +1:12 i: i32 (let)
+  local +2:11 j: i32 (const)
+  local +3:11 a: i64 (const)
+  callee +4:21 named -> @named
+  local +6:12 t: string (let)
+  local +9:9 held: string[] (const)
+  local +10:7 d: i32 (let)
+  local +12:14 i: i32 (let)
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_arena_release
-  calls: Box.constructor counted named nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 remember
+  calls: Box.constructor counted extra named nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 remember
   stackSites=2 stackLocals=2
   local +0:9 box: Box (const)
   callee +0:15 new Box -> @Box.constructor
@@ -49,3 +63,4 @@ function main(): void -> @nish_main [exported entry]
   callee +15:19 named -> @named
   local +17:7 k: i32 (let)
   callee +21:49 counted -> @counted
+  callee +21:81 extra -> @extra
