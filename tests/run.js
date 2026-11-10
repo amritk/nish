@@ -1591,6 +1591,7 @@ const INDEX_OF_ANY_REFUSALS = [
 const TEXT_REFUSALS = [
   ["std_text_split_empty_separator", "split: an empty separator"],
   ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
+  ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
 ]
 
 /**
@@ -28311,7 +28312,8 @@ if (!only || "std_text_index_of_any".includes(only)) {
 if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
   // `std_text_camel_case`, the guide's example, is held natively only: under
   // the Node prelude its `Regex.replaceAll` on a class of two members does
-  // not finish, which is `nish/regex`'s and not this module's.
+  // not finish, which is `nish/regex`'s and not this module's (#1362). It
+  // rejoins this list when #1362 is fixed.
   for (const name of ["std_text", "std_text_f64"]) {
     const dir = path.join(linkDir, name)
     const run = runUnderPrelude(path.join(dir, "main.ts"), [])
