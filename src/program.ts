@@ -889,16 +889,23 @@ export class Instantiation {
 
 /**
  * What one `...s` in an object literal copies (`checkObjectLiteral`): the
- * source's struct type, and the fields the emitter loads from it and stores
- * into the literal, by name -- the source's fields less every one a later
- * entry of the literal sets, since the later entry wins.
+ * spread itself and the file it is written in, the struct types of its source and of the literal, and the
+ * fields the emitter loads from the source and stores into the literal, by
+ * name -- the source's fields less every one a later entry of the literal
+ * sets, since the later entry wins.
  */
 export class SpreadCopy {
+  at: Node
+  file: SourceFile
   source: i32
+  into: i32
   fields: string[]
 
-  constructor(source: i32, fields: string[]) {
+  constructor(at: Node, file: SourceFile, source: i32, into: i32, fields: string[]) {
+    this.at = at
+    this.file = file
     this.source = source
+    this.into = into
     this.fields = fields
   }
 }
@@ -1819,6 +1826,12 @@ export class CheckedProgram {
    */
   nodeSpreadCopies: (SpreadCopy | null)[]
   /**
+   * Every spread `nodeSpreadCopies` recorded, in any instantiation: the
+   * whole-program refusal of an interface source some class widens reads
+   * them once every body is checked (`Compilation.rejectWideSpreads`).
+   */
+  spreadCopies: SpreadCopy[]
+  /**
    * WP32 S5: the calls of this module's bodies that are one fused lookup
    * (docs/wp32-map.md §9.1). Inside a generic's body it is the
    * instantiation's own, which `enterInstance` installs.
@@ -1923,6 +1936,7 @@ export class CheckedProgram {
     this.nodeProvenNoOverflow = new Array<boolean>(nodeCount)
     this.nodeDisjointCopy = new Array<boolean>(nodeCount)
     this.nodeSpreadCopies = new Array<SpreadCopy | null>(nodeCount)
+    this.spreadCopies = []
     this.memberSets = new Array<i32>(nodeCount)
     this.memberLists = []
     let i = 0

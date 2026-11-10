@@ -775,7 +775,7 @@ const checkSpreadSource = (ctx: CheckContext, spread: Node, info: StructInfo, sc
   ) {
     ctx.error(
       value,
-      `Spread of ${spelled} into \`${target}\`: only a value of a class or interface the program declares has fields ` +
+      `Spread of \`${spelled}\` into \`${target}\`: only a value of a class or interface the program declares has fields ` +
         "an object spread copies one by one, so set each field by name"
     )
     return null
@@ -803,8 +803,8 @@ const checkSpreadSource = (ctx: CheckContext, spread: Node, info: StructInfo, sc
     if (into.type !== field.type) {
       ctx.error(
         value,
-        `Field \`${field.name}\` spread from \`${spelled}\` is ${ctx.table.typeName(field.type)}, but \`${target}\` ` +
-          `declares it ${ctx.table.typeName(into.type)}: a spread copies each field as it is, so the two types ` +
+        `Field \`${field.name}\` spread from \`${spelled}\` is \`${ctx.table.typeName(field.type)}\`, but \`${target}\` ` +
+          `declares it \`${ctx.table.typeName(into.type)}\`: a spread copies each field as it is, so the two types ` +
           `must be the same; set it by name (\`${field.name}: s.${field.name}\`)`
       )
       return null
@@ -828,7 +828,7 @@ const namedIn = (names: string[], name: string): boolean => {
  * from the last, a spread stores the fields of its source that no entry
  * after it sets, since the later entry wins.
  */
-const recordSpreadCopies = (ctx: CheckContext, expr: Node, sources: StructInfo[]): void => {
+const recordSpreadCopies = (ctx: CheckContext, expr: Node, into: i32, sources: StructInfo[]): void => {
   const later: string[] = []
   let next = sources.length - 1
   let i = expr.children.length - 1
@@ -848,7 +848,9 @@ const recordSpreadCopies = (ctx: CheckContext, expr: Node, sources: StructInfo[]
       for (const name of fields) {
         later.push(name)
       }
-      ctx.program.nodeSpreadCopies[prop.id] = new SpreadCopy(source.type, fields)
+      const copy = new SpreadCopy(prop, ctx.source, source.type, into, fields)
+      ctx.program.nodeSpreadCopies[prop.id] = copy
+      ctx.program.spreadCopies.push(copy)
     }
     i = i - 1
   }
@@ -964,7 +966,7 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
       return target
     }
   }
-  recordSpreadCopies(ctx, expr, sources)
+  recordSpreadCopies(ctx, expr, info.type, sources)
   return target
 }
 

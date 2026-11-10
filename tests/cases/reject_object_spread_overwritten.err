@@ -1,0 +1,1 @@
+Field `x` is set by name and then always overwritten by the spread of `Point` after it, which TypeScript refuses (TS2783): set it after the spread, or leave it out

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 849
+export const RULE_COUNT: i32 = 859
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -173,6 +173,8 @@ const diagnosticRules = (): string[] => [
   "NL2367",
   "`, and only its `[Symbol.dispose]` may call it on the pointer the object owns: the `using` block closes it at every exit, so a close written here would be followed by a use after close and a second close",
   "NL2572",
+  "` does not declare: Node copies every own field of an instance and none of its methods, so a class instance is spread only into a type that declares each of its fields; otherwise set the fields by name",
+  "NL2700",
   " = g(...)` as a statement at the top of the constructor, where `g` is a `declare function` and nothing before it leaves the constructor: any other write would replace or copy a pointer the object owns",
   "NL2563",
   "` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined",
@@ -245,6 +247,8 @@ const diagnosticRules = (): string[] => [
   "NL2478",
   " and cannot be returned: a value that may be missing does not cross a call; return a default with `??`, or bind it to a `const` and return it where `!== undefined` has narrowed it",
   "NL2363",
+  "An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)",
+  "NL2703",
   " and cannot be held in a `let`: only a `const` is narrowed, because a `let` can be assigned; bind it with `const` and test it with `!== undefined`, or give it a default with `??`",
   "NL2361",
   ", and a buffer a declared C function takes is never null: it has no length to hold the count to, so a C function that accepts `NULL, 0` is declared with a `CPtr | null` parameter",
@@ -263,6 +267,8 @@ const diagnosticRules = (): string[] => [
   "NL2464",
   "`: the block releases what it allocated when it ends, and nothing proves the object it is stored into ends with it (allocate what must outlive the block before the block opens)",
   "NL2419",
+  " spreads another value into the typed JSON options: typed JSON reads a class's options from its text, where a spread names nothing it can see, so write each option out by name",
+  "NL2705",
   "` is made here and nobody owns it: a `Secret` leaves the function that made it returned or wiped, so bind it to a local (`const s = ...`) and `wipe(s)` once done, or return it",
   "NL2439",
   "` is not a gated capability: a dependency is granted only `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` and `unsafe`, and reaches every other capability without a grant",
@@ -275,6 +281,10 @@ const diagnosticRules = (): string[] => [
   "NL2336",
   "` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)",
   "NL2039",
+  "` besides: Node copies every own field of the instance a value holds, and the native copy only the interface's, so spread a value of a class type, or set the fields by name",
+  "NL3052",
+  "` may spread `null`, which under Node copies no field at all: narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)",
+  "NL2697",
   "` runs captures nothing: a capture it could write through would be a channel out of it that its result type does not name; pass the value as `exposeWith`'s argument instead",
   "NL2589",
   "; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol",
@@ -353,6 +363,8 @@ const diagnosticRules = (): string[] => [
   "NL3045",
   "`, so it declares `wipe(): void`, taking no parameters: a holder's key ends in that method, which wipes every `Secret` field it holds, `wipe(this.",
   "NL2540",
+  "` does not declare, and Node would carry it on the object anyway: spread a value whose every field the target declares, or set the fields by name",
+  "NL2701",
   "` is a variable of the top-level code and also a name the module declares or imports: under Node both live in the one module scope, so rename one",
   "NL2658",
   "` optional, and the field has no initializer: a missing optional key sets its field to the field's initializer, so an optional field declares one",
@@ -385,6 +397,8 @@ const diagnosticRules = (): string[] => [
   "NL2346",
   " cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`",
   "NL2372",
+  "`: which fields a spread copies depends on the variant it holds at run time, so narrow it to one variant first, or set the fields by name",
+  "NL2698",
   " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
   "NL1001",
   " and stores an allocation into memory, where this analysis stops following it: what it stores may be the block's and outlive the release",
@@ -405,6 +419,8 @@ const diagnosticRules = (): string[] => [
   "NL2327",
   "` writes the argument `exposeWith` hands it, a channel out of `expose` its result type does not name: return what it computes instead",
   "NL2450",
+  "`: only a value of a class or interface the program declares has fields an object spread copies one by one, so set each field by name",
+  "NL2699",
   "` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself",
   "NL2522",
   "` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that",
@@ -637,6 +653,8 @@ const diagnosticRules = (): string[] => [
   "NL2694",
   "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (",
   "NL2166",
+  "`: a spread copies each field as it is, so the two types must be the same; set it by name (`",
+  "NL2702",
   "`super` is only valid inside a method or constructor of a class that `extends` another class",
   "NL2159",
   "A module constant's initialiser must be a literal, another constant, or arithmetic over them",
@@ -683,6 +701,8 @@ const diagnosticRules = (): string[] => [
   "NL2279",
   " can overflow its lane type, so its total is `sumWrapping`, which wraps as the lanes do",
   "NL2636",
+  "` after it, which TypeScript refuses (TS2783): set it after the spread, or leave it out",
+  "NL2704",
   "` is not a module constant, and a module constant's value must be known at compile time",
   "NL2080",
   "`: a class's type parameters are in scope in its methods, and a diagnostic that names `",
