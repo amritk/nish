@@ -72,7 +72,7 @@ static void *fill(uint64_t r, uint64_t payload) {
 
 #define REGIONS 100000
 #define ROUNDS 10
-#define DEPTH 10000
+#define DEPTH 1000000
 
 /* The index part of a handle. */
 static uint64_t slot_index(uint64_t r) { return r & 0xffffff; }
@@ -200,8 +200,6 @@ static void positive(void) {
   CHECK(((again ^ r) & 0xffffff) == 0 || ((again ^ inner) & 0xffffff) == 0, "a freed slot is reused");
   nish_region_free(again);
 
-  children();
-
   /* A hundred thousand sessions, made, filled and freed, ten times. */
   static uint64_t handles[REGIONS];
   uint64_t first = 0, peak = 0, last = 0;
@@ -226,6 +224,9 @@ static void positive(void) {
   /* 64 KiB chunks would keep about 6.5 GB reserved and 450 MB resident here. */
   CHECK(peak < ((uint64_t)128 << 20), "100,000 live sessions stay under 128 MiB resident, peak %llu KiB",
         (unsigned long long)(peak >> 10));
+
+  /* After the resident-set rounds: the deep chain's slot table would count. */
+  children();
 }
 
 #ifdef NISH_THREADS

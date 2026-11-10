@@ -376,7 +376,15 @@ const make = (parent, build) => {
     parents.set(r, parent);
     children.get(parent).add(r);
   }
-  roots.set(r, inside(r, build));
+  try {
+    roots.set(r, inside(r, build));
+  } catch (e) {
+    roots.delete(r);
+    children.delete(r);
+    parents.delete(r);
+    if (parent !== 0n) children.get(parent).delete(r);
+    throw e;
+  }
   return r;
 };
 const parentNow = () => {

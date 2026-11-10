@@ -222,6 +222,15 @@ in the `f` an `enter` runs, never in a function something else also calls
 (NL2697). A plain `region()` made inside `enter` has no parent and keeps the
 rules above.
 
+The child may keep the parent's root only while that root holds nothing
+the parent's `f` stored into it: once any code stores into the root (a
+field, an array push, a `Map.set`, or a call that keeps its argument),
+the child may not keep it. Entering a handle that may be a child's gives
+an `f` whose root is the child's memory, so that root may neither take
+memory from outside nor be stored outside. A handle made by `region()`
+or `regionWith()` and never reassigned is not a child's and keeps the
+plain rules.
+
 ## Mistakes stop the program
 
 `enter`, `enterWith` and `free` check the handle each time. A handle that was

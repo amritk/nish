@@ -1301,7 +1301,7 @@ function Compilation.checkParallel(this: Compilation): void -> @Compilation.chec
 function Compilation.checkRegions(this: Compilation, facts: FactsTable): void -> @Compilation.checkRegions [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: ChildSites.constructor DiagnosticSink.report FreshResults.constructor crossingMessage holdsRegion isChildMaker nish_alloc_struct nish_array_grow nish_str_concat parallelBodyOf regionCallFindings regionRoleOf scopeSymbol taskFindings
+  calls: ChildSites.constructor ChildSites.scan DiagnosticSink.report FreshResults.constructor crossingMessage holdsRegion isChildMaker nish_alloc_struct nish_array_grow nish_str_concat parallelBodyOf regionCallFindings regionRoleOf scopeSymbol taskFindings
   pointer this: size=208 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=true captured=true passedTo=FreshResults.constructor#3 regionCallFindings#2 taskFindings#2 regionCallFindings#2
   stackSites=3 stackLocals=3
@@ -1315,52 +1315,53 @@ function Compilation.checkRegions(this: Compilation, facts: FactsTable): void ->
   local +6:11 sites: ChildSites (const)
   callee +6:19 new ChildSites -> @ChildSites.constructor
   local +7:16 unit: ModuleUnit (const)
-  local +8:18 call: ParallelCall (const)
-  callee +9:13 isChildMaker -> @isChildMaker
-  callee +9:26 regionRoleOf -> @regionRoleOf
-  local +14:16 unit: ModuleUnit (const)
-  local +15:13 program: CheckedProgram (const)
-  local +16:18 call: ParallelCall (const)
-  callee +17:13 isChildMaker -> @isChildMaker
-  callee +17:26 regionRoleOf -> @regionRoleOf
-  local +20:15 findings: RegionFinding[] (const)
-  callee +20:26 regionCallFindings -> @regionCallFindings
-  local +31:20 finding: RegionFinding (const)
-  callee +32:11 DiagnosticSink.report -> @DiagnosticSink.report
-  local +35:18 call: ParallelCall (const)
-  local +36:20 finding: RegionFinding (const)
-  callee +36:31 taskFindings -> @taskFindings
-  callee +37:11 DiagnosticSink.report -> @DiagnosticSink.report
-  local +40:13 crossings: ParallelCall[] (const)
-  local +41:18 call: ParallelCall (const)
-  local +44:18 call: ParallelCall (const)
-  local +47:18 call: ParallelCall (const)
-  local +48:15 fn: FunctionSig | null (const)
-  callee +48:20 parallelBodyOf -> @parallelBodyOf
-  local +49:15 instance: Instantiation | null (const)
-  local +53:15 types: i32[] (const)
-  local +54:20 type: i32 (const)
-  local +57:20 type: i32 (const)
-  local +61:20 type: i32 (const)
-  callee +62:15 holdsRegion -> @holdsRegion
-  local +63:19 what: string (const)
-  callee +64:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +68:15 crossingMessage -> @crossingMessage
-  local +74:18 call: ParallelCall (const)
-  local +75:20 type: i32 (const)
-  callee +76:15 holdsRegion -> @holdsRegion
-  local +77:19 what: string (const)
-  callee +78:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +82:15 crossingMessage -> @crossingMessage
-  local +89:16 unit: ModuleUnit (const)
-  local +90:13 program: CheckedProgram (const)
-  local +91:18 call: ParallelCall (const)
-  callee +92:14 isChildMaker -> @isChildMaker
-  callee +92:27 regionRoleOf -> @regionRoleOf
-  local +95:15 findings: RegionFinding[] (const)
-  callee +95:26 regionCallFindings -> @regionCallFindings
-  local +106:20 finding: RegionFinding (const)
-  callee +107:11 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +8:7 ChildSites.scan -> @ChildSites.scan
+  local +9:18 call: ParallelCall (const)
+  callee +10:13 isChildMaker -> @isChildMaker
+  callee +10:26 regionRoleOf -> @regionRoleOf
+  local +15:16 unit: ModuleUnit (const)
+  local +16:13 program: CheckedProgram (const)
+  local +17:18 call: ParallelCall (const)
+  callee +18:13 isChildMaker -> @isChildMaker
+  callee +18:26 regionRoleOf -> @regionRoleOf
+  local +21:15 findings: RegionFinding[] (const)
+  callee +21:26 regionCallFindings -> @regionCallFindings
+  local +32:20 finding: RegionFinding (const)
+  callee +33:11 DiagnosticSink.report -> @DiagnosticSink.report
+  local +36:18 call: ParallelCall (const)
+  local +37:20 finding: RegionFinding (const)
+  callee +37:31 taskFindings -> @taskFindings
+  callee +38:11 DiagnosticSink.report -> @DiagnosticSink.report
+  local +41:13 crossings: ParallelCall[] (const)
+  local +42:18 call: ParallelCall (const)
+  local +45:18 call: ParallelCall (const)
+  local +48:18 call: ParallelCall (const)
+  local +49:15 fn: FunctionSig | null (const)
+  callee +49:20 parallelBodyOf -> @parallelBodyOf
+  local +50:15 instance: Instantiation | null (const)
+  local +54:15 types: i32[] (const)
+  local +55:20 type: i32 (const)
+  local +58:20 type: i32 (const)
+  local +62:20 type: i32 (const)
+  callee +63:15 holdsRegion -> @holdsRegion
+  local +64:19 what: string (const)
+  callee +65:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +69:15 crossingMessage -> @crossingMessage
+  local +75:18 call: ParallelCall (const)
+  local +76:20 type: i32 (const)
+  callee +77:15 holdsRegion -> @holdsRegion
+  local +78:19 what: string (const)
+  callee +79:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +83:15 crossingMessage -> @crossingMessage
+  local +90:16 unit: ModuleUnit (const)
+  local +91:13 program: CheckedProgram (const)
+  local +92:18 call: ParallelCall (const)
+  callee +93:14 isChildMaker -> @isChildMaker
+  callee +93:27 regionRoleOf -> @regionRoleOf
+  local +96:15 findings: RegionFinding[] (const)
+  callee +96:26 regionCallFindings -> @regionCallFindings
+  local +107:20 finding: RegionFinding (const)
+  callee +108:11 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.checkSecrets(this: Compilation, facts: FactsTable): void -> @Compilation.checkSecrets [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

@@ -1,19 +1,11 @@
 // NL2697: a function that makes a child, called outside an `enter` as well
 // as by one, would make it with no parent.
-import { Region, child, childWith, enter, free, region } from "nish:region";
+import { Region, child, enter, free, region } from "nish:region";
 
 class Item {
   name: string;
-  next: Item | null = null;
   constructor(name: string) {
     this.name = name;
-  }
-}
-
-class Holder {
-  item: Item;
-  constructor(item: Item) {
-    this.item = item;
   }
 }
 

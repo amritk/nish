@@ -60,6 +60,7 @@ import {
   REGION_CHILD_WITH,
   REGION_ENTER,
   REGION_ENTER_WITH,
+  REGION_MAKE,
   REGION_MAKE_WITH,
   REGION_NONE,
   isChildMaker,
@@ -86,8 +87,7 @@ const ORIGIN_UNKNOWN: i32 = 3
  */
 const ORIGIN_ROOT: i32 = 4
 /**
- * In a child's `f`, the parent's memory `childWith`'s `arg` reaches, and in a
- * later `enter` of a child, its root's reach, which may be its parent's. It
+ * In a child's `f`, the parent's memory `childWith`'s `arg` reaches. It
  * outlives the region, so region memory may keep it, but it may keep no
  * region memory and may not grow.
  */
@@ -97,9 +97,17 @@ const ORIGIN_PARENT: i32 = 5
  * may keep it, but it may keep no region memory and may not grow.
  */
 const ORIGIN_MIXED: i32 = 6
+/**
+ * In an `enter` of a handle that may be a child's, what its root reaches: the
+ * child's memory or its ancestors'. Both existed before this `enter`, so a
+ * child made here may keep it and region memory may keep it, but it may keep
+ * no memory but an ancestor's, may not grow, and may not be stored outside.
+ */
+const ORIGIN_CHILD_ROOT: i32 = 7
 
 /** Whether `o` is the region's memory or the parent's, in a child's `f`. */
-const childOrParent = (o: i32): boolean => o === ORIGIN_REGION || o === ORIGIN_PARENT || o === ORIGIN_MIXED
+const childOrParent = (o: i32): boolean =>
+  o === ORIGIN_REGION || o === ORIGIN_PARENT || o === ORIGIN_MIXED || o === ORIGIN_CHILD_ROOT
 
 /** The origin of a value that may be `a` or `b`. */
 const joinOrigin = (a: i32, b: i32): i32 => {
@@ -117,17 +125,25 @@ const joinOrigin = (a: i32, b: i32): i32 => {
 
 /** Whether a value of origin `o` may be memory outside the region: what may not grow, nor keep the region's. */
 const mayBeOuter = (o: i32): boolean =>
-  o === ORIGIN_OUTER || o === ORIGIN_UNKNOWN || o === ORIGIN_PARENT || o === ORIGIN_MIXED
+  o === ORIGIN_OUTER ||
+  o === ORIGIN_UNKNOWN ||
+  o === ORIGIN_PARENT ||
+  o === ORIGIN_MIXED ||
+  o === ORIGIN_CHILD_ROOT
 
 /** Whether a value of origin `o` may be outer memory region memory may not keep: any but the parent's. */
 const mayBeReleased = (o: i32): boolean => o === ORIGIN_OUTER || o === ORIGIN_UNKNOWN
 
 /** Whether a value of origin `o` may be region memory. */
 const mayBeRegion = (o: i32): boolean =>
-  o === ORIGIN_REGION || o === ORIGIN_UNKNOWN || o === ORIGIN_ROOT || o === ORIGIN_MIXED
+  o === ORIGIN_REGION ||
+  o === ORIGIN_UNKNOWN ||
+  o === ORIGIN_ROOT ||
+  o === ORIGIN_MIXED ||
+  o === ORIGIN_CHILD_ROOT
 
 /** Whether a value of origin `o` is memory a child region made here may keep: what the root reaches. */
-const outlivesChild = (o: i32): boolean => o === ORIGIN_ROOT || o === ORIGIN_PARENT
+const outlivesChild = (o: i32): boolean => o === ORIGIN_ROOT || o === ORIGIN_PARENT || o === ORIGIN_CHILD_ROOT
 
 /** One refusal, at the node in `f`'s module it is about. */
 export class RegionFinding {
@@ -525,6 +541,12 @@ class RegionWalk {
   /** An `enter` walk's record of the child regions `fn` makes, or `null`. */
   sites: ChildSites | null
   /**
+   * `fn` stores into, or hands a callee that writes into, memory that may be
+   * the region's, so what it reads off the root may be memory it allocated.
+   * Flow-insensitive: the passes before the last one set it.
+   */
+  rootWritten: boolean
+  /**
    * WP49 stage 5, part 8: the arrows the spawn handed the task that capture
    * its spawner's objects (`taskFindings`). A call that runs one may answer
    * what it captures, and the origins of the arguments the task hands one
@@ -565,6 +587,7 @@ class RegionWalk {
     this.findings = []
     this.task = task
     this.sites = sites
+    this.rootWritten = false
     this.spawnArrows = []
     this.arrowArgs = []
     this.indirect = []
@@ -814,11 +837,17 @@ class RegionWalk {
     if (value === ORIGIN_NONE || value === ORIGIN_SCALAR) {
       return
     }
+    if (mayBeRegion(holder)) {
+      // Memory the root reaches read back after this is not known to have existed before `enter`.
+      this.rootWritten = true
+    }
     if ((holder === ORIGIN_REGION || holder === ORIGIN_ROOT) && mayBeReleased(value)) {
+      this.reportOuter(at, what)
+    } else if (holder === ORIGIN_PARENT && mayBeReleased(value)) {
       this.reportOuter(at, what)
     } else if ((holder === ORIGIN_OUTER || holder === ORIGIN_PARENT) && mayBeRegion(value)) {
       this.report(at, regionToOuterMessage(this.who, what, this.freed))
-    } else if (holder === ORIGIN_UNKNOWN || holder === ORIGIN_MIXED) {
+    } else if (holder === ORIGIN_UNKNOWN || holder === ORIGIN_MIXED || holder === ORIGIN_CHILD_ROOT) {
       // The parent's memory outlives the region, whichever the holder is.
       if (value === ORIGIN_OUTER) {
         this.reportOuter(at, what)
@@ -934,9 +963,11 @@ class RegionWalk {
       if (isChildMaker(role) && sites !== null && !this.collect) {
         // What `childWith` hands the child's `f` is the parent's to keep only if the root reaches it.
         const args = node.children[1].children
+        // Memory read off the root after `f` stores into region memory may be new, so none is.
         sites.record(
           node,
-          role === REGION_CHILD || (args.length > 0 && outlivesChild(this.origin(args[0]))),
+          role === REGION_CHILD ||
+            (!this.rootWritten && args.length > 0 && outlivesChild(this.origin(args[0]))),
           this.fn
         )
       }
@@ -1047,6 +1078,9 @@ class RegionWalk {
         continue
       }
       const arg = i < handed.length ? handed[i] : node
+      if (pp !== null && (pp.writesReach || pp.polluted) && mayBeRegion(o)) {
+        this.rootWritten = true
+      }
       if (pp === null) {
         // A `string` has no pointer facts, so a constructor is taken to keep it.
         if (isNew && mayBeReleased(o)) {
@@ -1245,10 +1279,11 @@ export const regionCallFindings = (
     seedOrigins.push(sites.fromRoot[at] ? ORIGIN_PARENT : ORIGIN_OUTER)
   }
   if (entered && names.length > 0) {
-    // A child's root may reach its parent's memory, which it may not grow nor keep its own in.
+    // A child's root may reach its ancestors' memory, which may not grow nor keep the child's.
     const handle = sig.paramTypes.length > 0 ? sig.paramTypes[0] : -1
     seedNames.push(names[0])
-    seedOrigins.push(sites.childTypes.indexOf(handle) >= 0 ? ORIGIN_PARENT : ORIGIN_ROOT)
+    const mayBeChild = sites.childTypes.indexOf(handle) >= 0 && !sites.plainHandle(program, site)
+    seedOrigins.push(mayBeChild ? ORIGIN_CHILD_ROOT : ORIGIN_ROOT)
   }
   if (role === REGION_ENTER_WITH && names.length > 1) {
     seedNames.push(names[1])
@@ -1536,9 +1571,17 @@ export class ChildSites {
   /** Each `enter` or `enterWith` instance judged, and the function it runs. */
   enterNames: string[]
   enterFns: FunctionSig[]
+  /**
+   * Variables declared from `region` or `regionWith`, and those bound any
+   * other way: one in the first and not the second holds a plain handle.
+   */
+  plain: Local[]
+  spoiled: Local[]
 
   constructor() {
     this.childTypes = []
+    this.plain = []
+    this.spoiled = []
     this.nodes = []
     this.fromRoot = []
     this.holders = []
@@ -1548,6 +1591,54 @@ export class ChildSites {
 
   indexOf(node: Node): i32 {
     return this.nodes.indexOf(node)
+  }
+
+  /** Notes every variable `node` binds, under `program`'s tables, as `plain` or `spoiled`. */
+  scan(program: CheckedProgram, node: Node): void {
+    if (node.kind === N_VAR_DECL) {
+      const local = program.nodeLocals[node.id]
+      const init = node.children[2]
+      if (local !== null && init.kind !== N_EMPTY && this.makesPlain(program, init)) {
+        this.plain.push(local)
+      } else if (local !== null) {
+        this.spoiled.push(local)
+      }
+    } else if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+      const target = unwrapParens(node.children[0])
+      const local: Local | null = target.kind === N_IDENT ? program.nodeLocals[target.id] : null
+      if (local !== null) {
+        this.spoiled.push(local)
+      }
+    }
+    for (const child of node.children) {
+      this.scan(program, child)
+    }
+  }
+
+  /** Whether `value` is a call of `region` or `regionWith`. */
+  makesPlain(program: CheckedProgram, value: Node): boolean {
+    const v = unwrapParens(value)
+    const callee: FunctionSig | null = v.kind === N_CALL ? program.nodeCallees[v.id] : null
+    const role = callee === null ? REGION_NONE : regionRoleOf(callee)
+    return role === REGION_MAKE || role === REGION_MAKE_WITH
+  }
+
+  /**
+   * Whether the handle the `enter` or `enterWith` call `site` is handed is
+   * one `region` or `regionWith` made: made there, or a variable only
+   * ever bound to one. A parameter or a field may hold a child's.
+   */
+  plainHandle(program: CheckedProgram, site: Node): boolean {
+    const args = site.children[1].children
+    if (args.length === 0) {
+      return false
+    }
+    const arg = unwrapParens(args[0])
+    if (this.makesPlain(program, arg)) {
+      return true
+    }
+    const local: Local | null = arg.kind === N_IDENT ? program.nodeLocals[arg.id] : null
+    return local !== null && this.plain.indexOf(local) >= 0 && this.spoiled.indexOf(local) < 0
   }
 
   record(node: Node, fromRoot: boolean, holder: FunctionSig): void {

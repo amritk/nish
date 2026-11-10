@@ -489,6 +489,7 @@ cases/region_cache added after R6: no rewriter to freeze it with
 cases/region_child_chain added after R6: no rewriter to freeze it with
 cases/region_child_keep added after R6: no rewriter to freeze it with
 cases/region_child_map added after R6: no rewriter to freeze it with
+cases/region_child_plain added after R6: no rewriter to freeze it with
 cases/region_copied_churn added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with

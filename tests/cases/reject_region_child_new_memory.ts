@@ -1,10 +1,9 @@
 // NL2610: memory new in this `enter` may be released by a scope while the
 // child lives on, so the child may not keep it.
-import { Region, child, childWith, enter, free, region } from "nish:region";
+import { Region, childWith, enter, free, region } from "nish:region";
 
 class Item {
   name: string;
-  next: Item | null = null;
   constructor(name: string) {
     this.name = name;
   }

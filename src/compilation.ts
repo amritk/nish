@@ -2501,6 +2501,7 @@ export class Compilation {
     // A `child` call is judged after every `enter` walk has said where it is made.
     const sites = new ChildSites()
     for (const unit of this.modules) {
+      sites.scan(unit.checker.program, unit.checker.program.file)
       for (const call of unit.checker.program.regionCalls) {
         if (isChildMaker(regionRoleOf(call.sig))) {
           sites.childTypes.push(call.sig.returnType)
