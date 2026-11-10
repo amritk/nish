@@ -147,7 +147,7 @@ function construct(emitter: Emitter, type: i32, isOk: boolean, payload: string, 
 function isResultConstructorCall(program: CheckedProgram, table: TypeTable, call: Node): boolean -> @isResultConstructorCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isResult nish_panic_index nish_str_eq
-  pointer program: size=704 writesThrough=false captured=false
+  pointer program: size=728 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isResult#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -580,7 +580,7 @@ function emitResultMethod(emitter: Emitter, expr: Node, receiver: i32): string -
 function resultMethodName(program: CheckedProgram, table: TypeTable, call: Node): string -> @resultMethodName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isResult nish_panic_index nish_str_eq
-  pointer program: size=704 writesThrough=false captured=false
+  pointer program: size=728 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isResult#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0

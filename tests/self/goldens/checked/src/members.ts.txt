@@ -52,6 +52,7 @@ import N_NUMBER from "./nodes" -> const N_NUMBER
 import N_PAREN from "./nodes" -> const N_PAREN
 import N_PROPERTY from "./nodes" -> const N_PROPERTY
 import N_RETURN from "./nodes" -> const N_RETURN
+import N_SPREAD from "./nodes" -> const N_SPREAD
 import N_THIS from "./nodes" -> const N_THIS
 import N_UNARY from "./nodes" -> const N_UNARY
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
@@ -70,6 +71,7 @@ import regionNewMessage from "./region-rules" -> function @regionNewMessage
 import EnumInfo from "./program" -> struct EnumInfo
 import FunctionSig from "./program" -> struct FunctionSig
 import ROLE_CONSTRUCTOR from "./program" -> const ROLE_CONSTRUCTOR
+import SpreadCopy from "./program" -> struct SpreadCopy
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import StructInfo from "./program" -> struct StructInfo
 import simdCompareMessage from "./simd" -> function @simdCompareMessage
@@ -512,56 +514,135 @@ function classLiteralMessage(name: string): string -> @classLiteralMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
+function hasSpread(expr: Node): boolean -> @hasSpread
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer expr: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 prop: Node (const)
+function checkSpreadSource(ctx: CheckContext, spread: Node, info: StructInfo, scope: Scope): StructInfo | null -> @checkSpreadSource
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkExpression
+  calls: CheckContext.error StructInfo.field TypeTable.isNullable TypeTable.isStruct TypeTable.isUnion TypeTable.secretInner TypeTable.typeName checkExpression isCollectionStruct isThreadsStruct nish_panic_index nish_str_concat structOf
+  pointer ctx: size=304 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0 structOf#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
+  pointer spread: size=40 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
+  stackSites=0 stackLocals=0
+  local +0:9 value: Node (const)
+  local +1:9 got: i32 (const)
+  callee +1:15 checkExpression -> @checkExpression
+  local +5:9 target: string (const)
+  callee +5:18 TypeTable.typeName -> @TypeTable.typeName
+  local +6:9 spelled: string (const)
+  callee +6:19 TypeTable.typeName -> @TypeTable.typeName
+  callee +7:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +8:5 CheckContext.error -> @CheckContext.error
+  callee +15:7 TypeTable.isUnion -> @TypeTable.isUnion
+  callee +16:5 CheckContext.error -> @CheckContext.error
+  local +23:7 source: StructInfo | null (let)
+  callee +24:7 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +25:14 structOf -> @structOf
+  callee +29:5 isCollectionStruct -> @isCollectionStruct
+  callee +30:5 isThreadsStruct -> @isThreadsStruct
+  callee +31:5 TypeTable.secretInner -> @TypeTable.secretInner
+  callee +33:5 CheckContext.error -> @CheckContext.error
+  local +40:14 field: FieldInfo (const)
+  local +41:11 into: FieldInfo | null (const)
+  callee +41:18 StructInfo.field -> @StructInfo.field
+  callee +43:7 CheckContext.error -> @CheckContext.error
+  callee +52:7 CheckContext.error -> @CheckContext.error
+  callee +61:7 CheckContext.error -> @CheckContext.error
+  callee +63:68 TypeTable.typeName -> @TypeTable.typeName
+  callee +64:28 TypeTable.typeName -> @TypeTable.typeName
+function namedIn(names: string[], name: string): boolean -> @namedIn
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer names: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 each: string (const)
+function recordSpreadCopies(ctx: CheckContext, expr: Node, into: i32, sources: StructInfo[]): void -> @recordSpreadCopies
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: into
+  calls: SpreadCopy.constructor namedIn nish_alloc_struct nish_array_grow nish_panic_index
+  pointer ctx: size=304 writesThrough=false captured=false
+  pointer expr: size=40 writesThrough=false captured=false
+  pointer sources: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local -20:9 later: string[] (const)
+  local -19:7 next: i32 (let)
+  local -18:7 i: i32 (let)
+  local -16:11 prop: Node (const)
+  local -12:13 source: StructInfo (const)
+  local -10:13 fields: string[] (const)
+  local -9:18 field: FieldInfo (const)
+  callee -8:14 namedIn -> @namedIn
+  local -4:18 name: string (const)
+  local -1:13 copy: SpreadCopy (const)
+  callee -1:20 new SpreadCopy -> @SpreadCopy.constructor
 function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkObjectLiteral [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: want
-  calls: CheckContext.error CheckContext.errorType StructInfo.field TypeTable.assignable TypeTable.isEntered TypeTable.isStruct TypeTable.stripNull TypeTable.typeName checkExpression classLiteralMessage hasMethods holderLiteralMessage isThreadsStruct nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf structOf takesDeclaredContext
-  pointer ctx: size=304 writesThrough=true captured=true passedTo=CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 CheckContext.error#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.error#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
-  stackSites=1 stackLocals=1
+  calls: CheckContext.error CheckContext.errorType StructInfo.field TypeTable.assignable TypeTable.isEntered TypeTable.isStruct TypeTable.stripNull TypeTable.typeName checkExpression checkSpreadSource classLiteralMessage hasMethods hasSpread holderLiteralMessage isThreadsStruct namedIn nish_array_grow nish_panic_index nish_str_concat nish_str_eq recordSpreadCopies secretFieldOf structOf takesDeclaredContext
+  pointer ctx: size=304 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 CheckContext.errorType#0 checkSpreadSource#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 CheckContext.error#0 recordSpreadCopies#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=hasSpread#0 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.error#1 recordSpreadCopies#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkSpreadSource#3 checkExpression#2
+  stackSites=4 stackLocals=4
   callee +0:20 TypeTable.isStruct -> @TypeTable.isStruct
   callee +0:39 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +1:12 CheckContext.errorType -> @CheckContext.errorType
-  local +6:9 target: i32 (const)
-  callee +6:18 TypeTable.stripNull -> @TypeTable.stripNull
-  local +7:9 info: StructInfo | null (const)
-  callee +7:16 structOf -> @structOf
-  callee +12:7 secretFieldOf -> @secretFieldOf
-  callee +13:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +13:32 holderLiteralMessage -> @holderLiteralMessage
-  callee +18:37 hasMethods -> @hasMethods
-  callee +18:58 isThreadsStruct -> @isThreadsStruct
-  callee +19:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +19:32 classLiteralMessage -> @classLiteralMessage
-  callee +19:52 TypeTable.typeName -> @TypeTable.typeName
-  local +21:9 seen: string[] (const)
-  local +22:14 prop: Node (const)
-  local +26:11 field: FieldInfo | null (const)
-  callee +26:19 StructInfo.field -> @StructInfo.field
-  callee +28:7 CheckContext.error -> @CheckContext.error
-  callee +28:28 TypeTable.typeName -> @TypeTable.typeName
-  local +31:9 duplicate: boolean (let)
-  local +32:16 name: string (const)
-  callee +38:7 CheckContext.error -> @CheckContext.error
-  local +42:11 value: Node (const)
-  local +46:11 context: i32 (const)
-  callee +46:21 takesDeclaredContext -> @takesDeclaredContext
-  callee +46:52 TypeTable.isEntered -> @TypeTable.isEntered
-  local +47:11 got: i32 (const)
-  callee +47:17 checkExpression -> @checkExpression
-  callee +48:29 TypeTable.assignable -> @TypeTable.assignable
-  local +49:13 spelled: string (const)
-  callee +49:23 TypeTable.typeName -> @TypeTable.typeName
-  callee +50:7 CheckContext.error -> @CheckContext.error
-  callee +52:40 TypeTable.typeName -> @TypeTable.typeName
-  callee +52:115 TypeTable.typeName -> @TypeTable.typeName
-  local +56:14 field: FieldInfo (const)
-  local +57:9 set: boolean (let)
-  local +58:16 name: string (const)
-  callee +64:7 CheckContext.error -> @CheckContext.error
-  callee +66:33 TypeTable.typeName -> @TypeTable.typeName
+  callee +1:9 hasSpread -> @hasSpread
+  callee +2:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +8:12 CheckContext.errorType -> @CheckContext.errorType
+  local +13:9 target: i32 (const)
+  callee +13:18 TypeTable.stripNull -> @TypeTable.stripNull
+  local +14:9 info: StructInfo | null (const)
+  callee +14:16 structOf -> @structOf
+  callee +19:7 secretFieldOf -> @secretFieldOf
+  callee +20:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +20:32 holderLiteralMessage -> @holderLiteralMessage
+  callee +25:37 hasMethods -> @hasMethods
+  callee +25:58 isThreadsStruct -> @isThreadsStruct
+  callee +26:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +26:32 classLiteralMessage -> @classLiteralMessage
+  callee +26:52 TypeTable.typeName -> @TypeTable.typeName
+  local +30:9 seen: string[] (const)
+  local +31:9 named: Node[] (const)
+  local +32:9 spread: string[] (const)
+  local +33:9 sources: StructInfo[] (const)
+  local +34:7 spreadFailed: boolean (let)
+  local +35:14 prop: Node (const)
+  local +37:13 source: StructInfo | null (const)
+  callee +37:22 checkSpreadSource -> @checkSpreadSource
+  local +42:18 field: FieldInfo (const)
+  local +43:13 k: i32 (let)
+  callee +47:13 CheckContext.error -> @CheckContext.error
+  callee +50:22 TypeTable.typeName -> @TypeTable.typeName
+  local +65:11 field: FieldInfo | null (const)
+  callee +65:19 StructInfo.field -> @StructInfo.field
+  callee +67:7 CheckContext.error -> @CheckContext.error
+  callee +67:28 TypeTable.typeName -> @TypeTable.typeName
+  local +70:9 duplicate: boolean (let)
+  local +71:16 name: string (const)
+  callee +77:7 CheckContext.error -> @CheckContext.error
+  local +82:11 value: Node (const)
+  local +86:11 context: i32 (const)
+  callee +86:21 takesDeclaredContext -> @takesDeclaredContext
+  callee +86:52 TypeTable.isEntered -> @TypeTable.isEntered
+  local +87:11 got: i32 (const)
+  callee +87:17 checkExpression -> @checkExpression
+  callee +88:29 TypeTable.assignable -> @TypeTable.assignable
+  local +89:13 spelled: string (const)
+  callee +89:23 TypeTable.typeName -> @TypeTable.typeName
+  callee +90:7 CheckContext.error -> @CheckContext.error
+  callee +92:40 TypeTable.typeName -> @TypeTable.typeName
+  callee +92:115 TypeTable.typeName -> @TypeTable.typeName
+  local +99:14 field: FieldInfo (const)
+  callee +100:10 namedIn -> @namedIn
+  callee +100:40 namedIn -> @namedIn
+  callee +101:7 CheckContext.error -> @CheckContext.error
+  callee +103:33 TypeTable.typeName -> @TypeTable.typeName
+  callee +108:3 recordSpreadCopies -> @recordSpreadCopies
 function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkMemberAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
