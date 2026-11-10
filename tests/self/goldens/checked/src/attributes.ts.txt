@@ -2853,7 +2853,7 @@ function buildFactGraph(facts: FactsTable, runtime: RuntimeTable): FactGraph -> 
 function propagate(facts: FactsTable, runtime: RuntimeTable): void -> @propagate
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via clearRecursiveWillReturn
-  calls: buildFactGraph clearRecursiveWillReturn nameWriteVia nish_array_grow nish_panic_index visitFacts
+  calls: buildFactGraph checkSettled checkingPropagate clearRecursiveWillReturn nameWriteVia nish_array_grow visitFacts
   pointer facts: size=24 writesThrough=true captured=true passedTo=clearRecursiveWillReturn#0 buildFactGraph#0
   pointer runtime: size=16 writesThrough=false captured=false passedTo=buildFactGraph#1
   stackSites=1 stackLocals=1
@@ -2864,11 +2864,24 @@ function propagate(facts: FactsTable, runtime: RuntimeTable): void -> @propagate
   local +3:9 marked: boolean[] (const)
   local +7:7 again: boolean (let)
   local +10:9 i: i32 (let)
-  callee +14:13 visitFacts -> @visitFacts
-  local +17:15 r: i32 (let)
-  local +18:17 end: i32 (const)
-  local +20:19 ci: i32 (const)
-  callee +31:3 nameWriteVia -> @nameWriteVia
+  callee +16:13 visitFacts -> @visitFacts
+  local +19:15 r: i32 (let)
+  local +20:17 end: i32 (const)
+  local +22:19 ci: i32 (const)
+  callee +33:7 checkingPropagate -> @checkingPropagate
+  callee +34:5 checkSettled -> @checkSettled
+  callee +36:3 nameWriteVia -> @nameWriteVia
+function checkSettled(graph: FactGraph, list: FunctionFacts[]): void -> @checkSettled
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via visitFacts
+  calls: internalError nish_arena_release nish_exit nish_panic_overflow nish_str_concat visitFacts
+  pointer graph: size=56 writesThrough=false captured=false passedTo=visitFacts#0
+  pointer list: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +1:14 f: FunctionFacts (const)
+  callee +2:9 visitFacts -> @visitFacts
+  callee +4:9 internalError -> @internalError
 function propagateWhole(facts: FactsTable, runtime: RuntimeTable): void -> @propagateWhole
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via clearRecursiveWillReturn
@@ -2908,7 +2921,7 @@ function checkingPropagate(): boolean -> @checkingPropagate
 function checkPropagate(facts: FactsTable, fresh: FactsTable, runtime: RuntimeTable): void -> @checkPropagate
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via propagateWhole
-  calls: differsFrom internalError nish_arena_release nish_exit nish_str_concat propagateWhole
+  calls: differsFrom internalError nish_arena_release nish_exit nish_str_concat nish_str_from_i32 nish_write propagateWhole
   pointer facts: size=24 writesThrough=false captured=false
   pointer fresh: size=24 writesThrough=true captured=true passedTo=propagateWhole#0
   pointer runtime: size=16 writesThrough=false captured=false passedTo=propagateWhole#1
@@ -2934,13 +2947,13 @@ function visitFacts(graph: FactGraph, fi: i32, f: FunctionFacts): boolean -> @vi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: fi
-  calls: FunctionFacts.pointerParamAt composeArguments nish_panic_index nish_panic_overflow propagateCallee settleKeeps
+  calls: FunctionFacts.pointerParamAt composeArguments nish_panic_overflow propagateCallee settleKeeps
   pointer graph: size=56 writesThrough=false captured=false
   pointer f: size=416 writesThrough=true captured=false passedTo=propagateCallee#0 composeArguments#0 settleKeeps#0
   stackSites=0 stackLocals=0
-  local -26:7 changed: boolean (let)
-  local -25:7 c: i32 (let)
-  local -24:9 end: i32 (const)
+  local -28:7 changed: boolean (let)
+  local -27:7 c: i32 (let)
+  local -26:9 end: i32 (const)
   local -21:13 callee: string (const)
   callee -20:11 propagateCallee -> @propagateCallee
   callee -14:7 composeArguments -> @composeArguments
@@ -3356,9 +3369,9 @@ function nameWriteVia(graph: FactGraph, list: FunctionFacts[]): void -> @nameWri
   local -2:13 first: Node | null (const)
   local +6:9 c: i32 (let)
   local +7:11 end: i32 (const)
-  local +15:15 callee: string (const)
-  callee +17:11 writesShared -> @writesShared
-  callee +18:11 writesAnArgument -> @writesAnArgument
+  local +17:15 callee: string (const)
+  callee +19:11 writesShared -> @writesShared
+  callee +20:11 writesAnArgument -> @writesAnArgument
 function isCountedLoop(unit: AnalysisUnit, table: TypeTable, loop: Node, known: FactsTable | null): boolean -> @isCountedLoop
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: absOf bodyDisturbs bodyMayExtend isName nish_array_grow nish_panic_index nish_str_eq numericLiteralValue stepOf unwrapParens

@@ -366,14 +366,18 @@ it.
 
 The fixpoint (`propagate`) runs as a worklist over function indices. It
 visits only the functions whose callees' facts have moved, in the order
-whole round-robin passes over the table would. Debug builds and reviews can
-set `NISH_CHECK_PROPAGATE=1` (any non-empty value). The compiler then
-collects every facts table a second time and settles it by whole passes from
-the start. It stops with an internal error if any function's attributes,
-pointer-parameter facts, shared-write flags, `writeSite` or `writeVia`
-differ. `writeSite` is first-come, so a missing dependency can change it
-while every flag stays right; only a run from the start catches that.
-`tests/run.js propagate-guard` keeps the guard passing.
+whole round-robin passes over the table would. Setting the environment
+variable `NISH_CHECK_PROPAGATE=1` (any non-empty value, in any build) checks
+that answer twice. First, one more whole pass over the settled table must
+change nothing; every fact the fixpoint settles reports a move, so this
+catches an incomplete fixpoint in any field. Second, the compiler collects
+every facts table again and settles it by whole passes from the start; any
+function whose attributes, pointer-parameter facts, shared-write flags,
+`writeSite` or `writeVia` differ stops the compile with an internal error.
+`writeSite` is first-come, so a missing dependency can change it while every
+flag stays right; only the run from the start catches that. When both pass,
+the compiler says so on stderr. `tests/run.js propagate-guard` keeps the guard
+passing.
 
 | Attribute | Emitted when | Proof |
 | --- | --- | --- |

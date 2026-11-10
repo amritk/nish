@@ -5118,8 +5118,9 @@ const buildFactGraph = (facts: FactsTable, runtime: RuntimeTable): FactGraph => 
  * visits that do change something are the whole passes' own, in their order.
  * That order is part of the answer: `writeSite` names the own-slot store that
  * first set `writesElsewhere`, and another order could reach a different one.
- * `NISH_CHECK_PROPAGATE` compares the result with whole passes run from the
- * start (`checkPropagate`).
+ * `NISH_CHECK_PROPAGATE` checks the result twice: one more whole pass must
+ * change nothing (`checkSettled`), and whole passes run from the start must
+ * agree (`checkPropagate`).
  */
 const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
   clearRecursiveWillReturn(facts)
@@ -5143,7 +5144,7 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
           again = true
           let r = i + 1 < graph.callerStart.length ? graph.callerStart[i] : 0
           const end = i + 1 < graph.callerStart.length ? graph.callerStart[i + 1] : 0
-          while (r < end && r < graph.callers.length) {
+          while (r >= 0 && r < end && r < graph.callers.length) {
             const ci = graph.callers[r]
             if (ci >= 0 && ci < marked.length) {
               marked[ci] = true
@@ -5155,7 +5156,30 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
       i = i + 1
     }
   }
+  if (checkingPropagate()) {
+    checkSettled(graph, list)
+  }
   nameWriteVia(graph, list)
+}
+
+/**
+ * `NISH_CHECK_PROPAGATE`'s first test: one more whole pass over what the
+ * worklist settled must change nothing. `visitFacts` reports a move of any
+ * fact it settles, so this sees an incomplete fixpoint in every field; a
+ * function that moves stops the compile with an internal error naming it.
+ */
+const checkSettled = (graph: FactGraph, list: FunctionFacts[]): void => {
+  let i = 0
+  for (const f of list) {
+    if (visitFacts(graph, i, f)) {
+      process.exit(
+        internalError(
+          `propagate: \`${f.sourceName}\` moved on one more whole pass over the settled facts (NISH_CHECK_PROPAGATE)`
+        )
+      )
+    }
+    i = i + 1
+  }
 }
 
 /**
@@ -5224,7 +5248,8 @@ const checkingPropagate = (): boolean => {
 }
 
 /**
- * `NISH_CHECK_PROPAGATE`, set to anything: `fresh`, the same table collected
+ * `NISH_CHECK_PROPAGATE`'s second test (`checkSettled` is the first):
+ * `fresh`, the same table collected
  * again, is settled by whole passes (`propagateWhole`), and every function of
  * `facts`, which the worklist settled, must agree with it: its attributes,
  * its pointer parameters, the shared-write flags, and the `writeSite` and
@@ -5233,7 +5258,9 @@ const checkingPropagate = (): boolean => {
  * `writeSite` is first-come, so either can move it with every flag still
  * right, and one more pass over the settled table would change nothing: only
  * a run from the start sees it. The compile then stops with an internal error
- * naming the function and what differs. Unset, nothing is collected twice.
+ * naming the function and what differs; when every function agrees it says
+ * so on stderr, which is how a test knows the check ran. Unset, nothing is
+ * collected twice.
  */
 const checkPropagate = (facts: FactsTable, fresh: FactsTable, runtime: RuntimeTable): void => {
   propagateWhole(fresh, runtime)
@@ -5253,6 +5280,7 @@ const checkPropagate = (facts: FactsTable, fresh: FactsTable, runtime: RuntimeTa
     }
     i = i + 1
   }
+  console.error(`propagate: ${facts.list.length} functions agree with whole passes (NISH_CHECK_PROPAGATE)`)
 }
 
 /** What `f`, settled by the worklist, says that `g`, settled by whole passes, does not; `""` when they agree (`checkPropagate`). */
@@ -5287,7 +5315,9 @@ const visitFacts = (graph: FactGraph, fi: i32, f: FunctionFacts): boolean => {
   let changed = false
   let c = fi < graph.calleeStart.length ? graph.calleeStart[fi] : 0
   const end = fi + 1 < graph.calleeStart.length ? graph.calleeStart[fi + 1] : 0
-  while (c < end && c < graph.calleeFacts.length && c < graph.calleeRuntime.length) {
+  // `buildFactGraph` pushes the four callee arrays together, so they are one
+  // length; the tests against each are what proves every access in range.
+  while (c >= 0 && c < end && c < graph.calleeFacts.length && c < graph.calleeRuntime.length) {
     if (c < graph.calleeName.length && c < graph.calleeWhole.length) {
       const callee = graph.calleeName[c]
       if (propagateCallee(f, graph.calleeFacts[c], graph.calleeRuntime[c], callee, graph.calleeWhole[c])) {
@@ -6215,7 +6245,9 @@ const nameWriteVia = (graph: FactGraph, list: FunctionFacts[]): void => {
     }
     let c = fi < graph.calleeStart.length ? graph.calleeStart[fi] : 0
     const end = fi + 1 < graph.calleeStart.length ? graph.calleeStart[fi + 1] : 0
-    while (c < end && f.writeVia.length === 0) {
+    // The four callee arrays are one length (`buildFactGraph` pushes them
+    // together); testing each is what proves every access in range.
+    while (c >= 0 && c < end && f.writeVia.length === 0) {
       if (
         c < graph.calleeName.length &&
         c < graph.calleeFacts.length &&

@@ -19587,23 +19587,26 @@ if (dealtHere("cliChecks")) {
   }
 
   // ---- propagate's guard ---------------------------------------------------------------
-  // `NISH_CHECK_PROPAGATE` settles every facts table a second time, from a fresh
-  // collection by whole round-robin passes, and stops with an internal error
-  // when a function's attributes, shared-write flags, `writeSite` or `writeVia`
-  // differ from the worklist's (`checkPropagate` in src/attributes.ts). Nothing
-  // else sets it, so these keep it passing: the shared-write dumps, a parallel
-  // refusal that names its write, and the compiler's own largest module.
+  // `NISH_CHECK_PROPAGATE` checks the worklist's answer twice (src/attributes.ts):
+  // one more whole round-robin pass over the settled facts must change nothing
+  // (`checkSettled`), and every table, collected again and settled by whole
+  // passes from the start, must agree on each function's attributes,
+  // shared-write flags, `writeSite` and `writeVia` (`checkPropagate`). A
+  // difference is an internal error; agreement is a stderr line, which proves
+  // the check ran. Nothing else sets the variable, so these keep it passing:
+  // the shared-write dumps, a parallel refusal that names its write (exit 1,
+  // its diagnostic unchanged), and the compiler's own largest module.
   if (!only || "propagate-guard".includes(only) || "attributes".includes(only)) {
     const guarded = [
-      ["tests/cases/dump_shared_write_alloc.ts", "--emit-checked"],
-      ["tests/cases/dump_shared_write_callee.ts", "--emit-checked"],
-      ["tests/cases/dump_shared_write_field.ts", "--emit-checked"],
-      ["tests/cases/dump_shared_write_panic.ts", "--emit-checked"],
-      ["tests/cases/reject_caps_parallel_clock.ts", "--emit-checked"],
-      ["src/attributes.ts", "--emit-checked"],
+      ["tests/cases/dump_shared_write_alloc.ts", 0],
+      ["tests/cases/dump_shared_write_callee.ts", 0],
+      ["tests/cases/dump_shared_write_field.ts", 0],
+      ["tests/cases/dump_shared_write_panic.ts", 0],
+      ["tests/cases/reject_caps_parallel_clock.ts", 1],
+      ["src/attributes.ts", 0],
     ]
-    for (const [file, flag] of guarded) {
-      const r = spawnSync(NISH, [flag, file], {
+    for (const [file, status] of guarded) {
+      const r = spawnSync(NISH, ["--emit-checked", file], {
         cwd: root,
         encoding: "utf8",
         env: { ...process.env, NISH_CHECK_PROPAGATE: "1" },
@@ -19611,9 +19614,11 @@ if (dealtHere("cliChecks")) {
       })
       const said = `${r.stderr ?? ""}`
       check(
-        `propagate-guard: ${path.basename(file)} settles as whole passes do`,
-        r.status !== 70 && !said.includes("NISH_CHECK_PROPAGATE"),
-        said.slice(0, 2000)
+        `propagate-guard: ${path.basename(file)} settles as whole passes do, exit ${status}`,
+        r.status === status &&
+          said.includes("agree with whole passes (NISH_CHECK_PROPAGATE)") &&
+          !said.includes("internal compiler error"),
+        `exit ${r.status} (signal ${r.signal}): ${said.slice(0, 2000)}`
       )
     }
   }
