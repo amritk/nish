@@ -381,7 +381,7 @@ function Checker.importArrayMethods(this: Checker): void -> @Checker.importArray
   callee -1:30 arrayMethodTemplates -> @arrayMethodTemplates
   callee -1:51 StringSet.at -> @StringSet.at
   callee +1:11 new ImportBinding -> @ImportBinding.constructor
-  callee +1:56 arrayMethodLocal -> @arrayMethodLocal
+  callee +4:13 arrayMethodLocal -> @arrayMethodLocal
 function Checker.qualifySymbols(this: Checker): void -> @Checker.qualifySymbols [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
