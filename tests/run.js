@@ -19586,6 +19586,43 @@ if (dealtHere("cliChecks")) {
     )
   }
 
+  // ---- propagate's guard ---------------------------------------------------------------
+  // `NISH_CHECK_PROPAGATE` checks the worklist's answer twice (src/attributes.ts):
+  // one more whole round-robin pass over the settled facts must change nothing
+  // (`checkSettled`), and every table, collected again and settled by whole
+  // passes from the start, must agree on each function's attributes,
+  // shared-write flags, `writeSite` and `writeVia` (`checkPropagate`). A
+  // difference is an internal error; agreement is a stderr line, which proves
+  // the check ran. Nothing else sets the variable, so these keep it passing:
+  // the shared-write dumps, a parallel refusal that names its write (exit 1,
+  // its diagnostic unchanged), and the compiler's own largest module.
+  if (!only || "propagate-guard".includes(only) || "attributes".includes(only)) {
+    const guarded = [
+      ["tests/cases/dump_shared_write_alloc.ts", 0],
+      ["tests/cases/dump_shared_write_callee.ts", 0],
+      ["tests/cases/dump_shared_write_field.ts", 0],
+      ["tests/cases/dump_shared_write_panic.ts", 0],
+      ["tests/cases/reject_caps_parallel_clock.ts", 1],
+      ["src/attributes.ts", 0],
+    ]
+    for (const [file, status] of guarded) {
+      const r = spawnSync(NISH, ["--emit-checked", file], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, NISH_CHECK_PROPAGATE: "1" },
+        maxBuffer: 256 * 1024 * 1024,
+      })
+      const said = `${r.stderr ?? ""}`
+      check(
+        `propagate-guard: ${path.basename(file)} settles as whole passes do, exit ${status}`,
+        r.status === status &&
+          said.includes("agree with whole passes (NISH_CHECK_PROPAGATE)") &&
+          !said.includes("internal compiler error"),
+        `exit ${r.status} (signal ${r.signal}): ${said.slice(0, 2000)}`
+      )
+    }
+  }
+
   // ---- WP12: exit codes --------------------------------------------------------------
   // The CLI's contract (docs/wp12-release.md): 0 ok, 1 compile error, 2 usage, 3 toolchain,
   // 70 internal compiler error. Each failure mode is driven from outside the compiler:
