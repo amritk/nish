@@ -17,6 +17,9 @@ const REGION_OPEN: i32 = 7 [exported]
 const REGION_CLOSE: i32 = 8 [exported]
 const REGION_REOPEN: i32 = 9 [exported]
 const REGION_LEAVE: i32 = 10 [exported]
+const REGION_CHILD: i32 = 11 [exported]
+const REGION_CHILD_WITH: i32 = 12 [exported]
+const REGION_CHILD_NEW: i32 = 13 [exported]
 function isRegionSource(program: CheckedProgram): boolean -> @isRegionSource [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isRegionModule
@@ -40,13 +43,28 @@ function regionRole(template: TemplateInfo): i32 -> @regionRole
   stackSites=0 stackLocals=0
   callee +0:31 isRegionSource -> @isRegionSource
   callee +2:7 roleNamed -> @roleNamed
+function isRegionMaker(role: i32): boolean -> @isRegionMaker [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: role
+  calls: isChildMaker
+  stackSites=0 stackLocals=0
+  callee +0:56 isChildMaker -> @isChildMaker
+function isChildMaker(role: i32): boolean -> @isChildMaker [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function isRunnerRole(role: i32): boolean -> @isRunnerRole [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: role
+  calls: isChildMaker
+  stackSites=0 stackLocals=0
+  callee +0:57 isChildMaker -> @isChildMaker
 function isRegionRunner(template: TemplateInfo): boolean -> @isRegionRunner [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: regionRole
+  calls: isRunnerRole regionRole
   pointer template: size=64 writesThrough=false captured=false passedTo=regionRole#0
   stackSites=0 stackLocals=0
-  local +0:9 role: i32 (const)
-  callee +0:16 regionRole -> @regionRole
+  callee +0:68 isRunnerRole -> @isRunnerRole
+  callee +0:81 regionRole -> @regionRole
 function regionRoleOf(sig: FunctionSig | null): i32 -> @regionRoleOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: regionRole
@@ -67,8 +85,10 @@ function regionRoleIn(program: CheckedProgram, sig: FunctionSig): i32 -> @region
   callee +3:7 roleNamed -> @roleNamed
 function isRegionIntrinsic(program: CheckedProgram, sig: FunctionSig): boolean -> @isRegionIntrinsic [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: regionRoleIn
+  calls: isChildMaker regionRoleIn
   pointer program: size=704 writesThrough=false captured=false passedTo=regionRoleIn#0
   pointer sig: size=176 writesThrough=false captured=false passedTo=regionRoleIn#1
   stackSites=0 stackLocals=0
-  callee +0:3 regionRoleIn -> @regionRoleIn
+  local +0:9 role: i32 (const)
+  callee +0:16 regionRoleIn -> @regionRoleIn
+  callee +1:34 isChildMaker -> @isChildMaker

@@ -380,6 +380,12 @@ fi
 
 CC=${CC:-clang}
 common=(-Wno-override-module)          # our IR is target-neutral; clang fills the triple in
+# -ffp-contract=off on every unit, every profile (WP50 S5): clang's default
+# contracts a*b+c in C into one fused multiply-add wherever the target has one
+# (arm64 always, x86-64 at v3), which rounds once where the source rounds
+# twice, so the runtime would print another float on arm64 than on x86-64.
+# Nish's own IR asks for no contraction, so the flag changes only the C units.
+common+=(-ffp-contract=off)
 elf=()                                 # flags that only make sense for ELF targets
 lld=0                                  # 1 when the link goes through ld.lld
 
@@ -451,10 +457,10 @@ if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 # runtime-parallel.c compiles to its sequential fallback because it tests
 # __wasi__ and __wasm__ as well as the macro.
 # --cpu: every unit at the one level, so the module, the runtime and the link
-# (LTO generates code there) agree. -ffp-contract=off keeps the meaning fixed:
-# v3 has FMA, and contracting a*b+c into one rounding would print a different
-# float than the baseline build (docs/LANGUAGE.md, "The CPU level").
-if [ -n "$cpu" ]; then common+=(-march=x86-64-v3 -ffp-contract=off); fi
+# (LTO generates code there) agree. v3 has FMA, and the -ffp-contract=off every
+# unit has above keeps a*b+c two roundings, so it prints the float the baseline
+# build does (docs/LANGUAGE.md, "The CPU level").
+if [ -n "$cpu" ]; then common+=(-march=x86-64-v3); fi
 
 # Hardening, on every native profile (the wasm and wasi ones build their own
 # command line and have none of these to give). docs/security/runtime.md
@@ -869,7 +875,7 @@ case "$profile" in
     fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
-    wasm_compile=(-Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory)
+    wasm_compile=(-Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory -ffp-contract=off)
     if [ "$profile" = wasm ]; then
       "$CC" "${wasm_compile[@]}" \
         ${tls[@]+"${tls[@]}"} \
@@ -1079,9 +1085,9 @@ case "$profile" in
     fi
     # SQLite builds on wasi-libc as it is: the amalgamation sees __wasi__ and
     # takes dot-file locking, no mmap and no WAL shared memory.
-    sqlite_objects --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG \
+    sqlite_objects --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG -ffp-contract=off \
       ${tls[@]+"${tls[@]}"} -ffunction-sections -fdata-sections
-    "$CC" -Wno-override-module --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG \
+    "$CC" -Wno-override-module --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG -ffp-contract=off \
       ${tls[@]+"${tls[@]}"} \
       -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all \
       "${inputs[@]}" ${libs[@]+"${libs[@]}"} -o "$out" ;;

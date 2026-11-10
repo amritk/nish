@@ -34,6 +34,7 @@ import {
 } from "./nish-modules"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { checkSimdCall } from "./simd"
+import { routedBuiltinLocal } from "./std-modules"
 import { Scope } from "./symbols"
 import {
   isNumeric,
@@ -608,6 +609,22 @@ const checkImulOperand = (ctx: CheckContext, arg: Node, scope: Scope): void => {
   }
 }
 
+/**
+ * Under `--deterministic`, record the `std/math.ts` function the checker's
+ * `importMath` imported under `routedBuiltinLocal` as the callee of a call to
+ * the builtin `name`: `quietBitsF64` or `quietBitsF32` for `f64ToBits` or
+ * `f32ToBits`, so a NaN answers one set of bits on every target, and
+ * `numberExact` or `parseFloatExact` for `Number` or `parseFloat` of a string,
+ * so a `0x` spelling reads one way on every target. The emitter then calls it
+ * as any other function.
+ */
+const bindRouted = (ctx: CheckContext, call: Node, name: string): void => {
+  const at = ctx.sigs.get(routedBuiltinLocal(name), -1)
+  if (at >= 0) {
+    ctx.program.nodeCallees[call.id] = ctx.program.functions[at]
+  }
+}
+
 const checkMath = (
   ctx: CheckContext,
   call: Node,
@@ -624,8 +641,9 @@ const checkMath = (
       }
     }
     // `std/math.ts`'s, bound by the checker's `importMath` under this spelling:
-    // `atan2`, `tan` and `hypot` always, and on a page module `sin`, `cos`,
-    // `exp`, `log` and `pow` too. Everywhere else those five stay intrinsics.
+    // `atan2`, `tan` and `hypot` always, and on a page module or under
+    // `--deterministic` `sin`, `cos`, `exp`, `log` and `pow` too. Everywhere
+    // else those five stay intrinsics.
     const at = ctx.sigs.get(name, -1)
     if (at >= 0) {
       ctx.program.nodeCallees[call.id] = ctx.program.functions[at]
@@ -863,12 +881,16 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     if (checkBuiltinArity(ctx, call, name, args, 1)) {
       checkArgumentType(ctx, args.children[0], scope, name, from)
     }
+    if (name === "f64ToBits") {
+      bindRouted(ctx, call, name)
+    }
     return name === "f64ToBits" ? T_I64 : T_F64
   }
   if (name === "f32ToBits") {
     if (checkBuiltinArity(ctx, call, name, args, 1)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_F32)
     }
+    bindRouted(ctx, call, name)
     return T_I32
   }
   if (name === "ctSelect" || name === "ctEq") {
@@ -891,6 +913,8 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       const got = checkExpression(ctx, args.children[0], scope, T_STRING)
       if (got !== T_ERROR && got !== T_STRING) {
         ctx.error(args.children[0], `\`${name}\` expects a string, got ${ctx.table.typeName(got)}`)
+      } else if (got === T_STRING && name === "parseFloat") {
+        bindRouted(ctx, call, name)
       }
     }
     return name === "parseInt" ? T_I32 : T_F64
@@ -903,6 +927,8 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
           args.children[0],
           `\`Number\` expects a string, number, or boolean, got ${ctx.table.typeName(got)}`
         )
+      } else if (got === T_STRING) {
+        bindRouted(ctx, call, name)
       }
     }
     return T_F64

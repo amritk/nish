@@ -1,13 +1,16 @@
 /**
  * `std/text` — the string operations a program has to write itself.
  *
- *     import { replaceAll, splitLines, splitWhitespace, trim } from "nish/text";
+ *     import { asciiUpper, padStart, replaceAll, split, splitLines, splitWhitespace, trim } from "nish/text";
  *
  *     export const main = (): i32 => {
  *       const lines: string[] = splitLines("a b\n  c  \n"); // ["a b", "  c  "]
  *       const words: string[] = splitWhitespace(lines[0]); // ["a", "b"]
  *       const c: string = trim(lines[1]); // "c"
  *       const dashed: string = replaceAll("a b", " ", "-"); // "a-b"
+ *       const fields: string[] = split("a,,b", ","); // ["a", "", "b"]
+ *       const loud: string = asciiUpper("get_id"); // "GET_ID"
+ *       const code: string = padStart("7", 3, "0"); // "007"
  *       return toI32(words.length);
  *     };
  *
@@ -21,10 +24,13 @@
  * **So a program that reads a file and wants its lines writes the loop.** This
  * module is that loop, written once. Every offset here is a **byte** offset,
  * like `s.length` itself, and every function but one is ASCII-only where it
- * inspects characters at all — a UTF-8 string passes through `splitLines` and
- * `split` untouched, because a newline and a space cannot appear inside a
- * multi-byte sequence. The one is `codePointLength`, which counts code points
- * rather than bytes and answers the same natively and under Node; it says how.
+ * inspects characters at all — a UTF-8 string passes through `splitLines`,
+ * `splitWhitespace`, `asciiUpper` and `asciiLower` untouched, because an ASCII
+ * byte cannot appear inside a multi-byte sequence. The one is
+ * `codePointLength`, which counts code points rather than bytes and answers the
+ * same natively and under Node; it says how. `padStart` and `padEnd` count a
+ * width in `s.length`'s units, so they are the two whose answers differ under
+ * Node on text that is not ASCII; each says by how much.
  *
  * **Every width this module declares is spelled** (`i32`, never `number`) *and*
  * every value a builtin hands it is converted at the read: `s.length`,
@@ -180,6 +186,62 @@ export const trim = (text: string): string => trimEnd(trimStart(text))
  * @returns `true` when `needle` occurs in `haystack`.
  */
 export const contains = (haystack: string, needle: string): boolean => toI32(haystack.indexOf(needle)) >= 0
+
+/**
+ * The pieces of `text` between the occurrences of `sep`: JavaScript's
+ * `text.split(sep)` for a separator that is not empty. A separator at the
+ * start, at the end or next to another gives an empty piece, so
+ * `split(",a,,b,", ",")` is `["", "a", "", "b", ""]`; `split("", ",")` is
+ * `[""]`; and a separator that never occurs gives `[text]`. Compare
+ * `splitWhitespace`, which drops the empty pieces.
+ *
+ * The pieces are the same natively and under Node for any text and any
+ * separator, multi-byte ones included: a match is a whole UTF-8 sequence
+ * natively and a whole run of UTF-16 units under Node, and a well-formed
+ * string holds a code point's encoding only where that code point is. So
+ * there is nothing for NL8001 (`--warn-portability`) to warn about, and it
+ * does not; the pieces' own `.length`s are still counted in each platform's
+ * units, and NL8001 reads those where the program does.
+ *
+ * **An empty separator panics.** JavaScript splits a string on `""` into its
+ * UTF-16 units, which natively would be its bytes, and the two answers differ
+ * on any text that is not ASCII. A separator is almost always a literal the
+ * caller chose, so an empty one is a mistake in the program, like an index out
+ * of range, and not a condition a caller could recover from.
+ *
+ * @param text The text to split.
+ * @param sep The separator, compared byte for byte; it must not be empty.
+ *   Occurrences are found left to right and do not overlap.
+ * @returns A fresh array of the pieces, in order; never empty.
+ */
+export const split = (text: string, sep: string): string[] => {
+  const sepLength: i32 = toI32(sep.length)
+  if (sepLength === 0) {
+    panic("split: an empty separator")
+  }
+  const length: i32 = toI32(text.length)
+  const parts: string[] = []
+  let start: i32 = 0
+  while (true) {
+    // Searching from `start` rather than cutting `text` down after each match
+    // copies nothing until the piece is taken.
+    const at: i32 = toI32(text.indexOf(sep, start))
+    // `start` is 0 or one past a match, so it is never negative and never
+    // past `length`, and a hit starts at or after `start` and a whole
+    // separator before `length`. The tests around the `substring`s therefore
+    // always hold, but for the empty tail after a final separator; they are
+    // written because they are what proves both bounds within `text`, as in
+    // `splitLines`.
+    if (at < 0) {
+      parts.push(start >= 0 && start < length ? text.substring(start, length) : "")
+      return parts
+    }
+    if (start >= 0 && start < length && at >= 0 && at < length) {
+      parts.push(text.substring(start, at))
+    }
+    start = at + sepLength
+  }
+}
 
 /**
  * `text` with every occurrence of `needle` replaced by `replacement`.
@@ -418,3 +480,167 @@ export const codePointLength = (text: string): i32 => {
   }
   return toI32(count)
 }
+
+/** The first and last lower-case ASCII letters, `a` and `z`. */
+const ASCII_LOWER_A: i32 = 97
+const ASCII_LOWER_Z: i32 = 122
+
+/** The first and last upper-case ASCII letters, `A` and `Z`. */
+const ASCII_UPPER_A: i32 = 65
+const ASCII_UPPER_Z: i32 = 90
+
+/** How far apart an ASCII letter's two cases are: `a` is `A` plus this. */
+const ASCII_CASE_DISTANCE: i32 = 32
+
+/**
+ * `text` with every unit from `low` to `high` moved by `delta`, and every other
+ * unit as it was: `asciiUpper` and `asciiLower`'s one walk.
+ *
+ * Natively the units are bytes, so the answer is built as bytes, one array and
+ * one `String.fromBytes`. Under Node a unit can be wider than a byte, so the
+ * unchanged runs are cut out of `text` whole and only the changed letters are
+ * made one at a time. The name is long for the reason `isTextBlankByte`'s is.
+ */
+const shiftTextAsciiRange = (text: string, low: i32, high: i32, delta: i32): string => {
+  const length: i32 = toI32(text.length)
+  let i: i32 = 0
+  if (textUnitsAreBytes()) {
+    const bytes: u8[] = []
+    while (i < length) {
+      const code: i32 = toI32(text.charCodeAt(i))
+      bytes.push(toU8(code >= low && code <= high ? code + delta : code))
+      i += 1
+    }
+    return String.fromBytes(bytes, 0, length)
+  }
+  const parts: string[] = []
+  let start: i32 = 0
+  while (i < length) {
+    const code: i32 = toI32(text.charCodeAt(i))
+    if (code >= low && code <= high) {
+      // `start` never passes `i`, which is below `length`, so this always
+      // holds; it is what proves `start` within `text`, as in `splitLines`.
+      if (start >= 0 && start < length) {
+        parts.push(text.substring(start, i))
+      }
+      parts.push(String.fromCharCode(code + delta))
+      start = i + 1
+    }
+    i += 1
+  }
+  if (start < length) {
+    parts.push(text.substring(start, length))
+  }
+  return parts.join("")
+}
+
+/**
+ * `text` with its ASCII letters `a` to `z` made `A` to `Z`, and nothing else
+ * changed: every other byte, a UTF-8 sequence's included, passes through.
+ *
+ * This is not JavaScript's `toUpperCase`, which knows Unicode's case table:
+ * that gives `"SS"` for `"ß"` and `"É"` for `"é"`, where this gives `"ß"` and
+ * `"é"`. That table is more than this runtime has room for, and the text this
+ * is for, identifiers, keywords and protocol tokens, is ASCII. On ASCII text
+ * the two agree, and this answers the same natively and under Node for any
+ * text, since a byte or unit from 97 to 122 is always the letter itself, so
+ * NL8001 (`--warn-portability`) has nothing to warn about, and does not.
+ *
+ * @param text The text whose ASCII letters are upper-cased.
+ * @returns A fresh string as long as `text`.
+ */
+export const asciiUpper = (text: string): string =>
+  shiftTextAsciiRange(text, ASCII_LOWER_A, ASCII_LOWER_Z, -ASCII_CASE_DISTANCE)
+
+/**
+ * `text` with its ASCII letters `A` to `Z` made `a` to `z`, and nothing else
+ * changed: every other byte, a UTF-8 sequence's included, passes through.
+ *
+ * This is not JavaScript's `toLowerCase`, for the reason `asciiUpper` gives:
+ * `"É"` stays `"É"` here. On ASCII text the two agree, and this answers the
+ * same natively and under Node for any text.
+ *
+ * @param text The text whose ASCII letters are lower-cased.
+ * @returns A fresh string as long as `text`.
+ */
+export const asciiLower = (text: string): string =>
+  shiftTextAsciiRange(text, ASCII_UPPER_A, ASCII_UPPER_Z, ASCII_CASE_DISTANCE)
+
+/**
+ * The padding `padStart` and `padEnd` put beside `text`: `fill` repeated and
+ * cut so that `text` and the padding together are `width` units long, or `""`
+ * when `text` is that long already or `fill` is empty.
+ *
+ * `fill` must be ASCII, and `caller` names the function in the panic when it
+ * is not. A multi-byte fill cut at a byte width could end in half a UTF-8
+ * sequence natively, which is text that is not well-formed, and padding is
+ * done with spaces and zeros. The fill is checked before the width, so a bad
+ * fill panics whether or not any padding was needed. The name is long for the
+ * reason `isTextBlankByte`'s is.
+ */
+const textPadding = (text: string, width: i32, fill: string, caller: string): string => {
+  const fillLength: i32 = toI32(fill.length)
+  let j: i32 = 0
+  while (j < fillLength) {
+    if (toI32(fill.charCodeAt(j)) >= NON_ASCII) {
+      panic(`${caller}: every byte of the fill must be ASCII`)
+    }
+    j += 1
+  }
+  const needed: i32 = width - toI32(text.length)
+  if (needed <= 0 || fillLength === 0) {
+    return ""
+  }
+  const parts: string[] = []
+  let left: i32 = needed
+  while (left >= fillLength) {
+    parts.push(fill)
+    left -= fillLength
+  }
+  parts.push(fill.substring(0, left))
+  return parts.join("")
+}
+
+/**
+ * `text` with `fill` repeated in front of it until it is `width` units long:
+ * JavaScript's `text.padStart(width, fill)` for ASCII text. A `width` no
+ * longer than `text`, or an empty `fill`, gives `text` unchanged, and a fill of
+ * several characters repeats and is cut at the width, so
+ * `padStart("7", 4, "ab")` is `"aba7"`.
+ *
+ * **`width` counts the units `text.length` counts**: bytes natively and UTF-16
+ * units under Node. So on text that is not ASCII the two answers differ:
+ * `padStart("é", 3, " ")` is `" é"` natively, where `é` is two bytes, and
+ * `"  é"` under Node, where it is one unit. NL8001 (`--warn-portability`)
+ * does not warn about it: the warning reads offsets in the program it is given,
+ * the library's own `text.length` is not walked, and what reaches the caller is
+ * a string rather than a number. Pad ASCII text, or count the width with
+ * `codePointLength` yourself, when the answer must be the same on both.
+ *
+ * **A fill that is not ASCII panics**, for the reason `indexOfAny`'s set must
+ * be ASCII: natively it would be cut in the middle of a UTF-8 sequence.
+ *
+ * @param text The text to pad.
+ * @param width The length the answer is padded to, in `text.length`'s units.
+ * @param fill The ASCII text repeated as the padding; `" "` and `"0"` are
+ *   the usual ones.
+ * @returns `text` with the padding in front; `text` unchanged when no
+ *   padding is needed.
+ */
+export const padStart = (text: string, width: i32, fill: string): string =>
+  textPadding(text, width, fill, "padStart") + text
+
+/**
+ * `text` with `fill` repeated after it until it is `width` units long:
+ * JavaScript's `text.padEnd(width, fill)` for ASCII text, with `padStart`'s
+ * rules. `padEnd("7", 4, "ab")` is `"7aba"`, and `padEnd("é", 3, " ")` is
+ * `"é "` natively and `"é  "` under Node.
+ *
+ * @param text The text to pad.
+ * @param width The length the answer is padded to, in `text.length`'s units.
+ * @param fill The ASCII text repeated as the padding.
+ * @returns `text` with the padding after it; `text` unchanged when no
+ *   padding is needed.
+ */
+export const padEnd = (text: string, width: i32, fill: string): string =>
+  text + textPadding(text, width, fill, "padEnd")

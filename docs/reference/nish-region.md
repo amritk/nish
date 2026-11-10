@@ -9,6 +9,8 @@ The `nish:region` builtin module, whose source is `std/region.ts`. A program imp
 ```ts
 import {
   Region,
+  child,
+  childWith,
   enter,
   enterWith,
   free,
@@ -44,6 +46,18 @@ free(r)                                           // r is dead from here
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="child" icon="phosphor/regular/function" href="#child">
+
+A new region whose parent is the region entered now: `region`, except that the child may keep the parent's memory that `enter` handed in, and freeing the parent frees the child.
+
+</scalar-card>
+
+<scalar-card title="child​With" icon="phosphor/regular/function" href="#childwith">
+
+`child` with one argument for `f`: the way the parent's memory reaches the child, because the arrow `child` runs captures nothing.
+
+</scalar-card>
 
 <scalar-card title="enter" icon="phosphor/regular/function" href="#enter">
 
@@ -88,7 +102,7 @@ A region whose root is a `T`.
 **This file is the source behind the builtin module**, and it is imported
 only by that name: `nish/region` is refused, so there is one spelling for the
 checker's rules to be read under (`src/region-check.ts`). What is written
-here is the meaning, over five intrinsics the compiler gives bodies of their
+here is the meaning, over six intrinsics the compiler gives bodies of their
 own (`src/emit-region.ts`), which swap the thread's arena for the region's
 around the function they run:
 
@@ -97,8 +111,12 @@ around the function they run:
 - `region(f)` makes a region, runs `f` with every allocation landing in
   it, and keeps what `f` answers as the region's root;
 - `enter(r, f)` runs `f(root)` the same way, and answers `f`'s scalar;
-- `free(r)` gives the region's memory back. A handle used after it is
-  freed, or entered twice, or freed while entered, stops the program.
+- `free(r)` gives the region's memory back, and its children's. A handle
+  used after it is freed, or entered twice, or freed while it or a child
+  is entered, stops the program;
+- `child(f)` and `childWith(arg, f)`, inside an `enter`, make a region
+  whose parent is the one entered: it may keep what the parent's root
+  reaches, and is freed with the parent.
 
 <scalar-detail title="A `Region&lt;T&gt;` is a handle">
 
@@ -116,6 +134,67 @@ is an entry in a table and `free` drops it.
 </scalar-detail>
 
 ## Functions
+
+### child
+
+A new region whose parent is the region entered now: `region`, except that
+the child may keep the parent's memory that `enter` handed in, and freeing
+the parent frees the child. Written only in the function an `enter` or
+`enterWith` runs (NL2702).
+
+```ts
+function child<T>(f: () => T): Region<T>
+```
+
+<scalar-field name="f" type="() =&gt; T" required>
+
+builds the child's root, under `region`'s rules, except that it may
+  store into the child what the parent's root reaches. What the entered
+  function allocated in the parent it may not (NL2610).
+
+</scalar-field>
+
+<scalar-field name="returns" type="Region&lt;T&gt;">
+
+the handle to the child, which holds its memory until `free` of it
+  or of its parent.
+
+</scalar-field>
+
+### childWith
+
+`child` with one argument for `f`: the way the parent's memory reaches the
+child, because the arrow `child` runs captures nothing.
+
+```ts
+function childWith<A, T>(
+  arg: A,
+  f: (arg: A) => T,
+): Region<T>
+```
+
+<scalar-field name="arg" type="A" required>
+
+handed to `f`: a number, `boolean` or `enum`, or memory the
+  parent's root reaches, which `f` may store into the child, a string read
+  off the root included. Memory the entered function allocated, and a string
+  the root does not reach, are refused when `f` stores them (NL2610).
+
+</scalar-field>
+
+<scalar-field name="f" type="(arg: A) =&gt; T" required>
+
+builds the child's root from `arg`, under the same rules as
+  `child`'s.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Region&lt;T&gt;">
+
+the handle to the child, which holds its memory until `free` of it
+  or of its parent.
+
+</scalar-field>
 
 ### enter
 
@@ -197,9 +276,10 @@ function free<T>(_r: Region<T>): void
 
 <scalar-field name="_r" type="Region&lt;T&gt;" required>
 
-the region to free. It and every copy of the handle are dead after
-  this; freeing it again, or while it is entered, stops the program rather
-  than freeing twice.
+the region to free, with every child made under it. It, its
+  children and every copy of their handles are dead after this; freeing it
+  again, or while it or a child is entered, stops the program rather than
+  freeing twice.
 
 </scalar-field>
 
@@ -241,8 +321,8 @@ function regionWith<A, T>(
 <scalar-field name="arg" type="A" required>
 
 handed to `f`. It lives outside the region, so unless it is a
-  number, `boolean`, `enum` or string literal `f` may not store it into
-  region memory (NL2610).
+  number, `boolean` or `enum` `f` may not store it into region memory
+  (NL2610), a string included.
 
 </scalar-field>
 

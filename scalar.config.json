@@ -7,26 +7,37 @@
   },
   "navigation": {
     "header": [
-      { "type": "link", "title": "GitHub", "to": "https://github.com/amritk/nish", "newTab": true },
-      { "type": "link", "title": "Language reference", "to": "/reference/language" },
-      { "type": "link", "title": "Changelog", "to": "/reference/changelog" }
+      { "type": "link", "title": "GitHub", "icon": "phosphor/regular/github-logo", "to": "https://github.com/amritk/nish", "newTab": true },
+      { "type": "link", "title": "Language reference", "icon": "phosphor/regular/book-open", "to": "/reference/language" },
+      { "type": "link", "title": "Changelog", "icon": "phosphor/regular/clock-counter-clockwise", "to": "/reference/changelog" }
     ],
     "routes": {
       "/": {
         "type": "group",
         "title": "Nish",
         "children": {
+          "/": {
+            "type": "page",
+            "title": "Nish",
+            "filepath": "docs/guide/index.md",
+            "showInSidebar": false,
+            "layout": {
+              "toc": false,
+              "pageTitle": false,
+              "pageActions": false,
+              "pageNav": false,
+              "lastUpdated": false,
+              "feedback": false,
+              "fullWidth": true,
+              "search": { "position": "header" },
+              "colorSchemeToggle": "header"
+            }
+          },
           "/getting-started": {
             "type": "group",
             "title": "Getting started",
+            "icon": "phosphor/regular/rocket-launch",
             "children": {
-              "/": {
-                "title": "Introduction",
-                "type": "page",
-                "filepath": "docs/guide/index.md",
-                "showInSidebar": true,
-                "hidden": false
-              },
               "/installation": {
                 "type": "page",
                 "title": "Installation",
@@ -47,6 +58,7 @@
           "/language": {
             "type": "group",
             "title": "The language",
+            "icon": "phosphor/regular/code",
             "children": {
               "/types": {
                 "type": "page",
@@ -123,6 +135,7 @@
           "/using-nish": {
             "type": "group",
             "title": "Using Nish",
+            "icon": "phosphor/regular/terminal-window",
             "children": {
               "/cli": {
                 "type": "page",
@@ -244,6 +257,7 @@
           "/reference": {
             "type": "group",
             "title": "Reference",
+            "icon": "phosphor/regular/book-open",
             "children": {
               "/language": {
                 "type": "group",
@@ -373,6 +387,7 @@
                     "type": "group",
                     "title": "Core",
                     "children": {
+                      "/array": { "type": "page", "title": "array", "filepath": "docs/reference/array.md" },
                       "/base64": {
                         "type": "page",
                         "title": "base64",
@@ -1004,6 +1019,7 @@
           "/security": {
             "type": "group",
             "title": "Security records",
+            "icon": "phosphor/regular/shield-check",
             "children": {
               "/": { "type": "page", "title": "Overview", "filepath": "docs/security/README.md" },
               "/toolchain/..": {
@@ -1249,8 +1265,10 @@
     "theme": "docs/site/theme.css",
     "logo": { "lightMode": "docs/site/logo-light.png", "darkMode": "docs/site/logo-dark.png" },
     "head": {
+      "scripts": [{ "path": "docs/site/site.js", "defer": true }],
       "links": [
         { "rel": "icon", "type": "image/x-icon", "href": "/favicon.ico" },
+        { "rel": "icon", "type": "image/svg+xml", "href": "/mark.svg" },
         { "rel": "icon", "type": "image/png", "href": "/favicon-32.png" },
         { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" }
       ]

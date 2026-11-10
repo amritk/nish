@@ -1,0 +1,1 @@
+`main` reaches `ffi`, which `--deterministic` refuses: C code or a host import runs where this compiler cannot pin its bits

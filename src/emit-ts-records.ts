@@ -30,6 +30,9 @@
 //   reference taken to the slot sees it.
 // - `new Array<T>(n)` is `newArray(n, zero)` and `dst.set(src, at)` is
 //   `arraySetAt(dst, src, at)`, each checked as the native one is.
+// - `xs.slice(a, b)` is `sliceArray(xs, a, b)`, checked as the native one is,
+//   and a `slice`, `map` or `filter` whose answer holds records inline is
+//   wrapped in `copyRecords`, which copies each as the native `push` does.
 //
 // The hook sees no type table, so "a record held inline" is read off the
 // program's struct list: an interface no class implements. A generic body is
@@ -65,6 +68,7 @@ import {
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
 import { K_ARRAY, T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
 import { STORAGE_NAMESPACE } from "./emit-ts-storage"
+import { arrayMethodOfLocal } from "./std-modules"
 
 /** Whether `type` is a record an array holds inline: an interface no class implements. */
 const inlineRecord = (program: CheckedProgram, type: i32): boolean => {
@@ -299,9 +303,46 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
   return args === "" ? null : compoundStore(walk, node, operands, args)
 }
 
+/**
+ * The rewrite of `xs.map(f)`, `xs.filter(f)` or `xs.slice(a, b)` once the
+ * checker routed it to its `nish/array` template, or `null`; the other
+ * methods are JavaScript's own as written. A `slice` is the runtime's checked
+ * `sliceArray`, and an answer whose elements are records held inline is
+ * copied, as the template's `push` copies each.
+ */
+const arrayMethodRow = (walk: Walk, node: Node, method: string): string | null => {
+  const list = node.children[1]
+  const last = walk.lastOperands
+  const texts: string[] = []
+  for (let i = 0; i < list.children.length; i++) {
+    texts.push(last !== null && last.node === list ? last.at(i) : walk.spanOf(list.children[i]))
+  }
+  if (method !== "slice" && method !== "map" && method !== "filter") {
+    return null
+  }
+  const plain = slotCopy(walk, elementOf(walk, slotTypeRaw(walk, node))) === COPY_NONE
+  if (method === "slice") {
+    const call = `${walk.helperName("sliceArray")}(${texts.join(", ")})`
+    return plain ? call : `${walk.helperName("copyRecords")}(${call})`
+  }
+  if (plain) {
+    return null
+  }
+  const receiver = atomic(list.children[0]) ? texts[0] : `(${texts[0]})`
+  const rest: string[] = []
+  for (let i = 1; i < texts.length; i++) {
+    rest.push(texts[i])
+  }
+  return `${walk.helperName("copyRecords")}(${receiver}.${method}(${rest.join(", ")}))`
+}
+
 /** The rewrite of a builtin array method call — `pop`, `push` of a record, `set` — or `null`. */
 const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const callee = node.children[0]
+  const arrayMethod = callee.kind === N_IDENT ? arrayMethodOfLocal(callee.text) : ""
+  if (arrayMethod !== "") {
+    return arrayMethodRow(walk, node, arrayMethod)
+  }
   if (callee.kind !== N_MEMBER || walk.program.nodeCallees[node.id] !== null) {
     return null
   }

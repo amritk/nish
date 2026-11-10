@@ -329,7 +329,7 @@ const runtimeObjects = (defines) => {
     const built = { objects: [], error: null }
     for (const src of [...RUNTIME_C, DRIVER_C]) {
       const obj = path.join(dir, path.basename(src).replace(/\.c$/, ".o"))
-      const cc = spawnSync("clang", ["-O2", ...defines, "-c", src, "-o", obj], {
+      const cc = spawnSync("clang", ["-O2", "-ffp-contract=off", ...defines, "-c", src, "-o", obj], {
         cwd: root,
         encoding: "utf8",
       })

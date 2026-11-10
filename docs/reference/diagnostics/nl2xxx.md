@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 688 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 694 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -5418,7 +5418,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`)
+` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`)
 ```
 
 ## NL2352
@@ -7247,7 +7247,7 @@ export const tidy = (s: string): string => trim(s);
 ```
 
 ```text
-This call to `trim` may panic: it reaches the `index` site at std/text.ts:157:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+This call to `trim` may panic: it reaches the `index` site at std/text.ts:163:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
 ```
 
 ## NL2459
@@ -11928,7 +11928,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-The function `region` or `regionWith` runs answers the region's root
+… runs answers the region's root, which must be memory it allocated, and …
 ```
 
 ## NL2615
@@ -12862,16 +12862,15 @@ export async function main(): Promise<i32> {
 The message of an error contains:
 
 ```text
-…a spawned task takes a function argument only when it captures nothing…
+…a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share…
 ```
 
 [`nl2690_spawn_capture.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2690_spawn_capture.ts):
 
 ```ts
-// NL2690: a spawned task takes a function argument only when it captures
-// nothing. The arrow reads `base` of `start`, a value that would ride in the
-// task's frame where neither the spawn's argument rule nor the task's region
-// rules see it.
+// NL2690: a spawned task's function argument captures only numbers, booleans,
+// enums and objects or arrays it may share. The arrow reads the string `tag`
+// of `start`, which the task may not share.
 import { sleep, spawn } from "nish:async"
 
 async function later(f: (n: i32) => i32, n: i32): Promise<void> {
@@ -12880,7 +12879,8 @@ async function later(f: (n: i32) => i32, n: i32): Promise<void> {
 }
 
 async function start(base: i32): Promise<void> {
-  spawn(later((n: i32): i32 => n + base, 2))
+  const tag = `n${base}`
+  spawn(later((n: i32): i32 => n + tag.length, 2))
 }
 
 export async function main(): Promise<i32> {
@@ -12890,7 +12890,7 @@ export async function main(): Promise<i32> {
 ```
 
 ```text
-`spawn` hands `later<(n) => ...>` an arrow that reads `base` of the function it is written in: a spawned task takes a function argument only when it captures nothing, because the task may run after that function returns; pass the value to the task as an argument of its own, or hand it a top-level function
+`spawn` hands `later<(n) => ...>` an arrow that reads `tag` of type string of the function it is written in: a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share, because the task may run after that function returns; pass the value to the task as an argument of its own, or hand it a top-level function
 ```
 
 ## NL2691
@@ -12939,4 +12939,52 @@ The message of an error contains:
 
 ```text
 …a `nish.host` entry names a host module the package has
+```
+
+## NL2697
+
+The message of an error contains:
+
+```text
+`find` is not supported: TypeScript types its answer `T | undefined`, and Nish has no `undefined`, so a test of it would pass `tsc` and mean something else under Node; use `findIndex` and index the array, `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`
+```
+
+## NL2698
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes at most two, the element and its index: JavaScript's third, the array itself, is the receiver the call already names, so read that instead
+```
+
+## NL2699
+
+The message of an error contains:
+
+```text
+`slice` on an array expects 0 to 2 arguments, got …
+```
+
+## NL2700
+
+The message of an error contains:
+
+```text
+…the clock and the random source answer differently on every run
+```
+
+## NL2701
+
+The message of an error contains:
+
+```text
+…the environment and the terminal answer differently on every host
+```
+
+## NL2702
+
+The message of an error contains:
+
+```text
+…: a child region's parent is the region entered when it is made, so `child` and `childWith` are called only in the function `enter` or `enterWith` runs, and that function only by them
 ```

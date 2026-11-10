@@ -1,16 +1,13 @@
-# Introduction
+# Nish
 
-Nish compiles a strict, static subset of TypeScript ahead of time to native
-code. You write `.ts` files with the syntax you already know; the compiler
-checks that every value has one fixed type and layout, turns the program into
-LLVM IR, and LLVM turns that into a small executable for x86_64, ARM64 or
-WebAssembly. There is no interpreter, no garbage collector and nothing to ship
-beside the binary.
+<div data-nish-hero></div>
 
-What makes that possible is what Nish leaves out: `any`, exceptions,
-prototypes and the other parts of TypeScript that only make sense at run time
-are compile errors, each with a stable code and a message saying what to write
-instead.
+Nish — **N**ative **I**nstruction **S**tatic **H**ost — compiles a strict,
+static subset of TypeScript ahead of time to native code. You write `.ts`
+files with the syntax you already know; the compiler checks that every value
+has one fixed type and layout, turns the program into LLVM IR, and LLVM turns
+that into a small executable for x86_64, ARM64 or WebAssembly. There is no
+interpreter, no garbage collector and nothing to ship beside the binary.
 
 > [!CAUTION]
 > **Nish is pre-alpha. Do not use it in production.** It is an early
@@ -19,6 +16,78 @@ instead.
 > command-line flags and the output all change without notice, often between
 > one minor release and the next. If you try it, pin an exact version and read
 > the [changelog](../../CHANGELOG.md) before you upgrade.
+
+## Why Nish
+
+<scalar-grid cols="3">
+
+<scalar-card title="The TypeScript you know" icon="phosphor/regular/file-ts">
+
+Arrow functions, classes, interfaces, discriminated unions, generics and
+modules, in `.ts` files your editor already understands.
+
+</scalar-card>
+
+<scalar-card title="One binary, nothing beside it" icon="phosphor/regular/cube">
+
+LLVM builds a small executable for x86_64, ARM64 or WebAssembly. No runtime
+to install, no interpreter, no JIT warming up.
+
+</scalar-card>
+
+<scalar-card title="No garbage collector" icon="phosphor/regular/memory">
+
+The compiler decides where every value lives and when its memory is reused,
+so nothing pauses the program to scan for garbage.
+
+</scalar-card>
+
+<scalar-card title="Errors you can act on" icon="phosphor/regular/chat-circle-text">
+
+What only makes sense at run time — `any`, exceptions, prototypes — is a
+compile error with a stable code and a message saying what to write instead.
+
+</scalar-card>
+
+<scalar-card title="Checked by default" icon="phosphor/regular/shield-check">
+
+Integers have fixed widths, and arithmetic that overflows stops the program
+with a message rather than wrapping round.
+
+</scalar-card>
+
+<scalar-card title="A way back out" icon="phosphor/regular/arrow-u-up-left">
+
+A Nish module is still TypeScript: the `nish` package runs it in Node or a
+browser, and a native build can be called from Node, WebAssembly or C.
+
+</scalar-card>
+
+</scalar-grid>
+
+## A first look
+
+```ts nish:ok
+const sumOfSquares = (limit: i32): i32 => {
+  let total = 0;
+  for (let i = 1; i <= limit; i++) {
+    total = total + i * i;
+  }
+  return total;
+};
+
+export const main = (): i32 => {
+  console.log(`1² + … + 10² = ${sumOfSquares(10)}`);
+  return 0;
+};
+```
+
+`i32` is a 32-bit integer, `export const main` is where the program starts and
+its return value is the exit status, and `total + i * i` is checked: if it
+overflowed, the program would stop with a message rather than wrap round.
+Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385`.
+
+## Explore the docs
 
 <scalar-grid cols="2">
 
@@ -52,29 +121,7 @@ and the language specification.
 
 </scalar-grid>
 
-## A first look
-
-```ts nish:ok
-const sumOfSquares = (limit: i32): i32 => {
-  let total = 0;
-  for (let i = 1; i <= limit; i++) {
-    total = total + i * i;
-  }
-  return total;
-};
-
-export const main = (): i32 => {
-  console.log(`1² + … + 10² = ${sumOfSquares(10)}`);
-  return 0;
-};
-```
-
-`i32` is a 32-bit integer, `export const main` is where the program starts and
-its return value is the exit status, and `total + i * i` is checked: if it
-overflowed, the program would stop with a message rather than wrap round.
-Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385`.
-
-## How this guide is laid out
+## Every page
 
 - **Getting started** — [install Nish](getting-started/installation.md),
   [build and run a first program](getting-started/first-program.md), and see

@@ -294,6 +294,25 @@ chunk to 144 bytes, so a payload shorter than that leaves the rest unused.
 What stays is `malloc`'s own fragmentation across sizes, which `rs` did not
 show over 2,000,000 requests.
 
+**Child regions (shipped after stage 2, #1357).** `child(f)` and
+`childWith(arg, f)` make a region whose parent is the region entered now, and
+may be called only in the `f` an `enter` or `enterWith` runs (NL2702; NL2351
+in a parallel body or a spawned function). A child may point into the
+parent's memory that existed before the current `enter`, what the root
+reaches, which removes the copy NL2610 forced on a program that keeps shared
+data in one region and per-task data in others. That memory cannot be released
+while the child lives: the parent outlives it, since `free(parent)` frees the
+children deepest first and retires their handles, and a scope opened during an
+`enter` rewinds only to a mark taken after the `enter` began. Memory new in
+this `enter` stays NL2610; the child's memory stored into the parent's is
+NL2609, growing the parent's collections in the child's `f` NL2615, and the
+parent's memory as the child's root NL2614. `src/region-rules.ts` adds two
+origins, the parent's memory seen in a child's `f` and a value that may be
+either, and keeps its fixpoint. In the runtime a slot links its parent,
+first child and siblings by index, 96 bytes against 80; making and unlinking
+a child is O(1), and `free` of a parent is O(1) a region in its subtree.
+Adopting a child or a parent with children panics (ASYNC-19).
+
 ### 2.2 A safe arena reset
 
 **Semantics.** `Arena.reset` is deprecated because nothing checks that the
