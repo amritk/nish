@@ -1130,6 +1130,17 @@ const DECLARED = [
     changelog: "nish.host",
     why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
   },
+  {
+    file: "text.ll",
+    changelog: "asciiUpper, asciiLower, padStart and padEnd in nish/text",
+    why: "std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd, so the module every importer of nish/text writes has new functions and renumbered string constants; no importer's own module moves",
+  },
+  {
+    program: "tests/link/std_text_camel_case/main.ts",
+    file: "exit",
+    changelog: "asciiUpper, asciiLower, padStart and padEnd in nish/text",
+    why: "the program imports asciiLower, asciiUpper and split from nish/text, which the 0.37.0 seed's std/text.ts does not export, so only the candidate compiles it",
+  },
 ]
 
 /**

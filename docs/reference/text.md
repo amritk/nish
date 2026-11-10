@@ -493,10 +493,10 @@ The ASCII text repeated as the padding; `" "` and `"0"` are
 
 `text` with every occurrence of `needle` replaced by `replacement`.
 
-The pieces between the occurrences are `split`'s, `join`ed once rather than
-concatenated in a loop: `s = s + t` inside a loop is quadratic in time *and*
-in arena, which is the one string mistake this project has measured the cost
-of — 180 MB of peak memory for 88 KB of output (`docs/wp14-selfhost.md` §3).
+The parts are collected and `join`ed once rather than concatenated in the loop:
+`s = s + t` inside a loop is quadratic in time *and* in arena, which is the one
+string mistake this project has measured the cost of — 180 MB of peak memory
+for 88 KB of output (`docs/wp14-selfhost.md` §3).
 
 An empty `needle` answers `text` unchanged, because every other answer is a
 choice about how many empty matches a string contains.

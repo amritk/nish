@@ -246,10 +246,10 @@ export const split = (text: string, sep: string): string[] => {
 /**
  * `text` with every occurrence of `needle` replaced by `replacement`.
  *
- * The pieces between the occurrences are `split`'s, `join`ed once rather than
- * concatenated in a loop: `s = s + t` inside a loop is quadratic in time *and*
- * in arena, which is the one string mistake this project has measured the cost
- * of — 180 MB of peak memory for 88 KB of output (`docs/wp14-selfhost.md` §3).
+ * The parts are collected and `join`ed once rather than concatenated in the loop:
+ * `s = s + t` inside a loop is quadratic in time *and* in arena, which is the one
+ * string mistake this project has measured the cost of — 180 MB of peak memory
+ * for 88 KB of output (`docs/wp14-selfhost.md` §3).
  *
  * An empty `needle` answers `text` unchanged, because every other answer is a
  * choice about how many empty matches a string contains.
@@ -260,8 +260,26 @@ export const split = (text: string, sep: string): string[] => {
  * @param replacement The text each occurrence becomes; it is not searched.
  * @returns The text with every occurrence replaced.
  */
-export const replaceAll = (text: string, needle: string, replacement: string): string =>
-  toI32(needle.length) === 0 ? text : split(text, needle).join(replacement)
+export const replaceAll = (text: string, needle: string, replacement: string): string => {
+  const needleLength: i32 = toI32(needle.length)
+  if (needleLength === 0) {
+    return text
+  }
+  const parts: string[] = []
+  let rest = text
+  while (true) {
+    const at: i32 = toI32(rest.indexOf(needle))
+    // `indexOf` never answers past `rest.length`, so the second half never
+    // holds; it is written because its negation is what proves `at` within
+    // `rest` for the `substring` below, as in `splitLines`.
+    if (at < 0 || at > toI32(rest.length)) {
+      parts.push(rest)
+      return parts.join(replacement)
+    }
+    parts.push(rest.substring(0, at))
+    rest = rest.substring(at + needleLength, toI32(rest.length))
+  }
+}
 
 /**
  * The index of the first line at which `left` and `right` differ, or `-1` when
