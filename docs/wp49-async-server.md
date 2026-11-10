@@ -1,12 +1,15 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
-**Status: D1 accepted; stages 1 to 4 built, stage 5 in part (§10), stage 6
-open.** The language half — `async`, `await`, `Promise<T>`, `spawn`,
+**Status: D1 accepted; stages 1 to 5 built (stage 5 in parts 1 to 8, part 8
+#1343), stage 6 open: its gate was measured on 2026-11-10 and is not met
+(§10).** The language half — `async`, `await`, `Promise<T>`, `spawn`,
 `awaitAll` and the frame lowering — compiles, and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
-tasks that share their spawner's objects (part 3), `serve` (part 4), the
+tasks that share their spawner's objects (parts 3 and 8), `serve` (part 4), the
 async Postgres pool (part 5), async `fetch` over TLS (part 6) and
-cancellation (part 7). The anchors below
+cancellation (part 7). D1's condition does not hold yet: the async TFB entries
+are outside the explicit ones' noise band on `plaintext`, `json` and `db`
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)). The anchors below
 are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
 note beyond what it states is a proposal and is not compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
@@ -282,6 +285,20 @@ in the explicit style, on `plaintext`, `json` and `db`. If it does not, the
 lowering is fixed before the feature ships. The explicit style stays
 supported regardless.
 
+**The gate, measured (2026-11-10).** `bench/techempower/run.sh` times both
+pairs in one run; the figures are in
+[BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6).
+The async entry is 87–90% below the explicit one on `plaintext` at every
+concurrency, 7–12% below on `json` at five of six (inside the band only at
+256), and 42–91% below on `db`, `query`, `update` and `fortune`; only
+`cached-query` at 256 connections is inside. The causes are not in the
+lowering: `serve`'s `HttpHandler` sends each answer as it ends, one `sendto`
+per request where the explicit loop sends one per 16 pipelined answers, and
+`PgAsyncPool` sends one query per connection at a time and makes a task that
+finds every connection claimed sleep (1 ms doubling to 16 ms) rather than wake
+on a release. Closing them is a batched send in `HttpHandler` (or `serve` on
+`Http1Server` directly) and a pipelined, wake-on-release pool.
+
 ## 7. A non-blocking call from a handler today, without `async`
 
 Until §2 lands, a handler makes an outbound call in the explicit style,
@@ -399,8 +416,8 @@ page for anything a user sees.
 | 2 | `nish/net/upstream` (§7) and the Postgres pool and carrier (WP39 E6), explicit style, each on the handler's loop | — | yes |
 | 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
 | 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
-| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314) and cancellation (part 7) |
-| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | no |
+| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314), cancellation (part 7) and a serve handler reaching its spawner's state (part 8, #1343) |
+| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | no: the entries are written (#1354 and before) and `run.sh` measures the gate, which is not met (§6) |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.
