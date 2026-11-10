@@ -3609,8 +3609,8 @@ wasm32 and in the `--emit-ts` reading under Node
   `env`, `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` or `tty` — is
   refused with the chain that reaches it, as the capability policy refuses
   one: NL3052 the file system, NL3053 another machine or program (`net`,
-  `process.spawn`), NL3054 C code or a host import (`ffi`), NL2698 the clock
-  and the random source, NL2699 the environment and the terminal.
+  `process.spawn`), NL3054 C code or a host import (`ffi`), NL2700 the clock
+  and the random source, NL2701 the environment and the terminal.
 - `Number(s)`, `parseFloat(s)` and `parseInt(s)` read a string with one
   grammar on every target, the one `--emit-ts` reads: a `0x` integer, read by
   `std/math.ts`'s `numberExact` and `parseFloatExact` (which the flag calls
