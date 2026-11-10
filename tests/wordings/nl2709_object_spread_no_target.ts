@@ -1,4 +1,4 @@
-// NL2708: A spread copies its source's fields into the target's layout, so the literal
+// NL2709: A spread copies its source's fields into the target's layout, so the literal
 // needs a declared class or interface type to copy into.
 interface Point {
   x: i32;

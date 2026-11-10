@@ -14384,6 +14384,12 @@ if (dealtHere("runtimeChecks")) {
       ["reenter-nested", entered],
       ["leave-outer", notLast],
       ["leave-unentered", notLast],
+      ["child-no-parent", "nish: a child region made with no region entered"],
+      ["child-stale", stale],
+      ["grandchild-stale", stale],
+      ["free-child-entered", "nish: free of a region that is entered"],
+      ["adopt-child", "nish: adopt of a region with a parent or children"],
+      ["adopt-parent", "nish: adopt of a region with a parent or children"],
     ]
     for (const [name, flags, extra] of [
       ["region_test", [], []],

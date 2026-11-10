@@ -1,4 +1,4 @@
-// NL2705: Node copies every own field of a class instance, so one is spread only into a
+// NL2706: Node copies every own field of a class instance, so one is spread only into a
 // type that declares each of them.
 interface Point {
   x: i32;

@@ -2548,7 +2548,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_par_arena`).
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
@@ -3199,7 +3199,7 @@ element's arena, which a task does not share, and each rule is reported at the
   allocates on the way is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -4322,14 +4322,14 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
 
   | Form | Code | Tests |
   | --- | --- | --- |
-  | no contextual class or interface type, `const o = { ...s }`: ``An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)`` | NL2708 | `reject_object_spread_no_target`, `reject_ffi_handle_walk_spread` |
-  | a source that is not a class or interface value, `{ ...n }` for an `i32` | NL2704 | `reject_object_spread` |
-  | a source that may be `null`, which Node spreads as no field at all: narrow it first | NL2702 | `reject_object_spread_nullable` |
-  | a union source, whose fields depend on the variant it holds | NL2703 | `reject_object_spread_union` |
-  | a class instance with a field the target does not declare, which Node would carry on the object | NL2705 | `reject_object_spread_class_extra` |
-  | an interface value with a field the target does not declare | NL2706 | `reject_object_spread_extra_field` |
-  | a copied field whose type differs from the target's, `i32` into `i64`: the copy converts nothing. A field a later entry sets by name is not copied, so its type is not checked (`obj_spread_override_type`); one a later spread supplies is still checked | NL2707 | `reject_object_spread_field_type` |
-  | a field set by name before a spread that always overwrites it, TypeScript's TS2783 | NL2709 | `reject_object_spread_overwritten` |
+  | no contextual class or interface type, `const o = { ...s }`: ``An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)`` | NL2709 | `reject_object_spread_no_target`, `reject_ffi_handle_walk_spread` |
+  | a source that is not a class or interface value, `{ ...n }` for an `i32` | NL2705 | `reject_object_spread` |
+  | a source that may be `null`, which Node spreads as no field at all: narrow it first | NL2703 | `reject_object_spread_nullable` |
+  | a union source, whose fields depend on the variant it holds | NL2704 | `reject_object_spread_union` |
+  | a class instance with a field the target does not declare, which Node would carry on the object | NL2706 | `reject_object_spread_class_extra` |
+  | an interface value with a field the target does not declare | NL2707 | `reject_object_spread_extra_field` |
+  | a copied field whose type differs from the target's, `i32` into `i64`: the copy converts nothing. A field a later entry sets by name is not copied, so its type is not checked (`obj_spread_override_type`); one a later spread supplies is still checked | NL2708 | `reject_object_spread_field_type` |
+  | a field set by name before a spread that always overwrites it, TypeScript's TS2783 | NL2710 | `reject_object_spread_overwritten` |
 
   An interface value may hold any class that implements it, and such a
   class may declare fields after the interface's prefix (see `implements`
@@ -4339,7 +4339,7 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `I` is
   `` Spread of `Named` into `Tagged` may spread an instance of `Item`, which implements it with field `weight` besides: … ``
   (NL3055, `reject_object_spread_width`); spread a value of the class type
-  instead. A spread into the typed JSON options of a class is NL2710
+  instead. A spread into the typed JSON options of a class is NL2711
   (`reject_json_options_spread`). One gap remains: Nish accepts `private`
   on a field and ignores it, so a class instance with a `private` field
   spreads into a type that declares that field, where `tsc` refuses the

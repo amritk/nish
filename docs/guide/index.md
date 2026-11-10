@@ -2,12 +2,12 @@
 
 <div data-nish-hero></div>
 
-Nish compiles a strict, static subset of TypeScript ahead of time to native
-code. You write `.ts` files with the syntax you already know; the compiler
-checks that every value has one fixed type and layout, turns the program into
-LLVM IR, and LLVM turns that into a small executable for x86_64, ARM64 or
-WebAssembly. There is no interpreter, no garbage collector and nothing to ship
-beside the binary.
+Nish — **N**ative **I**nstruction **S**tatic **H**ost — compiles a strict,
+static subset of TypeScript ahead of time to native code. You write `.ts`
+files with the syntax you already know; the compiler checks that every value
+has one fixed type and layout, turns the program into LLVM IR, and LLVM turns
+that into a small executable for x86_64, ARM64 or WebAssembly. There is no
+interpreter, no garbage collector and nothing to ship beside the binary.
 
 > [!CAUTION]
 > **Nish is pre-alpha. Do not use it in production.** It is an early

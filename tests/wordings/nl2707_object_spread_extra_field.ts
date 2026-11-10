@@ -1,4 +1,4 @@
-// NL2706: Node carries every field of the source onto the object, so a source field
+// NL2707: Node carries every field of the source onto the object, so a source field
 // the target does not declare is refused rather than dropped.
 interface Point {
   x: i32;

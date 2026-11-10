@@ -164,7 +164,7 @@ Node, so the compiler refuses:
 - a field whose type differs between the two, such as `i32` into `i64`;
 - a field set by name *before* a spread that overwrites it — move it after.
 
-```ts nish:err NL2708
+```ts nish:err NL2709
 interface Point {
   x: i32;
   y: i32;

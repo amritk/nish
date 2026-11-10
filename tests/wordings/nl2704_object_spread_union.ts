@@ -1,4 +1,4 @@
-// NL2703: Which fields a union value has depends on the variant it holds, so a spread
+// NL2704: Which fields a union value has depends on the variant it holds, so a spread
 // of one is refused until it is narrowed.
 enum Kind {
   Dot,

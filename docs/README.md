@@ -203,9 +203,11 @@ checked.
   its colon escaped (`# nish/json`, `# nish\:secret`, which Scalar would
   otherwise cut at the colon). `std/<path>.ts`, imported as `nish/<path>`, is
   `docs/reference/<path>.md`; the builtin module `nish:<name>` is
-  `docs/reference/nish-<name>.md`, made from `std/<name>.ts` for the two
-  with source behind them (`nish:region`, `nish:secret`: the compiler
-  refuses `nish/region` and `nish/secret`); the globals `runtime/nish.d.ts` declares are
+  `docs/reference/nish-<name>.md`, made from its `declare module` block in
+  `runtime/nish.d.ts`, the two with source behind them included
+  (`nish:region` and `nish:secret`, whose `std/<name>.ts` gets no page of its
+  own: the compiler refuses `nish/region` and `nish/secret`, and the one doc
+  source is the block an editor shows); the globals `runtime/nish.d.ts` declares are
   `docs/reference/builtins.md`. `index.md` opens with a short lead and a
   card for the language specification, the builtins, each area of the
   standard library, the command line and the diagnostics, then lists every

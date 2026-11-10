@@ -197,7 +197,8 @@ import {
   scopeSymbol,
 } from "./parallel"
 import { rejectAwaitCycles } from "./async-check"
-import { crossingMessage, holdsRegion, regionCallFindings, taskFindings } from "./region-rules"
+import { ChildSites, crossingMessage, holdsRegion, regionCallFindings, taskFindings } from "./region-rules"
+import { isChildMaker, regionRoleOf } from "./region-check"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
 import { jsonQuote, splitByte } from "./strings"
@@ -1016,7 +1017,7 @@ export class Compilation {
         path: "",
         name: "",
         packageName: "",
-        error: `\`${REGION_STD_SPECIFIER}\` is the builtin module \`${REGION_SPECIFIER}\`: import \`Region\`, \`region\`, \`regionWith\`, \`enter\`, \`enterWith\` and \`free\` from \`${REGION_SPECIFIER}\``,
+        error: `\`${REGION_STD_SPECIFIER}\` is the builtin module \`${REGION_SPECIFIER}\`: import \`Region\`, \`region\`, \`regionWith\`, \`child\`, \`childWith\`, \`enter\`, \`enterWith\` and \`free\` from \`${REGION_SPECIFIER}\``,
       }
       return spelled
     }
@@ -2549,9 +2550,26 @@ export class Compilation {
     const fresh = new FreshResults(programs, this.table, facts)
     const scopeName = scopeSymbol(programs)
     const table = this.table
+    // A `child` call is judged after every `enter` walk has said where it is made.
+    const sites = new ChildSites()
+    for (const unit of this.modules) {
+      for (const call of unit.checker.program.regionCalls) {
+        if (isChildMaker(regionRoleOf(call.sig))) {
+          sites.childTypes.push(call.sig.returnType)
+        }
+      }
+    }
+    // Which handles are plain matters only to a program that makes a child.
+    for (let i = 0; i < this.modules.length && sites.childTypes.length > 0; i++) {
+      const program = this.modules[i].checker.program
+      sites.scan(program, program.file)
+    }
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.regionCalls) {
+        if (isChildMaker(regionRoleOf(call.sig))) {
+          continue
+        }
         const findings = regionCallFindings(
           programs,
           table,
@@ -2560,7 +2578,8 @@ export class Compilation {
           call.node,
           call.sig,
           scopeName,
-          fresh
+          fresh,
+          sites
         )
         for (const finding of findings) {
           this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
@@ -2617,6 +2636,28 @@ export class Compilation {
             )
             break
           }
+        }
+      }
+    }
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const call of program.regionCalls) {
+        if (!isChildMaker(regionRoleOf(call.sig))) {
+          continue
+        }
+        const findings = regionCallFindings(
+          programs,
+          table,
+          facts,
+          program,
+          call.node,
+          call.sig,
+          scopeName,
+          fresh,
+          sites
+        )
+        for (const finding of findings) {
+          this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
         }
       }
     }

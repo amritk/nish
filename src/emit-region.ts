@@ -10,6 +10,7 @@ import { Emitter } from "./emit"
 import { paramValue } from "./ir"
 import { FunctionSig } from "./program"
 import {
+  REGION_CHILD_NEW,
   REGION_CLOSE,
   REGION_FREE,
   REGION_LEAVE,
@@ -27,6 +28,11 @@ export const emitRegionBody = (emitter: Emitter, sig: FunctionSig, role: i32): v
   const fn = emitter.fn
   if (role === REGION_NEW) {
     const h = fn.emitValue(`call i64 ${emitter.useRuntime("nish_region_new")}()`)
+    fn.emit(`ret i64 ${h}`)
+    return
+  }
+  if (role === REGION_CHILD_NEW) {
+    const h = fn.emitValue(`call i64 ${emitter.useRuntime("nish_region_child_new")}()`)
     fn.emit(`ret i64 ${h}`)
     return
   }
