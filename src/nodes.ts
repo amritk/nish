@@ -446,6 +446,10 @@ export const FLAG_SPREAD_ARGUMENT: i32 = 67108864
 // written back out as (`src/emit-ts-edits.ts`) moves the statements rather
 // than the function, and the checker's rules about that code read it here.
 export const FLAG_SCRIPT: i32 = 134217728
+// N_SPREAD: bit 28 marks one of an object literal's entries, `{ ...s }`,
+// which the checker lowers to field copies (`checkObjectLiteral`) rather than
+// refusing as the array literal's spread.
+export const FLAG_OBJECT_SPREAD: i32 = 268435456
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored

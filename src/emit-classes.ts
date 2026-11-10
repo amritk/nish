@@ -46,7 +46,7 @@ import { emitStringLength, emitStringMethodCall, guardKeep } from "./emit-string
 import { intrinsicType } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { isGuardedAccess } from "./parallel"
-import { N_FALSE, N_MEMBER, N_NULL, N_SPREAD, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
+import { N_FALSE, N_IDENT, N_MEMBER, N_NULL, N_SPREAD, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
 import { FieldInfo, FunctionSig, StructInfo } from "./program"
 import { ARRAY_TYPE } from "./runtime"
 import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID, UNION_TYPE } from "./types"
@@ -218,10 +218,11 @@ export const emitConstructorPrologue = (emitter: Emitter, sig: FunctionSig): voi
 // ---- Expressions ----------------------------------------------------------------------
 
 /**
- * `...s` among a literal's properties: `s` evaluated once, where it stands,
- * and each field the checker recorded (`nodeSpreadCopies`) loaded from it and
- * stored into the literal -- the fields no later entry sets, so a field is
- * stored once whichever entry wins.
+ * `...s` among a literal's properties: each field the checker recorded
+ * (`nodeSpreadCopies`) loaded from `s` and stored into the literal -- the
+ * fields no later entry sets, so a field is stored once whichever entry wins.
+ * A name is read again for each field, as the `f: s.f` written out would
+ * read it; anything else is evaluated once, where it stands.
  */
 const emitSpreadCopy = (emitter: Emitter, info: StructInfo, obj: string, spread: Node): void => {
   const copy = emitter.program.nodeSpreadCopies[spread.id]
@@ -229,13 +230,16 @@ const emitSpreadCopy = (emitter: Emitter, info: StructInfo, obj: string, spread:
     process.exit(internalErrorFor("emitter: an object spread the checker did not record", emitter.opts.json))
   } else {
     const sourceInfo = structInfoOf(emitter, copy.source)
-    const source = emitter.emitExpression(spread.children[0])
+    const value = spread.children[0]
+    const named = value.kind === N_IDENT
+    const once = named ? "" : emitter.emitExpression(value)
     for (const name of copy.fields) {
       const from = sourceInfo.field(name)
       const into = info.field(name)
       if (from === null || into === null) {
         process.exit(internalErrorFor(`emitter: spread field \`${name}\` missing from \`${info.name}\``, emitter.opts.json))
       } else {
+        const source = named ? emitter.emitExpression(value) : once
         storeField(emitter, info, obj, into, loadField(emitter, sourceInfo, source, from))
       }
     }
