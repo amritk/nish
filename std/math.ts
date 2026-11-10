@@ -1202,7 +1202,9 @@ export const fmodF64 = (x: f64, y: f64): f64 => {
  * @param x The value to read.
  * @returns The IEEE 754 bits of `x`, with every NaN as `0x7ff8000000000000`.
  */
-export const quietBitsF64 = (x: f64): i64 => (x !== x ? toI64(0x7ff8) << toI64(48) : f64ToBits(x))
+export const quietBitsF64 = (x: f64): i64 =>
+  // biome-ignore lint/suspicious/noSelfCompare: NaN is the only value that is not itself; Nish has no Number.isNaN
+  x !== x ? toI64(0x7ff8) << toI64(48) : f64ToBits(x)
 
 /**
  * `f32ToBits` under `--deterministic`: the bits of `x`, with every NaN as the
@@ -1211,4 +1213,6 @@ export const quietBitsF64 = (x: f64): i64 => (x !== x ? toI64(0x7ff8) << toI64(4
  * @param x The value to read.
  * @returns The IEEE 754 bits of `x`, with every NaN as `0x7fc00000`.
  */
-export const quietBitsF32 = (x: f32): i32 => (x !== x ? 0x7fc00000 : f32ToBits(x))
+export const quietBitsF32 = (x: f32): i32 =>
+  // biome-ignore lint/suspicious/noSelfCompare: NaN is the only value that is not itself; Nish has no Number.isNaN
+  x !== x ? 0x7fc00000 : f32ToBits(x)
