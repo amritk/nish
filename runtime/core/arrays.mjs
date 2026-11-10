@@ -73,10 +73,21 @@ export function copyIn(v) {
  * clamps the rest.
  */
 export function sliceArray(a, start, end) {
-  const from = start === undefined ? 0 : toIndex(start);
-  const to = end === undefined ? a.length : toIndex(end);
-  if (!(from >= 0 && from <= to && to <= a.length)) panicSlice(from, to, a.length);
-  return a.slice(from, to);
+  const from = start === undefined ? 0n : sliceBound(start);
+  const to = end === undefined ? BigInt(a.length) : sliceBound(end);
+  if (!(from >= 0n && from <= to && to <= BigInt(a.length))) panicSlice(from, to, a.length);
+  return a.slice(Number(from), Number(to));
+}
+
+// A `slice` bound as the native template converts it to `i64`: a `number` is
+// truncated toward zero and saturates, NaN to 0 and an infinity to the i64
+// limit, so a panic prints the same offsets natively and here.
+function sliceBound(i) {
+  if (typeof i === "bigint") return i;
+  if (Number.isNaN(i)) return 0n;
+  if (i >= 2 ** 63) return (1n << 63n) - 1n;
+  if (i <= -(2 ** 63)) return -(1n << 63n);
+  return BigInt(Math.trunc(i));
 }
 
 /**

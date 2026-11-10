@@ -3001,7 +3001,6 @@ function drawStatsOverlay(screen: Screen, stats: TermStats, corner: i32): void -
   local +6:9 y: i32 (const)
   callee +7:3 Screen.text -> @nish.Screen.text
   callee +8:3 Screen.text -> @nish.Screen.text
-module std/array.ts [package nish]
 import Framebuffer from "nish/term-pixels" -> struct Framebuffer
 import NO_SHADOW from "./break-gfx" -> const NO_SHADOW
 import Particles from "./break-gfx" -> struct Particles
@@ -3050,9 +3049,6 @@ import TermEvent from "nish/term" -> struct TermEvent
 import TermInput from "nish/term-io" -> struct TermInput
 import CLI from "./branding" -> const CLI
 import dirname from "./paths" -> function @dirname
-import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
-import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
-import Array.prototype.slice from "nish/array" -> generic function slice
 const MENU_STAY: i32 = 0 [exported]
 const MENU_QUIT: i32 = -1 [exported]
 const MENU_APPLY: i32 = -2 [exported]

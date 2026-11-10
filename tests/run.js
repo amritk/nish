@@ -14050,7 +14050,11 @@ if (dealtHere("arrayChecks")) {
   // `slice`'s words where JavaScript would clamp, after the line before it.
   if (!only || "arr_map_template".includes(only)) {
     const ll = path.join(buildDir, "arr_map_template.ll")
-    if (fs.existsSync(ll)) {
+    // The filter that runs this check also compiles the case, so a missing
+    // `.ll` is a failure, not a skip.
+    if (!fs.existsSync(ll)) {
+      check("arr_map_template: compiled to build/arr_map_template.ll", false, `missing ${ll}`)
+    } else {
       const ir = fs.readFileSync(ll, "utf8")
       const instance = "@nish.map$i32$i32$fn.6.double"
       const defines = ir.split("\n").filter((l) => l.startsWith("define ") && l.includes(`${instance}(`))
@@ -14066,7 +14070,9 @@ if (dealtHere("arrayChecks")) {
   if (!only || "arr_slice_bounds".includes(only)) {
     const name = "arr_slice_bounds"
     const ll = path.join(buildDir, `${name}.ll`)
-    if (fs.existsSync(ll)) {
+    if (!fs.existsSync(ll)) {
+      check(`${name}: compiled to build/${name}.ll`, false, `missing ${ll}`)
+    } else {
       const exe = path.join(buildDir, name)
       const cc = linkNative(exe, ll, { libm: true })
       const run = cc.status === 0 ? spawnSync(exe) : null

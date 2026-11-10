@@ -3130,7 +3130,6 @@ function Rng.nextInt(this: Rng, lo: i32, hi: i32): i32 -> @nish.Rng.nextInt [exp
   callee +7:12 below -> @nish.below
   callee +8:14 Rng.nextI32 -> @nish.Rng.nextI32
   callee +10:28 remainder -> @nish.remainder
-module std/array.ts [package nish]
 import ACTION_PRESS from "nish/term" -> const ACTION_PRESS
 import COLOR_DEFAULT from "nish/term" -> const COLOR_DEFAULT
 import EVENT_KEY from "nish/term" -> const EVENT_KEY

@@ -160,7 +160,9 @@ import {
   nishExportEntry,
 } from "./manifest"
 import {
+  ARRAY_SPECIFIER,
   COLLECTIONS_SPECIFIER,
+  isArrayModule,
   isStdModuleName,
   SECRET_STD_SPECIFIER,
   stdModuleName,
@@ -3300,6 +3302,28 @@ export class Compilation {
    * facts of every function the way stage0's `src/dump.ts` prints them; running it
    * twice would be the most expensive thing this class does twice.
    */
+  /**
+   * Whether `unit` is `std/array.ts` and no call instantiated any of its
+   * templates. The checker imports them for every call of a method named
+   * `map`, `slice`, ... (`importArrayMethods`) before any type is known, so a
+   * string's `slice` loads the module too; then it emits nothing, and the
+   * `--emit-checked` dump and the `--emit-ts` output leave it out.
+   */
+  isUnusedArrayModule(unit: ModuleUnit): boolean {
+    if (!isArrayModule(unit.packageName, unit.name)) {
+      return false
+    }
+    for (const other of this.modules) {
+      for (const imp of other.checker.program.imports) {
+        const template = imp.template
+        if (imp.specifier === ARRAY_SPECIFIER && template !== null && template.count > 0) {
+          return false
+        }
+      }
+    }
+    return true
+  }
+
   analyze(): FactsTable {
     const done = this.facts
     if (done !== null) {

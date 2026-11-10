@@ -52,7 +52,6 @@ function slice<string>(xs: readonly string[], start: i32, end: i32): string[] ->
   local +6:9 out: string[] (const)
   local +7:12 i: i32 (let)
 import Array.prototype.map from "nish/array" -> generic function map
-import Array.prototype.mapIndexed from "nish/array" -> generic function mapIndexed
 import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
 import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
 import Array.prototype.slice from "nish/array" -> generic function slice

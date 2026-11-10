@@ -63,7 +63,6 @@ function filter<string, (n) => ...>(xs: readonly string[], pred: void): string[]
   local +3:11 x: string (const)
   callee +4:9 (n) => ... -> @nish_main$arrow3
 import Array.prototype.map from "nish/array" -> generic function map
-import Array.prototype.mapIndexed from "nish/array" -> generic function mapIndexed
 import Array.prototype.filter from "nish/array" -> generic function filter
 import Array.prototype.filterIndexed from "nish/array" -> generic function filterIndexed
 struct Item (interface) size=8 align=4

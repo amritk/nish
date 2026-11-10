@@ -116,7 +116,8 @@ import { declarationName, lateUses, scriptMain } from "./script"
 import {
   ARRAY_SPECIFIER,
   arrayMethodLocal,
-  arrayMethodTemplates,
+  arrayMethodTemplate,
+  arrayMethodTemplateCount,
   COLLECTIONS_SPECIFIER,
   FLOAT_REM_LOCAL,
   MATH_SPECIFIER,
@@ -476,7 +477,9 @@ export class Checker {
     const names = new StringSet()
     scanArrayMethodCalls(this.program.file, names)
     for (let i: i32 = 0; i < names.size(); i++) {
-      for (const template of arrayMethodTemplates(names.at(i))) {
+      const name = names.at(i)
+      for (let k: i32 = 0; k < arrayMethodTemplateCount(name); k++) {
+        const template = arrayMethodTemplate(name, k)
         this.program.imports.push(
           new ImportBinding(
             ARRAY_SPECIFIER,
@@ -3382,7 +3385,7 @@ const mentionsArrayMethod = (text: string): boolean =>
 const scanArrayMethodCalls = (node: Node, names: StringSet): void => {
   if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
     const name = node.children[0].text
-    if (arrayMethodTemplates(name).length > 0) {
+    if (arrayMethodTemplateCount(name) > 0) {
       names.add(name)
     }
   }

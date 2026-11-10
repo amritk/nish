@@ -62,6 +62,7 @@ cases/arr_header_hoist_record_view added after R6: no rewriter to freeze it with
 cases/arr_map added after R6: no rewriter to freeze it with
 cases/arr_map_f64 added after R6: no rewriter to freeze it with
 cases/arr_map_template added after R6: no rewriter to freeze it with
+cases/arr_named_predicates added after R6: no rewriter to freeze it with
 cases/arr_path_alias_shrink added after R6: no rewriter to freeze it with
 cases/arr_path_alias_store added after R6: no rewriter to freeze it with
 cases/arr_path_callee_pop added after R6: no rewriter to freeze it with

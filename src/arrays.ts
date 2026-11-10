@@ -70,7 +70,13 @@ import {
   PAR_MAP_NEW,
   PAR_SPAWN,
 } from "./program"
-import { arrayMethodLocal, arrayMethodTemplates, isSortModule, SORT_LOCAL } from "./std-modules"
+import {
+  arrayMethodLocal,
+  arrayMethodTemplate,
+  arrayMethodTemplateCount,
+  isSortModule,
+  SORT_LOCAL,
+} from "./std-modules"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -595,7 +601,7 @@ const checkCallbackMethod = (ctx: CheckContext, call: Node, access: Node, args: 
     call,
     access,
     args,
-    arrayMethodLocal(arrayMethodTemplates(name)[pick]),
+    arrayMethodLocal(arrayMethodTemplate(name, pick)),
     scope
   )
 }
@@ -616,7 +622,7 @@ const checkArraySlice = (ctx: CheckContext, call: Node, access: Node, args: Node
     call,
     access,
     args,
-    arrayMethodLocal(arrayMethodTemplates("slice")[count]),
+    arrayMethodLocal(arrayMethodTemplate("slice", count)),
     scope
   )
 }
@@ -646,7 +652,7 @@ export const checkArrayMethod = (
   if (name === "slice") {
     return checkArraySlice(ctx, call, access, args, scope)
   }
-  if (arrayMethodTemplates(name).length > 0) {
+  if (arrayMethodTemplateCount(name) > 0) {
     return checkCallbackMethod(ctx, call, access, args, scope)
   }
   if (name === "find") {

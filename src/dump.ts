@@ -27,6 +27,7 @@ import { Compilation, ModuleUnit } from "./compilation"
 import { SourceFile } from "./diagnostics"
 import { EFFECT_READ, EFFECT_WRITE } from "./runtime"
 import { StringSet } from "./map"
+import { ARRAY_SPECIFIER } from "./std-modules"
 import { compareStrings, jsonQuote } from "./strings"
 import { N_CALL, N_CONSTRUCTOR, N_EMPTY, N_NEW, N_VAR_DECL, Node } from "./nodes"
 import {
@@ -37,6 +38,7 @@ import {
   ROLE_METHOD,
   STRUCT_CLASS,
   StructInfo,
+  TemplateInfo,
 } from "./program"
 import { T_BOOL, T_F64, T_STRING, TypeTable } from "./types"
 
@@ -325,6 +327,9 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   const pkg = program.packageName.length === 0 ? "" : ` [package ${program.packageName}]`
   out.push(`module ${unit.name}${unit.isEntry ? " (entry)" : ""}${pkg}`)
   for (const imp of program.imports) {
+    if (isUnusedArrayMethod(imp.specifier, imp.template)) {
+      continue
+    }
     const struct = imp.struct
     const constant = imp.constant
     const builtin = imp.builtin
@@ -421,6 +426,14 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
 }
 
 /**
+ * Whether an import is one of the `nish/array` templates the checker gives a
+ * module for each array-method name it calls (`importArrayMethods`) that no
+ * call instantiated: it emits nothing, so the dump does not list it.
+ */
+const isUnusedArrayMethod = (specifier: string, template: TemplateInfo | null): boolean =>
+  specifier === ARRAY_SPECIFIER && template !== null && template.count === 0
+
+/**
  * The `--emit-checked` dump of a whole checked program: every module in load
  * order, in the format stage0's `src/dump.ts` writes it. `src/compile.ts` prints this
  * for `--emit-checked` and this file's `main` prints it for the oracle, so the
@@ -433,6 +446,9 @@ export const checkedText = (compilation: Compilation): string => {
   const facts = compilation.analyze()
   const out: string[] = []
   for (const unit of compilation.modules) {
+    if (compilation.isUnusedArrayModule(unit)) {
+      continue
+    }
     dumpModule(unit, compilation.table, facts, out)
   }
   return `${out.join("\n")}\n`

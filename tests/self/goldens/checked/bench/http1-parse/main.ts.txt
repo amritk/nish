@@ -1132,7 +1132,6 @@ function copyBytesWalk(dst: u8[], at: i32, src: readonly u8[], from: i32, count:
   stackSites=0 stackLocals=0
   local -2:9 k: i32 (let)
   local +5:7 k: i32 (let)
-module std/array.ts [package nish]
 import HTTP1_BODY from "nish/net/http1-codec" -> const HTTP1_BODY
 import HTTP1_END from "nish/net/http1-codec" -> const HTTP1_END
 import HTTP1_HEAD from "nish/net/http1-codec" -> const HTTP1_HEAD
@@ -1151,9 +1150,6 @@ import H1B_END from "./old-copy" -> const H1B_END
 import H1B_HEAD from "./old-copy" -> const H1B_HEAD
 import H1B_NEED_MORE from "./old-copy" -> const H1B_NEED_MORE
 import H1bParser from "./old-copy" -> struct H1bParser
-import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
-import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
-import Array.prototype.slice from "nish/array" -> generic function slice
 const MAX_TARGET: i32 = 8192
 const MAX_HEADER_BYTES: i32 = 16384
 const MAX_HEADERS: i32 = 100

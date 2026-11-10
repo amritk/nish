@@ -2757,15 +2757,16 @@ the module (NL4015).
 
 ## Recipes for what is missing
 
-**Iterate and transform** — there is no `map`, and no function to pass it:
+**Iterate and accumulate** — there is no `reduce` or `forEach` (`map`, `filter`, `some`, `every`, `findIndex` and `slice` work); fold in a loop:
 
 ```ts nish:ok-body
 const xs: i32[] = [1, 2, 3];
-const doubled: i32[] = [];
-for (const x of xs) {
-  doubled.push(x * 2);
+const doubled = xs.map((x) => x * 2);
+let sum = 0;
+for (const x of doubled) {
+  sum += x;
 }
-console.log(`${doubled.length}`);
+console.log(`${sum}`);
 ```
 
 **Convert a number to a string** — there is no `toString` and no `String()`:

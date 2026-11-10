@@ -151,6 +151,7 @@ entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [4 x double], align 8
+  %zero.addr = alloca double, align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = fneg double 0x4000000000000000
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
@@ -202,6 +203,23 @@ entry:
   %36 = call i8* @show(%struct.nish_array* %34)
   %37 = call i8* @nish_arena_keep(i64 %35, i8* %36)
   call void @nish_print(i8* %37)
+  store double 0x0000000000000000, double* %zero.addr, align 8
+  %38 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %39 = call %struct.nish_array* @nish.slice$f64(%struct.nish_array* %38, double 0x3FECCCCCCCCCCCCD, double 0x4004000000000000)
+  %40 = call i64 @nish_arena_mark()
+  %41 = call i8* @show(%struct.nish_array* %39)
+  %42 = call i8* @nish_arena_keep(i64 %40, i8* %41)
+  %43 = call i8* @nish_str_concat(i8* %42, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %44 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %45 = load double, double* %zero.addr, align 8
+  %46 = load double, double* %zero.addr, align 8
+  %47 = fdiv double %45, %46
+  %48 = call %struct.nish_array* @nish.slice$f64(%struct.nish_array* %44, double %47, double 0x3FFE666666666666)
+  %49 = call i64 @nish_arena_mark()
+  %50 = call i8* @show(%struct.nish_array* %48)
+  %51 = call i8* @nish_arena_keep(i64 %49, i8* %50)
+  %52 = call i8* @nish_str_concat(i8* %43, i8* %51)
+  call void @nish_print(i8* %52)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

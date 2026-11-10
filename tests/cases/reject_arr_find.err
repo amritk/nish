@@ -1,1 +1,2 @@
 `find` is not supported: TypeScript types its answer `T | undefined`
+use `findIndex` and index the array, `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`

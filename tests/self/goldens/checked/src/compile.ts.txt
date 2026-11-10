@@ -3130,7 +3130,6 @@ function Rng.nextInt(this: Rng, lo: i32, hi: i32): i32 -> @nish.Rng.nextInt [exp
   callee +7:12 below -> @nish.below
   callee +8:14 Rng.nextI32 -> @nish.Rng.nextI32
   callee +10:28 remainder -> @nish.remainder
-module std/array.ts [package nish]
 import astText from "./ast-text" -> function @astText
 import playBreak from "./break" -> function @playBreak
 import capabilitySummary from "./capability-report" -> function @capabilitySummary
@@ -3196,9 +3195,6 @@ import sha256Hex from "./run-cache" -> function @sha256Hex
 import sqliteCacheKey from "./run-cache" -> function @sqliteCacheKey
 import sqliteFingerprint from "./run-cache" -> function @sqliteFingerprint
 import sqliteUnits from "./run-cache" -> function @sqliteUnits
-import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
-import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
-import Array.prototype.slice from "nish/array" -> generic function slice
 const PROFILE_NAMES: string = "speed, size, debug, wasi"
 const CPU_LEVEL: string = "x86-64-v3"
 const COMMA: i32 = 44

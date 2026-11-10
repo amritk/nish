@@ -4924,9 +4924,6 @@ function sha384(data: u8[]): u8[] -> @nish.sha384 [exported]
   callee +1:3 Sha384.update -> @nish.Sha384.update
   callee +2:10 Sha384.digest -> @nish.Sha384.digest
 module std/net/url.ts [package nish]
-import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
-import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
-import Array.prototype.slice from "nish/array" -> generic function slice
 const URL_DECODE_FORM: i32 = 1 [exported]
 const URL_DECODE_LENIENT: i32 = 2 [exported]
 const URL_DECODE_ALLOW_NUL: i32 = 4 [exported]
@@ -5412,7 +5409,6 @@ function urlOrigin(u: Url): string | null -> @nish.urlOrigin [exported]
   callee +0:25 urlDefaultPort -> @nish.urlDefaultPort
   local +4:9 port: i32 (const)
   callee +5:27 urlHostText -> @nish.urlHostText
-module std/array.ts [package nish]
 import connectResult from "nish:net" -> builtin connectResult
 import netAddress from "nish:net" -> builtin netAddress
 import netClose from "nish:net" -> builtin netClose

@@ -399,7 +399,8 @@ compiles to, with string `slice`'s rule. The range must satisfy
 `0 <= start <= end <= xs.length`, and anything else panics with
 `slice out of range: [start, end) of length n` and exits 1, where
 JavaScript counts a negative end back from the length and clamps the rest.
-A float end is truncated toward zero, saturating, as an index is.
+A float bound is truncated toward zero and saturates (NaN to 0, an infinity
+to the `i64` limit), natively and under Node alike.
 
 ```ts
 function slice<T>(

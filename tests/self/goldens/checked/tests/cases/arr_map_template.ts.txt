@@ -22,7 +22,6 @@ function map<i32, i32, double>(xs: readonly i32[], f: void): i32[] -> @nish.map$
   callee +3:14 double -> @double$
 import map from "nish/array" -> generic function map
 import Array.prototype.map from "nish/array" -> generic function map
-import Array.prototype.mapIndexed from "nish/array" -> generic function mapIndexed
 function double(x: i32): i32 -> @double$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow

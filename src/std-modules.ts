@@ -88,7 +88,7 @@ export const isStdModuleName = (name: string): boolean => {
  * against `package.json`.
  */
 export const stdModuleNames = (): string =>
-  "base64, bytes, cli, cli-args, cli-flags, collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/bcrypt, crypto/bcrypt-batch, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/jwt, crypto/p256, crypto/p384, crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, host/ring, host/text, json, json-equal, json-format, json-number, json-pointer, json-tokenizer, json-typed, json-value, map, math, net/buffer-pool, net/dns, net/dns-config, net/dns-message, net/dns-resolver, net/fetch, net/handler, net/hpack, net/http-compress, net/http-fields, net/http1-client-codec, net/http1-codec, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/outbound, net/postgres, net/postgres-async, net/postgres-carrier, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/serve, net/tls, net/tls-tcp, net/tls/client, net/tls/codec, net/tls/record, net/tls/record-client, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/tls/verify, net/upstream, net/url, net/websocket, net/webtransport, pair, random, regex, region, secret, sort, sqlite, sync/ring, sync/shm, term, term-io, term-pixels, term-probe, term-rate, testing, text, threads, yaml, yaml-json, yaml-lines, yaml-write"
+  "array, base64, bytes, cli, cli-args, cli-flags, collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/bcrypt, crypto/bcrypt-batch, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/jwt, crypto/p256, crypto/p384, crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, host/ring, host/text, json, json-equal, json-format, json-number, json-pointer, json-tokenizer, json-typed, json-value, map, math, net/buffer-pool, net/dns, net/dns-config, net/dns-message, net/dns-resolver, net/fetch, net/handler, net/hpack, net/http-compress, net/http-fields, net/http1-client-codec, net/http1-codec, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/outbound, net/postgres, net/postgres-async, net/postgres-carrier, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/serve, net/tls, net/tls-tcp, net/tls/client, net/tls/codec, net/tls/record, net/tls/record-client, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/tls/verify, net/upstream, net/url, net/websocket, net/webtransport, pair, random, regex, region, secret, sort, sqlite, sync/ring, sync/shm, term, term-io, term-pixels, term-probe, term-rate, testing, text, threads, yaml, yaml-json, yaml-lines, yaml-write"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
@@ -248,21 +248,51 @@ export const isSortModule = (packageName: string, name: string): boolean =>
  */
 export const ARRAY_SPECIFIER: string = "nish/array"
 
-/** The array methods `nish/array` holds templates for. */
-const arrayMethodNames = (): string[] => ["map", "filter", "some", "every", "findIndex", "slice"]
+/** Whether `name` is one of the array methods `nish/array` holds templates for. */
+const isArrayMethod = (name: string): boolean =>
+  name === "map" ||
+  name === "filter" ||
+  name === "some" ||
+  name === "every" ||
+  name === "findIndex" ||
+  name === "slice"
 
 /**
- * The templates of `nish/array` a method `name` may become: a callback method
- * has one for a callback of one parameter and one, `<name>Indexed`, for two;
- * `slice` has one per argument count. Empty for any other name.
+ * How many templates of `nish/array` a method `name` may become: a callback
+ * method has one for a callback of one parameter and one, `<name>Indexed`, for
+ * two; `slice` has one per argument count. 0 for any other name.
  */
-export const arrayMethodTemplates = (name: string): string[] => {
-  for (const method of arrayMethodNames()) {
-    if (name === method) {
-      return name === "slice" ? ["sliceAll", "sliceFrom", "slice"] : [name, `${name}Indexed`]
-    }
+export const arrayMethodTemplateCount = (name: string): i32 => {
+  if (name === "slice") {
+    return 3
   }
-  return []
+  return isArrayMethod(name) ? 2 : 0
+}
+
+/**
+ * The `k`th template `arrayMethodTemplateCount` counts for `name`. Each answer
+ * is a literal or `name` itself, so a loop over them allocates nothing.
+ */
+export const arrayMethodTemplate = (name: string, k: i32): string => {
+  if (name === "slice") {
+    if (k === 0) {
+      return "sliceAll"
+    }
+    return k === 1 ? "sliceFrom" : "slice"
+  }
+  if (k === 0) {
+    return name
+  }
+  if (name === "map") {
+    return "mapIndexed"
+  }
+  if (name === "filter") {
+    return "filterIndexed"
+  }
+  if (name === "some") {
+    return "someIndexed"
+  }
+  return name === "every" ? "everyIndexed" : "findIndexIndexed"
 }
 
 /** The prefix of the local name a `nish/array` template is imported under. */
@@ -270,6 +300,9 @@ const ARRAY_LOCAL_PREFIX: string = "Array.prototype."
 
 /** The local name a `nish/array` template is imported under: dotted, so no declaration can take it. */
 export const arrayMethodLocal = (template: string): string => `${ARRAY_LOCAL_PREFIX}${template}`
+
+/** The suffix of a template for a callback of two parameters (`mapIndexed`). */
+const INDEXED_SUFFIX: string = "Indexed"
 
 /**
  * The array method a call of the template imported under `local` was written
@@ -280,14 +313,14 @@ export const arrayMethodOfLocal = (local: string): string => {
   if (!local.startsWith(ARRAY_LOCAL_PREFIX)) {
     return ""
   }
-  for (const method of arrayMethodNames()) {
-    for (const template of arrayMethodTemplates(method)) {
-      if (local === arrayMethodLocal(template)) {
-        return method
-      }
-    }
+  const template = local.substring(ARRAY_LOCAL_PREFIX.length)
+  if (template === "sliceAll" || template === "sliceFrom" || template === "slice") {
+    return "slice"
   }
-  return ""
+  const method = template.endsWith(INDEXED_SUFFIX)
+    ? template.substring(0, template.length - INDEXED_SUFFIX.length)
+    : template
+  return method !== "slice" && isArrayMethod(method) ? method : ""
 }
 
 /** Whether `name` in `packageName` is `std/array.ts`, which is copied into its user like `std/sort.ts`. */

@@ -272,6 +272,8 @@ export const main = (): i32 => {
 - **The argument's type must match exactly**, parameter for parameter and
   the return type too.
 
-Combined with type parameters, this is how you write `map` or `fold` for
-yourself, since arrays have no `.map` or `.filter` methods — see
+Arrays' own `map`, `filter`, `some`, `every` and `findIndex` take a callback
+under this same rule, one or two parameters long (`(x)` or `(x, i)`); see
+[Arrays and strings](arrays-and-strings.md). Combined with type parameters, it
+is also how you write what they lack, such as a `fold` — see
 [Generics](generics.md).

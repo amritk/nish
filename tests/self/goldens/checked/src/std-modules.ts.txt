@@ -24,6 +24,7 @@ const SORT_LOCAL: string = "Array.prototype.sort" [exported]
 const FLOAT_REM_LOCAL: string = "%" [exported]
 const ARRAY_SPECIFIER: string = "nish/array" [exported]
 const ARRAY_LOCAL_PREFIX: string = "Array.prototype."
+const INDEXED_SUFFIX: string = "Indexed"
 function stdModuleName(specifier: string): string -> @stdModuleName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_new
@@ -103,29 +104,32 @@ function isSortModule(packageName: string, name: string): boolean -> @isSortModu
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
   stackSites=0 stackLocals=0
   callee +0:35 stdModuleName -> @stdModuleName
-function arrayMethodNames(): string[] -> @arrayMethodNames
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+function isArrayMethod(name: string): boolean -> @isArrayMethod
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
   stackSites=0 stackLocals=0
-function arrayMethodTemplates(name: string): string[] -> @arrayMethodTemplates [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+function arrayMethodTemplateCount(name: string): i32 -> @arrayMethodTemplateCount [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: arrayMethodNames nish_str_concat nish_str_eq
+  calls: isArrayMethod nish_str_eq
   stackSites=0 stackLocals=0
-  local +0:14 method: string (const)
-  callee +0:24 arrayMethodNames -> @arrayMethodNames
+  callee +0:10 isArrayMethod -> @isArrayMethod
+function arrayMethodTemplate(name: string, k: i32): string -> @arrayMethodTemplate [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
 function arrayMethodLocal(template: string): string -> @arrayMethodLocal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
 function arrayMethodOfLocal(local: string): string -> @arrayMethodOfLocal [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: arrayMethodLocal arrayMethodNames arrayMethodTemplates nish_arena_release nish_str_at nish_str_eq
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isArrayMethod nish_panic_overflow nish_str_at nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
-  local +0:14 method: string (const)
-  callee +0:24 arrayMethodNames -> @arrayMethodNames
-  local +1:16 template: string (const)
-  callee +1:28 arrayMethodTemplates -> @arrayMethodTemplates
-  callee +2:21 arrayMethodLocal -> @arrayMethodLocal
+  local +0:9 template: string (const)
+  local +4:9 method: string (const)
+  callee +7:32 isArrayMethod -> @isArrayMethod
 function isArrayModule(packageName: string, name: string): boolean -> @isArrayModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
