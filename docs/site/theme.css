@@ -186,6 +186,16 @@ body.scalar-app .t-header {
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
 }
+/* On a phone the sidebar is the menu, laid over the page rather than beside
+   it, so glass there lets the page read through the links: it gets a near
+   solid surface, and a z-index, because a positioned block later in the page
+   (the landing hero, a rising card) would otherwise paint over it. */
+body.scalar-app aside.t-doc__sidebar.sidebar-mobile-menu {
+  z-index: 10;
+  background: color-mix(in srgb, var(--scalar-background-1), transparent 6%);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
 
 ::selection {
   background: color-mix(in srgb, var(--nish-violet), transparent 65%);
