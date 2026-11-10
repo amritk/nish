@@ -157,7 +157,8 @@ A function stored, returned or held in a field is still on it;
 [wp51-function-references.md](wp51-function-references.md) (proposed, design
 only) measures a strict lowering for references to capture-free top-level
 functions — a tag and a `switch` — that would take part of this row off the
-list, and leaves closures here.
+list if each call's set is the members that can reach it, and leaves closures
+here.
 
 ### 2.2 Tier 3, refused permanently
 
