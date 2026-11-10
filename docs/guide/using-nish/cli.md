@@ -611,11 +611,13 @@ leaves the IR unchanged.
   natively on x86-64 and Arm, in a wasm build, and in the `--emit-ts`
   reading under Node. `Math.sin`, `cos`, `exp`, `log`, `pow` and a float `%`
   run the standard library's own versions instead of the platform's, and
-  `f64ToBits` gives one bit pattern for every NaN. A program that reads the
-  clock, a random number, the environment, a file, the network, another
-  process, the terminal or C code is refused, because those answer
-  differently on every run, and so is `Number(s)` or `parseFloat(s)` of a
-  string. Exit code 1, naming the call:
+  `f64ToBits` gives one bit pattern for every NaN. `Number(s)`,
+  `parseFloat(s)` and `parseInt(s)` read a string the way the `--emit-ts`
+  reading does, so a hex float such as `"0x1p3"` is not read as 8. A program
+  that reads the clock, a random number, the environment, a file, the
+  network, another process, the terminal, C code or a page's host import is
+  refused, because those answer differently on every run. Exit code 1, naming
+  the call:
 
   ```text
   main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now

@@ -30184,8 +30184,10 @@ if (!only || "wasm-math".includes(only)) {
 // docs/wp50-wasm-host.md §9. Under the flag every target -- native, wasm32 and
 // the --emit-ts reading -- calls std/math.ts for the transcendentals, `pow` and a
 // float `%`, and quiets a NaN's payload before f64ToBits and f32ToBits read it;
-// without it a native build keeps the LLVM intrinsics and `frem`. The refusals
-// the flag adds are tests/cases/reject_deterministic_*.
+// without it a native build keeps the LLVM intrinsics and `frem`. `Number`,
+// `parseFloat` and `parseInt` read the --emit-ts grammar (parse mode | 4,
+// tests/cases/deterministic_parse). The refusals the flag adds are
+// tests/cases/reject_deterministic_*.
 if (!only || "deterministic".includes(only)) {
   const dir = path.join(buildDir, "deterministic")
   fs.rmSync(dir, { recursive: true, force: true })
@@ -30297,15 +30299,24 @@ if (!only || "float-corpus".includes(only)) {
         ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
         : built
     )
+  } else if (process.env.WASI_SYSROOT) {
+    // A sysroot was asked for (CI's test job sets one), so the wasm32 row is
+    // owed: a skip here would let the row go unrun with the section green.
+    check(
+      "float-corpus: WASI_SYSROOT is set, so the wasm32 build runs",
+      false,
+      `WASI_SYSROOT=${process.env.WASI_SYSROOT} has no lib/${has("wasm-ld") ? "" : ", and there is no wasm-ld"}`
+    )
   } else {
     skip(
       `skipped: float-corpus: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasm32 build is not run`
     )
   }
-  // Number(s) over a string corpus, built without the flag: the native reading
-  // (strtod, which reads hex floats) and the --emit-ts reading under Node
-  // disagree on the string grammar, the evidence for --deterministic refusing Number(s)
-  // (NL2697). If they ever agree, the refusal can be lifted.
+  // Number(s) over the strings whose grammar differs: without the flag the
+  // native reading lets strtod read a hex float (0x1p3 is 8) and the --emit-ts
+  // reading under Node does not (NaN); under --deterministic the runtime reads
+  // the --emit-ts grammar, so the native build prints what Node prints. The
+  // corpus's 94 strings hold the three targets to one answer under the flag.
   fs.writeFileSync(
     at("number.ts"),
     [
@@ -30321,18 +30332,31 @@ if (!only || "float-corpus".includes(only)) {
     encoding: "utf8",
   })
   const numRun = numNative.status === 0 ? spawnSync(at("number-bin"), [], { cwd: root, encoding: "utf8" }) : numNative
+  const numFlagged = spawnSync(
+    NISH,
+    [at("number.ts"), "--deterministic", "-o", at("number-d") + path.sep, "--link", at("number-d-bin")],
+    { cwd: root, encoding: "utf8" }
+  )
+  const numFlaggedRun =
+    numFlagged.status === 0 ? spawnSync(at("number-d-bin"), [], { cwd: root, encoding: "utf8" }) : numFlagged
   const numTs = spawnSync(NISH, [at("number.ts"), "--emit-ts", at("number-ts")], { cwd: root, encoding: "utf8" })
   const numNode =
     numTs.status === 0
       ? spawnSync("node", [...emitTsNodeFlags, path.join(at("number-ts"), "entry.ts")], { cwd: root, encoding: "utf8" })
       : numTs
   check(
-    "float-corpus: Number(s) without the flag: native reads 0x1p3 as 8 and the --emit-ts reading as NaN, so --deterministic refuses it",
+    "float-corpus: Number(s): native reads 0x1p3 as 8 without the flag and NaN with it, as the --emit-ts reading does",
     numRun.status === 0 &&
       numNode.status === 0 &&
+      numFlaggedRun.status === 0 &&
       numRun.stdout === "0b101: NaN\n0x1p3: 8\n1e400: Infinity\n 12 : 12\n" &&
-      numNode.stdout === "0b101: NaN\n0x1p3: NaN\n1e400: Infinity\n 12 : 12\n",
-    `native:\n${numRun.status === 0 ? numRun.stdout : shown(numRun)}\nnode:\n${numNode.status === 0 ? numNode.stdout : shown(numNode)}`
+      numNode.stdout === "0b101: NaN\n0x1p3: NaN\n1e400: Infinity\n 12 : 12\n" &&
+      numFlaggedRun.stdout === numNode.stdout,
+    [
+      `native:\n${numRun.status === 0 ? numRun.stdout : shown(numRun)}`,
+      `native --deterministic:\n${numFlaggedRun.status === 0 ? numFlaggedRun.stdout : shown(numFlaggedRun)}`,
+      `node:\n${numNode.status === 0 ? numNode.stdout : shown(numNode)}`,
+    ].join("\n")
   )
 }
 

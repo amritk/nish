@@ -24,7 +24,8 @@ import (`tests/run.js`, section `wasm-math`). Stage 5b is built:
 `--deterministic`, which lowers the five on every target to the same
 functions, sends the TypeScript reading to `nish/math`, makes `f64ToBits` and
 `f32ToBits` give the canonical quiet NaN, refuses the nondeterministic
-capabilities and `Number(s)` (NL2697–NL2699, NL3052–NL3054), compiles every
+capabilities (NL2698–NL2699, NL3052–NL3054), reads `Number(s)`,
+`parseFloat` and `parseInt` with the `--emit-ts` grammar, compiles every
 runtime unit with `-ffp-contract=off`, and holds the float corpus
 (`tests/differential/corpus/float/`) to one `expected.txt` natively, on
 wasm32-wasi and under `--emit-ts` (`tests/run.js`, sections `deterministic`
@@ -743,7 +744,7 @@ What does not agree today, and what the flag does about it:
 | NaN bit patterns. x86-64 makes the default NaN with the sign set, aarch64 without it, and wasm leaves the sign and payload of an arithmetic NaN nondeterministic. They differ only where a program reads a float's bits | `f64ToBits` and `f32ToBits` return the canonical quiet NaN (`0x7ff8000000000000`, `0x7fc00000`) for any NaN: one compare and one select. A snapshot codec that writes floats through them sends the same bytes from server and client |
 | The runtime's C units are compiled with clang's default contraction, which may fuse inside C on aarch64 | every runtime unit is compiled with `-ffp-contract=off`. The float code in them today is exact or integer-only, so this is a guard, not a fix |
 | `Math.random`, `Date.now` and every other capability outside the deterministic set | refused: the flag is also the capability policy that denies `clock`, `entropy`, `env`, `ffi`, `fs.*`, `net`, `process.spawn` and `tty`, so the simulation module cannot call a host import either |
-| Parsing a float from text (`Number(s)`). Stage 5b found native and Node disagree on the grammar, not the rounding: `Number("0x1p3")` is 8 natively (`strtod` reads hex floats) and NaN in the `--emit-ts` reading under Node, checked without the flag in `tests/run.js`'s `float-corpus` section | refused under the flag (NL2697) until one parser serves both |
+| Parsing a float from text (`Number(s)`, `parseFloat`, `parseInt`). Stage 5b ran 94 strings (0.1, the `DBL_MIN` and `DBL_MAX` edges, 2^53 + 1 and + 3, exact halfway decimals, subnormals and their halfway points, 1e±400, whitespace, signs, `Infinity` spellings, `0b`/`0o`/`0x`) natively (glibc), on wasm32-wasi (musl) and under Node. Every decimal spelling and every `parseInt` agreed: the three libraries round correctly. Only hex differed: a hex float (`0x1p3`) is 8 through `strtod` and NaN (`Number`) or 1 (`parseFloat`) in the `--emit-ts` grammar, and musl's `strtod` misrounds a 57-bit hex integer (`0x1fffffffffffff1`: `0x4380000000000000` on wasm32, `0x437fffffffffffff` on glibc and Node) | the runtime reads a `0x` integer itself, correctly rounded on any libc, with or without the flag; under the flag (`mode \| 4`) it reads the `--emit-ts` grammar, the hex integer and nothing after it. The 94 strings are in the float corpus, and agree on all three targets. A refusal was the alternative; it would have refused `std/` modules that parse numbers (`std/json`) for a difference only hex floats show |
 
 - **The corpus.** `tests/differential/corpus/float/float.ts` runs every operation
   and every `Math` builtin over a fixed set of operands: ±0, ±subnormals, the

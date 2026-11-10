@@ -26,6 +26,7 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
+import { internalErrorFor } from "./ice"
 import {
   applyModuleEdits,
   emitModule,
@@ -272,9 +273,17 @@ const runtimeImport = (keyword: string, names: StringSet): string =>
 
 /**
  * The import line of what `--deterministic` routed to `nish/math`, from where
- * `out` is written to where the math library is (`outputPathOf`).
+ * `out` is written to where the math library is (`outputPathOf`). A name with
+ * no `nish/math` module to import it from stops the compile with an internal
+ * error (exit 70): the loader adds the module whenever the walk routes a call.
  */
-const mathImport = (out: string, outputs: string[], modules: ModuleUnit[], names: StringSet): string => {
+const mathImport = (
+  out: string,
+  outputs: string[],
+  modules: ModuleUnit[],
+  names: StringSet,
+  json: boolean
+): string => {
   if (names.size() === 0) {
     return ""
   }
@@ -285,7 +294,15 @@ const mathImport = (out: string, outputs: string[], modules: ModuleUnit[], names
     }
     k = k + 1
   }
+  noMathModule(json)
   return ""
+}
+
+/** Stop with an internal error (exit 70): a call was routed to `nish/math` and the loader did not add it. */
+const noMathModule = (json: boolean): void => {
+  process.exit(
+    internalErrorFor("emit-ts: a call routed to nish/math, and no nish/math module was loaded", json)
+  )
 }
 
 /**
@@ -483,7 +500,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     const header =
       runtimeImport("import", walk.helpers) +
       runtimeImport("import type", walk.widths) +
-      mathImport(out, outputs, modules, walk.mathNames) +
+      mathImport(out, outputs, modules, walk.mathNames, compilation.opts.json) +
       (walk.hostHandle ? HOST_HANDLE_ALIAS : "") +
       (walk.hostHandle && scriptFile ? "export {}\n" : "") +
       (walk.usesStorage ? walk.storageImport : "")

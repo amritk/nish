@@ -5,6 +5,7 @@ import CLI from "./branding" -> const CLI
 import Compilation from "./compilation" -> struct Compilation
 import ModuleUnit from "./compilation" -> struct ModuleUnit
 import Edit from "./diagnostics" -> struct Edit
+import internalErrorFor from "./ice" -> function @internalErrorFor
 import applyModuleEdits from "./emit-ts-edits" -> function @applyModuleEdits
 import emitModule from "./emit-ts-edits" -> function @emitModule
 import HOST_HANDLE_ALIAS from "./emit-ts-edits" -> const HOST_HANDLE_ALIAS
@@ -146,10 +147,11 @@ function runtimeImport(keyword: string, names: StringSet): string -> @runtimeImp
   stackSites=0 stackLocals=0
   callee +0:3 StringSet.size -> @StringSet.size
   callee +0:43 braceList -> @braceList
-function mathImport(out: string, outputs: string[], modules: ModuleUnit[], names: StringSet): string -> @mathImport
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: out
-  calls: StringSet.size braceList isMathModule nish_panic_index nish_str_concat relativeSpecifier
+function mathImport(out: string, outputs: string[], modules: ModuleUnit[], names: StringSet, json: boolean): string -> @mathImport
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via noMathModule
+  escaping: json out
+  calls: StringSet.size braceList isMathModule nish_panic_index nish_str_concat noMathModule relativeSpecifier
   pointer outputs: size=0 writesThrough=true captured=false
   pointer modules: size=0 writesThrough=false captured=false
   pointer names: size=8 writesThrough=false captured=false passedTo=StringSet.size#0 braceList#0
@@ -159,6 +161,14 @@ function mathImport(out: string, outputs: string[], modules: ModuleUnit[], names
   callee +5:9 isMathModule -> @isMathModule
   callee +6:24 braceList -> @braceList
   callee +6:50 relativeSpecifier -> @relativeSpecifier
+  callee +10:3 noMathModule -> @noMathModule
+function noMathModule(json: boolean): void -> @noMathModule
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_exit
+  escaping: json
+  calls: internalErrorFor nish_exit
+  stackSites=0 stackLocals=0
+  callee +0:5 internalErrorFor -> @internalErrorFor
 function launcher(entryOut: string, script: boolean, tasks: boolean): string -> @launcher
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: entryOut

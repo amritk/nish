@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 691 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 690 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12939,14 +12939,6 @@ The message of an error contains:
 
 ```text
 …a `nish.host` entry names a host module the package has
-```
-
-## NL2697
-
-The message of an error contains:
-
-```text
-` of a string reads it with each target's own number grammar, which `--deterministic` refuses
 ```
 
 ## NL2698

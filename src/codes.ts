@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 855
+export const RULE_COUNT: i32 = 854
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -633,8 +633,6 @@ const diagnosticRules = (): string[] => [
   "NL2386",
   "` is no capability: a policy names capabilities as `--emit-capabilities` reports them, one of ",
   "NL3033",
-  "` of a string reads it with each target's own number grammar, which `--deterministic` refuses",
-  "NL2697",
   "` returns is the one thing that leaves the secret, so it is written down rather than inferred",
   "NL2452",
   "`nish.host` is an array of strings, each the path of a host module relative to `package.json`",

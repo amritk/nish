@@ -534,11 +534,13 @@ function emitParamRangeChecks(emitter: Emitter, sig: FunctionSig): void -> @emit
 function emitParseCall(emitter: Emitter, s: string, mode: i32): string -> @emitParseCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
+  escaping: mode
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat nish_str_from_i32
   pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
-  callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +0:39 Emitter.useRuntime -> @Emitter.useRuntime
+  local +0:9 flagged: i32 (const)
+  callee +1:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +1:46 Emitter.useRuntime -> @Emitter.useRuntime
 function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): string -> @emitBuiltinCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitConsoleLog

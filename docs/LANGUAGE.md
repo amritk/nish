@@ -11041,9 +11041,12 @@ wasm32 and in the `--emit-ts` reading under Node
   one: NL3052 the file system, NL3053 another machine or program (`net`,
   `process.spawn`), NL3054 C code or a host import (`ffi`), NL2698 the clock
   and the random source, NL2699 the environment and the terminal.
-- `Number(s)` and `parseFloat(s)` of a string are NL2697: native and Node
-  parse different grammars (`Number("0x1p3")` is 8 natively, where `strtod`
-  reads hex floats, and NaN in the `--emit-ts` reading under Node).
+- `Number(s)`, `parseFloat(s)` and `parseInt(s)` read a string with one
+  grammar on every target, the one `--emit-ts` reads: a `0x` integer, read by
+  the runtime and correctly rounded on any libc, and no hex float, so
+  `Number("0x1p3")` is NaN and `parseFloat("0x1p3")` is 1 where a native build
+  without the flag lets `strtod` read 8 (`deterministic_parse`). Every decimal
+  spelling already agreed: glibc, musl and Node round them all correctly.
 
 ```text
 main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now
@@ -11051,7 +11054,9 @@ main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: th
 
 The float corpus, `tests/differential/corpus/float/`, holds every operation
 and `Math` builtin over ±0, subnormals, the normal extremes, ±Infinity, NaN,
-integers near 2^53 and multiples of π/4 to one `expected.txt` on each target
+integers near 2^53, multiples of π/4, NaN payloads read through
+`f64ToBits` and `f32ToBits`, and 94 strings through `Number`, `parseFloat` and
+`parseInt` to one `expected.txt` on each target
 (`tests/run.js`, sections `deterministic` and `float-corpus`; the
 `reject_deterministic_*` cases).
 
