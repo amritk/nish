@@ -5263,6 +5263,8 @@ const checkingPropagate = (): boolean => {
  * collected twice.
  */
 const checkPropagate = (facts: FactsTable, fresh: FactsTable, runtime: RuntimeTable): void => {
+  // `fresh` shares its `CallSite`s with `facts` (`collectRound` hands both
+  // `memory.callSites`), so this rewrites `site.target`; nothing reads it after.
   propagateWhole(fresh, runtime)
   if (fresh.list.length !== facts.list.length) {
     process.exit(internalError("propagate: the table collected again differs (NISH_CHECK_PROPAGATE)"))

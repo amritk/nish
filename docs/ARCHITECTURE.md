@@ -370,7 +370,9 @@ whole round-robin passes over the table would. Setting the environment
 variable `NISH_CHECK_PROPAGATE=1` (any non-empty value, in any build) checks
 that answer twice. First, one more whole pass over the settled table must
 change nothing; every fact the fixpoint settles reports a move, so this
-catches an incomplete fixpoint in any field. Second, the compiler collects
+catches an incomplete fixpoint in any field, and it is the only check of the
+allocation and arena facts (`allocates`, `allocEscapes`, `directArena`,
+`returnsAllocation`, `allocLeaks` and the rest). Second, the compiler collects
 every facts table again and settles it by whole passes from the start; any
 function whose attributes, pointer-parameter facts, shared-write flags,
 `writeSite` or `writeVia` differ stops the compile with an internal error.
