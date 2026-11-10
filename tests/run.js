@@ -30185,8 +30185,9 @@ if (!only || "wasm-math".includes(only)) {
 // the --emit-ts reading -- calls std/math.ts for the transcendentals, `pow` and a
 // float `%`, and quiets a NaN's payload before f64ToBits and f32ToBits read it;
 // without it a native build keeps the LLVM intrinsics and `frem`. `Number`,
-// `parseFloat` and `parseInt` read the --emit-ts grammar (parse mode | 4,
-// tests/cases/deterministic_parse). The refusals the flag adds are
+// `parseFloat` of a string call std/math.ts's `numberExact` and
+// `parseFloatExact` on every target, the --emit-ts reading included, and
+// `parseInt` already agrees (tests/cases/deterministic_parse). The refusals the flag adds are
 // tests/cases/reject_deterministic_*.
 if (!only || "deterministic".includes(only)) {
   const dir = path.join(buildDir, "deterministic")
@@ -30245,6 +30246,24 @@ if (!only || "deterministic".includes(only)) {
     "deterministic: without the flag the reading calls the platform's Math and imports no nish/math.ts",
     tsOff.status === 0 && entryOff.includes("Math.sin(") && !entryOff.includes("nish/math"),
     shown(tsOff) || entryOff
+  )
+  // tests/cases/deterministic_parse as the --emit-ts reading under Node: the
+  // string `Number` and `parseFloat` call numberExact and parseFloatExact, so
+  // Node prints the case's .out, which the native round trip prints.
+  const parseCase = path.join(root, "tests", "cases", "deterministic_parse.ts")
+  const parseTs = spawnSync(NISH, [parseCase, "--deterministic", "--emit-ts", at("parse-ts")], { cwd: root, encoding: "utf8" })
+  const parseEntry = parseTs.status === 0 ? fs.readFileSync(path.join(at("parse-ts"), "deterministic_parse.ts"), "utf8") : ""
+  const parseRun =
+    parseTs.status === 0
+      ? spawnSync("node", [...emitTsNodeFlags, path.join(at("parse-ts"), "entry.ts")], { cwd: root, encoding: "utf8" })
+      : parseTs
+  check(
+    "deterministic: the --emit-ts reading of deterministic_parse calls numberExact and parseFloatExact and prints the native .out",
+    parseRun.status === 0 &&
+      parseEntry.includes("numberExact(") &&
+      parseEntry.includes("parseFloatExact(") &&
+      parseRun.stdout === fs.readFileSync(path.join(root, "tests", "cases", "deterministic_parse.out"), "utf8"),
+    parseRun.status === 0 ? `${parseRun.stdout}\n${parseEntry}` : shown(parseRun)
   )
 }
 
@@ -30314,8 +30333,8 @@ if (!only || "float-corpus".includes(only)) {
   }
   // Number(s) over the strings whose grammar differs: without the flag the
   // native reading lets strtod read a hex float (0x1p3 is 8) and the --emit-ts
-  // reading under Node does not (NaN); under --deterministic the runtime reads
-  // the --emit-ts grammar, so the native build prints what Node prints. The
+  // reading under Node does not (NaN); under --deterministic std/math.ts's
+  // `numberExact` reads it on both, so the native build prints what Node prints. The
   // corpus's 94 strings hold the three targets to one answer under the flag.
   fs.writeFileSync(
     at("number.ts"),

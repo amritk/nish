@@ -11,5 +11,10 @@ export const main = (): number => {
   console.log(Number("0x1fffffffffffff1"));
   console.log(parseFloat(" 0.1e1x"));
   console.log(parseInt(" -42z"));
+  console.log(parseFloat("+0x10"));
+  console.log(Number("+0x10"));
+  console.log(parseFloat("-0x1fffffffffffff1"));
+  console.log(parseInt("+0x10"));
+  console.log(parseInt("0x1fffffffffffff1"));
   return 0;
 };

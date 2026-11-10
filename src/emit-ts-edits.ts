@@ -662,12 +662,14 @@ const observe = (walk: Walk, node: Node): string => {
 
 /** The `nish/math` functions `--deterministic` binds a builtin call to (`Checker.importMath`). */
 const MATH_ROUTED: string =
-  " sinF64 cosF64 tanF64 expF64 logF64 powF64 atan2F64 hypotF64 quietBitsF64 quietBitsF32 "
+  " sinF64 cosF64 tanF64 expF64 logF64 powF64 atan2F64 hypotF64 quietBitsF64 quietBitsF32 numberExact parseFloatExact "
 
 /**
- * Under `--deterministic`, the name a `Math.<name>(...)`, `f64ToBits(...)` or
- * `f32ToBits(...)` call the checker bound to `nish/math` is written to call,
- * else the empty string. JavaScript's `%` is already the exact remainder
+ * Under `--deterministic`, the name a `Math.<name>(...)`, `f64ToBits(...)`,
+ * `f32ToBits(...)`, `Number(s)` or `parseFloat(s)` call the checker bound to
+ * `nish/math` is written to call, else the empty string. A string `Number` or
+ * `parseFloat` calls `numberExact` or `parseFloatExact`, so Node reads the
+ * grammar a native or wasm build reads, not V8's (`parseFloat("+0x10")` is 16). JavaScript's `%` is already the exact remainder
  * `fmodF64` computes (ECMA-262 `Number::remainder`), so a float `%` is left
  * as it is written.
  */
@@ -682,7 +684,11 @@ const mathCallee = (walk: Walk, node: Node): string => {
       head.children[0].kind === N_IDENT &&
       head.children[0].text === "Math" &&
       listedWord(MATH_ROUTED, head.text + "F64")) ||
-    (head.kind === N_IDENT && (head.text === "f64ToBits" || head.text === "f32ToBits"))
+    (head.kind === N_IDENT &&
+      (head.text === "f64ToBits" ||
+        head.text === "f32ToBits" ||
+        head.text === "Number" ||
+        head.text === "parseFloat"))
   if (!spelled) {
     return ""
   }

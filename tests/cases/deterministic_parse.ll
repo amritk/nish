@@ -3,6 +3,8 @@
 @.str.2 = private unnamed_addr constant { i64, [18 x i8] } { i64 17, [18 x i8] c"0x1fffffffffffff1\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c" 0.1e1x\00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c" -42z\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"+0x10\00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"-0x1fffffffffffff1\00" }, align 8
 
 declare void @nish_free_arena() #3
 declare noundef i64 @nish_arena_mark() #3
@@ -40,6 +42,23 @@ entry:
   %11 = call i32 @llvm.fptosi.sat.i32.f64(double %10)
   %12 = call i8* @nish_str_from_i32(i32 %11)
   call void @nish_print(i8* %12)
+  %13 = call double @nish.parseFloatExact(i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*))
+  %14 = call i8* @nish_str_from_f64(double %13)
+  call void @nish_print(i8* %14)
+  %15 = call double @nish.numberExact(i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*))
+  %16 = call i8* @nish_str_from_f64(double %15)
+  call void @nish_print(i8* %16)
+  %17 = call double @nish.parseFloatExact(i8* bitcast ({ i64, [19 x i8] }* @.str.6 to i8*))
+  %18 = call i8* @nish_str_from_f64(double %17)
+  call void @nish_print(i8* %18)
+  %19 = call double @nish_parse_number(i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*), i32 2)
+  %20 = call i32 @llvm.fptosi.sat.i32.f64(double %19)
+  %21 = call i8* @nish_str_from_i32(i32 %20)
+  call void @nish_print(i8* %21)
+  %22 = call double @nish_parse_number(i8* bitcast ({ i64, [18 x i8] }* @.str.2 to i8*), i32 2)
+  %23 = call i32 @llvm.fptosi.sat.i32.f64(double %22)
+  %24 = call i8* @nish_str_from_i32(i32 %23)
+  call void @nish_print(i8* %24)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
