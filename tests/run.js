@@ -32057,6 +32057,71 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
   }
 }
 
+// ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------
+//
+// docs/wp50-wasm-host.md §10. examples/wasm-arena/build.mjs links client.ts for
+// the page (`--profile wasm-host`) and replay.ts natively under
+// `--deterministic`; node-run.mjs drives the page's own startArena under Node
+// with scripted input for a few thousand frames and prints the hash and the
+// recorded input. The same input replayed natively, and under the `--emit-ts`
+// reading of replay.ts, gives the same 64-bit hash. The ten-minute Chromium
+// soak is interop.yml's `arena` job.
+if (!only || "wasm-arena".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`wasm-arena: ${why}`)
+  } else {
+    const out = path.join(buildDir, "wasm-arena")
+    fs.rmSync(out, { recursive: true, force: true })
+    const built = spawnSync("node", ["examples/wasm-arena/build.mjs", "--nish", NISH, "--out", out], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (check("wasm-arena: build.mjs links the page module and the native replay", built.status === 0, shown(built))) {
+      const frames = 3000
+      const ran = spawnSync("node", ["examples/wasm-arena/node-run.mjs", path.join(out, "web"), String(frames)], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      let page = null
+      try {
+        page = ran.status === 0 ? JSON.parse(ran.stdout) : null
+      } catch {
+        page = null
+      }
+      check(
+        `wasm-arena: the page runs ${frames} frames under Node with memory and the arena's mark held still and no input dropped`,
+        page !== null && page.steady === true && page.byteLength === 4 * 1024 * 1024 && page.overflow === 0 && page.ticks > frames,
+        page === null ? shown(ran) : JSON.stringify({ ...page, runs: page.runs.length })
+      )
+      if (page !== null) {
+        const args = ["1", String(page.ticks), ...page.runs]
+        const want = `ticks ${page.ticks} hash ${page.hash}\n`
+        const native = spawnSync(path.join(out, "replay"), args, { encoding: "utf8" })
+        check(
+          `wasm-arena: the recorded input replays natively to the page's hash (${page.hash}, ${page.ticks} ticks)`,
+          native.status === 0 && native.stdout === want,
+          `want ${want}${shown(native)}`
+        )
+        const emitted = path.join(out, "ts")
+        const ts = spawnSync(NISH, ["examples/wasm-arena/replay.ts", "--deterministic", "--emit-ts", emitted], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        const node =
+          ts.status === 0
+            ? spawnSync("node", [...emitTsNodeFlags, path.join(emitted, "entry.ts"), ...args], { cwd: root, encoding: "utf8" })
+            : ts
+        check(
+          "wasm-arena: the --emit-ts reading of replay.ts gives the same hash under Node",
+          node.status === 0 && node.stdout === want,
+          `want ${want}${shown(node)}`
+        )
+      }
+    }
+  }
+}
+
 if (!only || "wasm-size".includes(only)) {
   // The ceilings are bytes clang 18 wrote on linux-x64, like the runtime's.
   const host = `${process.platform}-${process.arch}`
@@ -32161,13 +32226,34 @@ if (!only || "wasm-size".includes(only)) {
         ).stderr
       )
     let checkedSwitch = false
-    for (const { src, runtime, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
+    for (const { src, runtime, host: hostModule, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
       const stem = path.basename(src, ".ts")
       // The directory outlives a run: a sidecar an older build left must not pass for this one's.
       fs.rmSync(path.join(dir, `${stem}.wasm.sites.json`), { force: true })
       fs.rmSync(stubLog, { force: true })
-      const ll = wasmHostCompile(dir, stem)
-      const inputs = ll === null ? [] : runtime ? [ll, "runtime/runtime-wasm.c"] : [ll]
+      // A row with a host module is a program of several modules (examples/wasm-arena):
+      // one .ll each, linked together as build.mjs links them.
+      const lls = hostModule === undefined ? null : path.join(dir, `${stem}-ll`)
+      if (lls !== null) {
+        fs.rmSync(lls, { recursive: true, force: true })
+      }
+      const compiled =
+        lls === null
+          ? null
+          : spawnSync(
+              NISH,
+              [src, "--target", "wasm32", "--host", hostModule, "--emit-dts", path.join(dir, `${stem}.d.ts`), "-o", `${lls}/`],
+              { cwd: root, encoding: "utf8" }
+            )
+      const ll = lls === null ? wasmHostCompile(dir, stem) : compiled.status === 0 ? lls : null
+      const modules = (from) =>
+        fs
+          .readdirSync(from)
+          .filter((f) => f.endsWith(".ll"))
+          .sort()
+          .map((f) => path.join(from, f))
+      const sources = ll === null ? [] : lls === null ? [ll] : modules(lls)
+      const inputs = runtime ? [...sources, "runtime/runtime-wasm.c"] : sources
       const hostFlags = (name) => ["-o", path.join(dir, name), "--profile", "wasm-host"]
       const built =
         ll === null
@@ -32194,6 +32280,10 @@ if (!only || "wasm-size".includes(only)) {
           measured.every((n, i) => n <= ceiling[i]),
           "shrink it, or raise WASM_HOST_SIZE_BUDGETS in tests/runtime-budgets.js with the measurement and why"
         )
+      }
+      if (lls !== null) {
+        // The plain-bytes and no-imports checks below are of a program with no host module.
+        continue
       }
       const bareLinks = !clangFindsWasmOpt(ll)
       if (!checkedSwitch) {
