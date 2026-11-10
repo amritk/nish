@@ -237,11 +237,13 @@ export const SORT_LOCAL: string = "Array.prototype.sort"
 export const FLOAT_REM_LOCAL: string = "%"
 
 /**
- * The local name `--deterministic` imports `nish/math`'s `quietBitsF64` or
- * `quietBitsF32` under, for `f64ToBits` or `f32ToBits` (`importMath`): the
- * builtin's name with call parentheses, which no declaration can take.
+ * The local name `--deterministic` imports a `nish/math` function under for
+ * the builtin it answers (`importMath`): `quietBitsF64` or `quietBitsF32` for
+ * `f64ToBits` or `f32ToBits`, `numberExact` for `Number` and
+ * `parseFloatExact` for `parseFloat`. The builtin's name with call
+ * parentheses, which no declaration can take.
  */
-export const quietBitsLocal = (builtin: string): string => `${builtin}()`
+export const routedBuiltinLocal = (builtin: string): string => `${builtin}()`
 
 /** Whether `name` in `packageName` is `std/sort.ts`, which is copied into its user like `std/math.ts`. */
 export const isSortModule = (packageName: string, name: string): boolean =>

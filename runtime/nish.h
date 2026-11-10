@@ -889,11 +889,7 @@ int32_t nish_set_terminal_restore(const nish_str *bytes);
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`
  * (the whole string, trimmed; blank is 0; `0x` hex accepted, as in JS),
  * mode 2 is `parseInt` (base 10 via strtoll, 0 without digits) as a double
- * that the compiler saturates into an i32 with `llvm.fptosi.sat`. A `0x`
- * integer is read in runtime.c, correctly rounded on every libc; a hex float
- * goes to strtod, except under `--deterministic`, which adds 4 to the mode
- * and reads the `--emit-ts` grammar (`LITERAL` in runtime/core/numbers.mjs):
- * the hex integer and nothing after it. */
+ * that the compiler saturates into an i32 with `llvm.fptosi.sat`. */
 double nish_parse_number(const nish_str *s, int32_t mode);
 
 /* Checked integer division (Rust semantics): the failed-check path. */

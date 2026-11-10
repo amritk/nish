@@ -1111,6 +1111,12 @@ const DECLARED = [
     why: "the case is compiled with --deterministic, a flag the seed does not know",
   },
   {
+    program: "tests/cases/deterministic_parse.ts",
+    file: "exit",
+    changelog: "the same float bits on every target",
+    why: "the case is compiled with --deterministic, a flag the seed does not know",
+  },
+  {
     program: "tests/cases/host_import_string.ts",
     file: "exit",
     changelog: "Strings cross between a wasm module and its page",

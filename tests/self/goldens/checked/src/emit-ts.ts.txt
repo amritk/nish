@@ -151,17 +151,19 @@ function mathImport(out: string, outputs: string[], modules: ModuleUnit[], names
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noMathModule
   escaping: json out
-  calls: StringSet.size braceList isMathModule nish_panic_index nish_str_concat noMathModule relativeSpecifier
-  pointer outputs: size=0 writesThrough=true captured=false
+  calls: StringSet.size braceList isMathModule nish_panic_overflow nish_str_concat noMathModule relativeSpecifier
+  pointer outputs: size=0 writesThrough=false captured=false
   pointer modules: size=0 writesThrough=false captured=false
   pointer names: size=8 writesThrough=false captured=false passedTo=StringSet.size#0 braceList#0
   stackSites=0 stackLocals=0
   callee +0:7 StringSet.size -> @StringSet.size
   local +3:7 k: i32 (let)
-  callee +5:9 isMathModule -> @isMathModule
-  callee +6:24 braceList -> @braceList
-  callee +6:50 relativeSpecifier -> @relativeSpecifier
-  callee +10:3 noMathModule -> @noMathModule
+  local +4:14 unit: ModuleUnit (const)
+  callee +5:31 isMathModule -> @isMathModule
+  local +6:13 target: string (const)
+  callee +7:24 braceList -> @braceList
+  callee +7:50 relativeSpecifier -> @relativeSpecifier
+  callee +11:3 noMathModule -> @noMathModule
 function noMathModule(json: boolean): void -> @noMathModule
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit

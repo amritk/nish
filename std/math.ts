@@ -1216,3 +1216,127 @@ export const quietBitsF64 = (x: f64): i64 =>
 export const quietBitsF32 = (x: f32): i32 =>
   // biome-ignore lint/suspicious/noSelfCompare: NaN is the only value that is not itself; Nish has no Number.isNaN
   x !== x ? 0x7fc00000 : f32ToBits(x)
+
+// The value of the hex digit `c` (a UTF-16 code unit), or -1 if it is not one.
+const hexDigit = (c: i32): i32 => {
+  if (c >= 48 && c <= 57) {
+    return c - 48
+  }
+  const lower: i32 = c | 32
+  return lower >= 97 && lower <= 102 ? lower - 87 : -1
+}
+
+// The index of the first code unit at or after `at` that is not ASCII
+// whitespace, the set `nish_parse_number` skips: space, tab, LF, VT, FF, CR.
+const skipSpaces = (s: string, at: i32): i32 => {
+  let k: i32 = at
+  while (k >= 0 && k < toI32(s.length)) {
+    const c: i32 = toI32(s.charCodeAt(k))
+    if (c !== 32 && (c < 9 || c > 13)) {
+      return k
+    }
+    k = k + 1
+  }
+  return k
+}
+
+// Where the hex digits from `at` stop.
+const hexEnd = (s: string, at: i32): i32 => {
+  let k: i32 = at
+  while (k >= 0 && k < toI32(s.length) && hexDigit(toI32(s.charCodeAt(k))) >= 0) {
+    k = k + 1
+  }
+  return k
+}
+
+// The hex digits from `start` to `end` (at least one) as the nearest double,
+// ties to even. Digits past 64 bits are kept as a power of two and a sticky
+// bit, so a hex integer of any length rounds once, as a correct strtod does.
+const hexValue = (s: string, start: i32, end: i32): f64 => {
+  let m: u64 = toU64(0)
+  let scale: i32 = 0
+  let sticky: boolean = false
+  let k: i32 = start
+  while (k >= 0 && k < end && k < toI32(s.length)) {
+    const d: i32 = hexDigit(toI32(s.charCodeAt(k)))
+    if (m >> toU64(60) !== toU64(0)) {
+      scale = scale + 4
+      sticky = sticky || d !== 0
+    } else {
+      m = (m << toU64(4)) | toU64(d)
+    }
+    k = k + 1
+  }
+  const bits: i32 = m === toU64(0) ? 0 : 64 - clz64(m)
+  if (bits > 53) {
+    const shift: i32 = bits - 53
+    const low: u64 = m & ((toU64(1) << toU64(shift)) - toU64(1))
+    const half: u64 = toU64(1) << toU64(shift - 1)
+    m = m >> toU64(shift)
+    if (low > half || (low === half && (sticky || (m & toU64(1)) !== toU64(0)))) {
+      m = m + toU64(1)
+    }
+    scale = scale + shift
+  }
+  // At most 2^53, so exact; each doubling is exact until it overflows.
+  let v: f64 = toF64(m)
+  while (scale > 0 && v <= 1.7976931348623157e308) {
+    v = v * 2.0
+    scale = scale - 1
+  }
+  return v
+}
+
+// Whether `s` holds `0x` or `0X` at `at`.
+const isHexPrefix = (s: string, at: i32): boolean =>
+  at + 1 < toI32(s.length) && toI32(s.charCodeAt(at)) === 48 && (toI32(s.charCodeAt(at + 1)) | 32) === 120
+
+/**
+ * `Number(s)` of a string under `--deterministic` (WP50 §9): the grammar the
+ * `--emit-ts` reading has, on every target. A `0x` integer after optional
+ * ASCII whitespace and sign is read here, correctly rounded whatever the libc,
+ * and anything but whitespace after its digits, a hex float's `.` or `p`
+ * included, makes the string NaN. Every other spelling is the runtime's
+ * `Number`, which already agrees across targets.
+ *
+ * @param s The string to read.
+ * @returns The number `s` spells, or NaN.
+ */
+export const numberExact = (s: string): f64 => {
+  const p: i32 = skipSpaces(s, 0)
+  const negative: boolean = p < toI32(s.length) && toI32(s.charCodeAt(p)) === 45
+  const q: i32 = p < toI32(s.length) && (negative || toI32(s.charCodeAt(p)) === 43) ? p + 1 : p
+  if (!isHexPrefix(s, q)) {
+    return Number(s)
+  }
+  const end: i32 = hexEnd(s, q + 2)
+  if (end === q + 2 || skipSpaces(s, end) !== toI32(s.length)) {
+    const zero: f64 = 0.0
+    return zero / zero
+  }
+  const v: f64 = hexValue(s, q + 2, end)
+  return negative ? -v : v
+}
+
+/**
+ * `parseFloat(s)` under `--deterministic` (WP50 §9): the grammar the
+ * `--emit-ts` reading has, on every target. A `0x` integer after optional
+ * ASCII whitespace and sign is read here, correctly rounded whatever the libc,
+ * and reading stops at its last digit, so `0x1p3` is 1; `0x` with no digit is
+ * the `0` before it. Every other spelling is the runtime's `parseFloat`, which
+ * already agrees across targets.
+ *
+ * @param s The string to read.
+ * @returns The number at the start of `s`, or NaN.
+ */
+export const parseFloatExact = (s: string): f64 => {
+  const p: i32 = skipSpaces(s, 0)
+  const negative: boolean = p < toI32(s.length) && toI32(s.charCodeAt(p)) === 45
+  const q: i32 = p < toI32(s.length) && (negative || toI32(s.charCodeAt(p)) === 43) ? p + 1 : p
+  if (!isHexPrefix(s, q)) {
+    return parseFloat(s)
+  }
+  const end: i32 = hexEnd(s, q + 2)
+  const v: f64 = end === q + 2 ? 0.0 : hexValue(s, q + 2, end)
+  return negative ? -v : v
+}

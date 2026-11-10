@@ -12,6 +12,8 @@ import {
   fmodF64,
   hypotF64,
   logF64,
+  numberExact,
+  parseFloatExact,
   powF64,
   quietBitsF32,
   quietBitsF64,
@@ -68,6 +70,18 @@ The remainder `x % y` on `f64`, as JavaScript and C's `fmod` define it: e_fmod.c
 <scalar-card title="log​F64" icon="phosphor/regular/function" href="#logf64">
 
 `Math.log(x)`: fdlibm's `__ieee754_log`, `x` split as 2^k * (1 + f) and log(1 + f) taken from a polynomial in f / (2 + f).
+
+</scalar-card>
+
+<scalar-card title="number​Exact" icon="phosphor/regular/function" href="#numberexact">
+
+`Number(s)` of a string under `--deterministic` (WP50 §9): the grammar the `--emit-ts` reading has, on every target.
+
+</scalar-card>
+
+<scalar-card title="parse​Float​Exact" icon="phosphor/regular/function" href="#parsefloatexact">
+
+`parseFloat(s)` under `--deterministic` (WP50 §9): the grammar the `--emit-ts` reading has, on every target.
 
 </scalar-card>
 
@@ -302,6 +316,56 @@ The operand.
 
 The natural logarithm of `x`; -Infinity for a zero of either
   sign, NaN below zero or for a NaN, and Infinity for Infinity.
+
+</scalar-field>
+
+### numberExact
+
+`Number(s)` of a string under `--deterministic` (WP50 §9): the grammar the
+`--emit-ts` reading has, on every target. A `0x` integer after optional
+ASCII whitespace and sign is read here, correctly rounded whatever the libc,
+and anything but whitespace after its digits, a hex float's `.` or `p`
+included, makes the string NaN. Every other spelling is the runtime's
+`Number`, which already agrees across targets.
+
+```ts
+function numberExact(s: string): f64
+```
+
+<scalar-field name="s" type="string" required>
+
+The string to read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+The number `s` spells, or NaN.
+
+</scalar-field>
+
+### parseFloatExact
+
+`parseFloat(s)` under `--deterministic` (WP50 §9): the grammar the
+`--emit-ts` reading has, on every target. A `0x` integer after optional
+ASCII whitespace and sign is read here, correctly rounded whatever the libc,
+and reading stops at its last digit, so `0x1p3` is 1; `0x` with no digit is
+the `0` before it. Every other spelling is the runtime's `parseFloat`, which
+already agrees across targets.
+
+```ts
+function parseFloatExact(s: string): f64
+```
+
+<scalar-field name="s" type="string" required>
+
+The string to read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+The number at the start of `s`, or NaN.
 
 </scalar-field>
 

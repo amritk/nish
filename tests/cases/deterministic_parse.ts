@@ -1,8 +1,9 @@
-// Under `--deterministic` `Number`, `parseFloat` and `parseInt` read a string
-// with one grammar on every target, the one `--emit-ts` reads: a `0x` integer
-// is read in the runtime, correctly rounded on any libc, and a hex float is
-// not a number (`Number`) or its integer prefix (`parseFloat`). The flag adds
-// 4 to the parse mode passed to `nish_parse_number`.
+// Under `--deterministic` `Number` and `parseFloat` of a string read it with
+// one grammar on every target, the one `--emit-ts` reads: the call is to
+// `std/math.ts`'s `numberExact` or `parseFloatExact`, which read a `0x`
+// integer correctly rounded on any libc, a hex float as not a number
+// (`Number`) or its integer prefix (`parseFloat`), and hand every other
+// spelling to the runtime. `parseInt` already agrees, and stays the runtime's.
 export const main = (): number => {
   console.log(Number("0x1p3"));
   console.log(parseFloat("0x1p3"));

@@ -600,15 +600,9 @@ export const emitParamRangeChecks = (emitter: Emitter, sig: FunctionSig): void =
   }
 }
 
-/**
- * `call double @nish_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt,
- * plus 4 under `--deterministic`, where the runtime reads a `0x` spelling as JavaScript's
- * grammar does, a hex integer and nothing after it, rather than strtod's hex float.
- */
-const emitParseCall = (emitter: Emitter, s: string, mode: i32): string => {
-  const flagged = emitter.opts.deterministic ? mode | 4 : mode
-  return emitter.fn.emitValue(`call double ${emitter.useRuntime(PARSE_RUNTIME)}(i8* ${s}, i32 ${flagged})`)
-}
+/** `call double @nish_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
+const emitParseCall = (emitter: Emitter, s: string, mode: i32): string =>
+  emitter.fn.emitValue(`call double ${emitter.useRuntime(PARSE_RUNTIME)}(i8* ${s}, i32 ${mode})`)
 
 // ---- Dotted builtins -------------------------------------------------------------------
 

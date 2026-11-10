@@ -528,75 +528,20 @@ void nish_argv_init(int32_t argc, char **argv) {
   }
 }
 
-/* ---- String to number: mode 0 parseFloat, 1 Number, 2 parseInt, plus 4 under
- * `--deterministic` (contract: nish.h). ASCII whitespace only; strtod parses a decimal once
- * the inf/nan spellings JS rejects are ruled out. A `0x` integer is read here, not by strtod:
- * musl's strtod misrounds one past 2^53 (`0x1fffffffffffff1`), so wasm32 and glibc parted
- * ways. A hex float (`0x1p3`, `0x1.8`) still goes to strtod without the flag (documented);
- * with mode bit 4 it is the JS grammar's `0x` integer and its stop, the same on every target
- * (docs/wp50-wasm-host.md §9). */
+/* ---- String to number: mode 0 parseFloat, 1 Number, 2 parseInt (contract: nish.h). ASCII
+ * whitespace only; strtod parses once the inf/nan spellings JS rejects are ruled out, and its `0x`
+ * hex stays accepted (documented). */
 #define NISH_SPACES " \t\n\v\f\r"
 
-static int nish_hex_digit(char c) {
-  if (c >= '0' && c <= '9') return c - '0';
-  c |= 32;
-  return c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
-}
-
-/* The hex digits at `p` (at least one) as the nearest double, ties to even, and where they
- * stop in `*end`. Digits past 64 bits are kept as a power of two and a sticky bit. */
-static double nish_parse_hex(const char *p, const char **end) {
-  uint64_t m = 0, low, half;
-  int32_t scale = 0, bits = 0, shift;
-  int sticky = 0;
-  int d;
-  double v;
-  for (; (d = nish_hex_digit(*p)) >= 0; p++) {
-    if (m >> 60) {
-      scale += 4;
-      sticky |= d != 0;
-    } else {
-      m = m << 4 | (uint64_t)d;
-    }
-  }
-  *end = p;
-  for (low = m; low; low >>= 1) bits++;
-  if (bits > 53) {
-    shift = bits - 53;
-    low = m & ((UINT64_C(1) << shift) - 1);
-    half = UINT64_C(1) << (shift - 1);
-    m >>= shift;
-    if (low > half || (low == half && (sticky || (m & 1)))) m++;
-    scale += shift;
-  }
-  v = (double)m; /* at most 2^53: exact */
-  for (; scale > 0 && v != INFINITY; scale--) v *= 2.0;
-  return v;
-}
-
 double nish_parse_number(const nish_str *s, int32_t mode) {
-  const char *p, *q, *stop, *hex_end;
+  const char *p, *q, *stop;
   char *end;
   double v;
-  int exact = (mode & 4) != 0;
-  mode &= 3;
   if (mode == 2) return strtoll(s->data, 0, 10);
   p = s->data + strspn(s->data, NISH_SPACES);
   q = p + (*p == '+' || *p == '-');
   stop = s->data + s->len;
   if (!((*q >= '0' && *q <= '9') || *q == '.' || strncmp(q, "Infinity", 8) == 0)) return mode && p == stop ? 0 : NAN;
-  if (q[0] == '0' && (q[1] | 32) == 'x' && (exact || nish_hex_digit(q[2]) >= 0)) {
-    if (nish_hex_digit(q[2]) >= 0) {
-      v = nish_parse_hex(q + 2, &hex_end);
-    } else {
-      v = 0; /* `0x` and no digit: JS reads the `0` and stops at the `x` */
-      hex_end = q + 1;
-    }
-    if (exact || (*hex_end != '.' && (*hex_end | 32) != 'p')) {
-      v = *p == '-' ? -v : v;
-      return mode && hex_end + strspn(hex_end, NISH_SPACES) != stop ? NAN : v;
-    }
-  }
   v = strtod(p, &end);
   if (end == p) return NAN; /* "." alone */
   return mode && end + strspn(end, NISH_SPACES) != stop ? NAN : v;

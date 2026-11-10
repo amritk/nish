@@ -516,6 +516,74 @@ function quietBitsF64(x: f64): i64 -> @nish.quietBitsF64 [exported]
 function quietBitsF32(x: f32): i32 -> @nish.quietBitsF32 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function hexDigit(c: i32): i32 -> @nish.hexDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:9 lower: i32 (const)
+function skipSpaces(s: string, at: i32): i32 -> @nish.skipSpaces
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  stackSites=0 stackLocals=0
+  local +0:7 k: i32 (let)
+  local +2:11 c: i32 (const)
+function hexEnd(s: string, at: i32): i32 -> @nish.hexEnd
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish.hexDigit
+  stackSites=0 stackLocals=0
+  local +0:7 k: i32 (let)
+  callee +1:43 hexDigit -> @nish.hexDigit
+function hexValue(s: string, start: i32, end: i32): f64 -> @nish.hexValue
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: start
+  calls: nish.clz64 nish.hexDigit nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:7 m: u64 (let)
+  local +1:7 scale: i32 (let)
+  local +2:7 sticky: boolean (let)
+  local +3:7 k: i32 (let)
+  local +5:11 d: i32 (const)
+  callee +5:20 hexDigit -> @nish.hexDigit
+  local +14:9 bits: i32 (const)
+  callee +14:47 clz64 -> @nish.clz64
+  local +16:11 shift: i32 (const)
+  local +17:11 low: u64 (const)
+  local +18:11 half: u64 (const)
+  local +26:7 v: f64 (let)
+function isHexPrefix(s: string, at: i32): boolean -> @nish.isHexPrefix
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  stackSites=0 stackLocals=0
+function numberExact(s: string): f64 -> @nish.numberExact [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: s
+  calls: nish.hexEnd nish.hexValue nish.isHexPrefix nish.skipSpaces nish_panic_index nish_panic_overflow nish_parse_number
+  stackSites=0 stackLocals=0
+  local +0:9 p: i32 (const)
+  callee +0:18 skipSpaces -> @nish.skipSpaces
+  local +1:9 negative: boolean (const)
+  local +2:9 q: i32 (const)
+  callee +3:8 isHexPrefix -> @nish.isHexPrefix
+  local +6:9 end: i32 (const)
+  callee +6:20 hexEnd -> @nish.hexEnd
+  callee +7:24 skipSpaces -> @nish.skipSpaces
+  local +8:11 zero: f64 (const)
+  local +11:9 v: f64 (const)
+  callee +11:18 hexValue -> @nish.hexValue
+function parseFloatExact(s: string): f64 -> @nish.parseFloatExact [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: s
+  calls: nish.hexEnd nish.hexValue nish.isHexPrefix nish.skipSpaces nish_panic_index nish_panic_overflow nish_parse_number
+  stackSites=0 stackLocals=0
+  local +0:9 p: i32 (const)
+  callee +0:18 skipSpaces -> @nish.skipSpaces
+  local +1:9 negative: boolean (const)
+  local +2:9 q: i32 (const)
+  callee +3:8 isHexPrefix -> @nish.isHexPrefix
+  local +6:9 end: i32 (const)
+  callee +6:20 hexEnd -> @nish.hexEnd
+  local +7:9 v: f64 (const)
+  callee +7:40 hexValue -> @nish.hexValue
 import Math.atan2 from "nish/math" -> function @nish.atan2F64
 function angle(y: f64, x: f64): f64 -> @angle [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false

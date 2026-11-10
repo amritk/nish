@@ -288,9 +288,10 @@ const mathImport = (
     return ""
   }
   let k = 0
-  while (k < modules.length && k < outputs.length) {
-    if (isMathModule(modules[k].packageName, modules[k].name)) {
-      return `import ${braceList(names)} from "${relativeSpecifier(out, outputs[k])}"\n`
+  for (const unit of modules) {
+    if (k < outputs.length && isMathModule(unit.packageName, unit.name)) {
+      const target = outputs[k]
+      return `import ${braceList(names)} from "${relativeSpecifier(out, target)}"\n`
     }
     k = k + 1
   }

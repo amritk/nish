@@ -3543,7 +3543,8 @@ wasm32 and in the `--emit-ts` reading under Node
   and the random source, NL2699 the environment and the terminal.
 - `Number(s)`, `parseFloat(s)` and `parseInt(s)` read a string with one
   grammar on every target, the one `--emit-ts` reads: a `0x` integer, read by
-  the runtime and correctly rounded on any libc, and no hex float, so
+  `std/math.ts`'s `numberExact` and `parseFloatExact` (which the flag calls
+  in their place) and correctly rounded on any libc, and no hex float, so
   `Number("0x1p3")` is NaN and `parseFloat("0x1p3")` is 1 where a native build
   without the flag lets `strtod` read 8 (`deterministic_parse`). Every decimal
   spelling already agreed: glibc, musl and Node round them all correctly.

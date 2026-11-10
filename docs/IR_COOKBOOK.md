@@ -25318,11 +25318,12 @@ integer `%` keeps `srem` and copies nothing. A native build and
 `f64ToBits(x)` is `call i64 @nish.quietBitsF64(double %x)`, whose body is
 `fcmp une double %x, %x` and a `phi` of `0x7ff8 << 48` and the `bitcast`,
 and `f32ToBits` the same through `@nish.quietBitsF32` and `2143289344`
-(`0x7fc00000`) (`tests/cases/deterministic_bits.ll`), and every
-`nish_parse_number` call passes its mode plus 4 (`i32 4` for `parseFloat`,
-`i32 5` for `Number`, `i32 6` for `parseInt`), which reads the `--emit-ts`
-grammar: a `0x` integer and no hex float
-(`tests/cases/deterministic_parse.ll`). Every C
+(`0x7fc00000`) (`tests/cases/deterministic_bits.ll`), and `Number(s)` and
+`parseFloat(s)` of a string are `call double @nish.numberExact(i8* %s)` and
+`@nish.parseFloatExact`, which read a `0x` integer in Nish, correctly rounded,
+with no hex float, and call `nish_parse_number` for every other spelling;
+`parseInt` keeps its `i32 2` call (`tests/cases/deterministic_parse.ll`).
+`runtime.c` is the same with or without the flag. Every C
 unit and every link line is compiled with `-ffp-contract=off`, with or without
 the flag, so no `fmul` and `fadd` pair becomes an FMA on AArch64.
 

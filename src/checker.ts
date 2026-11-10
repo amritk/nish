@@ -117,7 +117,7 @@ import {
   COLLECTIONS_SPECIFIER,
   FLOAT_REM_LOCAL,
   MATH_SPECIFIER,
-  quietBitsLocal,
+  routedBuiltinLocal,
   SORT_LOCAL,
   SORT_SPECIFIER,
 } from "./std-modules"
@@ -411,7 +411,9 @@ export class Checker {
    * float remainder. The scan is syntax, so an integer `%` loads the library
    * and copies nothing from it. Under `--deterministic` an `f64ToBits` or
    * `f32ToBits` imports `quietBitsF64` or `quietBitsF32` under
-   * `quietBitsLocal`, so a NaN answers one set of bits everywhere.
+   * `routedBuiltinLocal`, so a NaN answers one set of bits everywhere, and a
+   * `Number` or `parseFloat` imports `numberExact` or `parseFloatExact`, so a
+   * `0x` string is read with one grammar everywhere.
    */
   importMath(): void {
     if (this.program.isMathLibrary()) {
@@ -420,8 +422,15 @@ export class Checker {
     const calls: Node[] = []
     const rems: Node[] = []
     const bits: Node[] = []
+    const parses: Node[] = []
     const routed = this.ctx.pageModule || this.ctx.deterministic
-    scanMathCalls(this.program.file, calls, routed ? rems : null, this.ctx.deterministic ? bits : null)
+    scanMathCalls(
+      this.program.file,
+      calls,
+      routed ? rems : null,
+      this.ctx.deterministic ? bits : null,
+      this.ctx.deterministic ? parses : null
+    )
     for (const call of calls) {
       const name = call.children[0].text
       this.bindMath(`${name}F64`, `Math.${name}`, call)
@@ -431,7 +440,11 @@ export class Checker {
     }
     for (const call of bits) {
       const name = call.children[0].text
-      this.bindMath(name === "f64ToBits" ? "quietBitsF64" : "quietBitsF32", quietBitsLocal(name), call)
+      this.bindMath(name === "f64ToBits" ? "quietBitsF64" : "quietBitsF32", routedBuiltinLocal(name), call)
+    }
+    for (const call of parses) {
+      const name = call.children[0].text
+      this.bindMath(name === "Number" ? "numberExact" : "parseFloatExact", routedBuiltinLocal(name), call)
     }
   }
 
@@ -3351,9 +3364,16 @@ const hasSortCall = (node: Node): boolean => {
  * `--deterministic`, where `rems` is not `null`, `sin`, `cos`, `exp`, `log`
  * and `pow` too, and every `%` and `%=` goes to `rems`. Under
  * `--deterministic`, where `bits` is not `null`, every `f64ToBits` and
- * `f32ToBits` call goes to `bits`.
+ * `f32ToBits` call goes to `bits`, and every `Number` and `parseFloat` call
+ * to `parses`.
  */
-const scanMathCalls = (node: Node, calls: Node[], rems: Node[] | null, bits: Node[] | null): void => {
+const scanMathCalls = (
+  node: Node,
+  calls: Node[],
+  rems: Node[] | null,
+  bits: Node[] | null,
+  parses: Node[] | null
+): void => {
   if (rems !== null && node.kind === N_BINARY && (node.text === "%" || node.text === "%=")) {
     rems.push(node)
   }
@@ -3364,6 +3384,14 @@ const scanMathCalls = (node: Node, calls: Node[], rems: Node[] | null, bits: Nod
     (node.children[0].text === "f64ToBits" || node.children[0].text === "f32ToBits")
   ) {
     bits.push(node)
+  }
+  if (
+    parses !== null &&
+    node.kind === N_CALL &&
+    node.children[0].kind === N_IDENT &&
+    (node.children[0].text === "Number" || node.children[0].text === "parseFloat")
+  ) {
+    parses.push(node)
   }
   if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
     const callee = node.children[0]
@@ -3381,7 +3409,7 @@ const scanMathCalls = (node: Node, calls: Node[], rems: Node[] | null, bits: Nod
     }
   }
   for (const child of node.children) {
-    scanMathCalls(child, calls, rems, bits)
+    scanMathCalls(child, calls, rems, bits, parses)
   }
 }
 
