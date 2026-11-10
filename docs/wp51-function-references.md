@@ -22,11 +22,15 @@ the set of top-level functions the program ever stores is closed and known at
 compile time, and so is, for each call, the part of it that can reach the
 call. A *reference* to a capture-free top-level function is a small
 integer **tag** into that set. A call through a reference lowers to a `switch`
-over the members that can reach it, with a direct call in each arm. The attribute fixpoint, the escape
-analysis and every other whole-program pass see that `switch` as an ordinary
-function with ordinary direct calls, so they take the **join of the set's
-facts** instead of giving up. Closures — anything that captures — stay refused,
-and so does passing a reference across the C boundary.
+over the members that can reach it, with a direct call in each arm. That
+`switch` is a function the checker generates and records, with its arms'
+calls, before any whole-program pass reads the call graph (§2.4). The
+attribute fixpoint, the escape analysis and the call-site ranges then see an
+ordinary function with ordinary direct calls, so they take the **join of the
+set's facts** instead of giving up; the one premise that needs the record to
+hold is the call-site ranges' "no other caller can exist" (§6). Closures —
+anything that captures — stay refused, and so does passing a reference across
+the C boundary.
 
 ## 1. The decision
 
@@ -41,41 +45,52 @@ refused.
   measured 0.99x to 1.24x the switch, most of it inside the 21% layout spread
   (§3), and the switch is within ±3% of a direct call for a set of one.
   On a **periodic mixed** stream it measured within ±3% of a direct call and
-  3.7x to 4.7x faster than an indirect call for sets of up to four, 3.1x to
-  3.3x for eight (§3.2, §3.3). On an **aperiodic** stream the selection itself
-  mispredicts: the switch costs 2.4x to 4.5x a direct call, as a hand-written
-  `switch` does; K=2's 1.28x over an indirect call is past the band but not
-  known to be past that group's layout spread, and K=4's 1.21x and K=8's
-  1.07x are no difference (§3.4, §3.5).
+  3.7x to 4.7x faster than an indirect call for sets of up to four; at eight
+  the switch becomes a jump table and costs 1.25x to 1.33x a direct call
+  itself, still 3.1x to 3.3x faster than an indirect call (§3.2, §3.3). On an
+  **aperiodic** stream the selection itself mispredicts: the switch costs 2.4x
+  to 4.5x a direct call, as a hand-written `switch` does. Its edge over an
+  indirect call there is 1.28x at K=2 and 1.21x at K=4, both past the band
+  but not known to be past that group's own layout spread, which was not
+  measured; K=8's 1.07x is inside the band and is none (§3.4, §3.5).
 - **The escape proof** survives the dispatched call when every member of the
-  set keeps the object local (§4). When one member does not, every call of the
-  set loses it: 7.0x and 1.5 GB in the spike.
+  set keeps the object local (§4, case A). When one member does not, every
+  call of the set loses it: 6.4x to 9.0x a direct call and 1.5 GB in the
+  spike (case B). When the
+  escaping member is in the program but not in the hot call's set, the hot
+  call keeps it: case C, the program a per-place pass produces, is measured
+  at A's cost (0.95x to 1.09x A, inside the layout spread) with `P` an
+  `alloca` (§4).
 - **Why strict holds, with per-place sets.** A hand-written `switch` joins
   only its own arms; a dispatcher with one set per signature joins every
   member of that signature, so a program rewritten from a `switch` to
-  references could get slower (the spike's case B, §4). Per-place sets cure
-  that (§2.3, §8): a place's set is exactly the tags a hand program storing
-  integer tags in the same places could hold there, so its dispatcher is the
-  switch that program must write at that call. No program is slower than the
-  same program written with integer tags and a hand `switch` over every
-  member stored into that place. What remains is flow-sensitive knowledge a
-  hand programmer could use and the pass does not (§10). The pass is unbuilt,
-  so stage 1 does not ship without it and without the `{u0,u1,u2}` test (§9).
-- **Why not wp28's compatibility mode.** Compat cannot hold this construct,
-  by wp28's own rules (line numbers at `350bad84`): its machinery, C0
-  (`--compat`), is unbuilt (`wp28-compatibility-mode.md:458`); strict is
-  normative and compat only adds acceptance (rule 1, :57-58), and with no
-  compat construct used the IR is byte-identical and every `reject_*` the
-  allow-list does not name rejects unchanged (rule 5, :75-79), so compat is a
-  flag over the strict language, not a change to it;
-  "Compat adds no rule to LANGUAGE.md" (§4.3, :239); "`src/` may never use a
-  compatibility construct" (§4.4, :244), where this construct is wanted
-  (§5.4); and `--compat` implies `--number-mode f64` (:316), a cost no
-  reference program should pay. wp28 has taken a row off its list this way
-  before: C2a, function-typed parameters, moved to "Built in strict" when
-  strict accepted them with nothing lost (`wp28-compatibility-mode.md:462`,
-  the struck-through ~~C2a~~ row). Capture-free references leave the list the
-  same way; closures stay on it.
+  references could get slower (case B, §4). Per-place sets (§2.3) give each
+  local, parameter, field declaration, array or `Map` element type and
+  function return its own set. The invariant that definition gives: **no
+  program is slower than the same program written with `i32` tags, whose
+  hand `switch` at each call covers every member stored into the same
+  declaration or element type** — the switch a hand program storing tags in
+  the same declarations must write. Case C measures that program. What the
+  definition does not cover — two arrays of one element type, two objects of
+  one class, a parameter's callers, flow — is listed in §10. The pass is
+  unbuilt, so stage 1 does not ship without it and without case C's test
+  (§9).
+- **Why not wp28's compatibility mode.** By wp28's own rules (line numbers
+  at `350bad84`) compat *could* hold references: rule 2 (:59-64) admits a
+  construct whose layouts stay fixed, and a tag is an `i32`. The case for
+  strict is rule 1's other half, that strict "does not grow" (:57-58), and
+  it is answered the way wp28 answered C2a, function-typed parameters, which
+  moved to "Built in strict" (`wp28-compatibility-mode.md:462`) because
+  strict could take them at no cost. A capture-free reference costs exactly
+  the hand `switch` it replaces (§3.5, case C in §4.3), so it adds nothing to
+  any program's bill that the program does not already pay. Placing it in
+  compat would also carry practical costs: C0 (`--compat`) is unbuilt
+  (:458), `src/` may never use a compat construct (:244) where §5.4 wants
+  this one, and `--compat` implies `--number-mode f64` (:316). Against
+  **Decline**, the case is expressiveness, not speed: a reference is no
+  faster than the `switch` a program writes today, but it lets a handler
+  live in a field, an array or a `Map`, so a table, a router or a test list
+  is written as data (§8). Closures stay on wp28's list.
 
 ## 2. The rule
 
@@ -132,15 +147,41 @@ non-nullable reference can never hold `0`: zero-filled storage of a
 non-nullable function type is refused (§2.1), a field is definitely assigned
 before it is read, and a call through `S | null` needs `h !== null` first.
 
-**The set a call dispatches over is the call's, not the signature's.** Each
-place a reference can be held — a local, a parameter, a field of a class, the
-elements of an array, a `Map`'s values, a function's return — gets the set of
-members that can be stored into it, by a flow-insensitive pass over the
-program's stores of names and of other places (a store `a = b` adds `b`'s set
-to `a`'s). A call through a reference read from place `p` dispatches over
-`p`'s set, `F(p) ⊆ F(S)`. The tags stay numbered per signature, so `===`,
-stores and loads need no translation; only the dispatcher's arms narrow.
-Calls whose sets are equal share one dispatcher.
+**The set a call dispatches over is the call's, not the signature's.** A
+**place** is a declaration a reference can be stored into, and each place
+gets one set. Stage 1's places are, exactly:
+
+| Place | One set per | So these share a set |
+| --- | --- | --- |
+| a local or a parameter | declaration (a generic body's, once for every instantiation) | every caller's argument for one parameter |
+| a field | class field declaration | every object of the class, and of every subclass that inherits the field |
+| an array element | element type `S[]` (stage 2: `(S \| null)[]`) | every array of that element type in the program |
+| a `Map` value (stage 2) | value type | every `Map` with that value type |
+| a return | function declaration | every call of that function |
+
+Per allocation — one set for each `new Array`, each literal, each object —
+is not a place: telling two arrays of one element type apart needs a
+points-to analysis, which stage 1 does not build. The pass is
+flow-insensitive and per place: a store of a name `f` into place `a` adds
+`f`; a store `a = b`, an argument for parameter `a`, or a `return b` into
+`a` adds `b`'s set to `a`'s; and it iterates to a fixpoint. A call through
+a reference read from place `p` dispatches over `p`'s set,
+`F(p) ⊆ F(S)`. The tags stay numbered per signature, so `===`, stores and
+loads need no translation; only the dispatcher's arms narrow. Calls whose
+sets are equal share one dispatcher.
+
+**The invariant, from that definition.** A hand program with no references
+stores an `i32` tag in the same declarations and writes a `switch` at each
+call. Its `switch` must cover every tag that can be in the declaration it
+reads: without reasoning about paths or about which object or array it
+holds, that is every tag stored into the declaration, or into any
+declaration that flows into it — exactly `F(p)`. So: **no program is slower
+than the same program written with `i32` tags, whose hand `switch` at each
+call covers every member stored into the same declaration or element type.**
+Case C (§4) is that program for §4's three-way site, measured. What the
+definition puts in one set that a hand program could keep apart is §10's
+list; none of it is slower than the hand program the invariant names, only
+than a hand program that reasons further.
 
 The compiler then generates one **dispatcher** per distinct set, an internal
 function written as the program could have written it:
@@ -169,15 +210,22 @@ The spike (§3, §4, §12) numbered its tags from `0` and had no `null`, so its
 constants, or, for a jump table, subtracts `1` from the index; nothing it
 measured depends on which.
 
-That is the whole design. Because the dispatcher is an ordinary function with
-ordinary direct calls, **no analysis needs a new case for "a call through a
-reference"**: each already handles a call to a known function, and the
-dispatcher's facts are the join of its arms' by the rule they already apply to
-any function with several call sites in its body. A hand-written `switch` is
-the same join over its own arms, and with per-place sets the dispatcher joins
-no more than the arms the program could reach — the property strict rests on
-(§8). §6 lists every place that leaned on "no function
-values" and what that join does to each.
+That is the whole design. The dispatcher is generated, but it is generated
+by the checker as a function of the program, with its arms' calls recorded
+like any body's (§2.4), so to every pass after the checker it is an ordinary
+function with ordinary direct calls. That is the sense in which **no
+analysis needs a new case for "a call through a reference"**: each already
+handles a call to a known function, and the dispatcher's facts are the join
+of its arms' by the rule they already apply to any function with several
+call sites in its body. It holds only if the record is complete before the
+first pass reads it; a member called from a dispatcher the call graph does
+not show would be a caller no analysis saw, and the call-site ranges would
+enter that member with facts its real callers do not meet (§6,
+`ARCHITECTURE.md:393`). A hand-written `switch` is the same join over its
+own arms, and with per-place sets the dispatcher joins no more than the arms
+the invariant above names — the property strict rests on (§8). §6 lists
+every place that leaned on "no function values" and what that join does to
+each.
 
 ### 2.4 How the set is known in time
 
@@ -192,17 +240,27 @@ therefore closed before pass 2, and nothing downstream sees a partial set.
 
 The per-place sets need the checked bodies (which field `this.f = g` stores
 into is a type question), so they are computed once pass 2 has checked every
-body, and before anything reads a call's callees: the attribute fixpoint, the
-region rules, the portability records and the emitter. Each reference call is
-recorded in `nodeCallees` as a call of its dispatcher, so every one of those
-passes sees an ordinary direct call (§6, the wp49 row).
+body, and before anything reads a call's callees: the call-site ranges
+(`src/ranges.ts`, which reads `program.nodeCallees`, :1019), the attribute
+fixpoint, the region rules, the portability records and the emitter. Each
+reference call is recorded in `nodeCallees` as a call of its dispatcher, and
+the dispatcher itself is a checked function whose arm calls are recorded the
+same way, so every one of those passes sees an ordinary direct call (§6, the
+wp49 row). If stage 1 instead emitted the dispatcher only in the emitter, the
+members would have callers `src/ranges.ts` never saw, and
+`takesEntryFacts` (`src/ranges.ts:355`–`360`) would have to refuse every set
+member; either is sound, the first keeps the members' entry facts, and §6's
+`ARCHITECTURE.md:393` row holds stage 1 to one of them.
 
 ## 3. The measurements
 
 Every figure in this section is best of seven, with every variant run once per
 round in order (interleaved), on the machine below. Each program prints a
-checksum folded from every call's result, and every variant of a group prints
-the same number, so no row timed a loop the optimiser removed.
+checksum folded from every call's result. Every **same** variant of a group
+prints its **direct** row's number, and each **mixed** switch prints its
+indirect twin's; the mixed streams differ by `K`, so their checksums differ
+from **direct**'s and from each other (each table lists them). No row timed a
+loop the optimiser removed.
 
 - **Machine.** `nproc` 4, `Intel(R) Xeon(R) Processor @ 2.30GHz`, 15 GB, a
   cloud container otherwise idle while timing.
@@ -219,7 +277,8 @@ the same number, so no row timed a loop the optimiser removed.
 - **What the band does not cover.** It is run-to-run noise of one binary. It
   says nothing about code layout and predictor aliasing between binaries: the
   indirect **same** binaries have the same hot loop at every `K` (§12.7 shows
-  serial `K = 2` and `8`, and array `K = 4`; with addresses stripped, the
+  serial `K = 2`, `4` and `8`, and array `K = 2`, `4` and `8`, so both ends of
+each group's spread; with addresses stripped, the
   eight instructions either side of every `call *` in `objdump -d` differ
   between `K = 1, 2, 4, 8` only in the addresses of string constants), yet spread from 427 to 516 ms (serial) and 435 to 525 ms
   (array), up to 21%. A difference of that size between two *binaries* is not
@@ -239,9 +298,10 @@ callees in place of one, so a set can have 1, 2, 4 or 8 members (§12.1).
   1,024-element `i32[]` per call, as a call through an array of references
   would.
 - **indirect** — the same `.ll` with `@call`'s body hand-edited to load a
-  function pointer from a table a C constructor owns and call it (§12.3), the
-  position a function value with no closed set is in, and the instrument of
-  wp28 §11c. Its attributes drop to `nounwind`, as an opaque callee's would.
+  function pointer from a table and call it (§12.3): the table is a global the
+  `.ll` defines and a C constructor fills from `getenv`, so it is not
+  constant and nothing can fold it. That is the position a function value
+  with no closed set is in, and the instrument of wp28 §11c. Its attributes drop to `nounwind`, as an opaque callee's would.
 
 Each set size is run with two tag streams, built once at start-up from
 `process.argv.length`, so the optimiser cannot know them:
@@ -371,31 +431,45 @@ The three streams answer differently, so each is read on its own.
   one `test` and `jne` at `K = 2`, the three-compare chain at `K = 4`, a jump
   table at `K = 8`, with no `select` and no `cmov` in the loop (§12.7). A
   hand-written `switch` or `if` chain over the same tags is the same code and
-  pays the same. `K = 4`'s 1.21x and `K = 8`'s 1.07x (both indirect branches
-  there) are inside the 21% spread measured elsewhere and are **none**.
-  `K = 2`'s 1.28x is past the band (±6%) and past the spread measured on the
-  serial and array groups, but this group's own layout spread was not
-  measured (§3), so it is not known to be past that.
+  pays the same. Against the indirect call, `K = 2`'s 1.28x and `K = 4`'s
+  1.21x (3,504 ms against 2,889 ms; a compare chain at `K = 4`, not an
+  indirect branch) are both past the band (±6%), but this group's own layout
+  spread was not measured (§3), so neither is known to be past that. `K = 8`'s
+  1.07x, a jump table against a `call *`, is inside the band: **none**.
 - **So the switch's large advantage is a periodic-stream result.** "3.1x to
   4.7x faster than an indirect call" holds where the tags follow a short
   pattern. On a monomorphic site it is not shown past the layout spread; where
-  the tags are decided by input it is at most 28% at `K = 2` (not known to be
-  past that group's layout spread) and none measured above.
+  the tags are decided by input it is 28% at `K = 2` and 21% at `K = 4`,
+  neither known to be past that group's layout spread, and none at `K = 8`.
   What holds in every stream is that the dispatcher is the `switch` a program
   writes by hand today, so at the call a reference costs what today's code
   costs. §4 is where that stops being true.
+- **Why the same switch is about 1.0x here and 1.3x to 1.6x in §4.3** — read
+  from the instructions (§12.7), not from counters (§7). Here each call's
+  `xor`, `sar`, `xor` and `inc` form a chain of dependent instructions the
+  next call waits on, and the tag load and the compare that picks the arm
+  depend only on the loop counter, so they can run beside that chain. §4's
+  **direct** loop is much shorter: `opt -O3` folds `u0`'s constants and
+  unrolls it five times, about four instructions a call (§12.7). A adds about
+  nine a call to that — the load, the compare, two `cmov`, an `imul` — so the
+  added work is most of the loop instead of a small part of it, and costs
+  1.3x to 1.6x. That is the hand `switch`'s cost too, since A *is* that
+  `switch`; it is the price of a callee picked by data against one known at
+  compile time, not of references.
 
 ## 4. The escape proof through a dispatched call
 
 wp28 §7.4 found that the call's own cost is the small half: the escape analysis
 was worth 8.76x there, and a callee the analysis cannot see forfeits it. That
 figure does not reproduce at `350bad84`: §11e's shape, adapted (§4.1), with
-and without `--no-stack-alloc` measured 1.85x here (§4.3). The likely cause is
+and without `--no-stack-alloc` measured 1.66x to 1.98x here, across three
+runs (§4.3). The likely cause is
 that `--no-stack-alloc` now rewinds the arena offset every iteration (§12.5
 shows the save and the rewind); no build without the rewind was timed, so
-that is not shown. The 1.85x is this note's reference for the lost proof. The
-question for a reference is whether the dispatcher keeps the proof when every member
-keeps the object local, and what it costs when one member does not.
+that is not shown. That ratio is this note's reference for the lost proof.
+The question for a reference is whether the dispatcher keeps the proof when
+every member keeps the object local, what it costs when one member does not,
+and what it costs when that member is in the program but not at the hot site.
 
 ### 4.1 The programs
 
@@ -406,14 +480,22 @@ one object made in `main` and passed down, so a member has somewhere to put
 
 - **A — every member local.** `u0..u3` read `p.x` and `p.y` and return.
 - **B — one member escapes.** `u3` also stores `k.last = p`.
+- **C — the program a per-place pass produces.** B's members, but the hot
+  site dispatches over `{u0, u1, u2}` only (`u0` for tag `0`, `u1` for `1`,
+  `u2` otherwise), and `u3` is called once, by name, after the loop:
+  `const e = u3(new P(r, 1), k)`. That is what §2.3's sets give when the hot
+  site's place never holds `u3` and another place does, and what a program
+  writes by hand today. `genc.mjs` derives it from B's sources (§12.4).
 
 Each is run with the **same** stream (every tag `0`, so the escaping arm of B
 is never taken and the row isolates the lost proof from the store) and the
 **mixed** one. The baselines are §11e adapted: where wp28's loop calls
 `use(p)`, whose body is `(p.x * 3) ^ (p.y + 1)`, **direct** calls `u0(p, k)`,
 the same body with `wrappingMul` and `wrappingAdd` (§3.1's overflow
-adaptation) and a `Keep` parameter, so it has the members' signature (§12.4). It is compiled as is and with `--no-stack-alloc` — wp28's
-instrument for "the object is not provable".
+adaptation) and a `Keep` parameter, so it has the members' signature (§12.4).
+It is compiled as is and with `--no-stack-alloc` — wp28's instrument for "the
+object is not provable". C's **mixed** stream is `((s ^ base) & 0x7fffffff) % 3`,
+three tags, not A's and B's four, so its checksum and stream are its own.
 
 ### 4.2 The fact table
 
@@ -426,7 +508,8 @@ allocation call the last two columns name:
 | direct | `u0`: `nounwind willreturn readonly`; `p`, `k` `readonly nocapture` | — | — | `nounwind willreturn`; `k` `readonly nocapture` | `%P.obj = alloca %struct.P` | `%Keep.obj = alloca` |
 | direct, `--no-stack-alloc` | as direct | — | — | as direct | `nish_alloc_struct(i64 8)` per iteration, the arena offset saved before it and rewound after (`nish_arena_release` if the arena grew), §12.5 | arena |
 | **A** (every member local) | `nounwind willreturn readonly`; `p`, `k` `readonly nocapture` | the same | **the same: `nounwind willreturn readonly`; `p`, `k` `readonly nocapture`** | `nounwind`; `k` `readonly nocapture` | **`%P.obj = alloca %struct.P`** | `%Keep.obj = alloca` |
-| **B** (`u3` stores `p`) | the same as A | `nounwind willreturn`; **`p` neither `readonly` nor `nocapture`**; `k` `nocapture` | **`nounwind willreturn`; `p` neither `readonly` nor `nocapture`** | `nounwind`; `k` `nocapture`, not `readonly` | **`nish_alloc_struct(i64 8)` per iteration, no per-iteration release** | `%Keep.obj = alloca` |
+| **B** (`u3` stores `p`) | the same as A | `nounwind willreturn`; **`p` neither `readonly` nor `nocapture`**; `k` `nocapture` | **`nounwind willreturn`; `p` neither `readonly` nor `nocapture`** | `nounwind`; `k` `nocapture`, not `readonly` | **`nish_alloc_struct(i64 8)` per iteration, no per-iteration release: every `P` lives until `nish_main` releases the arena** | `%Keep.obj = alloca` |
+| **C** (`u3` escapes, called after the loop) | the same as A | the same as B | **as A: `nounwind willreturn readonly`; `p`, `k` `readonly nocapture`** | `nounwind`; `k` `readonly nocapture` | **`%P.obj = alloca %struct.P`** | `%Keep.obj = alloca`; the one `P` passed to `u3` is `nish_alloc_struct(i64 8)`, once |
 
 `run` in A and B is `nounwind` without `willreturn` because it reads the tag
 array, whose bounds check can panic; **direct** reads no array. The rows are
@@ -436,47 +519,76 @@ set, not of the stream.
 The dispatcher's facts in A are its members' facts, and in B they are `u3`'s:
 **the join**, by the attribute pass as it is today, with no change. In A the
 stack proof survives the dispatched call; in B it is lost for every call of
-`dispatch`, including the ones whose tag is `0`.
+`dispatch`, including the ones whose tag is `0`. In C `u3`'s facts are B's,
+and the dispatcher, which does not call it, has A's: the escape stays at the
+site that calls `u3`.
 
 ### 4.3 What it costs
 
-| Program | stream | ms | / direct | max RSS | checksum |
-| --- | --- | ---: | ---: | ---: | --- |
-| direct | — | 113 | 1.00x | 12 MB | `208457217` |
-| direct (copy) | — | 116 | 1.03x | 12 MB | `208457217` |
-| direct, `--no-stack-alloc` | — | 209 | 1.85x | 12 MB | `208457217` |
-| A, every member local | same | 168 | 1.49x | 12 MB | `208457217` |
-| A, every member local | mixed | 166 | 1.47x | 12 MB | `230433138` |
-| B, `u3` escapes | same | 792 | 7.01x | **1,527 MB** | `208457217` |
-| B, `u3` escapes | mixed | 726 | 6.42x | **1,527 MB** | `230433138` |
+Three runs of `bench.py`, every row the best of its rounds, interleaved
+(§12.6): run 0 of 7 rounds, before C existed; runs 1 (7 rounds) and 2
+(11 rounds) on a later container, a different host, with C added.
+
+| Program | stream | run 0 ms | / direct | run 1 ms | / direct | run 2 ms | / direct | max RSS | checksum |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| direct | — | 113 | 1.00x | 139 | 1.00x | 126 | 1.00x | 12 MB | `208457217` |
+| direct (copy) | — | 116 | 1.03x | 135 | 0.97x | 133 | 1.06x | 12 MB | `208457217` |
+| direct, `--no-stack-alloc` | — | 209 | 1.85x | 231 | 1.66x | 249 | 1.98x | 12 MB | `208457217` |
+| A, every member local | same | 168 | 1.49x | 180 | 1.29x | 187 | 1.48x | 12 MB | `208457217` |
+| A, every member local | mixed | 166 | 1.47x | 199 | 1.43x | 206 | 1.63x | 12 MB | `230433138` |
+| B, `u3` escapes | same | 792 | 7.01x | 1,062 | 7.64x | 1,129 | 8.96x | **1,527 MB** | `208457217` |
+| B, `u3` escapes | mixed | 726 | 6.42x | 948 | 6.82x | 920 | 7.30x | **1,527 MB** | `230433138` |
+| **C**, `u3` escapes after the loop | same | — | — | 196 | 1.41x | 177 | 1.40x | 12 MB | `208457217 1876114956` |
+| **C**, `u3` escapes after the loop | mixed | — | — | 205 | 1.47x | 225 | 1.79x | 12 MB | `188232515 1694092638` |
+
+The copy rows put the within-run band at about ±6%. The runs disagree by
+more than that: A **same** is 1.49x, 1.29x and 1.48x **direct**, so a
+difference under about 20% between runs is not read. C prints a second
+number, `u3`'s result on the one `P` after the loop.
 
 - **A keeps the proof.** `P` stays an `alloca` and SROA dissolves it; after
-  `opt -O3` neither A nor **direct** has an allocation in the loop. A's 1.47x
-  to 1.49x over **direct** is not the proof (the facts are identical) but the
-  rest of the loop. After `opt -O3` **direct**'s loop is six instructions
-  (`mul`, `add`, `xor`, `add`, the induction `add` and the compare), while A's
-  loads `ts[i & 1023]` and switches into four arms that pick two constants
-  for a shared `mul`, `add`, `xor` and `add` (§12.5). How the 1.47x splits
-  between the load and the switch was not measured (§7).
+  `opt -O3` neither A nor **direct** has an allocation in the loop (§12.5).
+  A's 1.29x to 1.63x over **direct** is not the proof, since the facts are
+  identical, but the rest of the loop (§12.7). **direct**'s callee is a
+  constant: `opt -O3` folds `u0`'s constants and unrolls the loop five
+  times, about four instructions a call (`lea`, `inc`, `xor`, `add`). A's
+  loop loads `ts[i & 1023]`, compares it, and picks the arm's two constants
+  with two `cmovae`, then `imul`, `add` and `xor`: about thirteen
+  instructions a call, unrolled twice. How that splits between the load and
+  the select was not measured (§7). §3.5 says why the same switch costs
+  about 1.0x in §3's loops and this much here.
+- **A's same and mixed loops are the same instructions** (§12.7): the
+  `cmov` does not branch on the tag, so the stream cannot change the loop.
+  Their 1% to 11% differences are run noise read against a 6% band, not the
+  stream.
 - **B loses it, and the loss is not the stream's.** With every tag `0` the
-  escaping arm never runs, yet B is 7.0x **direct** and holds 1.5 GB: `P` goes
-  to the arena, and because `dispatch` may capture `p`, the loop gets no
-  per-iteration release either, so every `P` of the 200M iterations stays
-  until `run` returns. That is worse than `--no-stack-alloc` (1.85x, 12 MB),
-  which still releases each iteration because `u0` is known not to keep `p`.
-- **This is the price of the join, and the join is wider than a
-  hand-written `switch`'s.** A program that calls `u3` by name pays B's cost,
-  correctly, because `u3` does keep `p`. A hand-written `switch` — what a
-  Nish program writes today in place of a table of handlers — joins only its
-  own arms: a `switch` over `u0..u2` keeps the proof even if `u3`, elsewhere
-  in the program, escapes. A per-*signature* dispatcher joins every function
-  of that signature the program names, so the same three-way site written
-  with references would pay B's 7.0x and 1.5 GB for a member it never calls.
-  That is a program made slower than it can be written today, which is why
-  §2.3 makes the set per place and why stage 1 does not ship without that
-  pass (§8). With per-place sets the dispatcher at
-  that site is `{u0, u1, u2}`, the hand `switch`'s arms exactly, and A's
-  figures apply on paper; the pass is not built, so that is a prediction.
+  escaping arm never runs, yet B is 7.0x to 9.0x **direct** and holds 1.5 GB.
+  `dispatch` may capture `p`, so `P` is an escaping allocation in the loop
+  body; it goes to the arena, and `decidePass` (`src/escape.ts:2396`–`2420`)
+  refuses the loop its per-iteration mark and release for that reason. B's
+  `run` has no `nish_arena_mark` (§12.5), so every `P` of the 200M
+  iterations lives until `nish_main` releases the arena. `--no-stack-alloc`
+  allocates as often but keeps the release, because in **direct** nothing
+  in the loop escapes, so it holds 12 MB and costs 1.7x to 2.0x.
+- **B same is slower than B mixed in all three runs** (9%, 12% and 23%).
+  Both take the same arena path for every iteration; the mixed stream runs
+  `u3`'s store about a quarter of the time and the same stream never does.
+  Why the run that stores less is slower is **not known**; no counter was
+  read.
+- **The join is the hot site's members, not the signature's.** A program
+  that calls `u3` at the hot site pays B's cost, correctly, because `u3` does
+  keep `p`. A per-*signature* dispatcher would make every site of that
+  signature pay it, a program slower than it can be written today; that is
+  why §2.3 makes the set per place. C is the program that per-place sets
+  produce when the hot site's place holds `u0..u2` and `u3` is called
+  elsewhere: its `dispatch` has A's facts, `P` in `run` is an `alloca`, and
+  it costs 0.95x to 1.09x A in the same run, inside the layout spread of §3
+  (21%). Its loop (§12.7) has no allocation; it selects the constants
+  through a branch chain rather than A's `cmov`, so on the mixed stream it
+  can mispredict where A cannot; that is the likely reason C mixed is 5% and
+  27% over C same, and no counter was read to show it. `u3`'s one `P`, after the loop,
+  is in the arena once. C is hand-written: the pass that would produce it is
+  not built (§9).
 
 ## 5. Semantics
 
@@ -531,14 +643,35 @@ reference never crosses the boundary in either direction:
   pinned by a new `tests/cases/reject_fnref_ffi`;
 - a field of function type in a class a `declare function` is handed or
   returns (the same diagnostic, against the field);
-- a function type in the signature of an **external symbol**: an exported
-  function of the program's own package called through the C ABI, an entry of
-  the `wasm-host` export list, or a declaration `--emit-dts` writes. A foreign
-  caller could hand in a function no set holds, which breaks the closed-set
-  premise everything else rests on. An `export` between Nish modules is not
-  external and is not refused: `sortWith` (`std/sort.ts:162`) and `expose`
+- a function type in the signature of any declaration `hostVisible`
+  (`src/visibility.ts:141`–`142`) answers yes for, which is the one place the
+  compiler decides who besides this program can call a function or see a
+  layout. A foreign caller could hand in a function no set holds, which
+  breaks the closed-set premise everything else rests on. Read from that
+  rule, the refusal covers:
+  - **every exported function of an open-world build.** `buildModeOf`
+    (`src/visibility.ts:121`–`131`) makes a build closed only under `--link`,
+    native, with no sidecar (`--emit-header`, `--emit-dts`, `--emit-napi`,
+    `--emit-napi-async`) and no `declare function`; any other build, `-o`
+    alone included, leaves `export` host-visible;
+  - **every function, exported or not, under `--no-strict-exports`** in an
+    open build: `everySymbolPublic` gives each external linkage;
+  - **the entry point**, which is host-visible in every build; `main` takes
+    no function-typed parameter today, and must not take a reference;
+  - **a function-typed field of a class reachable from a host-visible
+    signature**, a parameter, return or field type, since a host that holds
+    the object can store into the field. Where `layoutsShared` holds (a
+    sidecar, a `declare function` or a wasm build), every class's layout is
+    handed out, so the field is refused in every class of such a build, not
+    only the reachable ones.
+
+  In a closed-world `--link` build an exported function is not host-visible,
+  and an `export` between Nish modules is never external: neither is
+  refused. `sortWith` (`std/sort.ts:162`) and `expose`
   (`std/secret.ts:77`) take function-typed parameters, and every caller of
-  them is in the program.
+  them is in the program. Because the refusal reads `hostVisible`, the
+  call-site ranges and the C ABI answer the same question, and an output
+  mode added later is refused until `src/visibility.ts` says it is closed.
 
 A real C callback — a code pointer C can call — is
 [wp27-ffi.md](wp27-ffi.md)'s and [wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md)'s
@@ -598,8 +731,7 @@ promises, module storage, classes or a parameter's own storage, not functions
 `src/parser.ts:4371`; `src/statements.ts:875`; `docs/AI.md:184`, 904;
 `docs/guide/language/async.md:82`; `docs/guide/getting-started/from-typescript.md:345`;
 `docs/guide/using-nish/threads.md:614`; `docs/security/postgres.md:533`;
-`docs/wp49-async-server.md:43`; `docs/ARCHITECTURE.md:393`), are unrelated
-and have no row.
+`docs/wp49-async-server.md:43`), are unrelated and have no row.
 
 **The compiler and its diagnostics**
 
@@ -612,7 +744,8 @@ and have no row.
 | `src/nodes.ts:129` | an `N_ARROW` is never a value | intact until stage 3 | stage 3's lifted arrow is a reference, not an `N_ARROW` value |
 | `docs/LANGUAGE.md:12476`, `src/validator.ts:146` | `Function` as a type name is forbidden | intact | `Function` stays refused (§2.2) |
 | `docs/LANGUAGE.md:1708`–`1712` (`reject_param_rest_function_value`) | a function with a rest parameter is never passed as a function value | intact, extended | the rule covers a reference too, and widens to default and optional parameters (§2.2) |
-| `src/attributes.ts:13`–`17`, 830, 4967, 5677 | the fact collector records direct callees; an unknown callee is `EFFECT_ANY` | weakened | none: the dispatcher's direct calls are recorded like any other; §4.2 is the evidence |
+| `docs/ARCHITECTURE.md:393` (the call-site ranges row), `src/ranges.ts:355`–`360` (`takesEntryFacts`), 1019 | **the entry-facts soundness premise**: a function that is not `hostVisible` is entered with the join of its call sites' facts, which is sound because "a Nish function is never a value, so no other caller can exist" | **broken** as written; sound under either of §2.4's options | a member of a set is called from its dispatcher, a caller with no syntax of its own. Sound if the dispatcher is a checked function whose arm calls are in `program.nodeCallees`, which the ranges read at 1019, before the ranges run: the dispatcher is then one more caller, its sites joined like any other's. Otherwise `takesEntryFacts` must refuse every set member. The premise is reworded to "every caller of a function is a call the compiler recorded"; the same row's builtin summary ("with no function value a call reaches only what it is handed") holds while no builtin takes a reference (stage 1) |
+| `src/attributes.ts:13`–`17`, 830, 4967, 5677 | the fact collector records direct callees; an unknown callee is `EFFECT_ANY` | weakened | none if §2.4's record holds: the dispatcher is an ordinary checked function, and its arm calls are direct calls recorded like any other; §4.2 is the evidence |
 | `src/attributes.ts:27`, `src/expressions.ts:4`–`10`, `src/emit.ts:24`, `src/emit-classes.ts:19` | "a table needs function values; D2 took a central `switch`" | weakened | a table becomes possible after the freeze (§5.4); the `switch` stays valid |
 | `src/emit-async.ts:27` | async state machines dispatch by `switch` | intact | — |
 | `src/generics.ts:1693`, 1740 | a function-typed parameter instantiates per callee | intact | a reference argument adds one `$fn.ref.<set>` instantiation per set |
@@ -634,6 +767,8 @@ and have no row.
 | Where | What it leans on | Verdict | What the text would need |
 | --- | --- | --- | --- |
 | `docs/LANGUAGE.md:3291`–`3292` | "There is no function pointer, no indirect call and no function value anywhere; the parameter has no LLVM parameter at all" | weakened | true of a parameter bound to a named callee; a parameter holding a reference has an `i32` parameter, and its calls go through the dispatcher, still no function pointer |
+| `docs/LANGUAGE.md:2305`–`2314` | the `--link` closed-world rule: every call to an exported function is one the compiler sees, which `ARCHITECTURE.md`'s call-site ranges row makes sound | intact, if | it rests on that row's premise, so it holds while every dispatcher's arm calls are recorded (§2.4); §5.2 keeps references out of every host-visible signature, so no host can hand one in |
+| `docs/LANGUAGE.md:3398`–`3402` (`reject_fnarg_not_name`) | a function argument must be the name of a top-level function or an arrow; a local, a member or any other expression is refused | **broken** in stage 2 | a reference-typed local, member or element is admitted as the argument and selects the `$fn.ref.<set>` instantiation; `reject_fnarg_not_name` keeps an expression of any other type (§9) |
 | `docs/LANGUAGE.md:12606` (`reject_fnarg_store`, `reject_fnarg_return`) | the summary row: a function parameter used as a value is refused | **broken** | a reference-typed parameter may be stored and returned; the row keeps a parameter bound to a named callee |
 | `docs/LANGUAGE.md:12609` (`reject_fnarg_arrow_value`) | an arrow anywhere but as a function argument is refused | intact until stage 3 | stage 3 admits a capture-free arrow in value position by lifting it |
 | `docs/LANGUAGE.md:12610` | a function type anywhere but on a parameter of a top-level function is refused | **broken** | the row becomes §2.1's places |
@@ -677,15 +812,21 @@ and have no row.
   costs 3.1x to 4.7x on a periodic stream is unknown (§3.5): the `K = 8` row
   rules out the obvious cause, and the candidates left are not distinguished.
 - **The aperiodic group's layout spread.** No pair of binaries with the same
-  loop was timed there, so `K = 2`'s 1.28x is not known to be past it.
-- **How A's 1.47x splits** between the tag load and the `switch` (§4.3).
+  loop was timed there, so neither `K = 2`'s 1.28x nor `K = 4`'s 1.21x is
+  known to be past it.
+- **How A's 1.3x to 1.6x splits** between the tag load and the `cmov`
+  select (§4.3). The disassembly says what A adds over **direct**, a callee
+  picked by data against one folded to constants (§3.5, §12.7); no variant
+  with the load but no select was timed.
+- **Why B same is slower than B mixed** in all three runs (§4.3).
 - **A `K = 1` control for the escape shape.** With one member there is no
   `switch`, so it would separate the tag array's cost from the dispatch's; it
   was not built.
-- **The per-place set pass.** §2.3's sets were reasoned, not built: the spike
-  wrote each dispatcher by hand over the members it meant. That a
-  flow-insensitive pass gives `{u0, u1, u2}` at the site §4.3 describes, and
-  what it costs to compute, are stage 1's to show.
+- **The per-place set pass.** Its output was measured, the pass was not:
+  case C (§4.3) is the program the pass produces for a hot site whose place
+  holds `u0..u2` while `u3` escapes at another site, written by hand. That
+  the pass computes `{u0, u1, u2}` there, and what it costs to compute, are
+  stage 1's to show.
 - **A loop-invariant reference.** `const h = pick(); for (...) h(x)` could be
   unswitched; whether LLVM does it from the dispatcher was not checked.
 - **Node.** No `--emit-ts` build was timed; §5.1 relies on wp22's 7.6x for a
@@ -709,40 +850,49 @@ The three possible answers, against the numbers:
   is free and its advantage over an indirect call is not shown past the 21%
   layout spread. On an aperiodic stream every lowering mispredicts: the switch
   costs 2.4x to 4.5x **direct**, as a hand-written `switch` over the same tags
-  does, and differs from the indirect call only at `K = 2` (1.28x, not known
-  to be past that group's layout spread). The escape proof
-  is kept whenever the set keeps it (§4.2, A). Declining leaves programs
-  writing the `switch` by hand, which costs the same as the reference and is
-  no safer.
+  does, and differs from the indirect call at `K = 2` and `K = 4` (1.28x and
+  1.21x, neither known to be past that group's layout spread) and not at
+  `K = 8`. The escape proof is kept whenever the set keeps it (§4.2, A and
+  C). So performance does not decide against Decline: a reference costs
+  what the hand `switch` costs. **The case over Decline is expressiveness**:
+  a handler in a field, an array or a `Map`, a parser's action table, a
+  router's handler list, a test list, written as the functions themselves
+  rather than as integer tags and a `switch` kept in step with them by hand.
 - **Strict**, with per-place sets. With **one dispatcher per signature** a
   reference could cost more than the code it replaces: a three-way site over
-  `u0..u2`, rewritten from a hand `switch` to references, pays B's 7.0x and
-  1.5 GB because `u3`, elsewhere in the program, keeps `p` (§4.3). That is the
-  per-signature problem, and per-place sets (§2.3) cure it: a place's set is
-  exactly the tags a hand program storing integer tags in the same places
-  could hold there, so the dispatcher at a call is the `switch` that program
-  must write at the same call, unless the hand programmer reasons about which
-  paths reach it. So no program is slower than the same program written with
-  integer tags and a hand `switch` over every member stored into that place.
-  The residual is that flow-sensitive knowledge (§10). The pass is unbuilt
-  (§7), so it is part of stage 1, and stage 1 does not ship until the
-  `{u0, u1, u2}` test of §9 keeps `P` an `alloca` with `u3` escaping
-  elsewhere. Its TypeScript reading is identical (class A of
-  [wp33-round-trip.md](wp33-round-trip.md) §2), because every read that could
-  tell a tag from a function object is refused (§5.1).
-- **Not compat.** wp28's compatibility mode cannot be the home, by its own
-  rules (§1): C0, the `--compat` machinery, is unbuilt
-  (`wp28-compatibility-mode.md:458` at `350bad84`); compat only adds
-  acceptance over byte-identical IR (rules 1 and 5, :57-58, :75-79) and adds
-  no rule to LANGUAGE.md (:239); `src/` may never use it (:244), where §5.4
-  wants references; and it implies `--number-mode f64` (:316). wp28 moved
-  C2a, function-typed parameters, to "Built in strict" once strict accepted
-  them with nothing lost (`wp28-compatibility-mode.md:462`); capture-free references leave its list the same way, and closures
-  stay on it.
+  `u0..u2`, rewritten from a hand `switch` to references, would pay B's 6.4x
+  to 9.0x and 1.5 GB because `u3`, elsewhere in the program, keeps `p` (§4.3).
+  Per-place sets (§2.3) are the cure, and it is measured: case C, the
+  program the pass produces when `u3` escapes at another site, keeps `P` an
+  `alloca` and costs 0.95x to 1.09x A (§4.3). A place is a declaration (a
+  local, a parameter, a field, a function's return) or an element type
+  (`S[]`, a `Map`'s value), and its set is every member stored into it. From
+  that: **no program is slower than the same program written with `i32`
+  tags, whose hand `switch` at each call covers every member stored into the
+  same declaration or element type**, since the dispatcher is that `switch`.
+  What a hand programmer could do better, by knowing which array or which
+  object a call reads, or which path reaches it, is §10's list. The pass is
+  unbuilt, so it is part of stage 1, and stage 1 does not ship until
+  `fnref_place_set`, case C's program, keeps `P` an `alloca` (§9). Its
+  TypeScript reading is identical (class A of
+  [wp33-round-trip.md](wp33-round-trip.md) §2), because every read that
+  could tell a tag from a function object is refused (§5.1).
+- **Not compat, though compat could hold it.** A tag is an `i32`, a fixed
+  layout, so wp28's rule 2 (`wp28-compatibility-mode.md:59`–`64` at
+  `350bad84`) would admit references in compat. Strict "does not grow"
+  (rule 1, :57-58), and wp28 answered that rule for C2a, function-typed
+  parameters, by building them in strict because they were "free at run
+  time" (:462). References are free in the same sense: each costs exactly
+  the hand `switch` it replaces (§3.5, and C in §4.3), so they leave compat's
+  list the same way. The practical costs of compat point the same way: C0,
+  the `--compat` machinery, is unbuilt (:458); `src/` may never use compat
+  (:244), where §5.4 wants references after the freeze; and compat implies
+  `--number-mode f64` (:316). Closures stay on wp28's list (C2b).
 
 What the recommendation does not rest on, because it was not measured (§7):
 `K = 5` to `7` and sets above eight, Node timings, a real program, the `K = 1`
-escape control, performance counters, and the per-place pass itself. The
+escape control, and performance counters. The per-place pass is unbuilt, but
+the program it produces is measured (case C). The
 aperiodic stream narrows the claim: the switch's large advantage over an
 indirect call is a periodic-stream result, while its parity with a
 hand-written `switch` holds on every stream.
@@ -761,50 +911,63 @@ its own.
 
 Every stage lands in the strict language (§8). Stage 1 changes
 `docs/LANGUAGE.md` and flips the negatives that refuse references today, so it
-does not ship until its per-place pass and its `{u0, u1, u2}` test do.
+does not ship until its per-place pass and `fnref_place_set`, case C's
+program, do.
 
 1. **Stage 1 — references in fields, locals, arrays and returns; calls; `===`;
    per-place sets.** Pass 1 collects the signature sets and the numbering
-   (§2.4); after pass 2 the per-place pass computes each place's set (§2.3)
-   and records each reference call in `nodeCallees` as a call of its
-   dispatcher; `src/annotations.ts` admits a function type outside a
+   (§2.4); after pass 2 the per-place pass computes each place's set (§2.3),
+   the checker generates each set's dispatcher as a checked function, and
+   records its arm calls and each reference call (as a call of its
+   dispatcher) in `nodeCallees`, before ranges, attributes or the region
+   rules read it; `src/annotations.ts` admits a function type outside a
    parameter as an `i32` tag; the checker refuses everything in §2.2 and the
    zero-filled storage of §2.1 with new codes in `src/codes.ts`; `src/emit.ts`
-   generates one `$ref.S.p` per distinct set and lowers a reference call to
-   it; `===` lowers to `icmp eq`; `-g` gets the enumeration type and the
+   writes each generated dispatcher as `$ref.S.p` and lowers a reference
+   call to a call of it; `===` lowers to `icmp eq`; `-g` gets the enumeration type and the
    artificial dispatcher (§5.3). NL2336, NL2334 and NL2337's wordings change
    (§6), and their `tests/wordings/` programs with them
    (`nl2336_fnarg_arrow_returned`, `nl2334_fnarg_parameter_as_value`,
-   `nl2337_fnarg_function_type_element`). A test pins that §4.3's three-way
-   site over `{u0, u1, u2}` keeps `P` an `alloca` with `u3` escaping
-   elsewhere; stage 1 does not ship without it (§8).
+   `nl2337_fnarg_function_type_element`). `fnref_place_set` is case C
+   (§4.1) written with references: a field or local holding `u0..u2` read at
+   the hot call, `u3` stored into another place and called there. Its golden
+   pins the dispatcher over `{u0, u1, u2}` with A's facts and `P` an
+   `alloca` in `run`; stage 1 does not ship without it (§8). Any function
+   reachable from a host-visible signature taking a reference is refused
+   (§5.2).
 2. **Stage 2 — references as arguments, `| null` and `Map` values.** A
    function-typed parameter accepts a reference, instantiating
    `$fn.ref.<set>` once per set; `S | null` with tag `0`, the exception to
    `reject_nullable_scalar` (§2.1), and zero-filled `new Array<S | null>(n)`;
    `Map` values. Each is a new kind of place, so the per-place pass extends to
-   it in the same stage, and the `{u0, u1, u2}` test reruns with the reference
-   passed as an argument, through `| null` and through a `Map`.
+   it in the same stage, and `fnref_place_set` gains a variant with the
+   reference passed as an argument, through `| null` and through a `Map`.
+   `reject_fnarg_not_name` flips (`docs/LANGUAGE.md:3398`–`3402`): a
+   reference-typed local, member or element is admitted as an argument, and
+   the case is rewritten to an expression of another type, which stays
+   refused.
 3. **Stage 3 — capture-free arrows in value position**, lifted to a generated
    top-level function and then a reference. Capturing arrows stay refused.
 
 `src/` uses none of them until the release after stage 1 (§5.4).
 
-**The construct checklist, for stage 1:**
+**The construct checklist, for stage 1**, item by item against
+[ARCHITECTURE.md](ARCHITECTURE.md#how-to-add-a-construct) "How to add a
+construct" and `CLAUDE.md`'s definition of done:
 
 | Item | What it is for references |
 | --- | --- |
-| 1. Rule, lowering and TypeScript reading | §2 and §2.3; the expected `.ll` is §12.2's `@call`, renumbered from tag `1`, checked with `llvm-as` and `opt -passes=verify`; TypeScript reading **A**, identical (§5.1) |
+| 1. Rule, lowering and TypeScript reading | §2 and §2.3; the expected `.ll` is §12.2's `@call`, renumbered from tag `1`, checked with `llvm-as` and `opt -passes=verify`; TypeScript reading **A**, identical (§5.1), so no `--emit-ts` translation or `tests/emit-ts/` fixture is required by the item; one is added all the same for `===` (§5.1) |
 | 2. Parser and validator | no new syntax: a function type and a bare name already parse; the validator keeps `Function` refused |
-| 3. Types | a function type outside a parameter: `llvmType` `i32`, `alignOf` 4, `assignable` by signature; `cType` and `tsKeyword` refuse it (§5.2); `src/debug.ts` the enumeration type |
-| 4. Checker | pass-1 signature sets; the post-pass-2 per-place sets; value-position names; reference calls; the §2.2 refusals and §2.1's zero-fill refusals (`new Array<S>(n)`, module storage); side tables for each set and each reference call |
-| 5. Diagnostics | new NL codes for each §2.2 wording, the zero-fill refusals and `reject_fnref_ffi`, each with a `tests/wordings/` program; the dispatcher-weakened warning |
-| 6. Emitter | `$ref.S.p` generation and the call lowering; named blocks (`sw.case.N`, `sw.default`) |
-| 7. Runtime | none: no C symbol |
-| 8. Attributes | none expected: the dispatcher is an ordinary function, and its facts are the join of its place's set. A test pins §4.2's A and B facts and the three-way site of stage 1 |
-| 9. Tests | goldens `tests/cases/fnref_field`, `fnref_array`, `fnref_eq`, `fnref_escape_join`, `fnref_place_set` (`.ll`, `llvm-as`, `.out`); `reject_fnref_capture`, `reject_fnref_generic`, `reject_fnref_ffi`, `reject_fnref_print`, `reject_fnref_zero_fill`, `reject_fnref_rest`, `reject_fnref_async`, `reject_fnref_json`; an `--emit-ts` fixture; `tests/self/goldens/checked/` regenerated; each new positive case registered with `node tests/differential/goldens.js --update`; `tests/differential/emit-ts-known.txt` regenerated under the Node `.github/workflows/ci.yml` pins; `DECLARED` entries in `tests/nish-cmp.js` for the reworded diagnostics. Negatives that flip, each rewritten to the refusal that remains: `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_store`, `reject_fnarg_return` (to a capturing arrow or a parameter bound to a named callee) and `reject_arrow_as_value` (to a capturing arrow) |
-| 10. Docs | the `docs/LANGUAGE.md` rule replacing "a function is not a value" (1585) and the function-type rules (3337, 3392, 3409); a cookbook entry with the dispatcher's IR; a `docs/guide/` page on function references; §6's broken rows rewritten; `docs/reference/` regenerated with `node scripts/gen-reference.mjs`, since `docs/LANGUAGE.md` moves |
-| 11. Security record | none: no attacker-facing code. `docs/security/async.md:130`'s claim holds (§6) |
+| 3. Types | a function type outside a parameter: `llvmType` `i32`, `alignOf` 4, `assignable` by signature, the annotation resolver (`src/annotations.ts:224`); `src/interop-abi.ts`'s `cType` and `tsKeyword`, `src/interop-wasm.ts`'s `wasmType` and bridging decision, and `src/interop-napi.ts`'s readers and boxers each **refuse** it with `reject_fnref_ffi`'s code rather than leave it unmapped, since a type with no N-API row silently drops the function from the addon (§5.2); `src/debug.ts` the enumeration type (§5.3) |
+| 4. Checker | pass-1 signature sets; the post-pass-2 per-place sets; the generated dispatchers and their `nodeCallees` record (§2.4); value-position names; reference calls; the §2.2 refusals and §2.1's zero-fill refusals (`new Array<S>(n)`, module storage); the `hostVisible` refusal (§5.2) |
+| 5. Diagnostics | new NL codes in `src/codes.ts` for each §2.2 wording, the zero-fill refusals and `reject_fnref_ffi`, each with a `tests/wordings/` program; the dispatcher-weakened warning; NL2336, NL2334 and NL2337 reworded with their wordings programs |
+| 6. Emitter | the generated dispatcher written as `$ref.S.p`, and the call lowering; named blocks (`sw.case.N`, `sw.default`) |
+| 7. Runtime | none: no C symbol, so no `RuntimeTable` row and no budget move |
+| 8. Attributes | none expected: the dispatcher is a checker-generated function, ordinary to the fact collector, and its facts are the join of its place's set. `fnref_escape_join` pins §4.2's A and B facts; `fnref_place_set` pins C's |
+| 9. Tests | goldens `tests/cases/fnref_field`, `fnref_array`, `fnref_eq`, `fnref_escape_join`, `fnref_place_set` (`.ts`, `.ll`, `llvm-as`, `.out`); `reject_fnref_capture`, `reject_fnref_generic`, `reject_fnref_ffi` (a `declare function`, an open-world export, `--no-strict-exports`, a field reachable from a host-visible signature), `reject_fnref_print`, `reject_fnref_zero_fill`, `reject_fnref_rest`, `reject_fnref_async`, `reject_fnref_json`; `tests/self/goldens/checked/` regenerated with `node tests/self/goldens.js --update`; each new positive case registered with `node tests/differential/goldens.js --update`; `tests/differential/emit-ts-known.txt` regenerated under the Node `.github/workflows/ci.yml` pins; `DECLARED` entries in `tests/nish-cmp.js` for the reworded diagnostics. Negatives that flip, each rewritten to the refusal that remains: `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_store`, `reject_fnarg_return` (to a capturing arrow or a parameter bound to a named callee) and `reject_arrow_as_value` (to a capturing arrow); `reject_fnarg_not_name` flips in stage 2 |
+| 10. Docs | the `docs/LANGUAGE.md` rule replacing "a function is not a value" (1585) and the function-type rules (3337, 3392, 3409), with test citations; a `docs/cookbook/` snippet with the dispatcher's IR and its marker in `docs/IR_COOKBOOK.md`, regenerated by `docs/cookbook/regen.sh` against `build/nish`; a `docs/guide/` page on function references with its route in `scalar.config.json`, and `docs/guide/language/functions.md:195` rewritten; §6's broken rows rewritten; `docs/reference/` regenerated with `node scripts/gen-reference.mjs`, since `docs/LANGUAGE.md` moves; the changelog is the commit message |
+| 11. Security record | none: no `std/net` or `std/crypto` module, no `runtime/*.c` file and no builtin that reads the network, the terminal or another process. `docs/security/async.md:130`'s claim holds (§6) |
 
 ## 10. Risks
 
@@ -816,16 +979,32 @@ does not ship until its per-place pass and its `{u0, u1, u2}` test do.
   stays faster than an indirect call on a periodic stream and equal to a hand
   `switch` of the same size on any stream. A program with dozens of handlers
   at one site is the case to measure before stage 1 closes.
-- **A per-place set wider than it needs to be — the remaining risk.** The
-  pass is flow-insensitive: a place that receives stores from two branches
-  holds both sets on both paths, so a place that held a leaking member once
-  joins it everywhere. A hand programmer storing integer tags in that place
-  writes the same `switch`, so the program is no slower than that; but one who
-  knows which path reaches a call can call `u0` directly instead, and against
-  that program the reference can lose the stack proof (case B's 7.0x and
-  1.5 GB, §4.3). Mitigated by stage 1's warning naming the member that
-  widened a dispatcher; per-alias sets (§11) are the cheap fallback if a real
-  program needs a site narrower than its place.
+- **A per-place set wider than it needs to be — the remaining risk.** A
+  place (§2.3) is a local, a parameter, a field declaration, an array or `Map`
+  element type, or a function's return; it is not an allocation. The
+  invariant per-place sets keep is: no program is slower than the same program
+  with `i32` tags whose hand `switch` covers every member stored into the same
+  declaration or element type — which is the dispatch that program would have
+  to write, since it has no finer place to keep a tag in either. Case C
+  measures that site (§4.3, 0.95x to 1.09x of A). The invariant says nothing
+  against a hand programmer who uses a finer place than a declaration, and
+  these are the gaps where a reference can lose to one:
+  - two arrays or `Map`s of one element type share one set, so `u3` stored
+    into a cold `S[]` joins the hot `S[]`'s dispatcher;
+  - two objects of one class share each field's set, so one object holding
+    `u3` widens the field for every object;
+  - a parameter joins every caller's argument set;
+  - the pass is flow-insensitive: a place that receives stores on two paths
+    holds both sets on both;
+  - a function's return is one place for every call of it.
+
+  Against a program that knows which member reaches a call and calls it
+  directly, the widened dispatcher can lose the stack proof: case B's 6.4x to
+  9.0x and 1.5 GB (§4.3). The workaround is to keep the cold member out of the hot
+  place — in its own field or local rather than a shared `S[]` — and stage 1's
+  warning names the member that widened a dispatcher and the place it came
+  through, so the user can see which store to move. Per-alias sets (§11) are
+  the fallback if a real program needs a site narrower than its declaration.
 - **Compile-time cost.** Pass 1 now scans every value-position name, the
   per-place pass walks every store of a reference, and each distinct set gets
   a function. All are linear and small; none was measured.
@@ -1243,8 +1422,9 @@ Array.from({ length: 8 }, (_, i) => i < k ? `i32 (i32, i32)* @t${i}` : "i32 (i32
 ```
 
 so every size has an eight-entry table whose first `K` entries are members.
-`wp51_fns.c`, linked beside the runtime (§3's build line), owns the table so
-link-time optimisation cannot treat it as constant:
+The `.ll` defines the table; `wp51_fns.c`, linked beside the runtime (§3's
+build line), declares it `extern`, and its `getenv` constructor's stores into
+it are why link-time optimisation cannot treat it as constant:
 
 ```c
 /* WP51 spike: owns the function table the indirect variant loads from.
@@ -1257,6 +1437,10 @@ __attribute__((constructor)) static void wp51_init(void) {
   if (getenv("WP51_SWAP")) { fn t = wp51_fns[0]; wp51_fns[0] = wp51_fns[1]; wp51_fns[1] = t; }
 }
 ```
+
+The file's first comment says it "owns" the table; it does not. The `extern`
+line declares it, the `.ll` above defines it, and the constructor only stores
+into it.
 
 ### 12.4 The escape programs
 
@@ -1342,6 +1526,33 @@ export function main(): i32 {
 - **same** pushes `base` (`0`) in place of `(s ^ base) & 3`.
 - **direct** is wp28 §11e's shape: only `u0`, no `dispatch`, no tag array,
   `run(n: i32, k: Keep)` with `acc = wrappingAdd(u0(p, k), 1);`.
+- **C** (`esc_c_same`, `esc_c_mixed`) is what the per-place pass would emit
+  for a hot place holding `{u0, u1, u2}` while `u3` is stored and called
+  elsewhere. `genc.mjs` writes it from B's two files:
+
+```js
+// Writes WP51 escape case C: what a per-place pass would produce. The hot
+// call's place holds {u0,u1,u2}; u3 escapes and is called at another site.
+import { readFileSync, writeFileSync } from "node:fs"
+for (const stream of ["same", "mixed"]) {
+  let s = readFileSync(`esc_b_${stream}.ts`, "utf8")
+  s = s.replace(/\/\/ The lowering under test[\s\S]*?\n}\n/, `// The hot place's dispatcher: its set is {u0, u1, u2}; u3 is not in it.
+function dispatch(tag: i32, p: P, k: Keep): i32 {
+  switch (tag) {
+    case 0:
+      return u0(p, k);
+    case 1:
+      return u1(p, k);
+    default:
+      return u2(p, k);
+  }
+}
+`)
+  s = s.replace("t.push((s ^ base) & 3);", "t.push(((s ^ base) & 0x7fffffff) % 3);")
+  s = s.replace("console.log(`${run(200000000, k, ts)}`);", "const r = run(200000000, k, ts);\n  // u3 at another site: it escapes into k, once.\n  const e = u3(new P(r, 1), k);\n  console.log(`${r} ${e}`);")
+  writeFileSync(`esc_c_${stream}.ts`, s)
+}
+```
 
 ### 12.5 The escape programs' `.ll`
 
@@ -1372,6 +1583,39 @@ define noundef i32 @nish_main() #2 {
 attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
 attributes #2 = { nounwind "probe-stack"="inline-asm" }
+
+; C (mixed; same is identical, attributes as above)
+define internal noundef i32 @u0(%struct.P* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, %struct.Keep* noundef nonnull readonly align 8 dereferenceable(8) nocapture %k) #1 {
+define internal noundef i32 @u3(%struct.P* noundef nonnull align 8 dereferenceable(8) %p, %struct.Keep* noundef nonnull align 8 dereferenceable(8) nocapture %k) #0 {
+define internal noundef i32 @dispatch(i32 noundef %tag, %struct.P* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, %struct.Keep* noundef nonnull readonly align 8 dereferenceable(8) nocapture %k) #1 {
+define internal noundef i32 @run(i32 noundef %n, %struct.Keep* noundef nonnull readonly align 8 dereferenceable(8) nocapture %k, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %ts) #2 {
+define noundef i32 @nish_main() #2 {
+```
+
+`u3` keeps B's facts and `dispatch` keeps A's: the join is over the place's
+set, not the signature's. C's `dispatch`, and the two places it allocates `P`
+— on `run`'s stack in the loop, in the arena once for the `u3` call:
+
+```llvm
+define internal noundef i32 @dispatch(i32 noundef %tag, %struct.P* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, %struct.Keep* noundef nonnull readonly align 8 dereferenceable(8) nocapture %k) #1 {
+entry:
+  switch i32 %tag, label %sw.default [
+    i32 0, label %sw.case
+    i32 1, label %sw.case.1
+  ]
+  ; ... each arm a direct call of u0, u1, u2 and its ret
+
+; run
+  %p.addr = alloca %struct.P*, align 8
+  %P.obj = alloca %struct.P, align 8
+  call void @P.constructor(%struct.P* %P.obj, i32 %6, i32 %7)
+
+; nish_main, after run returns
+  %arena.mark = call i64 @nish_arena_mark()
+  %12 = call i8* @nish_alloc_struct(i64 8)
+  %13 = bitcast i8* %12 to %struct.P*
+  call void @P.constructor(%struct.P* %13, i32 %14, i32 1)
+  %16 = call i32 @u3(%struct.P* %13, %struct.Keep* %15)
 ```
 
 **direct** with `--no-stack-alloc` (`esc_direct_nostack`), the loop body of
@@ -1685,6 +1929,9 @@ llvm-as <x>.ll -o /dev/null                 # every .ll, the _ind ones included
 scripts/build.sh <x>.ll runtime/runtime.c [wp51_fns.c] -o bin/<x> --profile speed
 cp bin/serial_direct bin/serial_direct_copy # and array_, esc_, rand_: the noise band
 python3 bench.py "$(cat groups.json)" 7     # best of 7, interleaved
+node genc.mjs                               # case C (§12.4), then build as above
+python3 bench.py '[["esc_direct", "esc_direct_copy", "esc_direct_nostack", "esc_a_same", "esc_a_mixed", "esc_b_same", "esc_b_mixed", "esc_c_same", "esc_c_mixed"]]' 7
+python3 bench.py '[["esc_direct", "esc_direct_copy", "esc_direct_nostack", "esc_a_same", "esc_a_mixed", "esc_b_same", "esc_b_mixed", "esc_c_same", "esc_c_mixed"]]' 11
 node genrand.mjs                            # §3.4's group, then the steps above
 python3 bench.py "$(cat groups_rand.json)" 7
 ```
@@ -1856,7 +2103,7 @@ compare; the index is masked (`and $0x3ff`), so there is no bounds check.
 load and a `call *` per iteration, the callee not inlined:
 
 ```asm
-1bf9:	lea    0x27f0(%rip),%r12      # the C constructor's table
+1bf9:	lea    0x27f0(%rip),%r12      # the table the constructor fills
 1c00:	mov    %ebx,%eax
 1c02:	and    $0x3ff,%eax
 1c07:	movslq (%r14,%rax,4),%rax     # the tag
@@ -1884,8 +2131,12 @@ load and a `call *` per iteration, the callee not inlined:
 1bfb:	jne    1be0
 ```
 
-`serial_k8_same_ind` is the same instructions at `1d1e` (`lea 0x27fb(%rip),%r12`)
-and `1d30`–`1d4b`, its `call *(%r12,%rax,8)` at `1d3d`. `array_k4_same_ind`:
+`serial_k4_same_ind`, the serial group's slowest binary, is the same
+instructions at `1c3e` (`lea 0x27fb(%rip),%r12`) and `1c50`–`1c6b`, its
+`call *(%r12,%rax,8)` at `1c5d`; `serial_k8_same_ind` is them again at `1d1e`
+and `1d30`–`1d4b`, its `call *` at `1d3d`. The loop starts at 32 mod 64 at
+`K = 2` (`1be0`) and at 16 mod 64 at `K = 4` (`1c50`): the layouts differ,
+the instructions do not. `array_k4_same_ind`:
 
 ```asm
 1d14:	lea    0x2845(%rip),%rbp      # the table
@@ -1905,6 +2156,24 @@ and `1d30`–`1d4b`, its `call *(%r12,%rax,8)` at `1d3d`. `array_k4_same_ind`:
 1d56:	cmp    $0x61a80,%r13d
 1d5d:	mov    0x8(%rsp),%r15
 1d62:	jne    1d20
+```
+
+The array group's two ends run these instructions too. `array_k2_same_ind`
+has its table `lea` at `1ca4`, the outer loop at `1cb0`–`1cf2`, the inner
+loop at `1cc0` (64-byte aligned) and its `call *0x0(%rbp,%rax,8)` at `1cd1`;
+`array_k8_same_ind` has them at `1df4`, `1e00`–`1e42`, `1e10` (16 mod 64)
+and `1e21`. Only the addresses move:
+
+```asm
+1e10:	cmp    %rbx,%r14              # array_k8_same_ind
+1e13:	je     2137
+1e19:	movslq (%r15,%rbx,4),%rax
+1e1d:	mov    (%r12,%rbx,4),%edi
+1e21:	call   *0x0(%rbp,%rax,8)
+1e25:	mov    %eax,%esi
+1e27:	inc    %rbx
+1e2a:	cmp    $0x400,%rbx
+1e31:	jne    1e10
 ```
 
 **The aperiodic loops: branches, not selects.** `rand_k2_mixed` advances the
@@ -1966,6 +2235,117 @@ xorshift state and branches on bit 24 of it:
 	notrack		jmpq	*.LJTI0_0(,%rdx,8)
 ```
 
-No loop shown above holds a `cmov`. The `cmovs` nearest each loop is after
-it, in printing the result: `1b74` in `serial_k2_mixed`, `1ab3` in
+No dispatch loop shown above holds a `cmov`. The `cmovs` nearest each loop
+is after it, in printing the result: `1b74` in `serial_k2_mixed`, `1ab3` in
 `rand_k2_mixed`, `1c01` in `serial_k2_same_ind`.
+
+**The escape loops (§4.3).** `run` is inlined into `nish_main` in each.
+**direct** (`esc_direct`): `u0` folded to constants, `P` gone, unrolled five
+times — about four instructions a call, all on the one `acc` chain:
+
+```asm
+18e0:	lea    -0xc(%rax),%ecx
+18e3:	inc    %edi
+18e5:	xor    %ecx,%edi
+18e7:	lea    -0x9(%rax),%ecx
+18ea:	add    $0x2,%edi
+18ed:	xor    %ecx,%edi
+18ef:	lea    -0x6(%rax),%ecx
+18f2:	add    $0x2,%edi
+18f5:	xor    %ecx,%edi
+18f7:	lea    -0x3(%rax),%ecx
+18fa:	add    $0x2,%edi
+18fd:	xor    %ecx,%edi
+18ff:	add    $0x2,%edi
+1902:	xor    %eax,%edi
+1904:	inc    %edi
+1906:	add    $0xf,%eax
+1909:	cmp    $0x23c3460c,%eax
+190e:	jne    18e0
+```
+
+**A** (`esc_a_same`; `esc_a_mixed` is the same instructions): unrolled twice,
+the tag loaded and compared, each arm's two constants picked with two
+`cmovae` — about thirteen instructions a call, the load, `cmp` and `cmov` on
+the chain into `imul`. This is the one loop in this section with a `cmov`
+inside it:
+
+```asm
+1b10:	lea    -0x1(%rcx),%r9d
+1b14:	mov    %r9d,%r8d
+1b17:	and    $0x3fe,%r8d
+1b1e:	mov    (%rax,%r8,4),%r10d     # the tag
+1b22:	lea    0x1(%r10),%r8d
+1b26:	cmp    $0x3,%r10d
+1b2a:	lea    0x3(%r10,%r10,1),%r10d
+1b2f:	cmovae %edx,%r10d             # u3's constants
+1b33:	cmovae %edi,%r8d
+1b37:	imul   %r9d,%r10d
+1b3b:	add    %esi,%r8d
+1b3e:	xor    %r10d,%r8d
+1b41:	mov    %ecx,%esi
+1b43:	and    $0x3ff,%esi
+1b49:	mov    (%rax,%rsi,4),%esi
+1b4c:	lea    0x1(%rsi),%r9d
+1b50:	cmp    $0x3,%esi
+1b53:	lea    0x3(%rsi,%rsi,1),%r10d
+1b58:	cmovae %edx,%r10d
+1b5c:	cmovae %edi,%r9d
+1b60:	imul   %ecx,%r10d
+1b64:	lea    (%r8,%r9,1),%esi
+1b68:	inc    %esi
+1b6a:	xor    %r10d,%esi
+1b6d:	inc    %esi
+1b6f:	add    $0x2,%ecx
+1b72:	cmp    $0xbebc201,%ecx
+1b78:	jne    1b10
+```
+
+**C** (`esc_c_same`): unrolled twice, each copy's constants picked by a
+`test`/`cmp` branch chain over the tag, and no call or allocation in the
+loop; the arena bump at `1c30` is the one `P` for `u3`, after it:
+
+```asm
+1b70:	mov    $0x1,%r9d
+1b76:	imul   %edx,%r8d
+1b7a:	add    %ebx,%edi
+1b7c:	xor    %r8d,%edi
+1b7f:	inc    %edi
+1b81:	add    %r9d,%edi
+1b84:	imul   %ecx,%esi
+1b87:	xor    %edi,%esi
+1b89:	mov    %esi,%ebx
+1b8b:	inc    %ebx
+1b8d:	add    $0x2,%ecx
+1b90:	cmp    $0xbebc201,%ecx
+1b96:	je     1c30                   # loop exit
+1b9c:	lea    -0x1(%rcx),%edx
+1b9f:	mov    %edx,%esi
+1ba1:	and    $0x3fe,%esi
+1ba7:	mov    (%rax,%rsi,4),%r9d     # the first copy's tag
+1bab:	mov    $0x3,%esi
+1bb0:	mov    $0x3,%r8d
+1bb6:	mov    $0x1,%edi
+1bbb:	test   %r9d,%r9d
+1bbe:	je     1beb
+1bc0:	cmp    $0x1,%r9d
+1bc4:	jne    1be0
+1bc6:	mov    $0x2,%edi
+1bcb:	mov    $0x5,%r8d
+1bd1:	jmp    1beb
+1be0:	mov    $0x3,%edi
+1be5:	mov    $0x7,%r8d
+1beb:	mov    %ecx,%r9d
+1bee:	and    $0x3ff,%r9d
+1bf5:	mov    (%rax,%r9,4),%r9d     # the second copy's tag
+1bf9:	test   %r9d,%r9d
+1bfc:	je     1b70
+1c02:	cmp    $0x1,%r9d
+1c06:	jne    1c20
+1c08:	mov    $0x2,%r9d
+1c0e:	mov    $0x5,%esi
+1c13:	jmp    1b76
+1c20:	mov    $0x3,%r9d
+1c26:	mov    $0x7,%esi
+1c2b:	jmp    1b76
+```
