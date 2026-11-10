@@ -4312,9 +4312,13 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   the reference it is (`obj_spread_nested`), a class instance spreads its
   fields and none of its methods, as Node's spread does
   (`obj_spread_class`), and a nullable source spreads once narrowed
-  (`obj_spread_narrowed`). The literal must still set every field of its
-  type, by the spread or by name. Each form whose Node reading would differ
-  from the copy is refused:
+  (`obj_spread_narrowed`); a write to the source after the spread leaves the
+  copy as it was (`obj_spread_class`). The literal must still set every
+  field of its type, by the spread or by name: a spread that supplies only
+  some of them leaves the rest
+  `` Object literal for `Point` is missing field `z` ``
+  (`reject_object_spread_missing_field`). Each form whose Node reading would
+  differ from the copy is refused:
 
   | Form | Code | Tests |
   | --- | --- | --- |
@@ -4324,7 +4328,7 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   | a union source, whose fields depend on the variant it holds | NL2698 | `reject_object_spread_union` |
   | a class instance with a field the target does not declare, which Node would carry on the object | NL2700 | `reject_object_spread_class_extra` |
   | an interface value with a field the target does not declare | NL2701 | `reject_object_spread_extra_field` |
-  | a field whose type differs from the target's, `i32` into `i64`: the copy converts nothing | NL2702 | `reject_object_spread_field_type` |
+  | a copied field whose type differs from the target's, `i32` into `i64`: the copy converts nothing. A field a later entry sets by name is not copied, so its type is not checked (`obj_spread_override_type`); one a later spread supplies is still checked | NL2702 | `reject_object_spread_field_type` |
   | a field set by name before a spread that always overwrites it, TypeScript's TS2783 | NL2704 | `reject_object_spread_overwritten` |
 
   An interface value may hold any class that implements it, and such a
@@ -4336,7 +4340,10 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `` Spread of `Named` into `Tagged` may spread an instance of `Item`, which implements it with field `weight` besides: … ``
   (NL3052, `reject_object_spread_width`); spread a value of the class type
   instead. A spread into the typed JSON options of a class is NL2705
-  (`reject_json_options_spread`). A computed key is still refused
+  (`reject_json_options_spread`). One gap remains: Nish accepts `private`
+  on a field and ignores it, so a class instance with a `private` field
+  spreads into a type that declares that field, where `tsc` refuses the
+  spread; under Node the copy is the same object either way. A computed key is still refused
   (NL1041). NL1061, Phase 0's old refusal of every object spread, is
   retired and never reused.
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is

@@ -1536,31 +1536,35 @@ function FactCollector.isWipedFreshSecret(this: FactCollector, local: Local, ini
   callee +28:15 secretRoleOf -> @secretRoleOf
 function FactCollector.noteFreshInit(this: FactCollector, key: string, init: Node): void -> @FactCollector.noteFreshInit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:13
   escaping: key
   calls: DirtMark.constructor FactCollector.noteStore FactCollector.valueOf TypeTable.isStruct constructorOf intrinsicType nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
-  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteStore#0 FactCollector.noteStore#0 FactCollector.noteStore#0 FactCollector.valueOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteStore#0 FactCollector.noteStore#0 FactCollector.noteStore#0 FactCollector.valueOf#0 FactCollector.valueOf#0
   pointer init: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
   stackSites=0 stackLocals=0
-  local -40:11 program: CheckedProgram (const)
-  local -39:11 type: i32 (const)
-  local -37:18 element: Node (const)
-  callee -36:9 FactCollector.noteStore -> @FactCollector.noteStore
-  local -29:18 property: Node (const)
-  callee -27:11 FactCollector.noteStore -> @FactCollector.noteStore
-  local -23:17 copy: SpreadCopy | null (const)
-  local -21:24 name: string (const)
-  callee -20:15 FactCollector.noteStore -> @FactCollector.noteStore
-  callee -13:22 TypeTable.isStruct -> @TypeTable.isStruct
-  local -10:11 ctor: FunctionSig | null (const)
-  callee -10:18 constructorOf -> @constructorOf
-  callee -10:53 intrinsicType -> @intrinsicType
-  local -9:11 mark: DirtMark (const)
-  callee -9:18 new DirtMark -> @DirtMark.constructor
-  local -7:16 arg: Node (const)
-  local -6:13 value: ValueDesc (const)
-  callee -6:21 FactCollector.valueOf -> @FactCollector.valueOf
-  local -4:18 name: string (const)
+  local -27:11 program: CheckedProgram (const)
+  local -26:11 type: i32 (const)
+  local -24:18 element: Node (const)
+  callee -23:9 FactCollector.noteStore -> @FactCollector.noteStore
+  local -16:18 property: Node (const)
+  callee -14:11 FactCollector.noteStore -> @FactCollector.noteStore
+  local -10:17 copy: SpreadCopy | null (const)
+  local -8:24 name: string (const)
+  callee -7:15 FactCollector.noteStore -> @FactCollector.noteStore
+  local -2:19 mark: DirtMark (const)
+  callee -2:26 new DirtMark -> @DirtMark.constructor
+  local -1:19 desc: ValueDesc (const)
+  callee -1:26 FactCollector.valueOf -> @FactCollector.valueOf
+  callee +8:22 TypeTable.isStruct -> @TypeTable.isStruct
+  local +11:11 ctor: FunctionSig | null (const)
+  callee +11:18 constructorOf -> @constructorOf
+  callee +11:53 intrinsicType -> @intrinsicType
+  local +12:11 mark: DirtMark (const)
+  callee +12:18 new DirtMark -> @DirtMark.constructor
+  local +14:16 arg: Node (const)
+  local +15:13 value: ValueDesc (const)
+  callee +15:21 FactCollector.valueOf -> @FactCollector.valueOf
+  local +17:18 name: string (const)
 function FactCollector.noteSlotStore(this: FactCollector, slot: MemPath, value: Node): void -> @FactCollector.noteSlotStore [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -2124,37 +2128,39 @@ function FactCollector.collectClassFacts(this: FactCollector, node: Node): void 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: FactCollector.addComposedCallee FactCollector.initialisesThis FactCollector.isStackOwned FactCollector.noteArguments FactCollector.noteCall FactCollector.noteHandleClose FactCollector.noteSlotWrite FunctionFacts.isStackSite ParentTable.parentOf StringSet.add TypeTable.isStruct TypeTable.isUnion TypeTable.stripNull constructorOf intrinsicType isAssignmentTarget isGuardedAccess nish_panic_index nish_str_eq
-  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isStackOwned#0 FactCollector.initialisesThis#0 FactCollector.noteSlotWrite#0 FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.noteCall#0 FactCollector.noteHandleClose#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isStackOwned#0 FactCollector.isStackOwned#0 FactCollector.initialisesThis#0 FactCollector.noteSlotWrite#0 FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.noteCall#0 FactCollector.noteHandleClose#0
   pointer node: size=40 writesThrough=true captured=true passedTo=ParentTable.parentOf#1 isAssignmentTarget#1 isGuardedAccess#2 intrinsicType#1 FunctionFacts.isStackSite#1 intrinsicType#1 FactCollector.addComposedCallee#2 FactCollector.noteArguments#1 FactCollector.noteCall#1 FactCollector.noteHandleClose#1 FunctionFacts.isStackSite#1
   stackSites=0 stackLocals=0
-  local -9:11 program: CheckedProgram (const)
-  local -8:11 table: TypeTable (const)
-  local -6:13 receiver: Node (const)
-  local -5:13 type: i32 (const)
-  callee -1:11 TypeTable.isUnion -> @TypeTable.isUnion
-  callee -1:25 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +3:12 TypeTable.isStruct -> @TypeTable.isStruct
-  local +6:13 above: Node | null (const)
-  callee +6:21 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +10:11 FactCollector.isStackOwned -> @FactCollector.isStackOwned
-  callee +13:11 isAssignmentTarget -> @isAssignmentTarget
-  callee +17:14 FactCollector.initialisesThis -> @FactCollector.initialisesThis
-  callee +17:49 isGuardedAccess -> @isGuardedAccess
-  callee +18:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
-  local +29:13 type: i32 (const)
-  callee +29:20 intrinsicType -> @intrinsicType
-  callee +30:24 TypeTable.isStruct -> @TypeTable.isStruct
-  callee +33:12 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
-  callee +35:9 StringSet.add -> @StringSet.add
-  local +37:13 ctor: FunctionSig | null (const)
-  callee +37:20 constructorOf -> @constructorOf
-  callee +37:50 intrinsicType -> @intrinsicType
-  callee +39:9 FactCollector.addComposedCallee -> @FactCollector.addComposedCallee
-  callee +40:9 FactCollector.noteArguments -> @FactCollector.noteArguments
-  callee +41:9 FactCollector.noteCall -> @FactCollector.noteCall
-  callee +43:7 FactCollector.noteHandleClose -> @FactCollector.noteHandleClose
-  callee +46:36 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
-  callee +48:7 StringSet.add -> @StringSet.add
+  local -7:11 program: CheckedProgram (const)
+  local -6:11 table: TypeTable (const)
+  local -2:13 copy: SpreadCopy | null (const)
+  callee -1:57 FactCollector.isStackOwned -> @FactCollector.isStackOwned
+  local +5:13 receiver: Node (const)
+  local +6:13 type: i32 (const)
+  callee +10:11 TypeTable.isUnion -> @TypeTable.isUnion
+  callee +10:25 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +14:12 TypeTable.isStruct -> @TypeTable.isStruct
+  local +17:13 above: Node | null (const)
+  callee +17:21 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +21:11 FactCollector.isStackOwned -> @FactCollector.isStackOwned
+  callee +24:11 isAssignmentTarget -> @isAssignmentTarget
+  callee +28:14 FactCollector.initialisesThis -> @FactCollector.initialisesThis
+  callee +28:49 isGuardedAccess -> @isGuardedAccess
+  callee +29:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
+  local +40:13 type: i32 (const)
+  callee +40:20 intrinsicType -> @intrinsicType
+  callee +41:24 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +44:12 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
+  callee +46:9 StringSet.add -> @StringSet.add
+  local +48:13 ctor: FunctionSig | null (const)
+  callee +48:20 constructorOf -> @constructorOf
+  callee +48:50 intrinsicType -> @intrinsicType
+  callee +50:9 FactCollector.addComposedCallee -> @FactCollector.addComposedCallee
+  callee +51:9 FactCollector.noteArguments -> @FactCollector.noteArguments
+  callee +52:9 FactCollector.noteCall -> @FactCollector.noteCall
+  callee +54:7 FactCollector.noteHandleClose -> @FactCollector.noteHandleClose
+  callee +57:36 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
+  callee +59:7 StringSet.add -> @StringSet.add
 function FactCollector.collectResultFacts(this: FactCollector, node: Node): void -> @FactCollector.collectResultFacts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11

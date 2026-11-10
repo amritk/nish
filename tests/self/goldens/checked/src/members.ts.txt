@@ -519,13 +519,29 @@ function hasSpread(expr: Node): boolean -> @hasSpread
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 prop: Node (const)
-function checkSpreadSource(ctx: CheckContext, spread: Node, info: StructInfo, scope: Scope): StructInfo | null -> @checkSpreadSource
+function namedIn(names: string[], name: string): boolean -> @namedIn
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer names: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 each: string (const)
+function namedAfter(expr: Node, entry: Node): string[] -> @namedAfter
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
+  pointer expr: size=40 writesThrough=false captured=false
+  pointer entry: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 names: string[] (const)
+  local +1:7 after: boolean (let)
+  local +2:14 prop: Node (const)
+function checkSpreadSource(ctx: CheckContext, spread: Node, info: StructInfo, overridden: string[], scope: Scope): StructInfo | null -> @checkSpreadSource
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
-  calls: CheckContext.error StructInfo.field TypeTable.isNullable TypeTable.isStruct TypeTable.isUnion TypeTable.secretInner TypeTable.typeName checkExpression isCollectionStruct isThreadsStruct nish_panic_index nish_str_concat structOf
+  calls: CheckContext.error StructInfo.field TypeTable.isNullable TypeTable.isStruct TypeTable.isUnion TypeTable.secretInner TypeTable.typeName checkExpression isCollectionStruct isThreadsStruct namedIn nish_panic_index nish_str_concat structOf
   pointer ctx: size=304 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0 structOf#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
   pointer spread: size=40 writesThrough=false captured=false
   pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer overridden: size=0 writesThrough=false captured=false passedTo=namedIn#0
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
   local +0:9 value: Node (const)
@@ -551,15 +567,10 @@ function checkSpreadSource(ctx: CheckContext, spread: Node, info: StructInfo, sc
   callee +41:18 StructInfo.field -> @StructInfo.field
   callee +43:7 CheckContext.error -> @CheckContext.error
   callee +52:7 CheckContext.error -> @CheckContext.error
-  callee +61:7 CheckContext.error -> @CheckContext.error
-  callee +63:68 TypeTable.typeName -> @TypeTable.typeName
-  callee +64:28 TypeTable.typeName -> @TypeTable.typeName
-function namedIn(names: string[], name: string): boolean -> @namedIn
-  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_eq
-  pointer names: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:14 each: string (const)
+  callee +62:38 namedIn -> @namedIn
+  callee +63:7 CheckContext.error -> @CheckContext.error
+  callee +65:68 TypeTable.typeName -> @TypeTable.typeName
+  callee +66:28 TypeTable.typeName -> @TypeTable.typeName
 function recordSpreadCopies(ctx: CheckContext, expr: Node, into: i32, sources: StructInfo[]): void -> @recordSpreadCopies
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -584,10 +595,10 @@ function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: want
-  calls: CheckContext.error CheckContext.errorType StructInfo.field TypeTable.assignable TypeTable.isEntered TypeTable.isStruct TypeTable.stripNull TypeTable.typeName checkExpression checkSpreadSource classLiteralMessage hasMethods hasSpread holderLiteralMessage isThreadsStruct namedIn nish_array_grow nish_panic_index nish_str_concat nish_str_eq recordSpreadCopies secretFieldOf structOf takesDeclaredContext
+  calls: CheckContext.error CheckContext.errorType StructInfo.field TypeTable.assignable TypeTable.isEntered TypeTable.isStruct TypeTable.stripNull TypeTable.typeName checkExpression checkSpreadSource classLiteralMessage hasMethods hasSpread holderLiteralMessage isThreadsStruct namedAfter namedIn nish_array_grow nish_panic_index nish_str_concat nish_str_eq recordSpreadCopies secretFieldOf structOf takesDeclaredContext
   pointer ctx: size=304 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 CheckContext.errorType#0 checkSpreadSource#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 CheckContext.error#0 recordSpreadCopies#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=hasSpread#0 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.error#1 recordSpreadCopies#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkSpreadSource#3 checkExpression#2
+  pointer expr: size=40 writesThrough=false captured=false passedTo=hasSpread#0 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 namedAfter#0 CheckContext.error#1 recordSpreadCopies#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkSpreadSource#4 checkExpression#2
   stackSites=4 stackLocals=4
   callee +0:20 TypeTable.isStruct -> @TypeTable.isStruct
   callee +0:39 TypeTable.stripNull -> @TypeTable.stripNull
@@ -614,6 +625,7 @@ function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i
   local +35:14 prop: Node (const)
   local +37:13 source: StructInfo | null (const)
   callee +37:22 checkSpreadSource -> @checkSpreadSource
+  callee +37:57 namedAfter -> @namedAfter
   local +42:18 field: FieldInfo (const)
   local +43:13 k: i32 (let)
   callee +47:13 CheckContext.error -> @CheckContext.error

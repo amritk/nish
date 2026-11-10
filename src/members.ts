@@ -731,11 +731,37 @@ const hasSpread = (expr: Node): boolean => {
   return false
 }
 
+/** Whether `name` is one of `names`. */
+const namedIn = (names: string[], name: string): boolean => {
+  for (const each of names) {
+    if (each === name) {
+      return true
+    }
+  }
+  return false
+}
+
+/** The keys the entries of literal `expr` after entry `entry` set by name. */
+const namedAfter = (expr: Node, entry: Node): string[] => {
+  const names: string[] = []
+  let after = false
+  for (const prop of expr.children) {
+    if (after && prop.kind === N_PROPERTY) {
+      names.push(prop.text)
+    }
+    if (prop.id === entry.id) {
+      after = true
+    }
+  }
+  return names
+}
+
 /**
  * The struct a `...s` in a literal for `info` copies from, or `null` once it
  * is reported. A spread is lowered to one load and one store per field, so
  * what it copies has to be the source's declared fields, each the type the
- * target declares it, and nothing Node would copy besides: every refusal
+ * target declares it unless an entry in `overridden` (the keys set by name
+ * after the spread) replaces it, and nothing Node would copy besides: every refusal
  * below is a value whose spread under Node copies a different set of fields,
  * or a field the native copy would have to convert.
  */
@@ -743,6 +769,7 @@ const checkSpreadSource = (
   ctx: CheckContext,
   spread: Node,
   info: StructInfo,
+  overridden: string[],
   scope: Scope
 ): StructInfo | null => {
   const value = spread.children[0]
@@ -805,7 +832,9 @@ const checkSpreadSource = (
       )
       return null
     }
-    if (into.type !== field.type) {
+    // A field an entry after the spread sets by name is never copied, so its
+    // type here is the later entry's to give, as TypeScript reads it.
+    if (into.type !== field.type && !namedIn(overridden, field.name)) {
       ctx.error(
         value,
         `Field \`${field.name}\` spread from \`${spelled}\` is \`${ctx.table.typeName(field.type)}\`, but \`${target}\` ` +
@@ -816,16 +845,6 @@ const checkSpreadSource = (
     }
   }
   return source
-}
-
-/** Whether `name` is one of `names`. */
-const namedIn = (names: string[], name: string): boolean => {
-  for (const each of names) {
-    if (each === name) {
-      return true
-    }
-  }
-  return false
 }
 
 /**
@@ -900,7 +919,7 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
   let spreadFailed = false
   for (const prop of expr.children) {
     if (prop.kind === N_SPREAD) {
-      const source = checkSpreadSource(ctx, prop, info, scope)
+      const source = checkSpreadSource(ctx, prop, info, namedAfter(expr, prop), scope)
       if (source === null) {
         spreadFailed = true
         continue

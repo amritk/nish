@@ -3194,11 +3194,17 @@ export class Compilation {
     if (classes.length === 0) {
       return
     }
+    // A spread in a generic body is recorded once per instance, at one place.
+    const reported = new StringSet()
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const copy of program.spreadCopies) {
         const iface = program.struct(this.table.nameOf(copy.source))
         if (iface === null || iface.kind === STRUCT_CLASS) {
+          continue
+        }
+        const place = `${copy.file.path}:${copy.at.start}:${copy.source}`
+        if (reported.has(place)) {
           continue
         }
         for (const cls of classes) {
@@ -3213,6 +3219,7 @@ export class Compilation {
                 "field of the instance a value holds, and the native copy only the interface's, so spread a value " +
                 "of a class type, or set the fields by name"
             )
+            reported.add(place)
             break
           }
         }

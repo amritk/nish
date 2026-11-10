@@ -1,6 +1,7 @@
-// The readings WP33 R1 keeps beside the object-literal forms it now reads for
-// Phase 0 to refuse: a computed key `{ [k]: 1 }` and spread `{ ...a }`, and a
-// computed member name in a class or an interface (NL1041, NL1061). Each opens
+// The readings WP33 R1 keeps beside the object-literal forms it now reads: a
+// computed key `{ [k]: 1 }` and a computed member name in a class or an
+// interface, which Phase 0 refuses (NL1041), and spread `{ ...a }`, which the
+// checker lowers to field copies. Each opens
 // at a `[` or a `...` where a key stands, which was a syntax error before.
 // None of those is in this file, which holds the programs beside them that
 // already compiled, and every one compiles as it did, to the same bytes: the

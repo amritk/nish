@@ -388,6 +388,7 @@ cases/obj_spread_class added after R6: no rewriter to freeze it with
 cases/obj_spread_narrowed added after R6: no rewriter to freeze it with
 cases/obj_spread_nested added after R6: no rewriter to freeze it with
 cases/obj_spread_order added after R6: no rewriter to freeze it with
+cases/obj_spread_override_type added after R6: no rewriter to freeze it with
 cases/optional_chain_bounds added after R6: no rewriter to freeze it with
 cases/optional_chain_field added after R6: no rewriter to freeze it with
 cases/optional_chain_generic added after R6: no rewriter to freeze it with

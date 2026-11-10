@@ -32984,6 +32984,20 @@ if (!only || "spread".includes(only)) {
     count(spread, arena) === 1 && count(written, arena) === 1,
     `nish_alloc_struct calls: spread ${count(spread, arena)}, written ${count(written, arena)}`
   )
+  // `firstX` reads its argument only through `{ ...b }`: were the spread's loads left out
+  // of its memory facts, it would be `readnone`, and LLVM could fold two calls across a
+  // store to `b`.
+  const groupOf = (ir, fn) => {
+    const def = ir === null ? null : ir.match(new RegExp(`^define [^\\n]*@${fn}\\([^\\n]*\\) #(\\d+)`, "m"))
+    const group = def === null ? null : ir.match(new RegExp(`^attributes #${def[1]} = \\{([^}]*)\\}`, "m"))
+    return group === null ? "" : group[1]
+  }
+  const firstX = groupOf(spread, "firstX")
+  check(
+    "object spread: a function that reads its argument only through a spread reads memory",
+    /\breadonly\b|memory\(read/.test(firstX) && !/\breadnone\b/.test(firstX),
+    `@firstX attributes: { ${firstX} }`
+  )
   const local = /= alloca %struct\.Point,/g
   check(
     "object spread: the literal that stays local is an alloca, in both spellings",

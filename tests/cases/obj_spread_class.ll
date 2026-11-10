@@ -81,6 +81,32 @@ entry:
   %31 = call i8* @nish_str_from_i32(i32 %30)
   %32 = call i8* @nish_str_concat(i8* %28, i8* %31)
   call void @nish_print(i8* %32)
+  %33 = load %struct.Cell*, %struct.Cell** %c.addr, align 8
+  %34 = getelementptr inbounds %struct.Cell, %struct.Cell* %33, i32 0, i32 0
+  store i32 40, i32* %34, align 4, !tbaa !4
+  %35 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
+  %36 = getelementptr inbounds %struct.Pair, %struct.Pair* %35, i32 0, i32 0
+  %37 = load i32, i32* %36, align 4
+  %38 = call i8* @nish_str_from_i32(i32 %37)
+  %39 = call i8* @nish_str_concat(i8* %38, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %40 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
+  %41 = getelementptr inbounds %struct.Pair, %struct.Pair* %40, i32 0, i32 1
+  %42 = load i32, i32* %41, align 4
+  %43 = call i8* @nish_str_from_i32(i32 %42)
+  %44 = call i8* @nish_str_concat(i8* %39, i8* %43)
+  %45 = call i8* @nish_str_concat(i8* %44, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %46 = load %struct.Cell*, %struct.Cell** %c.addr, align 8
+  %47 = getelementptr inbounds %struct.Cell, %struct.Cell* %46, i32 0, i32 0
+  %48 = load i32, i32* %47, align 4, !tbaa !4
+  %49 = call i8* @nish_str_from_i32(i32 %48)
+  %50 = call i8* @nish_str_concat(i8* %45, i8* %49)
+  %51 = call i8* @nish_str_concat(i8* %50, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %52 = load %struct.Cell*, %struct.Cell** %c.addr, align 8
+  %53 = getelementptr inbounds %struct.Cell, %struct.Cell* %52, i32 0, i32 1
+  %54 = load i32, i32* %53, align 4, !tbaa !5
+  %55 = call i8* @nish_str_from_i32(i32 %54)
+  %56 = call i8* @nish_str_concat(i8* %51, i8* %55)
+  call void @nish_print(i8* %56)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 }

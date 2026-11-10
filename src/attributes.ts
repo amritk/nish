@@ -2569,6 +2569,14 @@ class FactCollector {
             for (const name of copy.fields) {
               this.noteStore(key, `.${name}`, property.children[0])
             }
+          } else {
+            // Which fields it copies is unknown, so anything below the
+            // object may be anything.
+            const mark = new DirtMark(DIRT_STORE, key, "", true)
+            const desc = this.valueOf(property.children[0])
+            desc.unknown = true
+            mark.value = desc
+            this.facts.dirt.push(mark)
           }
         }
       }
@@ -3454,6 +3462,15 @@ class FactCollector {
   collectClassFacts(node: Node): void {
     const program = this.unit.program
     const table = this.table
+    if (node.kind === N_SPREAD && (node.flags & FLAG_OBJECT_SPREAD) !== 0) {
+      // `{ ...s }` loads each field it copies off `s`, the reads a written-out
+      // `f: s.f` makes; with no record of what it copies, it reads anyway.
+      const copy = program.nodeSpreadCopies[node.id]
+      if ((copy === null || copy.fields.length > 0) && !this.isStackOwned(node.children[0])) {
+        this.facts.readsMemory = true
+      }
+      return
+    }
     if (node.kind === N_MEMBER) {
       const receiver = node.children[0]
       const type = program.nodeTypes[receiver.id]
