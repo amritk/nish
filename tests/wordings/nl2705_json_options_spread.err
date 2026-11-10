@@ -1,0 +1,1 @@
+`User.json` spreads another value into the typed JSON options: typed JSON reads a class's options from its text, where a spread names nothing it can see, so write each option out by name

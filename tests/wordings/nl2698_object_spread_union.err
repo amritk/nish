@@ -1,0 +1,1 @@
+Spread of the union `Dot | Box` into `Out`: which fields a spread copies depends on the variant it holds at run time, so narrow it to one variant first, or set the fields by name

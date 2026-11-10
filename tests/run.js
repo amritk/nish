@@ -32909,6 +32909,52 @@ if (!only || "differential".includes(only) || "goldens".includes(only)) {
   )
 }
 
+// ---- Object spread: a lowering, not a construct of its own ----
+// `{ ...b, x: 1 }` is stored as the fields of `b` the literal does not write over, then the
+// fields it writes, so it owes the program written out by hand the same IR. The goldens
+// cannot say so: each `obj_spread_*` golden matches only itself. `spread-twin/written.ts`
+// is `spread.ts` with every spread written out; the two must emit the same module once
+// value names are set aside, a local literal must be an `alloca` in both, and the one that
+// escapes through the return must still be allocated in the arena in both -- a spread that
+// stopped being seen as a fresh literal, or one that started copying through a temporary
+// struct, moves one of those counts.
+if (!only || "spread".includes(only)) {
+  const fixtures = path.join(root, "tests", "differential", "spread-twin")
+  const out = path.join(buildDir, "spread-twin")
+  const emit = (name) => {
+    const dir = path.join(out, name)
+    fs.mkdirSync(dir, { recursive: true })
+    const run = spawnSync(NISH, [path.join(fixtures, `${name}.ts`), "-o", `${dir}/`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ll = path.join(dir, `${name}.ll`)
+    return run.status === 0 && fs.existsSync(ll) ? stripHeader(fs.readFileSync(ll, "utf8")) : null
+  }
+  // `%5`, `%t3`, `%p.addr` and the like name a value; `%struct.*` names a type and stays.
+  const unnamed = (ir) => ir.replace(/%(?!struct\.)[\w.]+/g, "%v")
+  const spread = emit("spread")
+  const written = emit("written")
+  check(
+    "object spread: a spread literal and its written-out twin emit the same IR, value names aside",
+    spread !== null && written !== null && unnamed(spread) === unnamed(written),
+    spread === null || written === null ? "a fixture did not compile" : "the two modules differ"
+  )
+  const count = (ir, re) => (ir === null ? -1 : (ir.match(re) || []).length)
+  const arena = /call i8\* @nish_alloc_struct\(/g
+  check(
+    "object spread: only the literal that escapes is allocated in the arena, in both spellings",
+    count(spread, arena) === 1 && count(written, arena) === 1,
+    `nish_alloc_struct calls: spread ${count(spread, arena)}, written ${count(written, arena)}`
+  )
+  const local = /= alloca %struct\.Point,/g
+  check(
+    "object spread: the literal that stays local is an alloca, in both spellings",
+    count(spread, local) >= 1 && count(spread, local) === count(written, local),
+    `Point allocas: spread ${count(spread, local)}, written ${count(written, local)}`
+  )
+}
+
 // ---- WP22 §2: the two spellings, and the codemod that rewrites one into the other ----
 // Stage A was declared done on "the two spellings of one program emit byte-identical IR",
 // and until now nothing in `npm test` asked. The claim is structural rather than lucky --

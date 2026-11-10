@@ -1,4 +1,6 @@
-// WP40 H1.1, §4d: a handle is never spread.
+// WP40 H1.1, §4d: a handle is never spread. Unannotated, the literal has no layout to
+// copy into; `File` has methods, so no literal is one; and `CPtr` cannot be the field of
+// an interface a spread could copy it into. Each of the three is refused.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32
