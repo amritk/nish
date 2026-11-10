@@ -1951,9 +1951,9 @@ import compressBound from "nish/compress/deflate" -> function @nish.compressBoun
 import GzipCompressor from "nish/compress/gzip" -> struct GzipCompressor
 import GzipFixedCompressor from "nish/compress/gzip" -> struct GzipFixedCompressor
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
-unsafe import 77:10 wrappingAdd from "nish:unsafe"
-unsafe call 533:26 wrappingAdd (node 1792)
-unsafe call 573:24 wrappingAdd (node 1947)
+unsafe import 78:10 wrappingAdd from "nish:unsafe"
+unsafe call 540:26 wrappingAdd (node 1792)
+unsafe call 580:24 wrappingAdd (node 1947)
 const HTTP_CODING_IDENTITY: i32 = 0 [exported]
 const HTTP_CODING_GZIP: i32 = 1 [exported]
 const HTTP_CODING_DEFLATE: i32 = 2 [exported]
