@@ -7247,7 +7247,7 @@ export const tidy = (s: string): string => trim(s);
 ```
 
 ```text
-This call to `trim` may panic: it reaches the `index` site at std/text.ts:157:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+This call to `trim` may panic: it reaches the `index` site at std/text.ts:163:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
 ```
 
 ## NL2459

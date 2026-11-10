@@ -1587,6 +1587,13 @@ const INDEX_OF_ANY_REFUSALS = [
   ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
 ]
 
+/** `split`'s and the pads' refused arguments, each a link program and its panic (read after the loop). */
+const TEXT_REFUSALS = [
+  ["std_text_split_empty_separator", "split: an empty separator"],
+  ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
+  ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
+]
+
 /**
  * The link programs whose output a check after the loop reads: by path, from
  * `build/test/link/<name>/`. They always run in shard 1, the shard that makes
@@ -1609,6 +1616,7 @@ const LINK_READ_LATER = [
   "range_export_napi_async",
   "range_export_unproven",
   ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
+  ...TEXT_REFUSALS.map(([name]) => name),
   "std_compress_node",
   "std_json_conformance",
   "std_json_tokenizer",
@@ -28402,6 +28410,10 @@ if (!only || "std_text_index_of_any".includes(only)) {
 // UTF-16 units less the second half of each pair, and é, €, 😀, "©®±" and a
 // lone surrogate print the same count both ways.
 if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
+  // `std_text_camel_case`, the guide's example, is held natively only: under
+  // the Node prelude its `Regex.replaceAll` on a class of two members does
+  // not finish, which is `nish/regex`'s and not this module's (#1362). It
+  // rejoins this list when #1362 is fixed.
   for (const name of ["std_text", "std_text_f64"]) {
     const dir = path.join(linkDir, name)
     const run = runUnderPrelude(path.join(dir, "main.ts"), [])
@@ -28423,6 +28435,39 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
       divergent.stdout === "built from bytes: 2\nstray continuation byte: 1\njoined halves: 1, length 2\n",
     shown(divergent)
   )
+  // The pads count `text` in the platform's units: natively é is two bytes
+  // and 😀 four, under Node one and two UTF-16 units, so each pad is a unit or
+  // two longer there. expected.out holds the native answers; these are Node's.
+  const pads = runUnderPrelude(path.join(linkDir, "std_text_pad_native", "main.ts"), [])
+  check(
+    "link/std_text_pad_native: under the Node prelude the pads count UTF-16 units, not bytes",
+    pads.status === 0 && pads.stdout === "start: [  \u00e9]\nend: [\u00e9  ]\nemoji: [..\u{1F600}]\nmixed: [00\u00dfx]\n",
+    shown(pads)
+  )
+  // An empty separator and a non-ASCII fill are refused the same way on both
+  // sides: a panic, whose message the link loop does not read, so it is held
+  // here from the binary the loop built and from the Node run.
+  for (const [name, message] of TEXT_REFUSALS) {
+    const dir = path.join(linkDir, name)
+    const want = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    check(
+      `link/${name}: under the Node prelude it prints expected.out and exits 1 with "${message}"`,
+      run.status === 1 && run.stdout === want && run.stderr.includes(message),
+      `--- native (expected.out)\n${want}--- node\n${shown(run)}`
+    )
+    const exe = path.join(buildDir, "link", name, "app")
+    if (!HAS_CLANG) {
+      skip(`skipped: link/${name}: no clang, so there is no native binary to read the panic of`)
+    } else {
+      const native = spawnSync(exe, [], { encoding: "utf8" })
+      check(
+        `link/${name}: the native binary panics with "${message}"`,
+        native.status === 1 && native.stderr.includes(message),
+        fs.existsSync(exe) ? shown(native) : `no binary at ${exe}`
+      )
+    }
+  }
 }
 
 // WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own
