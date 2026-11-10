@@ -592,6 +592,42 @@ requestAnimationFrame(function frame() {
 });
 ```
 
+### A whole page: `examples/wasm-arena`
+
+[`examples/wasm-arena`](https://github.com/amritk/nish/tree/main/examples/wasm-arena)
+puts the pieces above together: a fixed-step arena of a few hundred bodies
+that a page drives every frame. `sim.ts` is the simulation, in module
+storage; `client.ts` reads the input ring once per tick, steps it and writes
+the instance list the page draws; `host.ts` is the host module that creates
+the WebGPU shader (or, with no WebGPU adapter, the WebGL 2 program) from the
+text the module generates; `page.ts` makes its views once, pushes key
+presses into the ring and draws with `queue.writeBuffer` over the instance
+list. `build.mjs` writes the page, ready to serve, and a native replay:
+
+```console
+$ node examples/wasm-arena/build.mjs --nish $NISH/build/nish --out build/arena
+$ cd build/arena/web && python3 -m http.server 8000
+```
+
+Open `http://localhost:8000/`: WebGPU needs a secure context, which
+`localhost` is and a `file:` or `data:` page is not. Memory is fixed with
+`--memory 4`, so its `byteLength` never changes and the page's views stay
+valid for as long as it runs.
+
+The simulation is compiled with `--deterministic`, so the same input gives
+the same state bit for bit in the browser, natively and under `--emit-ts`.
+`build/arena/replay` replays a recorded input — a seed, a tick count, and
+run-length words, `44x1` for the word 1 held for 44 ticks — and prints the
+hash the page's `hashHi` and `hashLo` give after the same ticks:
+
+```console
+$ build/arena/replay 1 120 44x1 36x5 39x1
+ticks 120 hash d26f9b16ccb7478a
+```
+
+That is the check for a game whose server and client must agree: record the
+client's input, replay it on the server's build, and compare one hash.
+
 ## C
 
 `--emit-header` writes a prototype for each exported function. It includes

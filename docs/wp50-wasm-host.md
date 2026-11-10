@@ -1,6 +1,6 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**Status: accepted, 2026-11-06; stages 1 to 4 built.** The owner accepted every
+**Status: accepted, 2026-11-06; stages 1 to 6 built.** The owner accepted every
 recommendation in §13, with Q1 revised: the functions a page supplies are an
 `import` from the page's own TypeScript module (§3), not a `declare function`.
 Stage 1 (§14) is built: `--profile wasm-host`, `--memory`, `--inline`, the
@@ -29,9 +29,12 @@ capabilities (NL2700–NL2701, NL3052–NL3054), reads `Number(s)`,
 runtime unit with `-ffp-contract=off`, and holds the float corpus
 (`tests/differential/corpus/float/`) to one `expected.txt` natively, on
 wasm32-wasi and under `--emit-ts` (`tests/run.js`, sections `deterministic`
-and `float-corpus`; CI's `simd-arm64` job runs it on AArch64). The anchors below are at `39a87b3b`.
+and `float-corpus`; CI's `simd-arm64` job runs it on AArch64). Stage 6 is
+built: `examples/wasm-arena/`, its replay check (`tests/run.js`, section
+`wasm-arena`), its size row (`wasm-size`) and the `interop` workflow's `arena`
+job, the ten-minute Chromium soak (§10). The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
-the accepted design. Stages 1 to 5 are built; stage 6 is next.
+the accepted design. Stages 1 to 6 are built.
 
 cs, a browser arena shooter, is moving the bulk of its client into Nish
 compiled to WebAssembly: the fixed-step simulation (the same source the native
@@ -432,7 +435,7 @@ the browser the ones W9 uses.
 | WebGL 2 `bufferSubData`, `bufferData`, `texSubImage2D` | `ReadableStreamBYOBReader.read(view)`: it transfers the buffer, and a `WebAssembly.Memory` buffer cannot be transferred (a `TypeError`). Read into a page buffer, then `.set` |
 | `TextDecoder.decode` | `postMessage(view, [view.buffer])`: never transfer module memory |
 | `AudioBuffer.copyToChannel`, `copyFromChannel` | an `AudioWorklet`'s `port.postMessage` of a view: it clones, which allocates, so do it once and not per frame |
-| WebTransport `datagrams.writable` and send-stream `write`: the spec copies the bytes at write. Stage 6 confirms this in Chromium before W9 relies on it | anything else not in the left column, until it is checked |
+| WebTransport `datagrams.writable` and send-stream `write`: the spec copies the bytes at write. Confirmed in Chromium 153 by stage 6 (`tests/interop/chrome-arena.py`): a 32-byte view written as a datagram and overwritten with `z` straight after the `write` call comes back from the echo server as the 32 bytes written | anything else not in the left column, until it is checked |
 | `new Blob([view])`, a `fetch` body | |
 
 "Copy into a page-owned buffer" means `pageBuf.set(view.subarray(at, at + n))`
@@ -691,7 +694,13 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   safe for any module cs will ship: §10's example is kilobytes, and cs's
   whole client would have to grow by three orders of magnitude to reach the
   limit. The loader's documentation states the 8 MB figure, and stage 6 runs
-  `loadSync` in Chromium to confirm the limit has not come back.
+  `loadSync` in Chromium to confirm the limit has not come back. In Chromium
+  153 the arena's module padded to 8,384,512 bytes (8 MiB − 4 KiB) loads in
+  5 ms; padded to 8,392,704 (8 MiB + 4 KiB) it throws `RangeError:
+  WebAssembly.Compile is disallowed on the main thread, if the buffer size is
+  larger than 8MB. Use WebAssembly.compile, compile on a worker thread, or use
+  the flag --enable-features=WebAssemblyUnlimitedSyncCompilation`. The soak
+  checks both sides on every run.
 - **The bytes inside the bundle.** `build.sh --inline <file.mjs>` writes the
   module's bytes as an ES module, `export const bytes = new Uint8Array([...])`.
   The page passes `load(bytes, imports)`. Measured on this container (raw /
@@ -829,6 +838,31 @@ container has no `brotli` command.
     the same input for the same number of ticks and prints its own hash, and
     the two must be equal.
 
+**Built (stage 6).** The example is `sim.ts` (256 bodies, 64 shots and a ship
+in module storage, stepped at 60 Hz), `client.ts` (the input ring, the
+instance list, and the WGSL and GLSL generated with templates), `host.ts`,
+`page.ts`, `index.html`, `replay.ts` (the native replay) and `build.mjs`, which
+writes the page and the replay into one directory. `tests/run.js`'s
+`wasm-arena` section runs the page under Node for 3,000 frames
+(`node-run.mjs`) and holds its hash to the native replay's and to the replay's
+`--emit-ts` reading. The `interop` workflow's `arena` job runs it in Chromium
+for ten minutes against the band `tests/interop/chrome-arena.py` states (256
+KiB of used heap after GC between minute one and minute ten, and 1 KiB
+sampled per frame), and writes its figures to the job summary.
+
+**WebGPU in headless Chromium.** `navigator.gpu` answers with
+`--enable-unsafe-webgpu --enable-features=Vulkan
+--use-webgpu-adapter=swiftshader` on a secure context: Chromium 153 gave the
+adapter `google / swiftshader` on `http://127.0.0.1`. On a `data:` URL, not a
+secure context, `navigator.gpu` is `undefined`, so the soak serves the page
+from localhost. The page keeps the WebGL 2 `bufferSubData` path the owner
+allowed (Q8) for a browser with no adapter, and the soak's summary names which
+path ran. Measured locally over 120 s on WebGPU: memory 4,194,304 bytes and the
+arena mark 89,616 throughout, used heap +1,984 bytes between the two GCs,
+about 250 bytes sampled per frame (the command encoder and texture view each
+frame's draw makes), and the hash `4e0d41bf2e08771a` after 7,203 ticks on the
+page and natively.
+
 ## 11. Not wasm-bindgen; what goes in `std`
 
 **Why not use wasm-bindgen.** Rust's wasm-bindgen solves the same problem, and
@@ -897,7 +931,7 @@ module, and `--gc-sections` drops whatever a program does not use.
 | **Q5** | A new `--profile wasm-host` (explicit exports, fixed memory, the panic import, `--inline`), or change `--profile wasm` in place. In place, explicit exports would shrink every module by 26–68%, but break hosts that call runtime exports by hand, as `web/bytes-worker.mjs` calls `nish_alloc_array`. Also: for growable memory, buffer identity as the generation counter, or a counter word in memory? | **A new profile, and buffer identity.** `--profile wasm` can adopt the export list later as its own change |
 | **Q6** | Host handles as values only (§4), or also handle classes over a `HostHandle` field, for a resource scoped to a block? | **Values only now.** Add the class form when cs has a block-scoped host resource |
 | **Q7** | `--deterministic` as §9 has it: the capability policy plus `std/math.ts` transcendentals on every target and canonical NaN bits. Separately, should `std/math.ts` be the lowering of `sin`, `cos`, `exp`, `log`, `pow` and `%` on freestanding wasm even without the flag? | **Yes to both.** The second fixes a link that fails today and costs nothing that works today |
-| **Q8** | CI for the claims: an `ubuntu-24.04-arm` runner for the aarch64 column of the float corpus, and WebGPU in headless Chromium (`--enable-unsafe-webgpu` on SwiftShader). If WebGPU proves unavailable on the runner, may W9 fall back to WebGL 2 `bufferSubData`? | **The arm runner, yes.** WebGPU is required. If SwiftShader cannot provide it, stage 6 stops and asks rather than switching APIs |
+| **Q8** | CI for the claims: an `ubuntu-24.04-arm` runner for the aarch64 column of the float corpus, and WebGPU in headless Chromium (`--enable-unsafe-webgpu` on SwiftShader). If WebGPU proves unavailable on the runner, may W9 fall back to WebGL 2 `bufferSubData`? | **The arm runner, yes.** WebGPU is required. If SwiftShader cannot provide it, stage 6 stops and asks rather than switching APIs. Revised at stage 6: the page falls back to WebGL 2 `bufferSubData` where no adapter answers. SwiftShader provides WebGPU on a localhost page (§10), so the fallback is for browsers, and the soak names the path it ran |
 | **Q9** | A panic's site: a number plus an `x.sites.json` sidecar, or `path:line:col` strings inside the module? | **The number.** File names cost bytes in every download and help only a developer, who has the sidecar |
 | **Q10** | Inline bytes: the decimal array literal (smallest of the inline forms after compression, +25% over the separate file under brotli), opt-in through `--inline` | **Yes**, opt-in. cs decides per build whether a separate fetch is worth the bytes |
 | **Q11** | The ten-minute soak runs in the `interop` workflow beside the QUIC and TLS jobs, not in `npm test` | **Yes.** It needs a browser and ten minutes, and `npm test`'s shards should not wait on either |
@@ -914,7 +948,7 @@ answered. Stage 5 depends on nothing before it and can run beside stages 1–4.
 | 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | nothing to a program with no module storage and no host module: its loader, `.d.ts` and `.wasm` are the bytes it had before (`WASM_PLAIN_DIGESTS`, §6). One with either pays the `nish.panic` import and its site arguments. **Built**; record `docs/security/wasm-host.md` |
 | 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | nothing to a program with no strings (`WASM_PLAIN_DIGESTS`); 1,111 B for an integer template, 13,046 B with an `f64` (10,296 B of it the printer's table). **Built** |
 | 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured over an `x + 1.0` module, raw / gzip / brotli on `wasm-host` with no wasm-opt: `sin` 1,741 / 1,211 / 1,164 B, `cos` 1,755 / 1,219 / 1,176, `exp` 730 / 478 / 502, `log` 610 / 397 / 387, `pow` 2,250 / 1,292 / 1,243, `%` (`fmod`) 710 / 366 / 331, all six 6,250 / 3,490 / 3,352; `--profile wasm` adds the same raw bytes. Nothing to a module that calls none (`WASM_PLAIN_DIGESTS`). **Built** |
-| 6 | **The acceptance example (W9).** `examples/wasm-arena/`, the Chromium job, the ten-minute soak, the size rows for the example, and the guide's browser section | stages 1–5, Q8, Q11 | the example's figures become the guard's second row |
+| 6 | **The acceptance example (W9).** `examples/wasm-arena/`, the Chromium job, the ten-minute soak, the size rows for the example, and the guide's browser section | stages 1–5, Q8, Q11 | the example's figures become the guard's `examples/wasm-arena/client.ts` row (`WASM_HOST_SIZE_BUDGETS`). **Built** |
 
 Every stage carries its own definition of done from `CLAUDE.md`. That means a
 golden `.ll` and the exact IR for each new construct, a native and a wasm round
