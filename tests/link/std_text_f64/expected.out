@@ -15,6 +15,11 @@ PASS  codePointLength: a lone surrogate is one
 PASS  codePointLength: a low half before a high one closes nothing
 PASS  contains: an interior occurrence
 PASS  replaceAll: every occurrence, not just the first
+PASS  split: empty pieces at the ends
+PASS  asciiUpper: the ASCII letters change
+PASS  asciiLower: the ASCII letters change
+PASS  padStart: zeros in front
+PASS  padEnd: a fill repeats and is cut
 PASS  firstDifference: equal line lists answer -1
 PASS  firstDifference: a prefix answers the shorter length
 PASS  jsonField: a string value
@@ -30,4 +35,4 @@ FAIL  a check that fails on purpose
 failed: a check that fails on purpose
 deliberate: 0 passed, 1 failed, 0 skipped
 PASS  a failing suite answers exit code 1
-text-f64: 28 passed, 0 failed, 0 skipped
+text-f64: 33 passed, 0 failed, 0 skipped

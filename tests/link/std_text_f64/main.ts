@@ -23,10 +23,15 @@
 import { jsonField } from "../../../std/json.ts";
 import { Suite } from "../../../std/testing.ts";
 import {
+  asciiLower,
+  asciiUpper,
   codePointLength,
   contains,
   firstDifference,
+  padEnd,
+  padStart,
   replaceAll,
+  split,
   splitLines,
   splitWhitespace,
   trim,
@@ -65,6 +70,14 @@ export const main = (): i32 => {
   t.eqI32("codePointLength: a low half before a high one closes nothing", codePointLength("\ude00\ud83d"), toI32(2));
   t.eqBool("contains: an interior occurrence", contains("alphabet", "phab"), true);
   t.eqStr("replaceAll: every occurrence, not just the first", replaceAll("a-b-c", "-", "+"), "a+b+c");
+  // `split` passes `indexOf` an `i32` start, `asciiUpper` and `asciiLower`
+  // shift a byte, and the pads subtract a length from a width: each a read
+  // this mode would make an `f64` without the `toI32`.
+  t.eqStr("split: empty pieces at the ends", split(",a,", ",").join("|"), "|a|");
+  t.eqStr("asciiUpper: the ASCII letters change", asciiUpper("get_id"), "GET_ID");
+  t.eqStr("asciiLower: the ASCII letters change", asciiLower("GET_ID"), "get_id");
+  t.eqStr("padStart: zeros in front", padStart("7", toI32(3), "0"), "007");
+  t.eqStr("padEnd: a fill repeats and is cut", padEnd("7", toI32(4), "ab"), "7aba");
 
   // `firstDifference` reads two array lengths and compares them, which is the
   // read that used to make its ternary branches disagree on their type.
