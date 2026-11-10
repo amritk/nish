@@ -73,8 +73,10 @@ fixed point.
 
 ### Shards and time limits
 
-Every job stops at 15 minutes (`timeout-minutes`) but `test` (25) and
-`runtime-net` (20), and every LLVM install step at 5 (10 for Homebrew). Without them a job that hangs runs to GitHub's six-hour
+Every job stops at 15 minutes (`timeout-minutes`) but `test` (25),
+`runtime-net` (20) and interop.yml's `arena` (25: its Chromium soak of
+examples/wasm-arena runs ten minutes by design, docs/wp50-wasm-host.md §10),
+and every LLVM install step at 5 (10 for Homebrew). Without them a job that hangs runs to GitHub's six-hour
 limit: on #502 three jobs waited on one `apt-get update` fetch from
 archive.ubuntu.com from 19:22 to 01:22 and no test ran. apt has no timeout of
 its own, so every `apt-get` is also handed `$APT_OPTS` (30 s per connection,

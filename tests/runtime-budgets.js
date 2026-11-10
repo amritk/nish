@@ -928,6 +928,15 @@ export const RUNTIME_BUDGETS = [
  * code is 2,502; the same template with only the `i32` links to 1,111 bytes, because
  * `--gc-sections` drops the printer and its table. Its loader is 3,556 bytes (gzip
  * 1,483, brotli 1,302): 28 of them the `ignoreBOM` option that keeps a leading U+FEFF.
+ *
+ * examples/wasm-arena/client.ts is the whole-page row (WP50 stage 6, measured
+ * 2026-11-10): client.ts, sim.ts and nish/host/ring compiled with `--host
+ * examples/wasm-arena/host.ts --memory 4` (the page's own build), one `.ll` each,
+ * linked with no runtime-wasm.c. Its 14,108-byte `.wasm` (gzip 6,356, brotli 5,814;
+ * one byte and 66 brotli bytes over the build without `--memory`) is the whole
+ * simulation, the renderer's instance packing and the input ring; its loader is
+ * 10,767 bytes (gzip 3,522, brotli 3,090), most of it the eight module-storage
+ * views and the two host imports that take a string.
  */
 export const WASM_HOST_SIZE_BUDGETS = [
   {
@@ -957,6 +966,15 @@ export const WASM_HOST_SIZE_BUDGETS = [
     wasm: [13046, 11786, 11297],
     loader: [3556, 1483, 1302],
     inline: [44371, 15639, 13682],
+  },
+  {
+    src: "examples/wasm-arena/client.ts",
+    host: "examples/wasm-arena/host.ts",
+    memory: 4,
+    runtime: false,
+    wasm: [14108, 6356, 5814],
+    loader: [10767, 3522, 3090],
+    inline: [42249, 7821, 6770],
   },
 ]
 
