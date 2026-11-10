@@ -248,17 +248,19 @@ export const isSortModule = (packageName: string, name: string): boolean =>
  */
 export const ARRAY_SPECIFIER: string = "nish/array"
 
+/** The array methods `nish/array` holds templates for. */
+const arrayMethodNames = (): string[] => ["map", "filter", "some", "every", "findIndex", "slice"]
+
 /**
  * The templates of `nish/array` a method `name` may become: a callback method
  * has one for a callback of one parameter and one, `<name>Indexed`, for two;
  * `slice` has one per argument count. Empty for any other name.
  */
 export const arrayMethodTemplates = (name: string): string[] => {
-  if (name === "map" || name === "filter" || name === "some" || name === "every" || name === "findIndex") {
-    return [name, `${name}Indexed`]
-  }
-  if (name === "slice") {
-    return ["sliceAll", "sliceFrom", "slice"]
+  for (const method of arrayMethodNames()) {
+    if (name === method) {
+      return name === "slice" ? ["sliceAll", "sliceFrom", "slice"] : [name, `${name}Indexed`]
+    }
   }
   return []
 }
@@ -278,12 +280,14 @@ export const arrayMethodOfLocal = (local: string): string => {
   if (!local.startsWith(ARRAY_LOCAL_PREFIX)) {
     return ""
   }
-  const template = local.slice(ARRAY_LOCAL_PREFIX.length)
-  if (template.startsWith("slice")) {
-    return "slice"
+  for (const method of arrayMethodNames()) {
+    for (const template of arrayMethodTemplates(method)) {
+      if (local === arrayMethodLocal(template)) {
+        return method
+      }
+    }
   }
-  const name = template.endsWith("Indexed") ? template.slice(0, template.length - "Indexed".length) : template
-  return arrayMethodTemplates(name).length > 0 ? name : ""
+  return ""
 }
 
 /** Whether `name` in `packageName` is `std/array.ts`, which is copied into its user like `std/sort.ts`. */

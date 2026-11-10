@@ -1938,7 +1938,7 @@ export class CheckedProgram {
 
   /**
    * Whether this module writes no `.ll` of its own: `std/collections.ts`, `std/math.ts`,
-   * `std/sort.ts` and `std/secret.ts`, whose code is copied into each module that uses it, and
+   * `std/sort.ts`, `std/array.ts` and `std/secret.ts`, whose code is copied into each module that uses it, and
    * `std/map.ts`, whose every call is lowered in place at the call
    * (docs/wp32-map.md §4.1, §9.2).
    */
@@ -1977,7 +1977,7 @@ export class CheckedProgram {
     return ty === T_F64 || ty === T_F32 ? rem : null
   }
 
-  /** Whether this module is `std/math.ts` (`nish/math`) or `std/sort.ts`, copied like `std/collections.ts`. */
+  /** Whether this module is `std/math.ts` (`nish/math`), `std/sort.ts` or `std/array.ts`, copied like `std/collections.ts`. */
   isMathLibrary(): boolean {
     return this.mathLibrary
   }

@@ -317,16 +317,15 @@ const arrayMethodRow = (walk: Walk, node: Node, method: string): string | null =
   for (let i = 0; i < list.children.length; i++) {
     texts.push(last !== null && last.node === list ? last.at(i) : walk.spanOf(list.children[i]))
   }
-  if (method === "slice") {
-    const call = `${walk.helperName("sliceArray")}(${texts.join(", ")})`
-    return slotCopy(walk, elementOf(walk, slotTypeRaw(walk, node))) === COPY_NONE
-      ? call
-      : `${walk.helperName("copyRecords")}(${call})`
-  }
-  if (method !== "map" && method !== "filter") {
+  if (method !== "slice" && method !== "map" && method !== "filter") {
     return null
   }
-  if (slotCopy(walk, elementOf(walk, slotTypeRaw(walk, node))) === COPY_NONE) {
+  const plain = slotCopy(walk, elementOf(walk, slotTypeRaw(walk, node))) === COPY_NONE
+  if (method === "slice") {
+    const call = `${walk.helperName("sliceArray")}(${texts.join(", ")})`
+    return plain ? call : `${walk.helperName("copyRecords")}(${call})`
+  }
+  if (plain) {
     return null
   }
   const receiver = atomic(list.children[0]) ? texts[0] : `(${texts[0]})`

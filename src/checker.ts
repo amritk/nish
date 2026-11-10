@@ -470,7 +470,7 @@ export class Checker {
    * nothing instantiates emits nothing.
    */
   importArrayMethods(): void {
-    if (this.program.isMathLibrary()) {
+    if (this.program.isMathLibrary() || !mentionsArrayMethod(this.program.source.text)) {
       return
     }
     const names = new StringSet()
@@ -3368,6 +3368,15 @@ const hasSortCall = (node: Node): boolean => {
   }
   return false
 }
+
+/** Whether `text` holds the name of any `nish/array` method, the cheap test before `scanArrayMethodCalls`. */
+const mentionsArrayMethod = (text: string): boolean =>
+  text.indexOf("map") >= 0 ||
+  text.indexOf("filter") >= 0 ||
+  text.indexOf("some") >= 0 ||
+  text.indexOf("every") >= 0 ||
+  text.indexOf("findIndex") >= 0 ||
+  text.indexOf("slice") >= 0
 
 /** The names of the `.map(...)`-like calls under `node` that `std/array.ts` answers (`importArrayMethods`). */
 const scanArrayMethodCalls = (node: Node, names: StringSet): void => {
