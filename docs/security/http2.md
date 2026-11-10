@@ -226,7 +226,11 @@ twins; written against `main` at `f8643b9`, cited by function rather than by
 line). `encodeStatus` puts the connection's `date` straight after `:status` on
 every final head, an error's 431 included, and never on a 1xx or trailers; a
 program's own `date` (`http2NamesHoldDate`, which matches any ASCII case) is
-sent instead, so a head never carries two.
+sent instead, so a head never carries two. Two of the program's own were
+sent as they came until #696; `httpFieldsCheckOutgoing` now refuses a second
+`date` (`HTTP_FIELDS_DATE_REPEATED`, RFC 9110 §5.3), so `sendHead` answers
+`H2_INVALID` and writes nothing (`net_http2_errors`, `net_http_fields` and
+their `_f64` twins; before: the head went out with both).
 
 A mixed-case `Date` never reaches it: `sendHead` refuses an uppercase name with
 `H2_INVALID` (§8.2.1). The field goes as a literal without indexing, the static
