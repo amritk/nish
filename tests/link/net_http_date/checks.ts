@@ -33,7 +33,7 @@ const PINNED_LAST_MS: i64 = 1792138314999;
 const NEXT_SECOND_MS: i64 = 1792138315000;
 
 /** `bytes[at .. at + length)` as a string, one character a byte. */
-const textOf = (bytes: u8[], at: i32, length: i32): string => {
+const windowText = (bytes: u8[], at: i32, length: i32): string => {
   const parts: string[] = [];
   for (let k: i32 = at; k < at + length; k++) {
     parts.push(String.fromCharCode(toI32(bytes[k])));
@@ -44,7 +44,7 @@ const textOf = (bytes: u8[], at: i32, length: i32): string => {
 /** The IMF-fixdate of `unixMs`, or "refused". */
 const dateOf = (unixMs: i64): string => {
   const out: u8[] = new Array<u8>(HTTP_DATE_SIZE);
-  return httpDateWrite(out, 0, unixMs / toI64(1000)) < 0 ? "refused" : textOf(out, 0, HTTP_DATE_SIZE);
+  return httpDateWrite(out, 0, unixMs / toI64(1000)) < 0 ? "refused" : windowText(out, 0, HTTP_DATE_SIZE);
 };
 
 /** The decimal number in `bytes[at .. at + digits)`. */
@@ -79,9 +79,9 @@ const firstWrongDay = (): string => {
     const seconds: i64 = index * toI64(86400) + toI64(86399);
     const end: i32 = httpDateWrite(out, 0, seconds);
     const want: string = `${days.substring(3 * weekday, 3 * weekday + 3)}, ${months.substring(3 * month - 3, 3 * month)}`;
-    const got: string = `${textOf(out, 0, 3)}, ${textOf(out, 8, 3)}`;
-    if (end !== HTTP_DATE_SIZE || got !== want || numberAt(out, 5, 2) !== day || numberAt(out, 12, 4) !== year || textOf(out, 16, 13) !== " 23:59:59 GMT") {
-      return `${year}-${month}-${day}: ${textOf(out, 0, HTTP_DATE_SIZE)}`;
+    const got: string = `${windowText(out, 0, 3)}, ${windowText(out, 8, 3)}`;
+    if (end !== HTTP_DATE_SIZE || got !== want || numberAt(out, 5, 2) !== day || numberAt(out, 12, 4) !== year || windowText(out, 16, 13) !== " 23:59:59 GMT") {
+      return `${year}-${month}-${day}: ${windowText(out, 0, HTTP_DATE_SIZE)}`;
     }
     index = index + toI64(1);
     weekday = (weekday + 1) % 7;
@@ -115,7 +115,7 @@ export const dateChecks = (): i32 => {
 
   const out: u8[] = new Array<u8>(40);
   t.eqI32("written at an offset, it answers where it ends", httpDateWrite(out, 7, toI64(0)), toI32(36));
-  t.eqStr("and the date is there", textOf(out, 7, HTTP_DATE_SIZE), "Thu, 01 Jan 1970 00:00:00 GMT");
+  t.eqStr("and the date is there", windowText(out, 7, HTTP_DATE_SIZE), "Thu, 01 Jan 1970 00:00:00 GMT");
   const untouched: u8[] = new Array<u8>(HTTP_DATE_SIZE);
   untouched.fill(toU8(120));
   const one: i64 = toI64(1);
@@ -136,7 +136,7 @@ export const dateChecks = (): i32 => {
   const date = new HttpDate();
   t.eqI64("a new date has formatted nothing", date.formats(), toI64(0));
   t.ok("pin takes an instant", date.pin(PINNED_MS));
-  t.eqStr("current() is the pinned second", textOf(date.current(), 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:54 GMT");
+  t.eqStr("current() is the pinned second", windowText(date.current(), 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:54 GMT");
   // The arena is read around the cache's own calls; what the checks build stays outside it.
   const next: u8[] = new Array<u8>(HTTP_DATE_SIZE);
   const back: u8[] = new Array<u8>(HTTP_DATE_SIZE);
@@ -156,9 +156,9 @@ export const dateChecks = (): i32 => {
   const moved: i64 = Arena.used() - before;
   t.eqI64("a thousand calls in that second format it once", afterLoop, toI64(1));
   t.eqI64("so does a later instant in the same second", sameSecond, toI64(1));
-  t.eqStr("the next second is formatted", textOf(next, 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:55 GMT");
+  t.eqStr("the next second is formatted", windowText(next, 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:55 GMT");
   t.eqI64("once", nextFormats, toI64(2));
-  t.eqStr("a clock stepped back is formatted too", textOf(back, 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:54 GMT");
+  t.eqStr("a clock stepped back is formatted too", windowText(back, 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:54 GMT");
   t.eqI64("once more", date.formats(), toI64(3));
   t.ok(`and none of it moved the arena (${moved} bytes)`, moved === toI64(0));
 
@@ -166,16 +166,16 @@ export const dateChecks = (): i32 => {
   t.ok("and one past the last second", !date.pin((HTTP_DATE_LAST_SECOND + one) * toI64(1000)));
   t.ok(
     "and changes nothing: the date is the one pinned before",
-    textOf(date.current(), 0, HTTP_DATE_SIZE) === "Fri, 16 Oct 2026 08:11:54 GMT" && date.formats() === toI64(3)
+    windowText(date.current(), 0, HTTP_DATE_SIZE) === "Fri, 16 Oct 2026 08:11:54 GMT" && date.formats() === toI64(3)
   );
   t.ok("it takes the last millisecond of the last second", date.pin(HTTP_DATE_LAST_SECOND * toI64(1000) + toI64(999)));
-  t.eqStr("which is that second", textOf(date.current(), 0, HTTP_DATE_SIZE), "Fri, 31 Dec 9999 23:59:59 GMT");
+  t.eqStr("which is that second", windowText(date.current(), 0, HTTP_DATE_SIZE), "Fri, 31 Dec 9999 23:59:59 GMT");
 
   // --- The clock -------------------------------------------------------------------------------
   // One read: a second ending between two would format again and make the count 6.
   date.unpin();
   const clocked: u8[] = date.current();
-  const now: string = textOf(clocked, 0, HTTP_DATE_SIZE);
+  const now: string = windowText(clocked, 0, HTTP_DATE_SIZE);
   t.ok(
     "unpinned, it reads the clock: a date after this test was written",
     now !== "Fri, 31 Dec 9999 23:59:59 GMT" && numberAt(clocked, 12, 4) >= 2026 && now.endsWith(" GMT")
@@ -188,10 +188,10 @@ export const dateChecks = (): i32 => {
   const head: u8[] = new Array<u8>(256);
   const ok: i32 = 200;
   const zero: i32 = 0;
-  const one: i32 = http1WriteResponseHead(head, zero, ok, "OK", [bytesOf("date")], [own], zero, "", pinned);
+  const ownEnd: i32 = http1WriteResponseHead(head, zero, ok, "OK", [bytesOf("date")], [own], zero, "", pinned);
   t.eqStr(
     "HTTP/1.1: the program's one date replaces the server's, and one Date goes out",
-    one < 0 ? "refused" : textOf(head, 0, one),
+    ownEnd < 0 ? "refused" : windowText(head, 0, ownEnd),
     "HTTP/1.1 200 OK\r\ndate: Thu, 01 Jan 1970 00:00:00 GMT\r\nContent-Length: 0\r\n\r\n"
   );
   head[0] = toU8(120);
