@@ -1,0 +1,8 @@
+{
+  "name": "host-route",
+  "private": true,
+  "type": "module",
+  "nish": {
+    "host": ["src/host.ts"]
+  }
+}

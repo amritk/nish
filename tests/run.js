@@ -30545,6 +30545,140 @@ if (!only || "host-import".includes(only)) {
         braced.stderr.includes("export function first<T extends { id: i32 }>(x: T): T { return x }"),
       shown(braced)
     )
+
+    // The build reads only the host exports a Nish module imports: a page's file
+    // may export what the page alone calls, in types no wasm import carries.
+    const object = read(
+      "object",
+      "export function area(r: { w: i32 }): i32 {\n  return r.w\n}\nexport function first(x: i32): i32 {\n  return x\n}\n"
+    )
+    check(
+      "host-import: an object type in a host export the program does not import refuses nothing",
+      object.status === 0 && fs.readFileSync(path.join(scratch, "object.ll"), "utf8").includes("declare i32 @first(i32)"),
+      shown(object)
+    )
+    const counterDir = path.join(hostDir, "unimported")
+    const counter = (entry) =>
+      spawnSync(
+        NISH,
+        [
+          path.join(counterDir, entry),
+          "--target",
+          "wasm32",
+          "--host",
+          path.join(counterDir, "counter.ts"),
+          "-o",
+          path.join(scratch, `counter-${entry.replace(".ts", ".ll")}`),
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+    const counted = counter("main.ts")
+    const countedIr = counted.status === 0 ? fs.readFileSync(path.join(scratch, "counter-main.ll"), "utf8") : ""
+    check(
+      "host-import: create-vite's counter.ts beside an imported function compiles, and only the import is declared",
+      counted.status === 0 && countedIr.includes("declare i32 @first(i32)") && !countedIr.includes("setupCounter"),
+      shown(counted)
+    )
+    const takes = counter("takes.ts")
+    check(
+      "host-import: importing counter.ts's setupCounter refuses its element where counter.ts writes it (NL2661)",
+      takes.status === 1 &&
+        takes.stderr.includes(
+          "counter.ts:4:39: error: Parameter `element` of host function `setupCounter` is `HTMLElement`, and only a scalar"
+        ),
+      shown(takes)
+    )
+
+    // The page's bodies are its own TypeScript, which the build never reads.
+    const bodiesDir = path.join(hostDir, "bodies")
+    const bodies = spawnSync(
+      NISH,
+      [
+        path.join(bodiesDir, "main.ts"),
+        "--target",
+        "wasm32",
+        "--host",
+        path.join(bodiesDir, "host.ts"),
+        "-o",
+        path.join(scratch, "bodies.ll"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      "host-import: a host module whose bodies use the DOM, closures, a class and async compiles",
+      bodies.status === 0 && fs.readFileSync(path.join(scratch, "bodies.ll"), "utf8").includes("declare i32 @bump(i32)"),
+      shown(bodies)
+    )
+
+    // tsc reads the entry's import of a host module as TypeScript: a host
+    // export the entry imports, dropped from the page's file, fails the entry.
+    const dropDir = path.join(scratch, "dropped")
+    fs.mkdirSync(dropDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dropDir, "main.ts"),
+      [
+        'import type { i32, u16 } from "nish"',
+        'import { hI32, hU16 } from "./host"',
+        "export function rI32(x: i32): i32 {",
+        "  return hI32(x)",
+        "}",
+        "export function rU16(x: u16): u16 {",
+        "  return hU16(x)",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const hostText = fs.readFileSync(path.join(hostDir, "host.ts"), "utf8")
+    const typeCheckEntry = (name, text) => {
+      fs.writeFileSync(path.join(dropDir, "host.ts"), text)
+      const config = path.join(dropDir, `tsconfig.${name}.json`)
+      fs.writeFileSync(
+        config,
+        JSON.stringify({
+          extends: path.join(root, "tsconfig.json"),
+          compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true },
+          include: [],
+          files: [path.join(root, "runtime", "nish.d.ts"), path.join(dropDir, "host.ts"), path.join(dropDir, "main.ts")],
+        })
+      )
+      return typeCheckProject(config, root)
+    }
+    const whole = typeCheckEntry("whole", hostText)
+    check("host-import: the entry and its host module type-check under tsc --strict", whole.ok, whole.output)
+    const dropped = typeCheckEntry("dropped", hostText.replace("export function hU16(x: u16): u16 {\n  return x + 70000\n}\n", ""))
+    check(
+      "host-import: tsc fails the entry when the host module drops an export it imports (TS2305)",
+      !dropped.ok && /main\.ts.*TS2305.*hU16/.test(dropped.output),
+      dropped.output
+    )
+
+    // A program with no host module is compiled as it was before host modules:
+    // its native and wasm32 IR are these bytes (the .d.ts, the loader and both
+    // profiles' .wasm are held below, against WASM_PLAIN_DIGESTS).
+    for (const [src, native, wasm32] of [
+      [
+        "examples/add.ts",
+        "c9c8b3abb2a28d8d983ca06439bf07fb2d03fd373c18c185caa837eeacd8027b",
+        "2b682ad80229098976b5d710898209a5be40e28fc43bdcb3529e3353fb48ee8a",
+      ],
+      [
+        "examples/arrays.ts",
+        "9e21b3dc744ca821ec9862c91041dfa03a9b542c733773560b18007c22349de0",
+        "91ce0443911068f9c1bd57103d51a102f733d808c555db8b586336a4bb77aa0c",
+      ],
+    ]) {
+      const stem = path.basename(src, ".ts")
+      const got = [[], ["--target", "wasm32"]].map((flags, i) => {
+        const out = path.join(scratch, `${stem}.${i === 0 ? "native" : "wasm32"}.ll`)
+        const r = spawnSync(NISH, [src, ...flags, "-o", out], { cwd: root, encoding: "utf8" })
+        return r.status === 0 ? crypto.createHash("sha256").update(fs.readFileSync(out)).digest("hex") : shown(r)
+      })
+      check(
+        `host-import: ${src}, with no host module, compiles to main's native and wasm32 IR`,
+        got[0] === native && got[1] === wasm32,
+        `native ${got[0]}\nwasm32 ${got[1]}`
+      )
+    }
   }
   const why = wasmHostTools()
   if (why !== null) {
@@ -30822,6 +30956,105 @@ if (!only || "host-import".includes(only)) {
       brands.length === 3 && new Set(brands).size === 1,
       brands.join("\n")
     )
+
+    // A package's `nish.host` names its host modules with no `--host`: the
+    // program compiles, links and loads with the page's file as `host`, and
+    // nish/vite, which passes no `host` option here, imports that file too.
+    const route = path.join(dir, "route")
+    fs.cpSync(path.join(root, "tests", "host-import", "route"), route, { recursive: true })
+    const routed = spawnSync(
+      NISH,
+      [path.join(route, "main.ts"), "--target", "wasm32", "--emit-dts", path.join(route, "main.d.ts"), "-o", path.join(route, "main.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    const routedLink =
+      routed.status === 0
+        ? wasmHostLink([path.join(route, "main.ll")], ["-o", path.join(route, "main.wasm"), "--profile", "wasm-host"])
+        : routed
+    let routedRun = routedLink
+    if (routedLink.status === 0) {
+      fs.writeFileSync(
+        path.join(route, "run.mjs"),
+        [
+          'import { readFileSync } from "node:fs"',
+          'import * as host from "./src/host.ts"',
+          'import { loadSync } from "./main.mjs"',
+          'console.log(loadSync(readFileSync(new URL("./main.wasm", import.meta.url)), { host }).quad(5))',
+        ].join("\n")
+      )
+      routedRun = spawnSync(process.execPath, ["--no-warnings", path.join(route, "run.mjs")], { cwd: route, encoding: "utf8" })
+    }
+    check(
+      "host-import: a host module package.json's nish.host names compiles, links and loads as `host` with no --host",
+      routedRun.status === 0 && routedRun.stdout.trim() === "21",
+      shown(routedRun)
+    )
+    const { default: nishVite } = await import("nish/vite")
+    const routePlugin = nishVite({ compiler: NISH, entries: ["main.ts"] })
+    routePlugin.configResolved({ root: route, command: "build", cacheDir: path.join(route, ".cache") })
+    let routeCode = null
+    let routeFailure = ""
+    try {
+      const id = await routePlugin.resolveId("./main.ts", path.join(route, "index.html"))
+      routeCode = typeof id === "string" ? await routePlugin.load(id) : null
+    } catch (e) {
+      routeFailure = String(e.stderr ?? e)
+    }
+    let routeQuad = null
+    if (typeof routeCode === "string") {
+      const generated = path.join(route, "generated.mjs")
+      fs.writeFileSync(generated, routeCode)
+      try {
+        routeQuad = (await import(pathToFileURL(generated).href)).quad(5)
+      } catch (e) {
+        routeFailure = String(e)
+      }
+    }
+    check(
+      "host-import: nish/vite imports the host module package.json's nish.host names and passes it as `host`",
+      typeof routeCode === "string" &&
+        routeCode.includes(`import * as __nishHost0 from ${JSON.stringify(path.join(route, "src", "host.ts"))};`) &&
+        routeQuad === 21,
+      `${routeFailure}\n${routeCode}`
+    )
+
+    // The rest of a program with no host module's bytes: its .d.ts and loader,
+    // and on linux-x64 (where wasm-size measures them) its .wasm under each
+    // profile, are main's (WASM_PLAIN_DIGESTS).
+    const plainDir = path.join(dir, "plain")
+    const wasmBytes = `${process.platform}-${process.arch}` === "linux-x64"
+    for (const src of ["examples/add.ts", "examples/arrays.ts"]) {
+      const stem = path.basename(src, ".ts")
+      const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === src)
+      const { runtime } = WASM_HOST_SIZE_BUDGETS.find((row) => row.src === src)
+      const ll = wasmHostCompile(plainDir, stem)
+      const linkAs = (out, profile) =>
+        ll === null
+          ? { status: 1, stdout: "", stderr: "compile failed" }
+          : wasmHostLink(runtime ? [ll, "runtime/runtime-wasm.c"] : [ll], ["-o", path.join(plainDir, out), "--profile", profile])
+      const digest = (file) =>
+        fs.existsSync(path.join(plainDir, file))
+          ? crypto.createHash("sha256").update(fs.readFileSync(path.join(plainDir, file))).digest("hex")
+          : "missing"
+      const got = { dts: digest(`${stem}.d.ts`), loader: digest(`${stem}.mjs`) }
+      if (wasmBytes) {
+        const plain = linkAs(`${stem}.plain.wasm`, "wasm")
+        const hosted = linkAs(`${stem}.wasm`, "wasm-host")
+        got.wasm = plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain)
+        got.host = hosted.status === 0 ? digest(`${stem}.wasm`) : shown(hosted)
+      } else {
+        skip(
+          `host-import: ${src}'s --profile wasm and wasm-host .wasm digests are held on linux-x64 only, ` +
+            `and this host is ${process.platform}-${process.arch}; its .d.ts and loader are still held`
+        )
+      }
+      const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
+      check(
+        `host-import: ${src}, with no host module, keeps main's .d.ts and loader${wasmBytes ? " and --profile wasm and wasm-host .wasm" : ""}`,
+        moved.length === 0,
+        `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
+      )
+    }
   }
 }
 

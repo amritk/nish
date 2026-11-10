@@ -196,9 +196,12 @@ earns its place only where resolution must happen *before* the compiler can
 look — true of the mode, false of everything else here.
 
 The root package's `"nish"` field (`noPanic`, `capabilities`;
-[wp36-capability-policy.md](wp36-capability-policy.md#3-the-manifest)) does not
-break that rule: it is a policy the program's owner chooses, not a fact about
-the code, and it is read from the root manifest only, never a dependency's.
+[wp36-capability-policy.md](wp36-capability-policy.md#3-the-manifest); and
+`host`, the page's
+[host modules](guide/using-nish/interop.md#functions-the-page-supplies-host-modules))
+does not break that rule: it is a policy the program's owner chooses, not a
+fact about the code, and it is read from the root manifest only, never a
+dependency's.
 
 ### Why none of this is a trust boundary
 

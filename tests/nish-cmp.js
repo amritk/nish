@@ -1100,6 +1100,36 @@ const DECLARED = [
     changelog: "Strings cross between a wasm module and its page",
     why: "byte module storage may now be lent to a u8[] or readonly u8[] parameter, which the seed refused until stage 4",
   },
+  {
+    program: "tests/link/reject_host_manifest_absolute/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that is an absolute path is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_empty/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that is empty is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_missing/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that names no file is refused where package.json writes it (NL2696), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_not_string/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that is not a string is refused where package.json writes it (NL2694), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_escape/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
 ]
 
 /**
