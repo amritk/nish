@@ -647,17 +647,17 @@ static int nish_async_arm(int32_t fd, uint32_t want) {
   memset(&ev, 0, sizeof ev);
   ev.events = (want & 1 ? EPOLLIN : 0) | (want & 2 ? EPOLLOUT : 0) | EPOLLONESHOT;
   ev.data.u64 = data;
+  int op = x->added ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
   nish_async_calls++;
-  if (epoll_ctl(nish_async_poller, x->added ? EPOLL_CTL_MOD : EPOLL_CTL_ADD, fd, &ev) == 0) {
-    x->added = 1;
-    return 0;
-  }
+  int rc = epoll_ctl(nish_async_poller, op, fd, &ev);
   /* Added under a generation the watch has moved past: re-arm that one. */
-  if (!x->added && errno == EEXIST) {
-    x->added = 1;
-    return nish_async_arm(fd, want);
+  if (rc != 0 && op == EPOLL_CTL_ADD && errno == EEXIST) {
+    nish_async_calls++;
+    rc = epoll_ctl(nish_async_poller, EPOLL_CTL_MOD, fd, &ev);
   }
-  return errno;
+  if (rc != 0) return errno;
+  x->added = 1;
+  return 0;
 #else
   /* A filter per direction: re-adding one armed already re-arms it. */
   struct kevent ev;
