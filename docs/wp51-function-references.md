@@ -52,7 +52,9 @@ refused.
   to 4.5x a direct call, as a hand-written `switch` does. Its edge over an
   indirect call there is 1.28x at K=2 and 1.21x at K=4, both past the band
   but not known to be past that group's own layout spread, which was not
-  measured; K=8's 1.07x is inside the band and is none (§3.4, §3.5).
+  measured; K=8's 1.07x (3,976 against 3,732 ms, 6.5%) is at the band's
+  edge (its copy pair differs by 6.3%), so it is read neither way (§3.4,
+  §3.5).
 - **The escape proof** survives the dispatched call when every member of the
   set keeps the object local (§4, case A). When one member does not, every
   call of the set loses it: 6.4x to 9.1x a direct call and 1.5 GB in the
@@ -246,7 +248,11 @@ its dispatcher. The last arm is `default` because no other tag can reach
 the call: a non-null tag is made only by naming a member, `0` is ruled out
 above, and the set pass put every member that can flow to `p` in `F(p)`. A
 set of one has no `switch` at all; the tag is never read and the dispatcher
-is a direct call. Whether the last arm instead traps (`default:
+is a direct call. **An empty set** — an `S | null` place that only `null`
+was ever stored into — has no member and no dispatcher: every call through
+it sits behind an `h !== null` that no value of the place passes, so the
+call lowers to a trap (an `unreachable` terminator after `llvm.trap`), and
+`fnref_place_set` pins it with a variant whose field is never assigned. Whether the last arm instead traps (`default:
 unreachable`-equivalent, with every member a `case`) is **open, decided in
 stage 1** by timing `fnref_place_set` both ways: if the trap is inside the
 band it ships, so a store form the pass missed fails loudly; if not, the
@@ -515,7 +521,8 @@ The three streams answer differently, so each is read on its own.
   1.21x (3,504 ms against 2,889 ms; a compare chain at `K = 4`, not an
   indirect branch) are both past the band (±6%), but this group's own layout
   spread was not measured (§3), so neither is known to be past that. `K = 8`'s
-  1.07x, a jump table against a `call *`, is inside the band: **none**.
+  1.07x (6.5%), a jump table against a `call *`, is at the edge of the band
+  (the copy pair's 6.3%): it is read as neither a difference nor none.
 - **So the switch's large advantage is a periodic-stream result.** "3.1x to
   4.7x faster than an indirect call" holds where the tags follow a short
   pattern. On a monomorphic site it is not shown past the layout spread; where
@@ -642,8 +649,11 @@ number, `u3`'s result on the one `P` after the loop.
   about 1.0x in §3's loops and this much here.
 - **A's same and mixed loops are the same instructions** (§12.7): the
   `cmov` does not branch on the tag, so the stream cannot change the loop.
-  Their 1% to 11% differences are run noise read against each run's band,
-  not the stream.
+  Their differences are 1% in run 0 (band 3%) and 9% in run 3 (band 16%),
+  inside those runs' bands. In runs 1 and 2 they are 11% and 10% (180
+  against 199 ms, 187 against 206 ms), outside those runs' 3% and 6% bands,
+  and **unexplained**: the loops are the same instructions, so the stream is
+  not the cause the code allows, and no counter was read to find another.
 - **B loses it, and the loss is not the stream's.** With every tag `0` the
   escaping arm never runs, yet B is 7.0x to 9.1x **direct** and holds 1.5 GB.
   `dispatch` may capture `p`, so `P` is an escaping allocation in the loop
@@ -741,7 +751,8 @@ reference never crosses the boundary in either direction:
   pinned by a new `tests/cases/reject_fnref_ffi`;
 - a field of function type in a class a `declare function` is handed or
   returns (the same diagnostic, against the field);
-- a function type in the signature of any declaration `hostVisible`
+- a function type in a return, a field, or a reference-typed parameter or
+  local of any declaration `hostVisible`
   (`src/visibility.ts:141`–`142`) answers yes for, which is the one place the
   compiler decides who besides this program can call a function or see a
   layout. A foreign caller could hand in a function no set holds, which
@@ -765,9 +776,16 @@ reference never crosses the boundary in either direction:
 
   In a closed-world `--link` build an exported function is not host-visible,
   and an `export` between Nish modules is never external: neither is
-  refused. `sortWith` (`std/sort.ts:162`) and `expose`
-  (`std/secret.ts:77`) take function-typed parameters, and every caller of
-  them is in the program. Because the refusal reads `hostVisible`, the
+  refused. **A compile-time function parameter is not in the refusal's
+  scope, in any build.** `sortWith` (`std/sort.ts:162`) and `expose`
+  (`std/secret.ts:77`) take function-typed parameters; such a parameter is
+  bound when its function is instantiated (NL2587's wording), to a named
+  callee or, from stage 2, to a set's tag in the `$fn.ref.<set>`
+  instantiation, and a function holding one has no single body a host could
+  call (§2.2). Every instantiation is made at a call the compiler checked,
+  so its callers are in the program whatever the build mode. What is
+  refused is a reference a host could hold: a return, a field, or a
+  parameter of a function that is itself a host-visible symbol. Because the refusal reads `hostVisible`, the
   call-site ranges and the C ABI answer the same question, and an output
   mode added later is refused until `src/visibility.ts` says it is closed.
 
@@ -845,6 +863,7 @@ promises, module storage, classes or a parameter's own storage, not functions
 | --- | --- | --- | --- |
 | `src/codes.ts:274` (NL2336, `tests/wordings/nl2336_fnarg_arrow_returned`), `docs/LANGUAGE.md:3392`, `src/generics.ts:2398` | an arrow outside a function-typed argument is refused: "a function is never a value" | **broken** | the reason changes: a *capturing* arrow is refused; a capture-free one names a top-level function (stage 3 lifts it) |
 | `src/codes.ts:480` (NL2334, `tests/wordings/nl2334_fnarg_parameter_as_value`), `src/expressions.ts:984`–`993`, `docs/LANGUAGE.md:3337` | a function parameter can only be called or passed on | **broken** | a parameter holding a reference (the `$fn.ref.<set>` instantiation) may be stored; a parameter bound to a named callee stays as today |
+| `src/codes.ts:150`–`151` (NL2587, `tests/wordings/nl2587_fnarg_capture_function_param`), `docs/LANGUAGE.md:3358`–`3360` (`reject_fnarg_capture_function_param`) | an arrow argument may not name a function parameter of the function it is written in, which "is bound at instantiation and is no value" | intact | a function-typed parameter is still bound at instantiation, to a named callee or (stage 2) to a set's tag in `$fn.ref.<set>`, and the template is checked once from its source, so an arrow that names it is refused in every instantiation, `$fn.ref.<set>` included: one body is accepted or refused the same way whatever its argument. An arrow may capture a reference-typed *local* or field read: that is an `i32` tag, captured by copy like any `const` |
 | `src/generics.ts:2008`–`2010` | an argument for a function-typed parameter must be a name or an arrow: "a function is never a value computed at run time" | **broken** | a reference-typed expression is admitted and selects the `$fn.ref.<set>` instantiation (stage 2) |
 | `src/codes.ts:494` (NL2337, `tests/wordings/nl2337_fnarg_function_type_element`), `docs/LANGUAGE.md:3409`, `src/annotations.ts:224` | a function type annotates only a parameter | **broken** | the annotation resolver gives a function type in a field, local, element or return the `i32` tag representation |
 | `src/nodes.ts:129` | an `N_ARROW` is never a value | intact until stage 3 | stage 3's lifted arrow is a reference, not an `N_ARROW` value |
@@ -916,6 +935,7 @@ promises, module storage, classes or a parameter's own storage, not functions
 | `.claude/typescript.md:53`–`57` | `Function` is forbidden as "no dynamic function values": a function value "needs a function pointer and an indirect call", and the whole-program pass "cannot prove purity, termination or escape facts through an unknown callee"; "that is what keeps a function from being a value whichever way it is spelled" | weakened | `Function` stays forbidden (§2.2), but the reason no longer covers every spelling: a reference has neither a pointer nor an unknown callee, and its facts are its set's join (§6's first table). The sentence narrows to closures and `Function` |
 | `.claude/typescript.md:79` | `src/`'s own subset: "a function is never a value" | intact | the freeze keeps `src/` off references for one release (§5.4); after it, whether `src/` adopts them is its own change, and this line moves with it |
 | `.claude/selfhost.md:137`–`140` | Nish-0 has "no … function values" | intact | Nish-0's subset is a choice, held by the freeze; the line moves only if `src/` adopts references |
+| `.claude/testing.md:290` | "A function is not a value, so there is no `test(name, () => ...)`": the test harness is straight-line calls | weakened | the reason becomes "no closures"; a `test(name, f)` over a capture-free top-level `f` is expressible from stage 2 (as `docs/wp26-stdlib.md`'s row says), and the line changes only if `std/testing.ts` adopts it |
 | `docs/AI.md:3129` (checklist item 8) | "a stored or returned callback" is on the list of things a program must not use | **broken** | item 8 splits as the AI rows above do: a stored or returned *capture-free* function is admitted from stage 1, a stored or returned closure stays on the list |
 
 ## 7. Not measured
@@ -1087,7 +1107,23 @@ program, do.
    `reject_fnarg_not_name` flips (`docs/LANGUAGE.md:3398`–`3402`): a
    reference-typed local, member or element is admitted as an argument, and
    the case is rewritten to an expression of another type, which stays
-   refused.
+   refused. **What `functionArgs` holds.** Every reader of
+   `Instantiation.functionArgs` assumes one named callee and treats any other
+   length as "no callee": `src/region-rules.ts:981` and `src/secret.ts:2716`
+   return no finding, `src/parallel.ts:323` no body, `src/secret.ts:2094` and
+   `2477` no flow; `src/parallel.ts:1192` and `src/inline-arrays.ts:757` walk
+   whatever it holds. An empty list in a `$fn.ref.<set>` instantiation would
+   therefore let a region, a parallel body or an `expose` through unchecked.
+   So the reference parameter's slot holds the set's dispatcher, a checked
+   function with facts (§2.3): every reader then runs on it, and its facts,
+   captures and calls are its arms' join. One reader looks past the callee's
+   facts to its parameter list, `src/secret.ts:2094`'s `paramNames[1]`, and
+   on a dispatcher parameter `i + 1` is the member's `i` (§2.3); until that
+   reader is taught the offset, and the parallel roles' grain and capture
+   walks are read against a dispatcher body, stage 2 refuses a
+   reference argument to `expose`, `exposeWith`, `parallelMapInto` and
+   `parallelReduce`, each with a negative test, and admits it everywhere
+   else.
 3. **Stage 3 — capture-free arrows in value position**, lifted to a generated
    top-level function and then a reference. Capturing arrows stay refused.
 
@@ -2286,7 +2322,7 @@ load and a `call *` per iteration, the callee not inlined:
 1bfb:	jne    1be0
 ```
 
-`serial_k4_same_ind`, the serial group's slowest binary, is the same
+`serial_k4_same_ind`, the serial group's fastest indirect binary (427 ms), is the same
 instructions at `1c3e` (`lea 0x27fb(%rip),%r12`) and `1c50`–`1c6b`, its
 `call *(%r12,%rax,8)` at `1c5d`; `serial_k8_same_ind` is them again at `1d1e`
 and `1d30`–`1d4b`, its `call *` at `1d3d`. The loop starts at 32 mod 64 at
