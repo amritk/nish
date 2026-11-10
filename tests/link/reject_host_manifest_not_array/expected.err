@@ -1,0 +1,1 @@
+package.json:5:13: error: `host` is not an array: `nish.host` is an array of strings, each the path of a host module relative to `package.json`

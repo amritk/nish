@@ -26,7 +26,7 @@ import {
 A host object's handle, the global `HostHandle`'s twin, spelled alike so the two are one type.
 
 ```ts
-type HostHandle<K extends string> = number & reflection | 0
+type HostHandle<K extends string> = number & { readonly __nishHostKind: K } | 0
 ```
 
 ### f32

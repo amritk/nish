@@ -29873,6 +29873,88 @@ if (!only || "vite".includes(only)) {
     }
     check("vite: load leaves every other id to Vite", (await plugin.load(path.join(app, "src", "main.ts"))) === null)
 
+    // An entry imported as TypeScript writes it: without the `.ts`, or by its directory
+    // for an `index.ts`, from a module outside the entry's own directory.
+    fs.mkdirSync(path.join(app, "ent", "sum"), { recursive: true })
+    fs.copyFileSync(path.join(root, "examples", "add.ts"), path.join(app, "ent", "add.ts"))
+    fs.copyFileSync(path.join(root, "examples", "add.ts"), path.join(app, "ent", "sum", "index.ts"))
+    // Vite tries `.js` before `.ts`: `../ent/both` is the sibling `both.js`, not the entry.
+    fs.copyFileSync(path.join(root, "examples", "add.ts"), path.join(app, "ent", "both.ts"))
+    fs.writeFileSync(path.join(app, "ent", "both.js"), "export const add = (a, b) => a + b\n")
+    const spelled = nish({ compiler: NISH, entries: ["ent/add.ts", "ent/sum/index.ts", "ent/both.ts"] })
+    spelled.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache") })
+    const forms = {}
+    const spellings = [
+      "../ent/add",
+      "../ent/add.ts",
+      "/ent/add",
+      "../ent/sum",
+      "../ent/sum/index.ts",
+      "../ent/ad",
+      "../ent/add?raw",
+      "../ent/both",
+      "../ent/both.ts",
+    ]
+    for (const source of spellings) {
+      forms[source] = await spelled.resolveId(source, main)
+    }
+    const addId = `\0nish-entry:${path.join(app, "ent", "add.ts")}`
+    const sumId = `\0nish-entry:${path.join(app, "ent", "sum", "index.ts")}`
+    const bothId = `\0nish-entry:${path.join(app, "ent", "both.ts")}`
+    check(
+      "vite: an entry resolves with or without its `.ts`, and a directory to its `index.ts`, as Vite orders them",
+      forms["../ent/add"] === addId &&
+        forms["../ent/add.ts"] === addId &&
+        forms["/ent/add"] === addId &&
+        forms["../ent/sum"] === sumId &&
+        forms["../ent/sum/index.ts"] === sumId &&
+        forms["../ent/ad"] === null &&
+        forms["../ent/add?raw"] === null &&
+        forms["../ent/both"] === null &&
+        forms["../ent/both.ts"] === bothId,
+      JSON.stringify(forms)
+    )
+    let added = null
+    try {
+      const generated = path.join(app, "generated-add.mjs")
+      fs.writeFileSync(generated, await spelled.load(forms["../ent/add"]))
+      added = (await import(pathToFileURL(generated).href)).add(2, 3)
+    } catch (e) {
+      added = String(e.stderr ?? e)
+    }
+    check('vite: `import { add } from "../ent/add"` gets the wasm build of ent/add.ts', added === 5, String(added))
+
+    // A compiler older than `loadSync` writes a loader without it. The plugin says so,
+    // naming the compiler and its version, rather than leaving Rollup to report a
+    // missing export of a file in its cache. The stand-in compiler is this one with
+    // the loader's `loadSync` made private and an old version.
+    const oldCompiler = path.join(app, "old-nish")
+    fs.writeFileSync(
+      oldCompiler,
+      [
+        "#!/usr/bin/env bash",
+        'if [ "$1" = --version ]; then echo "nish 0.34.1"; exit 0; fi',
+        `${JSON.stringify(NISH)} "$@" || exit`,
+        'dts=; prev=; for a in "$@"; do [ "$prev" = --emit-dts ] && dts=$a; prev=$a; done',
+        `${JSON.stringify(process.execPath)} -e 'const fs = require("fs"); const f = process.argv[1]; fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(/^export function loadSync\\(/m, "function loadSync("))' "\${dts%.d.ts}.mjs"`,
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    )
+    const old = nish({ compiler: oldCompiler, entries: ["ent/add.ts"] })
+    old.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache-old") })
+    let oldError = ""
+    try {
+      await old.load(await old.resolveId("../ent/add", main))
+    } catch (e) {
+      oldError = String(e.message ?? e)
+    }
+    check(
+      "vite: a compiler whose loader has no `loadSync` fails the build naming the compiler, its version and the cause",
+      oldError.includes(oldCompiler) && oldError.includes("nish 0.34.1") && oldError.includes("predates `loadSync`"),
+      oldError || "load did not fail"
+    )
+
     // WP50 stage 2: an entry importing a host module is instantiated with it. The
     // generated module imports the host file whole and passes it as `host`, so the
     // page passes nothing, and Node's type stripping runs the host file as it is.
@@ -29915,6 +29997,148 @@ if (!only || "vite".includes(only)) {
     } else {
       check(hostName, false, hostFailure)
     }
+  }
+}
+
+// ---- WP50 stage 5: Math and float `%` on a page module ---------------------------
+//
+// A page module links no libm (docs/wp50-wasm-host.md §14 row 5), so `Math.sin`,
+// `cos`, `exp`, `log`, `pow` and a float `%` there call `std/math.ts`'s
+// fdlibm-derived functions, copied into the module. Both page profiles link the
+// program with no import, and every export agrees with V8's `Math` and `%` to
+// one ulp, the remainders exactly. A native build and `--profile wasi` keep the
+// intrinsics and `frem`, and an integer `%` copies nothing.
+if (!only || "wasm-math".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`wasm-math: ${why}`)
+  } else {
+    const dir = path.join(buildDir, "wasm-math")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const at = (name) => path.join(dir, name)
+    fs.writeFileSync(
+      at("main.ts"),
+      [
+        "export const sinOf = (x: f64): f64 => Math.sin(x)",
+        "export const cosOf = (x: f64): f64 => Math.cos(x)",
+        "export const expOf = (x: f64): f64 => Math.exp(x)",
+        "export const logOf = (x: f64): f64 => Math.log(x)",
+        "export const powOf = (x: f64, y: f64): f64 => Math.pow(x, y)",
+        "export const remOf = (x: f64, y: f64): f64 => x % y",
+        "export function remF32(x: f32, y: f32): f32 {",
+        "  let r = x",
+        "  r %= y",
+        "  return r",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const compile = (flags, out) =>
+      spawnSync(NISH, [at("main.ts"), ...flags, "-o", at(out)], { cwd: root, encoding: "utf8" })
+    const wasm = compile(["--target", "wasm32", "--emit-dts", at("main.d.ts")], "main.ll")
+    check("wasm-math: a program using every Math transcendental and `%` compiles for wasm32", wasm.status === 0, shown(wasm))
+    if (wasm.status === 0) {
+      const ir = fs.readFileSync(at("main.ll"), "utf8")
+      const names = ["sinF64", "cosF64", "expF64", "logF64", "powF64", "fmodF64"]
+      check(
+        "wasm-math: on a page module each call is to its copied `@nish.<name>F64`, with no intrinsic and no `frem`",
+        names.every((name) => new RegExp(`^define internal noundef double @nish\\.${name}\\(`, "m").test(ir)) &&
+          !/@llvm\.(?:sin|cos|exp|log|pow)\.f64|\bfrem\b|^declare double @fmod/m.test(ir) &&
+          /fpext float [^\n]+\n[^\n]*fpext float [^\n]+\n[^\n]*call double @nish\.fmodF64\([^\n]+\n[^\n]*fptrunc double/.test(ir),
+        ir.split("\n").filter((line) => /call double|frem|^declare/.test(line)).join("\n")
+      )
+      const host = wasmHostLink([at("main.ll")], ["-o", at("host.wasm"), "--profile", "wasm-host"])
+      const plain = wasmHostLink([at("main.ll")], ["-o", at("plain.wasm"), "--profile", "wasm"])
+      check("wasm-math: the module links with --profile wasm-host and with --profile wasm", host.status === 0 && plain.status === 0, `${shown(host)}\n${shown(plain)}`)
+      if (host.status === 0 && plain.status === 0) {
+        const importsOf = (file) =>
+          WebAssembly.Module.imports(new WebAssembly.Module(fs.readFileSync(file))).map((i) => `${i.module}.${i.name}`)
+        const imported = [...importsOf(at("host.wasm")), ...importsOf(at("plain.wasm"))]
+        check("wasm-math: neither module imports anything: no `sin`, `exp`, `fmod` or `fmodf` is left for the page", imported.length === 0, imported.join(", "))
+        fs.writeFileSync(
+          at("agree.mjs"),
+          [
+            "// Driven by tests/run.js's wasm-math section: each export, through the loader",
+            "// (wasm-host) and as a bare instance (wasm), against V8's Math and `%`, in ulps.",
+            'import { readFileSync } from "node:fs"',
+            'import { loadSync } from "./main.mjs"',
+            "",
+            'const viaLoader = loadSync(readFileSync(new URL("./host.wasm", import.meta.url)))',
+            'const bare = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(new URL("./plain.wasm", import.meta.url))), {}).exports',
+            "const ordered = (x) => {",
+            "  const b = new BigInt64Array(new Float64Array([x]).buffer)[0]",
+            "  return b < 0n ? -(b & 0x7fffffffffffffffn) : b",
+            "}",
+            "// ordered() maps -0 and +0 to the same integer, so a zero of the wrong sign is a mismatch here.",
+            "const ulps = (a, b) =>",
+            "  Object.is(a, b) || (Number.isNaN(a) && Number.isNaN(b)) ? 0 : a === 0 && b === 0 ? 1e9 : Math.abs(Number(ordered(a) - ordered(b)))",
+            "// -4, -0.5, 5 and -0 give the -0 results (-4 % 2, -0 % 5, -0.5 % 0.5, sin(-0), pow(-0, 3)); 0.444596136099278",
+            "// is where fdlibm's sin without a tail rounds differently from its tail form.",
+            "const xs = [0, -0, 1, -1, 0.5, -0.5, 2, 3, -4, 5, Math.PI, -Math.PI / 4, 1e-300, 1e300, 709.7, -745.2, 1e22, 1e-10, 100, NaN, Infinity, -Infinity, 1.5, -2.5, 7, 0.1, 0.444596136099278]",
+            "const worst = {}",
+            "const one = (name, got, want) => { worst[name] = Math.max(worst[name] ?? 0, ulps(got, want)) }",
+            "for (const m of [viaLoader, bare]) {",
+            "  for (const x of xs) {",
+            '    one("sin", m.sinOf(x), Math.sin(x))',
+            '    one("cos", m.cosOf(x), Math.cos(x))',
+            '    one("exp", m.expOf(x), Math.exp(x))',
+            '    one("log", m.logOf(x), Math.log(x))',
+            "    for (const y of xs) {",
+            '      one("pow", m.powOf(x, y), Math.pow(x, y))',
+            '      one("rem", m.remOf(x, y), x % y)',
+            '      one("remF32", m.remF32(Math.fround(x), Math.fround(y)), Math.fround(Math.fround(x) % Math.fround(y)))',
+            "    }",
+            "  }",
+            "}",
+            "console.log(JSON.stringify(worst))",
+            "",
+          ].join("\n")
+        )
+        const run = spawnSync(process.execPath, [at("agree.mjs")], { cwd: dir, encoding: "utf8" })
+        let worst = null
+        try {
+          worst = JSON.parse(run.stdout)
+        } catch {
+          worst = null
+        }
+        check(
+          "wasm-math: through the loader and bare, sin is V8's bits, cos, exp, log and pow are within one ulp of V8, and both remainders are exact, zero signs included",
+          run.status === 0 &&
+            worst !== null &&
+            ["sin", "cos", "exp", "log", "pow"].every((name) => worst[name] <= 1) &&
+            worst.sin === 0 &&
+            worst.rem === 0 &&
+            worst.remF32 === 0,
+          shown(run)
+        )
+      }
+    }
+    const intrinsicsKept = (ir) =>
+      ["sin", "cos", "exp", "log", "pow"].every((name) => ir.includes(`call double @llvm.${name}.f64(`)) &&
+      /= frem double /.test(ir) &&
+      /= frem float /.test(ir) &&
+      !ir.includes("@nish.")
+    for (const [label, flags, out] of [
+      ["a native build", [], "native.ll"],
+      ["--profile wasi", ["--profile", "wasi"], "wasi.ll"],
+    ]) {
+      const r = compile(flags, out)
+      const ir = r.status === 0 ? fs.readFileSync(at(out), "utf8") : ""
+      check(`wasm-math: ${label} keeps the intrinsics and \`frem\`, and copies nothing from std/math.ts`, r.status === 0 && intrinsicsKept(ir), shown(r) || ir)
+    }
+    fs.writeFileSync(at("int.ts"), "export const remI32 = (x: i32, y: i32): i32 => x % y\n")
+    const int = spawnSync(NISH, [at("int.ts"), "--target", "wasm32", "-o", at("int.ll")], { cwd: root, encoding: "utf8" })
+    const intIr = int.status === 0 ? fs.readFileSync(at("int.ll"), "utf8") : ""
+    check(
+      "wasm-math: an integer `%` on a page module is `srem` and copies nothing from std/math.ts",
+      int.status === 0 && intIr.includes("srem i32") && (intIr.match(/^define /gm) ?? []).length === 1,
+      shown(int) || intIr
+    )
+    // std/math.ts is checked under the program's number mode, where a bare
+    // literal is f64: every one in an integer expression must still be i32.
+    const f64Mode = compile(["--target", "wasm32", "--number-mode", "f64"], "f64mode.ll")
+    check("wasm-math: std/math.ts's copies compile under --number-mode f64", f64Mode.status === 0, shown(f64Mode))
   }
 }
 
@@ -30321,6 +30545,140 @@ if (!only || "host-import".includes(only)) {
         braced.stderr.includes("export function first<T extends { id: i32 }>(x: T): T { return x }"),
       shown(braced)
     )
+
+    // The build reads only the host exports a Nish module imports: a page's file
+    // may export what the page alone calls, in types no wasm import carries.
+    const object = read(
+      "object",
+      "export function area(r: { w: i32 }): i32 {\n  return r.w\n}\nexport function first(x: i32): i32 {\n  return x\n}\n"
+    )
+    check(
+      "host-import: an object type in a host export the program does not import refuses nothing",
+      object.status === 0 && fs.readFileSync(path.join(scratch, "object.ll"), "utf8").includes("declare i32 @first(i32)"),
+      shown(object)
+    )
+    const counterDir = path.join(hostDir, "unimported")
+    const counter = (entry) =>
+      spawnSync(
+        NISH,
+        [
+          path.join(counterDir, entry),
+          "--target",
+          "wasm32",
+          "--host",
+          path.join(counterDir, "counter.ts"),
+          "-o",
+          path.join(scratch, `counter-${entry.replace(".ts", ".ll")}`),
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+    const counted = counter("main.ts")
+    const countedIr = counted.status === 0 ? fs.readFileSync(path.join(scratch, "counter-main.ll"), "utf8") : ""
+    check(
+      "host-import: create-vite's counter.ts beside an imported function compiles, and only the import is declared",
+      counted.status === 0 && countedIr.includes("declare i32 @first(i32)") && !countedIr.includes("setupCounter"),
+      shown(counted)
+    )
+    const takes = counter("takes.ts")
+    check(
+      "host-import: importing counter.ts's setupCounter refuses its element where counter.ts writes it (NL2661)",
+      takes.status === 1 &&
+        takes.stderr.includes(
+          "counter.ts:4:39: error: Parameter `element` of host function `setupCounter` is `HTMLElement`, and only a scalar"
+        ),
+      shown(takes)
+    )
+
+    // The page's bodies are its own TypeScript, which the build never reads.
+    const bodiesDir = path.join(hostDir, "bodies")
+    const bodies = spawnSync(
+      NISH,
+      [
+        path.join(bodiesDir, "main.ts"),
+        "--target",
+        "wasm32",
+        "--host",
+        path.join(bodiesDir, "host.ts"),
+        "-o",
+        path.join(scratch, "bodies.ll"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      "host-import: a host module whose bodies use the DOM, closures, a class and async compiles",
+      bodies.status === 0 && fs.readFileSync(path.join(scratch, "bodies.ll"), "utf8").includes("declare i32 @bump(i32)"),
+      shown(bodies)
+    )
+
+    // tsc reads the entry's import of a host module as TypeScript: a host
+    // export the entry imports, dropped from the page's file, fails the entry.
+    const dropDir = path.join(scratch, "dropped")
+    fs.mkdirSync(dropDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dropDir, "main.ts"),
+      [
+        'import type { i32, u16 } from "nish"',
+        'import { hI32, hU16 } from "./host"',
+        "export function rI32(x: i32): i32 {",
+        "  return hI32(x)",
+        "}",
+        "export function rU16(x: u16): u16 {",
+        "  return hU16(x)",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const hostText = fs.readFileSync(path.join(hostDir, "host.ts"), "utf8")
+    const typeCheckEntry = (name, text) => {
+      fs.writeFileSync(path.join(dropDir, "host.ts"), text)
+      const config = path.join(dropDir, `tsconfig.${name}.json`)
+      fs.writeFileSync(
+        config,
+        JSON.stringify({
+          extends: path.join(root, "tsconfig.json"),
+          compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true },
+          include: [],
+          files: [path.join(root, "runtime", "nish.d.ts"), path.join(dropDir, "host.ts"), path.join(dropDir, "main.ts")],
+        })
+      )
+      return typeCheckProject(config, root)
+    }
+    const whole = typeCheckEntry("whole", hostText)
+    check("host-import: the entry and its host module type-check under tsc --strict", whole.ok, whole.output)
+    const dropped = typeCheckEntry("dropped", hostText.replace("export function hU16(x: u16): u16 {\n  return x + 70000\n}\n", ""))
+    check(
+      "host-import: tsc fails the entry when the host module drops an export it imports (TS2305)",
+      !dropped.ok && /main\.ts.*TS2305.*hU16/.test(dropped.output),
+      dropped.output
+    )
+
+    // A program with no host module is compiled as it was before host modules:
+    // its native and wasm32 IR are these bytes (the .d.ts, the loader and both
+    // profiles' .wasm are held below, against WASM_PLAIN_DIGESTS).
+    for (const [src, native, wasm32] of [
+      [
+        "examples/add.ts",
+        "c9c8b3abb2a28d8d983ca06439bf07fb2d03fd373c18c185caa837eeacd8027b",
+        "2b682ad80229098976b5d710898209a5be40e28fc43bdcb3529e3353fb48ee8a",
+      ],
+      [
+        "examples/arrays.ts",
+        "9e21b3dc744ca821ec9862c91041dfa03a9b542c733773560b18007c22349de0",
+        "91ce0443911068f9c1bd57103d51a102f733d808c555db8b586336a4bb77aa0c",
+      ],
+    ]) {
+      const stem = path.basename(src, ".ts")
+      const got = [[], ["--target", "wasm32"]].map((flags, i) => {
+        const out = path.join(scratch, `${stem}.${i === 0 ? "native" : "wasm32"}.ll`)
+        const r = spawnSync(NISH, [src, ...flags, "-o", out], { cwd: root, encoding: "utf8" })
+        return r.status === 0 ? crypto.createHash("sha256").update(fs.readFileSync(out)).digest("hex") : shown(r)
+      })
+      check(
+        `host-import: ${src}, with no host module, compiles to main's native and wasm32 IR`,
+        got[0] === native && got[1] === wasm32,
+        `native ${got[0]}\nwasm32 ${got[1]}`
+      )
+    }
   }
   const why = wasmHostTools()
   if (why !== null) {
@@ -30598,6 +30956,105 @@ if (!only || "host-import".includes(only)) {
       brands.length === 3 && new Set(brands).size === 1,
       brands.join("\n")
     )
+
+    // A package's `nish.host` names its host modules with no `--host`: the
+    // program compiles, links and loads with the page's file as `host`, and
+    // nish/vite, which passes no `host` option here, imports that file too.
+    const route = path.join(dir, "route")
+    fs.cpSync(path.join(root, "tests", "host-import", "route"), route, { recursive: true })
+    const routed = spawnSync(
+      NISH,
+      [path.join(route, "main.ts"), "--target", "wasm32", "--emit-dts", path.join(route, "main.d.ts"), "-o", path.join(route, "main.ll")],
+      { cwd: root, encoding: "utf8" }
+    )
+    const routedLink =
+      routed.status === 0
+        ? wasmHostLink([path.join(route, "main.ll")], ["-o", path.join(route, "main.wasm"), "--profile", "wasm-host"])
+        : routed
+    let routedRun = routedLink
+    if (routedLink.status === 0) {
+      fs.writeFileSync(
+        path.join(route, "run.mjs"),
+        [
+          'import { readFileSync } from "node:fs"',
+          'import * as host from "./src/host.ts"',
+          'import { loadSync } from "./main.mjs"',
+          'console.log(loadSync(readFileSync(new URL("./main.wasm", import.meta.url)), { host }).quad(5))',
+        ].join("\n")
+      )
+      routedRun = spawnSync(process.execPath, ["--no-warnings", path.join(route, "run.mjs")], { cwd: route, encoding: "utf8" })
+    }
+    check(
+      "host-import: a host module package.json's nish.host names compiles, links and loads as `host` with no --host",
+      routedRun.status === 0 && routedRun.stdout.trim() === "21",
+      shown(routedRun)
+    )
+    const { default: nishVite } = await import("nish/vite")
+    const routePlugin = nishVite({ compiler: NISH, entries: ["main.ts"] })
+    routePlugin.configResolved({ root: route, command: "build", cacheDir: path.join(route, ".cache") })
+    let routeCode = null
+    let routeFailure = ""
+    try {
+      const id = await routePlugin.resolveId("./main.ts", path.join(route, "index.html"))
+      routeCode = typeof id === "string" ? await routePlugin.load(id) : null
+    } catch (e) {
+      routeFailure = String(e.stderr ?? e)
+    }
+    let routeQuad = null
+    if (typeof routeCode === "string") {
+      const generated = path.join(route, "generated.mjs")
+      fs.writeFileSync(generated, routeCode)
+      try {
+        routeQuad = (await import(pathToFileURL(generated).href)).quad(5)
+      } catch (e) {
+        routeFailure = String(e)
+      }
+    }
+    check(
+      "host-import: nish/vite imports the host module package.json's nish.host names and passes it as `host`",
+      typeof routeCode === "string" &&
+        routeCode.includes(`import * as __nishHost0 from ${JSON.stringify(path.join(route, "src", "host.ts"))};`) &&
+        routeQuad === 21,
+      `${routeFailure}\n${routeCode}`
+    )
+
+    // The rest of a program with no host module's bytes: its .d.ts and loader,
+    // and on linux-x64 (where wasm-size measures them) its .wasm under each
+    // profile, are main's (WASM_PLAIN_DIGESTS).
+    const plainDir = path.join(dir, "plain")
+    const wasmBytes = `${process.platform}-${process.arch}` === "linux-x64"
+    for (const src of ["examples/add.ts", "examples/arrays.ts"]) {
+      const stem = path.basename(src, ".ts")
+      const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === src)
+      const { runtime } = WASM_HOST_SIZE_BUDGETS.find((row) => row.src === src)
+      const ll = wasmHostCompile(plainDir, stem)
+      const linkAs = (out, profile) =>
+        ll === null
+          ? { status: 1, stdout: "", stderr: "compile failed" }
+          : wasmHostLink(runtime ? [ll, "runtime/runtime-wasm.c"] : [ll], ["-o", path.join(plainDir, out), "--profile", profile])
+      const digest = (file) =>
+        fs.existsSync(path.join(plainDir, file))
+          ? crypto.createHash("sha256").update(fs.readFileSync(path.join(plainDir, file))).digest("hex")
+          : "missing"
+      const got = { dts: digest(`${stem}.d.ts`), loader: digest(`${stem}.mjs`) }
+      if (wasmBytes) {
+        const plain = linkAs(`${stem}.plain.wasm`, "wasm")
+        const hosted = linkAs(`${stem}.wasm`, "wasm-host")
+        got.wasm = plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain)
+        got.host = hosted.status === 0 ? digest(`${stem}.wasm`) : shown(hosted)
+      } else {
+        skip(
+          `host-import: ${src}'s --profile wasm and wasm-host .wasm digests are held on linux-x64 only, ` +
+            `and this host is ${process.platform}-${process.arch}; its .d.ts and loader are still held`
+        )
+      }
+      const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
+      check(
+        `host-import: ${src}, with no host module, keeps main's .d.ts and loader${wasmBytes ? " and --profile wasm and wasm-host .wasm" : ""}`,
+        moved.length === 0,
+        `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
+      )
+    }
   }
 }
 
@@ -31266,30 +31723,119 @@ if (!only || "wasm-size".includes(only)) {
     skip(why)
   } else {
     const dir = path.join(buildDir, "wasm-size")
+    fs.mkdirSync(dir, { recursive: true })
     const sizes = (file) => {
       const bytes = fs.readFileSync(file)
       return [bytes.length, zlib.gzipSync(bytes, { level: 9 }).length, zlib.brotliCompressSync(bytes).length]
     }
+    const link = (inputs, flags, env) =>
+      spawnSync("bash", ["scripts/build.sh", ...inputs, ...flags], { cwd: root, encoding: "utf8", env })
+    // binaryen's wasm-opt changes the bytes, and clang 18 runs it itself after an optimising
+    // link wherever it finds one (#1257). The ceilings and digests are of the module a
+    // machine without it links, which NISH_WASM_OPT=0 pins. A stand-in wasm-opt first on
+    // PATH logs each call and appends a custom section, so a pinned build it reached shows.
+    const stubBin = path.join(dir, "stub-bin")
+    const stubLog = path.join(dir, "wasm-opt.log")
+    fs.mkdirSync(stubBin, { recursive: true })
+    fs.writeFileSync(
+      path.join(stubBin, "wasm-opt"),
+      [
+        "#!/usr/bin/env bash",
+        'printf \'%s\\n\' "$*" >> "$WASM_OPT_STUB_LOG"',
+        "in= out=",
+        'while [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift 2 ;; -*) shift ;; *) in=$1; shift ;; esac; done',
+        '[ "$in" = "$out" ] || cp "$in" "$out"',
+        // A custom section named "stub": id 0, 5 bytes, a 4-byte name.
+        "printf '\\0\\5\\4stub' >> \"$out\"",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    )
+    const stubbed = (pinned) => ({
+      ...process.env,
+      PATH: `${stubBin}${path.delimiter}${process.env.PATH}`,
+      WASM_OPT_STUB_LOG: stubLog,
+      ...(pinned ? { NISH_WASM_OPT: "0" } : {}),
+    })
+    const stubCalls = () => (fs.existsSync(stubLog) ? fs.readFileSync(stubLog, "utf8").split("\n").filter(Boolean) : [])
+    // A directory of symlinks to everything in `from` but what `skip` names; false
+    // when `from` cannot be listed (searchable but not readable), with no mirror made.
+    const mirror = (from, to, skip) => {
+      const source = path.resolve(from)
+      let names
+      try {
+        names = fs.readdirSync(source)
+      } catch {
+        return false
+      }
+      fs.rmSync(to, { recursive: true, force: true })
+      fs.mkdirSync(to, { recursive: true })
+      for (const name of names) {
+        if (!skip.includes(name)) fs.symlinkSync(path.join(source, name), path.join(to, name))
+      }
+      return true
+    }
+    // PATH with no wasm-opt on it, for the `--profile wasm` link, which has no switch.
+    // A directory holding one is swapped for a mirror without it, never dropped: apt's
+    // binaryen puts wasm-opt in /usr/bin beside bash and clang (#1257). clang still
+    // finds one beside its own binary, which `-###` shows. A directory that cannot be
+    // listed cannot be mirrored, and is dropped.
+    let hidden = 0
+    const withoutWasmOpt = (searchPath) =>
+      String(searchPath)
+        .split(path.delimiter)
+        .map((d) => {
+          if (!fs.existsSync(path.join(d, "wasm-opt"))) return d
+          const to = path.join(dir, "no-wasm-opt", String(hidden++))
+          return mirror(d, to, ["wasm-opt"]) ? to : null
+        })
+        .filter((d) => d !== null)
+        .join(path.delimiter)
+    const bare = { ...process.env, PATH: withoutWasmOpt(process.env.PATH) }
+    delete bare.NISH_WASM_OPT
+    // The flags are scripts/build.sh's `wasm_compile` and `--no-entry`, so the probe
+    // asks the driver the link asks.
+    const clangFindsWasmOpt = (ll) =>
+      /wasm-opt"/.test(
+        spawnSync(
+          process.env.CC || "clang",
+          [
+            "-Wno-override-module",
+            "--target=wasm32-unknown-unknown",
+            "-Oz",
+            "-nostdlib",
+            "-mbulk-memory",
+            "-Wl,--no-entry",
+            ll,
+            "-o",
+            "x.wasm",
+            "-###",
+          ],
+          { encoding: "utf8", env: bare }
+        ).stderr
+      )
+    let checkedSwitch = false
     for (const { src, runtime, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
       const stem = path.basename(src, ".ts")
       // The directory outlives a run: a sidecar an older build left must not pass for this one's.
       fs.rmSync(path.join(dir, `${stem}.wasm.sites.json`), { force: true })
+      fs.rmSync(stubLog, { force: true })
       const ll = wasmHostCompile(dir, stem)
-      const link =
+      const inputs = ll === null ? [] : runtime ? [ll, "runtime/runtime-wasm.c"] : [ll]
+      const hostFlags = (name) => ["-o", path.join(dir, name), "--profile", "wasm-host"]
+      const built =
         ll === null
           ? null
-          : wasmHostLink(runtime ? [ll, "runtime/runtime-wasm.c"] : [ll], [
-              "-o",
-              path.join(dir, `${stem}.wasm`),
-              "--profile",
-              "wasm-host",
-              "--inline",
-              path.join(dir, `${stem}.bytes.mjs`),
-            ])
-      if (link?.status !== 0) {
-        check(`wasm-size: ${src} builds under --profile wasm-host`, false, link === null ? "compile failed" : shown(link))
+          : link(inputs, [...hostFlags(`${stem}.wasm`), "--inline", path.join(dir, `${stem}.bytes.mjs`)], stubbed(true))
+      if (built?.status !== 0) {
+        check(`wasm-size: ${src} builds under --profile wasm-host`, false, built === null ? "compile failed" : shown(built))
         continue
       }
+      check(
+        `wasm-size: ${src} under NISH_WASM_OPT=0 runs no wasm-opt, though one is on PATH`,
+        stubCalls().length === 0 && /no wasm-opt, NISH_WASM_OPT=0/.test(built.stdout),
+        `wasm-opt calls:\n${stubCalls().join("\n")}\n${shown(built)}`
+      )
       for (const [part, file] of [
         ["wasm", `${stem}.wasm`],
         ["loader", `${stem}.mjs`],
@@ -31298,33 +31844,76 @@ if (!only || "wasm-size".includes(only)) {
         const measured = sizes(path.join(dir, file))
         const ceiling = ceilings[part]
         check(
-          `wasm-size: ${file} is at most ${ceiling.join(" / ")} bytes raw / gzip -9 / brotli`,
+          `wasm-size: ${file} is ${measured.join(" / ")}, at most ${ceiling.join(" / ")} bytes raw / gzip -9 / brotli`,
           measured.every((n, i) => n <= ceiling[i]),
-          `measured ${measured.join(" / ")}; shrink it, or raise WASM_HOST_SIZE_BUDGETS in ` +
-            "tests/runtime-budgets.js with the measurement and why"
+          "shrink it, or raise WASM_HOST_SIZE_BUDGETS in tests/runtime-budgets.js with the measurement and why"
         )
+      }
+      const bareLinks = !clangFindsWasmOpt(ll)
+      if (!checkedSwitch) {
+        // The switch's two sides, on the first row: unset, the stand-in runs and is asked
+        // to drop target_features; with no wasm-opt at all, the bytes are the pinned ones.
+        checkedSwitch = true
+        fs.rmSync(stubLog, { force: true })
+        const opt = link(inputs, hostFlags(`${stem}.stub.wasm`), stubbed(false))
+        check(
+          `wasm-size: ${src} without NISH_WASM_OPT runs the wasm-opt on PATH with --strip-target-features`,
+          opt.status === 0 &&
+            stubCalls().some((call) => /^-Oz .*--strip-target-features /.test(call)) &&
+            /, wasm-opt -Oz\)/.test(opt.stdout),
+          `wasm-opt calls:\n${stubCalls().join("\n")}\n${shown(opt)}`
+        )
+        if (bareLinks) {
+          const none = link(inputs, hostFlags(`${stem}.none.wasm`), bare)
+          const same =
+            none.status === 0 &&
+            Buffer.compare(fs.readFileSync(path.join(dir, `${stem}.none.wasm`)), fs.readFileSync(path.join(dir, `${stem}.wasm`))) === 0
+          check(
+            `wasm-size: ${src} with no wasm-opt installed links the NISH_WASM_OPT=0 bytes`,
+            same && /, no wasm-opt\)/.test(none.stdout),
+            shown(none)
+          )
+          // The layout of #1257: wasm-opt in the directory that also holds bash. Each
+          // PATH directory with a bash (Homebrew adds a second) becomes a mirror with the
+          // stand-in beside it; the hidden PATH keeps their other tools, so the link runs.
+          let shares = 0
+          const sharedPath = String(process.env.PATH)
+            .split(path.delimiter)
+            .map((d) => {
+              if (!fs.existsSync(path.join(d, "bash"))) return d
+              const shared = path.join(dir, "shared-bin", String(shares++))
+              if (!mirror(d, shared, ["wasm-opt"])) return d
+              fs.copyFileSync(path.join(stubBin, "wasm-opt"), path.join(shared, "wasm-opt"))
+              return shared
+            })
+          const hiddenEnv = { ...bare, PATH: withoutWasmOpt(sharedPath.join(path.delimiter)), WASM_OPT_STUB_LOG: stubLog }
+          fs.rmSync(stubLog, { force: true })
+          const beside = link(inputs, hostFlags(`${stem}.beside.wasm`), hiddenEnv)
+          check(
+            `wasm-size: a wasm-opt hidden from the directory it shares with bash leaves that directory's tools on PATH`,
+            beside.status === 0 && stubCalls().length === 0 && /, no wasm-opt\)/.test(beside.stdout),
+            `wasm-opt calls:\n${stubCalls().join("\n")}\n${shown(beside)}`
+          )
+        } else {
+          skip(`wasm-size: clang finds a wasm-opt beside itself, so no build here links without one`)
+        }
       }
       // A program with no module storage and no host module gets main's bytes.
       const digests = WASM_PLAIN_DIGESTS.find((row) => row.src === src)
-      const plain = wasmHostLink(runtime ? [ll, "runtime/runtime-wasm.c"] : [ll], [
-        "-o",
-        path.join(dir, `${stem}.plain.wasm`),
-        "--profile",
-        "wasm",
-      ])
       const digest = (file) =>
         fs.existsSync(path.join(dir, file))
           ? crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, file))).digest("hex")
           : "missing"
-      const got = {
-        dts: digest(`${stem}.d.ts`),
-        loader: digest(`${stem}.mjs`),
-        wasm: plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain),
-        host: digest(`${stem}.wasm`),
+      const got = { dts: digest(`${stem}.d.ts`), loader: digest(`${stem}.mjs`), host: digest(`${stem}.wasm`) }
+      if (bareLinks) {
+        const plain = link(inputs, ["-o", path.join(dir, `${stem}.plain.wasm`), "--profile", "wasm"], bare)
+        got.wasm = plain.status === 0 ? digest(`${stem}.plain.wasm`) : shown(plain)
+      } else {
+        skip(`wasm-size: ${stem}.plain.wasm: clang finds a wasm-opt beside itself and --profile wasm has no switch`)
       }
       const moved = Object.keys(got).filter((part) => got[part] !== digests[part])
       check(
-        `wasm-size: ${src}'s .d.ts, loader, --profile wasm and --profile wasm-host .wasm are main's bytes`,
+        `wasm-size: ${src}'s .d.ts, loader${bareLinks ? ", --profile wasm" : ""} and --profile wasm-host .wasm are main's bytes`,
         moved.length === 0,
         `${moved.map((part) => `${part}: ${got[part]}`).join("\n")}\n(WASM_PLAIN_DIGESTS in tests/runtime-budgets.js)`
       )
@@ -31336,6 +31925,8 @@ if (!only || "wasm-size".includes(only)) {
         `imports: ${JSON.stringify(imported)}; sidecar: ${sidecar}`
       )
     }
+    // The mirrors are symlinks into system directories; none outlives the run.
+    for (const mirrors of ["no-wasm-opt", "shared-bin"]) fs.rmSync(path.join(dir, mirrors), { recursive: true, force: true })
   }
 }
 

@@ -25303,6 +25303,18 @@ each is a call to `std/math.ts`'s Nish port of fdlibm, copied into the module
 as `internal @nish.tanF64`, `@nish.atan2F64` and `@nish.hypotF64`, so no target calls
 libm and the optimiser sees the whole body.
 
+A page module (a wasm build with no WASI, or an `--emit-dts` compile, which
+`--profile wasm` and `wasm-host` link with no libm) takes that route for
+`Math.sin`, `cos`, `exp`, `log` and `pow` as well: `Math.exp(x)` is
+`tail call double @nish.expF64(double %x)` and the module defines
+`@nish.expF64` and its helpers (`tests/cases/wasm_math_exp.ll`). A float `%`
+there is `call double @nish.fmodF64(double %x, double %y)` in place of
+`frem`, which LLVM lowers to a call of libm's `fmod`; an `f32` operand is
+`fpext`ed to `double` first and the result `fptrunc`ed back, exact because a
+remainder of two floats is a float (`tests/cases/wasm_math_rem.ll`). An
+integer `%` keeps `srem` and copies nothing. A native build and
+`--profile wasi` keep the intrinsics and `frem`.
+
 <!-- cookbook:begin builtin-math-f64 -->
 Compiled with `--number-mode f64`.
 

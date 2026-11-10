@@ -65,7 +65,7 @@ function isLibrary(compilation: Compilation, unit: ModuleUnit): boolean -> @isLi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Compilation.libraryRoot isStdModule
   pointer compilation: size=208 writesThrough=false captured=false passedTo=Compilation.libraryRoot#0
-  pointer unit: size=88 writesThrough=false captured=false
+  pointer unit: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isStdModule -> @isStdModule
   callee +0:15 Compilation.libraryRoot -> @Compilation.libraryRoot
@@ -74,7 +74,7 @@ function modulePath(compilation: Compilation, root: string, unit: ModuleUnit): s
   escaping: root
   calls: isLibrary relativePath
   pointer compilation: size=208 writesThrough=false captured=false passedTo=isLibrary#0
-  pointer unit: size=88 writesThrough=false captured=false passedTo=isLibrary#1
+  pointer unit: size=96 writesThrough=false captured=false passedTo=isLibrary#1
   stackSites=0 stackLocals=0
   callee +0:3 isLibrary -> @isLibrary
   callee +0:46 relativePath -> @relativePath
@@ -470,7 +470,7 @@ function pushPanics(out: string[], program: CheckedProgram, sig: FunctionSig, pa
   escaping: path
   calls: nish_array_grow nish_panic_overflow siteReportEntry sitesOf
   pointer out: size=0 writesThrough=true captured=false
-  pointer program: size=696 writesThrough=false captured=false passedTo=sitesOf#0
+  pointer program: size=704 writesThrough=false captured=false passedTo=sitesOf#0
   pointer sig: size=176 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=siteReportEntry#2
   stackSites=0 stackLocals=0

@@ -17,7 +17,11 @@ and `nish/host/ring`, and the storage's TypeScript reading
 security record is `docs/security/wasm-host.md`. Stage 4 is built: string
 parameters of host imports and string results of exports (§7), `nish/host/text`,
 a module-storage `u8[]` lent to a `u8[]` parameter, and `runtime/runtime-text.c`
-(`tests/run.js`, section `host-import-text`). Stage 5 is the next. The anchors below are at `39a87b3b`.
+(`tests/run.js`, section `host-import-text`). Stage 5a is built: on a page
+module `Math.sin`, `cos`, `exp`, `log` and `pow` call `std/math.ts`'s fdlibm
+ports and a float `%` its `fmodF64`, so both page profiles link them with no
+import (`tests/run.js`, section `wasm-math`). Stage 5b, the rest of stage 5,
+is the next. The anchors below are at `39a87b3b`.
 [LANGUAGE.md](LANGUAGE.md) stays normative; the spellings in this note are
 the accepted design; `npm test` compiles stage 2's (host modules and
 `HostHandle`) and none of the later stages' yet.
@@ -768,10 +772,14 @@ wasm` as it is, then the same IR linked with an explicit export list instead of
 So `--export-all` costs 68% of the hello world and 26% of a module with arrays.
 `--profile wasm-host` exports the program's exported functions, its exported
 module storage, and the runtime entry points the loader calls (the arena mark,
-release and allocation), and nothing else. `--gc-sections` is already applied. `wasm-opt` is not installed here and
-appears nowhere in the repository. `build.sh` runs `wasm-opt -Oz` when it is on
-`PATH`, records in the build line whether it ran, and the size test reports
-both figures.
+release and allocation), and nothing else. `--gc-sections` is already applied.
+`build.sh` runs `wasm-opt -Oz --strip-target-features` when it is on `PATH` and
+records in the build line whether it ran (binaryen 132: `add.wasm` 74 bytes,
+`arrays.wasm` 1,713). clang 18 also runs a `wasm-opt` it finds itself after an
+`-O` link, keeping the `target_features` section, which made `add.wasm` 150
+bytes and broke the guard on a machine with binaryen (#1257).
+`NISH_WASM_OPT=0` links with neither pass; the size test measures that build,
+with a stub `wasm-opt` on `PATH` to prove neither runs.
 
 **The guard.** A `wasm-size` block in `tests/run.js` builds the hello world and
 the W9 example under `--profile wasm-host`. It writes the raw, gzip and brotli
@@ -892,7 +900,7 @@ answered. Stage 5 depends on nothing before it and can run beside stages 1–4.
 | 2 | **Imports and handles (W1, W4).** Host modules (`--host`, `package.json`), reading their signatures and skipping bodies. Import attributes. `HostHandle<K>`. `Imports` in the `.d.ts`. The adapter closures. The TS reading keeps the `import`. The refusals: a `string` result, an object, a function, a `Promise`, `declare function` in a wasm build, a host module in a native build. The plugin gains host modules | Q1, Q2, Q6 | about 20 B per imported function; nothing without one |
 | 3 | **Module storage and the driven module (W2, W5).** Module storage and its codes. `nish/host/ring` and the `nish/page` helpers (§11). `Layout` in the `.d.ts` and the views in the loader. Buffer windows for imports. Its TS reading. The re-entry flag. The `nish.panic` import and site numbers. Decoding results inside the bracket | Q3, Q4, Q9 | nothing to a program with no module storage and no host module: its loader, `.d.ts` and `.wasm` are the bytes it had before (`WASM_PLAIN_DIGESTS`, §6). One with either pays the `nish.panic` import and its site arguments. **Built**; record `docs/security/wasm-host.md` |
 | 4 | **Strings (W3).** `nish/host/text`. The freestanding string and formatting unit. String parameters to imports, string results of exports | stage 3 | nothing to a program with no strings (`WASM_PLAIN_DIGESTS`); 1,111 B for an integer template, 13,046 B with an `f64` (10,296 B of it the printer's table). **Built** |
-| 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured |
+| 5 | **The same bits (W7).** `--deterministic`, the `std/math.ts` transcendentals and `fmod`, canonical NaN bits, `-ffp-contract=off` for runtime units, the float corpus across four targets | Q7, Q8 | `sin` and friends in each module that calls them, measured over an `x + 1.0` module, raw / gzip / brotli on `wasm-host` with no wasm-opt: `sin` 1,741 / 1,211 / 1,164 B, `cos` 1,755 / 1,219 / 1,176, `exp` 730 / 478 / 502, `log` 610 / 397 / 387, `pow` 2,250 / 1,292 / 1,243, `%` (`fmod`) 710 / 366 / 331, all six 6,250 / 3,490 / 3,352; `--profile wasm` adds the same raw bytes. Nothing to a module that calls none (`WASM_PLAIN_DIGESTS`). **5a built** |
 | 6 | **The acceptance example (W9).** `examples/wasm-arena/`, the Chromium job, the ten-minute soak, the size rows for the example, and the guide's browser section | stages 1–5, Q8, Q11 | the example's figures become the guard's second row |
 
 Every stage carries its own definition of done from `CLAUDE.md`. That means a
