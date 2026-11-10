@@ -167,8 +167,9 @@ export const child = <T>(f: () => T): Region<T> => {
  * child, because the arrow `child` runs captures nothing.
  *
  * @param arg handed to `f`: a number, `boolean` or `enum`, or memory the
- *   parent's root reaches, which `f` may store into the child. A string `f`
- *   stores, and memory the entered function allocated, are refused (NL2610).
+ *   parent's root reaches, which `f` may store into the child, a string read
+ *   off the root included. Memory the entered function allocated, and a string
+ *   the root does not reach, are refused when `f` stores them (NL2610).
  * @param f builds the child's root from `arg`, under the same rules as
  *   `child`'s.
  * @returns the handle to the child, which holds its memory until `free` of it

@@ -176,8 +176,9 @@ function childWith<A, T>(
 <scalar-field name="arg" type="A" required>
 
 handed to `f`: a number, `boolean` or `enum`, or memory the
-  parent's root reaches, which `f` may store into the child. A string `f`
-  stores, and memory the entered function allocated, are refused (NL2610).
+  parent's root reaches, which `f` may store into the child, a string read
+  off the root included. Memory the entered function allocated, and a string
+  the root does not reach, are refused when `f` stores them (NL2610).
 
 </scalar-field>
 

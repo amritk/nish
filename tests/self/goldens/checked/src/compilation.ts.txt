@@ -1309,61 +1309,61 @@ function Compilation.checkRegions(this: Compilation, facts: FactsTable): void ->
   local -1:16 unit: ModuleUnit (const)
   local +2:11 fresh: FreshResults (const)
   callee +2:19 new FreshResults -> @FreshResults.constructor
-  local +3:11 scopeName: string (const)
-  callee +3:23 scopeSymbol -> @scopeSymbol
-  local +4:11 table: TypeTable (const)
-  local +6:11 sites: ChildSites (const)
-  callee +6:19 new ChildSites -> @ChildSites.constructor
-  local +7:16 unit: ModuleUnit (const)
-  local +8:18 call: ParallelCall (const)
-  callee +9:13 isChildMaker -> @isChildMaker
-  callee +9:26 regionRoleOf -> @regionRoleOf
-  local +15:14 i: i32 (let)
-  local +16:13 program: CheckedProgram (const)
-  callee +17:7 ChildSites.scan -> @ChildSites.scan
-  local +19:16 unit: ModuleUnit (const)
-  local +20:13 program: CheckedProgram (const)
-  local +21:18 call: ParallelCall (const)
-  callee +22:13 isChildMaker -> @isChildMaker
-  callee +22:26 regionRoleOf -> @regionRoleOf
-  local +25:15 findings: RegionFinding[] (const)
-  callee +25:26 regionCallFindings -> @regionCallFindings
-  local +36:20 finding: RegionFinding (const)
-  callee +37:11 DiagnosticSink.report -> @DiagnosticSink.report
-  local +40:18 call: ParallelCall (const)
-  local +41:20 finding: RegionFinding (const)
-  callee +41:31 taskFindings -> @taskFindings
-  callee +42:11 DiagnosticSink.report -> @DiagnosticSink.report
-  local +45:13 crossings: ParallelCall[] (const)
-  local +46:18 call: ParallelCall (const)
-  local +49:18 call: ParallelCall (const)
-  local +52:18 call: ParallelCall (const)
-  local +53:15 fn: FunctionSig | null (const)
-  callee +53:20 parallelBodyOf -> @parallelBodyOf
-  local +54:15 instance: Instantiation | null (const)
-  local +58:15 types: i32[] (const)
-  local +59:20 type: i32 (const)
-  local +62:20 type: i32 (const)
-  local +66:20 type: i32 (const)
-  callee +67:15 holdsRegion -> @holdsRegion
-  local +68:19 what: string (const)
-  callee +69:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +73:15 crossingMessage -> @crossingMessage
-  local +79:18 call: ParallelCall (const)
-  local +80:20 type: i32 (const)
-  callee +81:15 holdsRegion -> @holdsRegion
-  local +82:19 what: string (const)
-  callee +83:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +87:15 crossingMessage -> @crossingMessage
-  local +94:16 unit: ModuleUnit (const)
-  local +95:13 program: CheckedProgram (const)
-  local +96:18 call: ParallelCall (const)
-  callee +97:14 isChildMaker -> @isChildMaker
-  callee +97:27 regionRoleOf -> @regionRoleOf
-  local +100:15 findings: RegionFinding[] (const)
-  callee +100:26 regionCallFindings -> @regionCallFindings
-  local +111:20 finding: RegionFinding (const)
-  callee +112:11 DiagnosticSink.report -> @DiagnosticSink.report
+  local +4:11 scopeName: string (const)
+  callee +4:23 scopeSymbol -> @scopeSymbol
+  local +5:11 table: TypeTable (const)
+  local +7:11 sites: ChildSites (const)
+  callee +7:19 new ChildSites -> @ChildSites.constructor
+  local +8:16 unit: ModuleUnit (const)
+  local +9:18 call: ParallelCall (const)
+  callee +10:13 isChildMaker -> @isChildMaker
+  callee +10:26 regionRoleOf -> @regionRoleOf
+  local +16:14 i: i32 (let)
+  local +17:13 program: CheckedProgram (const)
+  callee +18:7 ChildSites.scan -> @ChildSites.scan
+  local +20:16 unit: ModuleUnit (const)
+  local +21:13 program: CheckedProgram (const)
+  local +22:18 call: ParallelCall (const)
+  callee +23:13 isChildMaker -> @isChildMaker
+  callee +23:26 regionRoleOf -> @regionRoleOf
+  local +26:15 findings: RegionFinding[] (const)
+  callee +26:26 regionCallFindings -> @regionCallFindings
+  local +37:20 finding: RegionFinding (const)
+  callee +38:11 DiagnosticSink.report -> @DiagnosticSink.report
+  local +41:18 call: ParallelCall (const)
+  local +42:20 finding: RegionFinding (const)
+  callee +42:31 taskFindings -> @taskFindings
+  callee +43:11 DiagnosticSink.report -> @DiagnosticSink.report
+  local +46:13 crossings: ParallelCall[] (const)
+  local +47:18 call: ParallelCall (const)
+  local +50:18 call: ParallelCall (const)
+  local +53:18 call: ParallelCall (const)
+  local +54:15 fn: FunctionSig | null (const)
+  callee +54:20 parallelBodyOf -> @parallelBodyOf
+  local +55:15 instance: Instantiation | null (const)
+  local +59:15 types: i32[] (const)
+  local +60:20 type: i32 (const)
+  local +63:20 type: i32 (const)
+  local +67:20 type: i32 (const)
+  callee +68:15 holdsRegion -> @holdsRegion
+  local +69:19 what: string (const)
+  callee +70:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +74:15 crossingMessage -> @crossingMessage
+  local +80:18 call: ParallelCall (const)
+  local +81:20 type: i32 (const)
+  callee +82:15 holdsRegion -> @holdsRegion
+  local +83:19 what: string (const)
+  callee +84:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +88:15 crossingMessage -> @crossingMessage
+  local +95:16 unit: ModuleUnit (const)
+  local +96:13 program: CheckedProgram (const)
+  local +97:18 call: ParallelCall (const)
+  callee +98:14 isChildMaker -> @isChildMaker
+  callee +98:27 regionRoleOf -> @regionRoleOf
+  local +101:15 findings: RegionFinding[] (const)
+  callee +101:26 regionCallFindings -> @regionCallFindings
+  local +112:20 finding: RegionFinding (const)
+  callee +113:11 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.checkSecrets(this: Compilation, facts: FactsTable): void -> @Compilation.checkSecrets [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

@@ -227,7 +227,9 @@ the parent's `f` stored into it: once any code stores into memory the
 root may reach (a field, an array push, a `Map.set`, or a call that keeps
 its argument), the child may not keep it. Filling an array or `Map` the
 `f` made itself is fine, unless the root, or memory it reaches, was put
-into memory the `f` made. Entering a handle that may be a child's gives
+into memory the `f` made. To keep a list of the parent's nodes, build it in
+the child's own `f`: it may push the parent's memory onto an array of the
+root it allocates. Entering a handle that may be a child's gives
 an `f` whose root is the child's memory, so that root may neither take
 memory from outside nor be stored outside. A handle made by `region()`
 or `regionWith()` and never reassigned is not a child's and keeps the

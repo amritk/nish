@@ -1165,6 +1165,7 @@ const DECLARED = [
   // Parent/child regions: the 0.37.0 seed's nish:region has no child or
   // childWith, so only the candidate compiles these programs.
   ...[
+    "tests/cases/region_child_builder_list.ts",
     "tests/cases/region_child_chain.ts",
     "tests/cases/region_child_fresh_list.ts",
     "tests/cases/region_child_keep.ts",
