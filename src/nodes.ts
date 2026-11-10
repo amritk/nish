@@ -87,7 +87,7 @@ export const N_THIS: i32 = 37
 export const N_TEMPLATE: i32 = 38 // children: TEMPLATE_TEXT and expressions, alternating
 export const N_TEMPLATE_TEXT: i32 = 39 // text: the decoded bytes of one span
 export const N_ARRAY: i32 = 40 // children: the elements
-export const N_OBJECT: i32 = 41 // children: the PROPERTYs, and an N_SPREAD for each `...a` (NL1061)
+export const N_OBJECT: i32 = 41 // children: the PROPERTYs, and an N_SPREAD for each `...a`
 export const N_PROPERTY: i32 = 42 // text: the key; children: the value
 export const N_BINARY: i32 = 43 // text: the operator; children: left, right
 export const N_UNARY: i32 = 44 // text: the operator; flags: PREFIX or POSTFIX; children: operand
@@ -173,7 +173,7 @@ export const N_REGEX: i32 = 67
 // every other one (NL2256). children: the expression, the type.
 export const N_AS: i32 = 68
 // `...a` in an array literal (NL2237), or among an object literal's
-// properties (NL1061): children: the expression spread.
+// properties (`checkObjectLiteral`): children: the expression spread.
 export const N_SPREAD: i32 = 69
 
 // ---- Refused declarations (WP33 R1) --------------------------------------------------

@@ -4634,8 +4634,8 @@ export class Parser {
     const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const propertyStart = this.start
-      // `{ ...a }`, object spread, for Phase 0 to refuse (NL1061): the
-      // N_SPREAD an array literal's `...a` is, among the properties.
+      // `{ ...a }`, object spread: the N_SPREAD an array literal's `...a`
+      // is, among the properties, for the checker (`checkObjectLiteral`).
       if (this.at(TOK_DOT_DOT_DOT)) {
         const spread = this.node(N_SPREAD, propertyStart, this.end)
         this.advance()
