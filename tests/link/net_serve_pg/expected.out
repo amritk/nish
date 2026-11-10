@@ -1,0 +1,6 @@
+connected 1 of 1
+quick: 200 [text/plain; charset=utf-8] q
+echo: 200 [text/plain; charset=utf-8] héllo
+bad: 404 [text/plain; charset=utf-8] no row: 42P01
+404: 404 [application/problem+json] {"type":"about:blank","title":"Not Found","status":404}
+serve: 0, answered 4; the handler served 2, missed 1; statements seen 3
