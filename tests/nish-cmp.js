@@ -531,6 +531,18 @@ const MSS_UNSET = "explicitly set enc.mss wins over the socket MSS"
 const mssUnset = (why, moved) =>
   moved.map((program) => ({ program, file: "http-compress.ll", changelog: MSS_UNSET, why }))
 const DECLARED = [
+  // std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd.
+  {
+    file: "text.ll",
+    changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
+    why: "std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd, so the module every importer of nish/text writes has new functions and renumbered string constants; no importer's own module moves",
+  },
+  {
+    program: "tests/link/std_text_camel_case/main.ts",
+    file: "exit",
+    changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
+    why: "the program imports asciiLower, asciiUpper and split from nish/text, which the 0.37.0 seed's std/text.ts does not export, so only the candidate compiles it",
+  },
   // Stage 5a: an --emit-dts compile is a page module, so Math.sin, cos, exp,
   // log, pow and a float % in it call std/math.ts's copies (`@nish.<name>F64`)
   // instead of an intrinsic or `frem` a page could not link.
