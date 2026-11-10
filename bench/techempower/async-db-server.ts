@@ -41,7 +41,6 @@ import {
   TFB_MAX_COUNT,
   TFB_QUERIES,
   TFB_UPDATE_SQL,
-  TFB_UPDATES,
   TFB_WORLD_ROWS,
   TfbFortunes,
   tfbCount,

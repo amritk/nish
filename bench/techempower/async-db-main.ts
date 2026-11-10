@@ -86,9 +86,14 @@ export const main = async (): Promise<i32> => {
   config.user = arg(args, 2, "")
   config.database = arg(args, 4, "")
   const password = secret(tfbAscii(arg(args, 3, "")))
-  const pool = new PgAsyncPool(connections < 1 ? 1 : connections > 64 ? 64 : connections)
-  await pgAsyncConnect(pool, config, password, pgTarget(pgHost, pgPort))
+  const size: i32 = connections > 64 ? 64 : connections
+  const pool = new PgAsyncPool(size < 1 ? 1 : size)
+  const connected: i32 = await pgAsyncConnect(pool, config, password, pgTarget(pgHost, pgPort))
   wipe(password)
+  if (connected < 1) {
+    console.log("no Postgres connection")
+    return 1
+  }
   const db = new TfbAsyncDb(pool)
   spawn(exitOnSignal(signalFd()))
   console.log(`listening ${port}`)

@@ -49,12 +49,12 @@ export const TFB_WORLD_ROWS: i32 = 10000
 /** How many queries the carrier holds: room for every slot's every key. */
 export const TFB_QUERY_ROOM: i32 = 65536
 /** The most Fortune rows one request holds, and the bytes their messages may take. */
-export const TFB_FORTUNE_ROWS: i32 = 256
-export const TFB_FORTUNE_BYTES: i32 = 32768
+const TFB_FORTUNE_ROWS: i32 = 256
+const TFB_FORTUNE_BYTES: i32 = 32768
 /** Room for a fortunes page: every message byte escaped to at most six, and the markup. */
 export const TFB_HTML_BYTES: i32 = 8 * TFB_FORTUNE_BYTES
 /** Room for a JSON answer of up to `TFB_MAX_COUNT` rows. */
-export const TFB_JSON_BYTES: i32 = 32768
+const TFB_JSON_BYTES: i32 = 32768
 
 /** The statements both entries run. */
 export const TFB_FORTUNE_SQL: string = "select id, message from fortune"
@@ -131,7 +131,13 @@ export const tfbWriteWorld = (w: JsonWriter, id: i64, number: i64): void => {
  * with the number all its rows share in `updateNumbers`. Answers how many
  * distinct ids there are.
  */
-export const tfbPlanUpdate = (ids: i64[], numbers: i64[], rows: i32, updateIds: i64[], updateNumbers: i64[]): i32 => {
+export const tfbPlanUpdate = (
+  ids: i64[],
+  numbers: i64[],
+  rows: i32,
+  updateIds: i64[],
+  updateNumbers: i64[]
+): i32 => {
   let n: i32 = 0
   for (let k: i32 = 0; k < rows; k++) {
     const id: i64 = ids[k]
@@ -355,7 +361,6 @@ class TfbJob {
     this.fortunes = new TfbFortunes()
   }
 }
-
 
 /** The database half of the TechEmpower entry: a handler, its carrier and the jobs in flight. */
 export class TfbDb {
