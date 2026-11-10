@@ -88,7 +88,7 @@ export const isStdModuleName = (name: string): boolean => {
  * against `package.json`.
  */
 export const stdModuleNames = (): string =>
-  "base64, bytes, cli, cli-args, cli-flags, collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/bcrypt, crypto/bcrypt-batch, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/jwt, crypto/p256, crypto/p384, crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, host/ring, host/text, json, json-equal, json-format, json-number, json-pointer, json-tokenizer, json-typed, json-value, map, math, net/buffer-pool, net/dns, net/dns-config, net/dns-message, net/dns-resolver, net/fetch, net/handler, net/hpack, net/http-compress, net/http-fields, net/http1-client-codec, net/http1-codec, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/outbound, net/postgres, net/postgres-async, net/postgres-carrier, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/serve, net/tls, net/tls-tcp, net/tls/client, net/tls/codec, net/tls/record, net/tls/record-client, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/tls/verify, net/upstream, net/url, net/websocket, net/webtransport, pair, random, regex, region, secret, sort, sqlite, sync/ring, sync/shm, term, term-io, term-pixels, term-probe, term-rate, testing, text, threads, yaml, yaml-json, yaml-lines, yaml-write"
+  "array, base64, bytes, cli, cli-args, cli-flags, collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/bcrypt, crypto/bcrypt-batch, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/jwt, crypto/p256, crypto/p384, crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, host/ring, host/text, json, json-equal, json-format, json-number, json-pointer, json-tokenizer, json-typed, json-value, map, math, net/buffer-pool, net/dns, net/dns-config, net/dns-message, net/dns-resolver, net/fetch, net/handler, net/hpack, net/http-compress, net/http-fields, net/http1-client-codec, net/http1-codec, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/outbound, net/postgres, net/postgres-async, net/postgres-carrier, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/serve, net/tls, net/tls-tcp, net/tls/client, net/tls/codec, net/tls/record, net/tls/record-client, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/tls/verify, net/upstream, net/url, net/websocket, net/webtransport, pair, random, regex, region, secret, sort, sqlite, sync/ring, sync/shm, term, term-io, term-pixels, term-probe, term-rate, testing, text, threads, yaml, yaml-json, yaml-lines, yaml-write"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
@@ -205,10 +205,11 @@ export const isRegexModule = (packageName: string, name: string): boolean =>
 
 /**
  * `nish/math`: `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish
- * rather than libm, and on a page module `sin`, `cos`, `exp`, `log`, `pow`
- * and the float `%` as well. Like `nish/collections` a program never imports
- * it: a call to one of them is what loads it, and the functions it reaches are
- * copied into the calling module, so it writes no `.ll` of its own. Each is
+ * rather than libm, and on a page module or under `--deterministic` `sin`,
+ * `cos`, `exp`, `log`, `pow` and the float `%` as well. Like
+ * `nish/collections` a program never imports it: a call to one of them is
+ * what loads it, and the functions it reaches are copied into the calling
+ * module, so it writes no `.ll` of its own. Each is
  * exported as `<name>F64`: `tan`, `atan2` and `hypot` are the C library's names.
  */
 export const MATH_SPECIFIER: string = "nish/math"
@@ -235,9 +236,121 @@ export const SORT_LOCAL: string = "Array.prototype.sort"
  */
 export const FLOAT_REM_LOCAL: string = "%"
 
+/**
+ * The local name `--deterministic` imports a `nish/math` function under for
+ * the builtin it answers (`importMath`): `quietBitsF64` or `quietBitsF32` for
+ * `f64ToBits` or `f32ToBits`, `numberExact` for `Number` and
+ * `parseFloatExact` for `parseFloat`. The builtin's name with call
+ * parentheses, which no declaration can take.
+ */
+export const routedBuiltinLocal = (builtin: string): string => `${builtin}()`
+
 /** Whether `name` in `packageName` is `std/sort.ts`, which is copied into its user like `std/math.ts`. */
 export const isSortModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(SORT_SPECIFIER)
+
+/**
+ * `nish/array`: the loops `xs.map(f)`, `xs.filter(f)`, `xs.some(f)`,
+ * `xs.every(f)`, `xs.findIndex(f)` and `xs.slice(a, b)` compile to. Like
+ * `nish/sort` a call of one of those methods is what loads it (the checker's
+ * `importArrayMethods`), and the call is checked as one to its template,
+ * instantiated per callback; a program may import the templates by name too.
+ */
+export const ARRAY_SPECIFIER: string = "nish/array"
+
+/** Whether `name` is one of the array methods `nish/array` holds templates for. */
+const isArrayMethod = (name: string): boolean =>
+  name === "map" ||
+  name === "filter" ||
+  name === "some" ||
+  name === "every" ||
+  name === "findIndex" ||
+  name === "slice"
+
+/**
+ * How many templates of `nish/array` a method `name` may become: a callback
+ * method has one for a callback of one parameter and one, `<name>Indexed`, for
+ * two; `slice` has one per argument count. 0 for any other name.
+ */
+export const arrayMethodTemplateCount = (name: string): i32 => {
+  if (name === "slice") {
+    return 3
+  }
+  return isArrayMethod(name) ? 2 : 0
+}
+
+/**
+ * The `k`th template `arrayMethodTemplateCount` counts for `name`. Each answer
+ * is a literal or `name` itself, so a loop over them allocates nothing.
+ */
+export const arrayMethodTemplate = (name: string, k: i32): string => {
+  if (name === "slice") {
+    if (k === 0) {
+      return "sliceAll"
+    }
+    return k === 1 ? "sliceFrom" : "slice"
+  }
+  if (k === 0) {
+    return name
+  }
+  if (name === "map") {
+    return "mapIndexed"
+  }
+  if (name === "filter") {
+    return "filterIndexed"
+  }
+  if (name === "some") {
+    return "someIndexed"
+  }
+  return name === "every" ? "everyIndexed" : "findIndexIndexed"
+}
+
+/** The prefix of the local name a `nish/array` template is imported under. */
+const ARRAY_LOCAL_PREFIX: string = "Array.prototype."
+
+/** The local name a `nish/array` template is imported under: dotted, so no declaration can take it. */
+export const arrayMethodLocal = (template: string): string => `${ARRAY_LOCAL_PREFIX}${template}`
+
+/**
+ * Whether an import under `local` is one the checker gave a module for an
+ * array-method call (`importArrayMethods`), not one the program wrote: no
+ * declaration can take a dotted name.
+ */
+export const isArrayMethodLocal = (local: string): boolean => local.startsWith(ARRAY_LOCAL_PREFIX)
+
+/**
+ * The array method a call of the std template imported under `local` was
+ * written as (`sort` for `SORT_LOCAL`, `map` for `Array.prototype.mapIndexed`),
+ * or `""` when `local` is no such name.
+ */
+export const rewrittenArrayMethod = (local: string): string =>
+  local === SORT_LOCAL ? "sort" : arrayMethodOfLocal(local)
+
+/** The suffix of a template for a callback of two parameters (`mapIndexed`). */
+const INDEXED_SUFFIX: string = "Indexed"
+
+/**
+ * The array method a call of the template imported under `local` was written
+ * as (`map` for `Array.prototype.mapIndexed`), or `""` when `local` names no
+ * `nish/array` template.
+ */
+export const arrayMethodOfLocal = (local: string): string => {
+  if (!isArrayMethodLocal(local)) {
+    return ""
+  }
+  const template = local.substring(ARRAY_LOCAL_PREFIX.length)
+  if (template === "sliceAll" || template === "sliceFrom" || template === "slice") {
+    return "slice"
+  }
+  const method = template.endsWith(INDEXED_SUFFIX)
+    ? template.substring(0, template.length - INDEXED_SUFFIX.length)
+    : template
+  return method !== "slice" && isArrayMethod(method) ? method : ""
+}
+
+/** Whether `name` in `packageName` is `std/array.ts`, which is copied into its user like `std/sort.ts`. */
+export const isArrayModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(ARRAY_SPECIFIER)
 
 /** Whether a module is `std/secret.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isSecretModule = (packageName: string, name: string): boolean =>

@@ -2114,8 +2114,15 @@ async function run(): Promise<void> {
   what the helper was handed, so in a task a fresh helper's answer other
   than a string, awaited or not, carries its arguments' origins too, and a
   store through a holder a helper built from the shared object is NL2609
-  (`reject_async_spawn_keep_returned`). Read and update the shared object
-  in place instead. Three refusals are conservative, and known to refuse
+  (`reject_async_spawn_keep_returned`). An argument is left out of that
+  join only when the answer's type cannot reach it: no class, array or
+  string type the answer may hold (through fields, elements, a nullable or a
+  union) is one the argument may hold, and neither side holds a class that
+  implements an interface. So a `PgAsyncResult` awaited from a query on a
+  shared `PgAsyncPool` is the task's own, while a `Holder` of a shared
+  `Tally` or a `Badge` of an interface `Tally` implements is still the
+  shared object's (`reject_async_spawn_answer_reach`). Read and update the
+  shared object in place instead. Three refusals are conservative, and known to refuse
   sound programs: a call that hands a callee both a shared object it writes
   into and any string or object of the task's, even when the callee writes
   only numbers; a store into the shared object of what an `await` answers
@@ -2125,13 +2132,32 @@ async function run(): Promise<void> {
   which may be the task's alone. A task may not itself spawn a task with an
   object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
   `reject_async_spawn_nested`); a task with only copied arguments may.
-- **A spawned task takes a function argument that captures nothing.** A
-  top-level function, or an arrow written at the call that reads only its own
-  parameters, is a compile-time argument: the call is an instance with the
-  function in its body, and nothing of it is in the task's frame
-  (`async_spawn_fn_arg`). An arrow that reads a local of the function it is
-  written in is NL2690 (`reject_async_spawn_block_arg`): what it captures
-  would ride in the task's frame, past the rules above.
+- **A spawned task's function argument captures only what the task may
+  share.** A top-level function, or an arrow written at the call, is a
+  compile-time argument: the call is an instance with the function in its
+  body (`async_spawn_fn_arg`). The arrow may read locals of the function it
+  is written in when each is a number, a `boolean` or an enum, copied into
+  the task's frame, or an object or array that holds, through any field or
+  element, no `Region`, no `Secret`, no handle class and no `nish/threads`
+  scope, lock, guard or channel. Its strings and nested objects are fine (a
+  `PgAsyncPool` holds both). Any other capture is NL2690: a `string`, a
+  nullable value or a union itself, or an object holding a `Region`
+  (`reject_async_spawn_block_arg`, `reject_async_spawn_handler_holds_region`).
+  A capture of a handle, or of an object holding a `Secret`, is refused
+  sooner, by the rule for any arrow argument (NL2588,
+  `reject_async_spawn_handler_holds_handle`,
+  `reject_async_spawn_handler_holds_secret`); the capture rule refuses them
+  as well, a check behind that one. A captured object is shared with
+  the task as if handed to it: the spawner releases no arena scope over it,
+  and the arrow's body is walked with the task's rules, the capture as memory
+  the task does not own, so the arrow may update its numbers and call its
+  methods (a serve handler awaiting a query on a captured `PgAsyncPool`) but
+  may not store the task's memory into it or grow it (NL2609, NL2615,
+  `async_spawn_handler_reach`, `reject_async_spawn_handler_*`). The arrow's
+  parameters carry what the task passes at each direct call; one it reaches
+  through a further function parameter is unknown, so storing it into a
+  capture is refused. Each arrow is an instance of its own, so a refused
+  arrow at one call site is not hidden by an admitted one at another.
 - **Each spawned task has a region of its own**, entered whenever the task
   runs and freed when it finishes, so what a task allocates is given back
   when it ends, not when `main` does (`tests/link/async_region_per_task`).
@@ -2522,7 +2548,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_par_arena`).
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
@@ -3173,7 +3199,7 @@ element's arena, which a task does not share, and each rule is reported at the
   allocates on the way is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -5042,7 +5068,9 @@ exception:
   words) and which carries `kind` (`panic`, `index`, `slice`, `overflow`,
   `memory`, `exit`, `divide`, or `trap`, `reentry` or `exception` for a
   module that died some other way) and `site`, the panic site's number
-  (-1 for none).
+  (-1 for none). An array's `xs.slice` out of range throws with `kind`
+  `panic`, not `slice`: its check is `std/array.ts`'s own `panic(...)`,
+  though the message reads as string `slice`'s does.
 - **Before it throws, the loader calls `onPanic`.** `load(bytes, { onPanic,
   sites })` takes the reporter; the default, `reportPanic` from `nish/page`,
   writes `nish: <message>` to `console.error`, as a native program writes it

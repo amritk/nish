@@ -52,6 +52,7 @@ import {
   N_ARRAY,
   N_ARROW,
   N_BINARY,
+  N_BINDING_PATTERN,
   N_CALL,
   N_IDENT,
   N_INDEX,
@@ -768,12 +769,23 @@ const storedFields = (emitter: Emitter, node: Node, names: string[], records: i3
   return opaque
 }
 
-/** Every local `loop` declares: a path rooted at one of them cannot be lifted above its declaration. */
+/**
+ * Every local `loop` declares: a path rooted at one of them cannot be lifted
+ * above its declaration. A pattern's names (`const [a, b] = await
+ * awaitAll(...)`) are declared too, but their locals sit on the names, not on
+ * the declaration: #1326 lifted an `a[0]` above the `awaitAll` that binds `a`.
+ */
 const localsDeclaredIn = (emitter: Emitter, node: Node, out: Local[]): void => {
-  if (node.kind === N_VAR_DECL) {
-    const local = emitter.program.nodeLocals[node.id]
-    if (local !== null) {
-      out.push(local)
+  const local: Local | null = node.kind === N_VAR_DECL ? emitter.program.nodeLocals[node.id] : null
+  if (local !== null) {
+    out.push(local)
+  }
+  if (node.kind === N_BINDING_PATTERN) {
+    for (const name of node.children) {
+      const bound = emitter.program.nodeLocals[name.id]
+      if (bound !== null) {
+        out.push(bound)
+      }
     }
   }
   for (const child of node.children) {

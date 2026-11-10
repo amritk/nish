@@ -307,6 +307,7 @@ const HTTP_FIELDS_PSEUDO_FORBIDDEN: i32 = -8 [exported]
 const HTTP_FIELDS_BAD_PSEUDO_VALUE: i32 = -9 [exported]
 const HTTP_FIELDS_AUTHORITY_MISMATCH: i32 = -10 [exported]
 const HTTP_FIELDS_BAD_CONTENT_LENGTH: i32 = -11 [exported]
+const HTTP_FIELDS_DATE_REPEATED: i32 = -12 [exported]
 const HTTP_FIELDS_NO_LENGTH: i64 = -1 [exported]
 const HTTP_FIELDS_METHOD: i32 = 1
 const HTTP_FIELDS_SCHEME: i32 = 2
@@ -460,17 +461,19 @@ function httpFieldsHasUserinfo(authority: u8[]): boolean -> @nish.httpFieldsHasU
   local +0:14 b: u8 (const)
 function httpFieldsCheckOutgoing(names: u8[][], values: u8[][]): i32 -> @nish.httpFieldsCheckOutgoing [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.httpFieldConnectionSpecific nish.httpFieldNameValid nish.httpFieldValueValid
+  calls: nish.httpFieldConnectionSpecific nish.httpFieldIs nish.httpFieldNameValid nish.httpFieldValueValid
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +4:12 k: i32 (let)
-  local +5:11 name: u8[] (const)
-  local +6:11 value: u8[] (const)
-  callee +7:10 httpFieldNameValid -> @nish.httpFieldNameValid
-  callee +10:10 httpFieldValueValid -> @nish.httpFieldValueValid
-  callee +13:9 httpFieldConnectionSpecific -> @nish.httpFieldConnectionSpecific
+  local +4:7 dated: boolean (let)
+  local +5:12 k: i32 (let)
+  local +6:11 name: u8[] (const)
+  local +7:11 value: u8[] (const)
+  callee +8:10 httpFieldNameValid -> @nish.httpFieldNameValid
+  callee +11:10 httpFieldValueValid -> @nish.httpFieldValueValid
+  callee +14:9 httpFieldConnectionSpecific -> @nish.httpFieldConnectionSpecific
+  callee +17:9 httpFieldIs -> @nish.httpFieldIs
 function HttpFields.constructor(this: HttpFields): void -> @nish.HttpFields.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=80 writesThrough=true captured=false

@@ -76,7 +76,7 @@ reference: where one disagrees with LANGUAGE.md, LANGUAGE.md wins.
 | [wp47-shared-memory.md](wp47-shared-memory.md) | Built. Shared work across cores: named shared-memory regions (`nish/sync/shm`) with checked slots and atomics at named orderings, a futex wakeup, and lock-free SPSC and MPSC rings (`nish/sync/ring`) with a doorbell that costs no system call on a busy ring; long-lived threads weighed instead, and the rings measured against a Unix socketpair. |
 | [wp48-run-rebuilds.md](wp48-run-rebuilds.md) | Built. Fast rebuilds for `nish run`: where a rebuild of a 42-module HTTP + SQLite + JSON server spent its time, the debug profile's module cache that compiles only the modules an edit changed, and the result — a one-line edit rebuilds in about 1.45 s, a 5,000-line program no slower — with what is left: the front end. |
 | [wp49-async-server.md](wp49-async-server.md) | Built through stage 4 (the language: `async`, `await`, `spawn`, `awaitAll`, the frame lowering); the executor over `pollWait` and the `async` server are open. `async`/`await` on the server and the road to the top of TechEmpower: a restricted `async` (no promise values, no recursion, `spawn` and a fixed-arity `awaitAll`) lowered to compile-time-sized frames, one executor per process over `pollWait`, a region per task, a non-blocking `Upstream` and Postgres pool for the explicit loop first, and the client renames. D1 accepted: reverses WP24. |
-| [wp50-wasm-host.md](wp50-wasm-host.md) | Stages 1 to 3 built (the `wasm-host` profile and loader, host modules, module storage, buffer windows, panics the page reports); stage 4 is next. A WebAssembly module a TypeScript page drives every frame, for cs's client: functions the page supplies imported from its own TypeScript, a Vite plugin so the page imports the module as TypeScript, why not wasm-bindgen and what goes in `std`, typed `HostHandle` kinds, fixed module storage the page views in place with its layout in the `.d.ts`, buffer windows and strings without copies, flat memory proved by a type rule, panics the page can report, a loader with no fetch, `--deterministic` for bit-identical floats across native, wasm and the TS reading, the size guard, the acceptance example, and the owner's answers. |
+| [wp50-wasm-host.md](wp50-wasm-host.md) | Stages 1 to 5 built (the `wasm-host` profile and loader, host modules, module storage, buffer windows, panics the page reports, strings without copies, `--deterministic`); stage 6 is next. A WebAssembly module a TypeScript page drives every frame, for cs's client: functions the page supplies imported from its own TypeScript, a Vite plugin so the page imports the module as TypeScript, why not wasm-bindgen and what goes in `std`, typed `HostHandle` kinds, fixed module storage the page views in place with its layout in the `.d.ts`, buffer windows and strings without copies, flat memory proved by a type rule, panics the page can report, a loader with no fetch, `--deterministic` for bit-identical floats across native, wasm and the TS reading, the size guard, the acceptance example, and the owner's answers. |
 
 The remaining semantic changes after WP13 (checked integer division,
 ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,
@@ -131,6 +131,41 @@ who write programs in Nish. A page there follows these rules:
   `/security` with its sub-groups included, so a new record gets its route
   there by hand, beside its index row.
 
+## The site's look
+
+The site's logo, styling and motion all live in [`docs/site/`](site/)
+(`assetsDir` in `scalar.config.json`):
+
+- [`mark.svg`](site/mark.svg) is the logo, and the source of every other
+  image there: `logo-dark.png` and `logo-light.png` (the mark beside "nish",
+  for the header) and the favicons are renders of it, so a new mark
+  re-renders them all. The theme's violets and cyan are its colours.
+
+- [`theme.css`](site/theme.css) is the theme: the colours of both modes, the
+  gradient behind every page, and every animation — a page's entrance, blocks
+  that rise as they scroll into view, the cards' pointer highlight and the
+  landing page's hero. All of it stops under `prefers-reduced-motion`, and a
+  colour change re-measures the contrast figures in the file's head.
+- [`site.js`](site/site.js) builds the hero into the empty
+  `<div data-nish-hero></div>` at the top of [the landing
+  page](guide/index.md) and tracks the pointer for the cards.
+- The landing page is the site's home, not a page of the guide: its route,
+  first under `/` in `scalar.config.json` and out of the sidebar, sets a
+  `layout` that drops the outline, the page actions and the previous/next
+  links and takes the full width, and `theme.css` lays out what is left — a
+  centred column, a lead paragraph and centred section headings, with the
+  hero and the card grids wider. The sidebar stays on in the route, because
+  on a phone it is the menu, and `theme.css` hides it on a wider screen. Keep it a home page:
+  what it says in detail belongs on a guide page it links. The host stays
+  empty in the Markdown so that GitHub shows nothing in its place; nothing a
+  reader needs may live only in the hero.
+- The icons beside the sidebar's groups and the header's links are the `icon`
+  keys in `scalar.config.json`.
+
+To see a change, run `npx @scalar/cli project preview scalar.config.json`
+(it needs Node 24) and look at the landing page, a page with tables and code,
+both colour modes and a phone-width window.
+
 ## The library reference
 
 `docs/reference/` is generated, never edited by hand: change the source's doc
@@ -168,9 +203,11 @@ checked.
   its colon escaped (`# nish/json`, `# nish\:secret`, which Scalar would
   otherwise cut at the colon). `std/<path>.ts`, imported as `nish/<path>`, is
   `docs/reference/<path>.md`; the builtin module `nish:<name>` is
-  `docs/reference/nish-<name>.md`, made from `std/<name>.ts` for the two
-  with source behind them (`nish:region`, `nish:secret`: the compiler
-  refuses `nish/region` and `nish/secret`); the globals `runtime/nish.d.ts` declares are
+  `docs/reference/nish-<name>.md`, made from its `declare module` block in
+  `runtime/nish.d.ts`, the two with source behind them included
+  (`nish:region` and `nish:secret`, whose `std/<name>.ts` gets no page of its
+  own: the compiler refuses `nish/region` and `nish/secret`, and the one doc
+  source is the block an editor shows); the globals `runtime/nish.d.ts` declares are
   `docs/reference/builtins.md`. `index.md` opens with a short lead and a
   card for the language specification, the builtins, each area of the
   standard library, the command line and the diagnostics, then lists every

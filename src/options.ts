@@ -224,6 +224,13 @@ export class Options {
   /** WP36: the capabilities `--deny` refuses, as a mask; 0 when none was given. */
   denyCapabilities: i32
   /**
+   * WP50 §9: `--deterministic`. The program answers the same bits on every
+   * target: the transcendentals and a float `%` are `std/math.ts`'s, a NaN's
+   * bits are the quiet one, and a program that reaches a nondeterministic
+   * capability is refused (`Compilation.refuseCapabilities`).
+   */
+  deterministic: boolean
+  /**
    * WP37: `--sandbox`, 0 when it was not given, 1 for strict and 2 for
    * `--sandbox=best-effort`. The entry wrapper passes it to `nish_sandbox`
    * from `.preinit_array`; 0 leaves the IR byte for byte what it was.
@@ -293,6 +300,7 @@ export class Options {
     this.capabilityReport = false
     this.allowCapabilities = -1
     this.denyCapabilities = 0
+    this.deterministic = false
     this.sandbox = 0
     this.sandboxCapabilities = 0
     this.panicSites = false

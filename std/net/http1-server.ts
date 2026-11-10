@@ -1516,8 +1516,8 @@ export class Http1Connection {
   /**
    * The segment `respondEncoded` counts in under `enc.segmentMode`: this
    * connection's `mss` when the program set it, else `enc.mss` when the
-   * program set it to other than `HTTP_DEFAULT_MSS`, else the socket's
-   * (`socketMss`), else `HTTP_DEFAULT_MSS`.
+   * program set it (above 0), else the socket's (`socketMss`), else
+   * `HTTP_DEFAULT_MSS`.
    *
    * @param enc the compressor whose own `mss` is the fallback after this connection's
    * @returns the segment size in bytes that segment counting uses for this connection
@@ -1526,7 +1526,7 @@ export class Http1Connection {
     if (this.mss > 0) {
       return this.mss
     }
-    if (enc.mss > 0 && enc.mss !== HTTP_DEFAULT_MSS) {
+    if (enc.mss > 0) {
       return enc.mss
     }
     return this.socketMss > 0 ? this.socketMss : HTTP_DEFAULT_MSS

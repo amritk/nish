@@ -175,6 +175,11 @@ export class CheckContext {
    * function` is refused. Set with `wasm`, and false everywhere else.
    */
   pageModule: boolean
+  /**
+   * `--deterministic` (WP50 §9): every transcendental and float `%` is
+   * `std/math.ts`'s, as on a page module, and a NaN's bits are the quiet one.
+   */
+  deterministic: boolean
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
@@ -341,6 +346,7 @@ export class CheckContext {
     this.wasm = false
     this.wasmFreestanding = false
     this.pageModule = false
+    this.deterministic = false
     this.sigs = new StringMap()
     this.entryHasMain = false
     this.peers = []

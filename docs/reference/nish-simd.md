@@ -570,8 +570,9 @@ overflow is `sumWrapping`.
 `runtime/nish.mjs` answers the import with
 `runtime/core.mjs`, where a vector is a fresh typed array of its lanes,
 made once and never written after, whose element type does the lane's
-arithmetic; a mask is an array of booleans, and a rotate is two shifts and
-an `or`. `tests/run.js`'s `simd` section holds the native, WASI and Node
+arithmetic: an integer lane wraps through its array type (`Uint8Array` for
+a `u8` lane), and an `f32` lane rounds through `Float32Array`. A mask is an
+array of booleans, and a rotate is two shifts and an `or`. `tests/run.js`'s `simd` section holds the native, WASI and Node
 outputs to one.
 
 </scalar-detail>
@@ -969,25 +970,25 @@ function f32x4(
 
 <scalar-field name="a0" type="f32" required>
 
-Lane 0, an `f32`; `a1` to `a3` are lanes 1 to 3 in order.
+Lane 0, an `f32`.
 
 </scalar-field>
 
 <scalar-field name="a1" type="f32" required>
 
-Lane 1.
+Lane 1, an `f32`.
 
 </scalar-field>
 
 <scalar-field name="a2" type="f32" required>
 
-Lane 2.
+Lane 2, an `f32`.
 
 </scalar-field>
 
 <scalar-field name="a3" type="f32" required>
 
-Lane 3.
+Lane 3, an `f32`.
 
 </scalar-field>
 
@@ -1007,13 +1008,13 @@ function f64x2(a0: f64, a1: f64): f64x2
 
 <scalar-field name="a0" type="f64" required>
 
-Lane 0, an `f64`; `a1` is lane 1.
+Lane 0, an `f64`.
 
 </scalar-field>
 
 <scalar-field name="a1" type="f64" required>
 
-Lane 1.
+Lane 1, an `f64`.
 
 </scalar-field>
 
@@ -1100,25 +1101,25 @@ function i32x4(
 
 <scalar-field name="a0" type="i32" required>
 
-Lane 0, an `i32`; `a1` to `a3` are lanes 1 to 3 in order.
+Lane 0, an `i32`.
 
 </scalar-field>
 
 <scalar-field name="a1" type="i32" required>
 
-Lane 1.
+Lane 1, an `i32`.
 
 </scalar-field>
 
 <scalar-field name="a2" type="i32" required>
 
-Lane 2.
+Lane 2, an `i32`.
 
 </scalar-field>
 
 <scalar-field name="a3" type="i32" required>
 
-Lane 3.
+Lane 3, an `i32`.
 
 </scalar-field>
 
@@ -1643,6 +1644,7 @@ The new vector.
 ### rotl
 
 Each lane rotated left by `count`, `llvm.fshl` with `v` as both halves.
+Signed and unsigned lanes rotate alike.
 
 ```ts
 function rotl<V extends IntegerVector>(
@@ -1673,6 +1675,7 @@ The vector of rotated lanes.
 ### rotr
 
 Each lane rotated right by `count`, `llvm.fshr` with `v` as both halves.
+Signed and unsigned lanes rotate alike.
 
 ```ts
 function rotr<V extends IntegerVector>(
@@ -2188,49 +2191,49 @@ function u16x8(
 
 <scalar-field name="a0" type="u16" required>
 
-Lane 0, a `u16`; `a1` to `a7` are lanes 1 to 7 in order.
+Lane 0, a `u16`.
 
 </scalar-field>
 
 <scalar-field name="a1" type="u16" required>
 
-Lane 1.
+Lane 1, a `u16`.
 
 </scalar-field>
 
 <scalar-field name="a2" type="u16" required>
 
-Lane 2.
+Lane 2, a `u16`.
 
 </scalar-field>
 
 <scalar-field name="a3" type="u16" required>
 
-Lane 3.
+Lane 3, a `u16`.
 
 </scalar-field>
 
 <scalar-field name="a4" type="u16" required>
 
-Lane 4.
+Lane 4, a `u16`.
 
 </scalar-field>
 
 <scalar-field name="a5" type="u16" required>
 
-Lane 5.
+Lane 5, a `u16`.
 
 </scalar-field>
 
 <scalar-field name="a6" type="u16" required>
 
-Lane 6.
+Lane 6, a `u16`.
 
 </scalar-field>
 
 <scalar-field name="a7" type="u16" required>
 
-Lane 7.
+Lane 7, a `u16`.
 
 </scalar-field>
 
@@ -2255,25 +2258,25 @@ function u32x4(
 
 <scalar-field name="a0" type="u32" required>
 
-Lane 0, a `u32`; `a1` to `a3` are lanes 1 to 3 in order.
+Lane 0, a `u32`.
 
 </scalar-field>
 
 <scalar-field name="a1" type="u32" required>
 
-Lane 1.
+Lane 1, a `u32`.
 
 </scalar-field>
 
 <scalar-field name="a2" type="u32" required>
 
-Lane 2.
+Lane 2, a `u32`.
 
 </scalar-field>
 
 <scalar-field name="a3" type="u32" required>
 
-Lane 3.
+Lane 3, a `u32`.
 
 </scalar-field>
 
@@ -2311,97 +2314,97 @@ function u8x16(
 
 <scalar-field name="a0" type="u8" required>
 
-Lane 0, a `u8`; `a1` to `a15` are lanes 1 to 15 in order.
+Lane 0, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a1" type="u8" required>
 
-Lane 1.
+Lane 1, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a2" type="u8" required>
 
-Lane 2.
+Lane 2, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a3" type="u8" required>
 
-Lane 3.
+Lane 3, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a4" type="u8" required>
 
-Lane 4.
+Lane 4, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a5" type="u8" required>
 
-Lane 5.
+Lane 5, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a6" type="u8" required>
 
-Lane 6.
+Lane 6, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a7" type="u8" required>
 
-Lane 7.
+Lane 7, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a8" type="u8" required>
 
-Lane 8.
+Lane 8, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a9" type="u8" required>
 
-Lane 9.
+Lane 9, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a10" type="u8" required>
 
-Lane 10.
+Lane 10, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a11" type="u8" required>
 
-Lane 11.
+Lane 11, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a12" type="u8" required>
 
-Lane 12.
+Lane 12, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a13" type="u8" required>
 
-Lane 13.
+Lane 13, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a14" type="u8" required>
 
-Lane 14.
+Lane 14, a `u8`.
 
 </scalar-field>
 
 <scalar-field name="a15" type="u8" required>
 
-Lane 15.
+Lane 15, a `u8`.
 
 </scalar-field>
 

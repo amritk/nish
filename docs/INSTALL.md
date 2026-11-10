@@ -269,7 +269,7 @@ routes are
     runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
     runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-chacha20.c \
     runtime/runtime-term.c runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c \
-    runtime/runtime-shm.c runtime/runtime-region.c -lm -o app
+    runtime/runtime-shm.c runtime/runtime-region.c -ffp-contract=off -lm -o app
   ```
 
   `--link`ing inside the container is the mistake to avoid: it shells out to the
@@ -428,13 +428,17 @@ clang app.ll runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c runti
   runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
   runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-chacha20.c \
   runtime/runtime-term.c runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c \
-  runtime/runtime-shm.c runtime/runtime-region.c -lm -o app
+  runtime/runtime-shm.c runtime/runtime-region.c -ffp-contract=off -lm -o app
 ```
 
 `runtime.c` is the part every program touches — the arena, arrays, the
 panics — `runtime-text.c` holds strings and number formatting, and
 `runtime-os.c` wraps the system calls: files, directories, subprocesses,
 `getenv`, the monotonic clock.
+
+`-ffp-contract=off` keeps clang from fusing a C `a*b+c` into one rounding
+where the CPU has a fused multiply-add (every arm64, x86-64 at v3): the runtime
+then prints the same float on every target, as `scripts/build.sh` compiles it.
 
 `runtime-parallel.c` divides work across threads for `nish/threads` (a program
 built with `--threads`, as every importer of `nish/threads` is, also needs

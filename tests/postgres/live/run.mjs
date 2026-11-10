@@ -5,7 +5,10 @@
 // sleeps, and the carrier reporting a server it cannot reach (`refused`) and
 // one that resets the connection (`reset`), and the TechEmpower database
 // entry (bench/techempower/db-main.ts) answering each of its test types from
-// TFB's World and Fortune tables (`tfb`).
+// TFB's World and Fortune tables (`tfb`), the same checks against its async
+// twin on the async pool (bench/techempower/async-db-main.ts, `tfb-async`),
+// and `../serve-pool.ts`, a serve handler that awaits the async pool `main`
+// owns (`servepool`).
 //
 //   node tests/postgres/live/run.mjs [--update] [scenario ...]
 //
@@ -43,7 +46,7 @@ const ROOT = join(HERE, "..", "..", "..");
 const NISH = join(ROOT, "build", "nish");
 const BIN = process.env.PG_BIN ?? "/usr/lib/postgresql/18/bin";
 const SCENARIOS = ["auth", "groups", "terminate", "pipeline", "arrays", "intarrays", "binary", "conduit", "batch", "explain", "batchscale", "unix"];
-const CHECKS = [...SCENARIOS, "carrier", "refused", "reset", "tfb"];
+const CHECKS = [...SCENARIOS, "carrier", "refused", "reset", "tfb", "tfb-async", "servepool"];
 const UPDATE = process.argv.includes("--update");
 const ONLY = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 for (const name of ONLY) {
@@ -292,6 +295,45 @@ const carrier = async (exe, db) => {
   };
 };
 
+/**
+ * A serve handler that awaits the async pool its spawner owns: `/double/21`
+ * is answered from the query's row, `/double/x` with the server's refusal
+ * (22P02, not an integer), and a route with no handler 404; then the program
+ * prints the tally the handler kept and exits 0.
+ */
+const servepool = async (exe, db) => {
+  const http = await freePort();
+  const child = spawn(exe, [String(db.port), db.user, db.password, db.database, String(http)]);
+  let out = "";
+  let err = "";
+  child.stdout.on("data", (d) => {
+    out += d;
+  });
+  child.stderr.on("data", (d) => {
+    err += d;
+  });
+  const exited = new Promise((resolve) => child.on("exit", resolve));
+  if (!(await waitFor(child, () => out, "listening", 30_000))) {
+    child.kill();
+    await exited;
+    return { ok: false, detail: `no "listening" line: stdout ${JSON.stringify(out)}, stderr ${JSON.stringify(err)}` };
+  }
+  const got = [];
+  for (const path of ["/double/21", "/double/x", "/nowhere"]) {
+    const r = await get(http, path);
+    got.push(`${r.status} ${r.status === 404 ? "" : r.body}`);
+  }
+  const timer = setTimeout(() => child.kill(), 30_000);
+  const status = await exited;
+  clearTimeout(timer);
+  const want = ["200 42\n", "400 refused: 22P02\n", "404 "];
+  const wantOut = "listening\nserve 0: answered 3, served 1, refused 1\n";
+  return {
+    ok: status === 0 && out === wantOut && got.every((g, k) => g === want[k]),
+    detail: `status ${status}, answers ${JSON.stringify(got)}, stdout ${JSON.stringify(out)}, stderr ${JSON.stringify(err)}`,
+  };
+};
+
 /** With nothing listening on its PostgreSQL port, the carrier must fail the query at once with the connect's error, not wait. */
 const refused = async (exe) => {
   const port = await freePort();
@@ -382,17 +424,20 @@ const fortunesPage = () => {
   );
 };
 
-/** `GET path` on `port`: its status, headers and body. */
+/** `GET path` on `port`: its status, headers and body; status 0 when it fails or is not whole in 30 s. */
 const get = (port, path) =>
   new Promise((resolve) => {
+    const deadline = setTimeout(() => req.destroy(new Error("no whole answer in 30 s")), 30_000);
     const req = request({ host: "127.0.0.1", port, path }, (res) => {
       const chunks = [];
+      res.on("error", (e) => resolve({ status: 0, headers: {}, body: `error: ${e.message}` }));
       res.on("data", (d) => chunks.push(d));
       res.on("end", () =>
         resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }),
       );
     });
     req.on("error", (e) => resolve({ status: 0, headers: {}, body: `error: ${e.message}` }));
+    req.on("close", () => clearTimeout(deadline));
     req.end();
   });
 
@@ -434,7 +479,8 @@ const rowsChanged = (rows) => {
 };
 
 /**
- * The TechEmpower database entry against TFB's tables: each test type's
+ * A TechEmpower database entry (`tfbExe`, the explicit one or its async twin,
+ * which take the same arguments) against TFB's tables: each test type's
  * shape, headers and count clamping, its rows read back from the server, an
  * update's rows written and changed, the fortunes page byte for byte, 64
  * requests at once, and a clean exit on SIGTERM. It runs two prefork workers
@@ -607,7 +653,9 @@ const main = async () => {
     const exe = join(work, "live");
     compile(join(HERE, "live.ts"), exe);
     compile(join(HERE, "..", "carrier.ts"), join(work, "carrier"));
+    if (wanted("servepool")) compile(join(HERE, "..", "serve-pool.ts"), join(work, "serve-pool"));
     if (wanted("tfb")) compile(join(ROOT, "bench", "techempower", "db-main.ts"), join(work, "tfb"));
+    if (wanted("tfb-async")) compile(join(ROOT, "bench", "techempower", "async-db-main.ts"), join(work, "tfb-async"));
 
     const setup = [
       "drop schema if exists nish_live cascade",
@@ -650,6 +698,8 @@ const main = async () => {
       ["refused", () => refused(join(work, "carrier"))],
       ["reset", () => reset(join(work, "carrier"))],
       ["tfb", () => tfb(exe, join(work, "tfb"), db)],
+      ["tfb-async", () => tfb(exe, join(work, "tfb-async"), db)],
+      ["servepool", () => servepool(join(work, "serve-pool"), db)],
     ];
     for (const [name, check] of checks) {
       if (!wanted(name)) continue;

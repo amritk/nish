@@ -844,6 +844,8 @@ export const main = (): number => {
     } else if (value === "--plain") {
       irFlag = irFlag.length === 0 ? value : irFlag
       opts.optimizeAttributes = false
+    } else if (value === "--deterministic") {
+      opts.deterministic = true
     } else if (value === "--strict-exports") {
       opts.strictExports = true
     } else if (value === "--no-strict-exports") {

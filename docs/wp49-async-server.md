@@ -1,12 +1,15 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
-**Status: D1 accepted; stages 1 to 4 built, stage 5 in part (§10), stage 6
-open.** The language half — `async`, `await`, `Promise<T>`, `spawn`,
+**Status: D1 accepted; stages 1 to 5 built (stage 5 in parts 1 to 8, part 8
+#1343), stage 6 open: its gate was measured on 2026-11-10 and is not met
+(§10).** The language half — `async`, `await`, `Promise<T>`, `spawn`,
 `awaitAll` and the frame lowering — compiles, and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
-tasks that share their spawner's objects (part 3), `serve` (part 4), the
+tasks that share their spawner's objects (parts 3 and 8), `serve` (part 4), the
 async Postgres pool (part 5), async `fetch` over TLS (part 6) and
-cancellation (part 7). The anchors below
+cancellation (part 7). D1's condition does not hold yet: the async TFB entries
+are outside the explicit ones' noise band on `plaintext`, `json` and `db`
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)). The anchors below
 are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
 note beyond what it states is a proposal and is not compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
@@ -282,6 +285,37 @@ in the explicit style, on `plaintext`, `json` and `db`. If it does not, the
 lowering is fixed before the feature ships. The explicit style stays
 supported regardless.
 
+**The gate, measured (2026-11-10).** `bench/techempower/run.sh` times both
+pairs in one run; the figures are in
+[BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6).
+The async entry is 87–90% below the explicit one on `plaintext` at every
+concurrency, 7–12% below on `json` at five of six (inside the band only at
+256), and 42–91% below on `db`, `query`, `update` and `fortune`; only
+`cached-query` at 256 connections is inside. What is known of the causes, as
+far as the evidence goes (the `strace -c` tables and their commands are in
+BENCHMARKS.md):
+
+- **`plaintext`** has two shares. `serve` keeps one request per connection in
+  flight, so a 16-deep pipelined burst runs as 16 tasks, and `HttpHandler`
+  sends each answer as it ends: one `sendto` per request (44,857 for 43,646)
+  where the explicit loop sends one per burst (25,379 for 402,880). How the
+  loss splits between the two was not measured.
+- **`json`** is not pipelined, so both entries send one answer per `sendto`,
+  and sends do not explain it. The executor adds a fixed cost per turn:
+  `nish_async_wait_fd` duplicates the descriptor (`fcntl(F_DUPFD_CLOEXEC)`) and
+  adds it to epoll, `nish_async_fire` removes and closes it, and `serve` writes
+  and drains a wake byte. At 64 connections that was about 400 turns and 0.1
+  calls a request, too few for 7–12%. The rest is per-request CPU in user
+  space, which was not profiled; the cause is open.
+- **The database tests**, from the code and not from a trace: `PgAsyncPool`
+  sends one query per connection at a time, and a task that finds every
+  connection claimed sleeps (1 ms doubling to 16 ms) rather than waking on a
+  release.
+
+Closing them starts with a batched or pipelined `serve` (more than one request
+of a connection in flight, its answers sent in one write), a profile of `json`'s
+per-request path, and a pipelined, wake-on-release pool.
+
 ## 7. A non-blocking call from a handler today, without `async`
 
 Until §2 lands, a handler makes an outbound call in the explicit style,
@@ -399,8 +433,8 @@ page for anything a user sees.
 | 2 | `nish/net/upstream` (§7) and the Postgres pool and carrier (WP39 E6), explicit style, each on the handler's loop | — | yes |
 | 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
 | 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
-| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314) and cancellation (part 7) |
-| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | no |
+| 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314), cancellation (part 7) and a serve handler reaching its spawner's state (part 8, #1343) |
+| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | no: the entries are written (#1354 and before) and `run.sh` measures the gate, which is not met (§6; draft #1367) |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.
@@ -643,7 +677,9 @@ or a table every task reads.
   of its own, one task kind each, and nothing crosses at run time. It is
   capture-free by WP29's rule, so it is accepted. The refusal names any other
   argument's type as written, never the `void` a compile-time position holds
-  in `paramTypes`.
+  in `paramTypes`. (Superseded by part 8: an arrow at the call may capture
+  the spawner's numbers and the objects a shared argument may be, and is
+  walked with the task's rules.)
 - **A shared argument.** An object, array, `Map` or `Set` argument is
   accepted when the spawner's memory outlives every task holding it. A
   spawn retains its argument: the escape analysis reads the argument of a
@@ -664,7 +700,8 @@ or a table every task reads.
   region, which is freed when the task ends; a nested task could outlive it.
   So a shared argument there is refused (NL2689), and nested spawns keep
   taking numbers and strings. A function argument that captures a local is
-  refused as well (NL2690).
+  refused as well (NL2690), unless the local is a number, a `boolean`, an
+  enum or an object it may share (part 8, below).
 - **What a task may do with it.** The spawned function is walked by the
   region rules with each shared parameter as *outer* memory. Storing memory
   the task allocated into it (a string, an array, an object) is NL2609, and
@@ -724,6 +761,51 @@ one per program and each naming only that `exit` surface, cover
 `docs/cookbook/async-spawn-shared.ts`. They name this release's note
 ("a spawned task may reach the objects its spawner owns") and go at the
 reseed that ships it, when the seed compiles them and they match nothing.
+
+### Part 3, extended by part 8: a serve handler reaches its spawner's state (#1324)
+
+`serveOn` spawns `serveTask(handle, ...)`, so a handler is a function
+argument of a spawned task, and until this part an arrow that captured
+anything was refused (NL2690): a handler could not reach a `PgAsyncPool` its
+spawner made. Two routes were open: relax the capture rule, or give
+`serveOn`/`serve` a context parameter handed to each handler. **The relaxed
+capture rule was built**, because it leaves `std/` untouched (no new
+`serve` signature to document, audit and keep beside the old one) and covers
+any spawned task, not only `serve`.
+
+The rule, in `taskFindings` (`src/region-rules.ts`):
+
+- At the spawn, each capture of the arrows the task is handed (through every
+  level of function argument, `capturesOf`) is a number, `boolean` or enum,
+  or an object or array `sharedWithTask` admits with no `taskShareObstacle`;
+  anything else is NL2690.
+- Captured objects are outer memory. The task's body is walked first; it
+  records, per arrow, the join of what each direct call passes for each
+  written parameter. Each arrow body is then walked with the task's rules,
+  its captures bound outer and its parameters seeded from those joins. An
+  arrow the task hands on to a further function parameter is called where
+  the walk cannot see, so its parameters are unknown: storing one into a
+  capture is NL2609.
+- A call that may run a handed arrow answers unknown memory, since the arrow
+  may answer a capture.
+- `spawnsShared` (`src/attributes.ts`) counts a captured shareable object,
+  so the spawner releases no arena scope over it; an arrow that itself
+  spawns makes the task `feedsTasks`, refused as a nested spawn (NL2689).
+- Each arrow is its own instance (WP29), so the facts are per call site: one
+  refused arrow is not hidden by another admitted at the same callee.
+- A handler builds its `Response` from what a pooled query answers, so in a
+  task `callOrigin` leaves an argument out of a call's answer when the
+  answer's type cannot reach it (`mayShareMemory`): the heap types each side
+  may hold share none, and neither holds a class that implements an
+  interface, since a class converts to an interface it implements. A
+  `PgAsyncResult` holds strings and arrays of numbers and strings and a
+  `PgAsyncPool` numbers and arrays of numbers, so the result is the task's
+  own (`reject_async_spawn_answer_reach` keeps the refusals that matter).
+- Building the live check showed `pgAsyncConnect` hanging against any server
+  that asks for SCRAM: `pgAsyncStartup` read before it wrote the
+  SASLInitialResponse it had queued. It now writes first; the stand-in
+  backend logs in by trust, so only `tests/postgres/live`'s `servepool`
+  check covers it.
 
 ## Stage 5, part 7: cancellation
 
