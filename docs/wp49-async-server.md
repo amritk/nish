@@ -643,7 +643,9 @@ or a table every task reads.
   of its own, one task kind each, and nothing crosses at run time. It is
   capture-free by WP29's rule, so it is accepted. The refusal names any other
   argument's type as written, never the `void` a compile-time position holds
-  in `paramTypes`.
+  in `paramTypes`. (Superseded by part 8: an arrow at the call may capture
+  the spawner's numbers and the objects a shared argument may be, and is
+  walked with the task's rules.)
 - **A shared argument.** An object, array, `Map` or `Set` argument is
   accepted when the spawner's memory outlives every task holding it. A
   spawn retains its argument: the escape analysis reads the argument of a
@@ -664,7 +666,8 @@ or a table every task reads.
   region, which is freed when the task ends; a nested task could outlive it.
   So a shared argument there is refused (NL2689), and nested spawns keep
   taking numbers and strings. A function argument that captures a local is
-  refused as well (NL2690).
+  refused as well (NL2690), unless the local is a number, a `boolean`, an
+  enum or an object it may share (part 8, below).
 - **What a task may do with it.** The spawned function is walked by the
   region rules with each shared parameter as *outer* memory. Storing memory
   the task allocated into it (a string, an array, an object) is NL2609, and
@@ -724,6 +727,51 @@ one per program and each naming only that `exit` surface, cover
 `docs/cookbook/async-spawn-shared.ts`. They name this release's note
 ("a spawned task may reach the objects its spawner owns") and go at the
 reseed that ships it, when the seed compiles them and they match nothing.
+
+### Part 3, extended by part 8: a serve handler reaches its spawner's state (#1324)
+
+`serveOn` spawns `serveTask(handle, ...)`, so a handler is a function
+argument of a spawned task, and until this part an arrow that captured
+anything was refused (NL2690): a handler could not reach a `PgAsyncPool` its
+spawner made. Two routes were open: relax the capture rule, or give
+`serveOn`/`serve` a context parameter handed to each handler. **The relaxed
+capture rule was built**, because it leaves `std/` untouched (no new
+`serve` signature to document, audit and keep beside the old one) and covers
+any spawned task, not only `serve`.
+
+The rule, in `taskFindings` (`src/region-rules.ts`):
+
+- At the spawn, each capture of the arrows the task is handed (through every
+  level of function argument, `capturesOf`) is a number, `boolean` or enum,
+  or an object or array `sharedWithTask` admits with no `taskShareObstacle`;
+  anything else is NL2690.
+- Captured objects are outer memory. The task's body is walked first; it
+  records, per arrow, the join of what each direct call passes for each
+  written parameter. Each arrow body is then walked with the task's rules,
+  its captures bound outer and its parameters seeded from those joins. An
+  arrow the task hands on to a further function parameter is called where
+  the walk cannot see, so its parameters are unknown: storing one into a
+  capture is NL2609.
+- A call that may run a handed arrow answers unknown memory, since the arrow
+  may answer a capture.
+- `spawnsShared` (`src/attributes.ts`) counts a captured shareable object,
+  so the spawner releases no arena scope over it; an arrow that itself
+  spawns makes the task `feedsTasks`, refused as a nested spawn (NL2689).
+- Each arrow is its own instance (WP29), so the facts are per call site: one
+  refused arrow is not hidden by another admitted at the same callee.
+- A handler builds its `Response` from what a pooled query answers, so in a
+  task `callOrigin` leaves an argument out of a call's answer when the
+  answer's type cannot reach it (`mayShareMemory`): the heap types each side
+  may hold share none, and neither holds a class that implements an
+  interface, since a class converts to an interface it implements. A
+  `PgAsyncResult` holds strings and arrays of numbers and strings and a
+  `PgAsyncPool` numbers and arrays of numbers, so the result is the task's
+  own (`reject_async_spawn_answer_reach` keeps the refusals that matter).
+- Building the live check showed `pgAsyncConnect` hanging against any server
+  that asks for SCRAM: `pgAsyncStartup` read before it wrote the
+  SASLInitialResponse it had queued. It now writes first; the stand-in
+  backend logs in by trust, so only `tests/postgres/live`'s `servepool`
+  check covers it.
 
 ## Stage 5, part 7: cancellation
 
