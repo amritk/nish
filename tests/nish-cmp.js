@@ -878,6 +878,24 @@ const DECLARED = [
     why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 5, part 7)",
   },
   {
+    program: "tests/link/tfb_async_entry/main.ts",
+    file: "exit",
+    changelog: "TechEmpower plaintext and json entry as serve handlers",
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 6, part 1)",
+  },
+  {
+    program: "tests/link/net_serve_server_field/main.ts",
+    file: "exit",
+    changelog: "TechEmpower plaintext and json entry as serve handlers",
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 6, part 1)",
+  },
+  {
+    program: "tests/link/net_serve_server_panic/main.ts",
+    file: "exit",
+    changelog: "TechEmpower plaintext and json entry as serve handlers",
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 6, part 1)",
+  },
+  {
     program: "tests/link/std_postgres_async_cancel/main.ts",
     file: "exit",
     changelog: SERVE_CANCEL,
@@ -894,6 +912,18 @@ const DECLARED = [
     file: "exit",
     changelog: SERVE_CANCEL,
     why: "the cookbook entry imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
+  },
+  {
+    program: "tests/cases/async_spawn_handler_reach.ts",
+    file: "exit",
+    changelog: "reaches its spawner's state and awaits the async Postgres pool",
+    why: "the 0.37.0 seed refuses a task call's argument the answer cannot reach; the candidate leaves it out, so only the candidate compiles the case (WP49 stage 5, part 8)",
+  },
+  {
+    program: "tests/link/net_serve_pg/main.ts",
+    file: "exit",
+    changelog: "reaches its spawner's state and awaits the async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/postgres-async.ts`, so only the candidate compiles the program (WP49 stage 5, part 8)",
   },
   // #1304 merged with its nish-cmp run cancelled. It adds `settle` to
   // `DnsResolver` and `DnsClient`, so dns-resolver.ll and dns.ll move in every
@@ -1085,6 +1115,36 @@ const DECLARED = [
     file: "exit",
     changelog: "Strings cross between a wasm module and its page",
     why: "byte module storage may now be lent to a u8[] or readonly u8[] parameter, which the seed refused until stage 4",
+  },
+  {
+    program: "tests/link/reject_host_manifest_absolute/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that is an absolute path is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_empty/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that is empty is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_missing/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that names no file is refused where package.json writes it (NL2696), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_not_string/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that is not a string is refused where package.json writes it (NL2694), which the 0.37.0 seed, reading no `host` field, compiled",
+  },
+  {
+    program: "tests/link/reject_host_manifest_escape/main.ts",
+    file: "exit",
+    changelog: "nish.host",
+    why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
   },
 ]
 

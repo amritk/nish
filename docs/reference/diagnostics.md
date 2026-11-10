@@ -2,7 +2,7 @@
 
 # Diagnostics
 
-Every diagnostic Nish prints carries a stable code, the `code` field of its [`--json`](../guide/using-nish/cli.md#--json-for-tools) object. A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. These pages list all 856, one page per band: the 4 of band 0, which no rule matches, and the 852 rules `src/codes.ts` holds, 66 of them retired.
+Every diagnostic Nish prints carries a stable code, the `code` field of its [`--json`](../guide/using-nish/cli.md#--json-for-tools) object. A code is a promise: it names the same rule in every release, and a retired rule keeps its number so no other rule is ever handed it. These pages list all 853, one page per band: the 4 of band 0, which no rule matches, and the 849 rules `src/codes.ts` holds, 66 of them retired.
 
 A rule is matched by a fragment of its message: the longest literal run of the message's template, with the names, types and counts it interpolates cut out. The fragment is matched as a substring, so `…` marks where the message goes on. Each example is a program from `tests/wordings/` that the suite compiles, and the message it gets, word for word. [Reading diagnostics](../guide/using-nish/cli.md#reading-diagnostics) in the guide says how to act on one; the [command-line reference](command-line.md) lists the flags that turn the warnings on and off.
 
@@ -28,7 +28,7 @@ The type checker: 688 codes.
 
 <scalar-card title="NL3xxx" icon="phosphor/regular/warning-circle" href="diagnostics/nl3xxx.md">
 
-Modules and the driver: 53 codes.
+Modules and the driver: 50 codes.
 
 </scalar-card>
 

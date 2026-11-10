@@ -785,10 +785,14 @@ wasm` as it is, then the same IR linked with an explicit export list instead of
 So `--export-all` costs 68% of the hello world and 26% of a module with arrays.
 `--profile wasm-host` exports the program's exported functions, its exported
 module storage, and the runtime entry points the loader calls (the arena mark,
-release and allocation), and nothing else. `--gc-sections` is already applied. `wasm-opt` is not installed here and
-appears nowhere in the repository. `build.sh` runs `wasm-opt -Oz` when it is on
-`PATH`, records in the build line whether it ran, and the size test reports
-both figures.
+release and allocation), and nothing else. `--gc-sections` is already applied.
+`build.sh` runs `wasm-opt -Oz --strip-target-features` when it is on `PATH` and
+records in the build line whether it ran (binaryen 132: `add.wasm` 74 bytes,
+`arrays.wasm` 1,713). clang 18 also runs a `wasm-opt` it finds itself after an
+`-O` link, keeping the `target_features` section, which made `add.wasm` 150
+bytes and broke the guard on a machine with binaryen (#1257).
+`NISH_WASM_OPT=0` links with neither pass; the size test measures that build,
+with a stub `wasm-opt` on `PATH` to prove neither runs.
 
 **The guard.** A `wasm-size` block in `tests/run.js` builds the hello world and
 the W9 example under `--profile wasm-host`. It writes the raw, gzip and brotli

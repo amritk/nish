@@ -56,8 +56,12 @@ the Homebrew LLVM is needed for the `wasm`, `wasm-host` and `wasi` profiles (`wa
 
 `wasm-opt` (binaryen: `apt-get install binaryen`, `brew install binaryen`) is
 optional. When it is on `PATH`, `scripts/build.sh --profile wasm-host` runs
-`wasm-opt -Oz` on the module, and the build line says whether it ran. Without
-it the module is complete, just not as small.
+`wasm-opt -Oz --strip-target-features` on the module, and the build line says
+whether it ran: `add.wasm` goes from 102 bytes to 74. Without it the module
+is complete and works the same. clang 18 also runs a `wasm-opt` it finds,
+after any optimising wasm link, and keeps a `target_features` section for it
+that build.sh's pass then drops. `NISH_WASM_OPT=0` links with neither pass,
+even with binaryen installed: the bytes a machine without it builds.
 
 <a id="wasi-optional-for---profile-wasi" style="scroll-margin-top: 65px"></a>
 

@@ -367,7 +367,7 @@ function refuseSite(program: CheckedProgram, facts: FactsTable, table: TypeTable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
   calls: DiagnosticSink.report FactsTable.get SourceFile.columnOf SourceFile.lineOf StringSet.has isAllowed nish_str_concat nish_str_from_i32 panicKindName siteAdvice
-  pointer program: size=704 writesThrough=false captured=false passedTo=siteAdvice#0
+  pointer program: size=704 writesThrough=true captured=false passedTo=siteAdvice#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer table: size=96 writesThrough=false captured=false passedTo=siteAdvice#1
   pointer scoped: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
@@ -408,9 +408,10 @@ function calledName(program: CheckedProgram, call: Node): string -> @calledName
   local +4:9 callee: Node (const)
   callee +4:18 unwrapBoundsParens -> @unwrapBoundsParens
 function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite): string -> @siteAdvice
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via indexAdvice
   calls: divideAdvice indexAdvice ioExitAdvice nish_panic_index nish_str_concat overflowAdvice rangeAdvice siteLocalName sliceAdvice unwrapBoundsParens
-  pointer program: size=704 writesThrough=false captured=false passedTo=indexAdvice#0 siteLocalName#0 sliceAdvice#0 divideAdvice#0 rangeAdvice#0 ioExitAdvice#0 overflowAdvice#0
+  pointer program: size=704 writesThrough=true captured=false passedTo=indexAdvice#0 siteLocalName#0 sliceAdvice#0 divideAdvice#0 rangeAdvice#0 ioExitAdvice#0 overflowAdvice#0
   pointer table: size=96 writesThrough=false captured=false passedTo=indexAdvice#1 divideAdvice#1 rangeAdvice#1 overflowAdvice#1
   pointer site: size=56 writesThrough=false captured=false passedTo=rangeAdvice#2
   stackSites=0 stackLocals=0
@@ -427,10 +428,11 @@ function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite):
   callee +29:14 ioExitAdvice -> @ioExitAdvice
   callee +36:14 overflowAdvice -> @overflowAdvice
 function indexAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @indexAdvice
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via indexGuardAdvice
   escaping: node
   calls: indexGuardAdvice nish_panic_index nish_str_concat siteLocalName unwrapBoundsParens
-  pointer program: size=704 writesThrough=false captured=false passedTo=siteLocalName#0 siteLocalName#0 indexGuardAdvice#0
+  pointer program: size=704 writesThrough=true captured=false passedTo=siteLocalName#0 siteLocalName#0 indexGuardAdvice#0
   pointer table: size=96 writesThrough=false captured=false passedTo=indexGuardAdvice#1
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0

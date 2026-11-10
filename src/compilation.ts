@@ -199,7 +199,14 @@ import { jsonQuote, splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
-import { HostText, hostModuleText, hostSignatureProblems, markHostFunctions } from "./host-module"
+import {
+  HostRefusal,
+  HostText,
+  dropRefused,
+  hostModuleText,
+  hostSignatureProblems,
+  markHostFunctions,
+} from "./host-module"
 import {
   buildModeOf,
   buildsPageModule,
@@ -315,6 +322,11 @@ export class ModuleUnit {
    */
   importedIdentities: string[]
   importedNames: string[]
+  /**
+   * A host module's exports no wasm import can carry, dropped from `file`:
+   * `check` reports the ones a Nish module imports, and only those.
+   */
+  hostRefusals: HostRefusal[]
 
   constructor(
     path: string,
@@ -340,6 +352,7 @@ export class ModuleUnit {
     this.signaturesFailed = false
     this.importedIdentities = []
     this.importedNames = []
+    this.hostRefusals = []
   }
 }
 
@@ -423,6 +436,8 @@ export class Compilation {
    * validator throws, and a program it refuses prints no tree on either side.
    */
   dumpOnly: boolean
+  /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
+  hostRefused: boolean
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[]
   /**
@@ -488,6 +503,7 @@ export class Compilation {
     this.workingDir = cwd === null ? "" : cwd
     this.unreadableRoot = ""
     this.hostIdentities = new StringSet()
+    this.hostRefused = false
     this.facts = null
     this.analysisUnits = []
     this.rootPackageDir = ""
@@ -591,7 +607,10 @@ export class Compilation {
     const firstDiagnostic = this.sink.count()
     const filesBefore = this.sink.fileOrder.size()
     const discovered = this.discover(path, name, packageOverride)
-    if (this.modules.length === first) {
+    // A refused `nish.host` is reported against `package.json`, which no
+    // import edge reaches, so `settleLoad` would drop it; there is nothing past
+    // the entry to settle.
+    if (this.modules.length === first || this.hostRefused) {
       return discovered // already loaded, unreadable, or it did not parse
     }
     let i = first
@@ -772,15 +791,14 @@ export class Compilation {
     if (parser.diagnostics.length > 0) {
       return false
     }
-    if (host) {
+    let refusals: HostRefusal[] = []
+    if (read !== null) {
       source.host = true
-      const problems = hostSignatureProblems(file, parser)
-      for (const problem of problems) {
-        this.sink.report(source, problem.node.start, problem.node.end, problem.message)
+      refusals = read.refusals
+      for (const refusal of hostSignatureProblems(file, parser)) {
+        refusals.push(refusal)
       }
-      if (problems.length > 0) {
-        return false
-      }
+      dropRefused(file, refusals)
       markHostFunctions(file)
     }
     const isEntry = this.modules.length === 0
@@ -807,6 +825,7 @@ export class Compilation {
     checker.ctx.pageModule = buildsPageModule(this.opts)
     checker.ctx.deterministic = this.opts.deterministic
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
+    unit.hostRefusals = refusals
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
     // with `--threads`, because every worker a region starts bumps an arena of
     // its own. It is a soundness requirement rather than a default: the rules
@@ -820,6 +839,10 @@ export class Compilation {
     this.modules.push(unit)
     if (isEntry) {
       this.hostIdentities = this.hostModules()
+      if (this.hostRefused) {
+        unit.refused = true
+        return false
+      }
     }
 
     // Phase 0 before pass 1a, so what is forbidden by design is refused before
@@ -1225,6 +1248,10 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false // pass 1 and module resolution ran during load
     }
+    this.reportHostRefusals()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     // Before anything records: a `noPanic` list turns the recording on.
     const manifest = this.rootManifest()
     const nish = this.readRootNish(manifest)
@@ -1461,10 +1488,37 @@ export class Compilation {
   }
 
   /**
+   * The refusals of the host exports a Nish module imports, each once (WP50
+   * §12): a host file may export what the page alone calls, in types no wasm
+   * import carries, and the build reads only the names it imports.
+   */
+  reportHostRefusals(): void {
+    for (const unit of this.modules) {
+      for (const imp of unit.checker.program.imports) {
+        const index = isBuiltinSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
+        if (index < 0) {
+          continue
+        }
+        const host = this.modules[index]
+        for (const refusal of host.hostRefusals) {
+          if (refusal.name === imp.importedName && !refusal.reported) {
+            refusal.reported = true
+            this.sink.report(host.source, refusal.start, refusal.end, refusal.message)
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * The identities of the host modules (WP50 §3): each `--host` path, relative
    * to the working directory, and each `"nish".host` entry, relative to the
    * root manifest. A manifest whose `"nish"` field is refused names none here;
-   * `check` reports it (NL3036).
+   * `check` reports it (NL3036). A `host` value that is not an array of
+   * strings (NL2694), an entry that is empty or absolute (NL2695) and one that
+   * names no file (NL2696) are each reported where `package.json` writes it,
+   * and `hostRefused` then stops the load: read as Nish, the page's module
+   * would only be refused for being TypeScript.
    */
   hostModules(): StringSet {
     const out = new StringSet()
@@ -1480,8 +1534,26 @@ export class Compilation {
       return out
     }
     const dir = dirname(source.path)
-    for (const entry of manifestHost(source.text, nish.hostAt).entries) {
-      out.add(this.identityOf(joinPath([dir, entry])))
+    const host = manifestHost(source.text, nish.hostAt, nish.hostEnd)
+    for (const problem of host.problems) {
+      this.sink.report(source, problem.start, problem.end, problem.message)
+      this.hostRefused = true
+    }
+    let i = 0
+    while (i < host.list.entries.length && i < host.list.offsets.length && i < host.list.ends.length) {
+      const entry = host.list.entries[i]
+      const path = joinPath([dir, entry])
+      if (readFileSyncOrNull(path) === null) {
+        this.sink.report(
+          source,
+          host.list.offsets[i],
+          host.list.ends[i],
+          `there is no \`${entry}\` in the directory \`package.json\` is in: a \`nish.host\` entry names a host module the package has`
+        )
+        this.hostRefused = true
+      }
+      out.add(this.identityOf(path))
+      i = i + 1
     }
     return out
   }

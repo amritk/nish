@@ -147,7 +147,16 @@ neither. Without the flag the
 memory grows on demand. `--inline <file.mjs>` writes the bytes
 module. Any other profile refuses either flag with exit 2. The stack is a
 fixed 64 KiB. If `wasm-opt` (binaryen) is on `PATH`, `build.sh` runs
-`wasm-opt -Oz` on the module, and the build line says whether it ran.
+`wasm-opt -Oz --strip-target-features` on the module (`examples/arrays.ts`:
+2,091 bytes down to 1,713), and the build line says whether it ran.
+`NISH_WASM_OPT=0` skips it even when binaryen is installed, and so does
+clang's own `wasm-opt` call after the link:
+
+```console
+$ NISH_WASM_OPT=0 $NISH/scripts/build.sh stats.ll $NISH/runtime/runtime-wasm.c \
+    -o stats.wasm --profile wasm-host
+stats.wasm: 807 bytes (wasm-host, no wasm-opt, NISH_WASM_OPT=0)
+```
 
 With Vite, `nish/vite` does all of this in `vite build`:
 
@@ -161,7 +170,18 @@ export default { plugins: [nish({ entries: ["src/stats.ts"] })] };
 In a build, `import { add } from "./stats.ts"` gets the wasm build, compiled,
 linked with `--profile wasm-host --inline` and loaded with `loadSync`. Under
 `vite serve` the import stays the TypeScript itself. Entries are paths from
-the project root.
+the project root. An import of a file listed in `entries` may leave out the
+`.ts` (`"../stats"`) or name the directory whose `index.ts` it is; any other
+import is left to Vite. Vite's extension order still holds: with a `stats.js`
+beside `stats.ts`, `"../stats"` is the JavaScript file.
+
+The generated module calls the loader's `loadSync`, which a compiler older
+than WP50 stage 1 does not write. With one, the build stops with an error
+naming it:
+
+```console
+Error: nish/vite: the compiler /usr/local/bin/nish (nish 0.34.1) wrote a loader with no `loadSync` export: it predates `loadSync` (WP50 stage 1), which the generated module calls. Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.
+```
 
 ### Functions the page supplies: host modules
 
@@ -201,9 +221,17 @@ import { load } from "./draw.mjs";
 const draw = await load(await (await fetch("draw.wasm")).arrayBuffer(), { host });
 ```
 
-Nish reads only the host module's exported signatures, and skips each function
-body unread, so a body may use the DOM, closures and promises. Each function
-becomes a wasm import from module `host` under its own name. The `.d.ts` gains
+Each `host` entry is a path relative to the `package.json`, naming a file
+inside the package that exists: a value that is not a list of strings
+(NL2694), an entry that is empty, absolute or climbs out of the package with
+`..` (NL2695) and one that names no file (NL2696) are refused where the
+`package.json` writes them. An entry naming the program's own entry file
+changes nothing: the entry is compiled as Nish all the same.
+
+Nish reads only the host module's exported signatures, and skips each
+function body unread, so a body may use the DOM, closures, classes and
+promises. Each function becomes a wasm import from module `host` under its
+own name. The `.d.ts` gains
 `Imports = { host: typeof import("./web/host") }`, so `tsc` refuses a page that
 passes a host object short of a function.
 
@@ -221,8 +249,14 @@ Nish and under `tsc` alike; a handle compares with `===` and `!==` against one
 of its kind or `0` ("none"), and supports nothing else. A field or parameter
 of a handle type may only default to `0` (NL2670).
 
-What cannot cross is refused with the explicit form: an object, a class, a
-function or `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663)
+Only the exports the Nish source imports are held to these rules, so a host
+module may export page-only functions beside them, such as create-vite's
+`setupCounter(element: HTMLElement)`: Nish leaves an export no module imports
+unread. An import is a value import, `import { f } from "./web/host.ts"`:
+`import type` from a host module is refused like any type-only import, so it
+never selects an export either. What an import names and cannot cross is
+refused with the explicit form: an object, a class, a function or `any`
+(NL2661), a generic function (NL2662), a `Promise` (NL2663)
 and a `string` result (NL2667). A `string` *argument* crosses: the page's
 function receives a JS string, decoded from the module's UTF-8 bytes. An array
 crosses only as a

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 852
+export const RULE_COUNT: i32 = 855
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -535,6 +535,8 @@ const diagnosticRules = (): string[] => [
   "NL2300",
   "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
   "NL2155",
+  "a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share",
+  "NL2690",
   "; C has one namespace, so every `declare function` of one name must agree on its parameter and return types",
   "NL3039",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
@@ -635,6 +637,8 @@ const diagnosticRules = (): string[] => [
   "NL2697",
   "` returns is the one thing that leaves the secret, so it is written down rather than inferred",
   "NL2452",
+  "`nish.host` is an array of strings, each the path of a host module relative to `package.json`",
+  "NL2694",
   "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (",
   "NL2166",
   "`super` is only valid inside a method or constructor of a class that `extends` another class",
@@ -661,6 +665,8 @@ const diagnosticRules = (): string[] => [
   "NL2054",
   "` is rebuilt from its own value on every iteration of this loop, so every pass copies all ",
   "NL2087",
+  "a `nish.host` entry is a host module's path relative to the directory `package.json` is in",
+  "NL2695",
   "` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)",
   "NL2038",
   "` is not supported yet: its result is `V | undefined`, and this version cannot narrow one",
@@ -821,8 +827,6 @@ const diagnosticRules = (): string[] => [
   "NL2453",
   "`main` must return void or an i32 number (the process exit code), not ",
   "NL2140",
-  "a spawned task takes a function argument only when it captures nothing",
-  "NL2690",
   "another thread allocates from an arena of its own, not from the region",
   "NL2612",
   "Only relative import specifiers are supported (`./x` or `../x`), got `",
@@ -1003,6 +1007,8 @@ const diagnosticRules = (): string[] => [
   "NL2131",
   ">(n)` would zero-fill with 0, which is not the member `",
   "NL2520",
+  "a `nish.host` entry names a host module the package has",
+  "NL2696",
   " extends ...`) is not supported yet: an unconstrained ",
   "NL2294",
   " produces no value and can only be used as a statement",

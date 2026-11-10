@@ -23,7 +23,7 @@
  * `resolveId`, `load`), so `tests/run.js` calls them directly, with no Vite.
  */
 import { execFile } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -68,6 +68,15 @@ function exportNames(dts) {
   return names;
 }
 
+/** Vite's default `resolve.extensions`, in the order it tries them. */
+const VITE_EXTENSIONS = [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"];
+
+/** Whether `p` is a file (`"file"`), a directory (`"dir"`) or neither. */
+const kind = (p) => {
+  const st = statSync(p, { throwIfNoEntry: false });
+  return st?.isFile() ? "file" : st?.isDirectory() ? "dir" : undefined;
+};
+
 /** The plugin. `compiler` and `buildScript` default to the ones in this package. */
 export default function nish(options = {}) {
   const compiler = options.compiler ?? path.join(packageDir, "bin", "nish");
@@ -77,9 +86,11 @@ export default function nish(options = {}) {
   let building = false;
   let cacheDir = path.join(root, "node_modules", ".vite");
   let entries = new Set();
+  let extensions = VITE_EXTENSIONS;
 
   const configure = (config) => {
     root = config.root ?? root;
+    extensions = config.resolve?.extensions ?? VITE_EXTENSIONS;
     building = config.command === "build";
     cacheDir = config.cacheDir ?? path.join(root, "node_modules", ".vite");
     entries = new Set((options.entries ?? []).map((e) => path.resolve(root, e)));
@@ -96,13 +107,26 @@ export default function nish(options = {}) {
     const host = (options.host ?? []).flatMap((h) => ["--host", path.resolve(root, h)]);
     await run(compiler, [entry, "--target", "wasm32", ...host, "--emit-dts", dts, "-o", ll], { cwd: root });
     const loader = path.join(dir, `${stem}.mjs`);
+    const loaderText = readFileSync(loader, "utf8");
+    // The generated module imports `loadSync`. A compiler older than it writes
+    // a loader without one, which Rollup would report only as a missing
+    // export of a file in the cache, naming neither the compiler nor the fix.
+    if (!/^export function loadSync\(/m.test(loaderText)) {
+      const version = await run(compiler, ["--version"], { cwd: root }).then(
+        (r) => r.stdout.trim(),
+        () => "an unknown version",
+      );
+      throw new Error(
+        `nish/vite: the compiler ${compiler} (${version}) wrote a loader with no \`loadSync\` export: ` +
+          "it predates `loadSync` (WP50 stage 1), which the generated module calls. " +
+          "Use a newer one: update the nish package, or pass its path as `nish({ compiler })`.",
+      );
+    }
     const ir = readFileSync(ll, "utf8");
     // runtime-wasm.c is linked when the IR needs a runtime function (a weak
     // `extern_weak` one, a panic stub wasm-ld writes itself, does not count)
     // or the loader calls the arena.
-    const needsRuntime =
-      /^declare (?!extern_weak)[^"\n]*@nish_/m.test(ir) ||
-      readFileSync(loader, "utf8").includes("raw.nish_arena_mark(");
+    const needsRuntime = /^declare (?!extern_weak)[^"\n]*@nish_/m.test(ir) || loaderText.includes("raw.nish_arena_mark(");
     const inline = path.join(dir, `${stem}.bytes.mjs`);
     const inputs = needsRuntime ? [ll, runtimeWasm] : [ll];
     await run("bash", [buildScript, ...inputs, "-o", path.join(dir, `${stem}.wasm`), "--profile", "wasm-host", "--inline", inline], {
@@ -117,16 +141,29 @@ export default function nish(options = {}) {
     enforce: "pre",
     configResolved: configure,
     async resolveId(source, importer) {
-      if (!building) return null;
+      if (!building || entries.size === 0) return null;
       // The seam for a `./client.nish` specifier (the page's client module of a
       // later stage) is here; stage 1 resolves only the entries.
+      // A specifier may leave out the `.ts`, or name a directory for its
+      // `index.ts`. It is resolved as Vite would, file then extensions in
+      // order then the directory's index, so a sibling `add.js` keeps `./add`.
       const base = importer ? path.dirname(importer) : root;
-      const candidates = source.startsWith(".")
-        ? [path.resolve(base, source)]
-        : path.isAbsolute(source)
-          ? [source, path.join(root, source)]
-          : [];
-      const hit = candidates.find((c) => entries.has(c));
+      // A candidate that no entry's path starts with resolves to no entry, so
+      // it is dropped before anything is read from the disk.
+      const candidates = (
+        source.startsWith(".")
+          ? [path.resolve(base, source)]
+          : path.isAbsolute(source)
+            ? [source, path.join(root, source)]
+            : []
+      ).filter((c) => [...entries].some((e) => e.startsWith(c)));
+      if (candidates.length === 0) return null;
+      const withExtension = (stem) => extensions.map((e) => stem + e).find((f) => kind(f) === "file");
+      const resolve = (c) => {
+        if (entries.has(c) || kind(c) === "file") return c;
+        return withExtension(c) ?? (kind(c) === "dir" ? withExtension(path.join(c, "index")) : undefined);
+      };
+      const hit = candidates.map(resolve).find((c) => c !== undefined && entries.has(c));
       return hit === undefined ? null : PREFIX + hit;
     },
     async load(id) {

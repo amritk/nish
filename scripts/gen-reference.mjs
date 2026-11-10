@@ -608,9 +608,24 @@ const typeText = (t) => {
       return `[${(t.elements ?? []).map(typeText).join(", ")}]`
     case "typeOperator":
       return `${t.operator} ${typeText(t.target)}`
+    case "reflection":
+      return objectTypeText(t.declaration)
     default:
       return t.type
   }
+}
+
+/** An inline object type, `{ readonly k: T; f(x: X): Y }`, from the declaration TypeDoc gives it. */
+const objectTypeText = (decl) => {
+  const members = [
+    ...(decl?.signatures ?? []).map((sig) => signatureText("", sig, true, false)),
+    ...(decl?.children ?? []).map((c) =>
+      c.signatures?.length
+        ? c.signatures.map((sig) => signatureText(c.name, sig, true, false)).join("; ")
+        : `${c.flags?.isReadonly ? "readonly " : ""}${c.name}${c.flags?.isOptional ? "?" : ""}: ${typeText(c.type)}`
+    ),
+  ]
+  return members.length === 0 ? "{}" : `{ ${members.join("; ")} }`
 }
 
 const typeParams = (tps) =>
