@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 50 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 51 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -629,4 +629,44 @@ The message of an error contains:
 
 ```text
 ` is the name the wasm loader answers the program's module storage under: …
+```
+
+## NL3052
+
+The message of an error contains:
+
+```text
+…` besides: Node copies every own field of the instance a value holds, and the native copy only the interface's, so spread a value of a class type, or set the fields by name
+```
+
+[`nl3052_object_spread_width.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3052_object_spread_width.ts):
+
+```ts
+// NL3052: A value of an interface type may hold a class instance with more fields; Node
+// copies all of them and the native copy only the interface's, so a spread of
+// such an interface is refused.
+interface Named {
+  name: i32;
+}
+
+interface Tagged {
+  name: i32;
+  tag: i32;
+}
+
+class Item implements Named {
+  name: i32 = 1;
+  weight: i32 = 2;
+}
+
+export const tag = (n: Named): i32 => {
+  const t: Tagged = { ...n, tag: 3 };
+  return t.tag;
+};
+
+export const main = (): i32 => tag(new Item());
+```
+
+```text
+Spread of `Named` into `Tagged` may spread an instance of `Item`, which implements it with field `weight` besides: Node copies every own field of the instance a value holds, and the native copy only the interface's, so spread a value of a class type, or set the fields by name
 ```

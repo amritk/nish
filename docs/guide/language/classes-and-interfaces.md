@@ -97,8 +97,9 @@ export const main = (): i32 => {
 ```
 
 Behaviour that belongs to an interface is a top-level function that takes
-it, as `add` does here. An object literal has fields only: no methods, no
-spread, and no computed keys.
+it, as `add` does here. An object literal has fields only: no methods and
+no computed keys. It may spread another record into itself, as the next
+section shows.
 
 A literal can also stand for a class without methods. A class
 with methods is different: it is made only by `new`. Compiled, a literal
@@ -125,6 +126,61 @@ export const main = (): i32 => {
 The message names the remedy — `` `Counter` has methods, so it is made only
 by `new`: ... Write `new Counter(...)` `` — and the fix is
 `const c = new Counter(5)`.
+
+## Object spread
+
+`{ ...base, x: 1 }` copies every field of `base` into the new literal, then
+sets the fields written after it. It compiles to the same code as writing
+each field out (`{ x: 1, y: base.y }`), so it costs nothing extra:
+
+```ts nish:ok
+interface Style {
+  color: string;
+  width: i32;
+  dashed: boolean;
+}
+
+export const main = (): i32 => {
+  const base: Style = { color: "red", width: 2, dashed: false };
+  const dashed: Style = { ...base, dashed: true };
+  console.log(`${dashed.color} ${dashed.width} ${dashed.dashed}`);   // red 2 true
+  return 0;
+};
+```
+
+Entries run in the order they are written, each spread once, and a later
+entry wins over an earlier one. Like any object literal, the literal needs a
+type from where it is written, and must end up setting every field of it.
+
+A spread is accepted only where it means the same thing natively and under
+Node, so the compiler refuses:
+
+- a literal with no declared type (`const o = { ...s }`) — annotate it;
+- a source that may be `null` — narrow it with `if (s !== null)` first;
+- a union source, whose fields depend on which variant it holds;
+- a source with a field the target does not declare, which Node would keep
+  on the object — this includes an interface value that may hold a class
+  with more fields than the interface lists;
+- a field whose type differs between the two, such as `i32` into `i64`;
+- a field set by name *before* a spread that overwrites it — move it after.
+
+```ts nish:err NL2703
+interface Point {
+  x: i32;
+  y: i32;
+}
+
+export const main = (): i32 => {
+  const p: Point = { x: 1, y: 2 };
+  const q = { ...p, x: 3 };
+  return q.x;
+};
+```
+
+A class instance spreads its fields and none of its methods, as it does under
+Node; the target must be a type with fields alone. The full rules are in
+[LANGUAGE.md → Interfaces and object
+literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interfaces-and-object-literals).
 
 ## `implements`
 

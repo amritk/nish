@@ -739,7 +739,12 @@ const hasSpread = (expr: Node): boolean => {
  * below is a value whose spread under Node copies a different set of fields,
  * or a field the native copy would have to convert.
  */
-const checkSpreadSource = (ctx: CheckContext, spread: Node, info: StructInfo, scope: Scope): StructInfo | null => {
+const checkSpreadSource = (
+  ctx: CheckContext,
+  spread: Node,
+  info: StructInfo,
+  scope: Scope
+): StructInfo | null => {
   const value = spread.children[0]
   const got = checkExpression(ctx, value, scope, -1)
   if (got === T_ERROR) {
@@ -751,7 +756,7 @@ const checkSpreadSource = (ctx: CheckContext, spread: Node, info: StructInfo, sc
     ctx.error(
       value,
       `Spread of \`${spelled}\` into \`${target}\` may spread \`null\`, which under Node copies no field at all: ` +
-        `narrow it first, taking a member into a local to do so (\`const s = o.f; if (s !== null) { ... { ...s } ... }\`)`
+        "narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)"
     )
     return null
   }

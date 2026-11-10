@@ -46,7 +46,18 @@ import { emitStringLength, emitStringMethodCall, guardKeep } from "./emit-string
 import { intrinsicType } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { isGuardedAccess } from "./parallel"
-import { N_FALSE, N_IDENT, N_MEMBER, N_NULL, N_SPREAD, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
+import {
+  N_FALSE,
+  N_IDENT,
+  N_MEMBER,
+  N_NULL,
+  N_SPREAD,
+  N_STRING,
+  N_TEMPLATE,
+  N_TRUE,
+  N_UNARY,
+  Node,
+} from "./nodes"
 import { FieldInfo, FunctionSig, StructInfo } from "./program"
 import { ARRAY_TYPE } from "./runtime"
 import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID, UNION_TYPE } from "./types"
@@ -237,7 +248,12 @@ const emitSpreadCopy = (emitter: Emitter, info: StructInfo, obj: string, spread:
       const from = sourceInfo.field(name)
       const into = info.field(name)
       if (from === null || into === null) {
-        process.exit(internalErrorFor(`emitter: spread field \`${name}\` missing from \`${info.name}\``, emitter.opts.json))
+        process.exit(
+          internalErrorFor(
+            `emitter: spread field \`${name}\` missing from \`${info.name}\``,
+            emitter.opts.json
+          )
+        )
       } else {
         const source = named ? emitter.emitExpression(value) : once
         storeField(emitter, info, obj, into, loadField(emitter, sourceInfo, source, from))

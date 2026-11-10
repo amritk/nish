@@ -22404,6 +22404,92 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end cls-interface -->
 
+### Object spread: field copies
+
+`{ ...b, x: 1, z: 2 }` is the literal written out: `b` is evaluated once, and
+each of its fields that no later entry sets is loaded and stored into the
+literal's own struct, here `y` alone, before `x` and `z` are stored by name.
+There is no temporary struct and no loop over fields, so the IR is exactly that
+of `{ y: b.y, x: 1, z: 2 }`; the literal escapes through the return, so it is
+allocated in the arena as any escaping literal is.
+
+<!-- cookbook:begin obj-spread -->
+```ts
+interface Base {
+  x: i32
+  y: i32
+}
+
+interface Point {
+  x: i32
+  y: i32
+  z: i32
+}
+
+const lift = (b: Base): Point => ({ ...b, x: 1, z: 2 })
+```
+
+```llvm
+%struct.Base = type { i32, i32 }
+%struct.Point = type { i32, i32, i32 }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal noundef nonnull align 4 dereferenceable(12) %struct.Point* @lift(%struct.Base* noundef nonnull readonly align 4 dereferenceable(8) nocapture %b) #0 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 12)
+  %1 = bitcast i8* %0 to %struct.Point*
+  %2 = getelementptr inbounds %struct.Base, %struct.Base* %b, i32 0, i32 1
+  %3 = load i32, i32* %2, align 4
+  %4 = getelementptr inbounds %struct.Point, %struct.Point* %1, i32 0, i32 1
+  store i32 %3, i32* %4, align 4
+  %5 = getelementptr inbounds %struct.Point, %struct.Point* %1, i32 0, i32 0
+  store i32 1, i32* %5, align 4
+  %6 = getelementptr inbounds %struct.Point, %struct.Point* %1, i32 0, i32 2
+  store i32 2, i32* %6, align 4
+  ret %struct.Point* %1
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end obj-spread -->
+
 ### Widening: `implements` as a prefix
 
 `%struct.Square` starts with `%struct.Shape`'s fields, so a `Square` becomes a

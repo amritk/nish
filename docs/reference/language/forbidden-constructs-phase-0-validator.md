@@ -94,7 +94,6 @@ fragment `tests/run.js` matches and the case that proves it.
 | `yield` | `` `yield` is forbidden in Nish (no coroutine runtime) `` | `reject_yield` |
 | regex literals | `Regular expression literals are forbidden in Nish (no regex engine in the runtime)` | `reject_regex`, `reject_regex_class` |
 | `bigint` literals (`10n`) | `` `bigint` literals are forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_literal` |
-| object spread `{ ...a }` | `Object spread is forbidden in Nish (set each field by name)` (NL1061, Phase 0) | `reject_object_spread` |
 | `{ __proto__: x }` | `` `__proto__` is forbidden in Nish (no prototype chain) `` | `reject_proto_literal` |
 | `x.__proto__` | `` `__proto__` access is forbidden in Nish (no prototype chain) `` | `reject_proto_access` |
 | `x.prototype` | `` `.prototype` access is forbidden in Nish (no prototype chain) `` | `reject_prototype_access` |

@@ -3109,8 +3109,11 @@ export const main = (): i32 => {
   | `presence` naming a field, or a presence field, the class does not declare | NL2495 | `json_reject_presence_misspelt_field`, `json_reject_presence_misspelt_flag` |
   | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded by a presence field of its own or is renamed or made optional; a field recorded twice | NL2592 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `reject_json_presence_twice` |
 
-  A spread or a computed key in the literal is refused by Phase 0 as it is
-  anywhere (NL1061, NL1041; `reject_json_options_spread`,
+  A spread in the literal is
+  `` `User.json` spreads another value into the typed JSON options: … ``,
+  because the options are read from the class's text, where a spread names
+  nothing (NL2705, `reject_json_options_spread`), and a computed key is
+  refused by Phase 0 as it is anywhere (NL1041,
   `json_reject_options_computed`), a subclass by `extends`
   (`json_reject_options_subclass`), and a second `static readonly json` is a
   duplicate member (`reject_json_options_twice`). The options are not a
