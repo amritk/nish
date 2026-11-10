@@ -67,6 +67,39 @@ export function copyIn(v) {
 }
 
 /**
+ * `xs.slice(start, end)` as `nish --emit-ts` writes it: the native rule, where
+ * the range must satisfy `0 <= start <= end <= xs.length` and anything else
+ * panics, not JavaScript's, which counts a negative bound from the end and
+ * clamps the rest.
+ */
+export function sliceArray(a, start, end) {
+  const from = start === undefined ? 0n : sliceBound(start);
+  const to = end === undefined ? BigInt(a.length) : sliceBound(end);
+  if (!(from >= 0n && from <= to && to <= BigInt(a.length))) panicSlice(from, to, a.length);
+  return a.slice(Number(from), Number(to));
+}
+
+// A `slice` bound as the native template converts it to `i64`: a `number` is
+// truncated toward zero and saturates, NaN to 0 and an infinity to the i64
+// limit, so a panic prints the same offsets natively and here.
+function sliceBound(i) {
+  if (typeof i === "bigint") return i;
+  if (Number.isNaN(i)) return 0n;
+  if (i >= 2 ** 63) return (1n << 63n) - 1n;
+  if (i <= -(2 ** 63)) return -(1n << 63n);
+  return BigInt(Math.trunc(i));
+}
+
+/**
+ * The array `xs.map`, `xs.filter` or `xs.slice` answers, as the native one
+ * holds it: each record a fresh copy, as an array holds a record inline.
+ */
+export function copyRecords(a) {
+  for (let i = 0; i < a.length; i++) a[i] = copyIn(a[i]);
+  return a;
+}
+
+/**
  * `a[i] = v` from a generic body: as `setIdx`, but a record is written field
  * by field into the record already in the slot, as an inline element is.
  */

@@ -16,11 +16,11 @@ import {
   H2_FRAME_PUSH_PROMISE,
   http2WriteHeader,
 } from "nish/net/http2-frame";
-import { H2_CLOSED, H2_ERROR, Http2Config } from "nish/net/http2";
+import { H2_CLOSED, H2_ERROR, H2_INVALID, Http2Config } from "nish/net/http2";
 import { Suite } from "nish/testing";
 import { httpFieldBytes } from "nish/net/http-fields";
 import { toHex } from "../crypto_x509/hex";
-import { Client, ZERO, getOf, postOf } from "../net_http2/peer";
+import { Client, ZERO, getOf, namesOf, postOf, valuesOf } from "../net_http2/peer";
 
 /** A connection past both prefaces, under `config`. */
 const opened = (config: Http2Config): Client => {
@@ -344,5 +344,16 @@ export const errorChecks = (): i32 => {
   t.ok("so does a HEADERS, whose block is decoded all the same", outcome(ug) === " | RST_STREAM 1 1" && alive(ug));
   ug.wire.headers(toI32(3), getOf("/next"), H2_FLAG_END_STREAM);
   t.eqStr("and the next stream reads", outcome(ug), "request 3 GET /next end | ");
+
+  // --- what the program sends: Date is a singleton (RFC 9110 §5.3) ----------------------
+  const dd = fresh();
+  dd.wire.headers(toI32(1), getOf("/dates"), H2_FLAG_END_STREAM);
+  outcome(dd);
+  const twoDates: string[] = ["date", "Thu, 01 Jan 1970 00:00:00 GMT", "date", "Fri, 16 Oct 2026 08:11:54 GMT"];
+  t.eqI32("a head with two date fields: H2_INVALID", dd.conn.respond(toI32(1), toI32(200), namesOf(twoDates), valuesOf(twoDates), true), H2_INVALID);
+  t.eqStr("and nothing went out for it", dd.takeFrames(), "");
+  const oneDate: string[] = ["date", "Thu, 01 Jan 1970 00:00:00 GMT"];
+  t.eqI32("the stream still takes a head with one", dd.conn.respond(toI32(1), toI32(200), namesOf(oneDate), valuesOf(oneDate), true), ZERO);
+  t.eqStr("which goes out with that date alone", dd.takeFrames(), "HEADERS 1 end :status=200 date=Thu, 01 Jan 1970 00:00:00 GMT");
   return t.done();
 };

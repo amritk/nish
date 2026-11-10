@@ -20,7 +20,7 @@ The globals and the 10 `nish:` modules that come with the compiler.
 
 <scalar-card title="Core" icon="phosphor/regular/atom" href="#core">
 
-Numbers, bytes, sorting, randomness and the test runner: 7 modules.
+Numbers, bytes, array loops, sorting, randomness and the test runner: 8 modules.
 
 </scalar-card>
 
@@ -102,6 +102,7 @@ Every diagnostic code, what it means and a program that provokes it.
 
 | Module | |
 | --- | --- |
+| [`nish/array`](array.md) | The array methods that take a callback, and `slice`, in Nish: each a plain loop, compiled once per callback. |
 | [`nish/base64`](base64.md) | Standard base64 (RFC 4648 §4) with `=` padding, the encoding kitty graphics frames are sent in. |
 | [`nish/bytes`](bytes.md) | Fixed-width integers and doubles read from, and written into, a byte array at an offset, in either byte order. |
 | [`nish/math`](math.md) | `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, and on a freestanding wasm build `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow` and the `%` of two `f64`s, in Nish rather than libm, so a program answers the same on every target and the optimiser sees the whole function. |

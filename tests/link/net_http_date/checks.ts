@@ -13,7 +13,12 @@
 // - **The clock**: unpinned, it reads `Date.now()`.
 import { HTTP_DATE_LAST_SECOND, HTTP_DATE_SIZE, httpDateWrite } from "nish/net/http-fields";
 import { HttpDate } from "nish/net/http1-server";
+import { HTTP1_REFUSED, http1ResponseHead, http1WriteResponseHead } from "nish/net/http1-codec";
+import { H3_INVALID } from "nish/net/http3";
 import { Suite } from "nish/testing";
+import { bytesOf } from "../crypto_x509/hex";
+import { h3Ready, H3Peer } from "../net_http3/peer";
+import { n32, n64 } from "../net_quic_frame/typed";
 
 // Instants in milliseconds since 1970, wider than an i32.
 const LAST_OF_1999: i64 = 946684799000;
@@ -28,7 +33,7 @@ const PINNED_LAST_MS: i64 = 1792138314999;
 const NEXT_SECOND_MS: i64 = 1792138315000;
 
 /** `bytes[at .. at + length)` as a string, one character a byte. */
-const textOf = (bytes: u8[], at: i32, length: i32): string => {
+const windowText = (bytes: u8[], at: i32, length: i32): string => {
   const parts: string[] = [];
   for (let k: i32 = at; k < at + length; k++) {
     parts.push(String.fromCharCode(toI32(bytes[k])));
@@ -39,7 +44,7 @@ const textOf = (bytes: u8[], at: i32, length: i32): string => {
 /** The IMF-fixdate of `unixMs`, or "refused". */
 const dateOf = (unixMs: i64): string => {
   const out: u8[] = new Array<u8>(HTTP_DATE_SIZE);
-  return httpDateWrite(out, 0, unixMs / toI64(1000)) < 0 ? "refused" : textOf(out, 0, HTTP_DATE_SIZE);
+  return httpDateWrite(out, 0, unixMs / toI64(1000)) < 0 ? "refused" : windowText(out, 0, HTTP_DATE_SIZE);
 };
 
 /** The decimal number in `bytes[at .. at + digits)`. */
@@ -74,9 +79,9 @@ const firstWrongDay = (): string => {
     const seconds: i64 = index * toI64(86400) + toI64(86399);
     const end: i32 = httpDateWrite(out, 0, seconds);
     const want: string = `${days.substring(3 * weekday, 3 * weekday + 3)}, ${months.substring(3 * month - 3, 3 * month)}`;
-    const got: string = `${textOf(out, 0, 3)}, ${textOf(out, 8, 3)}`;
-    if (end !== HTTP_DATE_SIZE || got !== want || numberAt(out, 5, 2) !== day || numberAt(out, 12, 4) !== year || textOf(out, 16, 13) !== " 23:59:59 GMT") {
-      return `${year}-${month}-${day}: ${textOf(out, 0, HTTP_DATE_SIZE)}`;
+    const got: string = `${windowText(out, 0, 3)}, ${windowText(out, 8, 3)}`;
+    if (end !== HTTP_DATE_SIZE || got !== want || numberAt(out, 5, 2) !== day || numberAt(out, 12, 4) !== year || windowText(out, 16, 13) !== " 23:59:59 GMT") {
+      return `${year}-${month}-${day}: ${windowText(out, 0, HTTP_DATE_SIZE)}`;
     }
     index = index + toI64(1);
     weekday = (weekday + 1) % 7;
@@ -110,7 +115,7 @@ export const dateChecks = (): i32 => {
 
   const out: u8[] = new Array<u8>(40);
   t.eqI32("written at an offset, it answers where it ends", httpDateWrite(out, 7, toI64(0)), toI32(36));
-  t.eqStr("and the date is there", textOf(out, 7, HTTP_DATE_SIZE), "Thu, 01 Jan 1970 00:00:00 GMT");
+  t.eqStr("and the date is there", windowText(out, 7, HTTP_DATE_SIZE), "Thu, 01 Jan 1970 00:00:00 GMT");
   const untouched: u8[] = new Array<u8>(HTTP_DATE_SIZE);
   untouched.fill(toU8(120));
   const one: i64 = toI64(1);
@@ -131,7 +136,7 @@ export const dateChecks = (): i32 => {
   const date = new HttpDate();
   t.eqI64("a new date has formatted nothing", date.formats(), toI64(0));
   t.ok("pin takes an instant", date.pin(PINNED_MS));
-  t.eqStr("current() is the pinned second", textOf(date.current(), 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:54 GMT");
+  t.eqStr("current() is the pinned second", windowText(date.current(), 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:54 GMT");
   // The arena is read around the cache's own calls; what the checks build stays outside it.
   const next: u8[] = new Array<u8>(HTTP_DATE_SIZE);
   const back: u8[] = new Array<u8>(HTTP_DATE_SIZE);
@@ -151,9 +156,9 @@ export const dateChecks = (): i32 => {
   const moved: i64 = Arena.used() - before;
   t.eqI64("a thousand calls in that second format it once", afterLoop, toI64(1));
   t.eqI64("so does a later instant in the same second", sameSecond, toI64(1));
-  t.eqStr("the next second is formatted", textOf(next, 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:55 GMT");
+  t.eqStr("the next second is formatted", windowText(next, 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:55 GMT");
   t.eqI64("once", nextFormats, toI64(2));
-  t.eqStr("a clock stepped back is formatted too", textOf(back, 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:54 GMT");
+  t.eqStr("a clock stepped back is formatted too", windowText(back, 0, HTTP_DATE_SIZE), "Fri, 16 Oct 2026 08:11:54 GMT");
   t.eqI64("once more", date.formats(), toI64(3));
   t.ok(`and none of it moved the arena (${moved} bytes)`, moved === toI64(0));
 
@@ -161,20 +166,58 @@ export const dateChecks = (): i32 => {
   t.ok("and one past the last second", !date.pin((HTTP_DATE_LAST_SECOND + one) * toI64(1000)));
   t.ok(
     "and changes nothing: the date is the one pinned before",
-    textOf(date.current(), 0, HTTP_DATE_SIZE) === "Fri, 16 Oct 2026 08:11:54 GMT" && date.formats() === toI64(3)
+    windowText(date.current(), 0, HTTP_DATE_SIZE) === "Fri, 16 Oct 2026 08:11:54 GMT" && date.formats() === toI64(3)
   );
   t.ok("it takes the last millisecond of the last second", date.pin(HTTP_DATE_LAST_SECOND * toI64(1000) + toI64(999)));
-  t.eqStr("which is that second", textOf(date.current(), 0, HTTP_DATE_SIZE), "Fri, 31 Dec 9999 23:59:59 GMT");
+  t.eqStr("which is that second", windowText(date.current(), 0, HTTP_DATE_SIZE), "Fri, 31 Dec 9999 23:59:59 GMT");
 
   // --- The clock -------------------------------------------------------------------------------
   // One read: a second ending between two would format again and make the count 6.
   date.unpin();
   const clocked: u8[] = date.current();
-  const now: string = textOf(clocked, 0, HTTP_DATE_SIZE);
+  const now: string = windowText(clocked, 0, HTTP_DATE_SIZE);
   t.ok(
     "unpinned, it reads the clock: a date after this test was written",
     now !== "Fri, 31 Dec 9999 23:59:59 GMT" && numberAt(clocked, 12, 4) >= 2026 && now.endsWith(" GMT")
   );
   t.eqI64("formatted once for the change", date.formats(), toI64(5));
+
+  // --- Date is a singleton (RFC 9110 §5.3): a head carries one, on every version ------
+  const pinned: u8[] = bytesOf("Fri, 16 Oct 2026 08:11:54 GMT");
+  const own: u8[] = bytesOf("Thu, 01 Jan 1970 00:00:00 GMT");
+  const head: u8[] = new Array<u8>(256);
+  const ok: i32 = 200;
+  const zero: i32 = 0;
+  const ownEnd: i32 = http1WriteResponseHead(head, zero, ok, "OK", [bytesOf("date")], [own], zero, "", pinned);
+  t.eqStr(
+    "HTTP/1.1: the program's one date replaces the server's, and one Date goes out",
+    ownEnd < 0 ? "refused" : windowText(head, 0, ownEnd),
+    "HTTP/1.1 200 OK\r\ndate: Thu, 01 Jan 1970 00:00:00 GMT\r\nContent-Length: 0\r\n\r\n"
+  );
+  head[0] = toU8(120);
+  t.ok(
+    "two date fields are HTTP1_REFUSED, and nothing is written",
+    http1WriteResponseHead(head, zero, ok, "OK", [bytesOf("date"), bytesOf("x-a"), bytesOf("date")], [own, bytesOf("b"), own], zero, "", pinned) === HTTP1_REFUSED &&
+      head[0] === toU8(120)
+  );
+  t.eqI32(
+    "in any case, the server's own date or none",
+    http1WriteResponseHead(head, zero, ok, "OK", [bytesOf("Date"), bytesOf("dATE")], [own, own], zero, "", []),
+    HTTP1_REFUSED
+  );
+  t.ok("http1ResponseHead refuses two as well", http1ResponseHead(ok, "OK", ["Date", "date"], ["a", "b"], zero) === null);
+  t.ok("and writes one", http1ResponseHead(ok, "OK", ["Date"], ["a"], zero) !== null);
+
+  const h3: H3Peer = h3Ready();
+  h3.h3.date = pinned;
+  h3.get(n64(0), "/hold");
+  h3.settle();
+  const dates: u8[][] = [bytesOf("date"), bytesOf("date")];
+  t.eqI32("HTTP/3: a head with two date fields is H3_INVALID", h3.h3.respond(n64(0), n32(200), dates, [own, own], true), H3_INVALID);
+  h3.settle();
+  t.ok("and nothing went out for it", toI32(h3.stream(n64(0)).data.length) === n32(0));
+  t.eqI32("the stream still takes a head with one", h3.h3.respond(n64(0), n32(200), [bytesOf("date")], [own], true), n32(0));
+  h3.settle();
+  t.eqStr("which goes out with that date alone", h3.response(n64(0)).fields, "date: Thu, 01 Jan 1970 00:00:00 GMT");
   return t.done();
 };

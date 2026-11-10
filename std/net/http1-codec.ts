@@ -1648,7 +1648,8 @@ export const http1IsFieldText = (text: string): boolean => {
  * (which would end the line early and let the rest be read as a field or a
  * second response); a field name that is not a token; `names` and `values` of
  * different lengths; a `Content-Length` or `Transfer-Encoding` among the
- * caller's fields, since the framing is decided here; a 1xx or 204 response
+ * caller's fields, since the framing is decided here; two `Date` fields in
+ * any case, since `Date` is a singleton (RFC 9110 §5.3); a 1xx or 204 response
  * with a body length (RFC 9110 §15.2, §15.3.5); and any other `bodyLength`
  * below zero.
  *
@@ -1680,6 +1681,7 @@ export const http1ResponseHead = (
     return null
   }
   const parts: string[] = [`HTTP/1.1 ${status} ${reason}\r\n`]
+  let dated: boolean = false
   for (let i: i32 = 0; i < count && i < toI32(names.length) && i < toI32(values.length); i += 1) {
     const name: string = names[i]
     const value: string = values[i]
@@ -1692,6 +1694,12 @@ export const http1ResponseHead = (
       http1SameWord(name, 0, nameLength, "transfer-encoding")
     ) {
       return null
+    }
+    if (http1SameWord(name, 0, nameLength, "date")) {
+      if (dated) {
+        return null
+      }
+      dated = true
     }
     parts.push(`${name}: ${value}\r\n`)
   }
@@ -2007,7 +2015,8 @@ const http1PutDecimal = (out: u8[], at: i32, n: i32): i32 => {
  *
  * Answers where the head ends; `HTTP1_REFUSED` for everything
  * `http1ResponseHead` refuses, a `Connection` among the caller's fields when
- * `connection` is given, a `connection` that is not field text, and a `date`
+ * `connection` is given, a `connection` that is not field text, two `date`
+ * fields among the caller's (a singleton, RFC 9110 §5.3), and a `date`
  * that is not field text on a final status, the only one it is sent on;
  * `HTTP1_NO_ROOM` when it is well formed but does not fit, the `Date` line
  * counted when it is sent. Either way `out` is untouched.
@@ -2051,7 +2060,7 @@ export const http1WriteResponseHead = (
   // field, the connection field and the empty line: counted before anything
   // is written, in 64 bits so that no caller's lengths can wrap the sum.
   let need: i64 = toI64(17) + toI64(reason.length)
-  let sendDate: boolean = status >= 200 && toI32(date.length) > 0
+  let dated: boolean = false
   for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
     const name: u8[] = names[i]
     const value: u8[] = values[i]
@@ -2065,10 +2074,15 @@ export const http1WriteResponseHead = (
       return HTTP1_REFUSED
     }
     if (http1BytesAre(name, "date")) {
-      sendDate = false
+      // Date is a singleton (RFC 9110 §5.3): a second one is refused.
+      if (dated) {
+        return HTTP1_REFUSED
+      }
+      dated = true
     }
     need = need + toI64(name.length) + toI64(value.length) + toI64(4)
   }
+  const sendDate: boolean = status >= 200 && toI32(date.length) > 0 && !dated
   if (sendDate) {
     // "Date: " value CRLF: 37 bytes for an IMF-fixdate.
     need = need + toI64(8) + toI64(date.length)

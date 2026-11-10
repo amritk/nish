@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 697 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 702 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -7247,7 +7247,7 @@ export const tidy = (s: string): string => trim(s);
 ```
 
 ```text
-This call to `trim` may panic: it reaches the `index` site at std/text.ts:157:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+This call to `trim` may panic: it reaches the `index` site at std/text.ts:163:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
 ```
 
 ## NL2459
@@ -12939,6 +12939,46 @@ The message of an error contains:
 
 ```text
 …a `nish.host` entry names a host module the package has
+```
+
+## NL2697
+
+The message of an error contains:
+
+```text
+`find` is not supported: TypeScript types its answer `T | undefined`, and Nish has no `undefined`, so a test of it would pass `tsc` and mean something else under Node; use `findIndex` and index the array, `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`
+```
+
+## NL2698
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes at most two, the element and its index: JavaScript's third, the array itself, is the receiver the call already names, so read that instead
+```
+
+## NL2699
+
+The message of an error contains:
+
+```text
+`slice` on an array expects 0 to 2 arguments, got …
+```
+
+## NL2700
+
+The message of an error contains:
+
+```text
+…the clock and the random source answer differently on every run
+```
+
+## NL2701
+
+The message of an error contains:
+
+```text
+…the environment and the terminal answer differently on every host
 ```
 
 ## NL2702

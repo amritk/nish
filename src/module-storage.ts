@@ -55,7 +55,7 @@ import {
   elementStride,
   inlineElementStruct,
 } from "./program"
-import { SORT_LOCAL } from "./std-modules"
+import { rewrittenArrayMethod } from "./std-modules"
 import { T_BOOL, T_U8, TypeTable, isHostWindow, isNumeric } from "./types"
 
 /** The most elements one storage may hold. */
@@ -486,11 +486,13 @@ const checkStorageCall = (ctx: CheckContext, call: Node): void => {
   const callee = call.children[0]
   const args = call.children[1]
   let pushesCopy = false
-  if (callee.kind === N_IDENT && callee.text === SORT_LOCAL && args.children.length > 0) {
-    // `xs.sort(cmp)` was rewritten to the std sort over `xs` (`arrays.ts`).
+  const method = callee.kind === N_IDENT && args.children.length > 0 ? rewrittenArrayMethod(callee.text) : ""
+  if (method !== "") {
+    // `xs.sort(cmp)`, `xs.map(f)` and the rest were rewritten to a std
+    // template called on `xs` (`arrays.ts`).
     const sorted = storageNamed(ctx, args.children[0])
     if (sorted !== null) {
-      refuseMethod(ctx, sorted, callee, "sort")
+      refuseMethod(ctx, sorted, callee, method)
       return
     }
   }
@@ -732,6 +734,17 @@ const lentUseStays = (
     )
   }
   if (parent.kind === N_LIST && grand !== null && grand.kind === N_CALL && grand.children[1] === parent) {
+    // `xs.slice(0, 2)` or `xs.sort(cmp)` in a body checked before this lend
+    // was rewritten in place to a std template called on `xs` (`arrays.ts`):
+    // judged as the method it was written as, so declaration order is moot.
+    const callee = grand.children[0]
+    const method =
+      callee.kind === N_IDENT && parent.children[0] === use ? rewrittenArrayMethod(callee.text) : ""
+    if (method !== "") {
+      return (
+        lendSafeMethod(method) || (lendInPlaceMethod(method) && great !== null && great.kind === N_EXPR_STMT)
+      )
+    }
     // `String.fromBytes(xs, start, end)` copies the bytes into a new string.
     return copiesBytes(grand, parent, use) || lentOnStays(ctx, sig, grand, use, queue)
   }

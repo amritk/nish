@@ -1,0 +1,1 @@
+`main` reaches `net`, which `--deterministic` refuses: another machine or another program answers from outside this one

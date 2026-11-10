@@ -49,7 +49,7 @@ stdout, nothing on stderr, every field 1-based with `endLine`/`endColumn`
 exclusive:
 
 ```json
-{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":20,"severity":"error","code":"NL2249","message":"Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort)"}
+{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":23,"severity":"error","code":"NL2249","message":"Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice)"}
 ```
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
@@ -165,7 +165,8 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
+| `xs.reduce(f)`, `.forEach`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
+| `xs.find(f)` | `` `find` is not supported: TypeScript types its answer `T \| undefined` … `` (NL2697) | `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }` |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `a?.b`, `a ?? b` | `?.` only in a chain that ends in `??`; `??` only on a `T \| null`, a chain or `m.get(k)` | `a?.b ?? d`, `a ?? d`, or `if (a !== null)` first |
 | `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |
@@ -862,8 +863,9 @@ export const main = (): i32 => {
   (`` The arrow reads `k`, a `let` of the function it is written in: ... bind the value to a `const` before the call ``),
   read `this` (bind `const self = this`), or read a function-typed parameter
   of its function. An arrow inside another arrow, or given to a method, a
-  constructor, `expose` or `exposeWith`, captures nothing; `xs.sort(cmp)`'s
-  comparator is the exception, and captures as an arrow argument does.
+  constructor, `expose` or `exposeWith`, captures nothing; the callbacks of
+  the array methods `sort`, `map`, `filter`, `some`, `every` and `findIndex`
+  are the exception, and capture as an arrow argument does.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
@@ -2246,7 +2248,10 @@ answers `a` — the same order Node gives; the comparator is required (`a.sort()
 is refused, since JavaScript would compare strings), a readonly array and
 `process.argv` are refused, `a - b` panics on `i32` values a full range apart
 (compare with `a > b ? 1 : a < b ? -1 : 0` there), and the comparator may read the caller's `const` locals and parameters but not
-a `let`, as any arrow argument may. That is every array method there is. A
+a `let`, as any arrow argument may. `a.map(f)`, `a.filter(f)`, `a.some(f)`,
+`a.every(f)`, `a.findIndex(f)` and `a.slice(start, end)` answer as in JavaScript
+(a callback takes the element, and the index if it names two parameters). That is
+every array method there is. A
 window into a buffer is `(buf, offset, length)`; there is no view type.
 
 **Strings.** `s.length` (**bytes**), `s.charCodeAt(i)` (the byte, bounds-checked),
@@ -2757,15 +2762,16 @@ the module (NL4015).
 
 ## Recipes for what is missing
 
-**Iterate and transform** — there is no `map`, and no function to pass it:
+**Iterate and accumulate** — there is no `reduce` or `forEach` (`map`, `filter`, `some`, `every`, `findIndex` and `slice` work); fold in a loop:
 
 ```ts nish:ok-body
 const xs: i32[] = [1, 2, 3];
-const doubled: i32[] = [];
-for (const x of xs) {
-  doubled.push(x * 2);
+const doubled = xs.map((x) => x * 2);
+let sum = 0;
+for (const x of doubled) {
+  sum += x;
 }
-console.log(`${doubled.length}`);
+console.log(`${sum}`);
 ```
 
 **Convert a number to a string** — there is no `toString` and no `String()`:

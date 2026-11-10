@@ -5115,7 +5115,9 @@ exception:
   words) and which carries `kind` (`panic`, `index`, `slice`, `overflow`,
   `memory`, `exit`, `divide`, or `trap`, `reentry` or `exception` for a
   module that died some other way) and `site`, the panic site's number
-  (-1 for none).
+  (-1 for none). An array's `xs.slice` out of range throws with `kind`
+  `panic`, not `slice`: its check is `std/array.ts`'s own `panic(...)`,
+  though the message reads as string `slice`'s does.
 - **Before it throws, the loader calls `onPanic`.** `load(bytes, { onPanic,
   sites })` takes the reporter; the default, `reportPanic` from `nish/page`,
   writes `nish: <message>` to `console.error`, as a native program writes it

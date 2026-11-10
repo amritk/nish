@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 859
+export const RULE_COUNT: i32 = 867
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -101,6 +101,8 @@ const diagnosticRules = (): string[] => [
   "NL2544",
   "`, a `let` of the function it is written in: a task's arrow may read only a `const` or a parameter of that function, which is handed to the task when it is spawned as its argument is and cannot change before it runs; bind the value to a `const` before the `spawn`",
   "NL2506",
+  "`find` is not supported: TypeScript types its answer `T | undefined`, and Nish has no `undefined`, so a test of it would pass `tsc` and mean something else under Node; use `findIndex` and index the array, `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`",
+  "NL2697",
   "` is wiped outside its holder's `wipe()`: a `Secret` field ends only in that method, on every path, so a wipe anywhere else would leave the holder holding zeros that its other uses then read and its own `wipe()` wipes again; call the holder's `wipe()` instead",
   "NL2547",
   "The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the body needs of it, to a `const` before the call (`const self = this`, `const k = this.k`)",
@@ -291,6 +293,8 @@ const diagnosticRules = (): string[] => [
   "NL3027",
   "`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads, so `dst` may not be reachable from an element of `src`",
   "NL2347",
+  " parameters, and Nish passes at most two, the element and its index: JavaScript's third, the array itself, is the receiver the call already names, so read that instead",
+  "NL2698",
   "`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer",
   "NL2473",
   "A `Secret` cannot be interpolated into a template literal: what it holds would leave in the string. Compute with it inside `expose` and interpolate what that returns",
@@ -865,6 +869,8 @@ const diagnosticRules = (): string[] => [
   "NL2277",
   "` reaches the operating system, and a wasm32 build has none to reach",
   "NL2404",
+  "C code or a host import runs where this compiler cannot pin its bits",
+  "NL3054",
   "Interface inheritance (`extends`) is not supported; list every field",
   "NL2215",
   "The function `region` or `regionWith` runs answers the region's root",
@@ -895,6 +901,8 @@ const diagnosticRules = (): string[] => [
   "NL2634",
   "Function names starting with `nish_` are reserved for the runtime",
   "NL2202",
+  "the environment and the terminal answer differently on every host",
+  "NL2701",
   "Union variants must give their tag one name: the first field of `",
   "NL2525",
   " (a module has no runtime object; resolve paths at compile time)",
@@ -909,6 +917,8 @@ const diagnosticRules = (): string[] => [
   "NL2130",
   "`super(...)` must be the first statement of the constructor of `",
   "NL2156",
+  "another machine or another program answers from outside this one",
+  "NL3053",
   " (a module has no top-level code, so there is nothing to defer)",
   "NL1059",
   ", not in your program. Please report it with the input file and",
@@ -927,6 +937,8 @@ const diagnosticRules = (): string[] => [
   "NL2678",
   "`new Array<T>(n)` expects exactly 1 argument (the length), got ",
   "NL2143",
+  "the clock and the random source answer differently on every run",
+  "NL2700",
   " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
   "NL2005",
   "` is generic, so it names no one function to pass as argument ",
@@ -1079,6 +1091,8 @@ const diagnosticRules = (): string[] => [
   "NL2105",
   "`; check for null first: `if (a !== null) { ... }`",
   "NL2113",
+  "`slice` on an array expects 0 to 2 arguments, got ",
+  "NL2699",
   "Only direct calls to named functions are supported",
   "NL2225",
   "The `for...of` variable cannot have an initializer",
@@ -1100,6 +1114,8 @@ const diagnosticRules = (): string[] => [
   "NL2190",
   "Index signatures are not supported in interface `",
   "NL2214",
+  "the file system answers differently on every host",
+  "NL3052",
   "Type arguments are not written at a call site in ",
   "NL2303",
   "` where a bound of `integer<Lo, Hi>` is expected",

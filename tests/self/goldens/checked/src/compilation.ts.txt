@@ -48,6 +48,8 @@ import CAPABILITY_COUNT from "./capabilities" -> const CAPABILITY_COUNT
 import capabilityIndex from "./capabilities" -> function @capabilityIndex
 import capabilityName from "./capabilities" -> function @capabilityName
 import capabilityNames from "./capabilities" -> function @capabilityNames
+import deterministicReason from "./capabilities" -> function @deterministicReason
+import deterministicRefusals from "./capabilities" -> function @deterministicRefusals
 import everyCapabilityName from "./capabilities" -> function @everyCapabilityName
 import optInCapabilities from "./capabilities" -> function @optInCapabilities
 import DependencyReach from "./capability-report" -> struct DependencyReach
@@ -83,6 +85,7 @@ import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import StructInfo from "./program" -> struct StructInfo
 import StructRegistry from "./program" -> struct StructRegistry
 import StructTemplateInfo from "./program" -> struct StructTemplateInfo
+import TemplateInfo from "./program" -> struct TemplateInfo
 import basename from "./paths" -> function @basename
 import basenameWithout from "./paths" -> function @basenameWithout
 import dirname from "./paths" -> function @dirname
@@ -114,7 +117,10 @@ import manifestVersion from "./manifest" -> function @manifestVersion
 import ManifestList from "./manifest" -> struct ManifestList
 import NishManifest from "./manifest" -> struct NishManifest
 import nishExportEntry from "./manifest" -> function @nishExportEntry
+import ARRAY_SPECIFIER from "./std-modules" -> const ARRAY_SPECIFIER
 import COLLECTIONS_SPECIFIER from "./std-modules" -> const COLLECTIONS_SPECIFIER
+import isArrayMethodLocal from "./std-modules" -> function @isArrayMethodLocal
+import isArrayModule from "./std-modules" -> function @isArrayModule
 import isStdModuleName from "./std-modules" -> function @isStdModuleName
 import SECRET_STD_SPECIFIER from "./std-modules" -> const SECRET_STD_SPECIFIER
 import stdModuleName from "./std-modules" -> function @stdModuleName
@@ -269,6 +275,7 @@ struct Compilation (class) size=208 align=8 exported
   method widenedArguments -> @Compilation.widenedArguments
   method reportArgumentGrowth -> @Compilation.reportArgumentGrowth
   method reportLockGrowth -> @Compilation.reportLockGrowth
+  method refusedOnlyByDeterministic -> @Compilation.refusedOnlyByDeterministic
   method refusedBy -> @Compilation.refusedBy
   method manifestDirAbove -> @Compilation.manifestDirAbove
   method denyPanicSites -> @Compilation.denyPanicSites
@@ -297,6 +304,7 @@ struct Compilation (class) size=208 align=8 exported
   method rejectForeignShadows -> @Compilation.rejectForeignShadows
   method reportForeignShadow -> @Compilation.reportForeignShadow
   method rejectCLibrarySymbols -> @Compilation.rejectCLibrarySymbols
+  method isUnusedArrayModule -> @Compilation.isUnusedArrayModule
   method analyze -> @Compilation.analyze
   method panicsText -> @Compilation.panicsText
   method arenaText -> @Compilation.arenaText
@@ -333,13 +341,20 @@ function isRetentionCode(code: string): boolean -> @isRetentionCode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
+function isUnusedArrayImport(specifier: string, local: string, template: TemplateInfo | null): boolean -> @isUnusedArrayImport [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: local
+  calls: isArrayMethodLocal nish_str_eq
+  pointer template: size=64 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:36 isArrayMethodLocal -> @isArrayMethodLocal
 function Compilation.constructor(this: Compilation, opts: Options): void -> @Compilation.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via RuntimeTable.constructor
   escaping: opts
   calls: DiagnosticSink.constructor RuntimeTable.constructor StringMap.constructor StringSet.constructor TypeTable.constructor nish_alloc_struct nish_realpath
   pointer this: size=208 writesThrough=true captured=false
-  pointer opts: size=200 writesThrough=true captured=true
+  pointer opts: size=208 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:18 new TypeTable -> @TypeTable.constructor
   callee +2:17 new DiagnosticSink -> @DiagnosticSink.constructor
@@ -487,47 +502,47 @@ function Compilation.discover(this: Compilation, path: string, name: string, pac
   callee +59:24 isWasmBuild -> @isWasmBuild
   callee +60:36 isFreestandingWasmBuild -> @isFreestandingWasmBuild
   callee +61:30 buildsPageModule -> @buildsPageModule
-  local +62:11 unit: ModuleUnit (const)
-  callee +62:18 new ModuleUnit -> @ModuleUnit.constructor
-  callee +70:41 threadsModuleName -> @threadsModuleName
-  callee +73:5 StringMap.set -> @StringMap.set
-  callee +76:29 Compilation.hostModules -> @Compilation.hostModules
-  local +89:11 beforeValidation: i32 (const)
-  callee +89:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +90:5 validate -> @validate
-  local +91:11 failedValidation: boolean (const)
-  callee +91:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +92:54 DiagnosticSink.count -> @DiagnosticSink.count
-  local +102:11 beforeNames: i32 (const)
-  callee +102:25 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +103:5 Checker.declareNames -> @Checker.declareNames
-  callee +115:29 DiagnosticSink.count -> @DiagnosticSink.count
-  local +116:11 signaturesFailed: boolean (const)
-  local +117:11 dir: string (const)
-  callee +117:17 dirname -> @dirname
-  local +118:9 ok: boolean (let)
-  local +124:9 failedDecl: Node | null (let)
-  local +125:16 imp: ImportBinding (const)
-  callee +127:11 isBuiltinSpecifier -> @isBuiltinSpecifier
-  callee +130:11 StringMap.has -> @StringMap.has
-  local +137:13 found: ResolvedModule (const)
-  callee +137:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
-  local +141:15 fix: Edit[] (const)
-  callee +143:13 fsSpecifierFix -> @fsSpecifierFix
-  callee +146:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
-  callee +148:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local +154:13 target: string (const)
-  callee +156:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  callee +159:91 stdModuleNames -> @stdModuleNames
-  callee +167:10 buildsPageModule -> @buildsPageModule
-  callee +169:9 StringSet.has -> @StringSet.has
-  callee +169:33 Compilation.identityOf -> @Compilation.identityOf
-  callee +171:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local +184:13 targetIdentity: string (const)
-  callee +184:30 Compilation.identityOf -> @Compilation.identityOf
-  callee +187:12 Compilation.discover -> @Compilation.discover
-  callee +192:9 StringMap.set -> @StringMap.set
-  callee +192:42 StringMap.get -> @StringMap.get
+  local +63:11 unit: ModuleUnit (const)
+  callee +63:18 new ModuleUnit -> @ModuleUnit.constructor
+  callee +71:41 threadsModuleName -> @threadsModuleName
+  callee +74:5 StringMap.set -> @StringMap.set
+  callee +77:29 Compilation.hostModules -> @Compilation.hostModules
+  local +90:11 beforeValidation: i32 (const)
+  callee +90:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +91:5 validate -> @validate
+  local +92:11 failedValidation: boolean (const)
+  callee +92:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +93:54 DiagnosticSink.count -> @DiagnosticSink.count
+  local +103:11 beforeNames: i32 (const)
+  callee +103:25 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +104:5 Checker.declareNames -> @Checker.declareNames
+  callee +116:29 DiagnosticSink.count -> @DiagnosticSink.count
+  local +117:11 signaturesFailed: boolean (const)
+  local +118:11 dir: string (const)
+  callee +118:17 dirname -> @dirname
+  local +119:9 ok: boolean (let)
+  local +125:9 failedDecl: Node | null (let)
+  local +126:16 imp: ImportBinding (const)
+  callee +128:11 isBuiltinSpecifier -> @isBuiltinSpecifier
+  callee +131:11 StringMap.has -> @StringMap.has
+  local +138:13 found: ResolvedModule (const)
+  callee +138:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
+  local +142:15 fix: Edit[] (const)
+  callee +144:13 fsSpecifierFix -> @fsSpecifierFix
+  callee +147:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
+  callee +149:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local +155:13 target: string (const)
+  callee +157:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  callee +160:91 stdModuleNames -> @stdModuleNames
+  callee +168:10 buildsPageModule -> @buildsPageModule
+  callee +170:9 StringSet.has -> @StringSet.has
+  callee +170:33 Compilation.identityOf -> @Compilation.identityOf
+  callee +172:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local +185:13 targetIdentity: string (const)
+  callee +185:30 Compilation.identityOf -> @Compilation.identityOf
+  callee +188:12 Compilation.discover -> @Compilation.discover
+  callee +193:9 StringMap.set -> @StringMap.set
+  callee +193:42 StringMap.get -> @StringMap.get
 function Compilation.resolveSpecifier(this: Compilation, dir: string, specifier: string): ResolvedModule -> @Compilation.resolveSpecifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via Compilation.resolveBareSpecifier
@@ -924,53 +939,59 @@ function Compilation.policyListMask(this: Compilation, source: SourceFile, list:
 function Compilation.refuseCapabilities(this: Compilation): void -> @Compilation.refuseCapabilities [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
-  calls: Compilation.analyze Compilation.entry Compilation.reportRefusal FunctionSig.definedIn allCapabilities buildModeOf functionIndex hostVisible nish_array_grow nish_str_concat nish_str_eq optInCapabilities witnessChain
+  calls: Compilation.analyze Compilation.entry Compilation.reportRefusal FunctionSig.definedIn allCapabilities buildModeOf deterministicRefusals functionIndex hostVisible nish_array_grow nish_str_concat nish_str_eq optInCapabilities witnessChain
   pointer this: size=208 writesThrough=true captured=false passedTo=Compilation.analyze#0 functionIndex#0 Compilation.entry#0 Compilation.reportRefusal#0
   stackSites=3 stackLocals=3
   local +0:11 allow: i32 (const)
   local +1:11 deny: i32 (const)
-  local +2:11 refused: i32 (const)
-  callee +2:39 optInCapabilities -> @optInCapabilities
-  callee +2:61 allCapabilities -> @allCapabilities
-  local +6:11 facts: FactsTable (const)
-  callee +6:19 Compilation.analyze -> @Compilation.analyze
-  local +7:11 index: FunctionIndex (const)
-  callee +7:19 functionIndex -> @functionIndex
-  local +12:11 programs: CheckedProgram[] (const)
-  local +13:16 unit: ModuleUnit (const)
-  local +16:11 mode: BuildMode (const)
-  callee +16:18 buildModeOf -> @buildModeOf
-  local +18:11 main: FunctionSig | null (const)
-  callee +18:18 Compilation.entry -> @Compilation.entry
-  local +19:11 judged: FunctionSig[] (const)
-  local +20:9 mainName: string (let)
-  local +25:16 program: CheckedProgram (const)
-  local +26:18 sig: FunctionSig (const)
-  callee +29:11 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee +30:11 hostVisible -> @hostVisible
-  local +36:9 c: i32 (let)
-  local +39:20 sig: FunctionSig (const)
-  local +40:17 chain: WitnessHop[] (const)
-  callee +40:25 witnessChain -> @witnessChain
-  local +41:17 source: SourceFile | null (const)
-  local +42:17 site: Node | null (const)
-  local +44:19 hops: string[] (const)
-  local +45:24 hop: WitnessHop (const)
-  callee +48:13 Compilation.reportRefusal -> @Compilation.reportRefusal
+  local +2:11 flagged: i32 (const)
+  callee +2:47 deterministicRefusals -> @deterministicRefusals
+  local +3:11 refused: i32 (const)
+  callee +3:39 optInCapabilities -> @optInCapabilities
+  callee +3:61 allCapabilities -> @allCapabilities
+  local +7:11 facts: FactsTable (const)
+  callee +7:19 Compilation.analyze -> @Compilation.analyze
+  local +8:11 index: FunctionIndex (const)
+  callee +8:19 functionIndex -> @functionIndex
+  local +13:11 programs: CheckedProgram[] (const)
+  local +14:16 unit: ModuleUnit (const)
+  local +17:11 mode: BuildMode (const)
+  callee +17:18 buildModeOf -> @buildModeOf
+  local +19:11 main: FunctionSig | null (const)
+  callee +19:18 Compilation.entry -> @Compilation.entry
+  local +20:11 judged: FunctionSig[] (const)
+  local +21:9 mainName: string (let)
+  local +26:16 program: CheckedProgram (const)
+  local +27:18 sig: FunctionSig (const)
+  callee +30:11 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee +31:11 hostVisible -> @hostVisible
+  local +37:9 c: i32 (let)
+  local +40:20 sig: FunctionSig (const)
+  local +41:17 chain: WitnessHop[] (const)
+  callee +41:25 witnessChain -> @witnessChain
+  local +42:17 source: SourceFile | null (const)
+  local +43:17 site: Node | null (const)
+  local +45:19 hops: string[] (const)
+  local +46:24 hop: WitnessHop (const)
+  callee +49:13 Compilation.reportRefusal -> @Compilation.reportRefusal
 function Compilation.reportRefusal(this: Compilation, source: SourceFile, site: Node, sig: FunctionSig, c: i32, hops: string[]): void -> @Compilation.reportRefusal [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
   escaping: c
-  calls: Compilation.refusedBy DiagnosticSink.report capabilityName nish_alloc_struct nish_str_concat
-  pointer this: size=208 writesThrough=false captured=false passedTo=Compilation.refusedBy#0
-  pointer source: size=32 writesThrough=true captured=true passedTo=DiagnosticSink.report#1
+  calls: Compilation.refusedBy Compilation.refusedOnlyByDeterministic DiagnosticSink.report capabilityName deterministicReason nish_alloc_struct nish_str_concat
+  pointer this: size=208 writesThrough=false captured=false passedTo=Compilation.refusedOnlyByDeterministic#0 Compilation.refusedBy#0
+  pointer source: size=32 writesThrough=true captured=true passedTo=DiagnosticSink.report#1 DiagnosticSink.report#1
   pointer site: size=40 writesThrough=false captured=false
   pointer sig: size=176 writesThrough=false captured=false
   pointer hops: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:5 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +4:42 capabilityName -> @capabilityName
-  callee +4:110 Compilation.refusedBy -> @Compilation.refusedBy
+  callee +0:9 Compilation.refusedOnlyByDeterministic -> @Compilation.refusedOnlyByDeterministic
+  callee +1:7 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +5:44 capabilityName -> @capabilityName
+  callee +5:103 deterministicReason -> @deterministicReason
+  callee +9:5 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +13:42 capabilityName -> @capabilityName
+  callee +13:110 Compilation.refusedBy -> @Compilation.refusedBy
 function Compilation.refuseDependencyCapabilities(this: Compilation): void -> @Compilation.refuseDependencyCapabilities [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
@@ -1169,6 +1190,13 @@ function Compilation.reportLockGrowth(this: Compilation, source: SourceFile, sit
   callee +0:5 DiagnosticSink.report -> @DiagnosticSink.report
   callee +4:47 capabilityName -> @capabilityName
   callee +4:101 capabilityLockName -> @capabilityLockName
+function Compilation.refusedOnlyByDeterministic(this: Compilation, c: i32): boolean -> @Compilation.refusedOnlyByDeterministic [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=208 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 bit: i32 (const)
+  local +1:11 allow: i32 (const)
+  local +2:11 deny: i32 (const)
 function Compilation.refusedBy(this: Compilation, c: i32): string -> @Compilation.refusedBy [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: c
@@ -1716,6 +1744,16 @@ function Compilation.rejectCLibrarySymbols(this: Compilation): void -> @Compilat
   callee +41:22 isCLibrarySymbol -> @isCLibrarySymbol
   callee +43:13 reservedPrefixText -> @reservedPrefixText
   callee +44:9 DiagnosticSink.report -> @DiagnosticSink.report
+function Compilation.isUnusedArrayModule(this: Compilation, unit: ModuleUnit): boolean -> @Compilation.isUnusedArrayModule [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isArrayModule isUnusedArrayImport nish_str_eq
+  pointer this: size=208 writesThrough=false captured=false
+  pointer unit: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:10 isArrayModule -> @isArrayModule
+  local +3:16 other: ModuleUnit (const)
+  local +4:18 imp: ImportBinding (const)
+  callee +7:12 isUnusedArrayImport -> @isUnusedArrayImport
 function Compilation.analyze(this: Compilation): FactsTable -> @Compilation.analyze [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:9
@@ -2006,7 +2044,7 @@ function signatureText(table: TypeTable, sig: FunctionSig): string -> @signature
 function fsSpecifierFix(ctx: CheckContext, imports: ImportBinding[], imp: ImportBinding): Edit[] -> @fsSpecifierFix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit exportsAllOf isQuote nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer ctx: size=304 writesThrough=false captured=false passedTo=CheckContext.edit#0
+  pointer ctx: size=312 writesThrough=false captured=false passedTo=CheckContext.edit#0
   pointer imports: size=0 writesThrough=false captured=false passedTo=exportsAllOf#1
   pointer imp: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0

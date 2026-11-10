@@ -237,7 +237,11 @@ rather than by line). `writeHead` puts the connection's `date` straight after
 (HTTP/3 has no 1xx for a program to send); a program's own `date`
 (`http3NamesHoldDate`, which matches any ASCII case) is sent instead, so a head
 never carries two. A mixed-case `Date` never reaches it: `respond` refuses an
-uppercase name with `H3_INVALID` (§4.2).
+uppercase name with `H3_INVALID` (§4.2). Two of the program's own were sent as
+they came until #696; `httpFieldsCheckOutgoing` now refuses a second `date`
+(`HTTP_FIELDS_DATE_REPEATED`, RFC 9110 §5.3), so `respond` answers
+`H3_INVALID` and writes nothing (`net_http_date`, `net_http_fields` and their
+`_f64` twins; before: the head went out with both).
 
 The date counts against the client's SETTINGS_MAX_FIELD_SECTION_SIZE as any
 field does, 65 bytes (RFC 9114 §4.2.2): a head that fits a limit of 107 bytes

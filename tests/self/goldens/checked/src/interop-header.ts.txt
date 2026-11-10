@@ -139,16 +139,16 @@ function generateHeader(compilation: Compilation, fns: ExternalFunction[], outFi
   callee +1:43 guardStem -> @guardStem
   local +2:9 lines: string[] (const)
   callee +3:14 banner -> @banner
-  callee +27:3 pushAll -> @pushAll
-  callee +27:18 structDefinitions -> @structDefinitions
-  callee +29:3 pushAll -> @pushAll
-  callee +29:18 resultDefinitions -> @resultDefinitions
-  callee +29:48 structFieldTypes -> @structFieldTypes
-  local +33:7 lastPath: string (let)
-  local +34:7 anyModule: boolean (let)
-  local +35:14 fn: ExternalFunction (const)
-  callee +44:9 tsSignatureLine -> @tsSignatureLine
-  local +53:11 proto: string (const)
-  callee +53:19 cPrototype -> @cPrototype
-  callee +56:9 tsSignatureLine -> @tsSignatureLine
-  callee +60:16 prototypeComment -> @prototypeComment
+  callee +28:3 pushAll -> @pushAll
+  callee +28:18 structDefinitions -> @structDefinitions
+  callee +30:3 pushAll -> @pushAll
+  callee +30:18 resultDefinitions -> @resultDefinitions
+  callee +30:48 structFieldTypes -> @structFieldTypes
+  local +34:7 lastPath: string (let)
+  local +35:7 anyModule: boolean (let)
+  local +36:14 fn: ExternalFunction (const)
+  callee +45:9 tsSignatureLine -> @tsSignatureLine
+  local +54:11 proto: string (const)
+  callee +54:19 cPrototype -> @cPrototype
+  callee +57:9 tsSignatureLine -> @tsSignatureLine
+  callee +61:16 prototypeComment -> @prototypeComment

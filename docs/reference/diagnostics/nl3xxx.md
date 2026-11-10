@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 51 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 54 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -629,6 +629,30 @@ The message of an error contains:
 
 ```text
 ` is the name the wasm loader answers the program's module storage under: …
+```
+
+## NL3052
+
+The message of an error contains:
+
+```text
+…the file system answers differently on every host
+```
+
+## NL3053
+
+The message of an error contains:
+
+```text
+…another machine or another program answers from outside this one
+```
+
+## NL3054
+
+The message of an error contains:
+
+```text
+C code or a host import runs where this compiler cannot pin its bits
 ```
 
 ## NL3055

@@ -97,7 +97,7 @@ The reference for each member of `Math`, with its parameters, its answer and its
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path. On a page module (a wasm build with no WASI, or an `--emit-dts` compile, whose IR `--profile wasm` or `wasm-host` links with no libm), `sin`, `cos`, `exp` and `log` are calls to `std/math.ts`'s `sinF64`, `cosF64`, `expF64` and `logF64` instead, fdlibm's, copied in like `tan`, within one ulp of V8; `--profile wasi` keeps the intrinsics | none | `math_intrinsics`, `math_rounding`, `wasm_math_exp`, `wasm_math_std`; `reject_wasm_math_f32` (`` `Math.sin` requires an f64 argument, got f32 ``); `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
+| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path. On a page module (a wasm build with no WASI, or an `--emit-dts` compile, whose IR `--profile wasm` or `wasm-host` links with no libm), `sin`, `cos`, `exp` and `log` are calls to `std/math.ts`'s `sinF64`, `cosF64`, `expF64` and `logF64` instead, fdlibm's, copied in like `tan`, within one ulp of V8; `--profile wasi` keeps the intrinsics. Under [`--deterministic`](#--deterministic) they are those calls on every target, `--emit-ts` included | none | `math_intrinsics`, `math_rounding`, `wasm_math_exp`, `wasm_math_std`; `reject_wasm_math_f32` (`` `Math.sin` requires an f64 argument, got f32 ``); `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
 | `Math.tan(x: f64): f64` | a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the module as `internal @nish.tanF64`, so no target calls libm; exact near every multiple of π/2 and within one ulp | none | `math_tan`, `math_std_edges` |
 | `Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64` | calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in like `tan`; ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is −π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two arguments, not JavaScript's any number | none | `math_atan2`, `math_hypot`; `reject_math_atan2_f32` (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``), `reject_math_hypot_arity` (`` `Math.hypot` expects exactly 2 arguments, got 3 ``) |
 | `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C. On a page module it is a call to `std/math.ts`'s `powF64`, copied in like `tan`, which answers ECMAScript's cases itself, within one ulp of V8 | none | `math_intrinsics`, `wasm_math_std`; `tests/differential/corpus/f64_pow_spec`; `reject_wasm_math_arity` (`` `Math.pow` expects exactly 2 arguments, got 1 ``) |
@@ -126,12 +126,12 @@ The reference for each conversion, with its parameter and its answer, is its doc
 | any integer -> an integer of the **same width** and other signedness | **no instruction at all**: signedness is not part of the LLVM type and the bits do not move (`toU32(i)` on an `i32`, `toI64(q)` on a `u64`) | `u_conv_same_width` |
 | `toF32(x): f32` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f64`: `fptrunc` (rounds to nearest); `f32`: identity | `f32_conversions`, `f32_constant` |
 | `toF64(x): f64` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f32`: `fpext` (exact); `f64`: identity | `conversions`, `u_conv_f64`, `f32_conversions` |
-| `f64ToBits(x: f64): i64` | reinterpret the 64 bits, never convert the value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`. One `bitcast`, so a function that only reinterprets bits stays `readnone` | `conv_f64_bits`; `reject_f64tobits_type`, `reject_f64tobits_arity` |
-| `f32ToBits(x: f32): i32` | the same for an `f32`'s 32 bits, signed as an `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is `-2147483648`. One `bitcast float to i32`; under Node, `runtime/nish.mjs` supplies it from a `DataView` | `f32_to_bits`; `reject_f32_to_bits_f64` (`` `f32ToBits` expects an argument of type f32, got f64 ``) |
+| `f64ToBits(x: f64): i64` | reinterpret the 64 bits, never convert the value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`. One `bitcast`, so a function that only reinterprets bits stays `readnone`; under [`--deterministic`](#--deterministic) a NaN gives `0x7FF8000000000000` (`quietBitsF64`) | `conv_f64_bits`; `reject_f64tobits_type`, `reject_f64tobits_arity` |
+| `f32ToBits(x: f32): i32` | the same for an `f32`'s 32 bits, signed as an `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is `-2147483648`. One `bitcast float to i32`; under Node, `runtime/nish.mjs` supplies it from a `DataView`; under [`--deterministic`](#--deterministic) a NaN gives `0x7FC00000` (`quietBitsF32`) | `f32_to_bits`; `reject_f32_to_bits_f64` (`` `f32ToBits` expects an argument of type f32, got f64 ``) |
 | `bitsToF64(b: i64): f64` | the inverse. `bitsToF64(f64ToBits(x)) === x` for every `x` except `NaN`, which is not `===` to itself | `conv_f64_bits`; `reject_bitstof64_type` |
-| `Number(x: string \| i32 \| i64 \| f64 \| boolean): f64` | a string is parsed with JavaScript's `Number(s)` rules (below); `i32`/`i64`: `sitofp`; `boolean`: `uitofp` (`true` is `1`); `f64`: identity. A numeric literal argument is typed `f64` (`Number(2.5)` works in i32 mode) | `parse_numbers`; `reject_number_array` (`` `Number` expects a string, number, or boolean, got i32[] ``) |
+| `Number(x: string \| i32 \| i64 \| f64 \| boolean): f64` | a string is parsed with JavaScript's `Number(s)` rules (below); `i32`/`i64`: `sitofp`; `boolean`: `uitofp` (`true` is `1`); `f64`: identity. A numeric literal argument is typed `f64` (`Number(2.5)` works in i32 mode). Under [`--deterministic`](#--deterministic) a string goes to `std/math.ts`'s `numberExact` instead, which reads a `0x` integer the same on every target. | `parse_numbers`; `reject_number_array` (`` `Number` expects a string, number, or boolean, got i32[] ``) |
 | `parseInt(s: string): i32` | base 10 only: ASCII whitespace, an optional sign, then digits (`strtoll`); stops at the first other character. **Deviations from JavaScript:** no `NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`, `parseInt("")`); values beyond the `i32` range saturate exactly like `toI32` (`parseInt("99999999999")` is `2147483647`); a `0x` prefix is not hexadecimal (`parseInt("0x10")` is `0`). Always `i32`, also under `--number-mode f64` (use `Number` there) | `parse_numbers`; `reject_parseint_number` (`` `parseInt` expects a string, got i32 ``) |
-| `parseFloat(s: string): f64` | ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded by `strtod`; `NaN` when there is none (`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`, `"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like `strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and gives `0`) | `parse_numbers` |
+| `parseFloat(s: string): f64` | ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded by `strtod`; `NaN` when there is none (`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`, `"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like `strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and gives `0`). Under [`--deterministic`](#--deterministic) a string goes to `std/math.ts`'s `parseFloatExact` instead, which reads a `0x` integer the same on every target. | `parse_numbers` |
 
 The string parsers accept only ASCII whitespace (` \t\n\v\f\r`), not the
 Unicode spaces JavaScript also trims. `Number(s)` trims it on both sides and
@@ -2029,6 +2029,11 @@ The reference for each member, with its parameters and its answer, is its doc co
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
 | `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2620); a second argument is refused too (`` `sort` takes one comparator ``, NL2619). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](declarations.md#function-parameters)): a top-level function, or an arrow, which may read the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused (`reject_arr_sort_capture_let`). Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
+| `a.map(f: (x: T[, i: number]) => U): U[]` | a new array of `f(a[i])` (or `f(a[i], i)`) for each element, in order, as `Array.prototype.map` gives. The callback takes one or two parameters; a third, JavaScript's array argument, is refused (`` The callback of `map` takes 3 parameters, and Nish passes at most two … ``, NL2698), and so is a second argument to `map` itself (JavaScript's `thisArg`). It is a compile-time function argument under the comparator's rule. Compiled to `std/array.ts`'s `map` or `mapIndexed`, called directly. See [Callback methods and `slice`](#callback-methods-and-slice) | `arr_map`, `arr_map_f64`, `arr_map_template`; `reject_arr_map_third_param`, `reject_arr_map_this_arg`, `reject_arr_map_capture_let` |
+| `a.filter(pred: (x: T[, i: number]) => boolean): T[]` | a new array of the elements `pred` keeps, in order. `pred` answers `boolean` (`reject_arr_filter_not_boolean`); the callback rules are `map`'s | `arr_filter`; `reject_arr_filter_not_boolean` |
+| `a.some(pred)`, `a.every(pred)`: `boolean` | whether some (every) element satisfies `pred`, stopping at the first that decides; an empty array answers `false` (`true`) | `arr_some_every` |
+| `a.findIndex(pred): number` | the first index `pred` accepts, or `-1`. There is **no `find`**: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(f)` is refused and points here (`` `find` is not supported: TypeScript types its answer `T \| undefined` … ``, NL2697) | `arr_find_index`; `reject_arr_find` |
+| `a.slice(start: number = 0, end: number = a.length): T[]` | a copy of `a[start..end)`, with `s.slice`'s rule: `0 <= start <= end <= a.length`, or the program **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript counts a negative index from the end and clamps the rest. Zero to two arguments (NL2699), each a `number`, where `s.slice` takes any integer type. Works on a `readonly T[]`, and the copy is a mutable `T[]` | `arr_slice`, `arr_slice_bounds`; `reject_arr_slice_args` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](expressions.md#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
@@ -2052,7 +2057,7 @@ type, so `wide.push(3)` on an `i64[]` is an `i64` three
 
 ### Sorting with a comparator
 
-`xs.sort(cmp)` is the one array method that takes a function. The checker
+`xs.sort(cmp)` sorts with a function the program passes. The checker
 rewrites the call to `sortWith(xs, cmp)` from `std/sort.ts`, which the program
 does not import: a `.sort(` call is what loads it. Because `cmp` is a
 compile-time function parameter, each comparator gets its own instantiation
@@ -2098,6 +2103,70 @@ receiver or `process.argv`, and a comparator that reads a `let` of the
 function it is written in (`reject_arr_sort_capture_let`). A comparator is an
 arrow argument like any other, so it may read that function's `const` locals
 and parameters (`arr_sort_capture`), under the rule in [Function parameters](declarations.md#function-parameters).
+
+### Callback methods and `slice`
+
+`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
+and `xs.slice(...)` are lowered as `sort` is: the checker rewrites the call to
+a template of `std/array.ts`, which a call of one of those names loads, and the
+callback is a compile-time function parameter, so each callback gets an
+instantiation of its own whose loop calls it directly. `xs.map(f)` and
+`map(xs, f)` with `map` imported from `nish/array` are the same call and
+compile to one instance (`arr_map_template`). The template is picked by the
+callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`, and
+`slice`, `sliceFrom` or `sliceAll` by the argument count.
+
+The callback takes the element, or the element and its index, as TypeScript
+allows. JavaScript passes a third argument, the array itself; Nish refuses a
+callback that declares one (NL2698), since the array is the receiver the call
+already names. A callback that declares no parameter, `xs.map(() => 0)`, is
+refused too, though TypeScript accepts it: the template is picked by the
+callback's arity, and there is none for zero, so write `(_x) => 0`. The
+callback rule is the comparator's: a top-level function, or
+an arrow that reads only the `const` locals and parameters of the function it
+is written in (`reject_arr_map_capture_let`).
+
+Each method walks the array from index 0 and calls the callback once per
+element, in order, up to the length the array had when the call began, as
+`Array.prototype` does; `some`, `every` and `findIndex` stop at the first
+element that decides. A callback that shrinks the array ends the walk at the
+new length, where JavaScript goes on and skips the missing indices. `map` and
+`filter` answer a new array, so writing into it does not touch the receiver;
+an element that is an `interface` record is stored inline and copied, so
+`filter(...)[0].id = 10` leaves the receiver's record as it was, as it would
+under Node (`arr_filter`).
+
+**There is no `find`.** TypeScript types `xs.find(f)` as `T | undefined`, and
+Nish has no `undefined`: a program testing `r !== null` would pass `tsc` and
+mean something else under Node. The call is refused with a message that
+points to `findIndex` (NL2697, `reject_arr_find`):
+`const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`.
+
+**`slice` panics where JavaScript clamps.** The bounds rule is string
+`slice`'s: `0 <= start <= end <= xs.length`, and anything else exits 1 with
+`slice out of range: [start, end) of length n` (`arr_slice_bounds`). A
+negative index, which JavaScript counts from the end, and an end past the
+length, which it clamps, are both outside. A `number` bound under
+`--number-mode f64` is made an integer before the check, as `llvm.fptosi.sat`
+does: a fraction is truncated toward zero (`xs.slice(0.9, 2.5)` is
+`xs.slice(0, 2)`), `NaN` is 0, and `±Infinity` or a magnitude of 2^63 or more
+saturates to the `i64` limits, so it fails the check and the message prints
+the limit (`slice out of range: [-9223372036854775808, 9223372036854775807) of
+length 3`; `arr_map_f64`, `arr_slice_saturate`). The bounds are `number`
+only, where string `slice` takes any integer type: an `i64` or `u32` bound is
+refused (`` Argument 2 of `slice`: expected i32, got i64 ``;
+`reject_arr_slice_i64_bound`), so convert it first: with `toI32(n)` in the
+default i32 mode, and with `Number(n)` under `--number-mode f64`, where the
+message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is not a
+`slice` [panic site](semantics-decisions.md#panic-sites): its check is `std/array.ts`'s own
+`panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
+proof at the call removes, and `--deny-panics` refuses it
+(`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
+is the runtime's `sliceArray`, which applies the same check with the same
+words, so the two agree on every input; `map`, `filter`, `some`, `every` and
+`findIndex` are the platform's own `Array.prototype` methods there, and an
+answer that holds records inline is copied with the runtime's `copyRecords`,
+as the native `push` copies.
 
 ## Bulk writes: `set` and `fill`
 
@@ -2217,7 +2286,8 @@ instruction for instruction, because the annotation is a promise to the checker
 and not a value.
 
 - **Everything that reads still works**: `a.length`, `a[i]`, `for...of`,
-  `indexOf`, `join`, passing it on to another `readonly T[]`.
+  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`, `slice`,
+  passing it on to another `readonly T[]`.
 - **Everything that writes is refused**: `a[i] = v` and `a[i] op= v` are
   `` Cannot assign to an element of readonly i32[] (declare it i32[] to write through it) ``
   (`reject_arr_readonly_store`), and `push` / `pop` are
@@ -2272,8 +2342,8 @@ a mutable `T[]` — and it is exact where the fixpoint is not
 (`` `process.argv` is read-only ``), because it is a value and not an
 annotation.
 
-There are no other array or string methods (`map`, `shift`, `toUpperCase`,
-`charAt`, ...) — `slice` is a string method and an array has none — and no
+There are no other array or string methods (`shift`, `find`, `reduce`,
+`toUpperCase`, `charAt`, ...) and no
 `toString` (template literals and `console.log` convert numbers);
 string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under
@@ -3516,6 +3586,53 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
   the program against the file before it looks in its cache, so the file is not
   part of the cache key and a cache hit is held to it too. `--fix` and
   `--emit-ast` refuse the flag.
+
+<a id="--deterministic" style="scroll-margin-top: 65px"></a>
+
+### `--deterministic`
+
+`--deterministic`, on a compile or `nish run`, promises that the program's
+`f64` and `f32` results are the same bits natively on x86-64 and AArch64, on
+wasm32 and in the `--emit-ts` reading under Node
+([wp50-wasm-host.md §9](https://github.com/amritk/nish/blob/main/docs/wp50-wasm-host.md#9-w7-the-same-bits-on-every-target)):
+
+- `Math.sin`, `cos`, `exp`, `log` and `pow` lower to `std/math.ts`'s
+  `sinF64`, `cosF64`, `expF64`, `logF64` and `powF64` on every target, as on a
+  page module, and a float `%` to `fmodF64` (an `f32` widened and the exact
+  result narrowed back). The `--emit-ts` reading imports those functions, and
+  `tanF64`, `atan2F64` and `hypotF64`, from `./nish/math.ts` in place of
+  `Math`. `+ - * /`, `sqrt` and the exact builtins need nothing: they are
+  correctly rounded everywhere, and every C unit and the program's IR are
+  compiled with `-ffp-contract=off` with or without the flag.
+- `f64ToBits` and `f32ToBits` give the canonical quiet NaN,
+  `0x7ff8000000000000` and `0x7fc00000`, for every NaN (`quietBitsF64` and
+  `quietBitsF32`); targets differ in the sign and payload of a NaN an
+  operation makes.
+- A program that reaches a nondeterministic capability — `clock`, `entropy`,
+  `env`, `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` or `tty` — is
+  refused with the chain that reaches it, as the capability policy refuses
+  one: NL3052 the file system, NL3053 another machine or program (`net`,
+  `process.spawn`), NL3054 C code or a host import (`ffi`), NL2700 the clock
+  and the random source, NL2701 the environment and the terminal.
+- `Number(s)`, `parseFloat(s)` and `parseInt(s)` read a string with one
+  grammar on every target, the one `--emit-ts` reads: a `0x` integer, read by
+  `std/math.ts`'s `numberExact` and `parseFloatExact` (which the flag calls
+  in their place) and correctly rounded on any libc, and no hex float, so
+  `Number("0x1p3")` is NaN and `parseFloat("0x1p3")` is 1 where a native build
+  without the flag lets `strtod` read 8 (`deterministic_parse`). Every decimal
+  spelling already agreed: glibc, musl and Node round them all correctly.
+
+```text
+main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now
+```
+
+The float corpus, `tests/differential/corpus/float/`, holds every operation
+and `Math` builtin over ±0, subnormals, the normal extremes, ±Infinity, NaN,
+integers near 2^53, multiples of π/4, NaN payloads read through
+`f64ToBits` and `f32ToBits`, and 94 strings through `Number`, `parseFloat` and
+`parseInt` to one `expected.txt` on each target
+(`tests/run.js`, sections `deterministic` and `float-corpus`; the
+`reject_deterministic_*` cases).
 
 ### The sandbox
 

@@ -550,6 +550,8 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   link.push("runtime/runtime-shm.c");
   link.push("runtime/runtime-region.c");
   link.push("runtime/runtime-async.c");
+  // As `scripts/build.sh` compiles every unit: no fused multiply-add the C did not write.
+  link.push("-ffp-contract=off");
   link.push("-lm");
   link.push("-o");
   link.push(exe);

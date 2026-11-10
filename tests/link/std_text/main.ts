@@ -11,10 +11,15 @@
 // resolves a relative path only as written, and Nish takes either spelling.
 import { Suite } from "../../../std/testing.ts";
 import {
+  asciiLower,
+  asciiUpper,
   codePointLength,
   contains,
   firstDifference,
+  padEnd,
+  padStart,
   replaceAll,
+  split,
   splitLines,
   splitWhitespace,
   trim,
@@ -149,6 +154,66 @@ export const main = (): number => {
   t.eqStr("replaceAll: the whole string as the needle", replaceAll("alpha", "alpha", "beta"), "beta");
   t.eqStr("replaceAll: an empty text answers empty", replaceAll("", "-", "+"), "");
   t.eqStr("replaceAll: a multi-character replacement is copied whole, and the needle is literal", replaceAll("a.b", ".", " -> "), "a -> b");
+
+  // --- split ---------------------------------------------------------------
+  // JavaScript's `split` for a separator that is not empty: an empty piece at
+  // each end and between adjacent separators, which is what `splitWhitespace`
+  // drops. Each piece is checked through `join`, which keeps the empty ones.
+  const fields: string[] = split(",a,,b,", ",");
+  t.eqI32("split: separators at both ends and side by side give empty pieces", fields.length, 5);
+  t.eqStr("split: and the pieces are in order", fields.join("|"), "|a||b|");
+  t.eqStr("split: a separator that never occurs gives the whole text", split("alpha", ",").join("|"), "alpha");
+  t.eqI32("split: and that is one piece", split("alpha", ",").length, 1);
+  t.eqI32("split: the empty text is one empty piece", split("", ",").length, 1);
+  t.eqStr("split: and that piece is empty", split("", ",")[0], "");
+  t.eqI32("split: the separator alone is two empty pieces", split(",", ",").length, 2);
+  t.eqStr("split: a multi-byte ASCII separator", split("a::b::c", "::").join("|"), "a|b|c");
+  // Overlapping candidates: the leftmost wins and the search goes on past it,
+  // as in `replaceAll`, so "aaa" on "aa" is "" and "a".
+  t.eqStr("split: overlapping candidates match leftmost, once each", split("aaa", "aa").join("|"), "|a");
+  t.eqStr("split: the whole text as the separator", split("alpha", "alpha").join("|"), "|");
+  // A separator that is not ASCII is a whole sequence natively and a whole
+  // run of units under Node, so both find the same pieces.
+  t.eqStr("split: a two-byte separator", split("a\u00e9b\u00e9c", "\u00e9").join("|"), "a|b|c");
+  t.eqStr("split: a four-byte separator, a surrogate pair under Node", split("x😀y😀", "😀").join("|"), "x|y|");
+  t.eqStr("split: multi-byte text on an ASCII separator", split("h\u00e9llo w\u00f6rld", " ").join("|"), "h\u00e9llo|w\u00f6rld");
+  // `é` written as `e` and a combining accent holds an `e`, which a `split`
+  // on "e" finds natively and under Node alike.
+  t.eqStr("split: an ASCII separator inside a decomposed character", split("e\u0301", "e").join("|"), "|\u0301");
+
+  // --- asciiUpper / asciiLower ---------------------------------------------
+  t.eqStr("asciiUpper: the ASCII letters change", asciiUpper("get_user-ID 42"), "GET_USER-ID 42");
+  t.eqStr("asciiLower: the ASCII letters change", asciiLower("Get_User-ID 42"), "get_user-id 42");
+  t.eqStr("asciiUpper: the empty text", asciiUpper(""), "");
+  t.eqStr("asciiLower: the empty text", asciiLower(""), "");
+  // The bytes either side of each range: `@` and `[` round `A`-`Z`, and the
+  // backtick and `{` round `a`-`z`.
+  t.eqStr("asciiUpper: only a to z move", asciiUpper("@AZ[`az{"), "@AZ[`AZ{");
+  t.eqStr("asciiLower: only A to Z move", asciiLower("@AZ[`az{"), "@az[`az{");
+  // Not `toUpperCase`: JavaScript makes "ß" "SS" and "é" "É"; these leave
+  // every byte that is not an ASCII letter alone.
+  t.eqStr("asciiUpper: \u00df and \u00e9 are not ASCII and stay", asciiUpper("stra\u00dfe caf\u00e9"), "STRA\u00dfE CAF\u00e9");
+  t.eqStr("asciiLower: \u00c9 is not ASCII and stays", asciiLower("CAF\u00c9"), "caf\u00c9");
+  t.eqStr("asciiUpper: a four-byte sequence passes through", asciiUpper("a😀b"), "A😀B");
+  t.eqStr("asciiLower: a four-byte sequence passes through", asciiLower("A😀B"), "a😀b");
+  t.eqI32("asciiUpper: the length is the input's", asciiUpper("stra\u00dfe").length, "stra\u00dfe".length);
+
+  // --- padStart / padEnd ---------------------------------------------------
+  // JavaScript's answers for ASCII text. Text that is not ASCII counts bytes
+  // natively and units under Node: `tests/link/std_text_pad_native`.
+  t.eqStr("padStart: zeros in front", padStart("7", 3, "0"), "007");
+  t.eqStr("padEnd: spaces after", padEnd("ab", 4, " "), "ab  ");
+  t.eqStr("padStart: a several-character fill repeats and is cut at the width", padStart("7", 4, "ab"), "aba7");
+  t.eqStr("padEnd: and the same after", padEnd("7", 4, "ab"), "7aba");
+  t.eqStr("padStart: a fill that fits exactly is not cut", padStart("7", 5, "ab"), "abab7");
+  t.eqStr("padStart: a width equal to the length changes nothing", padStart("abc", 3, "0"), "abc");
+  t.eqStr("padEnd: a width below the length changes nothing", padEnd("abc", 1, "0"), "abc");
+  t.eqStr("padStart: a negative width changes nothing", padStart("abc", -4, "0"), "abc");
+  t.eqStr("padStart: an empty fill changes nothing", padStart("abc", 8, ""), "abc");
+  t.eqStr("padEnd: an empty fill changes nothing", padEnd("abc", 8, ""), "abc");
+  t.eqStr("padStart: the empty text is all fill", padStart("", 3, "-"), "---");
+  // A fill longer than the room left is cut to it.
+  t.eqStr("padEnd: a fill longer than the room is cut", padEnd("ab", 3, "xyz"), "abx");
 
   // --- firstDifference -----------------------------------------------------
   const want: string[] = splitLines("alpha\nbeta\ngamma\n");
