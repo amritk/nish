@@ -1160,8 +1160,10 @@ const renderIndex = (pages) => {
 /**
  * The builtin modules with Nish source behind them (`src/nish-modules.ts`,
  * `isNishSourceModule`): a program imports `nish:region`, never `nish/region`,
- * which the compiler refuses. Each gets one page, from its `std/` source,
- * under its builtin name, in place of the `runtime/nish.d.ts` page.
+ * which the compiler refuses. Their page comes from `runtime/nish.d.ts`, as
+ * every builtin module's does, so the reference and the editor read one doc
+ * source; the `std/` file gets no page of its own, and its comments say only
+ * how the module is built.
  */
 const SOURCE_MODULES = new Set(["region", "secret"])
 
@@ -1213,9 +1215,7 @@ const collectPages = (project) => {
       continue
     }
     const name = m.name.replace(/^nish:/, "")
-    if (SOURCE_MODULES.has(name)) {
-      continue
-    }
+    const sourced = SOURCE_MODULES.has(name)
     const at = dtsLines.findIndex((l) => l.startsWith(`declare module ${JSON.stringify(m.name)}`))
     pages.push({
       mod: m,
@@ -1229,6 +1229,12 @@ const collectPages = (project) => {
         `The \`${m.name}\` builtin module: the globals of the same names, importable. ` +
         "Its members are declared in `runtime/nish.d.ts`; " +
         `[the language reference](${languageLink("builtin-modules-nish", `${outDir}/nish-${name}.md`)}) is the normative list.`,
+      // Said whatever the module comment says, so the page names what to import.
+      note: sourced
+        ? `The \`${m.name}\` builtin module, whose source is \`std/${name}.ts\`. ` +
+          `A program imports it as \`${m.name}\`; the compiler refuses \`nish/${name}\`. ` +
+          `[The language reference](${languageLink("builtin-modules-nish", `${outDir}/nish-${name}.md`)}) is the normative list.`
+        : "",
       fallback: globals,
     })
   }
@@ -1237,23 +1243,21 @@ const collectPages = (project) => {
       continue
     }
     const rel = m.name.slice("std/".length)
+    // A builtin module's page is its `runtime/nish.d.ts` one, made above.
+    if (SOURCE_MODULES.has(rel)) {
+      continue
+    }
     const source = `std/${rel}.ts`
-    const builtin = SOURCE_MODULES.has(rel)
-    const spec = builtin ? `nish:${rel}` : `nish/${rel}`
+    const spec = `nish/${rel}`
     pages.push({
       mod: m,
       spec,
       title: spec,
       source,
-      page: `${outDir}/${builtin ? `nish-${rel}` : rel}.md`,
+      page: `${outDir}/${rel}.md`,
       comment: leadingComment(fs.readFileSync(path.join(root, source), "utf8")),
       intro: "",
-      // Said whatever the module comment says, so the page names what to import.
-      note: builtin
-        ? `The \`${spec}\` builtin module, whose source is \`${source}\`. ` +
-          `A program imports it as \`${spec}\`; the compiler refuses \`nish/${rel}\`. ` +
-          `[The language reference](${languageLink("builtin-modules-nish", `${outDir}/nish-${rel}.md`)}) is the normative list.`
-        : "",
+      note: "",
     })
   }
   return pages.sort((a, b) => (a.page < b.page ? -1 : 1))

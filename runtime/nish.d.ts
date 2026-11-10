@@ -3460,8 +3460,9 @@ declare module "nish:unsafe" {
  * **Under Node.** `runtime/nish.mjs` answers the import with
  * `runtime/core.mjs`, where a vector is a fresh typed array of its lanes,
  * made once and never written after, whose element type does the lane's
- * arithmetic; a mask is an array of booleans, and a rotate is two shifts and
- * an `or`. `tests/run.js`'s `simd` section holds the native, WASI and Node
+ * arithmetic: an integer lane wraps through its array type (`Uint8Array` for
+ * a `u8` lane), and an `f32` lane rounds through `Float32Array`. A mask is an
+ * array of booleans, and a rotate is two shifts and an `or`. `tests/run.js`'s `simd` section holds the native, WASI and Node
  * outputs to one.
  *
  * Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-sixteen-byte-vectors
@@ -4103,6 +4104,7 @@ declare module "nish:simd" {
   export function shr<V extends IntegerVector>(v: V, count: i32): V;
   /**
    * Each lane rotated left by `count`, `llvm.fshl` with `v` as both halves.
+   * Signed and unsigned lanes rotate alike.
    *
    * @param v A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
    * @param count An integer literal below the lane width: 0 to 7, 15 or 31
@@ -4112,6 +4114,7 @@ declare module "nish:simd" {
   export function rotl<V extends IntegerVector>(v: V, count: i32): V;
   /**
    * Each lane rotated right by `count`, `llvm.fshr` with `v` as both halves.
+   * Signed and unsigned lanes rotate alike.
    *
    * @param v A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
    * @param count An integer literal below the lane width: 0 to 7, 15 or 31
@@ -4461,8 +4464,9 @@ declare module "nish:secret" {
    * copy.set(raw)`, then `secret(copy)`.
    *
    * @param value The key material, of a shape a `Secret` may hold (NL2428).
-   * @returns The `Secret`, which needs an owner: a `const` or `let`, a
-   *   `return`, or `wipe` (NL2439 otherwise).
+   * @returns The `Secret`, holding `value` itself and not a copy, so its
+   *   storage is the storage `wipe` later zeroes. It needs an owner: a
+   *   `const` or `let`, a `return`, or `wipe` (NL2439 otherwise).
    */
   export function secret<T>(value: T): Secret<T>;
   /**
@@ -4473,7 +4477,8 @@ declare module "nish:secret" {
    * (NL2449), and declares a return type that holds no `Secret` (NL2451; an
    * arrow writes it down, NL2452): that type is what leaves.
    *
-   * @param s The `Secret` to read, borrowed.
+   * @param s The `Secret` to read, borrowed: it can be exposed again, and is
+   *   still to be wiped.
    * @param f The function the value is handed to.
    * @returns What `f` answers.
    */
