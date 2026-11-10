@@ -7,14 +7,24 @@
 ```ts
 import {
   PG_ASYNC_CANCELLED,
+  PG_ASYNC_MAX_DEPTH,
   PG_ASYNC_MAX_SIZE,
+  PG_ASYNC_MAX_STATEMENTS,
+  PG_ASYNC_UNSENT,
+  PG_ASYNC_UNSENT_CANCELLED,
   PgAsyncParams,
   PgAsyncPool,
   PgAsyncResult,
+  pgAsyncAnswer,
   pgAsyncClaim,
   pgAsyncConnect,
+  pgAsyncDone,
+  pgAsyncPrepare,
   pgAsyncQuery,
   pgAsyncRelease,
+  pgAsyncSeat,
+  pgAsyncSend,
+  pgAsyncTurn,
 } from "nish/net/postgres-async";
 ```
 
@@ -60,15 +70,33 @@ export async function main(): Promise<i32> {
 
 <scalar-grid cols="2">
 
+<scalar-card title="pg​Async​Answer" icon="phosphor/regular/function" href="#pgasyncanswer">
+
+Builds the seat's answer, in the calling task's memory, from what `pgAsyncTurn` read, reading the rest of an answer past the pool's input from the socket, never past its ReadyForQuery.
+
+</scalar-card>
+
 <scalar-card title="pg​Async​Claim" icon="phosphor/regular/function" href="#pgasyncclaim">
 
-Claims a free connection for the calling task, sleeping while every live one is claimed: 1 ms, then twice as long each time up to 16 ms, for at most `pool.claimWaitMs` in all.
+Claims a free connection for the calling task, the whole of it: one with no pipelined statement in flight.
 
 </scalar-card>
 
 <scalar-card title="pg​Async​Connect" icon="phosphor/regular/function" href="#pgasyncconnect">
 
 Connects every slot of `pool` that is not connected, one after another, and authenticates each on a `PgConnection` (startup, then SCRAM-SHA-256 or `trust`), which wipes its copy of the password once the proof is made and is then dropped.
+
+</scalar-card>
+
+<scalar-card title="pg​Async​Done" icon="phosphor/regular/function" href="#pgasyncdone">
+
+Spends the seat's ticket once its answer is built: the connection moves past the answer, the next seat in its order is served, and the tasks waiting for room are woken.
+
+</scalar-card>
+
+<scalar-card title="pg​Async​Prepare" icon="phosphor/regular/function" href="#pgasyncprepare">
+
+Registers a statement the pipelined calls run by its number, prepared once on each connection, the first time a task sends it there.
 
 </scalar-card>
 
@@ -80,7 +108,25 @@ Runs one statement on the ticket's connection: Parse, Bind (each parameter in te
 
 <scalar-card title="pg​Async​Release" icon="phosphor/regular/function" href="#pgasyncrelease">
 
-Gives a claimed connection back, or closes it when `reusable` is false; the ticket is spent either way, and a ticket that is not the slot's current claim (a second release, or one after `close()`) panics.
+Gives a claimed connection back, or closes it when `reusable` is false, and wakes the tasks waiting for one; the ticket is spent either way, and a ticket that is not the slot's current claim (a second release, or one after `close()`) panics.
+
+</scalar-card>
+
+<scalar-card title="pg​Async​Seat" icon="phosphor/regular/function" href="#pgasyncseat">
+
+Takes a seat for one statement on a shared connection: the live one with the fewest statements in flight, below `pool.depth`, that no task claimed whole and no task is writing to.
+
+</scalar-card>
+
+<scalar-card title="pg​Async​Send" icon="phosphor/regular/function" href="#pgasyncsend">
+
+Writes the seat's statement: its Parse the first time the connection runs it, then Bind (each parameter in text), Execute and Sync, whole, waiting on the socket while other tasks run.
+
+</scalar-card>
+
+<scalar-card title="pg​Async​Turn" icon="phosphor/regular/function" href="#pgasyncturn">
+
+Waits for the seat's turn and reads its answer off the connection: the statements seated before it are answered first, to their own tasks, and what they read past their own answers begins this one.
 
 </scalar-card>
 
@@ -104,7 +150,7 @@ One query's answer, in the task's own memory: its rows as text, its tag, and how
 
 </scalar-grid>
 
-<scalar-detail title="Why three calls">
+<scalar-detail title="Why separate calls">
 
 A spawned task shares the pool with the function that
 spawned it, and runs in memory of its own that is freed when it ends
@@ -132,6 +178,40 @@ it when the query left it unfit to reuse.
 
 </scalar-detail>
 
+<scalar-detail title="Pipelining">
+
+Many tasks may share one connection instead of claiming
+it whole. `pgAsyncPrepare` registers a statement's SQL once, before the
+tasks run, and each task then runs it in five calls:
+
+<scalar-code-group>
+
+```ts example.ts
+const ticket: i32 = await pgAsyncSeat(pool, statement)  // a place in a connection's order
+if (ticket >= 0) {
+  const sent: i32 = await pgAsyncSend(pool, ticket, params)  // Bind, Execute, Sync
+  const turn: i32 = await pgAsyncTurn(pool, ticket, sent)  // the answers before it, then its own
+  const r = await pgAsyncAnswer(pool, ticket, turn)  // its rows, in the task's memory
+  pgAsyncDone(pool, ticket, turn, r.reusable)
+}
+```
+
+</scalar-code-group>
+
+</scalar-detail>
+
+Up to `pool.depth` statements are in flight on a connection at once, and
+its answers come back in the order they were sent; each task waits for the
+answers before its own on the pool's wake and reads its own when its turn
+comes, so one read often brings several. Each connection parses a
+statement once, named, and sends only Bind and Execute after; a Parse the
+server refused is sent again next time. Each statement has its own Sync, so
+a statement the server refuses fails alone. A connection is out of step
+when an answer behind which others wait is lost (a socket error, a frame
+this module does not expect, a task cancelled with its answer unread, an
+answer that left a transaction open): every statement behind it fails
+`PG_ERR_CLOSED`, and the connection closes once the last is answered.
+
 <scalar-detail title="Its own encoder and framer">
 
 A query is encoded and its answer framed
@@ -146,10 +226,11 @@ handed. The framer applies the same checks as `PgConnection`'s (PG-28 in
 
 <scalar-detail title="Claiming">
 
-When every live connection is claimed, `pgAsyncClaim` sleeps
-and looks again, 1 ms then doubling to 16 ms, until one is free or it has
-slept `claimWaitMs` in all; a released connection is not announced, so a
-waiter finds it on its next look. A ticket names a slot and that slot's
+When every live connection is claimed or in use,
+`pgAsyncClaim` (and `pgAsyncSeat`, when none has room) waits on the pool's
+wake, a socket pair `pgAsyncRelease` and each answer read write a byte to,
+until one is free or it has waited `claimWaitMs` in all; nothing polls on a
+clock. A ticket names a slot and that slot's
 claim: `pgAsyncQuery` and `pgAsyncRelease` panic on one that is not the
 slot's current claim, so two tasks never share a connection and a
 connection is given back once.
@@ -172,10 +253,11 @@ another's session or the rest of its answer.
 **Limits.** `PgAsyncPool`'s caps (`maxMessage`, `maxColumns`, `maxRows`,
 `maxResultBytes`, `claimWaitMs`) bound what one query keeps; rows past
 `maxRows` or `maxResultBytes` are read and dropped, and the query fails
-with `PG_ERR_TOO_BIG`. A wait has no deadline of its own: a server that
-accepts and never answers holds the task until it closes, the task is
-cancelled, or (in `pgAsyncConnect`) the caller gives up; bound a slow
-statement with the server's `statement_timeout` too.
+with `PG_ERR_TOO_BIG`. `pgAsyncConnect` gives each connection at most
+`connectWaitMs` (10 s) to connect and finish its startup. A query's wait
+has no deadline of its own: a server that accepts and never answers holds
+the task until it closes or the task is cancelled; bound a slow statement
+with the server's `statement_timeout` too.
 
 </scalar-callout>
 
@@ -184,12 +266,14 @@ statement with the server's `statement_timeout` too.
 A task that is cancelled (`nish:async`'s `cancel`, a
 `cancelAfter` deadline, or `nish/net/serve` when the client hangs up, the
 request's deadline passes or the server drains) stops waiting at once.
-`pgAsyncClaim` answers `PG_ASYNC_CANCELLED` and claims nothing; a query
+`pgAsyncClaim` and `pgAsyncSeat` answer `PG_ASYNC_CANCELLED` and take
+nothing; a query
 not yet sent fails with nothing written and its connection reusable; a
 query cut off mid-answer fails with `PG_ERR_CLOSED`, `socketError`
 `PG_ASYNC_CANCELLED` and `reusable` false, so the task's
 `pgAsyncRelease` closes the connection, whose unread answer would put the
-next task out of step. No CancelRequest is sent: the server runs the
+next task out of step. A pipelined statement cancelled before its turn
+fails the same way and fails the statements behind it. No CancelRequest is sent: the server runs the
 statement on until it sees the socket closed.
 
 </scalar-detail>
@@ -220,6 +304,7 @@ out of range) panic.
 </scalar-detail>
 
 `tests/link/std_postgres_async` runs one against a loopback backend;
+`tests/link/std_postgres_async_pipeline` pipelines statements from many tasks;
 `tests/link/std_postgres_async_flat` reads `Arena.used()` across thousands
 of queries. Caps and findings: `docs/security/postgres.md`.
 
@@ -227,11 +312,58 @@ Written for this module; not ported from another implementation.
 
 ## Functions
 
+### pgAsyncAnswer
+
+Builds the seat's answer, in the calling task's memory, from what
+`pgAsyncTurn` read, reading the rest of an answer past the pool's input
+from the socket, never past its ReadyForQuery. A statement the server
+refuses fails alone (each has its own Sync); one seated behind a refused
+Parse fails with SQLSTATE `26000` and the next one parses again. A frame
+this module does not expect or a cap past which it cannot be read fails it
+with `reusable` false. It only reads the pool, so a spawned task may call
+it.
+
+```ts
+function pgAsyncAnswer(
+  pool: PgAsyncPool,
+  ticket: i32,
+  turn: i32,
+): Promise<PgAsyncResult>
+```
+
+<scalar-field name="pool" type="PgAsyncPool" required>
+
+The pool the ticket came from; a cap out of its range panics.
+
+</scalar-field>
+
+<scalar-field name="ticket" type="i32" required>
+
+The ticket `pgAsyncTurn` used; any other panics, as does a
+  ticket whose turn has not come.
+
+</scalar-field>
+
+<scalar-field name="turn" type="i32" required>
+
+What `pgAsyncTurn` answered; one below 0 fails the answer
+  without reading, with `PG_ERR_ENCODING` for a parameter that could not be
+  sent and `PG_ERR_CLOSED` otherwise.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Promise&lt;PgAsyncResult&gt;">
+
+The answer; its `reusable` goes to `pgAsyncDone`.
+
+</scalar-field>
+
 ### pgAsyncClaim
 
-Claims a free connection for the calling task, sleeping while every live
-one is claimed: 1 ms, then twice as long each time up to 16 ms, for at most
-`pool.claimWaitMs` in all. A cancelled task claims nothing, so a
+Claims a free connection for the calling task, the whole of it: one with
+no pipelined statement in flight. While every live one is busy it waits
+until `pgAsyncRelease` or a pipelined answer frees one and wakes it, for at
+most `pool.claimWaitMs` in all. A cancelled task claims nothing, so a
 connection is never taken by a task that would close it at its first wait.
 It writes only numbers into the pool, so a spawned task may call it.
 
@@ -307,6 +439,83 @@ The number of slots connected after the call.
 
 </scalar-field>
 
+### pgAsyncDone
+
+Spends the seat's ticket once its answer is built: the connection moves
+past the answer, the next seat in its order is served, and the tasks
+waiting for room are woken. A Parse that failed is sent again by the next
+seat that runs the statement; an answer that left the connection unfit
+fails the seats behind it, and the connection closes once the last of them
+is answered. It writes only numbers into the pool, so a spawned task may
+call it.
+
+```ts
+function pgAsyncDone(
+  pool: PgAsyncPool,
+  ticket: i32,
+  turn: i32,
+  reusable: boolean,
+): void
+```
+
+<scalar-field name="pool" type="PgAsyncPool" required>
+
+The pool the ticket came from.
+
+</scalar-field>
+
+<scalar-field name="ticket" type="i32" required>
+
+The ticket `pgAsyncAnswer` used; it is spent here, and any
+  other panics.
+
+</scalar-field>
+
+<scalar-field name="turn" type="i32" required>
+
+What `pgAsyncTurn` answered.
+
+</scalar-field>
+
+<scalar-field name="reusable" type="boolean" required>
+
+The answer's `reusable`.
+
+</scalar-field>
+
+### pgAsyncPrepare
+
+Registers a statement the pipelined calls run by its number, prepared once
+on each connection, the first time a task sends it there. Call it from
+`main` or another function that is not a spawned task, before the tasks
+start: it grows the pool.
+
+```ts
+function pgAsyncPrepare(
+  pool: PgAsyncPool,
+  sql: string,
+): i32
+```
+
+<scalar-field name="pool" type="PgAsyncPool" required>
+
+The pool.
+
+</scalar-field>
+
+<scalar-field name="sql" type="string" required>
+
+One statement, `$1`, `$2`, ... naming the parameters.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The statement's number for `pgAsyncSeat`, 0 or more; -1 when the
+  SQL holds a NUL or `PG_ASYNC_MAX_STATEMENTS` are registered already.
+
+</scalar-field>
+
 ### pgAsyncQuery
 
 Runs one statement on the ticket's connection: Parse, Bind (each parameter
@@ -358,10 +567,11 @@ The answer; its `reusable` goes to `pgAsyncRelease`.
 
 ### pgAsyncRelease
 
-Gives a claimed connection back, or closes it when `reusable` is false; the
-ticket is spent either way, and a ticket that is not the slot's current
-claim (a second release, or one after `close()`) panics. It writes only
-numbers into the pool, so a spawned task may call it.
+Gives a claimed connection back, or closes it when `reusable` is false, and
+wakes the tasks waiting for one; the ticket is spent either way, and a
+ticket that is not the slot's current claim (a second release, or one after
+`close()`) panics. It writes only numbers into the pool, so a spawned task
+may call it.
 
 ```ts
 function pgAsyncRelease(
@@ -386,6 +596,137 @@ The ticket `pgAsyncClaim` answered.
 <scalar-field name="reusable" type="boolean" required>
 
 The query's `reusable`; false closes the connection.
+
+</scalar-field>
+
+### pgAsyncSeat
+
+Takes a seat for one statement on a shared connection: the live one with
+the fewest statements in flight, below `pool.depth`, that no task claimed
+whole and no task is writing to. The seat fixes the statement's place in
+the connection's order, so the calling task goes straight on, with no
+other `await` between: `pgAsyncSend` writes the statement, `pgAsyncTurn`
+waits for its answer, `pgAsyncAnswer` builds it and `pgAsyncDone` spends
+the ticket. Until `pgAsyncTurn` no other seat on the connection is taken,
+so the statements go out in the order of their seats. While no connection has room it waits until a seat
+or a connection frees and wakes it, for at most `pool.claimWaitMs` in all.
+It writes only numbers into the pool, so a spawned task may call it.
+
+```ts
+function pgAsyncSeat(
+  pool: PgAsyncPool,
+  statement: i32,
+): Promise<i32>
+```
+
+<scalar-field name="pool" type="PgAsyncPool" required>
+
+The pool.
+
+</scalar-field>
+
+<scalar-field name="statement" type="i32" required>
+
+A number `pgAsyncPrepare` answered; any other panics, as
+  does a `pool.depth` out of range.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Promise&lt;i32&gt;">
+
+A ticket (0 or more) for `pgAsyncSend`, `pgAsyncTurn`,
+  `pgAsyncAnswer` and `pgAsyncDone`, each called once; `PG_POOL_NONE` (-1) when no slot is connected;
+  `PG_CARRIER_FULL` (-2) when no seat came free in time;
+  `PG_ASYNC_CANCELLED` (-3) when the calling task is cancelled, before or
+  while it waits.
+
+</scalar-field>
+
+### pgAsyncSend
+
+Writes the seat's statement: its Parse the first time the connection runs
+it, then Bind (each parameter in text), Execute and Sync, whole, waiting on
+the socket while other tasks run. It only reads the pool; its buffer is the
+calling task's.
+
+```ts
+function pgAsyncSend(
+  pool: PgAsyncPool,
+  ticket: i32,
+  params: PgAsyncParams,
+): Promise<i32>
+```
+
+<scalar-field name="pool" type="PgAsyncPool" required>
+
+The pool the ticket came from.
+
+</scalar-field>
+
+<scalar-field name="ticket" type="i32" required>
+
+A ticket `pgAsyncSeat` answered and no `pgAsyncDone` has
+  spent; any other panics.
+
+</scalar-field>
+
+<scalar-field name="params" type="PgAsyncParams" required>
+
+The parameters, as many as the statement names; a NUL in
+  one sends nothing.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Promise&lt;i32&gt;">
+
+What to hand `pgAsyncTurn`: the bytes written, or
+  `PG_ASYNC_UNSENT` or `PG_ASYNC_UNSENT_CANCELLED` when nothing was, or
+  less than -15 when the write broke.
+
+</scalar-field>
+
+### pgAsyncTurn
+
+Waits for the seat's turn and reads its answer off the connection: the
+statements seated before it are answered first, to their own tasks, and
+what they read past their own answers begins this one. One read takes what
+the socket holds, up to the pool's input, so the answers behind this one
+often arrive with it. A lost connection (a socket error, or a task
+cancelled with its answer unread) fails this statement and every one behind
+it. It writes only numbers into the pool, so a spawned task may call it;
+`pgAsyncAnswer` then builds the answer in the task's memory.
+
+```ts
+function pgAsyncTurn(
+  pool: PgAsyncPool,
+  ticket: i32,
+  sent: i32,
+): Promise<i32>
+```
+
+<scalar-field name="pool" type="PgAsyncPool" required>
+
+The pool the ticket came from; a cap out of its range panics.
+
+</scalar-field>
+
+<scalar-field name="ticket" type="i32" required>
+
+The ticket `pgAsyncSeat` answered and `pgAsyncSend` used;
+  any other panics.
+
+</scalar-field>
+
+<scalar-field name="sent" type="i32" required>
+
+What `pgAsyncSend` answered.
+
+</scalar-field>
+
+<scalar-field name="returns" type="Promise&lt;i32&gt;">
+
+What to hand `pgAsyncAnswer` and `pgAsyncDone`: 0 when the answer
+  is there to read, else less than 0 for a statement that failed unanswered.
 
 </scalar-field>
 
@@ -425,19 +766,44 @@ class PgAsyncPool
 
 | Member | |
 | --- | --- |
-| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. |
+| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. It opens a socket pair per slot and one more, the wakes a waiting task waits on; `close()` closes them. |
 | `readonly claimed: u8[]` | Each slot's state: 0 free, 1 claimed by a ticket. |
 | `readonly claims: i32[]` | Each slot's claim count, the high part of its current ticket. |
-| `claimWaitMs: i32` | The most milliseconds `pgAsyncClaim` sleeps waiting for a free connection before it answers `PG_CARRIER_FULL`. |
-| `dropped: i32` | How many connections `pgAsyncRelease` closed rather than gave back. |
+| `claimWaitMs: i32` | The most milliseconds `pgAsyncClaim` or `pgAsyncSeat` waits for a free connection before it answers `PG_CARRIER_FULL`. |
+| `connects: i32` | How many connections `pgAsyncConnect` made, in all. |
+| `connectWaitMs: i32` | The most milliseconds `pgAsyncConnect` gives one connection to connect and finish its startup before it closes it and moves on; 0 or less waits for as long as the server takes. |
+| `depth: i32` | The most statements `pgAsyncSeat` puts in flight on one connection at once, 1 to `PG_ASYNC_MAX_DEPTH`. |
+| `readonly doomAt: i32[]` | Per slot: the first sequence number that is not served because the connection was lost, or -1. |
+| `dropped: i32` | How many connections were closed rather than given back: by `pgAsyncRelease`, or once a lost pipeline emptied. |
 | `readonly fds: i32[]` | Each slot's socket, or -1 while it is not connected. |
+| `readonly inAnswer: i32[]` | Per slot: where the answer in turn ends in `inputs`, past its ReadyForQuery, or -1 while it is not there whole. |
+| `readonly inEnd: i32[]` | Per slot: where the unserved bytes in `inputs` end. |
+| `readonly inParsed: u8[]` | Per slot: 1 when the answer in turn begins with a ParseComplete. |
+| `readonly inputs: u8[][]` | Per slot: answer bytes read past the last statement served, at `[inStart, inEnd)`. |
+| `readonly inStart: i32[]` | Per slot: where the unserved bytes in `inputs` start. |
 | `maxColumns: i32` | The most columns a row may have, 1 to 65535; more fails the query with `PG_ERR_TOO_BIG` and closes the connection. |
 | `maxMessage: i32` | The largest message a query accepts, in bytes, 1024 to 2^30 - 1; a larger one fails it with `PG_ERR_TOO_BIG` and closes the connection. |
 | `maxResultBytes: i32` | The most bytes of rows a query keeps, 1024 to 2^30 - 1: each row costs its DataRow's length and 16 bytes a cell. A row past it is dropped with every later one, read through to the ReadyForQuery, and the query fails with `PG_ERR_TOO_BIG`. |
 | `maxRows: i32` | The most rows a query keeps, 1 to 2^24; later rows are read and dropped, and the query fails with `PG_ERR_TOO_BIG`. |
+| `readonly nextSeq: i32[]` | Per slot: the sequence number the next seated statement takes. |
+| `readonly prepared: u8[]` | Per slot and statement (`slot * PG_ASYNC_MAX_STATEMENTS + statement`): 1 once a Parse for it was sent on that connection. |
+| `readonly seatClaims: i32[]` | Per seat: its claim count, the high part of its current ticket. |
+| `readonly seated: i32[]` | Per slot: the seats in use. |
+| `readonly seatParse: u8[]` | Per seat: 1 when its write carries the statement's Parse. |
+| `readonly seatSeq: i32[]` | Per seat: its statement's sequence number on the connection. |
+| `readonly seatStatement: i32[]` | Per seat: its statement. |
+| `readonly seatUsed: u8[]` | Per seat (`slot * PG_ASYNC_MAX_DEPTH + k`): 1 while a ticket holds it. |
+| `readonly seatWaiting: u8[]` | Per seat: 1 while its task waits for its answer's turn. |
+| `readonly served: i32[]` | Per slot: the sequence number whose answer is read next. |
 | `readonly size: i32` | The number of connection slots, fixed at construction. |
-| `waits: i32` | How many times `pgAsyncClaim` slept because every live connection was claimed. |
-| `close(): void` | Ends every connection: a Terminate is offered to each socket, which is then closed, claimed or not. Call it once the tasks that hold tickets are done; a ticket used afterwards panics. |
+| `readonly statements: u8[][]` | Each statement `pgAsyncPrepare` registered: its SQL as UTF-8. |
+| `readonly waiters: i32[]` | Per wake: the tasks waiting on it. |
+| `waits: i32` | How many times `pgAsyncClaim` or `pgAsyncSeat` waited because no live connection had room. |
+| `readonly wakeBytes: u8[]` | The bytes a wake is rung with and read back into, so neither allocates. |
+| `readonly wakePending: u8[]` | Per wake: 1 while a byte is written and not yet read. |
+| `readonly wakes: i32[]` | Per slot, then one for the pool: a socket pair whose read end a waiting task waits on, or -1. |
+| `readonly writing: u8[]` | Per slot: 1 while a seated statement has not yet been written whole. |
+| `close(): void` | Ends every connection: a Terminate is offered to each socket, which is then closed, claimed or not, and closes the wakes. Call it once the tasks that hold tickets are done; a ticket used afterwards panics. |
 | `live(): i32` | The number of slots connected now, claimed or not. |
 
 ### PgAsyncResult
@@ -470,6 +836,16 @@ class PgAsyncResult
 
 ## Limits
 
+<scalar-grid cols="2">
+
+<scalar-card title="16" icon="phosphor/regular/hash">
+
+`PG_ASYNC_MAX_DEPTH: i32`
+
+The most statements one connection has in flight at once: `PgAsyncPool.depth`'s ceiling.
+
+</scalar-card>
+
 <scalar-card title="64" icon="phosphor/regular/hash">
 
 `PG_ASYNC_MAX_SIZE: i32`
@@ -478,7 +854,19 @@ The most connections one `PgAsyncPool` holds.
 
 </scalar-card>
 
+<scalar-card title="64" icon="phosphor/regular/hash">
+
+`PG_ASYNC_MAX_STATEMENTS: i32`
+
+The most statements `pgAsyncPrepare` registers on one pool.
+
+</scalar-card>
+
+</scalar-grid>
+
 ## Constants
+
+<scalar-grid cols="2">
 
 <scalar-card title="-3" icon="phosphor/regular/hash">
 
@@ -490,3 +878,25 @@ query cut off by it fails with `PG_ERR_CLOSED` and this as its
 `socketError`, which no socket read or write answers.
 
 </scalar-card>
+
+<scalar-card title="-1" icon="phosphor/regular/hash">
+
+`PG_ASYNC_UNSENT: i32`
+
+`pgAsyncSend`'s answer for a statement it did not send because a parameter
+holds a NUL; `pgAsyncAnswer` fails it with `PG_ERR_ENCODING`, and the
+connection is reused.
+
+</scalar-card>
+
+<scalar-card title="-2" icon="phosphor/regular/hash">
+
+`PG_ASYNC_UNSENT_CANCELLED: i32`
+
+`pgAsyncSend`'s answer for a statement it did not send because the task was
+cancelled; `pgAsyncAnswer` fails it with `PG_ERR_CLOSED` and
+`PG_ASYNC_CANCELLED`, and the connection is reused.
+
+</scalar-card>
+
+</scalar-grid>

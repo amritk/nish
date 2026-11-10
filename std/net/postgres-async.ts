@@ -759,7 +759,8 @@ const pgAsyncWaitUntil = async (fd: i32, write: boolean, began: i64, waitMs: i32
     const left: i32 = waitMs - pgAsyncSince(began)
     if (left <= 0) {
       return false
-    } else if (write) {
+    }
+    if (write) {
       waited = await writableWithin(fd, left)
     } else {
       waited = await readableWithin(fd, left)
@@ -1060,9 +1061,8 @@ export const pgAsyncSend = async (pool: PgAsyncPool, ticket: i32, params: PgAsyn
 }
 
 /** How far `seq` is past slot `s`'s next answer, in the order of its pipeline. */
-const pgAsyncAhead = (pool: PgAsyncPool, s: i32, seq: i32): i32 => {
-  return (seq - pool.served[s] + PG_ASYNC_SEQ_WRAP) % PG_ASYNC_SEQ_WRAP
-}
+const pgAsyncAhead = (pool: PgAsyncPool, s: i32, seq: i32): i32 =>
+  (seq - pool.served[s] + PG_ASYNC_SEQ_WRAP) % PG_ASYNC_SEQ_WRAP
 
 /** Whether seat `seat`'s answer is lost: its connection failed at or before it. */
 const pgAsyncLostSeat = (pool: PgAsyncPool, seat: i32): boolean => {
@@ -1390,7 +1390,15 @@ export const pgAsyncQuery = async (
     }
   }
   const none: u8[] = []
-  return await pgAsyncRead(fd, none, false, pool.maxMessage, pool.maxColumns, pool.maxRows, pool.maxResultBytes)
+  return await pgAsyncRead(
+    fd,
+    none,
+    false,
+    pool.maxMessage,
+    pool.maxColumns,
+    pool.maxRows,
+    pool.maxResultBytes
+  )
 }
 
 /**
@@ -1433,7 +1441,12 @@ const pgAsyncEncode = (sql: u8[], name: i32, parse: boolean, params: PgAsyncPara
     return null
   }
   // The statement's name: none, or `n` and its decimal digits (at most 2).
-  const label: u8[] = name < 0 ? [] : name < 10 ? [110, toU8(48 + name)] : [110, toU8(48 + toI32(name / 10)), toU8(48 + (name % 10))]
+  let label: u8[] = []
+  if (name >= 10) {
+    label = [110, toU8(48 + toI32(name / 10)), toU8(48 + (name % 10))]
+  } else if (name >= 0) {
+    label = [110, toU8(48 + name)]
+  }
   const named: i32 = toI32(label.length)
   const values: u8[][] = []
   // The length, "" portal, the statement's name and NUL, no parameter formats,
@@ -1555,7 +1568,9 @@ const pgAsyncRead = async (
   maxResultBytes: i32
 ): Promise<PgAsyncResult> => {
   const result = new PgAsyncResult()
-  let buf: u8[] = new Array<u8>(toI32(seed.length) > PG_ASYNC_INPUT_SIZE ? toI32(seed.length) : PG_ASYNC_INPUT_SIZE)
+  let buf: u8[] = new Array<u8>(
+    toI32(seed.length) > PG_ASYNC_INPUT_SIZE ? toI32(seed.length) : PG_ASYNC_INPUT_SIZE
+  )
   let start: i32 = 0
   let end: i32 = 0
   for (let i: i32 = 0; i < toI32(seed.length) && end < toI32(buf.length); i++) {
@@ -1693,7 +1708,11 @@ const pgAsyncRead = async (
         const length: i32 = getI32BE(buf, start + 1)
         want = 1 + length - (end - start) + (toI32(buf[start]) === 90 ? 0 : 5)
       }
-      want = want > room ? room : want < 1 ? 1 : want
+      if (want > room) {
+        want = room
+      } else if (want < 1) {
+        want = 1
+      }
     }
     const got: i32 = netRead(fd, buf, end, want)
     if (got === PG_ASYNC_AGAIN) {
