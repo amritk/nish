@@ -1130,6 +1130,20 @@ const DECLARED = [
     changelog: "nish.host",
     why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
   },
+  // Parent/child regions: the 0.37.0 seed's nish:region has no child or
+  // childWith, so only the candidate compiles these programs.
+  ...[
+    "tests/cases/region_child_chain.ts",
+    "tests/cases/region_child_keep.ts",
+    "tests/cases/region_child_map.ts",
+    "docs/cookbook/mem-region-child.ts",
+    "tests/link/region_child_stale/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "add parent/child regions",
+    why: "the program imports child or childWith from nish:region, which the 0.37.0 seed does not have, so only the candidate compiles it",
+  })),
 ]
 
 /**

@@ -662,10 +662,10 @@ function RegionWalk.visitCall(this: RegionWalk, node: Node): void -> @RegionWalk
   callee +15:11 isChildMaker -> @isChildMaker
   local +17:15 args: Node[] (const)
   callee +18:9 ChildSites.record -> @ChildSites.record
-  callee +18:73 outlivesChild -> @outlivesChild
-  callee +18:87 RegionWalk.origin -> @RegionWalk.origin
-  callee +22:5 RegionWalk.visitArguments -> @RegionWalk.visitArguments
-  callee +23:5 RegionWalk.judgeCallee -> @RegionWalk.judgeCallee
+  callee +20:56 outlivesChild -> @outlivesChild
+  callee +20:70 RegionWalk.origin -> @RegionWalk.origin
+  callee +26:5 RegionWalk.visitArguments -> @RegionWalk.visitArguments
+  callee +27:5 RegionWalk.judgeCallee -> @RegionWalk.judgeCallee
 function RegionWalk.visitArguments(this: RegionWalk, node: Node, handed: Node[], seed: i32): void -> @RegionWalk.visitArguments [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.bindArrowParam
