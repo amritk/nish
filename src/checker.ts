@@ -1979,7 +1979,7 @@ export const indexGuardAdvice = (
     )
   }
   const convert = unsigned ? "toU32" : "toI32"
-  if ((unsigned || f64Mode) && declaresName(program.file, convert)) {
+  if ((unsigned || f64Mode) && shadowsGuardName(program, convert)) {
     return (
       "no guard removes the check here, because the one the compiler credits for this index calls the builtin " +
       `\`${convert}\`, which this module's own \`${convert}\` hides: rename it to guard the access`
@@ -2009,7 +2009,7 @@ const offsetSpelling = (index: Node, offset: Offset): string =>
  */
 const offsetGuardAdvice = (program: CheckedProgram, offset: Offset, sum: string, holder: string): string => {
   const f64Mode = program.f64Mode
-  if (f64Mode && declaresName(program.file, "toI32")) {
+  if (f64Mode && shadowsGuardName(program, "toI32")) {
     return (
       "no guard removes the check here, because the one the compiler credits for this index calls the builtin " +
       "`toI32`, which this module's own `toI32` hides: rename it to guard the access"
@@ -2057,7 +2057,7 @@ const boundsGuardEdits = (
     return none
   }
   const convert = unsigned ? "toU32" : "toI32"
-  if (declaresName(ctx.program.file, "panic") || declaresName(ctx.program.file, convert)) {
+  if (shadowsGuardName(ctx.program, "panic") || shadowsGuardName(ctx.program, convert)) {
     return none
   }
   // A statement that declares the index or the receiver (`const j = i, v = xs[j]`)
@@ -2190,16 +2190,10 @@ const hasEffectOffPath = (node: Node, path: Node[]): boolean => {
   return false
 }
 
-/**
- * Whether the module declares `name` anywhere: a function, a class, a
- * constant, a local, a parameter or an import. A guard calls `panic` and
- * `toI32` by name, so any such declaration might be what the call reaches
- * instead of the builtin, and the fix is not offered at all rather than
- * reasoning about scopes.
- */
-const declaresName = (node: Node, name: string): boolean => {
+/** Whether `node` is a declaration whose name `declaresName` reads from its children. */
+const isNameDeclaration = (node: Node): boolean => {
   const k = node.kind
-  const declares =
+  return (
     k === N_VAR_DECL ||
     k === N_PARAM ||
     k === N_FUNCTION ||
@@ -2208,7 +2202,19 @@ const declaresName = (node: Node, name: string): boolean => {
     k === N_ENUM ||
     k === N_TYPE_ALIAS ||
     k === N_IMPORT_SPEC
-  if (declares) {
+  )
+}
+
+/**
+ * Whether `node` declares `name` anywhere inside it: a function, a class, a
+ * constant, a local, a parameter or an import. A guard calls `panic` and
+ * `toI32` by name, so any such declaration might be what the call reaches
+ * instead of the builtin, and the fix is not offered at all rather than
+ * reasoning about scopes. A question about the whole module goes through
+ * `shadowsGuardName`, which walks it once.
+ */
+const declaresName = (node: Node, name: string): boolean => {
+  if (isNameDeclaration(node)) {
     for (const child of node.children) {
       if (child.kind === N_IDENT && child.text === name) {
         return true
@@ -2221,6 +2227,46 @@ const declaresName = (node: Node, name: string): boolean => {
     }
   }
   return false
+}
+
+/** The `CheckedProgram.guardShadows` bit for `name`, or 0 for a name a guard does not call. */
+const guardNameBit = (name: string): i32 => {
+  if (name === "panic") {
+    return 1
+  }
+  if (name === "toI32") {
+    return 2
+  }
+  return name === "toU32" ? 4 : 0
+}
+
+/** The `guardShadows` bits of every name `node` declares anywhere inside it, as `declaresName` reads a declaration. */
+const guardNamesDeclared = (node: Node): i32 => {
+  let bits = 0
+  if (isNameDeclaration(node)) {
+    for (const child of node.children) {
+      if (child.kind === N_IDENT) {
+        bits = bits | guardNameBit(child.text)
+      }
+    }
+  }
+  for (const child of node.children) {
+    bits = bits | guardNamesDeclared(child)
+  }
+  return bits
+}
+
+/**
+ * `declaresName(program.file, name)` for `panic`, `toI32` or `toU32`, the
+ * names a bounds guard calls. The first question walks the module once for
+ * all three and keeps the answer in `guardShadows`; every NL9007 warning
+ * after it reads the bits, where it used to walk the module twice.
+ */
+const shadowsGuardName = (program: CheckedProgram, name: string): boolean => {
+  if (program.guardShadows < 0) {
+    program.guardShadows = guardNamesDeclared(program.file)
+  }
+  return (program.guardShadows & guardNameBit(name)) !== 0
 }
 
 /** The test that proves `name` into `[lo, hi]`, for a range starting at 0 or at `-2147483648`. */
