@@ -617,10 +617,11 @@ export class HttpCompressor {
   /**
    * `segmentMode`'s rule, for a response of `identityBytes` bytes sent as it
    * is or `encodedBytes` compressed, heads included, at `mss` bytes a segment
-   * (`this.mss` when 0 or less): whether the compressed one takes fewer
-   * segments. When it does not, `decision` becomes
-   * `HTTP_COMPRESS_NO_FEWER_SEGMENTS`. `respondEncoded` calls it; a program
-   * driving HTTP/2 or HTTP/3 by hand may with its own head sizes.
+   * (`this.mss` when 0 or less, and `HTTP_DEFAULT_MSS` when both are, as
+   * `segmentSize` reads it): whether the compressed one takes fewer segments.
+   * When it does not, `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS`.
+   * `respondEncoded` calls it; a program driving HTTP/2 or HTTP/3 by hand may
+   * with its own head sizes.
    *
    * @param identityBytes the whole response's length sent uncompressed, head
    *   included, in bytes

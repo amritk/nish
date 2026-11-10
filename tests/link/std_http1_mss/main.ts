@@ -102,6 +102,9 @@ export const main = (): i32 => {
   t.eqI32("accept: the program's mss is left at 0", conn.mss, 0)
   t.eqI32("compressor: enc.mss starts at 0, unset", enc.mss, 0)
   t.eqI32("order: an unset enc.mss takes the socket's", conn.segmentMss(enc), socket)
+  enc.mss = -1
+  t.eqI32("order: a negative enc.mss counts as unset and takes the socket's", conn.segmentMss(enc), socket)
+  enc.mss = 0
 
   // respondEncoded counts in it: 3000 bytes fit one loopback segment as they are.
   netWrite(first, request, toI32(0), toI32(request.length))

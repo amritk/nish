@@ -4,6 +4,7 @@ PASS  accept: socketMss is netMss of the slot's descriptor
 PASS  accept: the program's mss is left at 0
 PASS  compressor: enc.mss starts at 0, unset
 PASS  order: an unset enc.mss takes the socket's
+PASS  order: a negative enc.mss counts as unset and takes the socket's
 PASS  socket: the request
 PASS  socket: respondEncoded
 PASS  socket: one segment at the socket's MSS, so not gzipped
@@ -23,4 +24,4 @@ PASS  restart: the program's mss back to 0
 PASS  restart: segmentMss falls to the default
 PASS  bare: socketMss 0
 PASS  bare: HTTP_DEFAULT_MSS
-std_http1_mss: 25 passed, 0 failed, 0 skipped
+std_http1_mss: 26 passed, 0 failed, 0 skipped
