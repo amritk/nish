@@ -36,6 +36,7 @@ import JSON_PUT_F64_KERNEL from "./kernels" -> const JSON_PUT_F64_KERNEL
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BINARY from "./nodes" -> const N_BINARY
+import N_BINDING_PATTERN from "./nodes" -> const N_BINDING_PATTERN
 import N_CALL from "./nodes" -> const N_CALL
 import N_IDENT from "./nodes" -> const N_IDENT
 import N_INDEX from "./nodes" -> const N_INDEX
@@ -555,15 +556,17 @@ function storedFields(emitter: Emitter, node: Node, names: string[], records: i3
   callee +26:9 storedFields -> @storedFields
 function localsDeclaredIn(emitter: Emitter, node: Node, out: Local[]): void -> @localsDeclaredIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:5
   calls: localsDeclaredIn nish_array_grow nish_panic_index
   pointer emitter: size=376 writesThrough=false captured=false passedTo=localsDeclaredIn#0
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=localsDeclaredIn#2
   stackSites=0 stackLocals=0
-  local -2:11 local: Local | null (const)
-  local +3:14 child: Node (const)
-  callee +4:5 localsDeclaredIn -> @localsDeclaredIn
+  local -2:9 local: Local | null (const)
+  local +3:16 name: Node (const)
+  local +4:13 bound: Local | null (const)
+  local +10:14 child: Node (const)
+  callee +11:5 localsDeclaredIn -> @localsDeclaredIn
 function noteArrayUse(emitter: Emitter, expr: Node, len: boolean, data: boolean, out: ArrayUse[]): void -> @noteArrayUse
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
