@@ -19,8 +19,9 @@
  * Nish code in std/crypto/aes.ts instead: the compiler keeps that code and
  * branches on `nish_aes_hw` at each call, so a table-free C AES here would only
  * be a second copy of the code under review. Every other target, wasm32
- * included, compiles `nish_aes_hw` to `return 0` and the kernels to a trap
- * nothing reaches, so a link that names them still resolves.
+ * included, and a toolchain without the intrinsic headers compile
+ * `nish_aes_hw` to `return 0` and the kernels to a trap nothing reaches, so a
+ * link that names them still resolves.
  *
  * The round-key array, `rk`, is the `8 * (rounds + 1)` words (88 or 120 u64s)
  * the bitsliced schedule uses, laid out differently on this path. One process
@@ -70,12 +71,19 @@
 
 #include "nish.h"
 
-#if defined(__x86_64__)
+#if defined(__has_include)
+#define NISH_AES_HAS(h) __has_include(h)
+#else
+#define NISH_AES_HAS(h) 0
+#endif
+
+#if defined(__x86_64__) && NISH_AES_HAS(<cpuid.h>) && NISH_AES_HAS(<tmmintrin.h>) && \
+    NISH_AES_HAS(<wmmintrin.h>)
 #include <cpuid.h>
 #include <tmmintrin.h>
 #include <wmmintrin.h>
 #define NISH_AES_X86 1
-#elif defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#elif defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && NISH_AES_HAS(<arm_neon.h>)
 #include <arm_neon.h>
 #define NISH_AES_ARM 1
 #endif
