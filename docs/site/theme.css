@@ -4,13 +4,13 @@
   the page's entrance, blocks that rise as they scroll into view, the cards'
   pointer highlight and the landing page's hero (built by site.js).
 
-  Logo palette: charcoal #1e2126, violet #9c42e9, mid #792cb9,
-  deep #391072 / #33175d, darkest fill #211a30, tagline grey #b7b7c5.
+  Logo palette (docs/site/mark.svg): charcoal #1e2226, violet #8b3fff,
+  mid #5b22c4, deep #42118a, and the cyan fleck #11a8f1.
 
   Text colours meet WCAG AA (4.5:1) on the surfaces they sit on, in both
   modes, and on every stop of the page gradient: the tightest are the dark
   link (#b47cf0, 4.80:1) and the light faint text (#5f6370, 4.52:1) on the
-  gradient's brightest stop. A colour change re-measures them.
+  gradient's brightest stop, and white on the dark button (#8b3fff, 4.94:1). A colour change re-measures them.
 
   Scalar reads a theme as CSS custom properties under .light-mode and
   .dark-mode (the class on <body>), the same shape as its built-in presets.
@@ -26,10 +26,10 @@
 :root:root {
   --scalar-block-spacing: 18px;
   --scalar-heading-spacing: 56px;
-  --nish-violet: #9c42e9;
-  --nish-violet-mid: #792cb9;
+  --nish-violet: #8b3fff;
+  --nish-violet-mid: #5b22c4;
   --nish-pink: #e85fb4;
-  --nish-cyan: #5cc8f5;
+  --nish-cyan: #11a8f1;
   --nish-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -63,10 +63,10 @@
   --scalar-color-query: #007b80;
 
   --scalar-link-color: var(--nish-violet-mid);
-  --scalar-link-color-hover: #5a1f8f;
+  --scalar-link-color-hover: #42118a;
 
   --scalar-button-1: var(--nish-violet-mid);
-  --scalar-button-1-hover: #5a1f8f;
+  --scalar-button-1-hover: #42118a;
   --scalar-button-1-color: #ffffff;
 
   --scalar-tooltip-background: color-mix(in srgb, var(--scalar-background-1), transparent 10%);
@@ -105,7 +105,7 @@
   --scalar-link-color-hover: #d2b0f8;
 
   --scalar-button-1: var(--nish-violet);
-  --scalar-button-1-hover: #8a33d6;
+  --scalar-button-1-hover: #7a2ff0;
   --scalar-button-1-color: #ffffff;
 
   --scalar-tooltip-background: color-mix(in srgb, var(--scalar-background-1), #ffffff 10%);
@@ -399,6 +399,20 @@ table.t-editor__table tbody tr:hover {
 }
 .nish-hero:empty {
   display: none;
+}
+/* Once the hero is up its headline is the page's title, so the Markdown's
+   own "Introduction" leaves the screen. It stays in the document, clipped
+   rather than removed, for a screen reader and for the page outline. */
+.page-node:has(.nish-hero__inner) > .t-editor__heading[data-level="1"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.page-node:has(.nish-hero__inner) > .nish-hero {
+  margin-top: 0;
 }
 .nish-hero__inner {
   position: relative;
@@ -748,7 +762,10 @@ a.nish-hero__cta:hover {
 .nish-hero__core img {
   width: 52px;
   height: 52px;
+  box-sizing: border-box;
+  padding: 7px;
   border-radius: 14px;
+  background: var(--scalar-background-1);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--nish-violet), transparent 50%);
   animation: nish-hero-core var(--nish-cycle) var(--nish-ease) infinite;
 }

@@ -133,8 +133,13 @@ who write programs in Nish. A page there follows these rules:
 
 ## The site's look
 
-The site's styling and motion are three files, all served from
-[`docs/site/`](site/) (`assetsDir` in `scalar.config.json`):
+The site's logo, styling and motion all live in [`docs/site/`](site/)
+(`assetsDir` in `scalar.config.json`):
+
+- [`mark.svg`](site/mark.svg) is the logo, and the source of every other
+  image there: `logo-dark.png` and `logo-light.png` (the mark beside "nish",
+  for the header) and the favicons are renders of it, so a new mark
+  re-renders them all. The theme's violets and cyan are its colours.
 
 - [`theme.css`](site/theme.css) is the theme: the colours of both modes, the
   gradient behind every page, and every animation — a page's entrance, blocks

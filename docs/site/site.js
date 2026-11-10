@@ -155,7 +155,7 @@
             "div.nish-hero__core",
             {},
             el("span.nish-hero__ring"),
-            el("img", { src: "/apple-touch-icon.png", alt: "", width: "56", height: "56" })
+            el("img", { src: "/mark.svg", alt: "", width: "52", height: "52" })
           ),
           el(
             "div.nish-hero__targets",
