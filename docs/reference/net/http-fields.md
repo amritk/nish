@@ -386,9 +386,9 @@ true when the value cannot end a line or smuggle whitespace at its
 Checks a field section a program is about to send, pseudo-headers left
 out: every name valid and in lowercase, every value valid, nothing
 connection-specific, at most one `date` (a singleton, RFC 9110 §5.3), and
-as many values as names. Answers `HTTP_FIELDS_OK`
-or the first refusal. A version's writer refuses what this refuses, so
-that a program's string can never reach the wire as a field it was not.
+as many values as names. Answers `HTTP_FIELDS_OK` or the first refusal. A
+version's writer refuses what this refuses, so that a program's string can
+never reach the wire as a field it was not.
 
 ```ts
 function httpFieldsCheckOutgoing(
