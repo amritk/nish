@@ -318,7 +318,7 @@ class HttpCompressor
 | `fixedLimit: i32` | The longest body `HTTP_ENCODER_AUTO` gives the fixed-Huffman encoder: 16384 by default. |
 | `minSaving: i32` | The least a compressed body must save to be sent: `minSaving` bytes and `minSavingPercent` percent of the body, whichever is more. 1 and 0 by default (any saving at all); a value below those counts as them. |
 | `minSavingPercent: i32` | The percent of the body a compressed body must save, as well as `minSaving` bytes: 0 by default, 100 or more sends nothing compressed. |
-| `mss: i32` | The TCP segment size `segmentMode` counts in, in bytes, when the program sets it: 0, the default, means unset, so a connection's socket MSS is used, or `HTTP_DEFAULT_MSS` where there is none. A value set here wins over the socket's; a connection's own `mss` wins over it. |
+| `mss: i32` | The TCP segment size `segmentMode` counts in, in bytes, when the program sets it: 0 (the default) or less means unset, so a connection's socket MSS is used, or `HTTP_DEFAULT_MSS` where there is none. A value set here wins over the socket's; a connection's own `mss` wins over it. |
 | `readonly names: u8[][]` | The fields `addFields` built: the program's, then `Content-Encoding` and `Vary`. |
 | `readonly output: u8[]` | Where `compress` writes; valid until the next call. |
 | `segmentMode: boolean` | Whether `respondEncoded` also sends the compressed response only when, head included, it takes fewer TCP segments of `mss` bytes than the body as it is; off by default. Segments are the connection's own `mss` if the program set it, else this compressor's `mss` if set, else the socket's MSS the server read on accept, else `HTTP_DEFAULT_MSS`. |

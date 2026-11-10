@@ -443,9 +443,9 @@ export class HttpCompressor {
   segmentMode: boolean
   /**
    * The TCP segment size `segmentMode` counts in, in bytes, when the program
-   * sets it: 0, the default, means unset, so a connection's socket MSS is used,
-   * or `HTTP_DEFAULT_MSS` where there is none. A value set here wins over the
-   * socket's; a connection's own `mss` wins over it.
+   * sets it: 0 (the default) or less means unset, so a connection's socket MSS
+   * is used, or `HTTP_DEFAULT_MSS` where there is none. A value set here wins
+   * over the socket's; a connection's own `mss` wins over it.
    */
   mss: i32
   /** `HTTP_ENCODER_AUTO` (the default), `HTTP_ENCODER_FIXED` or `HTTP_ENCODER_LEVEL`. */
