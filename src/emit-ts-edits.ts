@@ -222,6 +222,14 @@ export class Walk {
   choiceTexts: string[]
   /** Every name the emitted module must import from `nish/runtime`, in first-use order. */
   helpers: StringSet
+  /**
+   * `--deterministic`: a call the checker bound to `nish/math` (`Math.sin`,
+   * `f64ToBits`, ...) is written as a call to that function, which runs the
+   * same instructions as the native build, rather than as the platform's.
+   */
+  deterministic: boolean
+  /** Every name the emitted module must import from `nish/math`, in first-use order. */
+  mathNames: StringSet
   /** Every width type the module spells, in first-use order. */
   widths: StringSet
   /** Every identifier the module spells but an ambient call's callee: the names a helper must not be imported as. */
@@ -336,6 +344,8 @@ export class Walk {
     this.choiceNodes = []
     this.choiceTexts = []
     this.helpers = new StringSet()
+    this.deterministic = false
+    this.mathNames = new StringSet()
     this.widths = new StringSet()
     this.hostHandle = false
     this.names = new StringSet()
@@ -475,8 +485,18 @@ export class Walk {
    * asked for on the module's import line, once.
    */
   helperName(name: string): string {
+    return this.importName(this.helpers, name)
+  }
+
+  /** `helperName` for a `nish/math` export, which goes on its own import line. */
+  mathName(name: string): string {
+    return this.importName(this.mathNames, name)
+  }
+
+  /** Add `name` to `list`, aliased past the names the module binds, and answer the name to call it by. */
+  importName(list: StringSet, name: string): string {
     if (!this.names.has(name)) {
-      this.helpers.add(name)
+      list.add(name)
       return name
     }
     let alias = `__nish_${name}`
@@ -485,7 +505,7 @@ export class Walk {
       alias = `__nish${n}_${name}`
       n = n + 1
     }
-    this.helpers.add(`${name} as ${alias}`)
+    list.add(`${name} as ${alias}`)
     return alias
   }
 
@@ -646,6 +666,49 @@ const observe = (walk: Walk, node: Node): string => {
   }
   const local = walk.helperName(ambient)
   return local === ambient ? "" : local
+}
+
+/** The `nish/math` functions `--deterministic` binds a builtin call to (`Checker.importMath`). */
+const MATH_ROUTED: string =
+  " sinF64 cosF64 tanF64 expF64 logF64 powF64 atan2F64 hypotF64 quietBitsF64 quietBitsF32 numberExact parseFloatExact "
+
+/**
+ * Under `--deterministic`, the name a `Math.<name>(...)`, `f64ToBits(...)`,
+ * `f32ToBits(...)`, `Number(s)` or `parseFloat(s)` call the checker bound to
+ * `nish/math` is written to call, else the empty string. A string `Number` or
+ * `parseFloat` calls `numberExact` or `parseFloatExact`, so Node reads the
+ * grammar a native or wasm build reads, not V8's (`parseFloat("+0x10")` is
+ * 16). JavaScript's `%` is already the exact remainder `fmodF64` computes
+ * (ECMA-262 `Number::remainder`), so a float `%` is left as it is written.
+ */
+const mathCallee = (walk: Walk, node: Node): string => {
+  if (!walk.deterministic || node.kind !== N_CALL || node.children.length === 0) {
+    return ""
+  }
+  const head = node.children[0]
+  const spelled =
+    (head.kind === N_MEMBER &&
+      head.children.length === 1 &&
+      head.children[0].kind === N_IDENT &&
+      head.children[0].text === "Math" &&
+      listedWord(MATH_ROUTED, head.text + "F64")) ||
+    (head.kind === N_IDENT &&
+      (head.text === "f64ToBits" ||
+        head.text === "f32ToBits" ||
+        head.text === "Number" ||
+        head.text === "parseFloat"))
+  if (!spelled) {
+    return ""
+  }
+  const sig = walk.program.nodeCallees[node.id]
+  if (sig === null) {
+    // An untyped body binds no call, so a routed call looks like the platform's.
+    if (walk.untyped) {
+      walk.missType()
+    }
+    return ""
+  }
+  return listedWord(MATH_ROUTED, sig.sourceName) ? walk.mathName(sig.sourceName) : ""
 }
 
 /** Whether `call` is `r.expect(m)` or `r.unwrapOr(d)`, whose argument runs only when `r` is an `Err`. */
@@ -1002,7 +1065,8 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     changedAcrossInstances(walk, node, out, slot)
     return
   }
-  const callee = observe(walk, node)
+  const observed = observe(walk, node)
+  const callee = observed.length > 0 ? observed : mathCallee(walk, node)
   const here = walk.hoistHere
   const effectsBefore = walk.effects
   const localsBefore = walk.localsRead

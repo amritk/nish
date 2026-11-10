@@ -1828,7 +1828,9 @@ digits]`, `. digits`, or `[sign] Infinity`), correctly rounded.
 `parseFloat("3.14xyz")` is `3.14` and `parseFloat("1e")` is `1`. One
 deviation from JavaScript: a `0x` prefix is read as hexadecimal
 (`parseFloat("0x1A")` is `26`, where JavaScript stops at the `x` and gives
-`0`). Exactly one argument. Capability: none.
+`0`). Under `--deterministic` a `0x` string reads as `--emit-ts` reads it
+on every target: the hex integer, correctly rounded, stopping at a hex
+float's `.` or `p` (`0x1p3` is `1`). Exactly one argument. Capability: none.
 
 ```ts
 function parseFloat(s: string): f64
@@ -4575,7 +4577,9 @@ and `Number("   ")` are `0`, `Number("  7.5  ")` is `7.5`, and
 `Number("12px")`, `Number("1e")` and `Number("nan")` are `NaN`.
 `Number("0x1A")` is `26`, as in JavaScript, and a hex float such as `0x1p3`
 is also accepted, which JavaScript rejects; the `0b` and `0o` prefixes are
-`NaN`, which JavaScript reads.
+`NaN`, which JavaScript reads. Under `--deterministic` a `0x` string reads
+as `--emit-ts` reads it on every target: a hex float is `NaN`, and a hex
+integer is correctly rounded whatever the C library.
 
 An `i32` or an `i64` converts as `toF64` does, a `boolean` is `1` or `0`,
 and an `f64` is itself. A numeric literal argument is typed `f64`

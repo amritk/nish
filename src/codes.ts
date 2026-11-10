@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 852
+export const RULE_COUNT: i32 = 857
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -849,6 +849,8 @@ const diagnosticRules = (): string[] => [
   "NL2277",
   "` reaches the operating system, and a wasm32 build has none to reach",
   "NL2404",
+  "C code or a host import runs where this compiler cannot pin its bits",
+  "NL3054",
   "Interface inheritance (`extends`) is not supported; list every field",
   "NL2215",
   "The function `region` or `regionWith` runs answers the region's root",
@@ -879,6 +881,8 @@ const diagnosticRules = (): string[] => [
   "NL2634",
   "Function names starting with `nish_` are reserved for the runtime",
   "NL2202",
+  "the environment and the terminal answer differently on every host",
+  "NL2701",
   "Union variants must give their tag one name: the first field of `",
   "NL2525",
   " (a module has no runtime object; resolve paths at compile time)",
@@ -893,6 +897,8 @@ const diagnosticRules = (): string[] => [
   "NL2130",
   "`super(...)` must be the first statement of the constructor of `",
   "NL2156",
+  "another machine or another program answers from outside this one",
+  "NL3053",
   " (a module has no top-level code, so there is nothing to defer)",
   "NL1059",
   ", not in your program. Please report it with the input file and",
@@ -911,6 +917,8 @@ const diagnosticRules = (): string[] => [
   "NL2678",
   "`new Array<T>(n)` expects exactly 1 argument (the length), got ",
   "NL2143",
+  "the clock and the random source answer differently on every run",
+  "NL2700",
   " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
   "NL2005",
   "` is generic, so it names no one function to pass as argument ",
@@ -1086,6 +1094,8 @@ const diagnosticRules = (): string[] => [
   "NL2190",
   "Index signatures are not supported in interface `",
   "NL2214",
+  "the file system answers differently on every host",
+  "NL3052",
   "Type arguments are not written at a call site in ",
   "NL2303",
   "` where a bound of `integer<Lo, Hi>` is expected",

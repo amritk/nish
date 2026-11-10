@@ -84,6 +84,8 @@ import {
   capabilityIndex,
   capabilityName,
   capabilityNames,
+  deterministicReason,
+  deterministicRefusals,
   everyCapabilityName,
   optInCapabilities,
 } from "./capabilities"
@@ -846,6 +848,7 @@ export class Compilation {
     checker.ctx.wasm = isWasmBuild(this.opts)
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
     checker.ctx.pageModule = buildsPageModule(this.opts)
+    checker.ctx.deterministic = this.opts.deterministic
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     unit.hostRefusals = refusals
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
@@ -1888,7 +1891,8 @@ export class Compilation {
   refuseCapabilities(): void {
     const allow = this.opts.allowCapabilities & this.manifestAllow
     const deny = this.opts.denyCapabilities | this.manifestDeny
-    const refused = deny | (~allow & ~optInCapabilities() & allCapabilities())
+    const flagged = this.opts.deterministic ? deterministicRefusals() : 0
+    const refused = deny | (~allow & ~optInCapabilities() & allCapabilities()) | flagged
     if (refused === 0 || this.modules.length === 0) {
       return
     }
@@ -1949,6 +1953,15 @@ export class Compilation {
    * loop above is told so once rather than for each call it makes.
    */
   reportRefusal(source: SourceFile, site: Node, sig: FunctionSig, c: i32, hops: string[]): void {
+    if (this.refusedOnlyByDeterministic(c)) {
+      this.sink.report(
+        source,
+        site.start,
+        site.end,
+        `\`${sig.sourceName}\` reaches \`${capabilityName(c)}\`, which \`--deterministic\` refuses: ${deterministicReason(c)}; the chain that reaches it: ${hops.join(", ")}`
+      )
+      return
+    }
     this.sink.report(
       source,
       site.start,
@@ -2280,6 +2293,18 @@ export class Compilation {
       site.end,
       `the dependency \`${name}\` reaches \`${capabilityName(c)}\` through \`${caller}\`, which \`${capabilityLockName()}\` does not record for it; review the chain, then record it with \`--update-capability-lock\` — the chain that reaches it: ${hops.join(", ")}`
     )
+  }
+
+  /**
+   * Whether `--deterministic` is the only part of the policy that refuses
+   * capability `c`: then its refusal says why the flag refuses it, under a code
+   * of its own, and otherwise `--deny` or the allowlist is named as before.
+   */
+  refusedOnlyByDeterministic(c: i32): boolean {
+    const bit = 1 << c
+    const allow = this.opts.allowCapabilities & this.manifestAllow
+    const deny = this.opts.denyCapabilities | this.manifestDeny
+    return this.opts.deterministic && (deny & bit) === 0 && (allow & bit) !== 0
   }
 
   /** Which part of the policy refuses capability `c`, as the refusal names it: the first of the four that does. */

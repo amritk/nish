@@ -152,6 +152,35 @@ export const argumentCapabilities = (): i32 =>
   (1 << capabilityIndex("net")) |
   (1 << capabilityIndex("process.spawn"))
 
+/**
+ * The capabilities `--deterministic` refuses: every nondeterministic one
+ * (docs/wp50-wasm-host.md §9). A host import is labelled `ffi` (§13 Q2), so
+ * it is among them.
+ */
+export const deterministicRefusals = (): i32 => nondeterministic()
+
+/**
+ * Why `--deterministic` refuses capability `c`, in words. The six reserved
+ * codes cover nine capabilities and a string's parse, so related capabilities
+ * share one sentence, and each sentence is the literal run its code is matched
+ * on (src/codes.ts).
+ */
+export const deterministicReason = (c: i32): string => {
+  if (c === CAP_CLOCK || c === CAP_ENTROPY) {
+    return "the clock and the random source answer differently on every run"
+  }
+  if (c === CAP_ENV || c === CAP_TTY) {
+    return "the environment and the terminal answer differently on every host"
+  }
+  if (c === CAP_FS_READ || c === CAP_FS_WRITE) {
+    return "the file system answers differently on every host"
+  }
+  if (c === CAP_NET || c === CAP_PROCESS_SPAWN) {
+    return "another machine or another program answers from outside this one"
+  }
+  return "C code or a host import runs where this compiler cannot pin its bits"
+}
+
 /** Whether a set reaches none of the nondeterministic capabilities. */
 export const isDeterministic = (mask: i32): boolean => (mask & nondeterministic()) === 0
 

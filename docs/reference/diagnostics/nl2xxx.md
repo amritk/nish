@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 691 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 693 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12963,4 +12963,20 @@ The message of an error contains:
 
 ```text
 `slice` on an array expects 0 to 2 arguments, got …
+```
+
+## NL2700
+
+The message of an error contains:
+
+```text
+…the clock and the random source answer differently on every run
+```
+
+## NL2701
+
+The message of an error contains:
+
+```text
+…the environment and the terminal answer differently on every host
 ```

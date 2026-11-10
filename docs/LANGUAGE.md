@@ -6867,7 +6867,7 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on a page module (above, `Math.sin`) a float `%` or `%=` is a call to `std/math.ts`'s `fmodF64` in place of `frem`, whose libm `fmod` that link lacks, an `f32` widened to `f64` and the exact result narrowed back; on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`, `wasm_math_rem`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
+| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on a page module (above, `Math.sin`) or under [`--deterministic`](#--deterministic) a float `%` or `%=` is a call to `std/math.ts`'s `fmodF64` in place of `frem`, whose libm `fmod` that link lacks, an `f32` widened to `f64` and the exact result narrowed back; on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`, `wasm_math_rem`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
 | `+` | two `string` | `string` | `nish_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
@@ -7603,7 +7603,7 @@ The reference for each member of `Math`, with its parameters, its answer and its
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path. On a page module (a wasm build with no WASI, or an `--emit-dts` compile, whose IR `--profile wasm` or `wasm-host` links with no libm), `sin`, `cos`, `exp` and `log` are calls to `std/math.ts`'s `sinF64`, `cosF64`, `expF64` and `logF64` instead, fdlibm's, copied in like `tan`, within one ulp of V8; `--profile wasi` keeps the intrinsics | none | `math_intrinsics`, `math_rounding`, `wasm_math_exp`, `wasm_math_std`; `reject_wasm_math_f32` (`` `Math.sin` requires an f64 argument, got f32 ``); `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
+| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path. On a page module (a wasm build with no WASI, or an `--emit-dts` compile, whose IR `--profile wasm` or `wasm-host` links with no libm), `sin`, `cos`, `exp` and `log` are calls to `std/math.ts`'s `sinF64`, `cosF64`, `expF64` and `logF64` instead, fdlibm's, copied in like `tan`, within one ulp of V8; `--profile wasi` keeps the intrinsics. Under [`--deterministic`](#--deterministic) they are those calls on every target, `--emit-ts` included | none | `math_intrinsics`, `math_rounding`, `wasm_math_exp`, `wasm_math_std`; `reject_wasm_math_f32` (`` `Math.sin` requires an f64 argument, got f32 ``); `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
 | `Math.tan(x: f64): f64` | a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the module as `internal @nish.tanF64`, so no target calls libm; exact near every multiple of π/2 and within one ulp | none | `math_tan`, `math_std_edges` |
 | `Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64` | calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in like `tan`; ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is −π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two arguments, not JavaScript's any number | none | `math_atan2`, `math_hypot`; `reject_math_atan2_f32` (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``), `reject_math_hypot_arity` (`` `Math.hypot` expects exactly 2 arguments, got 3 ``) |
 | `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C. On a page module it is a call to `std/math.ts`'s `powF64`, copied in like `tan`, which answers ECMAScript's cases itself, within one ulp of V8 | none | `math_intrinsics`, `wasm_math_std`; `tests/differential/corpus/f64_pow_spec`; `reject_wasm_math_arity` (`` `Math.pow` expects exactly 2 arguments, got 1 ``) |
@@ -7632,12 +7632,12 @@ The reference for each conversion, with its parameter and its answer, is its doc
 | any integer -> an integer of the **same width** and other signedness | **no instruction at all**: signedness is not part of the LLVM type and the bits do not move (`toU32(i)` on an `i32`, `toI64(q)` on a `u64`) | `u_conv_same_width` |
 | `toF32(x): f32` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f64`: `fptrunc` (rounds to nearest); `f32`: identity | `f32_conversions`, `f32_constant` |
 | `toF64(x): f64` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f32`: `fpext` (exact); `f64`: identity | `conversions`, `u_conv_f64`, `f32_conversions` |
-| `f64ToBits(x: f64): i64` | reinterpret the 64 bits, never convert the value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`. One `bitcast`, so a function that only reinterprets bits stays `readnone` | `conv_f64_bits`; `reject_f64tobits_type`, `reject_f64tobits_arity` |
-| `f32ToBits(x: f32): i32` | the same for an `f32`'s 32 bits, signed as an `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is `-2147483648`. One `bitcast float to i32`; under Node, `runtime/nish.mjs` supplies it from a `DataView` | `f32_to_bits`; `reject_f32_to_bits_f64` (`` `f32ToBits` expects an argument of type f32, got f64 ``) |
+| `f64ToBits(x: f64): i64` | reinterpret the 64 bits, never convert the value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`. One `bitcast`, so a function that only reinterprets bits stays `readnone`; under [`--deterministic`](#--deterministic) a NaN gives `0x7FF8000000000000` (`quietBitsF64`) | `conv_f64_bits`; `reject_f64tobits_type`, `reject_f64tobits_arity` |
+| `f32ToBits(x: f32): i32` | the same for an `f32`'s 32 bits, signed as an `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is `-2147483648`. One `bitcast float to i32`; under Node, `runtime/nish.mjs` supplies it from a `DataView`; under [`--deterministic`](#--deterministic) a NaN gives `0x7FC00000` (`quietBitsF32`) | `f32_to_bits`; `reject_f32_to_bits_f64` (`` `f32ToBits` expects an argument of type f32, got f64 ``) |
 | `bitsToF64(b: i64): f64` | the inverse. `bitsToF64(f64ToBits(x)) === x` for every `x` except `NaN`, which is not `===` to itself | `conv_f64_bits`; `reject_bitstof64_type` |
-| `Number(x: string \| i32 \| i64 \| f64 \| boolean): f64` | a string is parsed with JavaScript's `Number(s)` rules (below); `i32`/`i64`: `sitofp`; `boolean`: `uitofp` (`true` is `1`); `f64`: identity. A numeric literal argument is typed `f64` (`Number(2.5)` works in i32 mode) | `parse_numbers`; `reject_number_array` (`` `Number` expects a string, number, or boolean, got i32[] ``) |
+| `Number(x: string \| i32 \| i64 \| f64 \| boolean): f64` | a string is parsed with JavaScript's `Number(s)` rules (below); `i32`/`i64`: `sitofp`; `boolean`: `uitofp` (`true` is `1`); `f64`: identity. A numeric literal argument is typed `f64` (`Number(2.5)` works in i32 mode). Under [`--deterministic`](#--deterministic) a string goes to `std/math.ts`'s `numberExact` instead, which reads a `0x` integer the same on every target. | `parse_numbers`; `reject_number_array` (`` `Number` expects a string, number, or boolean, got i32[] ``) |
 | `parseInt(s: string): i32` | base 10 only: ASCII whitespace, an optional sign, then digits (`strtoll`); stops at the first other character. **Deviations from JavaScript:** no `NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`, `parseInt("")`); values beyond the `i32` range saturate exactly like `toI32` (`parseInt("99999999999")` is `2147483647`); a `0x` prefix is not hexadecimal (`parseInt("0x10")` is `0`). Always `i32`, also under `--number-mode f64` (use `Number` there) | `parse_numbers`; `reject_parseint_number` (`` `parseInt` expects a string, got i32 ``) |
-| `parseFloat(s: string): f64` | ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded by `strtod`; `NaN` when there is none (`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`, `"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like `strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and gives `0`) | `parse_numbers` |
+| `parseFloat(s: string): f64` | ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded by `strtod`; `NaN` when there is none (`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`, `"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like `strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and gives `0`). Under [`--deterministic`](#--deterministic) a string goes to `std/math.ts`'s `parseFloatExact` instead, which reads a `0x` integer the same on every target. | `parse_numbers` |
 
 The string parsers accept only ASCII whitespace (` \t\n\v\f\r`), not the
 Unicode spaces JavaScript also trims. `Number(s)` trims it on both sides and
@@ -11087,6 +11087,51 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
   the program against the file before it looks in its cache, so the file is not
   part of the cache key and a cache hit is held to it too. `--fix` and
   `--emit-ast` refuse the flag.
+
+#### `--deterministic`
+
+`--deterministic`, on a compile or `nish run`, promises that the program's
+`f64` and `f32` results are the same bits natively on x86-64 and AArch64, on
+wasm32 and in the `--emit-ts` reading under Node
+([wp50-wasm-host.md §9](wp50-wasm-host.md#9-w7-the-same-bits-on-every-target)):
+
+- `Math.sin`, `cos`, `exp`, `log` and `pow` lower to `std/math.ts`'s
+  `sinF64`, `cosF64`, `expF64`, `logF64` and `powF64` on every target, as on a
+  page module, and a float `%` to `fmodF64` (an `f32` widened and the exact
+  result narrowed back). The `--emit-ts` reading imports those functions, and
+  `tanF64`, `atan2F64` and `hypotF64`, from `./nish/math.ts` in place of
+  `Math`. `+ - * /`, `sqrt` and the exact builtins need nothing: they are
+  correctly rounded everywhere, and every C unit and the program's IR are
+  compiled with `-ffp-contract=off` with or without the flag.
+- `f64ToBits` and `f32ToBits` give the canonical quiet NaN,
+  `0x7ff8000000000000` and `0x7fc00000`, for every NaN (`quietBitsF64` and
+  `quietBitsF32`); targets differ in the sign and payload of a NaN an
+  operation makes.
+- A program that reaches a nondeterministic capability — `clock`, `entropy`,
+  `env`, `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` or `tty` — is
+  refused with the chain that reaches it, as the capability policy refuses
+  one: NL3052 the file system, NL3053 another machine or program (`net`,
+  `process.spawn`), NL3054 C code or a host import (`ffi`), NL2700 the clock
+  and the random source, NL2701 the environment and the terminal.
+- `Number(s)`, `parseFloat(s)` and `parseInt(s)` read a string with one
+  grammar on every target, the one `--emit-ts` reads: a `0x` integer, read by
+  `std/math.ts`'s `numberExact` and `parseFloatExact` (which the flag calls
+  in their place) and correctly rounded on any libc, and no hex float, so
+  `Number("0x1p3")` is NaN and `parseFloat("0x1p3")` is 1 where a native build
+  without the flag lets `strtod` read 8 (`deterministic_parse`). Every decimal
+  spelling already agreed: glibc, musl and Node round them all correctly.
+
+```text
+main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now
+```
+
+The float corpus, `tests/differential/corpus/float/`, holds every operation
+and `Math` builtin over ±0, subnormals, the normal extremes, ±Infinity, NaN,
+integers near 2^53, multiples of π/4, NaN payloads read through
+`f64ToBits` and `f32ToBits`, and 94 strings through `Number`, `parseFloat` and
+`parseInt` to one `expected.txt` on each target
+(`tests/run.js`, sections `deterministic` and `float-corpus`; the
+`reject_deterministic_*` cases).
 
 #### The sandbox
 

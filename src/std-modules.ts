@@ -205,10 +205,11 @@ export const isRegexModule = (packageName: string, name: string): boolean =>
 
 /**
  * `nish/math`: `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish
- * rather than libm, and on a page module `sin`, `cos`, `exp`, `log`, `pow`
- * and the float `%` as well. Like `nish/collections` a program never imports
- * it: a call to one of them is what loads it, and the functions it reaches are
- * copied into the calling module, so it writes no `.ll` of its own. Each is
+ * rather than libm, and on a page module or under `--deterministic` `sin`,
+ * `cos`, `exp`, `log`, `pow` and the float `%` as well. Like
+ * `nish/collections` a program never imports it: a call to one of them is
+ * what loads it, and the functions it reaches are copied into the calling
+ * module, so it writes no `.ll` of its own. Each is
  * exported as `<name>F64`: `tan`, `atan2` and `hypot` are the C library's names.
  */
 export const MATH_SPECIFIER: string = "nish/math"
@@ -234,6 +235,15 @@ export const SORT_LOCAL: string = "Array.prototype.sort"
  * an operator, which no declaration can take.
  */
 export const FLOAT_REM_LOCAL: string = "%"
+
+/**
+ * The local name `--deterministic` imports a `nish/math` function under for
+ * the builtin it answers (`importMath`): `quietBitsF64` or `quietBitsF32` for
+ * `f64ToBits` or `f32ToBits`, `numberExact` for `Number` and
+ * `parseFloatExact` for `parseFloat`. The builtin's name with call
+ * parentheses, which no declaration can take.
+ */
+export const routedBuiltinLocal = (builtin: string): string => `${builtin}()`
 
 /** Whether `name` in `packageName` is `std/sort.ts`, which is copied into its user like `std/math.ts`. */
 export const isSortModule = (packageName: string, name: string): boolean =>
