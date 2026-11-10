@@ -102,7 +102,8 @@ saves at least `minSaving` bytes and `minSavingPercent` percent of the body;
 otherwise the compressed bytes are dropped and the body goes as it is. With
 `segmentMode` set, `respondEncoded` also sends it compressed only when the
 whole response, head included, takes fewer TCP segments of `mss` bytes (the
-connection's `mss` if set, else the compressor's, 1448 by default): a
+connection's `mss` if set, else the compressor's `mss` if set, else the MSS
+the server read from the socket, else `HTTP_DEFAULT_MSS`, 1448): a
 1300-byte body that gzips to 700 still fits in one segment either way.
 
 After each call `decision` says why (`HTTP_COMPRESS_SENT`, `_NOT_ACCEPTED`,
@@ -317,10 +318,10 @@ class HttpCompressor
 | `fixedLimit: i32` | The longest body `HTTP_ENCODER_AUTO` gives the fixed-Huffman encoder: 16384 by default. |
 | `minSaving: i32` | The least a compressed body must save to be sent: `minSaving` bytes and `minSavingPercent` percent of the body, whichever is more. 1 and 0 by default (any saving at all); a value below those counts as them. |
 | `minSavingPercent: i32` | The percent of the body a compressed body must save, as well as `minSaving` bytes: 0 by default, 100 or more sends nothing compressed. |
-| `mss: i32` | The TCP segment size `segmentMode` counts in, in bytes: `HTTP_DEFAULT_MSS` by default, and 0 or less means that default. |
+| `mss: i32` | The TCP segment size `segmentMode` counts in, in bytes, when the program sets it: 0, the default, means unset, so a connection's socket MSS is used, or `HTTP_DEFAULT_MSS` where there is none. A value set here wins over the socket's; a connection's own `mss` wins over it. |
 | `readonly names: u8[][]` | The fields `addFields` built: the program's, then `Content-Encoding` and `Vary`. |
 | `readonly output: u8[]` | Where `compress` writes; valid until the next call. |
-| `segmentMode: boolean` | Whether `respondEncoded` also sends the compressed response only when, head included, it takes fewer TCP segments of `mss` bytes than the body as it is; off by default. `mss` is `HTTP_DEFAULT_MSS` unless the program sets it, or a connection's own `mss` overrides it. |
+| `segmentMode: boolean` | Whether `respondEncoded` also sends the compressed response only when, head included, it takes fewer TCP segments of `mss` bytes than the body as it is; off by default. Segments are the connection's own `mss` if the program set it, else this compressor's `mss` if set, else the socket's MSS the server read on accept, else `HTTP_DEFAULT_MSS`. |
 | `readonly values: u8[][]` | The value of each field in `names`, at the same index; pass both to `respond`. |
 | `vary: boolean` | Whether `addFields` adds `Vary: Accept-Encoding` (RFC 9110 §12.5.5), which a cache needs whenever the same resource may be sent either way. On by default; turn it off when the program sets its own `Vary`. |
 | `addFields(names: u8[][], values: u8[][]): void` | Sets `names` / `values` to the program's fields followed by `Content-Encoding: gzip` and, when `vary`, `Vary: Accept-Encoding`. The arrays are reused, so after the first few calls this allocates nothing; they hold until the next call. |
