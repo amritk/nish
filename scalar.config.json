@@ -1278,7 +1278,6 @@
                   "/wp43-http-app-layer": { "type": "page", "title": "WP43: The HTTP application layer", "filepath": "docs/roadmap/wp43-http-app-layer.md" },
                   "/wp46-long-running-memory": { "type": "page", "title": "WP46: Memory for programs that do not exit: regions", "filepath": "docs/roadmap/wp46-long-running-memory.md" },
                   "/wp49-async-server": { "type": "page", "title": "WP49: async/await on the server, and the TechEmpower top", "filepath": "docs/roadmap/wp49-async-server.md" },
-                  "/wp50-wasm-host": { "type": "page", "title": "WP50: A WebAssembly module a TypeScript page drives", "filepath": "docs/roadmap/wp50-wasm-host.md" },
                   "/wp28-compatibility-mode": { "type": "page", "title": "WP28: Compatibility mode", "filepath": "docs/roadmap/wp28-compatibility-mode.md" },
                   "/wp44-streaming-files": { "type": "page", "title": "WP44: Streaming file reads", "filepath": "docs/roadmap/wp44-streaming-files.md" },
                   "/wp48-compressed-references": { "type": "page", "title": "WP48: Compressed 32-bit references", "filepath": "docs/roadmap/wp48-compressed-references.md" }
@@ -1322,6 +1321,7 @@
                   "/wp45-name-resolution": { "type": "page", "title": "WP45: Name resolution: a DNS stub resolver", "filepath": "docs/roadmap/wp45-name-resolution.md" },
                   "/wp47-shared-memory": { "type": "page", "title": "WP47: Shared work across cores: regions, atomics and rings", "filepath": "docs/roadmap/wp47-shared-memory.md" },
                   "/wp48-run-rebuilds": { "type": "page", "title": "WP48: Fast rebuilds for nish run", "filepath": "docs/roadmap/wp48-run-rebuilds.md" },
+                  "/wp50-wasm-host": { "type": "page", "title": "WP50: A WebAssembly module a TypeScript page drives", "filepath": "docs/roadmap/wp50-wasm-host.md" },
                   "/wp24-async": { "type": "page", "title": "WP24: async/await", "filepath": "docs/roadmap/wp24-async.md" },
                   "/wp41-mul-wide": { "type": "page", "title": "WP41: A wide multiply", "filepath": "docs/roadmap/wp41-mul-wide.md" }
                 }

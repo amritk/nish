@@ -102,7 +102,10 @@ with an empty `PATH`, and a build failure with `CC` pointing at a stub.
 
 `npm run smoke` (`scripts/smoke.sh`) builds every `examples/**/*.ts` that
 declares `export const main` with `--link --profile size`, runs it, and prints
-a size table. A program must exit 0 unless it carries `// smoke: exit <n>`.
+a size table. A program must exit 0 unless it carries `// smoke: exit <n>`;
+`// smoke: argv <args>` gives it a command line, `// smoke: args <flags>`
+extra compiler flags, and `// smoke: skip <reason>` leaves out a file that
+declares `main` but is not a native program (a browser page's entry).
 CI's `test` job runs it after `npm test` with `NISH=build/nish`.
 `release.yml` separately smoke-tests each unpacked tarball: `--version`, then
 linking and running `hello.ts` and a program that imports `nish/text`, from a
