@@ -1,5 +1,7 @@
 # Introduction
 
+<div data-nish-hero></div>
+
 Nish compiles a strict, static subset of TypeScript ahead of time to native
 code. You write `.ts` files with the syntax you already know; the compiler
 checks that every value has one fixed type and layout, turns the program into
