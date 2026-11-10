@@ -88,8 +88,6 @@ says, per concurrency, whether the async twin is inside the band: WP49 stage
 [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext)
 and, for the gate,
 [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6).
-On 2026-11-10 the async entries were outside the band on `plaintext`, most of
-`json` and every database test but `cached-queries` at 256 connections.
 
 ## The database entry
 

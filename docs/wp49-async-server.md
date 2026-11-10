@@ -291,13 +291,30 @@ pairs in one run; the figures are in
 The async entry is 87–90% below the explicit one on `plaintext` at every
 concurrency, 7–12% below on `json` at five of six (inside the band only at
 256), and 42–91% below on `db`, `query`, `update` and `fortune`; only
-`cached-query` at 256 connections is inside. The causes are not in the
-lowering: `serve`'s `HttpHandler` sends each answer as it ends, one `sendto`
-per request where the explicit loop sends one per 16 pipelined answers, and
-`PgAsyncPool` sends one query per connection at a time and makes a task that
-finds every connection claimed sleep (1 ms doubling to 16 ms) rather than wake
-on a release. Closing them is a batched send in `HttpHandler` (or `serve` on
-`Http1Server` directly) and a pipelined, wake-on-release pool.
+`cached-query` at 256 connections is inside. What is known of the causes, as
+far as the evidence goes (the `strace -c` tables and their commands are in
+BENCHMARKS.md):
+
+- **`plaintext`** has two shares. `serve` keeps one request per connection in
+  flight, so a 16-deep pipelined burst runs as 16 tasks, and `HttpHandler`
+  sends each answer as it ends: one `sendto` per request (44,857 for 43,646)
+  where the explicit loop sends one per burst (25,379 for 402,880). How the
+  loss splits between the two was not measured.
+- **`json`** is not pipelined, so both entries send one answer per `sendto`,
+  and sends do not explain it. The executor adds a fixed cost per turn:
+  `nish_async_wait_fd` duplicates the descriptor (`fcntl(F_DUPFD_CLOEXEC)`) and
+  adds it to epoll, `nish_async_fire` removes and closes it, and `serve` writes
+  and drains a wake byte. At 64 connections that was about 400 turns and 0.1
+  calls a request, too few for 7–12%. The rest is per-request CPU in user
+  space, which was not profiled; the cause is open.
+- **The database tests**, from the code and not from a trace: `PgAsyncPool`
+  sends one query per connection at a time, and a task that finds every
+  connection claimed sleeps (1 ms doubling to 16 ms) rather than waking on a
+  release.
+
+Closing them starts with a batched or pipelined `serve` (more than one request
+of a connection in flight, its answers sent in one write), a profile of `json`'s
+per-request path, and a pipelined, wake-on-release pool.
 
 ## 7. A non-blocking call from a handler today, without `async`
 

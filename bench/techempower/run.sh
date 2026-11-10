@@ -53,8 +53,15 @@
 # as n/a with the reason in the notes, and is left out of the median, the
 # minimum and the noise band. wrk's Non-2xx and socket-error counts go into
 # results.tsv beside each figure, and a cell any of them is non-zero in is
-# marked `*` and listed in the notes. If `entry` or `entry-copy` fails to
-# start, the run exits 1; a twin that fails to start is a row reading n/a.
+# marked `*` and listed in the notes. wrk counts those answers in its rate, so a
+# `*` cell's figure is not trusted: its verdict is never inside. If `entry`,
+# `entry-copy`, `db-entry` or `db-entry-copy` fails to start, the run exits 1;
+# a twin that fails to start is a row reading n/a.
+#
+# The database is loaded once and not reset between contestants or rounds:
+# /updates rewrites world's rows in place, so a later contestant meets more
+# dead tuples than an earlier one. The rotated order spreads that across the
+# contestants rather than removing it.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -422,7 +429,8 @@ report() {
       END { if (top > 0) printf " %.1f |\n", top / 1024; else printf " n/a |\n" }' "$results"
   done
   # The noise band: how far apart the two identical builds' medians are; the
-  # async twin is inside it when its median is no further below the base's.
+  # async twin is inside it when its median is no further below the base's
+  # and none of its rounds at that concurrency had a failure (`*`).
   printf '\nnoise band (|%s - %s| / %s, medians):' "$base" "$copy" "$base"
   local verdict=""
   for level in "$@"; do
@@ -435,6 +443,7 @@ report() {
       $1 == p && $2 == l && $4 != "n/a" && $3 == b { e[ce++] = $4 + 0 }
       $1 == p && $2 == l && $4 != "n/a" && $3 == cp { f[cf++] = $4 + 0 }
       $1 == p && $2 == l && $4 != "n/a" && $3 == t { g[cg++] = $4 + 0 }
+      $1 == p && $2 == l && $3 == t && ($5 != 0 || $6 != "0/0/0/0") { flagged = 1 }
       END {
         if (ce == 0 || cf == 0) { printf "%s: n/a\t%s: n/a", l, l; exit }
         a = med(e, ce); x = med(f, cf)
@@ -442,12 +451,14 @@ report() {
         band = (a > x ? a - x : x - a) * 100 / a
         if (cg == 0) { printf "%s: %.1f%%\t%s: n/a", l, band, l; exit }
         d = (med(g, cg) - a) * 100 / a
-        printf "%s: %.1f%%\t%s: %+.1f%% %s", l, band, l, d, (d >= -band ? "inside" : "outside")
+        # wrk counts a non-2xx answer in its rate, so a cell with failures
+        # can be fast for the wrong reason: it is never called inside.
+        printf "%s: %.1f%%\t%s: %+.1f%% %s", l, band, l, d, (flagged ? (d >= -band ? "unknown*" : "outside*") : (d >= -band ? "inside" : "outside"))
       }' "$results")
     printf ' %s' "${line%%	*}"
     verdict+=" ${line#*	}"
   done
-  printf '\n%s vs %s (median delta, inside or outside the band):%s\n' "$twin" "$base" "$verdict"
+  printf '\n%s vs %s (median delta, inside or outside the band; * had failures, never inside):%s\n' "$twin" "$base" "$verdict"
 }
 
 {
