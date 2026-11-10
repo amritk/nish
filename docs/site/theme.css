@@ -1,25 +1,36 @@
 /*
   The Nish docs theme: colours from the logo (docs/site/logo-*.png), in a
-  light and a dark mode, plus the vertical rhythm between blocks.
+  light and a dark mode, the vertical rhythm between blocks, and the motion:
+  the page's entrance, blocks that rise as they scroll into view, the cards'
+  pointer highlight and the landing page's hero (built by site.js).
 
-  Logo palette: charcoal #1e2126, violet #9c42e9, mid #792cb9,
-  deep #391072 / #33175d, darkest fill #211a30, tagline grey #b7b7c5.
+  Logo palette (docs/site/mark.svg): charcoal #1e2226, violet #8b3fff,
+  mid #5b22c4, deep #42118a, and the cyan fleck #11a8f1.
 
   Text colours meet WCAG AA (4.5:1) on the surfaces they sit on, in both
-  modes; the measured table is in PR #1291. A colour change re-measures it.
+  modes, and on every stop of the page gradient: the tightest are the dark
+  link (#b47cf0, 4.80:1) and the light faint text (#5f6370, 4.52:1) on the
+  gradient's brightest stop, and white on the dark button (#8b3fff, 4.94:1). A colour change re-measures them.
 
   Scalar reads a theme as CSS custom properties under .light-mode and
   .dark-mode (the class on <body>), the same shape as its built-in presets.
   A theme file replaces the default preset rather than layering on it, so
   every variable the preset sets is set here.
+
+  Every animation here is decoration: the last block of the file turns all of
+  it off under prefers-reduced-motion, and each animated element's resting
+  style is its finished state, so nothing is lost when one does not run.
 */
 
 /* Rhythm: Scalar's defaults are 12px between blocks and 44px above a heading. */
 :root:root {
   --scalar-block-spacing: 18px;
   --scalar-heading-spacing: 56px;
-  --nish-violet: #9c42e9;
-  --nish-violet-mid: #792cb9;
+  --nish-violet: #8b3fff;
+  --nish-violet-mid: #5b22c4;
+  --nish-pink: #e85fb4;
+  --nish-cyan: #11a8f1;
+  --nish-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root,
@@ -30,7 +41,7 @@
 
 .light-mode {
   --scalar-background-1: #ffffff;
-  --scalar-background-2: #f6f4fa;
+  --scalar-background-2: #f6f3fb;
   --scalar-background-3: #ebe7f2;
   --scalar-background-card: #ffffff;
   --scalar-background-accent: color-mix(in srgb, var(--nish-violet), transparent 91%);
@@ -52,10 +63,10 @@
   --scalar-color-query: #007b80;
 
   --scalar-link-color: var(--nish-violet-mid);
-  --scalar-link-color-hover: #5a1f8f;
+  --scalar-link-color-hover: #42118a;
 
   --scalar-button-1: var(--nish-violet-mid);
-  --scalar-button-1-hover: #5a1f8f;
+  --scalar-button-1-hover: #42118a;
   --scalar-button-1-color: #ffffff;
 
   --scalar-tooltip-background: color-mix(in srgb, var(--scalar-background-1), transparent 10%);
@@ -68,10 +79,10 @@
 }
 
 .dark-mode {
-  --scalar-background-1: #1e2126;
-  --scalar-background-2: #262930;
-  --scalar-background-3: #30343c;
-  --scalar-background-card: #23262c;
+  --scalar-background-1: #110f18;
+  --scalar-background-2: #1a1724;
+  --scalar-background-3: #262232;
+  --scalar-background-card: #16131f;
   --scalar-background-accent: color-mix(in srgb, var(--nish-violet), transparent 82%);
 
   --scalar-color-1: #e8e6ef;
@@ -79,7 +90,7 @@
   --scalar-color-3: #9d9dab;
 
   --scalar-color-accent: #b47cf0;
-  --scalar-border-color: #363a44;
+  --scalar-border-color: #2e2a3d;
   --scalar-focus-color: #b47cf0;
 
   --scalar-color-green: #3ccf8e;
@@ -94,7 +105,7 @@
   --scalar-link-color-hover: #d2b0f8;
 
   --scalar-button-1: var(--nish-violet);
-  --scalar-button-1-hover: #8a33d6;
+  --scalar-button-1-hover: #7a2ff0;
   --scalar-button-1-color: #ffffff;
 
   --scalar-tooltip-background: color-mix(in srgb, var(--scalar-background-1), #ffffff 10%);
@@ -129,9 +140,9 @@
   --scalar-sidebar-search-border-color: var(--scalar-border-color);
 }
 
-/* Code blocks: a shade darker than the page in dark mode, on the charcoal. */
+/* Code blocks: a shade darker than the page in dark mode. */
 body.dark-mode .t-editor__code {
-  --hljs-background: #191b20;
+  --hljs-background: #0b0a11;
 }
 
 /* Callouts: info carries the violet; warning and danger keep their colours. */
@@ -141,12 +152,6 @@ body.dark-mode .t-editor__callout {
   --callout-info-secondary: color-mix(in srgb, var(--nish-violet), transparent 93%);
 }
 
-/* Cards: a violet border and tint on hover. */
-body .t-editor__card.card--has-link:has(.card-stretched-link:hover) {
-  background-color: var(--scalar-background-accent);
-  border-color: color-mix(in srgb, var(--nish-violet), transparent 40%);
-}
-
 /* The header logo: Scalar's 24px slot leaves the wordmark hard to read. */
 body img.logo.logo {
   height: 32px;
@@ -154,5 +159,780 @@ body img.logo.logo {
 @media (max-width: 1000px) {
   body img.logo.logo {
     height: 28px;
+  }
+}
+
+/* ── The canvas ──────────────────────────────────────────────────────────
+   One fixed gradient behind every page: violet light from above the header,
+   falling off to the page colour. The base colour equals the last stop on
+   purpose. Scalar sets no background on <html>, so the browser paints the
+   canvas from <body>, and a fixed image covers one viewport only: past it
+   (overscroll on a long page) the base colour is what shows. */
+body.scalar-app.dark-mode {
+  background: #110f18 radial-gradient(120% 80% at 50% -20%, #341868 0%, #1f123d 34%, #110f18 72%) fixed;
+}
+body.scalar-app.light-mode {
+  background: #ffffff radial-gradient(120% 80% at 50% -20%, #ead9fd 0%, #f7f1fe 36%, #ffffff 72%) fixed;
+}
+
+/* The header and both sidebars are glass over the canvas, not slabs on it. */
+body.scalar-app .t-header,
+body.scalar-app aside.t-doc__sidebar,
+body.scalar-app aside.t-doc__toc {
+  background: transparent;
+}
+body.scalar-app .t-header {
+  background: color-mix(in srgb, var(--scalar-background-1), transparent 35%);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--nish-violet), transparent 65%);
+}
+
+/* ── Header and sidebar ──────────────────────────────────────────────── */
+
+/* A header link draws its underline from the left on hover. */
+.t-header__item {
+  position: relative;
+}
+.t-header__item::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--nish-violet), var(--nish-pink));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s var(--nish-ease);
+}
+.t-header__item:hover::after {
+  transform: scaleX(1);
+}
+
+body img.logo.logo {
+  transition: transform 0.4s var(--nish-ease), filter 0.4s;
+}
+a:hover > img.logo.logo {
+  transform: scale(1.06) rotate(-3deg);
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--nish-violet), transparent 40%));
+}
+
+/* Sidebar rows slide a hair toward the page under the pointer. */
+aside.t-doc__sidebar [data-sidebar-id] a,
+aside.t-doc__sidebar [data-sidebar-id] button {
+  transition: background-color 0.2s, color 0.2s, transform 0.25s var(--nish-ease);
+}
+aside.t-doc__sidebar [data-sidebar-id] a:hover {
+  transform: translateX(2px);
+}
+
+/* The outline's marker carries the logo's gradient. */
+aside.t-doc__toc .outline-marker {
+  background: linear-gradient(180deg, var(--nish-violet), var(--nish-pink));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--nish-violet), transparent 30%);
+}
+
+/* ── Page content ────────────────────────────────────────────────────── */
+
+/* A page arrives: one short rise for the whole column on every navigation. */
+@keyframes nish-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+.page-mdx__content {
+  animation: nish-rise 0.55s var(--nish-ease) both;
+}
+aside.t-doc__toc .container {
+  animation: nish-rise 0.55s 0.12s var(--nish-ease) both;
+}
+
+/* The page title, in the logo's gradient. `color` stays set for a browser
+   without background-clip: text. */
+.t-editor__heading[data-level="1"] {
+  width: fit-content;
+  color: var(--scalar-color-1);
+  background: linear-gradient(100deg, var(--scalar-color-1) 30%, var(--scalar-color-accent) 115%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Blocks rise into place as they scroll into view. Text does not: a
+   paragraph that fades in under the eye is harder to read, not nicer. Only
+   where the browser has scroll-driven animations; elsewhere blocks are
+   simply there. */
+@supports (animation-timeline: view()) {
+  @keyframes nish-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(18px) scale(0.985);
+    }
+  }
+  .page-node > .t-editor__code-container,
+  .page-node > .t-editor__table-wrapper,
+  .page-node > .t-editor__callout,
+  .page-node > .t-editor__image,
+  .page-node .t-editor__grid-element > .t-editor__card {
+    animation: nish-reveal linear both;
+    animation-timeline: view();
+    /* Finished within the first 160px on screen, however tall the block. */
+    animation-range: entry 0 entry 160px;
+  }
+}
+
+/* Links: the underline thickens instead of the colour jumping. */
+.t-prose a.t-editor__anchor {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-thickness 0.15s, color 0.15s;
+}
+.t-prose a.t-editor__anchor:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Cards: a lift, a violet edge, and a glow under the pointer. site.js keeps
+   --nish-x and --nish-y at the pointer; without it the glow sits top left. */
+body .t-editor__card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--scalar-background-card), transparent 25%);
+  transition: transform 0.35s var(--nish-ease), border-color 0.25s, box-shadow 0.35s;
+}
+body .t-editor__card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    260px circle at var(--nish-x, 0) var(--nish-y, 0),
+    color-mix(in srgb, var(--nish-violet), transparent 78%),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+body .t-editor__card.card--has-link:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--nish-violet), transparent 35%);
+  box-shadow: 0 14px 34px -18px color-mix(in srgb, var(--nish-violet), transparent 25%);
+}
+body .t-editor__card.card--has-link:hover::before {
+  opacity: 1;
+}
+body .t-editor__card .card-content__title svg {
+  color: var(--scalar-color-accent);
+  transition: transform 0.35s var(--nish-ease);
+}
+body .t-editor__card.card--has-link:hover .card-content__title svg {
+  transform: scale(1.15) rotate(-6deg);
+}
+
+/* Tables: one rounded panel with a tinted head and a row that answers the
+   pointer. Scalar rings the wrapper with its own square shadow, which would
+   show as a second frame outside the rounded one. */
+figure.t-editor__table-wrapper {
+  border-radius: 14px;
+  box-shadow: none;
+}
+table.t-editor__table {
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--scalar-border-color);
+  border-radius: 14px;
+}
+table.t-editor__table th {
+  background: color-mix(in srgb, var(--nish-violet), transparent 90%);
+  border-top: 0;
+}
+table.t-editor__table :is(th, td):first-child {
+  border-left: 0;
+}
+table.t-editor__table :is(th, td):last-child {
+  border-right: 0;
+}
+table.t-editor__table tr:last-child td {
+  border-bottom: 0;
+}
+table.t-editor__table tbody tr {
+  transition: background-color 0.2s;
+}
+table.t-editor__table tbody tr:hover {
+  background: color-mix(in srgb, var(--nish-violet), transparent 94%);
+}
+
+/* Code blocks: rounder, and the edge warms to violet under the pointer. */
+.t-editor__code-container {
+  border-radius: 12px;
+  transition: box-shadow 0.3s;
+}
+.t-editor__code-container .t-editor__code {
+  border-radius: 12px;
+}
+.t-editor__code-container:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--nish-violet), transparent 55%),
+    0 18px 40px -24px color-mix(in srgb, var(--nish-violet), transparent 30%);
+}
+
+.t-editor__callout {
+  border-radius: 12px;
+}
+
+/* ── The landing page's hero (docs/guide/index.md; built by site.js) ─────
+   A source file is typed, flows through the compiler to its three targets,
+   and runs. One 12s clock drives every part: each keyframe set below spans
+   the whole cycle and places its part by percentage (1s is 8.33%), so the
+   parts cannot drift apart. */
+.nish-hero {
+  --nish-cycle: 12s;
+  position: relative;
+  margin: 22px 0 calc(var(--scalar-block-spacing) + 10px);
+}
+.nish-hero:empty {
+  display: none;
+}
+/* Once the hero is up its headline is the page's title, so the Markdown's
+   own "Introduction" leaves the screen. It stays in the document, clipped
+   rather than removed, for a screen reader and for the page outline. */
+.page-node:has(.nish-hero__inner) > .t-editor__heading[data-level="1"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.page-node:has(.nish-hero__inner) > .nish-hero {
+  margin-top: 0;
+}
+.nish-hero__inner {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 36px 28px 28px;
+  border: 1px solid color-mix(in srgb, var(--nish-violet), transparent 70%);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--scalar-background-1), transparent 45%);
+  animation: nish-rise 0.8s 0.1s var(--nish-ease) both;
+}
+
+/* Two blurred lights that drift behind everything in the panel. */
+.nish-hero__aurora {
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background:
+    radial-gradient(38% 34% at 30% 34%, color-mix(in srgb, var(--nish-violet), transparent 55%), transparent 70%),
+    radial-gradient(30% 30% at 72% 62%, color-mix(in srgb, var(--nish-pink), transparent 72%), transparent 70%),
+    radial-gradient(26% 26% at 60% 22%, color-mix(in srgb, var(--nish-cyan), transparent 80%), transparent 70%);
+  filter: blur(30px);
+  animation: nish-drift 22s ease-in-out infinite alternate;
+}
+@keyframes nish-drift {
+  to {
+    transform: translate3d(6%, -5%, 0) rotate(14deg) scale(1.12);
+  }
+}
+
+.nish-hero__title {
+  margin: 0;
+  font-size: clamp(28px, 5.2vw, 44px);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  color: var(--scalar-color-1);
+  text-wrap: balance;
+}
+.nish-hero__accent {
+  color: var(--scalar-color-accent);
+  background: linear-gradient(90deg, var(--nish-violet), var(--nish-pink), var(--nish-cyan), var(--nish-violet));
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: nish-sheen 9s linear infinite;
+}
+.light-mode .nish-hero__accent {
+  /* The pink and cyan are too pale to read on white; the light page runs the
+     sheen through the two violets instead. */
+  background-image: linear-gradient(90deg, var(--nish-violet-mid), #b0229a, #4a3fd0, var(--nish-violet-mid));
+}
+@keyframes nish-sheen {
+  to {
+    background-position: -300% 0;
+  }
+}
+
+.nish-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 22px 0 26px;
+}
+.nish-hero__cta,
+.nish-hero__install {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.25s var(--nish-ease), box-shadow 0.25s, border-color 0.25s;
+}
+a.nish-hero__cta {
+  color: var(--scalar-button-1-color);
+  text-decoration: none;
+  background: var(--scalar-button-1);
+  box-shadow: 0 8px 24px -10px var(--nish-violet);
+}
+a.nish-hero__cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -8px var(--nish-violet);
+}
+.nish-hero__cta span {
+  transition: transform 0.25s var(--nish-ease);
+}
+.nish-hero__cta:hover span {
+  transform: translateX(4px);
+}
+.nish-hero__install {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--scalar-color-1);
+  font-weight: 400;
+  border: 1px solid var(--scalar-border-color);
+  background: color-mix(in srgb, var(--scalar-background-2), transparent 30%);
+}
+.nish-hero__install:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--nish-violet), transparent 40%);
+}
+.nish-hero__install code {
+  overflow: hidden;
+  font-family: var(--scalar-font-code);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nish-hero__prompt,
+.nish-hero__copied {
+  color: var(--scalar-color-accent);
+  font-family: var(--scalar-font-code);
+  font-size: 12px;
+}
+.nish-hero__copied:empty {
+  display: none;
+}
+
+.nish-hero__stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 14px 0;
+}
+.nish-hero__terminal {
+  grid-column: 1 / -1;
+}
+
+.nish-hero__window {
+  overflow: hidden;
+  border: 1px solid var(--scalar-border-color);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--scalar-background-2), transparent 20%);
+  box-shadow: 0 20px 40px -28px color-mix(in srgb, var(--nish-violet-mid), #000 60%);
+}
+.dark-mode .nish-hero__window {
+  background: color-mix(in srgb, #0b0a11, transparent 15%);
+}
+.nish-hero__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--scalar-border-color);
+  color: var(--scalar-color-3);
+  font-size: 11px;
+}
+.nish-hero__bar i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--scalar-background-3);
+}
+.nish-hero__bar span {
+  margin-left: 6px;
+}
+.nish-hero__code {
+  margin: 0;
+  padding: 12px 14px;
+  overflow: hidden;
+  color: var(--scalar-color-1);
+  font-family: var(--scalar-font-code);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre;
+  animation: nish-hero-show var(--nish-cycle) linear infinite;
+}
+.nish-hero__code > span {
+  display: block;
+  width: fit-content;
+}
+.nish-tok-k {
+  color: var(--scalar-color-purple);
+}
+.nish-tok-t {
+  color: var(--scalar-color-query);
+}
+.nish-tok-n {
+  color: var(--scalar-color-orange);
+}
+.nish-hero__cmd b {
+  color: var(--scalar-color-accent);
+}
+.nish-hero__out {
+  color: var(--scalar-color-green);
+}
+
+/* What is typed is wiped together at the end of the cycle. A line's own
+   animation starts late (its delay), so it also hides itself before the
+   cycle ends: otherwise it would still be showing its last frame when the
+   block fades back in. */
+@keyframes nish-hero-show {
+  0%,
+  83% {
+    opacity: 1;
+  }
+  86%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes nish-hero-type {
+  0% {
+    clip-path: inset(0 100% 0 0);
+  }
+  4%,
+  86% {
+    clip-path: inset(0);
+  }
+  86.01%,
+  100% {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+.nish-hero__line {
+  animation: nish-hero-type var(--nish-cycle) steps(24, end) infinite;
+  animation-delay: calc(var(--i) * 0.28s);
+}
+@keyframes nish-hero-cmd {
+  0%,
+  43% {
+    clip-path: inset(0 100% 0 0);
+  }
+  52%,
+  100% {
+    clip-path: inset(0);
+  }
+}
+.nish-hero__typed {
+  display: inline-block;
+  vertical-align: bottom;
+  animation: nish-hero-cmd var(--nish-cycle) steps(19, end) infinite;
+}
+@keyframes nish-hero-out {
+  0%,
+  55% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  58%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.nish-hero__out {
+  animation: nish-hero-out var(--nish-cycle) var(--nish-ease) infinite;
+}
+
+/* The middle of the stage: beams, the compiler, the targets. */
+.nish-hero__flow {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 150px;
+}
+.nish-hero__beams {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.nish-hero__rail,
+.nish-hero__pulse {
+  fill: none;
+  stroke-linecap: round;
+}
+.nish-hero__rail {
+  stroke: color-mix(in srgb, var(--nish-violet), transparent 72%);
+  stroke-width: 1;
+}
+.nish-hero__pulse {
+  stroke: var(--scalar-color-accent);
+  stroke-width: 2.5;
+  stroke-dasharray: 22 200;
+  stroke-dashoffset: 22;
+  opacity: 0;
+  filter: drop-shadow(0 0 5px var(--nish-violet));
+}
+/* A dash 22 long on a path 100 long: offset 22 hides it before the start,
+   -100 has carried it off the end. */
+@keyframes nish-hero-pulse-in {
+  0%,
+  20% {
+    stroke-dashoffset: 22;
+    opacity: 0;
+  }
+  21% {
+    opacity: 1;
+  }
+  28% {
+    stroke-dashoffset: -100;
+    opacity: 1;
+  }
+  29%,
+  100% {
+    stroke-dashoffset: -100;
+    opacity: 0;
+  }
+}
+@keyframes nish-hero-pulse-out {
+  0%,
+  30% {
+    stroke-dashoffset: 22;
+    opacity: 0;
+  }
+  31% {
+    opacity: 1;
+  }
+  38% {
+    stroke-dashoffset: -100;
+    opacity: 1;
+  }
+  39%,
+  100% {
+    stroke-dashoffset: -100;
+    opacity: 0;
+  }
+}
+.nish-hero__pulse--in {
+  animation: nish-hero-pulse-in var(--nish-cycle) linear infinite;
+}
+.nish-hero__pulse--out {
+  animation: nish-hero-pulse-out var(--nish-cycle) linear infinite;
+  animation-delay: calc(var(--i) * 0.15s);
+}
+
+/* The compiler shares the beams' grid cell and sits at its centre, which is
+   where the paths in site.js meet (150 of the 300 units across). */
+.nish-hero__flow > .nish-hero__beams,
+.nish-hero__flow > .nish-hero__core {
+  grid-column: 1;
+  grid-row: 1;
+}
+.nish-hero__core {
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  justify-self: center;
+  width: 52px;
+  height: 52px;
+}
+.nish-hero__core img {
+  width: 52px;
+  height: 52px;
+  box-sizing: border-box;
+  padding: 7px;
+  border-radius: 14px;
+  background: var(--scalar-background-1);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--nish-violet), transparent 50%);
+  animation: nish-hero-core var(--nish-cycle) var(--nish-ease) infinite;
+}
+/* A comet circling the compiler: a conic sweep, masked down to a 2px ring. */
+.nish-hero__ring {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 50%, var(--nish-violet) 80%, var(--nish-pink) 97%, transparent);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  animation: nish-spin 3.2s linear infinite;
+}
+@keyframes nish-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@keyframes nish-hero-core {
+  0%,
+  27%,
+  42%,
+  100% {
+    transform: none;
+    filter: none;
+  }
+  31% {
+    transform: scale(1.12);
+    filter: drop-shadow(0 0 16px var(--nish-violet));
+  }
+}
+
+.nish-hero__targets {
+  grid-column: 2;
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  align-items: center;
+}
+.nish-hero__target {
+  padding: 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--nish-violet), transparent 35%);
+  border-radius: 999px;
+  color: var(--scalar-color-1);
+  background: color-mix(in srgb, var(--nish-violet), transparent 82%);
+  box-shadow: 0 0 18px -6px var(--nish-violet);
+  font-family: var(--scalar-font-code);
+  min-width: 108px;
+  font-size: 11.5px;
+  text-align: center;
+  animation: nish-hero-target var(--nish-cycle) var(--nish-ease) infinite;
+  animation-delay: calc(var(--i) * 0.15s);
+}
+/* Lit is the resting style, so the keyframes name it by hand at both ends of
+   the stretch it holds: a keyframe that left it out would be interpolated
+   straight from unlit to unlit. */
+@keyframes nish-hero-target {
+  0%,
+  37%,
+  86%,
+  100% {
+    color: var(--scalar-color-3);
+    border-color: var(--scalar-border-color);
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+  }
+  39% {
+    transform: scale(1.08);
+  }
+  41%,
+  83% {
+    color: var(--scalar-color-1);
+    border-color: color-mix(in srgb, var(--nish-violet), transparent 35%);
+    background: color-mix(in srgb, var(--nish-violet), transparent 82%);
+    box-shadow: 0 0 18px -6px var(--nish-violet);
+    transform: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .nish-hero__inner {
+    padding: 26px 16px 16px;
+  }
+  .nish-hero__stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .nish-hero__flow {
+    min-height: 130px;
+  }
+  .nish-hero__code {
+    font-size: 11px;
+  }
+}
+
+/* ── The landing page (docs/guide/index.md) ─────────────────────────────
+   Its route in scalar.config.json turns off the sidebar, the outline, the
+   page actions and the previous/next links and gives it the full width, so
+   it reads as a home page rather than the first page of the guide. What is
+   left is laid out here: the hero and the card grids across a wide column,
+   and the prose, the callout and the code in a narrower one at its centre.
+   Every rule is scoped to the page that holds the hero's host. */
+.page-node:has(> [data-nish-hero]) {
+  max-width: 1080px;
+  margin-inline: auto;
+}
+.page-node:has(> [data-nish-hero]) > :not([data-nish-hero], .t-editor__grid-element) {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.page-node:has(> [data-nish-hero]) > .t-editor__heading[data-level="2"] {
+  margin-top: 96px;
+  margin-bottom: 28px;
+  font-size: clamp(26px, 3.6vw, 36px);
+  letter-spacing: -0.02em;
+  text-align: center;
+  justify-content: center;
+}
+/* The paragraph under the hero is its lead. */
+.page-node:has(> [data-nish-hero]) > [data-nish-hero] + .t-editor__paragraph {
+  margin-top: 36px;
+  font-size: 18px;
+  line-height: 1.65;
+  color: var(--scalar-color-2);
+  text-align: center;
+  text-wrap: pretty;
+}
+.page-node:has(> [data-nish-hero]) .nish-hero__inner {
+  padding: 56px 36px 32px;
+}
+.page-node:has(> [data-nish-hero]) .nish-hero__title {
+  font-size: clamp(34px, 6.4vw, 64px);
+  text-align: center;
+}
+.page-node:has(> [data-nish-hero]) .nish-hero__actions {
+  justify-content: center;
+  margin: 30px 0 40px;
+}
+/* A grid's columns are an inline style on the element Scalar renders, so
+   only !important can fold them on a narrower screen. */
+@media (max-width: 960px) {
+  .page-node:has(> [data-nish-hero]) > .t-editor__grid-element {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 720px) {
+  .page-node:has(> [data-nish-hero]) > .t-editor__grid-element {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .page-node:has(> [data-nish-hero]) .nish-hero__inner {
+    padding: 34px 16px 16px;
+  }
+  .page-node:has(> [data-nish-hero]) > [data-nish-hero] + .t-editor__paragraph {
+    font-size: 16px;
+  }
+  .page-node:has(> [data-nish-hero]) > .t-editor__heading[data-level="2"] {
+    margin-top: 64px;
+  }
+}
+
+/* ── No motion, on request ───────────────────────────────────────────────
+   Everything above rests in its finished state, so stopping the animations
+   leaves a complete, still page. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
   }
 }
