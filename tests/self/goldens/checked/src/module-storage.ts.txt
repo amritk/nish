@@ -27,8 +27,7 @@ import FunctionSig from "./program" -> struct FunctionSig
 import StructInfo from "./program" -> struct StructInfo
 import elementStride from "./program" -> function @elementStride
 import inlineElementStruct from "./program" -> function @inlineElementStruct
-import arrayMethodOfLocal from "./std-modules" -> function @arrayMethodOfLocal
-import SORT_LOCAL from "./std-modules" -> const SORT_LOCAL
+import rewrittenArrayMethod from "./std-modules" -> function @rewrittenArrayMethod
 import T_BOOL from "./types" -> const T_BOOL
 import T_U8 from "./types" -> const T_U8
 import TypeTable from "./types" -> struct TypeTable
@@ -296,16 +295,10 @@ function refuseMethod(ctx: CheckContext, info: ConstInfo, node: Node, method: st
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error
-function rewrittenMethod(local: string): string -> @rewrittenMethod
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: local
-  calls: arrayMethodOfLocal nish_str_eq
-  stackSites=0 stackLocals=0
-  callee +0:85 arrayMethodOfLocal -> @arrayMethodOfLocal
 function checkStorageCall(ctx: CheckContext, call: Node): void -> @checkStorageCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseMethod
-  calls: CheckContext.error checkStorageUses lendsStorage nish_panic_index nish_str_concat nish_str_eq refuseMethod rewrittenMethod storageElementOf storageHoldsRecords storageNamed storesInlineElements unwrapParens
+  calls: CheckContext.error checkStorageUses lendsStorage nish_panic_index nish_str_concat nish_str_eq refuseMethod rewrittenArrayMethod storageElementOf storageHoldsRecords storageNamed storesInlineElements unwrapParens
   pointer ctx: size=304 writesThrough=true captured=true passedTo=storageNamed#0 refuseMethod#0 storageNamed#0 refuseMethod#0 checkStorageUses#0 checkStorageUses#0 lendsStorage#0 storageElementOf#0 storageHoldsRecords#0 checkStorageUses#0 CheckContext.error#0 checkStorageUses#0
   pointer call: size=40 writesThrough=false captured=false passedTo=lendsStorage#1
   stackSites=0 stackLocals=0
@@ -313,7 +306,7 @@ function checkStorageCall(ctx: CheckContext, call: Node): void -> @checkStorageC
   local +1:9 args: Node (const)
   local +2:7 pushesCopy: boolean (let)
   local +3:9 method: string (const)
-  callee +3:72 rewrittenMethod -> @rewrittenMethod
+  callee +3:72 rewrittenArrayMethod -> @rewrittenArrayMethod
   local +7:11 sorted: ConstInfo | null (const)
   callee +7:20 storageNamed -> @storageNamed
   callee +9:7 refuseMethod -> @refuseMethod
@@ -421,7 +414,7 @@ function lentUsesStay(ctx: CheckContext, sig: FunctionSig, name: string, node: N
 function lentUseStays(ctx: CheckContext, sig: FunctionSig, use: Node, parent: Node | null, grand: Node | null, great: Node | null, queue: LendQueue): boolean -> @lentUseStays
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via lentOnStays
-  calls: copiesBytes lendInPlaceMethod lendSafeMethod lengthWritten lentOnStays nish_panic_index nish_str_eq
+  calls: copiesBytes lendInPlaceMethod lendSafeMethod lengthWritten lentOnStays nish_panic_index nish_str_eq rewrittenArrayMethod
   pointer ctx: size=304 writesThrough=true captured=true passedTo=lentOnStays#0
   pointer sig: size=176 writesThrough=false captured=false passedTo=lentOnStays#1
   pointer use: size=40 writesThrough=false captured=false passedTo=copiesBytes#2 lentOnStays#3
@@ -433,8 +426,13 @@ function lentUseStays(ctx: CheckContext, sig: FunctionSig, use: Node, parent: No
   callee +0:15 lengthWritten -> @lengthWritten
   callee +2:9 lendSafeMethod -> @lendSafeMethod
   callee +7:7 lendInPlaceMethod -> @lendInPlaceMethod
-  callee +17:12 copiesBytes -> @copiesBytes
-  callee +17:47 lentOnStays -> @lentOnStays
+  local +19:11 callee: Node (const)
+  local +20:11 method: string (const)
+  callee +21:63 rewrittenArrayMethod -> @rewrittenArrayMethod
+  callee +24:9 lendSafeMethod -> @lendSafeMethod
+  callee +24:36 lendInPlaceMethod -> @lendInPlaceMethod
+  callee +28:12 copiesBytes -> @copiesBytes
+  callee +28:47 lentOnStays -> @lentOnStays
 function lengthWritten(member: Node, grand: Node | null): boolean -> @lengthWritten
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isAssignmentOperator nish_panic_index nish_str_eq

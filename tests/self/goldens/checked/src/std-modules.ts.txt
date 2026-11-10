@@ -127,6 +127,12 @@ function isArrayMethodLocal(local: string): boolean -> @isArrayMethodLocal [expo
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_at
   stackSites=0 stackLocals=0
+function rewrittenArrayMethod(local: string): string -> @rewrittenArrayMethod [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: local
+  calls: arrayMethodOfLocal nish_str_eq
+  stackSites=0 stackLocals=0
+  callee +0:35 arrayMethodOfLocal -> @arrayMethodOfLocal
 function arrayMethodOfLocal(local: string): string -> @arrayMethodOfLocal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: local

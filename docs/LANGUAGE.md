@@ -9539,7 +9539,7 @@ The reference for each member, with its parameters and its answer, is its doc co
 | `a.filter(pred: (x: T[, i: number]) => boolean): T[]` | a new array of the elements `pred` keeps, in order. `pred` answers `boolean` (`reject_arr_filter_not_boolean`); the callback rules are `map`'s | `arr_filter`; `reject_arr_filter_not_boolean` |
 | `a.some(pred)`, `a.every(pred)`: `boolean` | whether some (every) element satisfies `pred`, stopping at the first that decides; an empty array answers `false` (`true`) | `arr_some_every` |
 | `a.findIndex(pred): number` | the first index `pred` accepts, or `-1`. There is **no `find`**: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(f)` is refused and points here (`` `find` is not supported: TypeScript types its answer `T \| undefined` … ``, NL2697) | `arr_find_index`; `reject_arr_find` |
-| `a.slice(start: number = 0, end: number = a.length): T[]` | a copy of `a[start..end)`, with `s.slice`'s rule: `0 <= start <= end <= a.length`, or the program **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript counts a negative index from the end and clamps the rest. Zero to two arguments (NL2699). Works on a `readonly T[]`, and the copy is a mutable `T[]` | `arr_slice`, `arr_slice_bounds`; `reject_arr_slice_args` |
+| `a.slice(start: number = 0, end: number = a.length): T[]` | a copy of `a[start..end)`, with `s.slice`'s rule: `0 <= start <= end <= a.length`, or the program **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript counts a negative index from the end and clamps the rest. Zero to two arguments (NL2699), each a `number`, where `s.slice` takes any integer type. Works on a `readonly T[]`, and the copy is a mutable `T[]` | `arr_slice`, `arr_slice_bounds`; `reject_arr_slice_args` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
@@ -9625,7 +9625,10 @@ callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`, and
 The callback takes the element, or the element and its index, as TypeScript
 allows. JavaScript passes a third argument, the array itself; Nish refuses a
 callback that declares one (NL2698), since the array is the receiver the call
-already names. The callback rule is the comparator's: a top-level function, or
+already names. A callback that declares no parameter, `xs.map(() => 0)`, is
+refused too, though TypeScript accepts it: the template is picked by the
+callback's arity, and there is none for zero, so write `(_x) => 0`. The
+callback rule is the comparator's: a top-level function, or
 an arrow that reads only the `const` locals and parameters of the function it
 is written in (`reject_arr_map_capture_let`).
 
@@ -9655,7 +9658,10 @@ does: a fraction is truncated toward zero (`xs.slice(0.9, 2.5)` is
 `xs.slice(0, 2)`), `NaN` is 0, and `±Infinity` or a magnitude of 2^63 or more
 saturates to the `i64` limits, so it fails the check and the message prints
 the limit (`slice out of range: [-9223372036854775808, 9223372036854775807) of
-length 3`; `arr_map_f64`, `arr_slice_saturate`). An array's `slice` is not a
+length 3`; `arr_map_f64`, `arr_slice_saturate`). The bounds are `number`
+only, where string `slice` takes any integer type: an `i64` or `u32` bound is
+refused (`` Argument 2 of `slice`: expected f64, got i64 `` under
+`--number-mode f64`), so convert it with `Number(n)` first. An array's `slice` is not a
 `slice` [panic site](#panic-sites): its check is `std/array.ts`'s own
 `panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
 proof at the call removes, and `--deny-panics` refuses it
