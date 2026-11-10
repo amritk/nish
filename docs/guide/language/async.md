@@ -297,9 +297,68 @@ export async function main(): Promise<void> {
 }
 ```
 
-A function argument must capture nothing: a top-level function, or an arrow
-that reads only its own parameters. Any other argument, such as an
-`Item | null`, is refused (NL2673); pass the value itself.
+A function argument is a top-level function or an arrow written at the call.
+The arrow may read locals of the function it is written in when each is a
+number, a `boolean`, an enum, or an object or array the task could be handed
+itself; the task then shares that object as it would an argument. A capture
+of anything else, such as a `string`, is refused (NL2690): pass it to the task
+as an argument of its own. Any other argument, such as an `Item | null`, is
+refused (NL2673); pass the value itself.
+
+```ts nish:ok
+import { sleep, spawn } from "nish:async";
+
+class Board {
+  hits: i32 = 0;
+}
+
+async function later(handle: (n: i32) => Promise<void>, n: i32): Promise<void> {
+  await sleep(n);
+  await handle(n);
+}
+
+export async function main(): Promise<i32> {
+  const board = new Board();
+  spawn(later(async (n: i32): Promise<void> => {
+    board.hits = board.hits + n;
+  }, 5));
+  await sleep(20);
+  console.log(`${board.hits}`); // 5
+  return 0;
+}
+```
+
+An arrow that reads a `string` of its spawner is refused, since the string is
+the spawner's and the task may run after it returns:
+
+```ts nish:err NL2690
+import { sleep, spawn } from "nish:async";
+
+class Board {
+  hits: i32 = 0;
+}
+
+async function later(handle: (n: i32) => void, n: i32): Promise<void> {
+  await sleep(n);
+  handle(n);
+}
+
+export async function main(): Promise<i32> {
+  const board = new Board();
+  const label = `run ${board.hits}`;
+  spawn(later((n: i32): void => {
+    board.hits = board.hits + label.length + n;
+  }, 5));
+  await sleep(20);
+  return 0;
+}
+```
+
+The arrow runs in the task, so it follows the task's rules for what it
+captured: it may change its numbers and call its methods, but storing a
+string or object it made into the captured object, or growing an array of
+it, is refused (NL2609, NL2615), as is spawning a further task with it
+(NL2689).
 
 A shared object may not hold anything its spawner frees, wipes or closes on
 its own schedule: a `Region`, a `Secret`, a handle a `using` block closes,
