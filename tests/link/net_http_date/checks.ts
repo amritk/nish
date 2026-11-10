@@ -13,7 +13,12 @@
 // - **The clock**: unpinned, it reads `Date.now()`.
 import { HTTP_DATE_LAST_SECOND, HTTP_DATE_SIZE, httpDateWrite } from "nish/net/http-fields";
 import { HttpDate } from "nish/net/http1-server";
+import { HTTP1_REFUSED, http1ResponseHead, http1WriteResponseHead } from "nish/net/http1-codec";
+import { H3_INVALID } from "nish/net/http3";
 import { Suite } from "nish/testing";
+import { bytesOf } from "../crypto_x509/hex";
+import { h3Ready, H3Peer } from "../net_http3/peer";
+import { n32, n64 } from "../net_quic_frame/typed";
 
 // Instants in milliseconds since 1970, wider than an i32.
 const LAST_OF_1999: i64 = 946684799000;
@@ -176,5 +181,43 @@ export const dateChecks = (): i32 => {
     now !== "Fri, 31 Dec 9999 23:59:59 GMT" && numberAt(clocked, 12, 4) >= 2026 && now.endsWith(" GMT")
   );
   t.eqI64("formatted once for the change", date.formats(), toI64(5));
+
+  // --- Date is a singleton (RFC 9110 §5.3): a head carries one, on every version ------
+  const pinned: u8[] = bytesOf("Fri, 16 Oct 2026 08:11:54 GMT");
+  const own: u8[] = bytesOf("Thu, 01 Jan 1970 00:00:00 GMT");
+  const head: u8[] = new Array<u8>(256);
+  const ok: i32 = 200;
+  const zero: i32 = 0;
+  const one: i32 = http1WriteResponseHead(head, zero, ok, "OK", [bytesOf("date")], [own], zero, "", pinned);
+  t.eqStr(
+    "HTTP/1.1: the program's one date replaces the server's, and one Date goes out",
+    one < 0 ? "refused" : textOf(head, 0, one),
+    "HTTP/1.1 200 OK\r\ndate: Thu, 01 Jan 1970 00:00:00 GMT\r\nContent-Length: 0\r\n\r\n"
+  );
+  head[0] = toU8(120);
+  t.ok(
+    "two date fields are HTTP1_REFUSED, and nothing is written",
+    http1WriteResponseHead(head, zero, ok, "OK", [bytesOf("date"), bytesOf("x-a"), bytesOf("date")], [own, bytesOf("b"), own], zero, "", pinned) === HTTP1_REFUSED &&
+      head[0] === toU8(120)
+  );
+  t.eqI32(
+    "in any case, the server's own date or none",
+    http1WriteResponseHead(head, zero, ok, "OK", [bytesOf("Date"), bytesOf("dATE")], [own, own], zero, "", []),
+    HTTP1_REFUSED
+  );
+  t.ok("http1ResponseHead refuses two as well", http1ResponseHead(ok, "OK", ["Date", "date"], ["a", "b"], zero) === null);
+  t.ok("and writes one", http1ResponseHead(ok, "OK", ["Date"], ["a"], zero) !== null);
+
+  const h3: H3Peer = h3Ready();
+  h3.h3.date = pinned;
+  h3.get(n64(0), "/hold");
+  h3.settle();
+  const dates: u8[][] = [bytesOf("date"), bytesOf("date")];
+  t.eqI32("HTTP/3: a head with two date fields is H3_INVALID", h3.h3.respond(n64(0), n32(200), dates, [own, own], true), H3_INVALID);
+  h3.settle();
+  t.ok("and nothing went out for it", toI32(h3.stream(n64(0)).data.length) === n32(0));
+  t.eqI32("the stream still takes a head with one", h3.h3.respond(n64(0), n32(200), [bytesOf("date")], [own], true), n32(0));
+  h3.settle();
+  t.eqStr("which goes out with that date alone", h3.response(n64(0)).fields, "date: Thu, 01 Jan 1970 00:00:00 GMT");
   return t.done();
 };
