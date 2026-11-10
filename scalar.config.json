@@ -22,14 +22,15 @@
             "filepath": "docs/guide/index.md",
             "showInSidebar": false,
             "layout": {
-              "sidebar": false,
               "toc": false,
               "pageTitle": false,
               "pageActions": false,
               "pageNav": false,
               "lastUpdated": false,
               "feedback": false,
-              "fullWidth": true
+              "fullWidth": true,
+              "search": { "position": "header" },
+              "colorSchemeToggle": "header"
             }
           },
           "/getting-started": {

@@ -871,8 +871,8 @@ a.nish-hero__cta:hover {
 }
 
 /* ── The landing page (docs/guide/index.md) ─────────────────────────────
-   Its route in scalar.config.json turns off the sidebar, the outline, the
-   page actions and the previous/next links and gives it the full width, so
+   Its route in scalar.config.json turns off the outline, the page actions
+   and the previous/next links and gives it the full width, so
    it reads as a home page rather than the first page of the guide. What is
    left is laid out here: the hero and the card grids across a wide column,
    and the prose, the callout and the code in a narrower one at its centre.
@@ -880,6 +880,16 @@ a.nish-hero__cta:hover {
 .page-node:has(> [data-nish-hero]) {
   max-width: 1080px;
   margin-inline: auto;
+}
+/* The route keeps the sidebar, because on a phone the sidebar is the menu
+   and the menu should list the guide; on a wider screen the home page hides
+   it and takes back the column Scalar pads the content by for it. The open
+   phone menu carries .sidebar-mobile-menu, so it is never the one hidden. */
+body:has(.page-node > [data-nish-hero]) aside.t-doc__sidebar:not(.sidebar-mobile-menu) {
+  display: none;
+}
+main.content-sidebar:has(.page-node > [data-nish-hero]) {
+  padding-left: 0;
 }
 .page-node:has(> [data-nish-hero]) > :not([data-nish-hero], .t-editor__grid-element) {
   max-width: 760px;
