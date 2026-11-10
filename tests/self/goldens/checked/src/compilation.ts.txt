@@ -8,6 +8,8 @@ import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import FactsTable from "./attributes" -> struct FactsTable
 import arenaBlockFindings from "./escape" -> function @arenaBlockFindings
 import arenaLoopFindings from "./escape" -> function @arenaLoopFindings
+import explainMemory from "./escape" -> function @explainMemory
+import MemoryReport from "./escape" -> struct MemoryReport
 import portabilityFindings from "./portability" -> function @portabilityFindings
 import liftScript from "./script" -> function @liftScript
 import Checker from "./checker" -> struct Checker
@@ -149,6 +151,7 @@ import FreshResults from "./secret" -> struct FreshResults
 import secretNeedMessage from "./secret" -> function @secretNeedMessage
 import jsonQuote from "./strings" -> function @jsonQuote
 import splitByte from "./strings" -> function @splitByte
+import StringBuilder from "./strings" -> struct StringBuilder
 import TypeTable from "./types" -> struct TypeTable
 import columnOf from "./lexer" -> function @columnOf
 import lineOf from "./lexer" -> function @lineOf
@@ -297,6 +300,7 @@ struct Compilation (class) size=208 align=8 exported
   method analyze -> @Compilation.analyze
   method panicsText -> @Compilation.panicsText
   method arenaText -> @Compilation.arenaText
+  method explainMemoryText -> @Compilation.explainMemoryText
   method libraryRoot -> @Compilation.libraryRoot
   method libraryUnits -> @Compilation.libraryUnits
   method writesOutput -> @Compilation.writesOutput
@@ -1718,6 +1722,31 @@ function Compilation.arenaText(this: Compilation): string -> @Compilation.arenaT
   local +0:11 facts: FactsTable (const)
   callee +0:19 Compilation.analyze -> @Compilation.analyze
   callee +1:12 arenaJson -> @arenaJson
+function Compilation.explainMemoryText(this: Compilation): string -> @Compilation.explainMemoryText [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Compilation.analyze
+  calls: Compilation.analyze Compilation.inRootPackage MemoryReport.constructor SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText explainMemory nish_str_concat nish_str_from_i32
+  pointer this: size=208 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.inRootPackage#0
+  stackSites=2 stackLocals=2
+  local +0:11 facts: FactsTable (const)
+  callee +0:19 Compilation.analyze -> @Compilation.analyze
+  local +1:11 report: MemoryReport (const)
+  callee +1:20 new MemoryReport -> @MemoryReport.constructor
+  local +2:11 lines: StringBuilder (const)
+  callee +2:19 new StringBuilder -> @StringBuilder.constructor
+  local +3:16 unit: AnalysisUnit (const)
+  local +4:13 source: SourceFile (const)
+  callee +5:12 Compilation.inRootPackage -> @Compilation.inRootPackage
+  local +8:13 from: i32 (const)
+  callee +9:7 explainMemory -> @explainMemory
+  local +10:11 i: i32 (let)
+  local +12:15 note: ArenaFinding (const)
+  callee +13:9 StringBuilder.add -> @StringBuilder.add
+  callee +14:29 SourceFile.lineOf -> @SourceFile.lineOf
+  callee +14:63 SourceFile.columnOf -> @SourceFile.columnOf
+  callee +16:9 StringBuilder.add -> @StringBuilder.add
+  callee +20:5 StringBuilder.add -> @StringBuilder.add
+  callee +24:12 StringBuilder.toText -> @StringBuilder.toText
 function Compilation.libraryRoot(this: Compilation): string -> @Compilation.libraryRoot [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=208 writesThrough=false captured=false

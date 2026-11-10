@@ -350,11 +350,19 @@ export class LoopScope {
    * arena-loop diagnostic has no rewrite to offer and says nothing.
    */
   handsBack: boolean
+  /**
+   * A pass bumps the arena, itself or through a callee that leaves memory
+   * behind: whether there is anything for a scope to release, which is what
+   * `--explain-memory` reads to tell a loop that keeps memory from one that
+   * has none to give back.
+   */
+  allocates: boolean
 
   constructor(loop: Node, body: Node) {
     this.loop = loop
     this.body = body
     this.scoped = false
+    this.allocates = false
     this.why = 0
     this.at = null
     this.name = ""

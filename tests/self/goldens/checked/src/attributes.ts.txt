@@ -230,6 +230,7 @@ struct LoopScope (class) size=40 align=8 exported
   field why: i32 index=4 offset=32
   field scoped: boolean index=5 offset=36
   field handsBack: boolean index=6 offset=37
+  field allocates: boolean index=7 offset=38
   constructor -> @LoopScope.constructor
 struct HoistedHeader (class) size=40 align=8 exported
   field root: Local index=0 offset=0

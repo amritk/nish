@@ -610,6 +610,10 @@ leaves the IR unchanged.
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
+- **`--explain-memory`** prints every loop and function that keeps the memory
+  it allocates past its arena scope, and why
+  ([Memory](../language/memory.md#what-you-do-have-to-think-about)). `nish run`
+  takes the flag; `--emit-ast` and `--json` do not.
 - **`--emit-ast`** and **`--emit-checked`** print what the compiler parsed and
   what its checker recorded, one line per node.
 

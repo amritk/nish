@@ -81,6 +81,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--emit-checked", "", "print what the checker recorded")
   menu.row("--emit-panics", "<file.json>", "list every place the program can panic")
   menu.row("--emit-arena", "<file.json>", "write the arena retention report")
+  menu.row("--explain-memory", "", "say which loops and functions keep their memory, and why")
 
   menu.section("Code generation")
   menu.row("--number-mode", "i32|f64", "what a bare number is; i32 by default")

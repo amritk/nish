@@ -12114,6 +12114,10 @@ by the caller.
 - **`--emit-arena <file.json>`** writes every allocation site of the program
   with where its memory goes, beside the IR, and changes no byte of it; see
   [Arena placement](#arena-placement) below.
+- **`--explain-memory`** prints, beside the warnings, every loop and function
+  of the program's own modules that keeps the memory it allocates past its
+  scope, and why, and changes no byte of the IR; see
+  [Explaining kept memory](#explaining-kept-memory) below.
 - **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and a
   `DIFile` per source file a declaration comes from — the name as it was given
   on the command line, with `.` for the directory, so the metadata depends only
@@ -12455,6 +12459,56 @@ site is memory the program holds on purpose, so it is never marked.
 - `--emit-arena` changes no byte of the IR, and it is a product, as
   `--emit-panics` is: `nish run` and `--fix` refuse it, and so does
   `--emit-ast`, which stops before the facts exist (exit 2).
+
+### Explaining kept memory
+
+**`--explain-memory`** answers, before the program is deployed, the question a
+memory budget turns on: which loops hand back what each pass allocated, and
+which do not. The [memory model](#memory-model) gives a pass of a loop, and a
+function, an arena scope of its own when it can prove what they allocated is
+unreachable at the end; one stored allocation, in the loop or in any callee,
+refuses the scope, and the memory the pass allocated then stays until the next
+bracket out. The warnings name such a refusal only where they can also name a
+rewrite; this report names every one, on stderr, after the warnings:
+
+```
+tests/cases/explain_memory.ts:18:1: memory: `remember` keeps what it allocates until the memory of its caller is released, because the allocation on line 19 is stored into memory, where this analysis stops following it
+tests/cases/explain_memory.ts:36:3: memory: this loop keeps what each pass allocates until `main` returns, because line 37 keeps what the pass allocated in `last`, which is declared outside the loop
+tests/cases/explain_memory.ts:52:10: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `main` returns
+explain-memory: 4 of 5 allocating loops keep what a pass allocates past the pass; 1 of 3 allocating functions with a scalar result keep what they allocate past the call
+```
+
+- **A loop** is listed when its passes allocate — themselves, or through a
+  callee that leaves memory behind — and no scope releases it at the end of
+  each pass. The line says where it does go back: at the end of the pass of the
+  scoped loop around it, at the end of the `using a = arena()` block around it,
+  when the function returns, or, in a function with no scope, when its caller's
+  memory is (in `main`, never: "for the rest of the run"). The reason is the
+  first refusal the analysis met, the one NL9011 names. A loop whose body opens
+  with `using a = arena()` is the program's own bracket and is not listed. A
+  condition or `for` update that allocates is listed on its own line, because
+  it runs outside the bracket a pass takes whether or not the body has one.
+- **A function** is listed when it answers a number, a `boolean`, an enum or
+  nothing, leaves memory behind, and has no scope of its own. A function that
+  answers memory (a string, an array, an object) is not: what it allocates goes
+  to its caller with the result, and whether the caller gives it back is the
+  caller's line.
+- **The summary** counts the loops whose passes allocate and the functions that
+  answer no memory and allocate, and how many of each keep it. A budget in CI
+  can hold that count, or the listed lines, against a golden, as
+  `tests/run.js` does with a case's `<name>.memory`
+  (`tests/cases/explain_memory`).
+- **The program's own modules only**, as `--deny-retention` judges them; a
+  generic function is explained once, not per instantiation. Under
+  `--no-elision` every allocating loop and function is listed, for that reason.
+- **What it does not promise.** It reports the scopes the compiler takes, not
+  the bytes: a listed loop over three passes costs nothing, and memory the
+  program keeps on purpose — an array it pushes onto for its whole run — is
+  listed with the line that keeps it. It does not measure memory at run time.
+- `--explain-memory` changes no byte of the IR. `nish run` accepts it. With
+  `--emit-ast`, which stops before the facts exist, with `--json`, whose
+  stderr is diagnostic objects only, and with `--fix`, which compiles nothing,
+  it is a usage error (exit 2).
 
 ## Forbidden constructs (Phase 0 validator)
 
