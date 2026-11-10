@@ -266,6 +266,13 @@ an error included, carries a `Date` (RFC 9110 §6.6.1) and a 1xx carries none;
 a program's own `date` field, in any case, is sent instead of the server's, so
 a response never carries two.
 
+Two `date` fields of the program's own, in any case, were sent as they came
+until #696: `Date` is a singleton (RFC 9110 §5.3) whose value holds a comma,
+so a reader cannot combine the two or tell which to believe.
+`http1WriteResponseHead` now answers `HTTP1_REFUSED` for a second one, writing
+nothing, and `http1ResponseHead` answers `null` (`net_http_date`, `_f64`;
+before: the head went out with both).
+
 On a final status `http1WriteResponseHead` refuses a date that is not field
 text, so the date cannot split the head (a 1xx never sends it, so there it is
 not read), and counts its 37 bytes before it writes, so `HTTP1_NO_ROOM` still
