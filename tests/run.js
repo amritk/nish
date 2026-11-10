@@ -30184,11 +30184,11 @@ if (!only || "wasm-math".includes(only)) {
 // docs/wp50-wasm-host.md §9. Under the flag every target -- native, wasm32 and
 // the --emit-ts reading -- calls std/math.ts for the transcendentals, `pow` and a
 // float `%`, and quiets a NaN's payload before f64ToBits and f32ToBits read it;
-// without it a native build keeps the LLVM intrinsics and `frem`. `Number`,
+// without it a native build keeps the LLVM intrinsics and `frem`. `Number` and
 // `parseFloat` of a string call std/math.ts's `numberExact` and
 // `parseFloatExact` on every target, the --emit-ts reading included, and
-// `parseInt` already agrees (tests/cases/deterministic_parse). The refusals the flag adds are
-// tests/cases/reject_deterministic_*.
+// `parseInt` already agrees (tests/cases/deterministic_parse). The refusals
+// the flag adds are tests/cases/reject_deterministic_*.
 if (!only || "deterministic".includes(only)) {
   const dir = path.join(buildDir, "deterministic")
   fs.rmSync(dir, { recursive: true, force: true })
@@ -30334,8 +30334,9 @@ if (!only || "float-corpus".includes(only)) {
   // Number(s) over the strings whose grammar differs: without the flag the
   // native reading lets strtod read a hex float (0x1p3 is 8) and the --emit-ts
   // reading under Node does not (NaN); under --deterministic std/math.ts's
-  // `numberExact` reads it on both, so the native build prints what Node prints. The
-  // corpus's 94 strings hold the three targets to one answer under the flag.
+  // `numberExact` reads it on both, so the native build prints what Node
+  // prints. The corpus's 94 strings hold the three targets to one answer under
+  // the flag.
   fs.writeFileSync(
     at("number.ts"),
     [

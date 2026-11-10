@@ -669,9 +669,9 @@ const MATH_ROUTED: string =
  * `f32ToBits(...)`, `Number(s)` or `parseFloat(s)` call the checker bound to
  * `nish/math` is written to call, else the empty string. A string `Number` or
  * `parseFloat` calls `numberExact` or `parseFloatExact`, so Node reads the
- * grammar a native or wasm build reads, not V8's (`parseFloat("+0x10")` is 16). JavaScript's `%` is already the exact remainder
- * `fmodF64` computes (ECMA-262 `Number::remainder`), so a float `%` is left
- * as it is written.
+ * grammar a native or wasm build reads, not V8's (`parseFloat("+0x10")` is
+ * 16). JavaScript's `%` is already the exact remainder `fmodF64` computes
+ * (ECMA-262 `Number::remainder`), so a float `%` is left as it is written.
  */
 const mathCallee = (walk: Walk, node: Node): string => {
   if (!walk.deterministic || node.kind !== N_CALL || node.children.length === 0) {
