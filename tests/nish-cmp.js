@@ -880,6 +880,12 @@ const DECLARED = [
     why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 6, part 1)",
   },
   {
+    program: "tests/link/tfb_async_db/main.ts",
+    file: "exit",
+    changelog: "TechEmpower database entry on the async Postgres pool",
+    why: "the 0.37.0 seed's std has no `std/net/serve.ts`, so only the candidate compiles the program (WP49 stage 6, part 2)",
+  },
+  {
     program: "tests/link/net_serve_server_field/main.ts",
     file: "exit",
     changelog: "TechEmpower plaintext and json entry as serve handlers",
