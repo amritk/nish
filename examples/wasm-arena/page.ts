@@ -7,6 +7,8 @@
 //
 // build.mjs strips the types and rewrites the three imports below to the files
 // it writes beside it (client.mjs, host.js, nish-page.mjs).
+//
+// smoke: skip a browser page, built by build.mjs, not a native program
 import { ringOver } from "nish/page"
 import { type Exports, loadSync } from "./client"
 import * as host from "./host"

@@ -21,7 +21,8 @@ with build/arena/replay. It exits 1 when a check fails.
 
 It also checks the renderer: the page must choose the one `--expect` names
 (the note's §10 records WebGPU on swiftshader), since a silent fall back to
-WebGL 2 would soak a path the note does not claim.
+WebGL 2 would soak a path the note does not claim; `--adapter` names a
+substring the WebGPU adapter's vendor / architecture string must contain.
 
 Then two checks the note's §5.3 and §8 left to a browser, recorded in the
 same JSON, each failing the run when Chromium does not do what the note says:
@@ -39,7 +40,7 @@ An exception in a check is recorded and fails the run; `out` is written
 whatever happens.
 
     python3 chrome-arena.py <page url> <seconds> <out.json>
-        [--expect webgpu|webgl2] [--webtransport <quic port> <hash file>]
+        [--expect webgpu|webgl2] [--adapter <substring>] [--webtransport <quic port> <hash file>]
 
 CHROMIUM names a browser binary to use in place of Playwright's own.
 """
@@ -248,11 +249,13 @@ def parse(argv):
     """The arguments, or None when they do not parse."""
     if len(argv) < 3:
         return None
-    args = {"url": argv[0], "seconds": float(argv[1]), "out": argv[2], "expect": "webgpu", "webtransport": None}
+    args = {"url": argv[0], "seconds": float(argv[1]), "out": argv[2], "expect": "webgpu", "adapter": None, "webtransport": None}
     rest = argv[3:]
     while rest:
         if rest[0] == "--expect" and len(rest) >= 2 and rest[1] in ("webgpu", "webgl2"):
             args["expect"], rest = rest[1], rest[2:]
+        elif rest[0] == "--adapter" and len(rest) >= 2:
+            args["adapter"], rest = rest[1], rest[2:]
         elif rest[0] == "--webtransport" and len(rest) >= 3:
             args["webtransport"], rest = (int(rest[1]), rest[2]), rest[3:]
         else:
@@ -343,6 +346,8 @@ def soak(args, report, failures):
             report["renderer"] = "webgpu" if record["webgpu"] else "webgl2"
             if report["renderer"] != args["expect"]:
                 failures.append(f"the page drew with {report['renderer']}, not the {args['expect']} expected ({report['gpu']})")
+            if args["adapter"] is not None and args["adapter"] not in report["gpu"]:
+                failures.append(f"the WebGPU adapter is not the {args['adapter']} expected ({report['gpu']})")
             if record["moved"] != 0:
                 failures.append(f"memory's byteLength or the arena's mark moved after {record['moved']} frames")
             if record["overflow"] != 0:
@@ -380,6 +385,7 @@ def main(argv):
         "url": args["url"],
         "seconds": args["seconds"],
         "expect": args["expect"],
+        "adapter": args["adapter"],
         "heapBand": HEAP_BAND,
         "frameBand": FRAME_BAND,
     }

@@ -13,7 +13,10 @@
 # A program is any examples/**/*.ts that declares `export const main`. It
 # is expected to exit 0 unless it carries a `// smoke: exit <n>` comment; a
 # `// smoke: argv <args>` comment passes those arguments on its command line
-# (process.argv). Every program reads /dev/null for stdin, so a run is the
+# (process.argv). A `// smoke: skip <reason>` comment leaves a file out: it
+# declares a `main` but is not a native program, such as a browser page's
+# entry (examples/wasm-arena/page.ts), and the reason is printed in the table.
+# Every program reads /dev/null for stdin, so a run is the
 # same from a terminal as in CI. The script exits non-zero if any program fails to compile,
 # link, or run with the expected status. Binaries and IR go to build/smoke/.
 # Needs clang on PATH.
@@ -52,11 +55,18 @@ if [ ${#programs[@]} -eq 0 ]; then
 fi
 
 failed=0
+skipped=0
 rows=()
 for src in "${programs[@]}"; do
   # examples/multi/main.ts -> multi_main; examples/hello.ts -> hello
   name=$(printf '%s' "${src#"$examples"/}" | sed -e 's/\.ts$//' -e 's#/#_#g')
   exe="$out/$name"
+  skip=$(sed -n 's#^// smoke: skip \(.*\)#\1#p' "$src" | head -n 1)
+  if [ -n "$skip" ]; then
+    skipped=$((skipped + 1))
+    rows+=("$(printf '%-24s %10s  %s' "$src" "-" "skipped: $skip")")
+    continue
+  fi
   want=$(sed -n 's#^// smoke: exit \([0-9][0-9]*\).*#\1#p' "$src" | head -n 1)
   want=${want:-0}
   # `// smoke: args <flags>` passes extra compiler flags (e.g. --number-mode f64).
@@ -92,4 +102,4 @@ if [ "$failed" -ne 0 ]; then
   echo "smoke: FAILED" >&2
   exit 1
 fi
-echo "smoke: ${#programs[@]} program(s) built (size profile) and ran"
+echo "smoke: $((${#programs[@]} - skipped)) program(s) built (size profile) and ran, $skipped skipped"

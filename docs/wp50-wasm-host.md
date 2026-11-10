@@ -435,7 +435,7 @@ the browser the ones W9 uses.
 | WebGL 2 `bufferSubData`, `bufferData`, `texSubImage2D` | `ReadableStreamBYOBReader.read(view)`: it transfers the buffer, and a `WebAssembly.Memory` buffer cannot be transferred (a `TypeError`). Read into a page buffer, then `.set` |
 | `TextDecoder.decode` | `postMessage(view, [view.buffer])`: never transfer module memory |
 | `AudioBuffer.copyToChannel`, `copyFromChannel` | an `AudioWorklet`'s `port.postMessage` of a view: it clones, which allocates, so do it once and not per frame |
-| WebTransport `datagrams.writable` and send-stream `write`: the spec copies the bytes at write. Checked by stage 6 (`tests/interop/chrome-arena.py`, which fails the `arena` job otherwise): a 32-byte view written as a datagram and overwritten with `z` as soon as `write` returns, before its promise settles, comes back from the echo server as the 32 bytes written. Seen locally in Chromium 153; the job's summary records CI's pinned Chromium 141 | anything else not in the left column, until it is checked |
+| WebTransport `datagrams.writable` and send-stream `write`: the spec copies the bytes at write. Checked by stage 6 (`tests/interop/chrome-arena.py`, which fails the `arena` job otherwise): a 32-byte view written as a datagram and overwritten with `z` as soon as `write` returns, before its promise settles, comes back from the echo server as the 32 bytes written. In CI's pinned Chromium 141.0.7390.37 the echo was the bytes written on the first try; also seen locally in Chromium 153 | anything else not in the left column, until it is checked |
 | `new Blob([view])`, a `fetch` body | |
 
 "Copy into a page-owned buffer" means `pageBuf.set(view.subarray(at, at + n))`
@@ -694,13 +694,15 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   safe for any module cs will ship: §10's example is kilobytes, and cs's
   whole client would have to grow by three orders of magnitude to reach the
   limit. The loader's documentation states the 8 MB figure, and stage 6 runs
-  `loadSync` in Chromium to confirm the limit has not come back. Locally, in Chromium
-  153, the arena's module padded to 8,384,512 bytes (8 MiB − 4 KiB) loads in
-  5 ms; padded to 8,392,704 (8 MiB + 4 KiB) it throws `RangeError:
+  `loadSync` in Chromium to confirm the limit has not come back. In CI's
+  pinned Chromium 141.0.7390.37, the arena's module padded to 8,384,512 bytes
+  (8 MiB − 4 KiB) loads in 5.4 ms; padded to 8,392,704 (8 MiB + 4 KiB) it is
+  refused at once (0 ms) with `RangeError:
   WebAssembly.Compile is disallowed on the main thread, if the buffer size is
   larger than 8MB. Use WebAssembly.compile, compile on a worker thread, or use
-  the flag --enable-features=WebAssemblyUnlimitedSyncCompilation`. The soak
-  asserts both sides on every run, in CI's pinned Chromium 141: the load
+  the flag --enable-features=WebAssemblyUnlimitedSyncCompilation`. Locally,
+  Chromium 153 gave the same two results (5 ms, and the same `RangeError`).
+  The soak asserts both sides on every run: the load
   under 8 MiB must succeed at the size asked, and the one over must be
   refused with a `RangeError`. The job's summary prints both results.
 - **The bytes inside the bundle.** `build.sh --inline <file.mjs>` writes the
@@ -851,8 +853,19 @@ writes the page and the replay into one directory. `tests/run.js`'s
 for ten minutes against the band `tests/interop/chrome-arena.py` states (256
 KiB of used heap after GC between minute one and minute ten, and 1 KiB
 sampled per frame), and writes its figures to the job summary: the browser's
-version and user agent, the renderer, the datagram and both `loadSync`
-results.
+version and user agent, the renderer and adapter, the datagram and both
+`loadSync` results.
+
+Measured in CI's pinned Chromium 141.0.7390.37 (Playwright 1.56, headless,
+WebGPU on the adapter `google / swiftshader`), over 600.0 s: 36,005 frames and
+36,002 ticks, none stepped past the log's end; memory's `byteLength`
+4,194,304 and the arena mark 89,616 on every frame; used heap after GC
+1,217,728 bytes at minute one and 1,220,760 at minute ten (+3,032, inside the
+±262,144 band); 224.6 bytes sampled per frame over 32,401 frames (band
+1,024), most of it the command encoder and texture view each frame's draw
+makes; and the hash `4432046c1f1caf92` on the page and from the native replay
+of the recorded input. The datagram was copied on the first try, and
+`loadSync` loaded 8,384,512 bytes in 5.4 ms and refused 8,392,704 in 0 ms.
 
 **Why the page and native bits agree.** The native replay (`replay.ts`) is
 built with `--deterministic`. The page module cannot be: the flag is also the
@@ -869,15 +882,18 @@ deterministic build of the same file.
 
 **WebGPU in headless Chromium.** `navigator.gpu` answers with
 `--enable-unsafe-webgpu --enable-features=Vulkan
---use-webgpu-adapter=swiftshader` on a secure context: locally, Chromium 153 gave the
-adapter `google / swiftshader` on `http://127.0.0.1`. On a `data:` URL, not a
+--use-webgpu-adapter=swiftshader` on a secure context: CI's pinned Chromium
+141.0.7390.37 and, locally, Chromium 153 both gave the adapter
+`google / swiftshader` on `http://127.0.0.1`. On a `data:` URL, not a
 secure context, `navigator.gpu` is `undefined`, so the soak serves the page
 from localhost. The page keeps the WebGL 2 `bufferSubData` path the owner
 allowed (Q8) for a browser with no adapter. The soak fails when the page draws
 with any renderer but the one its `--expect` names, which is `webgpu` in the
-job, so a silent fall back to WebGL 2 in CI's Chromium 141 turns the job red
-rather than soaking a path this section does not claim. Measured locally, in
-Chromium 153, over 120 s on WebGPU: memory 4,194,304 bytes and the
+job, or on an adapter whose string lacks its `--adapter` substring,
+`swiftshader` in the job, so a silent fall back to WebGL 2 or another adapter
+turns the job red rather than soaking a path this section does not claim.
+CI's ten-minute figures are under "Built (stage 6)" above. Measured locally
+only, in Chromium 153, over 120 s on WebGPU: memory 4,194,304 bytes and the
 arena mark 89,616 throughout, used heap +1,984 bytes between the two GCs,
 about 250 bytes sampled per frame (the command encoder and texture view each
 frame's draw makes), and the hash `4e0d41bf2e08771a` after 7,203 ticks on the
@@ -951,7 +967,7 @@ module, and `--gc-sections` drops whatever a program does not use.
 | **Q5** | A new `--profile wasm-host` (explicit exports, fixed memory, the panic import, `--inline`), or change `--profile wasm` in place. In place, explicit exports would shrink every module by 26–68%, but break hosts that call runtime exports by hand, as `web/bytes-worker.mjs` calls `nish_alloc_array`. Also: for growable memory, buffer identity as the generation counter, or a counter word in memory? | **A new profile, and buffer identity.** `--profile wasm` can adopt the export list later as its own change |
 | **Q6** | Host handles as values only (§4), or also handle classes over a `HostHandle` field, for a resource scoped to a block? | **Values only now.** Add the class form when cs has a block-scoped host resource |
 | **Q7** | `--deterministic` as §9 has it: the capability policy plus `std/math.ts` transcendentals on every target and canonical NaN bits. Separately, should `std/math.ts` be the lowering of `sin`, `cos`, `exp`, `log`, `pow` and `%` on freestanding wasm even without the flag? | **Yes to both.** The second fixes a link that fails today and costs nothing that works today |
-| **Q8** | CI for the claims: an `ubuntu-24.04-arm` runner for the aarch64 column of the float corpus, and WebGPU in headless Chromium (`--enable-unsafe-webgpu` on SwiftShader). If WebGPU proves unavailable on the runner, may W9 fall back to WebGL 2 `bufferSubData`? | **The arm runner, yes.** WebGPU is required. If SwiftShader cannot provide it, stage 6 stops and asks rather than switching APIs. Revised at stage 6: the page falls back to WebGL 2 `bufferSubData` where no adapter answers. SwiftShader provides WebGPU on a localhost page (§10), so the fallback is for browsers, and the soak names the path it ran |
+| **Q8** | CI for the claims: an `ubuntu-24.04-arm` runner for the aarch64 column of the float corpus, and WebGPU in headless Chromium (`--enable-unsafe-webgpu` on SwiftShader). If WebGPU proves unavailable on the runner, may W9 fall back to WebGL 2 `bufferSubData`? | **The arm runner, yes.** WebGPU is required. If SwiftShader cannot provide it, stage 6 stops and asks rather than switching APIs. Revised at stage 6: the page falls back to WebGL 2 `bufferSubData` where no adapter answers. SwiftShader provides WebGPU on a localhost page (§10): CI's pinned Chromium 141.0.7390.37 drew the ten-minute soak with WebGPU on `google / swiftshader`, so the fallback is for browsers, and the soak asserts the renderer and adapter it ran |
 | **Q9** | A panic's site: a number plus an `x.sites.json` sidecar, or `path:line:col` strings inside the module? | **The number.** File names cost bytes in every download and help only a developer, who has the sidecar |
 | **Q10** | Inline bytes: the decimal array literal (smallest of the inline forms after compression, +25% over the separate file under brotli), opt-in through `--inline` | **Yes**, opt-in. cs decides per build whether a separate fetch is worth the bytes |
 | **Q11** | The ten-minute soak runs in the `interop` workflow beside the QUIC and TLS jobs, not in `npm test` | **Yes.** It needs a browser and ten minutes, and `npm test`'s shards should not wait on either |

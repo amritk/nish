@@ -7,6 +7,9 @@
 // The input is run-length coded, because a held key is the same word for
 // many ticks: `40x17` is the word 17 for 40 ticks. Ticks past the last run
 // step with the word 0. It prints `ticks <n> hash <16 hex digits>`.
+//
+// smoke: args --deterministic
+// smoke: argv 1 120 44x1 36x5 39x1
 import { simHash, simReset, simStep, simTicks } from "./sim"
 
 const hex = (h: u64): string => {

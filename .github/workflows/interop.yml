@@ -612,7 +612,7 @@ jobs:
             "$PLAYWRIGHT" sh -c "set -e
               pip install --quiet --no-deps --require-hashes -r /interop/chrome-requirements.txt
               python3 /interop/chrome-arena.py http://127.0.0.1:8000/index.html 600 /out/arena.json \
-                --expect webgpu --webtransport $QUIC_PORT /out/hash"
+                --expect webgpu --adapter swiftshader --webtransport $QUIC_PORT /out/hash"
 
       # The browser's input, replayed by sim.ts compiled natively with
       # --deterministic, must land on the hash the page printed.
@@ -629,7 +629,7 @@ jobs:
           print()
           print("| | |\n|---|---|")
           print(f"| browser | {d.get('chromium')}; {d.get('userAgent')} |")
-          print(f"| renderer | {d.get('renderer')}, expected {d.get('expect')} ({d.get('gpu')}) |")
+          print(f"| renderer | {d.get('renderer')}, expected {d.get('expect')} on {d.get('adapter')} ({d.get('gpu')}) |")
           for f in d["failures"]:
               print(f"| FAIL | {f} |")
           if "heap" not in d:
