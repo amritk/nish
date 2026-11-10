@@ -1,4 +1,4 @@
-// NL2705: Typed JSON options are read from the class's text: a spread into them names
+// NL2710: Typed JSON options are read from the class's text: a spread into them names
 // nothing that text can show, so it is refused with its own message.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";

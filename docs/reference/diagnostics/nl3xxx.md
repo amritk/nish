@@ -631,7 +631,7 @@ The message of an error contains:
 ` is the name the wasm loader answers the program's module storage under: …
 ```
 
-## NL3052
+## NL3055
 
 The message of an error contains:
 
@@ -639,10 +639,10 @@ The message of an error contains:
 …` besides: Node copies every own field of the instance a value holds, and the native copy only the interface's, so spread a value of a class type, or set the fields by name
 ```
 
-[`nl3052_object_spread_width.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3052_object_spread_width.ts):
+[`nl3055_object_spread_width.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3055_object_spread_width.ts):
 
 ```ts
-// NL3052: A value of an interface type may hold a class instance with more fields; Node
+// NL3055: A value of an interface type may hold a class instance with more fields; Node
 // copies all of them and the native copy only the interface's, so a spread of
 // such an interface is refused.
 interface Named {

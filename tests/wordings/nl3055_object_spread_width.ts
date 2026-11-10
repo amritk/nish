@@ -1,4 +1,4 @@
-// NL3052: A value of an interface type may hold a class instance with more fields; Node
+// NL3055: A value of an interface type may hold a class instance with more fields; Node
 // copies all of them and the native copy only the interface's, so a spread of
 // such an interface is refused.
 interface Named {

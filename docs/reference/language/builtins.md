@@ -3112,7 +3112,7 @@ export const main = (): i32 => {
   A spread in the literal is
   `` `User.json` spreads another value into the typed JSON options: … ``,
   because the options are read from the class's text, where a spread names
-  nothing (NL2705, `reject_json_options_spread`), and a computed key is
+  nothing (NL2710, `reject_json_options_spread`), and a computed key is
   refused by Phase 0 as it is anywhere (NL1041,
   `json_reject_options_computed`), a subclass by `extends`
   (`json_reject_options_subclass`), and a second `static readonly json` is a

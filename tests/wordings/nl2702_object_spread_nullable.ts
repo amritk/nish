@@ -1,4 +1,4 @@
-// NL2697: Spreading `null` copies no field under Node, so a maybe-null source is
+// NL2702: Spreading `null` copies no field under Node, so a maybe-null source is
 // narrowed first.
 interface Point {
   x: i32;

@@ -403,7 +403,7 @@ NL2592  a presence field that is not a `boolean`, is `readonly`, is the
         recorded twice
 ```
 
-A spread in the literal is refused (NL2705), a computed key as it is
+A spread in the literal is refused (NL2710), a computed key as it is
 anywhere (NL1041), a subclass by `extends`, and a second `static readonly
 json` is a duplicate member. The options are not a value: `User.json` names a
 class where a value is due, and is refused as any class name there is.

@@ -12941,7 +12941,7 @@ The message of an error contains:
 …a `nish.host` entry names a host module the package has
 ```
 
-## NL2697
+## NL2702
 
 The message of an error contains:
 
@@ -12949,10 +12949,10 @@ The message of an error contains:
 …` may spread `null`, which under Node copies no field at all: narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)
 ```
 
-[`nl2697_object_spread_nullable.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2697_object_spread_nullable.ts):
+[`nl2702_object_spread_nullable.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2702_object_spread_nullable.ts):
 
 ```ts
-// NL2697: Spreading `null` copies no field under Node, so a maybe-null source is
+// NL2702: Spreading `null` copies no field under Node, so a maybe-null source is
 // narrowed first.
 interface Point {
   x: i32;
@@ -12973,7 +12973,7 @@ export const main = (): i32 => {
 Spread of `Point | null` into `Point` may spread `null`, which under Node copies no field at all: narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)
 ```
 
-## NL2698
+## NL2703
 
 The message of an error contains:
 
@@ -12981,10 +12981,10 @@ The message of an error contains:
 …`: which fields a spread copies depends on the variant it holds at run time, so narrow it to one variant first, or set the fields by name
 ```
 
-[`nl2698_object_spread_union.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2698_object_spread_union.ts):
+[`nl2703_object_spread_union.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2703_object_spread_union.ts):
 
 ```ts
-// NL2698: Which fields a union value has depends on the variant it holds, so a spread
+// NL2703: Which fields a union value has depends on the variant it holds, so a spread
 // of one is refused until it is narrowed.
 enum Kind {
   Dot,
@@ -13021,7 +13021,7 @@ export const main = (): i32 => {
 Spread of the union `Dot | Box` into `Out`: which fields a spread copies depends on the variant it holds at run time, so narrow it to one variant first, or set the fields by name
 ```
 
-## NL2699
+## NL2704
 
 The message of an error contains:
 
@@ -13029,10 +13029,10 @@ The message of an error contains:
 …`: only a value of a class or interface the program declares has fields an object spread copies one by one, so set each field by name
 ```
 
-[`nl2699_object_spread_not_struct.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2699_object_spread_not_struct.ts):
+[`nl2704_object_spread_not_struct.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2704_object_spread_not_struct.ts):
 
 ```ts
-// NL2699: An object spread copies a declared class's or interface's fields one by one;
+// NL2704: An object spread copies a declared class's or interface's fields one by one;
 // a number has none, and Node would copy nothing at all from it.
 interface Point {
   x: i32;
@@ -13049,7 +13049,7 @@ export const main = (): i32 => {
 Spread of `i32` into `Point`: only a value of a class or interface the program declares has fields an object spread copies one by one, so set each field by name
 ```
 
-## NL2700
+## NL2705
 
 The message of an error contains:
 
@@ -13057,10 +13057,10 @@ The message of an error contains:
 …` does not declare: Node copies every own field of an instance and none of its methods, so a class instance is spread only into a type that declares each of its fields; otherwise set the fields by name
 ```
 
-[`nl2700_object_spread_class_extra.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2700_object_spread_class_extra.ts):
+[`nl2705_object_spread_class_extra.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2705_object_spread_class_extra.ts):
 
 ```ts
-// NL2700: Node copies every own field of a class instance, so one is spread only into a
+// NL2705: Node copies every own field of a class instance, so one is spread only into a
 // type that declares each of them.
 interface Point {
   x: i32;
@@ -13081,7 +13081,7 @@ export const main = (): i32 => {
 Spread of the `Tagged` instance into `Point` copies its field `tag`, which `Point` does not declare: Node copies every own field of an instance and none of its methods, so a class instance is spread only into a type that declares each of its fields; otherwise set the fields by name
 ```
 
-## NL2701
+## NL2706
 
 The message of an error contains:
 
@@ -13089,10 +13089,10 @@ The message of an error contains:
 …` does not declare, and Node would carry it on the object anyway: spread a value whose every field the target declares, or set the fields by name
 ```
 
-[`nl2701_object_spread_extra_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2701_object_spread_extra_field.ts):
+[`nl2706_object_spread_extra_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2706_object_spread_extra_field.ts):
 
 ```ts
-// NL2701: Node carries every field of the source onto the object, so a source field
+// NL2706: Node carries every field of the source onto the object, so a source field
 // the target does not declare is refused rather than dropped.
 interface Point {
   x: i32;
@@ -13114,7 +13114,7 @@ export const main = (): i32 => {
 Spread of `Point3` into `Point` copies field `z`, which `Point` does not declare, and Node would carry it on the object anyway: spread a value whose every field the target declares, or set the fields by name
 ```
 
-## NL2702
+## NL2707
 
 The message of an error contains:
 
@@ -13122,10 +13122,10 @@ The message of an error contains:
 …`: a spread copies each field as it is, so the two types must be the same; set it by name (`…
 ```
 
-[`nl2702_object_spread_field_type.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2702_object_spread_field_type.ts):
+[`nl2707_object_spread_field_type.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2707_object_spread_field_type.ts):
 
 ```ts
-// NL2702: A spread copies each field as it is, so a field's type in the source and the
+// NL2707: A spread copies each field as it is, so a field's type in the source and the
 // target must be the same.
 interface Wide {
   x: i64;
@@ -13146,7 +13146,7 @@ export const main = (): i32 => {
 Field `x` spread from `Narrow` is `i32`, but `Wide` declares it `i64`: a spread copies each field as it is, so the two types must be the same; set it by name (`x: s.x`)
 ```
 
-## NL2703
+## NL2708
 
 The message of an error contains:
 
@@ -13154,10 +13154,10 @@ The message of an error contains:
 An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)
 ```
 
-[`nl2703_object_spread_no_target.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2703_object_spread_no_target.ts):
+[`nl2708_object_spread_no_target.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2708_object_spread_no_target.ts):
 
 ```ts
-// NL2703: A spread copies its source's fields into the target's layout, so the literal
+// NL2708: A spread copies its source's fields into the target's layout, so the literal
 // needs a declared class or interface type to copy into.
 interface Point {
   x: i32;
@@ -13174,7 +13174,7 @@ export const main = (): i32 => {
 An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)
 ```
 
-## NL2704
+## NL2709
 
 The message of an error contains:
 
@@ -13182,10 +13182,10 @@ The message of an error contains:
 …` after it, which TypeScript refuses (TS2783): set it after the spread, or leave it out
 ```
 
-[`nl2704_object_spread_overwritten.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2704_object_spread_overwritten.ts):
+[`nl2709_object_spread_overwritten.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2709_object_spread_overwritten.ts):
 
 ```ts
-// NL2704: A field set by name and then always overwritten by a later spread is
+// NL2709: A field set by name and then always overwritten by a later spread is
 // TypeScript's TS2783; the name was dead, so it is refused.
 interface Point {
   x: i32;
@@ -13203,7 +13203,7 @@ export const main = (): i32 => {
 Field `x` is set by name and then always overwritten by the spread of `Point` after it, which TypeScript refuses (TS2783): set it after the spread, or leave it out
 ```
 
-## NL2705
+## NL2710
 
 The message of an error contains:
 
@@ -13211,10 +13211,10 @@ The message of an error contains:
 … spreads another value into the typed JSON options: typed JSON reads a class's options from its text, where a spread names nothing it can see, so write each option out by name
 ```
 
-[`nl2705_json_options_spread.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2705_json_options_spread.ts):
+[`nl2710_json_options_spread.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2710_json_options_spread.ts):
 
 ```ts
-// NL2705: Typed JSON options are read from the class's text: a spread into them names
+// NL2710: Typed JSON options are read from the class's text: a spread into them names
 // nothing that text can show, so it is refused with its own message.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";

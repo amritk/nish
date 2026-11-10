@@ -610,7 +610,7 @@ The message of an error contains:
 Object spread is forbidden in …
 ```
 
-**Retired**: `Object spread is forbidden in`, the Phase 0 refusal object spread replaced when it became field copies; each form it still refuses has its own code now, NL2697-NL2705 and NL3052 (tests/cases/reject_object_spread*)
+**Retired**: `Object spread is forbidden in`, the Phase 0 refusal object spread replaced when it became field copies; each form it still refuses has its own code now, NL2702-NL2710 and NL3055 (tests/cases/reject_object_spread*)
 
 ## NL1062
 
