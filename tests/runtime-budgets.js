@@ -711,8 +711,15 @@ const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1280
  * and taking a task off the ready queue when it finishes queued (ASYNC-18). Measured
  * **3,797 bytes** against 2,627 on 2026-11-09 with clang 18.1.3 on linux-x64; the next
  * 256-byte boundary.
+ *
+ * Raised to 4,608 by keeping a waited descriptor registered (WP49 stage 6, part 4,
+ * ASYNC-19): the per-descriptor table of generations and parked waits, the re-arm with
+ * `EPOLL_CTL_MOD`, the reader of an event that wakes only the waits parked on its
+ * descriptor, and the fall-back that fails a reused number's old waits. In return a
+ * steady-state wait makes one system call instead of four. Measured **4,405 bytes**
+ * against 3,797 on 2026-11-10 with clang 18.1.3 on linux-x64; the next 256-byte boundary.
  */
-const RUNTIME_ASYNC_TEXT_BUDGET = 3840
+const RUNTIME_ASYNC_TEXT_BUDGET = 4608
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
