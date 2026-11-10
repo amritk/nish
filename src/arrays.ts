@@ -528,7 +528,10 @@ const checkAsTemplateCall = (
 ): i32 => {
   const template = ctx.template(local)
   if (template === null) {
-    return ctx.errorType(call, `internal: the template \`${local}\` was not loaded for this \`${access.text}\` call`)
+    return ctx.errorType(
+      call,
+      `internal: the template \`${local}\` was not loaded for this \`${access.text}\` call`
+    )
   }
   const name = new Node(N_IDENT, access.start, access.end)
   name.id = access.id
@@ -587,7 +590,14 @@ const checkCallbackMethod = (ctx: CheckContext, call: Node, access: Node, args: 
     return T_ERROR
   }
   const pick: i32 = arity === 2 ? 1 : 0
-  return checkAsTemplateCall(ctx, call, access, args, arrayMethodLocal(arrayMethodTemplates(name)[pick]), scope)
+  return checkAsTemplateCall(
+    ctx,
+    call,
+    access,
+    args,
+    arrayMethodLocal(arrayMethodTemplates(name)[pick]),
+    scope
+  )
 }
 
 /**
@@ -601,7 +611,14 @@ const checkArraySlice = (ctx: CheckContext, call: Node, access: Node, args: Node
     ctx.error(call, `\`slice\` on an array expects 0 to 2 arguments, got ${count}`)
     return T_ERROR
   }
-  return checkAsTemplateCall(ctx, call, access, args, arrayMethodLocal(arrayMethodTemplates("slice")[count]), scope)
+  return checkAsTemplateCall(
+    ctx,
+    call,
+    access,
+    args,
+    arrayMethodLocal(arrayMethodTemplates("slice")[count]),
+    scope
+  )
 }
 
 /** `a.push(v)`, `a.pop()`, `a.indexOf(v)`, `a.join(sep)`, `a.set(b, at)`, `a.fill(v, from, to)`. */

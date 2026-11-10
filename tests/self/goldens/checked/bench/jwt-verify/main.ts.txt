@@ -17779,6 +17779,7 @@ function x25519Base(scalar: Secret<u8[]>): u8[] | null -> @nish.x25519Base [expo
   stackSites=1 stackLocals=1
   local +0:9 base: u8[] (const)
   callee +2:10 exposeWith<u8[], u8[], u8[] | null, x25519Exposed> -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.18.nish.x25519Exposed
+module std/array.ts [package nish]
 import base64urlDecode from "nish/crypto/base64url" -> function @nish.base64urlDecode
 import timingSafeEqualAt from "nish/crypto/ct" -> function @nish.timingSafeEqualAt
 import HmacSha256 from "nish/crypto/hmac" -> struct HmacSha256
@@ -17799,6 +17800,9 @@ import now from "../crypto/lib/gen" -> function @now
 import parseArgs from "../crypto/lib/gen" -> function @parseArgs
 import report from "../crypto/lib/gen" -> function @report
 import b64aDecode from "./old" -> function @b64aDecode
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const TOKENS: i32 = 16
 const NOW: i64 = 1700000100
 struct Token (class) size=40 align=8

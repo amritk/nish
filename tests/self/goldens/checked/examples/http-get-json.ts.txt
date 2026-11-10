@@ -1098,6 +1098,9 @@ import TLS_RECORD_STATE_OPEN from "nish/net/tls/record-server" -> const TLS_RECO
 import TlsClientTrust from "nish/net/tls/verify" -> struct TlsClientTrust
 import tlsClientTrust from "nish/net/tls/verify" -> function @nish.tlsClientTrust
 import tlsClientVerdict from "nish/net/tls/verify" -> function @nish.tlsClientVerdict
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const HTTP_E_NONE: i32 = 0 [exported]
 const HTTP_E_URL: i32 = 1 [exported]
 const HTTP_E_DNS: i32 = 2 [exported]
@@ -4745,6 +4748,9 @@ function httpDateWrite(out: u8[], at: i32, seconds: i64): i32 -> @nish.httpDateW
   callee +11:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
   callee +13:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
 module std/net/url.ts [package nish]
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const URL_DECODE_FORM: i32 = 1 [exported]
 const URL_DECODE_LENIENT: i32 = 2 [exported]
 const URL_DECODE_ALLOW_NUL: i32 = 4 [exported]
@@ -5230,6 +5236,7 @@ function urlOrigin(u: Url): string | null -> @nish.urlOrigin [exported]
   callee +0:25 urlDefaultPort -> @nish.urlDefaultPort
   local +4:9 port: i32 (const)
   callee +5:27 urlHostText -> @nish.urlHostText
+module std/array.ts [package nish]
 module std/net/dns.ts [package nish]
 import DNS_ADDRESS_BYTES from "nish/net/dns-message" -> const DNS_ADDRESS_BYTES
 import DnsConfig from "nish/net/dns-config" -> struct DnsConfig
@@ -6766,6 +6773,9 @@ import X509Certificate from "nish/crypto/x509" -> struct X509Certificate
 import pemToDer from "nish/crypto/x509" -> function @nish.pemToDer
 import x509ParseCertificate from "nish/crypto/x509" -> function @nish.x509ParseCertificate
 import Set from "nish/collections" -> generic class Set
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const PKI_ROOTS_MAX_FILE_BYTES: i32 = 16777216 [exported]
 const PKI_ROOTS_MAX_FILES: i32 = 4096 [exported]
 const PKI_ROOTS_MAX_ROOTS: i32 = 4096 [exported]
@@ -6933,6 +6943,9 @@ import p256PublicKey from "nish/crypto/p256" -> function @nish.p256PublicKey
 import p256SignSha256 from "nish/crypto/p256" -> function @nish.p256SignSha256
 import p256VerifySha256 from "nish/crypto/p256" -> function @nish.p256VerifySha256
 import sha256 from "nish/crypto/sha256" -> function @nish.sha256
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const X509_MAX_DAYS: i32 = 14 [exported]
 const X509_MAX_SERIAL: i32 = 20 [exported]
 const X509_SIG_UNKNOWN: i32 = 0 [exported]
@@ -32286,6 +32299,9 @@ import x509NameEqual from "nish/crypto/x509" -> function @nish.x509NameEqual
 import x509NameIsPrefix from "nish/crypto/x509" -> function @nish.x509NameIsPrefix
 import x509ParseCertificate from "nish/crypto/x509" -> function @nish.x509ParseCertificate
 import Map from "nish/collections" -> generic class Map
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const PKI_OK: i32 = 0 [exported]
 const PKI_ERR_MALFORMED: i32 = 1 [exported]
 const PKI_ERR_EXPIRED: i32 = 2 [exported]

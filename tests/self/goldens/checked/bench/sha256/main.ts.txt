@@ -1987,6 +1987,7 @@ function expose<u64[], u64[], hmacCopyWords>(s: Secret<u64[]>, f: void): u64[] -
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:70 hmacCopyWords -> @nish.hmacCopyWords
+module std/array.ts [package nish]
 import base64urlDecode from "nish/crypto/base64url" -> function @nish.base64urlDecode
 import base64urlEncode from "nish/crypto/base64url" -> function @nish.base64urlEncode
 import hmacSha256 from "nish/crypto/hmac" -> function @nish.hmacSha256
@@ -2002,6 +2003,9 @@ import now from "../crypto/lib/gen" -> function @now
 import parseArgs from "../crypto/lib/gen" -> function @parseArgs
 import report from "../crypto/lib/gen" -> function @report
 import tweak from "../crypto/lib/gen" -> function @tweak
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const HEADER: string = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
 function asciiBytes(text: string): u8[] -> @asciiBytes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false

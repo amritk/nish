@@ -32318,6 +32318,9 @@ import x509NameEqual from "nish/crypto/x509" -> function @nish.x509NameEqual
 import x509NameIsPrefix from "nish/crypto/x509" -> function @nish.x509NameIsPrefix
 import x509ParseCertificate from "nish/crypto/x509" -> function @nish.x509ParseCertificate
 import Map from "nish/collections" -> generic class Map
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const PKI_OK: i32 = 0 [exported]
 const PKI_ERR_MALFORMED: i32 = 1 [exported]
 const PKI_ERR_EXPIRED: i32 = 2 [exported]
@@ -33846,6 +33849,9 @@ import p256PublicKey from "nish/crypto/p256" -> function @nish.p256PublicKey
 import p256SignSha256 from "nish/crypto/p256" -> function @nish.p256SignSha256
 import p256VerifySha256 from "nish/crypto/p256" -> function @nish.p256VerifySha256
 import sha256 from "nish/crypto/sha256" -> function @nish.sha256
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const X509_MAX_DAYS: i32 = 14 [exported]
 const X509_MAX_SERIAL: i32 = 20 [exported]
 const X509_SIG_UNKNOWN: i32 = 0 [exported]
@@ -35084,6 +35090,7 @@ function x509CertificateHash(der: u8[]): u8[] -> @nish.x509CertificateHash [expo
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.sha256#0
   stackSites=0 stackLocals=0
   callee +0:57 sha256 -> @nish.sha256
+module std/array.ts [package nish]
 module std/collections.ts [package nish]
 const INDEX_CAP: i32 = 16777215
 const INITIAL_SLOTS: i32 = 8
@@ -35520,6 +35527,9 @@ import X509Certificate from "nish/crypto/x509" -> struct X509Certificate
 import pemToDer from "nish/crypto/x509" -> function @nish.pemToDer
 import x509ParseCertificate from "nish/crypto/x509" -> function @nish.x509ParseCertificate
 import Set from "nish/collections" -> generic class Set
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const PKI_ROOTS_MAX_FILE_BYTES: i32 = 16777216 [exported]
 const PKI_ROOTS_MAX_FILES: i32 = 4096 [exported]
 const PKI_ROOTS_MAX_ROOTS: i32 = 4096 [exported]
@@ -35971,6 +35981,9 @@ function routerHex(c: i32): i32 -> @nish.routerHex
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 module std/net/url.ts [package nish]
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const URL_DECODE_FORM: i32 = 1 [exported]
 const URL_DECODE_LENIENT: i32 = 2 [exported]
 const URL_DECODE_ALLOW_NUL: i32 = 4 [exported]

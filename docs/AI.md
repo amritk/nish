@@ -49,7 +49,7 @@ stdout, nothing on stderr, every field 1-based with `endLine`/`endColumn`
 exclusive:
 
 ```json
-{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":20,"severity":"error","code":"NL2249","message":"Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort)"}
+{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":23,"severity":"error","code":"NL2249","message":"Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice)"}
 ```
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
@@ -165,7 +165,8 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
+| `xs.reduce(f)`, `.forEach`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
+| `xs.find(f)` | `` `find` is not supported: TypeScript types its answer `T \| undefined` … `` (NL2697) | `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }` |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `a?.b`, `a ?? b` | `?.` only in a chain that ends in `??`; `??` only on a `T \| null`, a chain or `m.get(k)` | `a?.b ?? d`, `a ?? d`, or `if (a !== null)` first |
 | `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |

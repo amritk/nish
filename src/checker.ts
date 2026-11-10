@@ -478,7 +478,13 @@ export class Checker {
     for (let i: i32 = 0; i < names.size(); i++) {
       for (const template of arrayMethodTemplates(names.at(i))) {
         this.program.imports.push(
-          new ImportBinding(ARRAY_SPECIFIER, template, arrayMethodLocal(template), this.program.file, this.program.file)
+          new ImportBinding(
+            ARRAY_SPECIFIER,
+            template,
+            arrayMethodLocal(template),
+            this.program.file,
+            this.program.file
+          )
         )
       }
     }

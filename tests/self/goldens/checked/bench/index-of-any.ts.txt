@@ -107,8 +107,12 @@ function codePointLength(text: string): i32 -> @nish.codePointLength [exported]
   callee +7:7 textUnitsAreBytes -> @nish.textUnitsAreBytes
   local +18:7 afterHigh: boolean (let)
   local +20:11 unit: i32 (const)
+module std/array.ts [package nish]
 import monotonicNanos from "nish:process" -> builtin monotonicNanos
 import indexOfAny from "nish/text" -> function @nish.indexOfAny
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const HAYSTACK_BYTES: i32 = 1048576
 const MATCH_EVERY: i32 = 4099
 const ROUNDS: i32 = 200

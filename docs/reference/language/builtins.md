@@ -2029,6 +2029,11 @@ The reference for each member, with its parameters and its answer, is its doc co
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
 | `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2620); a second argument is refused too (`` `sort` takes one comparator ``, NL2619). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](declarations.md#function-parameters)): a top-level function, or an arrow, which may read the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused (`reject_arr_sort_capture_let`). Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
+| `a.map(f: (x: T[, i: number]) => U): U[]` | a new array of `f(a[i])` (or `f(a[i], i)`) for each element, in order, as `Array.prototype.map` gives. The callback takes one or two parameters; a third, JavaScript's array argument, is refused (`` The callback of `map` takes 3 parameters, and Nish passes at most two … ``, NL2698), and so is a second argument to `map` itself (JavaScript's `thisArg`). It is a compile-time function argument under the comparator's rule. Compiled to `std/array.ts`'s `map` or `mapIndexed`, called directly. See [Callback methods and `slice`](#callback-methods-and-slice) | `arr_map`, `arr_map_f64`, `arr_map_template`; `reject_arr_map_third_param`, `reject_arr_map_this_arg`, `reject_arr_map_capture_let` |
+| `a.filter(pred: (x: T[, i: number]) => boolean): T[]` | a new array of the elements `pred` keeps, in order. `pred` answers `boolean` (`reject_arr_filter_not_boolean`); the callback rules are `map`'s | `arr_filter`; `reject_arr_filter_not_boolean` |
+| `a.some(pred)`, `a.every(pred)`: `boolean` | whether some (every) element satisfies `pred`, stopping at the first that decides; an empty array answers `false` (`true`) | `arr_some_every` |
+| `a.findIndex(pred): number` | the first index `pred` accepts, or `-1`. There is **no `find`**: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(f)` is refused and points here (`` `find` is not supported: TypeScript types its answer `T \| undefined` … ``, NL2697) | `arr_find_index`; `reject_arr_find` |
+| `a.slice(start: number = 0, end: number = a.length): T[]` | a copy of `a[start..end)`, with `s.slice`'s rule: `0 <= start <= end <= a.length`, or the program **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript counts a negative index from the end and clamps the rest. Zero to two arguments (NL2699). Works on a `readonly T[]`, and the copy is a mutable `T[]` | `arr_slice`, `arr_slice_bounds`; `reject_arr_slice_args` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](expressions.md#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
@@ -2052,7 +2057,7 @@ type, so `wide.push(3)` on an `i64[]` is an `i64` three
 
 ### Sorting with a comparator
 
-`xs.sort(cmp)` is the one array method that takes a function. The checker
+`xs.sort(cmp)` sorts with a function the program passes. The checker
 rewrites the call to `sortWith(xs, cmp)` from `std/sort.ts`, which the program
 does not import: a `.sort(` call is what loads it. Because `cmp` is a
 compile-time function parameter, each comparator gets its own instantiation
@@ -2098,6 +2103,52 @@ receiver or `process.argv`, and a comparator that reads a `let` of the
 function it is written in (`reject_arr_sort_capture_let`). A comparator is an
 arrow argument like any other, so it may read that function's `const` locals
 and parameters (`arr_sort_capture`), under the rule in [Function parameters](declarations.md#function-parameters).
+
+### Callback methods and `slice`
+
+`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
+and `xs.slice(...)` are lowered as `sort` is: the checker rewrites the call to
+a template of `std/array.ts`, which a call of one of those names loads, and the
+callback is a compile-time function parameter, so each callback gets an
+instantiation of its own whose loop calls it directly. `xs.map(f)` and
+`map(xs, f)` with `map` imported from `nish/array` are the same call and
+compile to one instance (`arr_map_template`). The template is picked by the
+callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`, and
+`slice`, `sliceFrom` or `sliceAll` by the argument count.
+
+The callback takes the element, or the element and its index, as TypeScript
+allows. JavaScript passes a third argument, the array itself; Nish refuses a
+callback that declares one (NL2698), since the array is the receiver the call
+already names. The callback rule is the comparator's: a top-level function, or
+an arrow that reads only the `const` locals and parameters of the function it
+is written in (`reject_arr_map_capture_let`).
+
+Each method walks the array from index 0 and calls the callback once per
+element, in order, up to the length the array had when the call began, as
+`Array.prototype` does; `some`, `every` and `findIndex` stop at the first
+element that decides. A callback that shrinks the array ends the walk at the
+new length, where JavaScript goes on and skips the missing indices. `map` and
+`filter` answer a new array, so writing into it does not touch the receiver;
+an element that is an `interface` record is stored inline and copied, so
+`filter(...)[0].id = 10` leaves the receiver's record as it was, as it would
+under Node (`arr_filter`).
+
+**There is no `find`.** TypeScript types `xs.find(f)` as `T | undefined`, and
+Nish has no `undefined`: a program testing `r !== null` would pass `tsc` and
+mean something else under Node. The call is refused with a message that
+points to `findIndex` (NL2697, `reject_arr_find`):
+`const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`.
+
+**`slice` panics where JavaScript clamps.** The bounds rule is string
+`slice`'s: `0 <= start <= end <= xs.length`, and anything else exits 1 with
+`slice out of range: [start, end) of length n` (`arr_slice_bounds`). A
+negative index, which JavaScript counts from the end, and an end past the
+length, which it clamps, are both outside. Under Node and `--emit-ts` the call
+is the runtime's `sliceArray`, which applies the same check with the same
+words, so the two agree on every input; `map`, `filter`, `some`, `every` and
+`findIndex` are the platform's own `Array.prototype` methods there, and an
+answer that holds records inline is copied with the runtime's `copyRecords`,
+as the native `push` copies.
 
 ## Bulk writes: `set` and `fill`
 
@@ -2272,8 +2323,8 @@ a mutable `T[]` — and it is exact where the fixpoint is not
 (`` `process.argv` is read-only ``), because it is a value and not an
 annotation.
 
-There are no other array or string methods (`map`, `shift`, `toUpperCase`,
-`charAt`, ...) — `slice` is a string method and an array has none — and no
+There are no other array or string methods (`shift`, `find`, `reduce`,
+`toUpperCase`, `charAt`, ...) and no
 `toString` (template literals and `console.log` convert numbers);
 string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under

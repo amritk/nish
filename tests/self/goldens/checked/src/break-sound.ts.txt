@@ -3087,6 +3087,7 @@ function drawStatsOverlay(screen: Screen, stats: TermStats, corner: i32): void -
   local +6:9 y: i32 (const)
   callee +7:3 Screen.text -> @nish.Screen.text
   callee +8:3 Screen.text -> @nish.Screen.text
+module std/array.ts [package nish]
 import BREAK_PITCHES from "./break-game" -> const BREAK_PITCHES
 import SOUND_ADVANCE from "./break-game" -> const SOUND_ADVANCE
 import SOUND_BREAK from "./break-game" -> const SOUND_BREAK
@@ -3102,6 +3103,9 @@ import SOUND_OVER from "./break-game" -> const SOUND_OVER
 import SOUND_PADDLE from "./break-game" -> const SOUND_PADDLE
 import SOUND_STEEL from "./break-game" -> const SOUND_STEEL
 import SOUND_WALL from "./break-game" -> const SOUND_WALL
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const SAMPLE_RATE: i32 = 22050
 const SAME_GAP_NS: i64 = 60000000
 const ANY_GAP_NS: i64 = 15000000

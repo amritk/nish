@@ -373,6 +373,7 @@
                     "type": "group",
                     "title": "Core",
                     "children": {
+                      "/array": { "type": "page", "title": "array", "filepath": "docs/reference/array.md" },
                       "/base64": {
                         "type": "page",
                         "title": "base64",

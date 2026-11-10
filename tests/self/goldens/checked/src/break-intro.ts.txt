@@ -3001,6 +3001,7 @@ function drawStatsOverlay(screen: Screen, stats: TermStats, corner: i32): void -
   local +6:9 y: i32 (const)
   callee +7:3 Screen.text -> @nish.Screen.text
   callee +8:3 Screen.text -> @nish.Screen.text
+module std/array.ts [package nish]
 module std/random.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 import wrappingMul from "nish:unsafe" -> builtin wrappingMul
@@ -3125,6 +3126,9 @@ import wallColour from "./break-menu" -> function @wallColour
 import SOUND_CLEAR from "./break-game" -> const SOUND_CLEAR
 import SOUND_STEEL from "./break-game" -> const SOUND_STEEL
 import SOUND_WALL from "./break-game" -> const SOUND_WALL
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const INTRO_PLAYING: i32 = 0 [exported]
 const INTRO_DONE: i32 = 1 [exported]
 const INTRO_QUIT: i32 = -1 [exported]

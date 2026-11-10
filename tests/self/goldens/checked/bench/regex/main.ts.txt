@@ -3,6 +3,9 @@
 entry: bench/regex/main.ts
 module std/regex.ts [package nish]
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 unsafe import 104:10 uncheckedGet from "nish:unsafe"
 unsafe call 4170:24 uncheckedGet (node 21469)
 unsafe call 4170:50 uncheckedGet (node 21475)
@@ -2024,9 +2027,13 @@ function regexEscape(text: string): string -> @nish.regexEscape [exported]
   local +3:7 lit: i32 (let)
   local +4:7 i: i32 (let)
   local +6:11 c: i32 (const)
+module std/array.ts [package nish]
 import Regex from "nish/regex" -> struct Regex
 import RegexMatch from "nish/regex" -> struct RegexMatch
 import regexCompile from "nish/regex" -> function @nish.regexCompile
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 function words(): string[] -> @words
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

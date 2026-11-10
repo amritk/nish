@@ -4924,6 +4924,9 @@ function expose<u64[], u64[], hmacCopyWords>(s: Secret<u64[]>, f: void): u64[] -
   stackSites=0 stackLocals=0
   callee +0:70 hmacCopyWords -> @nish.hmacCopyWords
 module std/net/url.ts [package nish]
+import Array.prototype.sliceAll from "nish/array" -> generic function sliceAll
+import Array.prototype.sliceFrom from "nish/array" -> generic function sliceFrom
+import Array.prototype.slice from "nish/array" -> generic function slice
 const URL_DECODE_FORM: i32 = 1 [exported]
 const URL_DECODE_LENIENT: i32 = 2 [exported]
 const URL_DECODE_ALLOW_NUL: i32 = 4 [exported]
@@ -5409,6 +5412,7 @@ function urlOrigin(u: Url): string | null -> @nish.urlOrigin [exported]
   callee +0:25 urlDefaultPort -> @nish.urlDefaultPort
   local +4:9 port: i32 (const)
   callee +5:27 urlHostText -> @nish.urlHostText
+module std/array.ts [package nish]
 import PgBatchClock from "nish/net/postgres" -> struct PgBatchClock
 import PgBatchClockConfig from "nish/net/postgres" -> struct PgBatchClockConfig
 import PG_CLOCK_WAIT from "nish/net/postgres" -> const PG_CLOCK_WAIT
