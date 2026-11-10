@@ -1,4 +1,4 @@
-// NL2697: a helper the `enter`'s function calls may not make the child: only
+// NL2702: a helper the `enter`'s function calls may not make the child: only
 // the function `enter` runs is known to run with the region entered.
 import { Region, child, enter, free, region } from "nish:region";
 

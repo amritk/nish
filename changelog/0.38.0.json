@@ -1,0 +1,1034 @@
+{
+  "version": "0.38.0",
+  "date": "2026-11-10",
+  "tag": "v0.38.0",
+  "range": {
+    "from": "v0.37.0",
+    "to": "4503d4a9"
+  },
+  "entries": [
+    {
+      "id": "plan-the-rest-of-wp49-stage-5-around",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "plan the rest of WP49 stage 5 around what a spawned task may reach",
+      "body": "The owner chose to let a spawned task reach objects its spawner owns, under a rule the compiler checks, so `serve` can run one task per request. The plan now marks the executor and async fetch done, retires the combined serve-and-pool stage, and adds spawn-reach (the rule), async-serve and pg-async (in parallel), then cancellation, which also gives async fetch a deadline on each wait.",
+      "metrics": [],
+      "refs": [
+        "#1278"
+      ],
+      "tests": [],
+      "commits": [
+        "05288e9"
+      ],
+      "pr": 1298,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "specify-nish-hex-and-freeze-its-contract-before",
+      "type": "test",
+      "scope": "std",
+      "breaking": false,
+      "title": "specify nish/hex and freeze its contract before the code",
+      "body": "* test(std): specify nish/hex and freeze its contract before the code\n\nThe spec-first half of a new module: specs/hex.md says what nish/hex's\nhexEncode and hexDecode must do, contracts/hex.json restates every MUST as a\nverbatim requirement with its test vectors (RFC 4648 §10 and the spec's own\ntable) and Z3-sampled properties, and test/spec/hex.ts is the Nish test vector\nemits from it. The contract records the spec's sha256, so the implementation\nPR that follows cannot change the spec or the test it is judged by.\n\nRefs: specs/hex.md\nTests: test/spec/hex.ts\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw6VnGLF1HYU44ohad6\n\n* test(std): tighten nish/hex's spec after review\n\nAn independent review found that the timing promise in §5 forbade only a\ntable, which a decoder can keep while still branching on every digit, and\nthat it left the encoder out. §5 now forbids branching on, or indexing memory\nby, any input byte in either direction, and the contract says where that is\nchecked. V9 tested an odd length rather than whitespace, so it is now\n\"0a 0b 0c\"; lengths are stated in bytes; a size note says what happens past\n2^31 - 1 bytes; and a new property refuses control bytes and DEL anywhere in\nan even-length text. The contract lists the implementation's three lines of\nequivalent mutants with their reasons.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw6VnGLF1HYU44ohad6\n\n* test(std): sample nish/hex's properties more, and drop the survivor list\n\nThe implementation is to be rewritten as plain loops once the compiler can\nprove a strided index in range, so the three allowSurvivors entries, which\nnamed lines of the current draft, no longer describe anything; a later\nmutate run decides whether any are needed. Each property now draws 96\nsamples, the sampler's ceiling, rather than 26 to 38.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01YQzkw6VnGLF1HYU44ohad6",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1be927d"
+      ],
+      "pr": 1288,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "run-nish-cmp-s-compiles-in-parallel-and",
+      "type": "ci",
+      "breaking": false,
+      "title": "run nish-cmp's compiles in parallel and give its job 30 minutes",
+      "body": "The 0.37.0 release was cancelled because `nish-cmp (x86_64-linux)` hit its\n20-minute job timeout. Nothing disagreed: the job compiles every program of\nthe corpus twice, once with the released seed and once with HEAD, one process\nat a time, and took 730 to 930 s on a fast x86_64 runner and 1,040 to 1,220 s\non a slow one. Each compile uses one core, so three of the runner's four sat\nidle.\n\n`tests/nish-cmp.js` now keeps `--jobs` programs in flight (default: the number\nof cores). Each slot has its own output directory, the two compilers of one\nprogram still run one after the other so the largest entries (about 1.6 GiB\neach) fit four slots in a 16 GB runner, and results are reported in corpus\norder, so the report is the same at any `--jobs`. `compare` keeps its\nsynchronous form for `tests/differential/fuzz.js`.\n\nThe job's timeout goes from 20 to 30 minutes, for a slow runner and a growing\ncorpus.",
+      "metrics": [
+        "full corpus on a 4-core machine, 972 s at --jobs 1 and 264 s at --jobs 4, byte-identical reports; in CI the x86_64 byte-comparison step went from 787-938 s to 303 s (job 528 s) and the aarch64 one from about 710 s to 208 s (job 380 s)"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/nish-cmp.js (full corpus",
+        "same report as CI; a tampered candidate reports the same failures at --jobs 4 and 1)",
+        "tests/differential/fuzz.js --stage1"
+      ],
+      "commits": [
+        "3ff49e9"
+      ],
+      "pr": 1306,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "regenerate-package-lock-json-for-v0-37-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.37.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "971227a"
+      ],
+      "pr": 1316,
+      "author": "github-actions[bot]",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "close-the-unix-socket-acceptance-gaps-fd-leaks",
+      "type": "test",
+      "scope": "net",
+      "breaking": false,
+      "title": "close the Unix-socket acceptance gaps — fd leaks, a two-process exchange, and seqpacket rows",
+      "body": "Three criteria the Unix-socket feature run left open now have evidence on main.\n\ntests/link/net_unix_proc_fds counts /proc/self/fd around 29 listen, connect,\naccept and refusal attempts and prints the difference, so a leaked descriptor\nbreaks the byte-exact output; on a system without /proc it is a named skip.\ntests/link/net_unix_exchange spawns itself and exchanges a ping and a pong over\nunixListen and unixConnect, so both ends are real processes. docs/BENCHMARKS.md\ngains the seqpacket CPU rows from the 2026-10-31 record in bench/README.md; no\nnew measurement is made.\n\nFixes #1129",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/net_unix_proc_fds",
+        "tests/link/net_unix_exchange"
+      ],
+      "commits": [
+        "1a0bbb2"
+      ],
+      "pr": 1302,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "build-the-c-twins-with-the-release-hardening",
+      "type": "fix",
+      "scope": "bench",
+      "breaking": false,
+      "title": "build the C twins with the release hardening flags, and three bench reporting gaps",
+      "body": "The sqlite and postgres benches compared a Nish binary built with the release\nhardening against a C twin built without it, so \"Nish − C\" quietly included the\nhardening's cost. The twins now take their flags from scripts/build.sh's own\nhardening block (read by bench/compiler.mjs, per OS and architecture), so the\ntwo lists cannot drift, and each bench checks its twin with\nscripts/check-hardening.mjs before it measures: a twin that is not hardened, or\na machine with no ELF or Mach-O reader to check it, stops the run. The measured\n-O3 flags are unchanged.\n\nThe bcrypt bench's stale-compiler error now says to run `npm run build` (or pass\n--compiler), and bench/jwt-verify reports max and spread beside the median.\n\nFixes #944",
+      "metrics": [],
+      "refs": [
+        "#953",
+        "#1195"
+      ],
+      "tests": [],
+      "commits": [
+        "842c398"
+      ],
+      "pr": 1315,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "restore-what-npm-test-covers-in-agents-md",
+      "type": "docs",
+      "breaking": false,
+      "title": "restore what npm test covers in AGENTS.md, repoint the PR template, and reconcile the shard notes",
+      "body": "AGENTS.md again says what `npm test` covers (goldens, llvm-as, native, runtime\nand differential) and that CI runs it in eight shards. The PR template now asks\nfor every CI `test` shard green and undegraded on the current head, with skip\ncounts read from the shard summaries, rather than a local full run, matching\nCLAUDE.md's definition of done. docs/wp10-ci.md's two shard-cost passages no\nlonger contradict each other, and the comment on LINK_SERIAL in tests/run.js\nsays why the remaining programs stay serial.\n\nFixes #896",
+      "metrics": [],
+      "refs": [
+        "#927"
+      ],
+      "tests": [],
+      "commits": [
+        "079d1cd"
+      ],
+      "pr": 1310,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "pin-deny-ffi-on-a-string-returning-foreign",
+      "type": "test",
+      "scope": "interop",
+      "breaking": false,
+      "title": "pin --deny ffi on a string-returning foreign call, and fix three stale FFI lines",
+      "body": "A program whose only foreign call is `strerror`, a string return, is now\nrefused under `--deny ffi` by a test that names the hop (`calls strerror`), and\nthe runtime record's RT-15 row cites it. docs/wp40-ffi-buffers-handles.md no\nlonger says WP40 is being built or planned: it names the four test cases it\ncites that do not exist yet and why, and says SIMD types now exist and a foreign\nf32x4 parameter is refused today. The tests/cases/ffi_pointer.ts header now\nmatches the nullable-pointer rule in docs/LANGUAGE.md.\n\nFixes #901",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "4ee45c9"
+      ],
+      "pr": 1312,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "pin-the-tls-client-s-data-exchange-and",
+      "type": "test",
+      "scope": "net",
+      "breaking": false,
+      "title": "pin the TLS client's data exchange and close_notify per suite and group against openssl s_server",
+      "body": "The openssl s_server tests now exchange data and close for each TLS 1.3 suite\n(AES-128-GCM, AES-256-GCM, ChaCha20-Poly1305) and for each key-exchange group\n(X25519 offered alone, P-256), asserting the suite and group ids each\nconnection negotiated. One more case observes the client's own close_notify: it\nfails if s_server reports an unexpected EOF, so a close that skips close_notify\ncannot pass. The TLS record drops that item from \"Not exercised\" and pins TLS-3\nto #777's squash commit instead of a pre-merge hash.\n\nFixes #1033",
+      "metrics": [],
+      "refs": [
+        "#828"
+      ],
+      "tests": [
+        "tests/run.js net_tls_client_tcp",
+        "tests/link/net_tls_client_tcp"
+      ],
+      "commits": [
+        "ff1b0d1"
+      ],
+      "pr": 1301,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "document-number-parseint-parsefloat-and-date-now-in",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "document Number, parseInt, parseFloat and Date.now in nish.d.ts and close its tag gaps",
+      "body": "Number, parseInt, parseFloat and Date.now now carry doc comments in\nruntime/nish.d.ts and get pages in the library reference. They are declared by\nmerging with lib's own declarations, so neither tsc nor the checker accepts\nanything new, and the Nish forms say what they refuse (parseInt has no radix).\nThe second StringConstructor block gets its class doc.\n\nscripts/gen-reference.mjs now renders only the signatures nish.d.ts itself\ndeclares for a global, so lib's parseInt(string, radix?) no longer heads a page\nthat then says there is no radix, and it renders an interface's call signature\nwith its @param and @returns, and an interface's card from its own doc.\n\nFixes #1254",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "1d215b1"
+      ],
+      "pr": 1303,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "give-async-fetch-https-and-a-non-blocking",
+      "type": "docs",
+      "scope": "plan",
+      "breaking": false,
+      "title": "give async fetch https and a non-blocking name lookup, and isolate awaitAll lanes, in WP49 stage 5",
+      "body": "Async fetch answered HTTP_E_TLS for an https URL and resolved names with the blocking resolver, so a program calling an https service still needed fetchSync. A fetch-net stage, beside spawn-reach, drives TlsRecordClient and DnsResolver with readable and writable.\n\nTwo calls joined by one awaitAll that each hold a large allocation across an await corrupt each other's memory (HF-13), while the same calls under spawn are sound: the lanes share their parent's arena. An awaitall-regions stage after spawn-reach gives each lane its own region. The per-wait deadline stays with cancellation, which now waits on both.",
+      "metrics": [],
+      "refs": [
+        "#1278"
+      ],
+      "tests": [],
+      "commits": [
+        "ef64397"
+      ],
+      "pr": 1305,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "a-native-string-carries-arbitrary-bytes-and-two",
+      "type": "docs",
+      "scope": "guide",
+      "breaking": false,
+      "title": "a native string carries arbitrary bytes, and two follow-ups from the docs polish",
+      "body": "Four places in the user guide said a native string is always UTF-8. They now\nsay what docs/LANGUAGE.md does: a string is a length and its bytes, usually\nUTF-8 text but never validated as such, and under --emit-ts bytes that are not\nUTF-8 decode to U+FFFD. The FetchPool paragraph on the HTTP client page is split\nunder the 120-word limit, and the installation page's pinned-version examples\nname 0.37.0, the current release.\n\nFixes #1031",
+      "metrics": [],
+      "refs": [
+        "#1296"
+      ],
+      "tests": [],
+      "commits": [
+        "e7b27d3"
+      ],
+      "pr": 1311,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "cache-tbaa-nodes-per-module-1318",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "cache TBAA nodes per module",
+      "body": "Every load and store of a class field rebuilt its class's TBAA path node and its scalar nodes as text and hashed them through `addMetadata`, only to find the number it had handed out the first time: a fifth of a heavy compile. The emitter now remembers, per module, the `omnipotent char` node, each value type's scalar node and each class's path node.\n\nThe cache cannot change a byte of the IR. Metadata numbers never move once handed out (only `src/debug.ts` fills reserved numbers, with `!DI` text that is never a TBAA node), so a hit skips only a lookup of a node that already exists and the interning order is unchanged. A class's node is keyed by name but used only for the same `StructInfo` it was built from, so two layouts under one name would each be built afresh.",
+      "metrics": [
+        "callgrind Ir, src/interop-abi.ts -g -o: 6.27G -> 5.07G (-19.1%)",
+        "callgrind Ir, tests/link/net_relay_bad_pool/main.ts -g --link: 4.89G -> 3.97G (-18.9%)",
+        "wall, interop-abi -g -o, median of 7 interleaved: 2432 -> 1873 ms (-23%; base vs its own copy 3%)"
+      ],
+      "refs": [],
+      "tests": [
+        "whole nish-cmp corpus (2401 programs) byte-identical",
+        "old vs new compiler",
+        "node tests/run.js tbaa",
+        "class",
+        "wasi",
+        "performance"
+      ],
+      "commits": [
+        "b38fb7e"
+      ],
+      "pr": 1318,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "refuse-a-nish-cmp-declaration-that-names-no",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "refuse a nish-cmp declaration that names no program, file or undo",
+      "body": "The last DECLARED entry in tests/nish-cmp.js named no program, file or undo, so it matched every difference and nish-cmp passed whatever IR HEAD emitted. nish-cmp now refuses such an entry before compiling, and tests/run.js runs that check. Every other entry was stale against the 0.37.0 seed and is retired. Four tests/link programs that the seed refuses for seeing two copies of std/ are excused only for that exact refusal.",
+      "metrics": [],
+      "refs": [
+        ".claude/testing.md"
+      ],
+      "tests": [
+        "tests/run.js selfhost (nish-cmp self-checks)"
+      ],
+      "commits": [
+        "d8fce1a"
+      ],
+      "pr": 1319,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "a-dns-search-fallback-no-longer-masks-a",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "a DNS search fallback no longer masks a later NODATA, and resolveHost keeps an answered family at its timeout",
+      "body": "Two resolver bugs from #1024, each recorded as a Low finding in\ndocs/security/dns.md with a test that failed before the fix.\n\nDNS-6: a search candidate that left an error to fall back on (NXDOMAIN for A,\nSERVFAIL for AAAA) kept it even when a later candidate answered NODATA, so a\nname that exists read as DNS_RESOLVE_NO_ANSWER, an outage. NODATA from any\ncandidate now ends the lookup DNS_RESOLVE_NOT_FOUND; the fallback stands only\nwhen no later candidate answers.\n\nDNS-7: at timeoutMs the lookup was cancelled whole, so a server that answered A\nand never AAAA made resolveHost return DNS_RESOLVE_TIMEOUT with the addresses in\nhand. DnsResolver.settle and DnsClient.settle now end a lookup whose one family\nanswered with addresses, closing the other query, and that family is returned;\na lookup with no address yet is still DNS_RESOLVE_TIMEOUT.\n\nThe security index counts both, and the networking and standard-library guide\npages describe the timeout behaviour.\n\nFixes #1024",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_dns_resolver (fallback:",
+        "settle:)",
+        "tests/link/std_dns (timeout:)"
+      ],
+      "commits": [
+        "e04f464"
+      ],
+      "pr": 1304,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "pin-isintegral-s-spellings-against-node-the-webtransport",
+      "type": "test",
+      "breaking": false,
+      "title": "pin isIntegral's spellings against Node, the WebTransport rebind's new address, and the rounding edges",
+      "body": "Three test pins that could not fail where they should.\n\nThe json tokenizer's Node check now covers all sixteen isIntegral spellings\n#843 lists: eleven integral, including 1e400 and -0.0e5, and five that are not.\nThe WebTransport address-rebind check compares the slot's address bytes after\nthe move with those of 127.0.0.2, so a client that never changes address fails\nit (#1250). math_rounding adds the half-way and boundary edges #1044 lists:\n±1.5, ±2.5, ±0.49999999999999994 (ceil of the negative is -0), ±2^52 and the\nnegative subnormal of greatest magnitude.\n\nFixes #843\nFixes #1250",
+      "metrics": [],
+      "refs": [
+        "#1044"
+      ],
+      "tests": [
+        "tests/link/std_json_tokenizer",
+        "tests/link/net_loopback",
+        "tests/cases/math_rounding"
+      ],
+      "commits": [
+        "083fa89"
+      ],
+      "pr": 1317,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "async-fetch-speaks-https-and-resolves-names-without",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "async fetch speaks https and resolves names without blocking (WP49 stage 5, part 6)",
+      "body": "`await fetch(url)` now speaks https: it drives the same TlsRecordClient as fetchSync from its own task, waiting on readable and writable, with the same verification. Trust comes from the caller's roots or the system's. The certificate must match the URL's host and be valid now. A body is whole only at close_notify or its framing. A bad chain, a wrong name or an expired certificate gives fetchSync's code and sentence. https connections are never pooled.\n\nA name lookup no longer stops the process. The async fetch drives DnsResolver over a non-blocking UDP socket, with the system resolver config, hosts file, retries and timeouts it shares with resolveHost. It is bounded by connectTimeoutMs, and the OutboundPolicy filter runs on every answer. HttpOptions gains a `dns` option honoured by both clients.\n\nA single wait still has no deadline (HF-10); cancellation adds one. Two awaitAll lanes holding large allocations across an await can corrupt each other (HF-13). Until the runtime fix lands, run such fetches as spawned tasks.\n\nThis change also declares #1304's nish-cmp differences, which main carried undeclared.",
+      "metrics": [],
+      "refs": [
+        "docs/security/fetch.md"
+      ],
+      "tests": [
+        "tests/link/net_fetch_async_https",
+        "tests/link/net_fetch_async_dns_slow",
+        "tests/link/net_fetch_async_https_flat"
+      ],
+      "commits": [
+        "acb9f0c"
+      ],
+      "pr": 1314,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "qualify-pgbatcher-s-flat-per-key-cost-for",
+      "type": "docs",
+      "scope": "net",
+      "breaking": false,
+      "title": "qualify PgBatcher's flat per-key cost for colliding int keys, and pin it with a test",
+      "body": "The postgres guide said a take's cost per request stays flat as maxRequests\ngrows. That holds for spread and dense keys but not for int keys built to\ncollide under pgIntHash: from 1,024 to 65,536 such keys the measured time per\nkey rose 2.3x (2.8 to 6.4 us, against a 35% noise band), bounded by the\n1,024-slot probe limit. The guide and the record now say so, the record's\ngarbled sizing sentence is rewritten, and the pgIntHash comment says what its\nfinal shift drops (at most two keys share a hash). A new std_postgres_batch_scale\ncase batches 2,048 keys that all hash to 0 and checks every row routes to its\nkey, including the ones past the probe bound that are bound twice; the PG-17\nrow names it.",
+      "metrics": [],
+      "refs": [
+        "#1165"
+      ],
+      "tests": [],
+      "commits": [
+        "cc20c92"
+      ],
+      "pr": 1313,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "keep-a-result-made-in-a-loop-body",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "keep a Result made in a loop body and stored in an outer let alive past the pass's arena rewind",
+      "body": "A call that answers a `Result` in a register (WP17) hands back no memory: the\ncaller boxes it, in the arena, inside the loop pass. The per-pass escape walk\ncounted such a call as old whenever its callee allocated nothing, so\n`r = q.step()` into a `let` declared outside the loop kept the pass's rewind,\nand the rewind freed the box `r` still pointed at; the next allocation after\nthe loop overwrote its tag (#899).\n\n`PassWalk.isOld` now counts a register-`Result` call as new, so storing it into\nan outer local refuses the pass its scope, and inside a `using arena()` block\nthe same store is reported as escaping the block. A `return` from a loop pass\nin a function that answers its `Result` in a register keeps the pass's scope\nwhatever the returned expression: `emitReturnValue` packs the value into its\nregister before the release, and a by-value `Result` holds only scalar payloads\n(`packablePayload`), so nothing it carries points into the pass.\n\nThe three new cases are declared to nish-cmp under this change's release note.\n\nFixes #899",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/result_loop_outer_let",
+        "tests/cases/result_loop_payloads",
+        "tests/cases/result_loop_return_alloc",
+        "tests/cases/reject_result_loop_using_outer_let"
+      ],
+      "commits": [
+        "697811d"
+      ],
+      "pr": 1308,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "strings-cross-between-a-wasm-module-and-its",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "strings cross between a wasm module and its page (WP50 stage 4)",
+      "body": "A wasm module can now build strings, pass them to the page and return them. It can concatenate, use templates and format numbers. Strings go to the page's host imports and come back from exports as JavaScript strings, and the module reads and writes text in module storage through the new `nish/host/text`.\n\nThe string and number-formatting half of the C runtime moves out of runtime/runtime.c into a freestanding runtime/runtime-text.c. scripts/build.sh links it into a wasm build only when the IR names one of its symbols, so a module with no string operation keeps its .wasm, loader and .d.ts byte for byte. Natively every program still links it, and the arena's bump fast path is repeated inline so concatenation keeps its instruction count.\n\nA `string` parameter of a host import crosses as the bytes' pointer and length. The generated loader decodes it with a TextDecoder that keeps a leading U+FEFF. An export's `string` result is decoded inside the arena bracket and typed `string` in the .d.ts. An export that takes a string stays out of the bridge, and its reason points to `nish/host/text`. A host import that returns a string stays refused (NL2667), and NL2665 is retired.\n\n`nish/host/text`'s writers append UTF-8 text, integers and shortest-digit f64s to a module-storage `u8[]`. A write that does not fit answers -1 and writes nothing, and the reader refuses a count past the array. To support this, byte module storage may be lent to a `u8[]` parameter, which may not resize, alias or return it.\n\nThe C header that --emit-header writes now names runtime-text.c beside runtime.c and runtime-os.c. tests/nish-cmp.js declares each intended output difference from the 0.37.0 seed. The security records gain WH-9, which covers a forged (p, n) pair or header past the end of memory and invalid UTF-8.",
+      "metrics": [
+        "runtime.c .text 3,495 -> 1,723 B and runtime-text.c 1,787 B (-Oz, clang 18.1.3), threads 3,710 -> 1,938 B; examples/label.ts under --profile wasm-host 13,046 / 11,786 / 11,297 B raw/gzip/brotli (10,296 B of it the pow10 table), an i32-only template 1,111 B; strbuild instructions +0.000% against the baseline"
+      ],
+      "refs": [
+        "docs/wp50-wasm-host.md#7-w3-strings-out-and-in",
+        "docs/security/wasm-host.md"
+      ],
+      "tests": [
+        "tests/cases/host_import_string",
+        "tests/cases/storage_lend_bytes",
+        "tests/host-import/text",
+        "tests/cases/reject_storage_lend_bytes_*"
+      ],
+      "commits": [
+        "377be32"
+      ],
+      "pr": 1309,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "a-spawned-task-may-reach-the-objects-its",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a spawned task may reach the objects its spawner owns (WP49 stage 5, part 3)",
+      "body": "spawn now takes a function argument that captures nothing and an object, array, Map or Set its spawner owns, shared as a pointer. A spawner that hands a task an object keeps no arena scope, so the object outlives every task. Inside the task, its own memory may not be stored into a shared object (NL2609), a shared object may not be grown (NL2615) or kept in the task's memory (NL2610), and a shared object may not hold a Region, Secret, using handle or threads primitive (NL2691). Nested spawns of shared objects (NL2689) and capturing function arguments (NL2690) are refused.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/security/async.md (ASYNC-10",
+        "ASYNC-12",
+        "ASYNC-13)"
+      ],
+      "tests": [
+        "tests/cases/async_spawn_shared",
+        "tests/cases/async_spawn_fn_arg",
+        "tests/link/async_spawn_shared_outlives",
+        "tests/cases/reject_async_spawn_*"
+      ],
+      "commits": [
+        "27ca184"
+      ],
+      "pr": 1307,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "serve-one-task-and-one-region-per-request",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "serve, one task and one region per request (WP49 stage 5, part 4)",
+      "body": "nish/net/serve answers HTTP/1.1 from an async program: serve(port, router, limits, handle) accepts and parses with the existing handler and codec, routes with nish/net/router, and spawns one task per request, each in a region of its own. Requests on one connection run in order; responses are written into a per-slot buffer the server owns. ServeLimits caps connections, requests in flight, header, body and response sizes, and the head and idle timeouts; a per-request deadline is held for the cancellation stage. Arena.used() stays flat over thousands of pipelined keep-alive requests.",
+      "metrics": [],
+      "refs": [
+        "docs/security/serve.md",
+        "docs/guide/using-nish/async-server.md"
+      ],
+      "tests": [
+        "tests/link/net_serve",
+        "tests/link/net_serve_pipelined_flat"
+      ],
+      "commits": [
+        "2d10118"
+      ],
+      "pr": 1322,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "the-async-postgres-pool-wp49-stage-5-part",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "the async Postgres pool (WP49 stage 5, part 5)",
+      "body": "nish/net/postgres-async is a connection pool that main makes once and spawned tasks share: a task claims a connection with pgAsyncClaim, runs pgAsyncQuery over the extended protocol with its parameters sent as Bind values, and gives the connection back with pgAsyncRelease. It waits with readable and writable, so a slow query in one task does not stop another's. It has its own encoder and framer rather than PgCarrier, because a task may not grow the shared pool's memory or hold its password. Rows are built in the querying task's own region. A connection with bytes left after ReadyForQuery is closed rather than reused; maxResultBytes bounds what one answer keeps, rows, tags and error fields together; every cap is validated.",
+      "metrics": [],
+      "refs": [
+        "docs/security/postgres.md (PG-28 to PG-36)",
+        "docs/guide/using-nish/postgres.md"
+      ],
+      "tests": [
+        "tests/link/std_postgres_async",
+        "tests/link/std_postgres_async_flat",
+        "tests/link/std_postgres_async_*_panic"
+      ],
+      "commits": [
+        "ea8b601"
+      ],
+      "pr": 1321,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "give-each-awaitall-lane-its-own-region-wp49",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "give each awaitAll lane its own region (WP49 stage 5, HF-13)",
+      "body": "Two calls joined by one awaitAll used to share the awaiting function's arena, so one call's scope release at its return could free or overwrite memory a sibling still held across an await (a SIGSEGV with large allocations, HF-13). Each member now runs in a region of its own from its first resume, entered and left around every resume as a spawned task's is; when it finishes, nish_region_adopt moves the region's chunks onto the awaiting function's arena, so its answer lives on and is freed with the caller's memory. Adopting carves what the caller's current chunk had left into a chunk of its own, so a loop does not grow a fresh chunk per join, and a region the call released back to empty is freed rather than kept. A program with no awaitAll is unchanged; a member that never waits now pays a region per call (ASYNC-16), and a loop with no per-pass release keeps about one region tail per joined call (ASYNC-17).",
+      "metrics": [],
+      "refs": [
+        "docs/security/async.md (ASYNC-14 to ASYNC-17)",
+        "docs/security/fetch.md (HF-13)"
+      ],
+      "tests": [
+        "tests/cases/async_await_all_lanes_large",
+        "tests/link/async_await_all_lanes",
+        "tests/link/async_await_all_small",
+        "tests/link/async_await_all_retain"
+      ],
+      "commits": [
+        "2f4f8e3"
+      ],
+      "pr": 1320,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-08"
+    },
+    {
+      "id": "pin-the-platform-packages-at-pack-time-not",
+      "type": "build",
+      "scope": "release",
+      "breaking": false,
+      "title": "pin the platform packages at pack time, not in package.json",
+      "body": "The checked-in package.json no longer lists the @amritk/nish-<asset>\npackages as optionalDependencies. release.yml now writes them into the\ncopy it packs (scripts/pin-platform-packages.mjs), using the assets its\nown matrix built, and checks the packed manifest pins exactly those.\n\nA pin in package.json meant a pin in package-lock.json, and that pin\nneeds the resolved URL and integrity of a tarball that does not exist\nuntil the release publishes it. So every release left main failing\n`npm ci` until a separate lockfile job waited for the registry, opened\na pull request and merged it. That job is gone, along with its write\npermissions. The lockfile check in CI now holds every commit, release\ncommits and tags included, and the published package is unchanged. The\npackage test installs a tarball pinned the way release.yml pins it.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js package",
+        "tests/run.js release-pr"
+      ],
+      "commits": [
+        "20fcf9c"
+      ],
+      "pr": 1329,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "prefork-reap-race-security-index-totals-and-the",
+      "type": "fix",
+      "scope": "test",
+      "breaking": false,
+      "title": "prefork reap race, security index totals, and the nish-cmp declaration rule",
+      "body": "The link/net_prefork stubborn() step waited for the supervisor's \"d\" message behind a fixed 5 s window of silence. On a stalled runner, that window could close before the supervisor finished its grace period, SIGKILL and reap. That printed false for `done && tookMs >= grace` (expected.out line 25), as on #1313's shard 2/8. The wait now follows the supervisor itself. It reaps the supervisor with waitPid(WNOHANG) and polls for \"d\" in 1 s steps, up to a one-minute bound. The assertions are unchanged.\n\nThe security index Total row now equals the sum of its area rows: Fixed 3/14/75/165 and Open 0/1/4/43. Seven row changes since #1116 had not moved it.\n\nThe per-shard setup figure is about 200 s, measured on three main runs. tests/run.js and docs/wp10-ci.md now both state it.\n\nCLAUDE.md's Definition of done gains the rule that a std/ or src/ change that moves a nish-cmp corpus program's IR declares it in tests/nish-cmp.js in the same PR. .claude/testing.md and .claude/selfhost.md point to it.\n\nRefs #1300",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/net_prefork"
+      ],
+      "commits": [
+        "38fc9e8"
+      ],
+      "pr": 1332,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "cancel-a-task-on-hang-up-deadline-or",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "cancel a task on hang-up, deadline or shutdown (WP49 stage 5, part 7)",
+      "body": "* feat(runtime): cancel an async task, and bound a descriptor wait\n\n`nish:async` gains `taskId()`, `cancel(task)`, `cancelled()` and\n`cancelAfter(task, ms)`, plus `readableWithin(fd, ms)` and\n`writableWithin(fd, ms)`. A cancelled task carries a flag on its node:\nevery wait it has parked answers false at once, and every later\n`readable`, `writable` or `sleep` it makes answers false without\nparking, so the task runs on to its end, disposes its `using` bindings\nand frees its region. `cancelAfter` arms a per-task deadline as a timer\nin the executor's heap, disarmed when the task finishes or is\ncancelled. A bounded descriptor wait answers false if its timer fires\nfirst, which leaves the waiting task itself usable.\n\nThe timer heap now records each wait's position, so a timer is removed\nthe moment its wait is answered either way.\n\n* feat(net): cancel a serve task when its client hangs up or the server drains\n\nserve records each slot's task and cancels it once the handler reports\nthe client gone (connection closed, reused, or its stream ended while the\nrequest is held) and, on drain, cancels every busy task, so a hung handler\nno longer holds a slot or the drain. ServeLimits.deadline is enforced with\ncancelAfter. nish:async's new builtins are declared in runtime/nish.d.ts.\n\nTests: tests/link/net_serve_hangup\n\n* feat(net): bound every wait of the async fetch, and enforce serve's deadline\n\nThe async fetch now keeps fetchSync's deadlines: each wait for the server is\nbounded by the read timeout and the whole fetch's total, so a server that\naccepts and says nothing answers HTTP_E_READ_TIMEOUT or HTTP_E_TOTAL_TIMEOUT\ninstead of parking the task for ever (HF-10). A fetch whose task is cancelled,\nby `cancel` or a `cancelAfter` deadline, answers the new HTTP_E_CANCELLED.\n`serve` arms `ServeLimits.deadline` on every request's task, so a handler that\nruns past it is cancelled and its connection goes on.\n\n`cancel` answers true for a task still running, a second cancel too; its doc\nsaid otherwise.\n\nTests: tests/link/net_fetch_async_deadline, tests/link/net_serve_deadline, tests/link/async_cancel\n\n* feat(net): a cancelled task gives up its Postgres claim and query\n\nA task cancelled while it waits for a pooled connection stops waiting and\nfails its claim with -3; one cancelled while its query is on the wire drops\nthat connection, since its reply would arrive for nobody, and the pool dials\na fresh one. No CancelRequest is sent: closing the connection ends the\nbackend's work when the server next writes to it.\n\nTests: tests/link/std_postgres_async_cancel\n\n* docs(net): record cancellation as the fix for SERVE-8, HF-10 and ASYNC-6\n\nA stop now cancels the tasks still parked, so serveOn returns within the\ndrain instead of after the slowest handler; net_serve_shutdown pins it.\nThe records move SERVE-8, HF-10 and ASYNC-6 to fixed with their before and\nafter, and add ASYNC-14: a stale or forged handle cancels nothing, and a\ncancelled task leaves no wait or timer behind.\n\nTests: tests/link/net_serve_shutdown\n\n* test(checker): refuse a bad bounded wait or task call, and the cancel calls under --emit-ts\n\nThree negative cases pin NL2692 (a bounded wait's arguments), NL2671 (a\nbounded wait not awaited) and NL2693 (a task call's arguments), and\ntests/emit-ts/async/refused-cancel pins NL4018 at the cancelAfter line.\n\nTests: tests/cases/reject_async_within_argument, tests/cases/reject_async_within_bare, tests/cases/reject_async_cancel_argument, tests/emit-ts/async/refused-cancel\n\n* docs(net): document bounding a wait and cancelling a task\n\nLANGUAGE.md gains the rules for readableWithin, writableWithin, taskId,\ncancel, cancelled and cancelAfter; the user guide's async, server, client\nand Postgres pages say what a cancel does in each; the Postgres record adds\nPG-37 (no CancelRequest for a cancelled query, accepted); the WP49 note\nmarks stage 5 done; the reference is regenerated.\n\nRefs: docs/LANGUAGE.md#bounding-a-wait-and-cancelling-a-task\n\n* chore: format the fetch wait's failure call\n\n* docs(net): record why serve hands its handler no shared context yet\n\n* fix(runtime): take a task finishing while queued off the ready queue\n\nA task that cancels itself while awaitAll runs its calls has its own\npending waits fired, which queue it; it could then finish still queued,\nand nish_async_done put a node the ready queue held on the free list.\ndone now unlinks a queued task first (ASYNC-18, fixed before landing).\ntaskId() in main answers 0, as its declaration says. The async fetch's\nbounded wait answers HTTP_E_IO when the poller refuses the descriptor,\ninstead of waiting again at once until its deadline.\n\nTests: tests/link/async_cancel\n\n* build(runtime): raise the executor's size budget for cancellation\n\nruntime-async.c measures 3,797 bytes at -Oz against 2,627 on main: a\ntask's cancel flag and its list of pending waits, the bounded waits'\nand cancelAfter's timers, and ASYNC-18's unlink of a task that finishes\nqueued. The budget moves to the next 256-byte boundary, 3,840, with its\nrow in docs/wp7-runtime.md. The IR cookbook's runtime declarations list\ngains the five new calls.\n\n* test(runtime): pin task cancellation with a positive case and two probes\n\nA new case, tests/cases/async_cancel, cancels a parked task, lets a\ncancelAfter deadline fail two sleeps, and bounds a wait on a quiet socket,\nwith its golden IR and a cookbook entry. The runtime probe now checks that\na cancel closes the descriptor a wait duplicated, so a later write wakes no\ntask, and that a handle whose node was reused for a new task is refused\nwithout cancelling that task.\n\nThe fetch record's HF-11 row no longer carries HF-10's test sentence, the\nconnect bound is recorded as untested, and the index row counts ten fixed\nfindings.\n\nTests: tests/cases/async_cancel, tests/link/async_cancel\nRefs: docs/IR_COOKBOOK.md#cancelling-a-task-and-a-bounded-wait\n\n* test(self): declare the IR cancellation moves in nish-cmp\n\nHttp1Connection gains ended() and HttpHandler hungUp(), so every program\nthat reaches std/net/http1-server.ts or std/net/handler.ts differs from the\n0.37.0 seed's output; the cancellation tests and cookbook entry import\nbuiltins or std modules the seed does not have. Each is now a DECLARED entry\nnaming its program and file, with no catch-all.\n\n* fix(checker): drop the unused isTaskCall export and provoke NL4018 in the wordings\n\nknip refused isTaskCall as an unused export; it is only used inside\nasync-check.ts. The codes test needs every registry code provoked by a\nprogram, so tests/wordings gains the --emit-ts refusal of the task calls.\n\nTests: tests/wordings/nl4018_task_cancel\n\n* docs(reference): regenerate the NL4018 page for its wordings case\n\n* test(self): declare the rest of the cancellation IR moves in nish-cmp\n\nThe full corpus against the 0.37.0 seed showed five more test programs\nwhose http1-server, handler and caller files lay Http1Connection.ended()\nand HttpHandler.hungUp() out again; each program and file gets its entry.\n\n* test(self): declare the http1-server cancellation IR moves of the server link tests\n\nThe ten net_http1_server_* link programs lay out http1-server.ll again\nfor Http1Connection.ended(); each program/file pair is declared on its\nown, with no catch-all.\n\n* fix(runtime): declare the cancellation calls in nish.h and label them in the capabilities audit\n\nnish.h now declares nish_async_wait_fd_within, nish_async_task_id,\nnish_async_cancel, nish_async_cancelled and nish_async_cancel_after,\nwhich the runtime table already lists. The capabilities audit knows the\nsix new nish:async exports: the bounded waits read no byte of their\ndescriptor and the task controls touch nothing outside the program, so\nnone carries a capability row.\n\n* test(self): declare the http1-server IR moves of the http2, http3 and http-app link tests\n\nA full nish-cmp run against the 0.37.0 seed found twenty more programs\nwhose http1-server.ll (and, for net_http_app, handler.ll, main.ll and\napp.ll) moves with Http1Connection.ended(). Each program/file pair is\ndeclared on its own, with no catch-all.\n\n* test(self): declare the remaining http1-server and handler IR moves in nish-cmp\n\nAn uncapped full nish-cmp run against the 0.37.0 seed listed 118 more\nprogram/file pairs, in 50 programs that reach std/net/http1-server.ts\nor std/net/handler.ts (relay, webtransport, upstream, loopback, interop,\npostgres carrier, TechEmpower). Each pair is declared on its own. The\nhang-up and shutdown serve tests import std/net/serve.ts, which the seed\nlacks, so like the deadline test only the candidate compiles them.\n\n* fix(checker): build a cancellation call's argument list once\n\nThe ratchet on src/compile.ts counted two NL9003 warnings (the argument\nlist was reassigned, dropping its first allocation) and three NL9007\n(unproven indexes into it) in the nish:async task-call check. The list\nand its description now come from helpers that return once, and each\nindex is guarded. emit-ts-known.txt gains cases/async_cancel, refused\nwith NL4011, regenerated under Node 22.23.4, the version ci.yml pins.\n\nTests: performance ratchet (selfHosting), emit-ts\n\n* fix(net): cancel a task on hang-up, deadline or shutdown, declared in nish-cmp\n\nThe nish-cmp entries for this change named a branch commit's subject,\nwhich the squash merge removes. They now carry the pull request's\nsubject as the changelog generator renders it, the words main will\nhave (CLAUDE.md, \"Definition of done\").",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a5f5ab7"
+      ],
+      "pr": 1323,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "std-math-ts-transcendentals-and-fmod-the-lowering",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "std/math.ts transcendentals and fmod, the lowering on freestanding wasm",
+      "body": "Math.sin, cos, exp, log and pow and a float `%` no longer fail to link on --profile wasm and --profile wasm-host. Before, they lowered to libm intrinsics and `frem`, which leave `sin` and `fmod` undefined on a freestanding link. A page module now calls fdlibm-derived Nish copies in std/math.ts (sinF64, cosF64, expF64, logF64, powF64, fmodF64), so both profiles link with no imports and need no flag. An f32 remainder widens, calls fmodF64 and narrows, which is exact. --profile wasi keeps libm, native IR is unchanged, and a module that calls none of these keeps its bytes. sin gives V8's bits; cos, exp, log and pow are within one ulp of V8; % is exact.\n\nAlso names four of #1323's nish-cmp declarations by that PR's commit subject, so the release-notes check passes on main again.",
+      "metrics": [
+        "bytes added to a wasm-host module (raw/gzip/brotli): sin 1741/1211/1164, cos 1755/1219/1176, exp 730/478/502, log 610/397/387, pow 2250/1292/1243, % 710/366/331, all six 6250/3490/3352"
+      ],
+      "refs": [
+        "docs/wp50-wasm-host.md#9-w7-the-same-bits-on-every-target"
+      ],
+      "tests": [
+        "tests/cases/wasm_math_std",
+        "tests/cases/wasm_math_rem",
+        "tests/cases/reject_wasm_math_f32"
+      ],
+      "commits": [
+        "de9028b"
+      ],
+      "pr": 1334,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "the-techempower-plaintext-and-json-entry-as-serve",
+      "type": "feat",
+      "scope": "bench",
+      "breaking": false,
+      "title": "the TechEmpower plaintext and json entry as serve handlers (WP49 stage 6, part 1)",
+      "body": "bench/techempower/async-main.ts answers TFB's /plaintext and /json from `serve` handlers in the async style, beside the explicit entry in main.ts. It takes the same arguments (port, nodelay, host, slots), prints the same `listening <port>` line, and answers byte for byte the same. tests/link/tfb_async_entry runs tfb_entry's checks against it: status, exact body, content type and length, the Server and Date fields, and 16-deep pipelining in order.\n\n`ServeLimits.server` names a Server field that `serve` writes into the head of every answer a handler gives. It is made into bytes once, before the first request, so it costs no allocation per request. It is empty by default, which writes no field. A value holding a control byte panics before the server listens, so CR and LF never reach the response head (SERVE-15). The server's own answers carry no Server field: refuse's 404 and 405, and the 400, 413, 431, 500 and 503 it writes itself.\n\ntests/nish-cmp.js points four stage-5 declarations at the words the release notes carry, which turns main's nish-cmp green again, and declares the three new serve programs that the 0.37.0 seed cannot compile.",
+      "metrics": [],
+      "refs": [
+        "docs/wp49-async-server.md#6-tfb-what-the-top-takes"
+      ],
+      "tests": [
+        "tests/link/tfb_async_entry",
+        "tests/link/net_serve_server_field",
+        "tests/link/net_serve_server_panic"
+      ],
+      "commits": [
+        "315303f"
+      ],
+      "pr": 1340,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "fuzz-the-smoke-s-targets-one-per-core",
+      "type": "ci",
+      "breaking": false,
+      "title": "fuzz the smoke's targets one per core",
+      "body": "`fuzz.sh --smoke` built, replayed and fuzzed its 18 targets one after\nanother, each libFuzzer run a single process on one core, so three of a\nCI runner's four cores sat idle for ten minutes. In the last five main\nruns that step took 595 to 625 s, and `fuzz-smoke` finished last every\ntime, 41 to 210 s after the next job.\n\nThe smoke now builds the sanitized runtime once and then runs FUZZ_JOBS\ntargets at a time (the online cores by default). Each target is a lane\nwith its own log and status: the logs print whole and in name order\nwhen every lane is done, one target's crash no longer stops the rest,\nand the last line names every target that failed. `--build`, `--run`\nand `--replay` are unchanged. FUZZ_JOBS=1 gives the old order.\n\nMeasured: the Fuzz smoke step 186 s on CI (was 595 to 625 s), the\nfuzz-smoke job 444 s (was 754 to 889 s), finishing 278 s before the\nrun's last job\nTests: a throwaway crashing target fails the smoke with its exit status\nwhile the other 18 finish; node tests/run.js fuzz",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0fe07ed"
+      ],
+      "pr": 1344,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "a-wasm-size-guard-that-holds-with-wasm",
+      "type": "fix",
+      "scope": "interop",
+      "breaking": false,
+      "title": "a wasm-size guard that holds with wasm-opt, and nish/vite's two silent failures",
+      "body": "The wasm-size guard no longer fails on a machine with binaryen installed. Its ceilings were measured without wasm-opt, but build.sh runs `wasm-opt -Oz` whenever it is on PATH, and on a tiny module that makes the output bigger, not smaller. The guard now measures the link with `NISH_WASM_OPT=0`, which skips wasm-opt for that build, so its figures are the same with or without binaryen. It prints the measured raw, gzip and brotli sizes next to each ceiling when a row passes. A test with a stub wasm-opt checks both the pinned path and the default path. Another test hides wasm-opt from PATH without removing the directory it shares with clang and bash, so it also holds on an apt-binaryen machine. INSTALL.md now says what wasm-opt does to a tiny module.\n\nnish/vite has two fixes:\n- When the compiler's loader has no `loadSync`, the plugin now fails with an error naming the compiler path and version, instead of Rollup's MISSING_EXPORT.\n- An extensionless import of an entry (`../ent/add` for `ent/add.ts`, or a directory's `index.ts`) is now compiled to wasm. The plugin resolves imports in Vite's own order (the exact file first, then `resolve.extensions`, then `index`), so a same-stem `.js` still wins. Before, such an import silently shipped the TypeScript reading.\n\nFixes #1257.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js sections wasm-size and vite"
+      ],
+      "commits": [
+        "e131255"
+      ],
+      "pr": 1336,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "host-module-tests-nish-host-diagnostics-and-the",
+      "type": "fix",
+      "scope": "interop",
+      "breaking": false,
+      "title": "host-module tests, nish.host diagnostics and the HostHandle reference",
+      "body": "Only the exports the Nish source actually imports from a host file are now validated. The file can also hold the page's own DOM-typed, async or class-using exports. Before, an unimported `export function setupCounter(el: HTMLElement)` was refused, so create-vite's counter.ts could not be a host file.\n\nA malformed `nish.host` in package.json is now a diagnostic instead of being silently ignored:\n- NL2694: the field is not an array, or an entry is not a string.\n- NL2695: an entry is empty, absolute, or leaves the package with `..`.\n- NL2696: the named file does not exist.\n\nThe library reference now prints `HostHandle<K>` as `number & { readonly __nishHostKind: K } | 0` instead of `reflection`, because scripts/gen-reference.mjs prints inline type literals.\n\nNew tests cover what #1269 found untested:\n- tsc fails on the Nish entry when its host file drops an export the entry imports.\n- The package.json `nish.host` route works, both compiled and through nish/vite.\n- A host file whose bodies use the DOM, closures, classes and async compiles.\n- A program with no host module keeps its .ll, .d.ts, loader and .wasm bytes.\n\nFixes #1269.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js host-import sections; tests/link/reject_host_manifest_{absolute",
+        "empty",
+        "escape",
+        "missing",
+        "not_array",
+        "not_string}; tests/host-import/{bodies",
+        "route",
+        "unimported}"
+      ],
+      "commits": [
+        "f329a3d"
+      ],
+      "pr": 1335,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "cache-guard-name-shadowing-and-intern-metadata-refs",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "cache guard-name shadowing and intern metadata refs",
+      "body": "The compiler no longer walks a whole module again for every NL9007 bounds\nfix-it, and it formats each debug-metadata reference once. Before, each\nwarning's advice asked whether the module declares `panic`, `toI32` or\n`toU32`, and each answer walked the module's whole AST, std modules included.\n`CheckedProgram.guardShadows` now caches all three answers as bits, filled by\none walk the first time a module is asked. `IRModule.metadataRefs` keeps each\n`!N` string from the moment its number is handed out. `addMetadata` returns\nthe stored string, and on a miss it files the text with a single map lookup.\n`toText` prints the stored strings. Every emitted `.ll` is byte-identical:\nnish-cmp reports 0 undeclared differences, and the net program's 75 `.ll`\nfiles are unchanged with and without `-g`.",
+      "metrics": [
+        "callgrind instruction counts for nish compiling tests/link/net_relay_bad_pool/main.ts, base and new interleaved with a byte-identical copy of base; every repeat gave the same count, so the noise band is 0. With -g: 3,892,287,680 to 3,505,355,151 instructions (-9.94%). Without -g: 3,195,469,333 to 2,909,280,242 (-8.96%). Whole-module shadowing walks: 272.7M (470 declaresName walks) to about 11.0M (35 walks, one per module). addMetadata inclusive: 365.7M to 269.6M with -g (-26%), and 73.2M to 49.3M without (-33%). IRModule.toText inclusive with -g: 200.5M to 171.3M (-15%)."
+      ],
+      "refs": [
+        "src/checker.ts shadowsGuardName",
+        "src/ir.ts IRModule.metadataRefs"
+      ],
+      "tests": [
+        "tests/nish-cmp.js (0 undeclared)",
+        "tests/self/goldens/checked/src/"
+      ],
+      "commits": [
+        "350bad8"
+      ],
+      "pr": 1342,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "a-serve-handler-reaches-its-spawner-s-state",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a serve handler reaches its spawner's state and awaits the async Postgres pool (WP49 stage 5, part 8)",
+      "body": "An arrow handed to a spawned task may now capture what the task may share: numbers, booleans and enums, and objects or arrays that hold nothing their spawner frees, wipes or closes. Inside the task, a call through a function-typed parameter takes the facts of the arrow actually passed at that spawn, not fully conservative ones. So a `serve` handler can capture the spawner's `PgAsyncPool` and await a pooled query, with no change to `serve`. The region rules still refuse a handler that stores memory it allocated into what it shares, grows an array there, keeps a `Request` in it, or hands it on to a further spawn (NL2609, NL2615, NL2689). A capture of a string, a nullable value or a host handle is still refused (NL2690). Before this change, any capture was refused.\n\nThe async pool's startup now writes a queued SCRAM message before it reads again. Before, it read first and hung against any server that logs in by SCRAM (PG-38).\n\nFixes #1324",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/wp49-async-server.md"
+      ],
+      "tests": [
+        "tests/cases/async_spawn_handler_reach",
+        "tests/cases/reject_async_spawn_handler_{store",
+        "keep",
+        "grow",
+        "mixed",
+        "second",
+        "forward",
+        "respawn",
+        "holds_region",
+        "holds_handle",
+        "holds_secret}",
+        "tests/cases/reject_async_spawn_answer_reach",
+        "tests/link/net_serve_pg",
+        "tests/postgres/live (servepool)"
+      ],
+      "commits": [
+        "f4f325f"
+      ],
+      "pr": 1343,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "propagate-attribute-facts-over-an-index-worklist-1341",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "propagate attribute facts over an index worklist",
+      "body": "The compiler settles its function attribute facts (effects, termination, pointer and allocation facts) with a worklist. It visits a function again only when something that function reads has moved. It used to make full passes over every function and look every callee up by name. `propagate` now builds a FactGraph of flat CSR arrays once per table, resolves every name a visit reads to an index, and runs an ordered pass-worklist over function indices. That worklist produces the same state-changing visits as the old round robin, in the same order, so every fact, the first-come `writeSite` included, is unchanged. Whole compiles take about 11% fewer instructions, and the compiler's output does not change.\n\nNISH_CHECK_PROPAGATE (any non-empty value) checks the result in any build. One more whole pass over the settled facts must change nothing, and a from-scratch round-robin run must agree on every function's writeSite, writeVia, shared-write flags, attributes and pointer-parameter flags. When unset, it costs one getenv per table.",
+      "metrics": [
+        "1.12x fewer instructions on the whole compile (callgrind Ir, deterministic: -10.8% net_relay_bad_pool -g, 3,894.2M -> 3,475.1M; -11.7% src/interop-abi.ts -g, 5,141.0M -> 4,539.3M; propagate itself 491.5M -> 74.0M and 770.6M -> 168.4M); wall -9.6% / -8.8% (median 1371 -> 1240 ms, 2038 -> 1858 ms), per-pair ratio IQR 0.896-0.938 / 0.886-0.938 over 11 interleaved pairs, 4-core container"
+      ],
+      "refs": [
+        "#1318"
+      ],
+      "tests": [
+        "tests/run.js propagate-guard"
+      ],
+      "commits": [
+        "7810916"
+      ],
+      "pr": 1341,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "the-new-nish-mark-a-gradient-canvas-motion",
+      "type": "docs",
+      "scope": "site",
+      "breaking": false,
+      "title": "the new Nish mark, a gradient canvas, motion and an animated landing hero",
+      "body": "The docs site takes the new Nish mark and a look of its own.\n\n- docs/site/mark.svg is the mark as a vector; the header logos, the\n  favicons and the hero's compiler tile are drawn from it, and the theme's\n  violets and cyan are its colours.\n- A fixed violet gradient sits behind every page, with the header and both\n  sidebars as glass over it, on a darker ink in dark mode.\n- The landing page opens with a hero: a source file is typed, flows through\n  the compiler to x86_64, ARM64 and WebAssembly, and runs, beside a\n  \"Get started\" button and the install command, which a click copies. Its\n  headline stands in for the page's title.\n- Pages rise in on navigation; code blocks, tables, callouts and cards rise\n  as they scroll into view; cards lift with a glow under the pointer.\n- Tables and code blocks are rounded panels, and the sidebar's groups and\n  the header's links have icons.\n\nAll motion stops under prefers-reduced-motion. Text still meets WCAG AA on\nevery stop of the gradient; the tightest figures are in theme.css. The hero\nis built by docs/site/site.js into an empty element, so GitHub's rendering\nof the same Markdown is unchanged.",
+      "metrics": [],
+      "refs": [
+        "docs/README.md#the-sites-look"
+      ],
+      "tests": [],
+      "commits": [
+        "3cc4979"
+      ],
+      "pr": 1345,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "make-the-landing-page-a-home-page-1355",
+      "type": "docs",
+      "scope": "site",
+      "breaking": false,
+      "title": "make the landing page a home page",
+      "body": "The docs site's root now reads as a home page rather than the first page\nof the guide. Its route moves out of \"Getting started\" to the top of the\nsite, out of the sidebar, with a layout that drops the sidebar, the\noutline, the Copy Page button, the breadcrumb and the previous/next links\nand takes the full width.\n\nThe page itself is laid out as a landing page: a larger centred hero, a\nlead paragraph, a \"Why Nish\" grid of six features, the first program, the\nsection cards and a list of every page, in a centred column with the card\ngrids wider and folding to one column on a phone. The rules are scoped to\nthe page that holds the hero, so no other page changes.",
+      "metrics": [],
+      "refs": [
+        "docs/README.md#the-sites-look"
+      ],
+      "tests": [],
+      "commits": [
+        "6e882be"
+      ],
+      "pr": 1355,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "the-techempower-database-entry-on-the-async-postgres",
+      "type": "feat",
+      "scope": "bench",
+      "breaking": false,
+      "title": "the TechEmpower database entry on the async Postgres pool (WP49 stage 6, part 2)",
+      "body": "bench/techempower/async-db-main.ts serves TFB's db, query, update, cached-query and fortune tests from `serve` handlers that await a PgAsyncPool. It sits beside the explicit db-main.ts and takes the same arguments: port, prefork workers, pinning and steering, the Postgres target and its password. Its answers match the explicit entry's byte for byte, except that `serve` writes header names in lowercase.\n\nEach request claims a pooled connection and runs one statement. A World read of any count is a single statement over an int8[] parameter. An update first checks that the read left its connection reusable, then writes each distinct id once, in ascending order. At a cold start, cached queries share one load of the table: the first request loads it and the others wait for that load. Fortunes reuse the explicit entry's sort and escape, through db-server.ts's new TfbFortunes, and the explicit path does no new work per request.\n\nThe async pool never re-dials a connection it closes, so a query cut off mid-answer, as at the end of every wrk run, would leave that slot empty for good. The entry therefore re-dials closed slots while it serves, backing off from 100 ms up to 5 s.\n\ntests/link/tfb_async_db runs tfb_db's checks against the async entry, using an in-process stand-in Postgres. It also covers:\n- a cut-off read that is re-dialled and served;\n- a read that ends inside a transaction;\n- a refused or shared cold cache;\n- an exhausted pool;\n- a fortunes page larger than its buffer.\n\ntests/postgres/live gains a tfb-async check, which runs the same verification as tfb against the async entry on a real Postgres.",
+      "metrics": [],
+      "refs": [
+        "docs/wp49-async-server.md#6-tfb-what-the-top-takes"
+      ],
+      "tests": [
+        "tests/link/tfb_async_db",
+        "tests/postgres/live (tfb-async)"
+      ],
+      "commits": [
+        "8ecf72b"
+      ],
+      "pr": 1354,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "bound-the-relay-soak-s-waves-by-the",
+      "type": "test",
+      "scope": "net",
+      "breaking": false,
+      "title": "bound the relay soak's waves by the clock, not by turns of the loop",
+      "body": "net_relay_soak's driver gave a wave 20,000 turns of its poll loop. A client\nthat had finished stayed in the loop's set, and the relay can still answer a\nlate ACK to it; nobody read that socket again, so every wait of the wave\nreturned at once and a turn cost microseconds. When the relay stalled, at a\ncheckpoint where it forks `sh` to read its resident set, a loaded runner spent\nthe whole budget in a few milliseconds and gave up on a session the relay then\nclosed: \"2499 of 2500 finished\", and the arena check failed with it, because\nthe next wave arrived while the relay still held the abandoned one.\n\nA finished client now leaves the poll set, a wave has 20 s of wall time, and a\nlost HELLO is sent again after a second rather than every 200 turns.\n\nReproduced with an `sh` on PATH that sleeps before it runs: the old driver\nfailed 5 of 8 runs at +100 ms a checkpoint, the new one 0 of 6 at +500 ms.",
+      "metrics": [],
+      "refs": [
+        "#927"
+      ],
+      "tests": [
+        "tests/link/net_relay_soak"
+      ],
+      "commits": [
+        "71c0f5a"
+      ],
+      "pr": 1364,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "one-param-per-lane-on-the-nish-simd",
+      "type": "docs",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "one @param per lane on the nish:simd constructors",
+      "body": "u8x16, u16x8, i32x4, u32x4, f32x4 and f64x2 now document each lane with its own @param, instead of folding lanes 1 to N into the a0 tag. The generated nish:simd reference page lists every parameter of every lane constructor. Only doc comments change; no declaration does.",
+      "metrics": [],
+      "refs": [
+        "#1267"
+      ],
+      "tests": [],
+      "commits": [
+        "7525417"
+      ],
+      "pr": 1365,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "two-awaitalls-whose-lanes-return-arrays-no-longer",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "two awaitAlls whose lanes return arrays no longer crash the compiler",
+      "body": "A `const [a, b] = await awaitAll(...)` inside a `for`, `while` or `do` body, whose lanes return arrays, stopped the compiler with \"emitter: no slot for local\" as soon as the body read `a[0]` or `a.length`. The loop preheader's array-header lift asks `localsDeclaredIn` which locals the loop declares itself. That walk only looked at plain variable declarations, so it missed the locals an awaitAll binding pattern declares. It then lifted `a`'s header load above the awaitAll that binds `a`. The walk now collects a binding pattern's locals too. That can only stop lifts, never add one.\n\nFixes #1326",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/async_await_all_arrays"
+      ],
+      "commits": [
+        "80de2d0"
+      ],
+      "pr": 1359,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "an-explicitly-set-enc-mss-wins-over-the",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "an explicitly set enc.mss wins over the socket MSS",
+      "body": "`HttpCompressor.mss` now defaults to 0, meaning unset, where it used to default to `HTTP_DEFAULT_MSS` (1448). `Http1Connection.segmentMss` picks `conn.mss` if the program set it, then `enc.mss` if it is above 0, then the socket's MSS, then 1448. A program that deliberately sets `enc.mss = 1448`, for example to force Ethernet sizing over loopback or a tunnel, now keeps it instead of losing it to the socket reading. A program that leaves it alone still gets the socket's MSS. Readers that size a segment from `enc.mss` fall back to 1448 when it is 0.\n\nVisible change: a program that read `enc.mss` without setting it saw 1448 and now sees 0.\n\nFixes #1109",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_http1_mss"
+      ],
+      "commits": [
+        "153b6ca"
+      ],
+      "pr": 1356,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "a-solid-phone-menu-that-lists-the-guide",
+      "type": "fix",
+      "scope": "site",
+      "breaking": false,
+      "title": "a solid phone menu that lists the guide on every page",
+      "body": "On a phone the docs sidebar is the menu, laid over the page. The theme's\nglass look left it transparent, so the page read through the links, and a\npositioned block later in the page (the landing hero, a rising card)\npainted over them. The menu now has a near-solid blurred surface and sits\nabove the page, below the header.\n\nThe home page's menu also listed only the header links, since its route\nturned the sidebar off. The route keeps the sidebar again; theme.css\nhides it on a wider screen and takes back the column Scalar pads the\ncontent by, and the route puts search and the colour toggle in the\nheader, where the hidden sidebar would otherwise have taken them.",
+      "metrics": [],
+      "refs": [
+        "docs/README.md#the-sites-look"
+      ],
+      "tests": [],
+      "commits": [
+        "03fe030"
+      ],
+      "pr": 1366,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "refuse-a-response-that-carries-two-date-fields",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "refuse a response that carries two Date fields",
+      "body": "RFC 9110 §5.3 does not allow combining repeated Date fields, but a program could still send two `date` fields of its own on any carrier. `httpFieldsCheckOutgoing`, which HTTP/2 and HTTP/3 already run, now refuses a field list with two `date` names as `HTTP_FIELDS_DATE_REPEATED`. The HTTP/1.1 head writer refuses the same list before it writes a byte, and the server answers H1_INVALID. One program `date` still suppresses the server's own, so exactly one Date goes out. The check stays a single pass with no allocation.\n\nRefs #696 (item 1; item 2, the h2/h3 load measurement, stays open)",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/net_http_fields",
+        "tests/link/net_http_date",
+        "tests/link/net_http2_errors"
+      ],
+      "commits": [
+        "e4517de"
+      ],
+      "pr": 1360,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "split-asciiupper-asciilower-padstart-and-padend-in-nish",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
+      "body": "`nish/text` gains the string helpers that naming code needs, as functions rather than new string methods, so the compiler is unchanged.\n\n- `split(text, sep)` answers what JavaScript's `text.split(sep)` answers for a non-empty separator, including empty pieces for leading, trailing and adjacent separators. An empty separator panics: JavaScript splits it into UTF-16 units, which natively would be bytes, and an empty separator is a programmer error, not a run-time condition.\n- `asciiUpper` and `asciiLower` change only A–Z and a–z and leave every other byte alone. They are named \"ascii\" on purpose: unlike `toUpperCase`, \"ß\" stays \"ß\".\n- `padStart(text, width, fill)` and `padEnd` give JavaScript's results for ASCII text. Non-ASCII text is counted in the platform's units, bytes natively and UTF-16 units under Node, so `padStart(\"é\", 3, \" \")` is `\" é\"` natively and `\"  é\"` under Node. A non-ASCII fill panics, because cutting it at a byte width could split a UTF-8 sequence. NL8001 does not report these calls; the guide says why.\n\nThe standard-library guide shows the helpers with `regexCompile(...).replaceAll(...)` turning snake_case into camelCase. That example runs natively only until #1362, a nish/regex hang under the Node prelude, is fixed.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/standard-library.md#nishtext"
+      ],
+      "tests": [
+        "tests/link/std_text",
+        "std_text_f64",
+        "std_text_pad_native",
+        "std_text_camel_case",
+        "std_text_split_empty_separator",
+        "std_text_pad_non_ascii_fill",
+        "std_text_pad_start_non_ascii_fill"
+      ],
+      "commits": [
+        "2cdaf78"
+      ],
+      "pr": 1361,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-09"
+    },
+    {
+      "id": "array-methods-map-filter-some-every-findindex-and",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "array methods map, filter, some, every, findIndex and slice",
+      "body": "Arrays gain map, filter, some, every, findIndex and slice. Each compiles to a\nplain loop that calls the callback directly, with one instantiation per callee\nand no function pointer. The checker rewrites `xs.m(f)` into a template from\nthe new `nish/array` module, the way `xs.sort(cmp)` already becomes\n`sortWith`. `xs.map(f)` and `map(xs, f)` therefore compile to the same\ninstance. A callback takes `(x)` or `(x, i)` and captures `const` locals and\nparameters as an arrow argument does. A third `array` parameter is refused\n(NL2698).\n\n`xs.find(...)` is refused with a pointer to `findIndex` (NL2697): TypeScript\ntypes its answer `T | undefined`, Nish has no `undefined`, and a `!== null`\ntest would pass tsc and diverge under Node. `slice(start?, end?)` copies with\nstring `slice`'s bounds: outside `0 <= start <= end <= length` it panics, where\nJavaScript clamps. An f64 bound truncates toward zero and saturates.\n`--emit-ts` and the Node prelude behave like JavaScript's methods, and the\nemit-ts differential compares every new case.\n\nA module-storage array lent to a function that calls one of these methods (or\n`sort`) is now judged the same whatever order the two are declared in. Before,\na callee checked before its caller was refused.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#callback-methods-and-slice"
+      ],
+      "tests": [
+        "tests/cases/arr_map",
+        "arr_map_template",
+        "arr_filter",
+        "arr_some_every",
+        "arr_find_index",
+        "arr_slice",
+        "arr_slice_bounds",
+        "arr_slice_saturate",
+        "arr_named_predicates",
+        "storage_lend_methods_before",
+        "storage_lend_methods_after",
+        "reject_arr_find",
+        "reject_arr_map_third_param"
+      ],
+      "commits": [
+        "2b4e472"
+      ],
+      "pr": 1358,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-10"
+    },
+    {
+      "id": "deterministic-the-same-float-bits-on-every-target",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "--deterministic, the same float bits on every target (WP50 stage 5b)",
+      "body": "A program built with --deterministic prints the same f64 and f32 bits natively on x86-64 and AArch64, on wasm32, and in the --emit-ts reading under Node. Anything the flag cannot make agree is refused.\n\nUnder the flag:\n- Math.sin, cos, tan, exp, log, pow, atan2 and hypot, and a float `%`, call std/math.ts's fdlibm ports on every target, native included. The --emit-ts reading calls the same functions transpiled, instead of V8's Math.\n- f64ToBits and f32ToBits return the canonical quiet NaN (0x7ff8000000000000, 0x7fc00000) for any NaN.\n- Number and parseFloat of a string read one grammar on every target. std/math.ts's numberExact and parseFloatExact read a 0x integer correctly rounded on any libc, and a hex float gives NaN from Number. The corpus found that targets disagreed only on hex spellings: glibc, musl and V8 differ on 0x1p3, and musl misrounds a long 0x integer. Every decimal spelling and every parseInt agreed, so float parsing is not refused.\n- The flag is also a capability policy. It refuses the clock and entropy (NL2700, so Date.now and Math.random), env and tty (NL2701), fs (NL3052), net and process.spawn (NL3053), and ffi and host imports (NL3054).\n\nOn every build, every runtime C unit and link line is compiled with -ffp-contract=off. Without the flag nothing else changes: the runtime is byte-identical, the IR is unchanged, and WASM_PLAIN_DIGESTS holds.\n\ntests/differential/corpus/float/ runs every arithmetic operation and Math builtin. Its operand set includes the subnormals, the normal extremes, integers around 2^53, multiples of pi/4 and arguments up to 1e300, plus NaNs built from bits, f32 rows and 95 parse strings. It prints the result bits in hex and holds all four targets byte for byte to expected.txt. CI's arm64 job runs the AArch64 column.",
+      "metrics": [
+        "std/math sinF64 against glibc 2.39 sin on x86-64, 20M calls, median of 11 interleaved rounds: 0.27x the time on [0, 14620] (0.126 s vs 0.472 s), 0.70x on [0, 0.78) (0.097 s vs 0.139 s); noise band (glibc against a byte-identical copy) 1.005-1.007",
+        "the float corpus prints 821 lines, byte-identical on native x86-64, native AArch64, wasm32-wasi and --emit-ts under Node"
+      ],
+      "refs": [
+        "docs/wp50-wasm-host.md#9-w7-the-same-bits-on-every-target",
+        "docs/LANGUAGE.md"
+      ],
+      "tests": [
+        "tests/differential/corpus/float",
+        "tests/cases/deterministic_bits",
+        "tests/cases/deterministic_parse",
+        "tests/cases/reject_deterministic_*",
+        "tests/run.js deterministic and float-corpus"
+      ],
+      "commits": [
+        "4503d4a"
+      ],
+      "pr": 1363,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-10"
+    }
+  ]
+}

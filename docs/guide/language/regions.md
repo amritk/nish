@@ -219,7 +219,7 @@ export const main = (): i32 => {
 The child's memory may not be stored into the parent's, the child's `f` may
 not grow the parent's arrays, `Map`s or `Set`s, and `child` may be called only
 in the `f` an `enter` runs, never in a function something else also calls
-(NL2697). A plain `region()` made inside `enter` has no parent and keeps the
+(NL2702). A plain `region()` made inside `enter` has no parent and keeps the
 rules above.
 
 The child may keep the parent's root only while that root holds nothing

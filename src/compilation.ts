@@ -84,6 +84,8 @@ import {
   capabilityIndex,
   capabilityName,
   capabilityNames,
+  deterministicReason,
+  deterministicRefusals,
   everyCapabilityName,
   optInCapabilities,
 } from "./capabilities"
@@ -121,6 +123,7 @@ import {
   STRUCT_CLASS,
   StructRegistry,
   StructTemplateInfo,
+  TemplateInfo,
 } from "./program"
 import {
   basename,
@@ -160,7 +163,10 @@ import {
   nishExportEntry,
 } from "./manifest"
 import {
+  ARRAY_SPECIFIER,
   COLLECTIONS_SPECIFIER,
+  isArrayMethodLocal,
+  isArrayModule,
   isStdModuleName,
   SECRET_STD_SPECIFIER,
   stdModuleName,
@@ -372,6 +378,27 @@ export class EmittedModule {
 /** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
   code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016"
+
+/**
+ * Whether an import emits nothing and names nothing the program wrote: one of
+ * the `nish/array` templates the checker gives a module for each array-method
+ * name it calls (`importArrayMethods`, under a dotted local) that no call
+ * instantiated, or that bound no template. The `--emit-checked` dump leaves it
+ * out, and `std/array.ts` is unused when every `nish/array` import is one. An
+ * import the program wrote is never unused, called or not, because the
+ * emitted TypeScript still names it.
+ *
+ * @param specifier The import's module specifier.
+ * @param local The import's local name.
+ * @param template The template it bound, or `null` for none.
+ * @returns `true` when the import is a synthesised, uninstantiated `nish/array` one.
+ */
+export const isUnusedArrayImport = (
+  specifier: string,
+  local: string,
+  template: TemplateInfo | null
+): boolean =>
+  specifier === ARRAY_SPECIFIER && isArrayMethodLocal(local) && (template === null || template.count === 0)
 
 export class Compilation {
   opts: Options
@@ -822,6 +849,7 @@ export class Compilation {
     checker.ctx.wasm = isWasmBuild(this.opts)
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
     checker.ctx.pageModule = buildsPageModule(this.opts)
+    checker.ctx.deterministic = this.opts.deterministic
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     unit.hostRefusals = refusals
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
@@ -1864,7 +1892,8 @@ export class Compilation {
   refuseCapabilities(): void {
     const allow = this.opts.allowCapabilities & this.manifestAllow
     const deny = this.opts.denyCapabilities | this.manifestDeny
-    const refused = deny | (~allow & ~optInCapabilities() & allCapabilities())
+    const flagged = this.opts.deterministic ? deterministicRefusals() : 0
+    const refused = deny | (~allow & ~optInCapabilities() & allCapabilities()) | flagged
     if (refused === 0 || this.modules.length === 0) {
       return
     }
@@ -1925,6 +1954,15 @@ export class Compilation {
    * loop above is told so once rather than for each call it makes.
    */
   reportRefusal(source: SourceFile, site: Node, sig: FunctionSig, c: i32, hops: string[]): void {
+    if (this.refusedOnlyByDeterministic(c)) {
+      this.sink.report(
+        source,
+        site.start,
+        site.end,
+        `\`${sig.sourceName}\` reaches \`${capabilityName(c)}\`, which \`--deterministic\` refuses: ${deterministicReason(c)}; the chain that reaches it: ${hops.join(", ")}`
+      )
+      return
+    }
     this.sink.report(
       source,
       site.start,
@@ -2256,6 +2294,18 @@ export class Compilation {
       site.end,
       `the dependency \`${name}\` reaches \`${capabilityName(c)}\` through \`${caller}\`, which \`${capabilityLockName()}\` does not record for it; review the chain, then record it with \`--update-capability-lock\` — the chain that reaches it: ${hops.join(", ")}`
     )
+  }
+
+  /**
+   * Whether `--deterministic` is the only part of the policy that refuses
+   * capability `c`: then its refusal says why the flag refuses it, under a code
+   * of its own, and otherwise `--deny` or the allowlist is named as before.
+   */
+  refusedOnlyByDeterministic(c: i32): boolean {
+    const bit = 1 << c
+    const allow = this.opts.allowCapabilities & this.manifestAllow
+    const deny = this.opts.denyCapabilities | this.manifestDeny
+    return this.opts.deterministic && (deny & bit) === 0 && (allow & bit) !== 0
   }
 
   /** Which part of the policy refuses capability `c`, as the refusal names it: the first of the four that does. */
@@ -3333,6 +3383,33 @@ export class Compilation {
         )
       }
     }
+  }
+
+  /**
+   * Whether `unit` is `std/array.ts` and nothing needs it: every `nish/array`
+   * import is one the checker gave a module for a call of a method named
+   * `map`, `slice`, ... (`importArrayMethods`, under a dotted local), and no
+   * call instantiated it. The checker adds those before any type is known, so
+   * a string's `slice` loads the module too; then it emits nothing, and the
+   * `--emit-checked` dump and the `--emit-ts` output leave it out. An import
+   * the program wrote keeps the module, instantiated or not, because the
+   * emitted TypeScript still names it.
+   */
+  isUnusedArrayModule(unit: ModuleUnit): boolean {
+    if (!isArrayModule(unit.packageName, unit.name)) {
+      return false
+    }
+    for (const other of this.modules) {
+      for (const imp of other.checker.program.imports) {
+        if (
+          imp.specifier === ARRAY_SPECIFIER &&
+          !isUnusedArrayImport(imp.specifier, imp.localName, imp.template)
+        ) {
+          return false
+        }
+      }
+    }
+    return true
   }
 
   /**

@@ -1,0 +1,1 @@
+Module storage `BUF` cannot be lent to `keep`, which lets its parameter `a` go further than

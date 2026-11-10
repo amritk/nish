@@ -11,6 +11,10 @@ export declare function storeIdx<T>(a: T[], i: number | bigint, v: T): T;
 export declare function arraySet<T>(dst: T[], src: readonly T[], offset?: number): void;
 /** `dst.set(src, offset)` as `--emit-ts` writes it: a 64-bit offset is a bigint, checked exactly. */
 export declare function arraySetAt<T>(dst: T[], src: readonly T[], offset?: number | bigint): void;
+/** `xs.slice(start, end)` as `--emit-ts` writes it: an out-of-range bound panics, as the native one does. */
+export declare function sliceArray<T>(a: readonly T[], start?: number | bigint, end?: number | bigint): T[];
+/** The answer of `xs.map`, `xs.filter` or `xs.slice` with each record copied, as an array holds it inline. */
+export declare function copyRecords<T>(a: T[]): T[];
 /** `new Array<T>(n)`: `--emit-ts` writes `T` out, so the zero it fills with is not what `T` is read from. */
 export declare function newArray<T>(n: number | bigint, zero: unknown): T[];
 export declare function arenaUsed(): i64;

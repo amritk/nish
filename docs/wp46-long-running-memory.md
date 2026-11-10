@@ -296,7 +296,7 @@ show over 2,000,000 requests.
 
 **Child regions (shipped after stage 2, #1357).** `child(f)` and
 `childWith(arg, f)` make a region whose parent is the region entered now, and
-may be called only in the `f` an `enter` or `enterWith` runs (NL2697; NL2351
+may be called only in the `f` an `enter` or `enterWith` runs (NL2702; NL2351
 in a parallel body or a spawned function). A child may point into the
 parent's memory that existed before the current `enter`, what the root
 reaches, which removes the copy NL2610 forced on a program that keeps shared

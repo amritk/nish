@@ -1,0 +1,1 @@
+`main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run

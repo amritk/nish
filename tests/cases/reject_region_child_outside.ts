@@ -1,4 +1,4 @@
-// NL2697: `child` outside the function `enter` runs has no parent.
+// NL2702: `child` outside the function `enter` runs has no parent.
 import { child, free } from "nish:region";
 
 class Item {

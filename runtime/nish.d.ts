@@ -403,7 +403,9 @@ declare var process: Process;
  * `Number("12px")`, `Number("1e")` and `Number("nan")` are `NaN`.
  * `Number("0x1A")` is `26`, as in JavaScript, and a hex float such as `0x1p3`
  * is also accepted, which JavaScript rejects; the `0b` and `0o` prefixes are
- * `NaN`, which JavaScript reads.
+ * `NaN`, which JavaScript reads. Under `--deterministic` a `0x` string reads
+ * as `--emit-ts` reads it on every target: a hex float is `NaN`, and a hex
+ * integer is correctly rounded whatever the C library.
  *
  * An `i32` or an `i64` converts as `toF64` does, a `boolean` is `1` or `0`,
  * and an `f64` is itself. A numeric literal argument is typed `f64`
@@ -446,7 +448,9 @@ declare function parseInt(s: string): i32;
  * `parseFloat("3.14xyz")` is `3.14` and `parseFloat("1e")` is `1`. One
  * deviation from JavaScript: a `0x` prefix is read as hexadecimal
  * (`parseFloat("0x1A")` is `26`, where JavaScript stops at the `x` and gives
- * `0`). Exactly one argument. Capability: none.
+ * `0`). Under `--deterministic` a `0x` string reads as `--emit-ts` reads it
+ * on every target: the hex integer, correctly rounded, stopping at a hex
+ * float's `.` or `p` (`0x1p3` is `1`). Exactly one argument. Capability: none.
  *
  * @param s the text read.
  * @returns the number, or `NaN` when there is none (`parseFloat("abc")`,
@@ -4603,7 +4607,7 @@ declare module "nish:region" {
    * A new region whose parent is the region entered now: `f()` runs with every
    * allocation landing in it, and what it answers is the root. The child may
    * keep memory the parent's root reaches, and `free` of the parent frees it
-   * too. Called outside an `enter` or `enterWith` `f` it is NL2697, and it
+   * too. Called outside an `enter` or `enterWith` `f` it is NL2702, and it
    * stops the program when no region is entered.
    *
    * @param f Makes the root. It answers memory it allocated, never the
@@ -5327,7 +5331,7 @@ interface Math {
  * there. A numeric literal argument to `push`, `indexOf` or `fill` takes the
  * element type, so `wide.push(3)` on an `i64[]` pushes an `i64` three. An
  * unknown method is refused with the supported list: "Unknown method `shift` on
- * i32[]"; there is no `map`, `shift`, `slice` or `toString` on an array.
+ * i32[]"; there is no `shift`, `find` or `toString` on an array.
  */
 interface Array<T> {
   /** The element count, read-only: assigning to it is refused. */
@@ -5481,6 +5485,72 @@ interface Array<T> {
    * @param offset the first slot written, `0` by default.
    */
   set(source: readonly T[], offset?: number): void;
+  /**
+   * A new array of `callbackfn(element)` for each element, in order, as
+   * `Array.prototype.map` gives. The callback takes the element, or the
+   * element and its index; a third parameter (JavaScript's array argument) is
+   * refused (NL2698), as is a second argument to `map` itself. It is a
+   * top-level function or an arrow reading only `const` locals and parameters,
+   * and the call compiles to a loop that calls it directly (`std/array`'s
+   * `map`). Capability: none.
+   *
+   * @param callbackfn called once per element, with the element and its index.
+   * @returns a new array of the callback's answers, of the receiver's length.
+   */
+  map<U>(callbackfn: (value: T, index: number) => U): U[];
+  /**
+   * A new array of the elements for which `predicate` answers `true`, in
+   * order, as `Array.prototype.filter` gives. The predicate answers a
+   * `boolean` and takes the element, or the element and its index, under the
+   * callback rules of `map`. Capability: none.
+   *
+   * @param predicate called once per element, with the element and its index.
+   * @returns a new array of the elements kept.
+   */
+  filter(predicate: (value: T, index: number) => boolean): T[];
+  /**
+   * Whether `predicate` answers `true` for some element, stopping at the first
+   * that does, as `Array.prototype.some` does; an empty array answers `false`.
+   * The callback rules are `map`'s. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `true`.
+   * @returns `true` when some element satisfies `predicate`.
+   */
+  some(predicate: (value: T, index: number) => boolean): boolean;
+  /**
+   * Whether `predicate` answers `true` for every element, stopping at the
+   * first that does not, as `Array.prototype.every` does; an empty array
+   * answers `true`. The callback rules are `map`'s. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `false`.
+   * @returns `true` when no element fails `predicate`.
+   */
+  every(predicate: (value: T, index: number) => boolean): boolean;
+  /**
+   * The index of the first element for which `predicate` answers `true`, or
+   * `-1`, as `Array.prototype.findIndex` gives. The callback rules are
+   * `map`'s. There is no `find`: TypeScript types its answer `T | undefined`
+   * and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and
+   * points here. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `true`.
+   * @returns the first such index, or `-1`.
+   */
+  findIndex(predicate: (value: T, index: number) => boolean): number;
+  /**
+   * A copy of the elements from `start` up to `end`, in a new array, with
+   * string `slice`'s rule: the range must satisfy `0 <= start <= end <=
+   * length`, and anything else panics with `slice out of range: [start, end)
+   * of length n` and exits 1, where JavaScript counts a negative index back
+   * from the length and clamps the rest. `start` is `0` and `end` the length
+   * by default; a third argument is refused (NL2699). Under Node the prelude's
+   * `sliceArray` applies the same check. Capability: none.
+   *
+   * @param start the first index copied, `0` by default.
+   * @param end the index after the last copied, the length by default.
+   * @returns a new array of `end - start` elements.
+   */
+  slice(start?: number, end?: number): T[];
 }
 
 /**
@@ -5491,8 +5561,9 @@ interface Array<T> {
  * nish_array *`.
  *
  * Everything that reads works (`length`, `a[i]`, `for...of`, `indexOf`, `join`,
- * passing it on to another `readonly T[]`); every write is refused under its
- * own name, an element store ("Cannot assign to an element of readonly i32[]
+ * `map`, `filter`, `some`, `every`, `findIndex`, `slice`, passing it on to
+ * another `readonly T[]`); every write is refused under its own name, an
+ * element store ("Cannot assign to an element of readonly i32[]
  * (declare it i32[] to write through it)"), `push`, `pop`, `set`, `fill` and
  * `sort` included. A `T[]` widens into a `readonly T[]`, and never back:
  * "Argument 1 of `fill`: expected i32[], got readonly i32[]". It is shallow, as
@@ -5524,6 +5595,72 @@ interface ReadonlyArray<T> {
    * @returns the joined string.
    */
   join(separator?: string): string;
+  /**
+   * A new array of `callbackfn(element)` for each element, in order, as
+   * `Array.prototype.map` gives. The callback takes the element, or the
+   * element and its index; a third parameter (JavaScript's array argument) is
+   * refused (NL2698), as is a second argument to `map` itself. It is a
+   * top-level function or an arrow reading only `const` locals and parameters,
+   * and the call compiles to a loop that calls it directly (`std/array`'s
+   * `map`). Capability: none.
+   *
+   * @param callbackfn called once per element, with the element and its index.
+   * @returns a new array of the callback's answers, of the receiver's length.
+   */
+  map<U>(callbackfn: (value: T, index: number) => U): U[];
+  /**
+   * A new array of the elements for which `predicate` answers `true`, in
+   * order, as `Array.prototype.filter` gives. The predicate answers a
+   * `boolean` and takes the element, or the element and its index, under the
+   * callback rules of `map`. Capability: none.
+   *
+   * @param predicate called once per element, with the element and its index.
+   * @returns a new array of the elements kept.
+   */
+  filter(predicate: (value: T, index: number) => boolean): T[];
+  /**
+   * Whether `predicate` answers `true` for some element, stopping at the first
+   * that does, as `Array.prototype.some` does; an empty array answers `false`.
+   * The callback rules are `map`'s. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `true`.
+   * @returns `true` when some element satisfies `predicate`.
+   */
+  some(predicate: (value: T, index: number) => boolean): boolean;
+  /**
+   * Whether `predicate` answers `true` for every element, stopping at the
+   * first that does not, as `Array.prototype.every` does; an empty array
+   * answers `true`. The callback rules are `map`'s. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `false`.
+   * @returns `true` when no element fails `predicate`.
+   */
+  every(predicate: (value: T, index: number) => boolean): boolean;
+  /**
+   * The index of the first element for which `predicate` answers `true`, or
+   * `-1`, as `Array.prototype.findIndex` gives. The callback rules are
+   * `map`'s. There is no `find`: TypeScript types its answer `T | undefined`
+   * and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and
+   * points here. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `true`.
+   * @returns the first such index, or `-1`.
+   */
+  findIndex(predicate: (value: T, index: number) => boolean): number;
+  /**
+   * A copy of the elements from `start` up to `end`, in a new array, with
+   * string `slice`'s rule: the range must satisfy `0 <= start <= end <=
+   * length`, and anything else panics with `slice out of range: [start, end)
+   * of length n` and exits 1, where JavaScript counts a negative index back
+   * from the length and clamps the rest. `start` is `0` and `end` the length
+   * by default; a third argument is refused (NL2699). Under Node the prelude's
+   * `sliceArray` applies the same check. Capability: none.
+   *
+   * @param start the first index copied, `0` by default.
+   * @param end the index after the last copied, the length by default.
+   * @returns a new array of `end - start` elements.
+   */
+  slice(start?: number, end?: number): T[];
 }
 
 /**

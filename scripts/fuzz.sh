@@ -108,7 +108,7 @@ build_runtime() {
   local src obj
   for src in "${RUNTIME_C[@]}"; do
     obj="$FUZZ_OUT/obj/$(basename "$src" .c).o"
-    "$CC" "${SAN_FLAGS[@]}" -DNISH_FUZZ_ABORT -Iruntime -c "$src" -o "$obj" \
+    "$CC" "${SAN_FLAGS[@]}" -ffp-contract=off -DNISH_FUZZ_ABORT -Iruntime -c "$src" -o "$obj" \
       || die "compiling $src under the sanitizers failed (is libclang-rt-18-dev installed?)"
     runtime_objs+=("$obj")
   done

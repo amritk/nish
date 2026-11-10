@@ -148,7 +148,7 @@ export const enterWith = <T, A, R>(r: Region<T>, arg: A, f: (root: T, arg: A) =>
  * A new region whose parent is the region entered now: `region`, except that
  * the child may keep the parent's memory that `enter` handed in, and freeing
  * the parent frees the child. Written only in the function an `enter` or
- * `enterWith` runs (NL2697).
+ * `enterWith` runs (NL2702).
  *
  * @param f builds the child's root, under `region`'s rules, except that it may
  *   store into the child what the parent's root reaches. What the entered

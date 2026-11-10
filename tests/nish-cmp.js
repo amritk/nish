@@ -112,17 +112,21 @@ const SEED_HEADER_LINES = [
   " * runtime/runtime.c next to your C code; include runtime/nish.h's",
 ].join("\n")
 
-/** The four lines WP50 stage 4 writes in their place, naming `runtime-text.c` and `runtime-os.c`. */
+/**
+ * The five lines WP50 writes in their place: stage 4 names `runtime-text.c`
+ * and `runtime-os.c`, stage 5 the `-ffp-contract=off` every unit is compiled with.
+ */
 const STAGE4_HEADER_LINES = [
   " * C ABI of the Nish modules listed below. Link the .ll module(s),",
   " * runtime/runtime.c, runtime/runtime-text.c (strings and number formatting)",
-  " * and runtime/runtime-os.c next to your C code, or hand runtime/runtime.c to",
-  " * scripts/build.sh, which adds the rest; include runtime/nish.h's",
+  " * and runtime/runtime-os.c, compiled with -ffp-contract=off, next to your C",
+  " * code, or hand runtime/runtime.c to scripts/build.sh, which does both;",
+  " * include runtime/nish.h's",
 ].join("\n")
 
 /**
  * `text` with the stage 4 header comment put back as the seed wrote it. A
- * declaration's `undo`: it touches only those four lines, so any other change
+ * declaration's `undo`: it touches only those five lines, so any other change
  * to a `.h` still differs.
  */
 const withoutStage4Header = (text) => text.split(STAGE4_HEADER_LINES).join(SEED_HEADER_LINES)
@@ -1133,6 +1137,18 @@ const DECLARED = [
     "a string result is decoded into a JS string, so a function returning one is exported to the page instead of listed as a comment"
   ),
   {
+    program: "tests/cases/deterministic_bits.ts",
+    file: "exit",
+    changelog: "the same float bits on every target",
+    why: "the case is compiled with --deterministic, a flag the seed does not know",
+  },
+  {
+    program: "tests/cases/deterministic_parse.ts",
+    file: "exit",
+    changelog: "the same float bits on every target",
+    why: "the case is compiled with --deterministic, a flag the seed does not know",
+  },
+  {
     program: "tests/cases/host_import_string.ts",
     file: "exit",
     changelog: "Strings cross between a wasm module and its page",
@@ -1174,7 +1190,7 @@ const DECLARED = [
     changelog: "nish.host",
     why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
   },
-  // Parent/child regions: the 0.37.0 seed's nish:region has no child or
+  // Parent/child regions: the 0.38.0 seed's nish:region has no child or
   // childWith, so only the candidate compiles these programs.
   ...[
     "tests/cases/region_child_builder_list.ts",
@@ -1190,8 +1206,92 @@ const DECLARED = [
     program,
     file: "exit",
     changelog: "Add parent/child regions",
-    why: "the program imports child or childWith from nish:region, which the 0.37.0 seed does not have, so only the candidate compiles it",
+    why: "the program imports child or childWith from nish:region, which the 0.38.0 seed does not have, so only the candidate compiles it",
   })),
+  {
+    program: "tests/cases/arr_filter.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `filter` and `map` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_find_index.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `findIndex` on an array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_map.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `map` on an array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_map_f64.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `map` on an f64 array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_map_template.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case imports `map` from nish/array, a module the 0.37.0 seed's std does not have, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_slice.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `slice` and `map` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_slice_bounds.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `slice` and `map` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_slice_saturate.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `slice` on an array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_named_predicates.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case passes named functions to `some`, `every` and `findIndex` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/deny_panics_arr_map.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `map`, `filter`, `some`, `every` and `findIndex` on an array under `--deny-panics`, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/storage_lend_methods_after.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case lends module storage to functions that call `slice`, `map` and the other methods, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/storage_lend_methods_before.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case lends module storage to functions that call `slice`, `map` and the other methods, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/arr_some_every.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `some` and `every` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "docs/cookbook/arr-map.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the cookbook entry calls `map` on an array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
   // #696 item 1: httpFieldsCheckOutgoing and the HTTP/1.1 response writers
   // refuse a second `date` field, so every program that reaches
   // std/net/http-fields.ts or std/net/http1-codec.ts lays both out again.

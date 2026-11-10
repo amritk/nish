@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 689 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 694 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -12942,6 +12942,46 @@ The message of an error contains:
 ```
 
 ## NL2697
+
+The message of an error contains:
+
+```text
+`find` is not supported: TypeScript types its answer `T | undefined`, and Nish has no `undefined`, so a test of it would pass `tsc` and mean something else under Node; use `findIndex` and index the array, `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`
+```
+
+## NL2698
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes at most two, the element and its index: JavaScript's third, the array itself, is the receiver the call already names, so read that instead
+```
+
+## NL2699
+
+The message of an error contains:
+
+```text
+`slice` on an array expects 0 to 2 arguments, got …
+```
+
+## NL2700
+
+The message of an error contains:
+
+```text
+…the clock and the random source answer differently on every run
+```
+
+## NL2701
+
+The message of an error contains:
+
+```text
+…the environment and the terminal answer differently on every host
+```
+
+## NL2702
 
 The message of an error contains:
 

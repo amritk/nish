@@ -258,7 +258,7 @@ const notFreshMessage = (fn: FunctionSig, ref: string, child: boolean): string =
   `which must be memory it allocated, and ${fnName(fn)} may not: ${ref}`
 
 /**
- * NL2697: a child region's parent is whichever region is entered when it is
+ * NL2702: a child region's parent is whichever region is entered when it is
  * made, which only the function `enter` or `enterWith` runs knows for certain.
  * `what` says how `child` or `childWith` is reached otherwise.
  */

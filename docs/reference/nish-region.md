@@ -140,7 +140,7 @@ is an entry in a table and `free` drops it.
 A new region whose parent is the region entered now: `region`, except that
 the child may keep the parent's memory that `enter` handed in, and freeing
 the parent frees the child. Written only in the function an `enter` or
-`enterWith` runs (NL2697).
+`enterWith` runs (NL2702).
 
 ```ts
 function child<T>(f: () => T): Region<T>

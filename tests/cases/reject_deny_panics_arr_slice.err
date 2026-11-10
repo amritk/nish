@@ -1,0 +1,2 @@
+error: This call to `slice<i32>` may panic: it reaches the `panic` site at std/array.ts
+outside the no-panic scope this call is in

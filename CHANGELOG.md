@@ -26,6 +26,77 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-10
+
+### Added
+
+- net: Async fetch speaks https and resolves names without blocking (WP49 stage 5, part 6) ([#1314](https://github.com/amritk/nish/pull/1314))
+- interop: Strings cross between a wasm module and its page (WP50 stage 4) ([#1309](https://github.com/amritk/nish/pull/1309))
+- checker: A spawned task may reach the objects its spawner owns (WP49 stage 5, part 3) ([#1307](https://github.com/amritk/nish/pull/1307))
+- net: Serve, one task and one region per request (WP49 stage 5, part 4) ([#1322](https://github.com/amritk/nish/pull/1322))
+- net: The async Postgres pool (WP49 stage 5, part 5) ([#1321](https://github.com/amritk/nish/pull/1321))
+- net: Cancel a task on hang-up, deadline or shutdown (WP49 stage 5, part 7) ([#1323](https://github.com/amritk/nish/pull/1323))
+- codegen: Std/math.ts transcendentals and fmod, the lowering on freestanding wasm ([#1334](https://github.com/amritk/nish/pull/1334))
+- bench: The TechEmpower plaintext and json entry as serve handlers (WP49 stage 6, part 1) ([#1340](https://github.com/amritk/nish/pull/1340))
+- checker: A serve handler reaches its spawner's state and awaits the async Postgres pool (WP49 stage 5, part 8) ([#1343](https://github.com/amritk/nish/pull/1343))
+- bench: The TechEmpower database entry on the async Postgres pool (WP49 stage 6, part 2) ([#1354](https://github.com/amritk/nish/pull/1354))
+- std: Split, asciiUpper, asciiLower, padStart and padEnd in nish/text ([#1361](https://github.com/amritk/nish/pull/1361))
+- checker: Array methods map, filter, some, every, findIndex and slice ([#1358](https://github.com/amritk/nish/pull/1358))
+- cli: --deterministic, the same float bits on every target (WP50 stage 5b) ([#1363](https://github.com/amritk/nish/pull/1363))
+
+### Fixed
+
+- bench: Build the C twins with the release hardening flags, and three bench reporting gaps ([#1315](https://github.com/amritk/nish/pull/1315))
+- net: A DNS search fallback no longer masks a later NODATA, and resolveHost keeps an answered family at its timeout ([#1304](https://github.com/amritk/nish/pull/1304))
+- codegen: Keep a Result made in a loop body and stored in an outer let alive past the pass's arena rewind ([#1308](https://github.com/amritk/nish/pull/1308))
+- runtime: Give each awaitAll lane its own region (WP49 stage 5, HF-13) ([#1320](https://github.com/amritk/nish/pull/1320))
+- test: Prefork reap race, security index totals, and the nish-cmp declaration rule ([#1332](https://github.com/amritk/nish/pull/1332))
+- interop: A wasm-size guard that holds with wasm-opt, and nish/vite's two silent failures ([#1336](https://github.com/amritk/nish/pull/1336))
+- interop: Host-module tests, nish.host diagnostics and the HostHandle reference ([#1335](https://github.com/amritk/nish/pull/1335))
+- codegen: Two awaitAlls whose lanes return arrays no longer crash the compiler ([#1359](https://github.com/amritk/nish/pull/1359))
+- runtime: An explicitly set enc.mss wins over the socket MSS ([#1356](https://github.com/amritk/nish/pull/1356))
+- site: A solid phone menu that lists the guide on every page ([#1366](https://github.com/amritk/nish/pull/1366))
+- runtime: Refuse a response that carries two Date fields ([#1360](https://github.com/amritk/nish/pull/1360))
+
+### Performance
+
+- codegen: Cache TBAA nodes per module ([#1318](https://github.com/amritk/nish/pull/1318))
+- codegen: Cache guard-name shadowing and intern metadata refs ([#1342](https://github.com/amritk/nish/pull/1342))
+- codegen: Propagate attribute facts over an index worklist ([#1341](https://github.com/amritk/nish/pull/1341))
+
+### Documentation
+
+- plan: Plan the rest of WP49 stage 5 around what a spawned task may reach ([#1298](https://github.com/amritk/nish/pull/1298))
+- Restore what npm test covers in AGENTS.md, repoint the PR template, and reconcile the shard notes ([#1310](https://github.com/amritk/nish/pull/1310))
+- runtime: Document Number, parseInt, parseFloat and Date.now in nish.d.ts and close its tag gaps ([#1303](https://github.com/amritk/nish/pull/1303))
+- plan: Give async fetch https and a non-blocking name lookup, and isolate awaitAll lanes, in WP49 stage 5 ([#1305](https://github.com/amritk/nish/pull/1305))
+- guide: A native string carries arbitrary bytes, and two follow-ups from the docs polish ([#1311](https://github.com/amritk/nish/pull/1311))
+- net: Qualify PgBatcher's flat per-key cost for colliding int keys, and pin it with a test ([#1313](https://github.com/amritk/nish/pull/1313))
+- site: The new Nish mark, a gradient canvas, motion and an animated landing hero ([#1345](https://github.com/amritk/nish/pull/1345))
+- site: Make the landing page a home page ([#1355](https://github.com/amritk/nish/pull/1355))
+- runtime: One @param per lane on the nish:simd constructors ([#1365](https://github.com/amritk/nish/pull/1365))
+
+### Tests
+
+- std: Specify nish/hex and freeze its contract before the code ([#1288](https://github.com/amritk/nish/pull/1288))
+- net: Close the Unix-socket acceptance gaps — fd leaks, a two-process exchange, and seqpacket rows ([#1302](https://github.com/amritk/nish/pull/1302))
+- interop: Pin --deny ffi on a string-returning foreign call, and fix three stale FFI lines ([#1312](https://github.com/amritk/nish/pull/1312))
+- net: Pin the TLS client's data exchange and close_notify per suite and group against openssl s_server ([#1301](https://github.com/amritk/nish/pull/1301))
+- self: Refuse a nish-cmp declaration that names no program, file or undo ([#1319](https://github.com/amritk/nish/pull/1319))
+- Pin isIntegral's spellings against Node, the WebTransport rebind's new address, and the rounding edges ([#1317](https://github.com/amritk/nish/pull/1317))
+- net: Bound the relay soak's waves by the clock, not by turns of the loop ([#1364](https://github.com/amritk/nish/pull/1364))
+
+### Build
+
+- Regenerate package-lock.json for v0.37.0 ([#1316](https://github.com/amritk/nish/pull/1316))
+- release: Pin the platform packages at pack time, not in package.json ([#1329](https://github.com/amritk/nish/pull/1329))
+
+### CI
+
+- Run nish-cmp's compiles in parallel and give its job 30 minutes ([#1306](https://github.com/amritk/nish/pull/1306))
+- Fuzz the smoke's targets one per core ([#1344](https://github.com/amritk/nish/pull/1344))
+
+
 ## [0.37.0] - 2026-11-08
 
 ### Added
@@ -1748,3 +1819,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.35.0]: https://github.com/amritk/nish/releases/tag/v0.35.0
 [0.36.0]: https://github.com/amritk/nish/releases/tag/v0.36.0
 [0.37.0]: https://github.com/amritk/nish/releases/tag/v0.37.0
+[0.38.0]: https://github.com/amritk/nish/releases/tag/v0.38.0
