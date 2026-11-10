@@ -6528,7 +6528,9 @@ exception:
   words) and which carries `kind` (`panic`, `index`, `slice`, `overflow`,
   `memory`, `exit`, `divide`, or `trap`, `reentry` or `exception` for a
   module that died some other way) and `site`, the panic site's number
-  (-1 for none).
+  (-1 for none). An array's `xs.slice` out of range throws with `kind`
+  `panic`, not `slice`: its check is `std/array.ts`'s own `panic(...)`,
+  though the message reads as string `slice`'s does.
 - **Before it throws, the loader calls `onPanic`.** `load(bytes, { onPanic,
   sites })` takes the reporter; the default, `reportPanic` from `nish/page`,
   writes `nish: <message>` to `console.error`, as a native program writes it
@@ -9647,7 +9649,17 @@ points to `findIndex` (NL2697, `reject_arr_find`):
 `slice`'s: `0 <= start <= end <= xs.length`, and anything else exits 1 with
 `slice out of range: [start, end) of length n` (`arr_slice_bounds`). A
 negative index, which JavaScript counts from the end, and an end past the
-length, which it clamps, are both outside. Under Node and `--emit-ts` the call
+length, which it clamps, are both outside. A `number` bound under
+`--number-mode f64` is made an integer before the check, as `llvm.fptosi.sat`
+does: a fraction is truncated toward zero (`xs.slice(0.9, 2.5)` is
+`xs.slice(0, 2)`), `NaN` is 0, and `±Infinity` or a magnitude of 2^63 or more
+saturates to the `i64` limits, so it fails the check and the message prints
+the limit (`slice out of range: [-9223372036854775808, 9223372036854775807) of
+length 3`; `arr_map_f64`, `arr_slice_saturate`). An array's `slice` is not a
+`slice` [panic site](#panic-sites): its check is `std/array.ts`'s own
+`panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
+proof at the call removes, and `--deny-panics` refuses it
+(`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
 words, so the two agree on every input; `map`, `filter`, `some`, `every` and
 `findIndex` are the platform's own `Array.prototype` methods there, and an
@@ -12307,7 +12319,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | --- | --- | --- |
 | `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
 | `pop` | `a.pop()` on an empty array | a dominating `if (a.length > 0)`, the length fact the bounds proof already keeps (`tests/cases/panics_pop`) |
-| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`, `net_write2_bounds`) |
+| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site; an array's `xs.slice` is not a `slice` site but a `call` reaching `std/array.ts`'s `panic` ([Callback methods and `slice`](#callback-methods-and-slice)) (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`, `net_write2_bounds`) |
 | `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | a divisor that is not 0, and not -1 unless the dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor whose declared range leaves those values out, or a guard on a local divisor — `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned one. A float division is not a site (`tests/cases/panics_divide`) |
 | `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). A `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not a site |
 | `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |

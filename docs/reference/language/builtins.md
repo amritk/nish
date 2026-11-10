@@ -2143,7 +2143,17 @@ points to `findIndex` (NL2697, `reject_arr_find`):
 `slice`'s: `0 <= start <= end <= xs.length`, and anything else exits 1 with
 `slice out of range: [start, end) of length n` (`arr_slice_bounds`). A
 negative index, which JavaScript counts from the end, and an end past the
-length, which it clamps, are both outside. Under Node and `--emit-ts` the call
+length, which it clamps, are both outside. A `number` bound under
+`--number-mode f64` is made an integer before the check, as `llvm.fptosi.sat`
+does: a fraction is truncated toward zero (`xs.slice(0.9, 2.5)` is
+`xs.slice(0, 2)`), `NaN` is 0, and `±Infinity` or a magnitude of 2^63 or more
+saturates to the `i64` limits, so it fails the check and the message prints
+the limit (`slice out of range: [-9223372036854775808, 9223372036854775807) of
+length 3`; `arr_map_f64`, `arr_slice_saturate`). An array's `slice` is not a
+`slice` [panic site](semantics-decisions.md#panic-sites): its check is `std/array.ts`'s own
+`panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
+proof at the call removes, and `--deny-panics` refuses it
+(`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
 words, so the two agree on every input; `map`, `filter`, `some`, `every` and
 `findIndex` are the platform's own `Array.prototype` methods there, and an

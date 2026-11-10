@@ -862,8 +862,9 @@ export const main = (): i32 => {
   (`` The arrow reads `k`, a `let` of the function it is written in: ... bind the value to a `const` before the call ``),
   read `this` (bind `const self = this`), or read a function-typed parameter
   of its function. An arrow inside another arrow, or given to a method, a
-  constructor, `expose` or `exposeWith`, captures nothing; `xs.sort(cmp)`'s
-  comparator is the exception, and captures as an arrow argument does.
+  constructor, `expose` or `exposeWith`, captures nothing; the callbacks of
+  the array methods `sort`, `map`, `filter`, `some`, `every` and `findIndex`
+  are the exception, and capture as an arrow argument does.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
