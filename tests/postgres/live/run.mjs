@@ -5,8 +5,10 @@
 // sleeps, and the carrier reporting a server it cannot reach (`refused`) and
 // one that resets the connection (`reset`), and the TechEmpower database
 // entry (bench/techempower/db-main.ts) answering each of its test types from
-// TFB's World and Fortune tables (`tfb`), and `../serve-pool.ts`, a serve
-// handler that awaits the async pool `main` owns (`servepool`).
+// TFB's World and Fortune tables (`tfb`), the same checks against its async
+// twin on the async pool (bench/techempower/async-db-main.ts, `tfb-async`),
+// and `../serve-pool.ts`, a serve handler that awaits the async pool `main`
+// owns (`servepool`).
 //
 //   node tests/postgres/live/run.mjs [--update] [scenario ...]
 //
@@ -44,7 +46,7 @@ const ROOT = join(HERE, "..", "..", "..");
 const NISH = join(ROOT, "build", "nish");
 const BIN = process.env.PG_BIN ?? "/usr/lib/postgresql/18/bin";
 const SCENARIOS = ["auth", "groups", "terminate", "pipeline", "arrays", "intarrays", "binary", "conduit", "batch", "explain", "batchscale", "unix"];
-const CHECKS = [...SCENARIOS, "carrier", "refused", "reset", "tfb", "servepool"];
+const CHECKS = [...SCENARIOS, "carrier", "refused", "reset", "tfb", "tfb-async", "servepool"];
 const UPDATE = process.argv.includes("--update");
 const ONLY = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 for (const name of ONLY) {
@@ -477,7 +479,8 @@ const rowsChanged = (rows) => {
 };
 
 /**
- * The TechEmpower database entry against TFB's tables: each test type's
+ * A TechEmpower database entry (`tfbExe`, the explicit one or its async twin,
+ * which take the same arguments) against TFB's tables: each test type's
  * shape, headers and count clamping, its rows read back from the server, an
  * update's rows written and changed, the fortunes page byte for byte, 64
  * requests at once, and a clean exit on SIGTERM. It runs two prefork workers
@@ -652,6 +655,7 @@ const main = async () => {
     compile(join(HERE, "..", "carrier.ts"), join(work, "carrier"));
     if (wanted("servepool")) compile(join(HERE, "..", "serve-pool.ts"), join(work, "serve-pool"));
     if (wanted("tfb")) compile(join(ROOT, "bench", "techempower", "db-main.ts"), join(work, "tfb"));
+    if (wanted("tfb-async")) compile(join(ROOT, "bench", "techempower", "async-db-main.ts"), join(work, "tfb-async"));
 
     const setup = [
       "drop schema if exists nish_live cascade",
@@ -694,6 +698,7 @@ const main = async () => {
       ["refused", () => refused(join(work, "carrier"))],
       ["reset", () => reset(join(work, "carrier"))],
       ["tfb", () => tfb(exe, join(work, "tfb"), db)],
+      ["tfb-async", () => tfb(exe, join(work, "tfb-async"), db)],
       ["servepool", () => servepool(join(work, "serve-pool"), db)],
     ];
     for (const [name, check] of checks) {
