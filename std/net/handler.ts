@@ -488,6 +488,10 @@ export class HttpHandler {
   private slotGen: i32[]
   private current: i32[]
   private open: boolean[]
+  /** Whether a slot is in `owed`: an answer's send was put off for the request queued behind it. */
+  private owing: boolean[]
+  /** The slots whose send `flush` still owes, `owedCount` of them. */
+  private owed: i32[]
   /** `pollWait`'s output. */
   private readyFds: i32[]
   /** Per watched id: whether its descriptor was ready in the last `wait`. */
@@ -535,6 +539,8 @@ export class HttpHandler {
   loop: i32 = 0
   private queueStart: i32 = 0
   private queueCount: i32 = 0
+  private owedCount: i32 = 0
+  private sent: i64 = 0
   private outputSize: i32 = 0
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
   private draining: boolean = false
@@ -570,6 +576,8 @@ export class HttpHandler {
     this.slotGen = new Array<i32>(limits.slots)
     this.current = new Array<i32>(limits.slots)
     this.open = new Array<boolean>(limits.slots)
+    this.owing = new Array<boolean>(limits.slots)
+    this.owed = new Array<i32>(limits.slots)
     for (let s: i32 = 0; s < limits.slots; s++) {
       this.current[s] = -1
     }
@@ -631,6 +639,7 @@ export class HttpHandler {
    * @returns how many whole requests are queued for `take` after this turn
    */
   wait(timeoutMs: i32): i32 {
+    this.flush()
     for (let id: i32 = 0; id < HANDLER_MAX_WATCHED; id++) {
       this.watchedFired[id] = false
     }
@@ -733,8 +742,36 @@ export class HttpHandler {
   }
 
   /**
+   * Sends every answer whose send was put off, so the connection's answers to
+   * a pipelined burst go out in one write. `wait` calls it before it blocks; a
+   * program that blocks elsewhere, as `nish/net/serve` does, calls it first.
+   */
+  flush(): void {
+    const n: i32 = this.owedCount
+    this.owedCount = 0
+    for (let k: i32 = 0; k < n && k < toI32(this.owed.length); k++) {
+      const slot: i32 = this.owed[k]
+      this.owing[slot] = false
+      if (this.open[slot] && this.server.holds(slot)) {
+        this.settle(slot, this.server.connection(slot))
+      }
+    }
+  }
+
+  /**
+   * How many times the handler handed a connection's waiting output to its
+   * socket: one per connection per pass, however many answers it holds.
+   * @returns the count of sends since the handler was made, each one write or a few for a partial one
+   */
+  sends(): i64 {
+    return this.sent
+  }
+
+  /**
    * Takes `slot`'s events until it needs the socket again, then sends what it
-   * holds and re-arms it, or closes it once it is over.
+   * holds and re-arms it, or closes it once it is over. While the next
+   * request on it is queued and its output has room, the send waits for
+   * `flush`, so the answer to that request goes out with this one.
    */
   private drive(slot: i32): void {
     const conn: Http1Connection = this.server.connection(slot)
@@ -755,6 +792,27 @@ export class HttpHandler {
       // The carrier has written its refusal and ends the connection; a
       // request it was reading is nobody's.
       this.releaseReading(slot)
+    } else if (this.owable(slot, conn)) {
+      if (!this.owing[slot]) {
+        this.owing[slot] = true
+        this.owed[this.owedCount] = slot
+        this.owedCount += 1
+      }
+      return
+    }
+    this.settle(slot, conn)
+  }
+
+  /** Whether `slot`'s send can wait for `flush`: a whole request is queued behind its answer and its output is still roomy. */
+  private owable(slot: i32, conn: Http1Connection): boolean {
+    const at: i32 = this.current[slot]
+    return !this.draining && at >= 0 && this.requests[at].state === HANDLER_QUEUED && this.roomy(conn)
+  }
+
+  /** Sends what `slot` holds and re-arms it, or closes it once it is over; enqueues a parked request once there is room. */
+  private settle(slot: i32, conn: Http1Connection): void {
+    if (conn.wantsWrite()) {
+      this.sent += 1
     }
     const wants: i32 = this.server.flush(slot)
     if ((wants & H1_DONE) !== 0) {

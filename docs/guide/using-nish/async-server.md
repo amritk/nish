@@ -170,8 +170,15 @@ or in the database.
 A client that sends several requests on one connection without waiting gets
 the answers in the order it sent them: the server reads a connection's next
 request only once the one before it is answered, so a later request's task
-starts only after the earlier answer is sent. Requests on one connection run
+starts only after the earlier answer is ready. Requests on one connection run
 one at a time; two clients never wait on each other.
+
+A burst whose handlers answer without waiting is answered within one turn of
+the server's loop, and the answers go out together in one write while they
+fit the connection's 64 KiB output; a client that stops reading gets what fits
+and the rest as it reads, still in order. If the client hangs up mid-burst,
+the request whose task is waiting is cancelled and the requests behind it are
+never run. `ServeStats.sends` counts the writes.
 
 ## Limits
 
