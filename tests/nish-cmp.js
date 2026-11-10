@@ -1000,6 +1000,12 @@ const DECLARED = [
     why: "the 0.37.0 seed refuses an object or function argument to `spawn`, which this release shares with the task (WP49 stage 5, part 3)",
   },
   {
+    program: "tests/cases/async_await_all_arrays.ts",
+    file: "exit",
+    changelog: "awaitAlls whose lanes return arrays no longer crash the compiler",
+    why: "the 0.37.0 seed lifts an `a[0]` header load above the `awaitAll` that binds `a` in a loop and stops with an internal compiler error (#1326)",
+  },
+  {
     program: "tests/link/std_postgres_async/main.ts",
     file: "exit",
     changelog: "async Postgres pool",
