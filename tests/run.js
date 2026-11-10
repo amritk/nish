@@ -30265,6 +30265,38 @@ if (!only || "float-corpus".includes(only)) {
       `skipped: float-corpus: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasm32 build is not run`
     )
   }
+  // Number(s) over a string corpus, built without the flag: the native reading
+  // (strtod, which reads hex floats) and the --emit-ts reading under Node
+  // disagree on the string grammar, the evidence for --deterministic refusing Number(s)
+  // (NL2697). If they ever agree, the refusal can be lifted.
+  fs.writeFileSync(
+    at("number.ts"),
+    [
+      'const inputs: string[] = ["0b101", "0x1p3", "1e400", " 12 "]',
+      "for (const s of inputs) {",
+      "  console.log(`${s}: ${Number(s)}`)",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const numNative = spawnSync(NISH, [at("number.ts"), "-o", at("number") + path.sep, "--link", at("number-bin")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const numRun = numNative.status === 0 ? spawnSync(at("number-bin"), [], { cwd: root, encoding: "utf8" }) : numNative
+  const numTs = spawnSync(NISH, [at("number.ts"), "--emit-ts", at("number-ts")], { cwd: root, encoding: "utf8" })
+  const numNode =
+    numTs.status === 0
+      ? spawnSync("node", [...emitTsNodeFlags, path.join(at("number-ts"), "entry.ts")], { cwd: root, encoding: "utf8" })
+      : numTs
+  check(
+    "float-corpus: Number(s) without the flag: native reads 0x1p3 as 8 and the --emit-ts reading as NaN, so --deterministic refuses it",
+    numRun.status === 0 &&
+      numNode.status === 0 &&
+      numRun.stdout === "0b101: NaN\n0x1p3: 8\n1e400: Infinity\n 12 : 12\n" &&
+      numNode.stdout === "0b101: NaN\n0x1p3: NaN\n1e400: Infinity\n 12 : 12\n",
+    `native:\n${numRun.status === 0 ? numRun.stdout : shown(numRun)}\nnode:\n${numNode.status === 0 ? numNode.stdout : shown(numNode)}`
+  )
 }
 
 // ---- WP50 stage 2: a wasm module imports the page's host functions --------------

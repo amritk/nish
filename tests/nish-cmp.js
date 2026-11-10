@@ -1105,6 +1105,12 @@ const DECLARED = [
     "a string result is decoded into a JS string, so a function returning one is exported to the page instead of listed as a comment"
   ),
   {
+    program: "tests/cases/deterministic_bits.ts",
+    file: "exit",
+    changelog: "the same float bits on every target",
+    why: "the case is compiled with --deterministic, a flag the seed does not know",
+  },
+  {
     program: "tests/cases/host_import_string.ts",
     file: "exit",
     changelog: "Strings cross between a wasm module and its page",

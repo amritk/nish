@@ -11042,8 +11042,8 @@ wasm32 and in the `--emit-ts` reading under Node
   `process.spawn`), NL3054 C code or a host import (`ffi`), NL2698 the clock
   and the random source, NL2699 the environment and the terminal.
 - `Number(s)` and `parseFloat(s)` of a string are NL2697: native and Node
-  parse different grammars (`Number("0b101")` is NaN natively and 5 under
-  Node, `Number("0x1p3")` the reverse).
+  parse different grammars (`Number("0x1p3")` is 8 natively, where `strtod`
+  reads hex floats, and NaN in the `--emit-ts` reading under Node).
 
 ```text
 main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now
