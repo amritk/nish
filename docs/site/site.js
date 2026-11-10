@@ -1,6 +1,7 @@
 /*
   The docs site's one script: it builds the animated hero on the landing page
-  and gives cards a highlight that follows the pointer. Everything it draws is
+  (the name unfolding into what it stands for, a source file compiling to its
+  targets) and gives cards a highlight that follows the pointer. Everything it draws is
   styled, and animated, by theme.css; with this file missing the pages read
   the same, without the hero.
 
@@ -27,6 +28,14 @@
   ]
 
   const TARGETS = ["x86_64", "ARM64", "WebAssembly"]
+
+  /** What the name stands for: each initial, then the rest of its word. */
+  const NAME = [
+    ["N", "ative"],
+    ["I", "nstruction"],
+    ["S", "tatic"],
+    ["H", "ost"],
+  ]
 
   /** `el("div.a.b", { attr }, ...children)`: the few lines of DOM building the hero needs. */
   const el = (spec, attrs = {}, ...children) => {
@@ -119,11 +128,31 @@
     return button
   }
 
+  /**
+   * The name, unpacked: it reads "NISH" and then each initial unfolds into its
+   * word. A screen reader gets the whole phrase once, from the label, rather
+   * than eight fragments.
+   */
+  const unpackedName = () =>
+    el(
+      "p.nish-hero__name",
+      { "aria-label": "Nish: Native Instruction Static Host" },
+      ...NAME.map(([initial, rest], index) =>
+        el(
+          "span.nish-hero__word",
+          { style: `--i:${index}`, "aria-hidden": "true" },
+          el("b", {}, initial),
+          el("span.nish-hero__rest", {}, el("span", {}, rest))
+        )
+      )
+    )
+
   const hero = () =>
     el(
       "div.nish-hero__inner",
       {},
       el("div.nish-hero__aurora", { "aria-hidden": "true" }),
+      unpackedName(),
       el("p.nish-hero__title", {}, "TypeScript in. ", el("span.nish-hero__accent", {}, "Native code out.")),
       el(
         "div.nish-hero__actions",

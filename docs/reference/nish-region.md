@@ -9,6 +9,8 @@ The `nish:region` builtin module, whose source is `std/region.ts`. A program imp
 ```ts
 import {
   Region,
+  child,
+  childWith,
   enter,
   enterWith,
   free,
@@ -48,6 +50,18 @@ free(r);
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="child" icon="phosphor/regular/function" href="#child">
+
+A new region whose parent is the region entered now: `f()` runs with every allocation landing in it, and what it answers is the root.
+
+</scalar-card>
+
+<scalar-card title="child​With" icon="phosphor/regular/function" href="#childwith">
+
+`child`, with one outside argument handed to `f`.
+
+</scalar-card>
 
 <scalar-card title="enter" icon="phosphor/regular/function" href="#enter">
 
@@ -128,6 +142,62 @@ module (NL4015).
 Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#regions-nishregion
 
 ## Functions
+
+### child
+
+A new region whose parent is the region entered now: `f()` runs with every
+allocation landing in it, and what it answers is the root. The child may
+keep memory the parent's root reaches, and `free` of the parent frees it
+too. Called outside an `enter` or `enterWith` `f` it is NL2702, and it
+stops the program when no region is entered.
+
+```ts
+function child<T>(f: () => T): Region<T>
+```
+
+<scalar-field name="f" type="() =&gt; T" required>
+
+Makes the root. It answers memory it allocated, never the
+  parent's (NL2614).
+
+</scalar-field>
+
+<scalar-field name="returns" type="Region&lt;T&gt;">
+
+The handle.
+
+</scalar-field>
+
+### childWith
+
+`child`, with one outside argument handed to `f`.
+
+```ts
+function childWith<A, T>(
+  arg: A,
+  f: (arg: A) => T,
+): Region<T>
+```
+
+<scalar-field name="arg" type="A" required>
+
+Memory the parent's root reaches, which `f` may keep in the
+  child, or outer memory it may only read (NL2610).
+
+</scalar-field>
+
+<scalar-field name="f" type="(arg: A) =&gt; T" required>
+
+Makes the root from `arg`. It answers memory it allocated, never
+  `arg` itself (NL2614).
+
+</scalar-field>
+
+<scalar-field name="returns" type="Region&lt;T&gt;">
+
+The handle.
+
+</scalar-field>
 
 ### enter
 

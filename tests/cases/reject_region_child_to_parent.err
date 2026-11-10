@@ -1,0 +1,1 @@
+stores `new Item("child")` into `item.next`: region memory kept by memory outside the region

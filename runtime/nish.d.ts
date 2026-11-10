@@ -4609,6 +4609,28 @@ declare module "nish:region" {
    */
   export function regionWith<A, T>(arg: A, f: (arg: A) => T): Region<T>;
   /**
+   * A new region whose parent is the region entered now: `f()` runs with every
+   * allocation landing in it, and what it answers is the root. The child may
+   * keep memory the parent's root reaches, and `free` of the parent frees it
+   * too. Called outside an `enter` or `enterWith` `f` it is NL2702, and it
+   * stops the program when no region is entered.
+   *
+   * @param f Makes the root. It answers memory it allocated, never the
+   *   parent's (NL2614).
+   * @returns The handle.
+   */
+  export function child<T>(f: () => T): Region<T>;
+  /**
+   * `child`, with one outside argument handed to `f`.
+   *
+   * @param arg Memory the parent's root reaches, which `f` may keep in the
+   *   child, or outer memory it may only read (NL2610).
+   * @param f Makes the root from `arg`. It answers memory it allocated, never
+   *   `arg` itself (NL2614).
+   * @returns The handle.
+   */
+  export function childWith<A, T>(arg: A, f: (arg: A) => T): Region<T>;
+  /**
    * `f(root)`, with every allocation landing in the region. Stops the program
    * on a dead, foreign or already-entered handle.
    *
