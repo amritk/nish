@@ -4,7 +4,8 @@
 // 3000-byte body that four 1448-byte segments would gzip goes as it is in one
 // loopback segment. Then the order `segmentMss` documents: an `mss` the
 // program sets on the connection wins over everything, an `enc.mss` it sets
-// wins over the socket's, and a slot accepted into again starts from the new
+// (even to `HTTP_DEFAULT_MSS`) wins over the socket's, one it leaves at 0
+// (unset) does not, and a slot accepted into again starts from the new
 // socket's value, not the last connection's own or the program's.
 import { HTTP_COMPRESS_NO_FEWER_SEGMENTS, HTTP_COMPRESS_SENT, HTTP_DEFAULT_MSS, HttpCompressor } from "nish/net/http-compress"
 import { DEFLATE_FAST } from "nish/compress/deflate"
@@ -99,7 +100,8 @@ export const main = (): i32 => {
   t.ok("accept: loopback reports an MSS that holds a 3000-byte response and its head", socket > 3200)
   t.eqI32("accept: socketMss is netMss of the slot's descriptor", conn.socketMss, socket)
   t.eqI32("accept: the program's mss is left at 0", conn.mss, 0)
-  t.eqI32("order: an enc.mss left at HTTP_DEFAULT_MSS takes the socket's", conn.segmentMss(enc), socket)
+  t.eqI32("compressor: enc.mss starts at 0, unset", enc.mss, 0)
+  t.eqI32("order: an unset enc.mss takes the socket's", conn.segmentMss(enc), socket)
 
   // respondEncoded counts in it: 3000 bytes fit one loopback segment as they are.
   netWrite(first, request, toI32(0), toI32(request.length))
@@ -110,9 +112,11 @@ export const main = (): i32 => {
   // An enc.mss the program sets wins over the socket's; a conn.mss it sets wins over both.
   enc.mss = 1000
   t.eqI32("order: a set enc.mss wins over the socket's", conn.segmentMss(enc), 1000)
+  enc.mss = HTTP_DEFAULT_MSS
+  t.eqI32("order: an enc.mss set to HTTP_DEFAULT_MSS still wins over the socket's", conn.segmentMss(enc), HTTP_DEFAULT_MSS)
   conn.mss = 600
   t.eqI32("order: a set conn.mss wins over enc.mss", conn.segmentMss(enc), 600)
-  enc.mss = HTTP_DEFAULT_MSS
+  enc.mss = 0
   t.eqI32("order: and over the socket's", conn.segmentMss(enc), 600)
   conn.mss = 0
 
@@ -125,7 +129,7 @@ export const main = (): i32 => {
   t.eqI32("kept alive: socketMss is not read again or lost", conn.socketMss, socket)
   t.eqI32("kept alive: respondEncoded", conn.respondEncoded(200, none, none, body, 0, 3000, enc, conn.acceptEncoding()), 0)
   t.ok("kept alive: at the set enc.mss, gzipped", gzipped(conn) && enc.decision === HTTP_COMPRESS_SENT)
-  enc.mss = HTTP_DEFAULT_MSS
+  enc.mss = 0
 
   // A slot accepted into again: what the last connection held is gone.
   conn.mss = 600
