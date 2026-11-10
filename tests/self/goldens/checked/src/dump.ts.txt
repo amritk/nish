@@ -4,13 +4,12 @@ entry: src/dump.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.t
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
 import Compilation from "./compilation" -> struct Compilation
+import isUnusedArrayImport from "./compilation" -> function @isUnusedArrayImport
 import ModuleUnit from "./compilation" -> struct ModuleUnit
 import SourceFile from "./diagnostics" -> struct SourceFile
 import EFFECT_READ from "./runtime" -> const EFFECT_READ
 import EFFECT_WRITE from "./runtime" -> const EFFECT_WRITE
 import StringSet from "./map" -> struct StringSet
-import ARRAY_SPECIFIER from "./std-modules" -> const ARRAY_SPECIFIER
-import isArrayMethodLocal from "./std-modules" -> function @isArrayMethodLocal
 import compareStrings from "./strings" -> function @compareStrings
 import jsonQuote from "./strings" -> function @jsonQuote
 import N_CALL from "./nodes" -> const N_CALL
@@ -26,7 +25,6 @@ import ROLE_CONSTRUCTOR from "./program" -> const ROLE_CONSTRUCTOR
 import ROLE_METHOD from "./program" -> const ROLE_METHOD
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import StructInfo from "./program" -> struct StructInfo
-import TemplateInfo from "./program" -> struct TemplateInfo
 import T_BOOL from "./types" -> const T_BOOL
 import T_F64 from "./types" -> const T_F64
 import T_STRING from "./types" -> const T_STRING
@@ -173,7 +171,7 @@ function walkBody(program: CheckedProgram, source: SourceFile, table: TypeTable,
 function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: string[]): void -> @dumpModule
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.definedIn SourceFile.columnOf SourceFile.lineOf TypeTable.typeName bodyTables constantSyntax factsText isUnusedArrayMethod jsonQuote nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32 signatureLine structText
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FactsTable.get FunctionSig.definedIn SourceFile.columnOf SourceFile.lineOf TypeTable.typeName bodyTables constantSyntax factsText isUnusedArrayImport jsonQuote nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32 signatureLine structText
   pointer unit: size=96 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0 constantSyntax#0 structText#0 signatureLine#0 factsText#1 bodyTables#2
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
@@ -183,7 +181,7 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   local -5:9 source: SourceFile (const)
   local -1:9 pkg: string (const)
   local +1:14 imp: ImportBinding (const)
-  callee +2:9 isUnusedArrayMethod -> @isUnusedArrayMethod
+  callee +2:9 isUnusedArrayImport -> @isUnusedArrayImport
   local +5:11 struct: StructInfo | null (const)
   local +6:11 constant: ConstInfo | null (const)
   local +7:11 builtin: BuiltinExport | null (const)
@@ -218,13 +216,6 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   callee +91:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
   callee +93:5 bodyTables -> @bodyTables
   callee +95:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-function isUnusedArrayMethod(specifier: string, local: string, template: TemplateInfo | null): boolean -> @isUnusedArrayMethod
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: local
-  calls: isArrayMethodLocal nish_str_eq
-  pointer template: size=64 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  callee +0:36 isArrayMethodLocal -> @isArrayMethodLocal
 function checkedText(compilation: Compilation): string -> @checkedText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
