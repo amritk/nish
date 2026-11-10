@@ -1,0 +1,7 @@
+{
+  "name": "reject-host-manifest-not-string",
+  "private": true,
+  "nish": {
+    "host": ["host.ts", 12]
+  }
+}

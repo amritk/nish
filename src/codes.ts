@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 846
+export const RULE_COUNT: i32 = 849
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -633,6 +633,8 @@ const diagnosticRules = (): string[] => [
   "NL3033",
   "` returns is the one thing that leaves the secret, so it is written down rather than inferred",
   "NL2452",
+  "`nish.host` is an array of strings, each the path of a host module relative to `package.json`",
+  "NL2694",
   "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (",
   "NL2166",
   "`super` is only valid inside a method or constructor of a class that `extends` another class",
@@ -659,6 +661,8 @@ const diagnosticRules = (): string[] => [
   "NL2054",
   "` is rebuilt from its own value on every iteration of this loop, so every pass copies all ",
   "NL2087",
+  "a `nish.host` entry is a host module's path relative to the directory `package.json` is in",
+  "NL2695",
   "` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)",
   "NL2038",
   "` is not supported yet: its result is `V | undefined`, and this version cannot narrow one",
@@ -993,6 +997,8 @@ const diagnosticRules = (): string[] => [
   "NL2131",
   ">(n)` would zero-fill with 0, which is not the member `",
   "NL2520",
+  "a `nish.host` entry names a host module the package has",
+  "NL2696",
   " extends ...`) is not supported yet: an unconstrained ",
   "NL2294",
   " produces no value and can only be used as a statement",

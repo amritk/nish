@@ -4814,7 +4814,7 @@ It cannot refuse arithmetic on a handle or an `as` cast, which `nish` does;
 a handle stays assignable to `number`.
 
 ```ts
-type HostHandle<K extends string> = number & reflection | 0
+type HostHandle<K extends string> = number & { readonly __nishHostKind: K } | 0
 ```
 
 ### Result
