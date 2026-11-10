@@ -374,7 +374,8 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
   const outputs: string[] = []
   let anyAsync = false
   for (const unit of modules) {
-    const out = outputPathOf(unit, base)
+    // `std/array.ts` loaded by a string's `slice` and used by nothing.
+    const out = compilation.isUnusedArrayModule(unit) ? "" : outputPathOf(unit, base)
     if (out === ".." || out.startsWith("../") || out.startsWith("/")) {
       result.unwritable = `--emit-ts cannot place ${unit.path}, which lies above the directory of the program's other modules`
       return result

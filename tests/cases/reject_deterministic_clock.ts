@@ -1,4 +1,4 @@
-// --deterministic refuses `clock` (NL2698): the time differs on every run.
+// --deterministic refuses `clock` (NL2700): the time differs on every run.
 const now = (): i64 => monotonicNanos();
 
 export const main = (): number => {

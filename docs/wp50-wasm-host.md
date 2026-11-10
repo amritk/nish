@@ -24,7 +24,7 @@ import (`tests/run.js`, section `wasm-math`). Stage 5b is built:
 `--deterministic`, which lowers the five on every target to the same
 functions, sends the TypeScript reading to `nish/math`, makes `f64ToBits` and
 `f32ToBits` give the canonical quiet NaN, refuses the nondeterministic
-capabilities (NL2698–NL2699, NL3052–NL3054), reads `Number(s)`,
+capabilities (NL2700–NL2701, NL3052–NL3054), reads `Number(s)`,
 `parseFloat` and `parseInt` with the `--emit-ts` grammar, compiles every
 runtime unit with `-ffp-contract=off`, and holds the float corpus
 (`tests/differential/corpus/float/`) to one `expected.txt` natively, on

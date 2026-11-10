@@ -311,6 +311,13 @@ export class Walk {
   effects: boolean
   /** A local was read in the current statement, outside what was hoisted. */
   localsRead: boolean
+  /**
+   * The operands of the node the rows were last asked about. A node's last
+   * child is walked last, so while the rows are asked about a call, these are
+   * its argument list's when that list was walked: each argument's text, which
+   * the list's own spliced text no longer separates.
+   */
+  lastOperands: Operands | null
 
   constructor(program: CheckedProgram, table: TypeTable, source: SourceFile, nodeCount: i32) {
     this.program = program
@@ -374,6 +381,7 @@ export class Walk {
     this.hoistable = false
     this.effects = false
     this.localsRead = false
+    this.lastOperands = null
     this.preludes = []
     this.temps = 0
     // Only the instances whose body is in this module: an imported generic is
@@ -1112,6 +1120,7 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
   }
   walk.instanceChoice = choiceBefore || walk.instanceChoice
   walk.hoistable = false
+  walk.lastOperands = operands
   if (walk.preludes.length > hoisted) {
     // What ran before this node ran before the statement now, so it is as if
     // nothing in the node had run yet.

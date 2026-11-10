@@ -91,9 +91,9 @@ divide with overflow` is simply unreachable on an unsigned type.
 - `obj.method(args)` calls a class method with `obj` as `this`
   (`tests/cases/cls_this_method_call`); `this.method(args)` inside a method
   likewise.
-- `xs.push(v)` is the only array method (`tests/cases/arr_push`;
-  `` Unknown method `pop` on i32[] (supported: push) ``); strings have no
-  methods (`` Unknown method `toUpperCase` on string `` *(CLI only)*).
+- An array has the methods of [Arrays and strings as receivers](builtins.md#arrays-and-strings-as-receivers)
+  (`tests/cases/arr_push`); any other is
+  `` Unknown method `shift` on i32[] (supported: push, pop, …) ``.
 - Builtins are called by dotted name (`console.log`, `Math.sqrt`,
   `process.exit`) or bare name (`toI32`, `parseInt`, `Number`,
   `readFileSync`); a user function with the same bare name shadows the
