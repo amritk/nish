@@ -1,7 +1,8 @@
 // The async TechEmpower database entry (bench/techempower/async-db-server.ts)
 // under `serveOn`, against the rules tests/link/tfb_db holds the explicit
-// entry to, over loopback: a pool of two connections to the stand-in
-// Postgres of backend.ts, and a Nish client, as tasks in the same process.
+// entry to, over loopback: a pool of one connection to the stand-in Postgres
+// of backend.ts, the entry's `tfbKeepPool` dialling it again whenever the
+// pool closes it, and a Nish client, as tasks in the same process.
 //
 //   1. /db: 200, one `{"id":n,"randomNumber":m}` object whose number is the
 //      stand-in's row for that id; `Server: nish`, an IMF-fixdate `Date` and
@@ -9,9 +10,12 @@
 //   2. /queries: as many rows as asked, each the stand-in's row, the count
 //      clamped as the rules read it: absent, empty, 0, negative or not a
 //      number is 1, and over 500 is 500. Each request is one World read.
-//   3. /cached-queries: as many rows as asked, each the row the stand-in
-//      held when the first cached query read the table, the count clamped
-//      the same way; the table is read once and no World row is.
+//   3. /cached-queries: two cached queries at a cold start share one read
+//      of the table, the second waiting on the first: when that read is
+//      refused both answer 503 with `Server`, and when it succeeds both
+//      answer 200. Then as many rows as asked, each the row the stand-in
+//      held when the table was read, the count clamped the same way; the
+//      table is read once and no World row is.
 //   4. /updates: each row answered carries the number the stand-in now
 //      holds for its id, numbers that differ from the rows read, every id
 //      bound once, ascending, in one statement a request, and the count is
@@ -22,24 +26,56 @@
 //      the same page.
 //   6. A World read the stand-in refuses answers 503 with `Server`, and the
 //      next request is served again.
+//   7. With the pool's one connection claimed by the client, /db answers 503
+//      once `claimWaitMs` passes, and is served once it is released.
+//   8. A fortunes answer with more rows than a page holds answers 503, and
+//      the next /fortunes is the page again.
+//   9. A World read the stand-in cuts off mid-answer answers 503; the pool
+//      closes the connection, `tfbKeepPool` dials it again, and the next
+//      /db is served on the new one.
+//  10. A World read that ends in a transaction (ReadyForQuery 'T') leaves
+//      /updates no connection to write on: it answers 503 with no update
+//      sent, the connection is closed and dialled again, and the next
+//      /updates is served.
+//
+// Every wait the client and stand-in make is bounded at five seconds, so a
+// broken entry fails the test instead of hanging it; `watch` ends the
+// process if `serveOn` does not stop once the client is done.
 //
 // tfb_db's batching, slot and prepared-statement checks have no twin: the
 // async entry runs one unnamed statement per request on a claimed connection.
 // Every request is counted in `ANSWERED`, so `serveOn` stops once the client
 // is done.
-import { readable, spawn } from "nish:async"
-import { NET_UNIX_STREAM, netClose, netLocalPort, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
+import { awaitAll, readableWithin, sleep, spawn, writableWithin } from "nish:async"
+import {
+  NET_UNIX_STREAM,
+  connectResult,
+  netAddress,
+  netClose,
+  netLocalPort,
+  netRead,
+  netWrite,
+  tcpConnect,
+  tcpListen,
+  unixSocketPair,
+} from "nish:net"
 import { secret, wipe } from "nish:secret"
 import { PgConfig, pgTarget } from "nish/net/postgres"
-import { PgAsyncPool, pgAsyncConnect } from "nish/net/postgres-async"
+import { PgAsyncPool, pgAsyncClaim, pgAsyncConnect, pgAsyncRelease } from "nish/net/postgres-async"
 import { ServeLimits, ServeStats } from "nish/net/serve"
 import { Suite } from "nish/testing"
-import { TfbAsyncDb, tfbDbLimits, tfbServeDb } from "../../../bench/techempower/async-db-server"
-import { Conn, dial, hangUp, headerOf, sendText } from "../net_serve/client"
+import { TfbAsyncDb, tfbDbLimits, tfbKeepPool, tfbServeDbUntil } from "../../../bench/techempower/async-db-server"
+import { Conn, hangUp, headerOf } from "../net_serve/client"
 import { ROWS, Table, standIn } from "./backend"
 
 /** The requests the client sends, each answered once. */
-const ANSWERED: i32 = 26
+const ANSWERED: i32 = 38
+/** The connections the stand-in accepts: the first, and one after each of the two the pool closes. */
+const CONNECTIONS: i32 = 3
+/** The longest any one wait of the test lasts, in milliseconds. */
+const WAIT_MS: i32 = 5000
+/** The longest the whole client runs, in milliseconds. */
+const CLIENT_MS: i32 = 60000
 const DAYS: string = "Mon Tue Wed Thu Fri Sat Sun "
 const MONTHS: string = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec "
 
@@ -139,7 +175,11 @@ const moreBytes = async (c: Conn): Promise<boolean> => {
   while (true) {
     const n: i32 = netRead(c.fd, c.buf, c.end, toI32(c.buf.length) - c.end)
     if (n === -11) {
-      await readable(c.fd)
+      const ready: boolean = await readableWithin(c.fd, WAIT_MS)
+      if (!ready) {
+        c.closed = true
+        return false
+      }
       continue
     }
     if (n <= 0) {
@@ -161,9 +201,58 @@ const answerHeadEnd = (c: Conn): i32 => {
   return -1
 }
 
+/** Connects `c` to the loopback `port`, waiting at most `WAIT_MS`; false when it could not. */
+const dialWithin = async (c: Conn, port: i32): Promise<boolean> => {
+  const addr: u8[] = new Array<u8>(18)
+  netAddress(addr, "127.0.0.1", port)
+  const fd: i32 = tcpConnect(addr)
+  if (fd < 0) {
+    return false
+  }
+  const ready: boolean = await writableWithin(fd, WAIT_MS)
+  if (!ready || connectResult(fd) !== 0) {
+    netClose(fd)
+    return false
+  }
+  c.fd = fd
+  return true
+}
+
+/** Sends `GET path` on `c`, each wait for room at most `WAIT_MS`; false when it could not. */
+const ask = async (c: Conn, path: string): Promise<boolean> => {
+  const text: string = `GET ${path} HTTP/1.1\r\nHost: tfb\r\n\r\n`
+  const bytes: u8[] = new Array<u8>(text.length)
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    bytes[i] = toU8(text.charCodeAt(i))
+  }
+  let at: i32 = 0
+  while (at < toI32(text.length)) {
+    const n: i32 = netWrite(c.fd, bytes, at, toI32(text.length) - at)
+    if (n === -11) {
+      const ready: boolean = await writableWithin(c.fd, WAIT_MS)
+      if (!ready) {
+        return false
+      }
+    } else if (n <= 0) {
+      return false
+    } else {
+      at += n
+    }
+  }
+  return true
+}
+
 /** The answer to `GET path` on `c`; status 0 when the peer closed first. */
 const get = async (c: Conn, path: string): Promise<Answer> => {
-  await sendText(c, `GET ${path} HTTP/1.1\r\nHost: tfb\r\n\r\n`)
+  const sent: boolean = await ask(c, path)
+  if (!sent) {
+    return new Answer()
+  }
+  return await answer(c)
+}
+
+/** The next answer on `c`; status 0 when the peer closed or went quiet first. */
+const answer = async (c: Conn): Promise<Answer> => {
   const a: Answer = new Answer()
   let end: i32 = answerHeadEnd(c)
   while (end < 0) {
@@ -297,6 +386,60 @@ const count = async (c: Conn, path: string, table: Table, rows: i32[], ids: i32[
   return rowsMatch(held, ids, numbers, n) ? n : -1
 }
 
+/** Waits, polling every 5 ms for at most `WAIT_MS`, until the pool has `live` connections; false when it has not. */
+const liveWithin = async (db: TfbAsyncDb, live: i32): Promise<boolean> => {
+  for (let waited: i32 = 0; waited < WAIT_MS; waited += 5) {
+    if (db.pool.live() === live) {
+      return true
+    }
+    await sleep(5)
+  }
+  return db.pool.live() === live
+}
+
+/** Waits, polling every millisecond for at most `WAIT_MS`, until the stand-in holds a whole-table read; false when it does not. */
+const heldWithin = async (table: Table): Promise<boolean> => {
+  for (let waited: i32 = 0; waited < WAIT_MS; waited++) {
+    if (table.cacheHeld) {
+      return true
+    }
+    await sleep(1)
+  }
+  return table.cacheHeld
+}
+
+/** Waits, polling every millisecond for at most `WAIT_MS`, until a cached query waits on the table's read; false when none does. */
+const waitedWithin = async (db: TfbAsyncDb, waits: i32): Promise<boolean> => {
+  for (let waited: i32 = 0; waited < WAIT_MS; waited++) {
+    if (db.cacheWaits > waits) {
+      return true
+    }
+    await sleep(1)
+  }
+  return db.cacheWaits > waits
+}
+
+/**
+ * Two cached queries at a cold start, one on `c` and one on `c2`, the
+ * stand-in holding whole-table reads: the first reads the table, and the
+ * second is sent once it does; answers whether the second waited on it.
+ */
+const coalesced = async (c: Conn, c2: Conn, db: TfbAsyncDb, table: Table): Promise<boolean> => {
+  const waits: i32 = db.cacheWaits
+  let waited: boolean = false
+  const first: boolean = await ask(c, "/cached-queries?count=3")
+  if (first) {
+    const held: boolean = await heldWithin(table)
+    if (held) {
+      const second: boolean = await ask(c2, "/cached-queries?count=3")
+      if (second) {
+        waited = await waitedWithin(db, waits)
+      }
+    }
+  }
+  return waited
+}
+
 /** Ends a client's suite and writes its exit status, 0 or 1, as one byte on `doneFd`. */
 const report = (t: Suite, doneFd: i32): void => {
   const code: u8[] = [toU8(t.done())]
@@ -304,11 +447,14 @@ const report = (t: Suite, doneFd: i32): void => {
 }
 
 /** The client: every check, in a suite of its own, since a task keeps nothing outside its region. */
-const client = async (port: i32, table: Table, doneFd: i32): Promise<void> => {
+const client = async (port: i32, table: Table, db: TfbAsyncDb, doneFd: i32): Promise<void> => {
   const t = new Suite("tfb async db: client")
   const c: Conn = new Conn(65536)
-  const dialed: boolean = await dial(c, port)
+  const dialed: boolean = await dialWithin(c, port)
   t.ok("the client connects", dialed)
+  const c2: Conn = new Conn(65536)
+  const dialed2: boolean = await dialWithin(c2, port)
+  t.ok("and a second connection", dialed2)
   const ids: i32[] = new Array<i32>(512)
   const numbers: i32[] = new Array<i32>(512)
   const now: i32[] = []
@@ -347,6 +493,33 @@ const client = async (port: i32, table: Table, doneFd: i32): Promise<void> => {
   // --- 3. /cached-queries -----------------------------------------------------------------------
   const s: i32[] = snapshot(table)
   const cachedReads: i32 = table.worldReads
+  const failed: i32 = db.failures
+  table.refuseCache = true
+  table.holdCache = true
+  const sharedRefused: boolean = await coalesced(c, c2, db, table)
+  table.holdCache = false
+  t.ok("a cached query at a cold start waits on the one reading the table", sharedRefused)
+  const refusedFirst: Answer = await answer(c)
+  const refusedSecond: Answer = await answer(c2)
+  t.ok(
+    "a refused read of the table answers 503 with Server, to both",
+    refusedFirst.status === 503 &&
+      refusedFirst.field("server") === "nish" &&
+      refusedSecond.status === 503 &&
+      refusedSecond.field("server") === "nish"
+  )
+  t.eqI32("both are counted as failures", db.failures - failed, toI32(2))
+  t.ok("and the cache is left cold", !db.cacheReady && !db.cacheLoading)
+  table.holdCache = true
+  const sharedRead: boolean = await coalesced(c, c2, db, table)
+  table.holdCache = false
+  t.ok("the next cached query reads the table, the other waiting on it", sharedRead)
+  const readFirst: Answer = await answer(c)
+  const readSecond: Answer = await answer(c2)
+  const firstRows: i32 = headers(readFirst, "application/json") ? worlds(readFirst.body, true, ids, numbers) : -1
+  t.ok("the reader answers 3 rows, each the row's", firstRows === 3 && rowsMatch(s, ids, numbers, firstRows))
+  const secondRows: i32 = headers(readSecond, "application/json") ? worlds(readSecond.body, true, ids, numbers) : -1
+  t.ok("so does the one that waited", secondRows === 3 && rowsMatch(s, ids, numbers, secondRows))
   const ten: i32 = await count(c, "/cached-queries?count=10", table, s, ids, numbers)
   t.eqI32("/cached-queries?count=10 answers 10 rows, each the row's", ten, toI32(10))
   const cachedAbsent: i32 = await count(c, "/cached-queries", table, s, ids, numbers)
@@ -435,17 +608,76 @@ const client = async (port: i32, table: Table, doneFd: i32): Promise<void> => {
   const next: Answer = await get(c, "/db")
   const served: i32 = worlds(next.body, false, ids, numbers)
   t.ok("the next /db is served again", next.status === 200 && served === 1 && rowsMatch(snapshot(table), ids, numbers, served))
+
+  // --- 7. No connection to claim ----------------------------------------------------------------
+  const ticket: i32 = await pgAsyncClaim(db.pool)
+  t.ok("the client claims the pool's one connection", ticket >= 0)
+  const unclaimed: Answer = await get(c, "/db")
+  t.ok("/db with no connection to claim answers 503 with Server", unclaimed.status === 503 && unclaimed.field("server") === "nish")
+  if (ticket >= 0) {
+    pgAsyncRelease(db.pool, ticket, true)
+  }
+  const claimed: Answer = await get(c, "/db")
+  t.eqI32("once it is released, /db is served", claimed.status, toI32(200))
+
+  // --- 8. Fortunes past a page ------------------------------------------------------------------
+  table.crowdFortunes = true
+  const crowded: Answer = await get(c, "/fortunes")
+  t.ok("fortunes past what a page holds answer 503 with Server", crowded.status === 503 && crowded.field("server") === "nish")
+  const after: Answer = await get(c, "/fortunes")
+  t.ok("the next /fortunes is the page again", after.status === 200 && after.body === FORTUNES)
+
+  // --- 9. A connection lost mid-answer ----------------------------------------------------------
+  const dropped: i32 = db.pool.dropped
+  table.dropWorld = true
+  const cut: Answer = await get(c, "/db")
+  t.ok("a World read cut off mid-answer answers 503 with Server", cut.status === 503 && cut.field("server") === "nish")
+  t.eqI32("the pool closes that connection", db.pool.dropped - dropped, toI32(1))
+  const redialled: boolean = await liveWithin(db, 1)
+  t.ok("tfbKeepPool dials it again", redialled && table.accepted === 2)
+  const fresh: Answer = await get(c, "/db")
+  const freshRows: i32 = worlds(fresh.body, false, ids, numbers)
+  t.ok(
+    "the next /db is served on the new connection",
+    fresh.status === 200 && freshRows === 1 && rowsMatch(snapshot(table), ids, numbers, freshRows)
+  )
+
+  // --- 10. A read that ends out of step ---------------------------------------------------------
+  const updatesBefore: i32 = table.updates
+  table.busyWorld = true
+  const busy: Answer = await get(c, "/updates?queries=5")
+  t.ok("an update whose read ends in a transaction answers 503 with Server", busy.status === 503 && busy.field("server") === "nish")
+  t.eqI32("and sends no update", table.updates, updatesBefore)
+  t.eqI32("the pool closes that connection too", db.pool.dropped - dropped, toI32(2))
+  const again2: boolean = await liveWithin(db, 1)
+  t.ok("tfbKeepPool dials it again", again2 && table.accepted === 3)
+  const healed: i32 = await count(c, "/updates?queries=5", table, now, ids, numbers)
+  t.eqI32("the next /updates is served", healed, toI32(5))
+  t.eqI32("tfbKeepPool dialled two connections again", db.redials, toI32(2))
   hangUp(c)
+  hangUp(c2)
   report(t, doneFd)
 }
 
-/** The client's exit status, read from `fds[0]`, after which both ends are closed; -1 when none came. */
-const joined = async (fds: i32[]): Promise<i32> => {
-  await readable(fds[0])
+/**
+ * The client's exit status, read from `fds[0]` within `CLIENT_MS`, after which
+ * both ends are closed; -1 when none came. Ends the process with 1 if
+ * `serveOn` has not stopped within `WAIT_MS` of the client's end, which only
+ * a broken entry would do.
+ */
+const watch = async (fds: i32[], db: TfbAsyncDb): Promise<i32> => {
+  const ready: boolean = await readableWithin(fds[0], CLIENT_MS)
   const got: u8[] = [0]
-  const n: i32 = netRead(fds[0], got, 0, 1)
+  const n: i32 = ready ? netRead(fds[0], got, 0, 1) : -1
   netClose(fds[0])
   netClose(fds[1])
+  for (let waited: i32 = 0; waited < WAIT_MS && db.serving === 1; waited += 5) {
+    await sleep(5)
+  }
+  if (db.serving === 1) {
+    console.log("serveOn did not stop once the client was done")
+    process.exit(1)
+  }
   return n === 1 ? toI32(got[0]) : -1
 }
 
@@ -453,17 +685,17 @@ export const main = async (): Promise<i32> => {
   const t = new Suite("tfb async db")
   const table = new Table()
   const pgListen: i32 = tcpListen("127.0.0.1", 0, 16)
-  spawn(standIn(pgListen, table))
-  spawn(standIn(pgListen, table))
-  const pool = new PgAsyncPool(2)
+  spawn(standIn(pgListen, table, CONNECTIONS))
+  const pool = new PgAsyncPool(1)
+  pool.claimWaitMs = 50
   const config = new PgConfig()
   config.user = "tfb"
   config.database = "tfb"
   const pw: u8[] = [112, 119]
   const password = secret(pw)
-  const live: i32 = await pgAsyncConnect(pool, config, password, pgTarget("127.0.0.1", netLocalPort(pgListen)))
-  wipe(password)
-  t.eqI32("the pool connects both connections", live, toI32(2))
+  const target = pgTarget("127.0.0.1", netLocalPort(pgListen))
+  const live: i32 = await pgAsyncConnect(pool, config, password, target)
+  t.eqI32("the pool connects its connection", live, toI32(1))
   const db = new TfbAsyncDb(pool)
 
   const listener: i32 = tcpListen("127.0.0.1", 0, 16)
@@ -472,13 +704,18 @@ export const main = async (): Promise<i32> => {
   const stats: ServeStats = new ServeStats()
   const fds: i32[] = [0, 0]
   unixSocketPair(NET_UNIX_STREAM, fds)
-  spawn(client(netLocalPort(listener), table, fds[1]))
-  const stopped: i32 = await tfbServeDb(listener, db, limits, stats)
-  const clientCode: i32 = await joined(fds)
+  spawn(client(netLocalPort(listener), table, db, fds[1]))
+  const [stopped, redials, clientCode] = await awaitAll(
+    tfbServeDbUntil(listener, db, limits, stats),
+    tfbKeepPool(db, config, password, target, 10),
+    watch(fds, db)
+  )
+  wipe(password)
   t.eqI32("serveOn stops once the client's requests are answered", stopped, toI32(0))
   t.eqI32("every client check passed", clientCode, toI32(0))
+  t.eqI32("tfbKeepPool stops with it, having dialled two connections again", redials, toI32(2))
   t.eqI32("the server answered each request once", stats.answered, ANSWERED)
-  t.eqI32("no query failed but the one refused", db.failures, toI32(1))
+  t.eqI32("no query failed but the seven made to", db.failures, toI32(7))
   t.eqI32("every statement was one of the entry's four", table.other, toI32(0))
   t.eqI32("limits asked for 0 slots have one connection", tfbDbLimits(0).connections, toI32(1))
   pool.close()

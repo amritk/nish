@@ -12,17 +12,19 @@
 // socket path, 127.0.0.1 by default; `workers` is 1 (the default) for one
 // process, 0 for one a core, or the count (`NISH_WORKERS` overrides it);
 // `connections` is each worker's Postgres connections, 4 by default, 64 at
-// most. Each worker prints `listening <port>` once its pool is connected and
-// serves until SIGINT or SIGTERM, then exits 0.
-import { readable, spawn } from "nish:async"
+// most (more is said and clamped). Each worker prints `listening <port>` once
+// at least one connection is made, saying so when fewer than asked were, and
+// serves until SIGINT or SIGTERM, then exits 0. While it serves, `main` dials
+// again every connection the pool closed, so the pool never shrinks for good.
+import { awaitAll, readable, spawn } from "nish:async"
 import { tcpListenFlags } from "nish:net"
 import { signalFd } from "nish:process"
 import { secret, wipe } from "nish:secret"
 import { PgConfig, pgTarget } from "nish/net/postgres"
-import { PgAsyncPool, pgAsyncConnect } from "nish/net/postgres-async"
+import { PG_ASYNC_MAX_SIZE, PgAsyncPool, pgAsyncConnect } from "nish/net/postgres-async"
 import { PreforkConfig, preforkArgs, preforkListener, preforkWith } from "nish/net/prefork"
 import { ServeStats } from "nish/net/serve"
-import { TfbAsyncDb, tfbDbLimits, tfbServeDb } from "./async-db-server"
+import { TfbAsyncDb, tfbDbLimits, tfbKeepPool, tfbServeDbUntil } from "./async-db-server"
 import { tfbAscii } from "./db-server"
 
 /** `SO_REUSEPORT` and `TCP_NODELAY` on every accepted socket, for one process. */
@@ -33,6 +35,8 @@ const PREFORK_FLAGS: i32 = 2
 const BACKLOG: i32 = 4096
 /** Requests each worker holds in flight, TFB's largest database concurrency being 512. */
 const SLOTS: i32 = 1024
+/** How often `main` looks for a closed connection to dial again, in milliseconds. */
+const REDIAL_MS: i32 = 100
 
 const arg = (args: string[], k: i32, fallback: string): string =>
   toI32(args.length) > k ? args[k] : fallback
@@ -85,17 +89,31 @@ export const main = async (): Promise<i32> => {
   const config = new PgConfig()
   config.user = arg(args, 2, "")
   config.database = arg(args, 4, "")
+  // Kept, as `PgPool` keeps its copy, to dial again what the pool closes.
   const password = secret(tfbAscii(arg(args, 3, "")))
-  const size: i32 = connections > 64 ? 64 : connections
-  const pool = new PgAsyncPool(size < 1 ? 1 : size)
-  const connected: i32 = await pgAsyncConnect(pool, config, password, pgTarget(pgHost, pgPort))
-  wipe(password)
+  let size: i32 = connections < 1 ? 1 : connections
+  if (size > PG_ASYNC_MAX_SIZE) {
+    console.log(`connections ${connections} clamped to ${PG_ASYNC_MAX_SIZE}`)
+    size = PG_ASYNC_MAX_SIZE
+  }
+  const pool = new PgAsyncPool(size)
+  const target = pgTarget(pgHost, pgPort)
+  const connected: i32 = await pgAsyncConnect(pool, config, password, target)
   if (connected < 1) {
+    wipe(password)
     console.log("no Postgres connection")
     return 1
+  }
+  if (connected < size) {
+    console.log(`connected ${connected} of ${size} Postgres connections; dialling the rest`)
   }
   const db = new TfbAsyncDb(pool)
   spawn(exitOnSignal(signalFd()))
   console.log(`listening ${port}`)
-  return await tfbServeDb(listener, db, tfbDbLimits(SLOTS), new ServeStats())
+  const [code, redialled] = await awaitAll(
+    tfbServeDbUntil(listener, db, tfbDbLimits(SLOTS), new ServeStats()),
+    tfbKeepPool(db, config, password, target, REDIAL_MS)
+  )
+  wipe(password)
+  return redialled < 0 ? 1 : code
 }

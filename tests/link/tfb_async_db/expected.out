@@ -1,5 +1,6 @@
-PASS  the pool connects both connections
+PASS  the pool connects its connection
 PASS  the client connects
+PASS  and a second connection
 PASS  /db answers 200
 PASS  /db carries Server, Date and application/json
 PASS  /db is one {id, randomNumber} object
@@ -15,6 +16,13 @@ PASS  a count of 500 answers 500 rows
 PASS  a count of 501 answers 500 rows
 PASS  a count past i32 answers 500 rows
 PASS  each request is one World read
+PASS  a cached query at a cold start waits on the one reading the table
+PASS  a refused read of the table answers 503 with Server, to both
+PASS  both are counted as failures
+PASS  and the cache is left cold
+PASS  the next cached query reads the table, the other waiting on it
+PASS  the reader answers 3 rows, each the row's
+PASS  so does the one that waited
 PASS  /cached-queries?count=10 answers 10 rows, each the row's
 PASS  a cached query with no count answers 1 row
 PASS  a cached count of 0 answers 1 row
@@ -41,11 +49,27 @@ PASS  /fortunes is the expected page: the added row, sorted, escaped, the Japane
 PASS  a second /fortunes answers the same page
 PASS  a refused World read answers 503 with Server
 PASS  the next /db is served again
-tfb async db: client: 42 passed, 0 failed, 0 skipped
+PASS  the client claims the pool's one connection
+PASS  /db with no connection to claim answers 503 with Server
+PASS  once it is released, /db is served
+PASS  fortunes past what a page holds answer 503 with Server
+PASS  the next /fortunes is the page again
+PASS  a World read cut off mid-answer answers 503 with Server
+PASS  the pool closes that connection
+PASS  tfbKeepPool dials it again
+PASS  the next /db is served on the new connection
+PASS  an update whose read ends in a transaction answers 503 with Server
+PASS  and sends no update
+PASS  the pool closes that connection too
+PASS  tfbKeepPool dials it again
+PASS  the next /updates is served
+PASS  tfbKeepPool dialled two connections again
+tfb async db: client: 65 passed, 0 failed, 0 skipped
 PASS  serveOn stops once the client's requests are answered
 PASS  every client check passed
+PASS  tfbKeepPool stops with it, having dialled two connections again
 PASS  the server answered each request once
-PASS  no query failed but the one refused
+PASS  no query failed but the seven made to
 PASS  every statement was one of the entry's four
 PASS  limits asked for 0 slots have one connection
-tfb async db: 7 passed, 0 failed, 0 skipped
+tfb async db: 8 passed, 0 failed, 0 skipped

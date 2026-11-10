@@ -11,8 +11,9 @@
 // included. An update reads its rows that way, then writes every new
 // randomNumber in one statement over two `int8[]` parameters, each distinct
 // id once, ascending, on the same connection. The first cached query reads
-// the whole table, and every cached query answers from that copy; no response
-// is cached. A fortune reads the table, adds the request-time row, sorts by
+// the whole table, and every cached query answers from that copy; one task
+// reads it while the others that need it wait, and a read that fails fails
+// them all and leaves it to the next request. No response is cached. A fortune reads the table, adds the request-time row, sorts by
 // the message's bytes, and renders the page.
 //
 // What the tasks share is one `TfbAsyncDb`, whose scratch buffers a task
@@ -21,11 +22,20 @@
 // task from handing `serve` a buffer it shares, so a JSON answer is written
 // into a buffer sized to it, and a fortunes page is copied out of the shared
 // one it is rendered into.
+//
+// A connection the pool closes (a query lost, cancelled mid-answer, or ended
+// out of step) is dialled again by `tfbKeepPool`, which `main` awaits beside
+// `tfbServeDbUntil` in one `awaitAll`: dialling holds the password, which no
+// spawned task may.
+import { sleep } from "nish:async"
+import { Secret } from "nish:secret"
 import { JsonWriter } from "nish/json"
+import { PgConfig, PgTarget } from "nish/net/postgres"
 import {
   PgAsyncParams,
   PgAsyncPool,
   pgAsyncClaim,
+  pgAsyncConnect,
   pgAsyncQuery,
   pgAsyncRelease,
 } from "nish/net/postgres-async"
@@ -59,6 +69,8 @@ const TFB_ROW_JSON: i32 = 46
 /** The most bytes one id of an `int8[]` literal and its comma take. */
 const TFB_ROW_ARRAY: i32 = 12
 const TFB_ZERO: i32 = 0
+/** The longest `tfbKeepPool` waits between dials while none succeeds. */
+const TFB_REDIAL_MOST_MS: i32 = 5000
 
 /** What every request's task shares: the pool, the cached table and the scratch a task fills and reads without waiting. */
 export class TfbAsyncDb {
@@ -74,8 +86,16 @@ export class TfbAsyncDb {
   readonly fortunes: TfbFortunes
   readonly html: u8[]
   cacheReady: boolean = false
+  /** Set while one task reads the table for the cache; the others wait on it. */
+  cacheLoading: boolean = false
+  /** How many times a cached query waited on another task's read of the table. */
+  cacheWaits: i32 = 0
   /** How many requests were answered 503 because a query failed or no connection came. */
   failures: i32 = 0
+  /** 1 while `tfbServeDbUntil` serves, 0 once `serveOn` returned. */
+  serving: i32 = 1
+  /** Connections `tfbKeepPool` dialled again after the pool closed them. */
+  redials: i32 = 0
 
   constructor(pool: PgAsyncPool) {
     this.pool = pool
@@ -137,16 +157,31 @@ export const tfbServeDb = async (
         return refuse(req)
       }
       if (route === TFB_CACHED) {
+        if (!db.cacheReady && db.cacheLoading) {
+          // Another task reads the table: wait for it, and fail with it.
+          db.cacheWaits += 1
+          let waiting: boolean = true
+          while (waiting && db.cacheLoading) {
+            waiting = await sleep(1)
+          }
+          if (!db.cacheReady) {
+            db.failures += 1
+            return new Response(503)
+          }
+        }
         if (!db.cacheReady) {
           // The first cached query reads the table; one that fails leaves it to the next.
+          db.cacheLoading = true
           const ticket: i32 = await pgAsyncClaim(db.pool)
           if (ticket < 0) {
+            db.cacheLoading = false
             db.failures += 1
             return new Response(503)
           }
           const table = await pgAsyncQuery(db.pool, ticket, TFB_CACHE_SQL, new PgAsyncParams())
           pgAsyncRelease(db.pool, ticket, table.reusable)
           if (!table.ok()) {
+            db.cacheLoading = false
             db.failures += 1
             return new Response(503)
           }
@@ -157,6 +192,7 @@ export const tfbServeDb = async (
             }
           }
           db.cacheReady = true
+          db.cacheLoading = false
         }
         const count: i32 = tfbCount(req.raw, "count")
         const body: u8[] = new Array<u8>(count * TFB_ROW_JSON + 2)
@@ -239,6 +275,12 @@ export const tfbServeDb = async (
         w.endArray()
         return new Response(200).bytes("application/json", body, TFB_ZERO, w.end)
       }
+      if (!r.reusable) {
+        // The read ended out of step: the update may not follow on this connection.
+        pgAsyncRelease(db.pool, ticket, false)
+        db.failures += 1
+        return new Response(503)
+      }
       // The update: plan it in the shared scratch, then write the answer and
       // both parameters before the next `await` lets another task in.
       for (let k: i32 = 0; k < count; k++) {
@@ -279,3 +321,63 @@ export const tfbServeDb = async (
     },
     stats
   )
+
+/**
+ * `tfbServeDb`, then `db.serving` set to 0 so `tfbKeepPool` stops: the two
+ * are awaited together, in one `awaitAll`.
+ * @param listener the listening socket
+ * @param db what every request's task shares
+ * @param limits the server's caps
+ * @param stats the server's counters
+ * @returns what `serveOn` answered
+ */
+export const tfbServeDbUntil = async (
+  listener: i32,
+  db: TfbAsyncDb,
+  limits: ServeLimits,
+  stats: ServeStats
+): Promise<i32> => {
+  const code: i32 = await tfbServeDb(listener, db, limits, stats)
+  db.serving = 0
+  return code
+}
+
+/**
+ * Dials again every connection of `db.pool` that is closed, while the
+ * `tfbServeDbUntil` serves: it looks every `everyMs`, and while a dial connects
+ * nothing it waits twice as long each time, up to five seconds. Call it from
+ * `main`, beside `tfbServeDbUntil` in an `awaitAll`, not from a spawned
+ * task: it holds the password.
+ * @param db what the server's tasks share; `db.serving` ends the watch
+ * @param config the startup parameters, as the first connect had them
+ * @param password the role's password, which the caller wipes once this returns
+ * @param target where the server is
+ * @param everyMs how often to look, at least 1
+ * @returns how many connections it dialled again
+ */
+export const tfbKeepPool = async (
+  db: TfbAsyncDb,
+  config: PgConfig,
+  password: Secret<u8[]>,
+  target: PgTarget,
+  everyMs: i32
+): Promise<i32> => {
+  const every: i32 = everyMs < 1 ? 1 : everyMs
+  let wait: i32 = every
+  while (db.serving === 1) {
+    await sleep(wait)
+    const live: i32 = db.pool.live()
+    if (db.serving !== 1 || live >= db.pool.size) {
+      wait = every
+      continue
+    }
+    const now: i32 = await pgAsyncConnect(db.pool, config, password, target)
+    if (now > live) {
+      db.redials += now - live
+      wait = every
+    } else {
+      wait = wait * 2 > TFB_REDIAL_MOST_MS ? TFB_REDIAL_MOST_MS : wait * 2
+    }
+  }
+  return db.redials
+}

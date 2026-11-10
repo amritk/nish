@@ -225,9 +225,6 @@ const tfbEscape = (out: u8[], at: i32, text: u8[], start: i32, length: i32): i32
   return end
 }
 
-/** The row TFB adds to every fortunes answer at request time, with id 0. */
-const TFB_EXTRA_FORTUNE: string = "Additional fortune added at request time."
-
 /**
  * One fortunes answer's rows: row `k` has id `ids[k]` and the message at
  * `text[starts[k], starts[k] + lengths[k])`. A reader writes a message's
@@ -239,6 +236,8 @@ export class TfbFortunes {
   lengths: i32[]
   order: i32[]
   text: u8[]
+  /** The row TFB adds to every fortunes answer at request time, with id 0. */
+  private extra: u8[]
   rows: i32 = 0
   textLength: i32 = 0
 
@@ -248,6 +247,7 @@ export class TfbFortunes {
     this.lengths = new Array<i32>(TFB_FORTUNE_ROWS)
     this.order = new Array<i32>(TFB_FORTUNE_ROWS)
     this.text = new Array<u8>(TFB_FORTUNE_BYTES)
+    this.extra = tfbAscii("Additional fortune added at request time.")
   }
 
   /** Empties it for the next answer. */
@@ -286,12 +286,12 @@ export class TfbFortunes {
    * @returns the page's length, or -1 when the request-time row does not fit
    */
   render(out: u8[]): i32 {
-    const length: i32 = toI32(TFB_EXTRA_FORTUNE.length)
+    const length: i32 = toI32(this.extra.length)
     if (this.textLength + length > TFB_FORTUNE_BYTES) {
       return -1
     }
     for (let k: i32 = 0; k < length; k++) {
-      this.text[this.textLength + k] = toU8(toI32(TFB_EXTRA_FORTUNE.charCodeAt(k)))
+      this.text[this.textLength + k] = this.extra[k]
     }
     this.push(toI64(0), length)
     const n: i32 = this.rows
