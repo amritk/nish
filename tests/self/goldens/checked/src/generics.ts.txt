@@ -147,6 +147,7 @@ import StructInfo from "./program" -> struct StructInfo
 import StructInstantiation from "./program" -> struct StructInstantiation
 import StructTemplateInfo from "./program" -> struct StructTemplateInfo
 import TemplateInfo from "./program" -> struct TemplateInfo
+import rewrittenArrayMethod from "./std-modules" -> function @rewrittenArrayMethod
 import Local from "./symbols" -> struct Local
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
 import Scope from "./symbols" -> struct Scope
@@ -836,11 +837,11 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: expr
-  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName checkExpression enterMember fitTemplateArguments holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isGatheredRest isParallelEntry isSpawnTemplate jsonRefusal jsonRouteOf matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry recordRegionCall reduceElementMessage refuseUnawaitedCall regionRoleOf resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
+  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName argumentLead checkExpression enterMember fitTemplateArguments holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isGatheredRest isParallelEntry isSpawnTemplate jsonRefusal jsonRouteOf matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry recordRegionCall reduceElementMessage refuseUnawaitedCall regionRoleOf resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
   pointer ctx: size=304 writesThrough=true captured=true passedTo=refuseUnawaitedCall#0 fitTemplateArguments#0 checkExpression#0 unifyAnnotation#0 checkExpression#0 unifyAnnotation#0 resolveFunctionArgument#0 CheckContext.errorType#0 matchFunctionArguments#0 CheckContext.errorType#0 CheckContext.errorType#0 secretArgumentShapeMessage#0 CheckContext.errorType#0 instantiate#0 CheckContext.errorType#0 noteJsonRoute#0 recordRangeEntry#0 recordMemberEntry#0 enterMember#0 CheckContext.error#0
-  pointer expr: size=40 writesThrough=true captured=true passedTo=refuseUnawaitedCall#1 fitTemplateArguments#1 reduceElementMessage#5 CheckContext.errorType#1 CheckContext.errorType#1 instantiate#4 recordParallelCall#1 recordExposeCall#1 recordRegionCall#1
-  pointer template: size=64 writesThrough=true captured=true passedTo=isSpawnTemplate#0 typeParamSet#0 resolveInTemplate#0 resolveFunctionArgument#1 matchFunctionArguments#1 reduceElementMessage#2 secretArgumentShapeMessage#1 instantiate#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 checkExpression#2 resolveFunctionArgument#6
+  pointer expr: size=40 writesThrough=true captured=true passedTo=refuseUnawaitedCall#1 fitTemplateArguments#1 resolveFunctionArgument#1 matchFunctionArguments#1 reduceElementMessage#5 CheckContext.errorType#1 CheckContext.errorType#1 instantiate#4 argumentLead#0 recordParallelCall#1 recordExposeCall#1 recordRegionCall#1
+  pointer template: size=64 writesThrough=true captured=true passedTo=isSpawnTemplate#0 typeParamSet#0 resolveInTemplate#0 resolveFunctionArgument#2 matchFunctionArguments#2 reduceElementMessage#2 secretArgumentShapeMessage#1 instantiate#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 checkExpression#2 resolveFunctionArgument#7
   stackSites=1 stackLocals=1
   callee -34:7 refuseUnawaitedCall -> @refuseUnawaitedCall
   local -31:9 parameters: Node (const)
@@ -917,25 +918,28 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   callee +117:14 CheckContext.errorType -> @CheckContext.errorType
   callee +119:5 noteJsonRoute -> @noteJsonRoute
   local +122:9 offset: i32 (const)
-  callee +126:8 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  callee +128:8 recordRangeEntry -> @recordRangeEntry
-  callee +129:8 recordMemberEntry -> @recordMemberEntry
-  callee +130:8 TypeTable.assignable -> @TypeTable.assignable
-  callee +132:11 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  callee +133:9 enterMember -> @enterMember
-  local +136:13 want: string (const)
-  callee +136:20 TypeTable.typeName -> @TypeTable.typeName
-  callee +137:7 CheckContext.error -> @CheckContext.error
-  callee +139:78 TypeTable.typeName -> @TypeTable.typeName
-  local +151:9 caller: FunctionSig | null (const)
-  callee +152:27 isParallelEntry -> @isParallelEntry
-  callee +153:5 recordParallelCall -> @recordParallelCall
-  local +156:9 role: i32 (const)
-  callee +156:16 secretRoleOf -> @secretRoleOf
-  callee +158:5 recordExposeCall -> @recordExposeCall
-  local +161:9 regionRole: i32 (const)
-  callee +161:22 regionRoleOf -> @regionRoleOf
-  callee +163:5 recordRegionCall -> @recordRegionCall
+  local +125:7 bad: i32 (let)
+  callee +129:8 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee +131:8 recordRangeEntry -> @recordRangeEntry
+  callee +132:8 recordMemberEntry -> @recordMemberEntry
+  callee +133:8 TypeTable.assignable -> @TypeTable.assignable
+  local +140:11 param: i32 (const)
+  callee +141:9 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee +142:7 enterMember -> @enterMember
+  local +145:11 want: string (const)
+  callee +145:18 TypeTable.typeName -> @TypeTable.typeName
+  callee +146:5 CheckContext.error -> @CheckContext.error
+  callee +148:10 argumentLead -> @argumentLead
+  callee +148:76 TypeTable.typeName -> @TypeTable.typeName
+  local +158:9 caller: FunctionSig | null (const)
+  callee +159:27 isParallelEntry -> @isParallelEntry
+  callee +160:5 recordParallelCall -> @recordParallelCall
+  local +163:9 role: i32 (const)
+  callee +163:16 secretRoleOf -> @secretRoleOf
+  callee +165:5 recordExposeCall -> @recordExposeCall
+  local +168:9 regionRole: i32 (const)
+  callee +168:22 regionRoleOf -> @regionRoleOf
+  callee +170:5 recordRegionCall -> @recordRegionCall
 function unwrapTypeParens(node: Node): Node -> @unwrapTypeParens
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: node
@@ -1086,11 +1090,32 @@ function writtenNames(fn: FunctionSig): string[] -> @writtenNames
   local +0:9 out: string[] (const)
   local +1:7 i: i32 (let)
   callee +2:14 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-function mismatchMessage(table: TypeTable, template: TemplateInfo, index: i32, fn: FunctionSig, param: Node, wanted: string): string -> @mismatchMessage
+function argumentOf(call: Node, name: string, index: i32): string -> @argumentOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: index name
+  calls: argumentWords
+  pointer call: size=40 writesThrough=false captured=false passedTo=argumentWords#0
+  stackSites=0 stackLocals=0
+  callee +0:70 argumentWords -> @argumentWords
+function argumentLead(call: Node, name: string, index: i32): string -> @argumentLead
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: index name
+  calls: argumentWords
+  pointer call: size=40 writesThrough=false captured=false passedTo=argumentWords#0
+  stackSites=0 stackLocals=0
+  callee +0:72 argumentWords -> @argumentWords
+function argumentWords(call: Node, name: string, index: i32, capital: boolean): string -> @argumentWords
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: functionTypeText nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 writtenNames
+  calls: nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 rewrittenArrayMethod
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 callee: Node (const)
+  local +1:9 method: string (const)
+  callee +1:44 rewrittenArrayMethod -> @rewrittenArrayMethod
+function mismatchMessage(table: TypeTable, lead: string, fn: FunctionSig, param: Node, wanted: string): string -> @mismatchMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: functionTypeText nish_panic_index nish_str_concat writtenNames
   pointer table: size=96 writesThrough=false captured=false passedTo=functionTypeText#0
-  pointer template: size=64 writesThrough=false captured=false
   pointer fn: size=176 writesThrough=false captured=false passedTo=writtenNames#0
   pointer param: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1126,17 +1151,18 @@ function mentionsUnbound(annotation: Node, names: StringSet, bindings: StringMap
   callee +5:7 StringSet.add -> @StringSet.add
   callee +9:10 StringSet.size -> @StringSet.size
   callee +9:32 mentionsTypeParam -> @mentionsTypeParam
-function resolveFunctionArgument(ctx: CheckContext, template: TemplateInfo, index: i32, arg: Node, names: StringSet, bindings: StringMap, scope: Scope): FunctionSig | null -> @resolveFunctionArgument
+function resolveFunctionArgument(ctx: CheckContext, call: Node, template: TemplateInfo, index: i32, arg: Node, names: StringSet, bindings: StringMap, scope: Scope): FunctionSig | null -> @resolveFunctionArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: arg index
-  calls: CheckContext.arrowMode CheckContext.capturesOuter CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.constant FunctionBindings.get FunctionSig.isAsync FunctionSig.writtenArity Scope.lookup answerAnnotation asyncArgumentMessage capturesNothing liftArrowArgument mismatchMessage nish_panic_index nish_str_concat nish_str_from_i32 outerFunctionMessage promisesAnswer refuseOnce unifyAnnotation unwrapTypeParens
+  calls: CheckContext.arrowMode CheckContext.capturesOuter CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.constant FunctionBindings.get FunctionSig.isAsync FunctionSig.writtenArity Scope.lookup answerAnnotation argumentLead argumentOf asyncArgumentMessage capturesNothing liftArrowArgument mismatchMessage nish_panic_index nish_str_concat outerFunctionMessage promisesAnswer refuseOnce unifyAnnotation unwrapTypeParens
   pointer ctx: size=304 writesThrough=true captured=true passedTo=liftArrowArgument#0 refuseOnce#0 refuseOnce#0 CheckContext.capturesOuter#0 CheckContext.arrowMode#0 refuseOnce#0 refuseOnce#0 outerFunctionMessage#0 CheckContext.signature#0 CheckContext.template#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 unifyAnnotation#0 refuseOnce#0 unifyAnnotation#0
-  pointer template: size=64 writesThrough=false captured=false passedTo=liftArrowArgument#1 mismatchMessage#1 asyncArgumentMessage#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=liftArrowArgument#1 argumentLead#0 argumentOf#0 argumentLead#0 argumentLead#0 argumentLead#0
+  pointer template: size=64 writesThrough=false captured=false passedTo=liftArrowArgument#2
   pointer arg: size=40 writesThrough=true captured=true passedTo=refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1
-  pointer names: size=8 writesThrough=false captured=false passedTo=liftArrowArgument#4 unifyAnnotation#3 unifyAnnotation#3
-  pointer bindings: size=40 writesThrough=true captured=true passedTo=liftArrowArgument#5 unifyAnnotation#4 unifyAnnotation#4
-  pointer scope: size=56 writesThrough=true captured=true passedTo=liftArrowArgument#6 Scope.lookup#0
+  pointer names: size=8 writesThrough=false captured=false passedTo=liftArrowArgument#5 unifyAnnotation#3 unifyAnnotation#3
+  pointer bindings: size=40 writesThrough=true captured=true passedTo=liftArrowArgument#6 unifyAnnotation#4 unifyAnnotation#4
+  pointer scope: size=56 writesThrough=true captured=true passedTo=liftArrowArgument#7 Scope.lookup#0
   stackSites=0 stackLocals=0
   local -5:9 param: Node (const)
   local -4:9 fnType: Node (const)
@@ -1144,6 +1170,7 @@ function resolveFunctionArgument(ctx: CheckContext, template: TemplateInfo, inde
   local -1:7 written: Node (let)
   callee +6:12 liftArrowArgument -> @liftArrowArgument
   local +8:9 lead: string (const)
+  callee +8:19 argumentLead -> @argumentLead
   callee +10:5 refuseOnce -> @refuseOnce
   local +13:9 name: string (const)
   callee +14:7 Scope.lookup -> @Scope.lookup
@@ -1162,25 +1189,29 @@ function resolveFunctionArgument(ctx: CheckContext, template: TemplateInfo, inde
   callee +28:39 CheckContext.signature -> @CheckContext.signature
   callee +30:9 CheckContext.template -> @CheckContext.template
   callee +31:7 refuseOnce -> @refuseOnce
+  callee +34:75 argumentOf -> @argumentOf
   callee +39:9 CheckedProgram.constant -> @CheckedProgram.constant
   callee +40:7 refuseOnce -> @refuseOnce
   callee +43:5 refuseOnce -> @refuseOnce
   callee +49:5 refuseOnce -> @refuseOnce
+  callee +52:10 argumentLead -> @argumentLead
   local +56:9 wanted: Node[] (const)
   callee +57:7 FunctionSig.writtenArity -> @FunctionSig.writtenArity
   callee +60:5 refuseOnce -> @refuseOnce
-  callee +60:26 mismatchMessage -> @mismatchMessage
-  callee +60:81 CheckContext.textOf -> @CheckContext.textOf
-  local +63:7 k: i32 (let)
-  callee +64:35 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  callee +65:5 unifyAnnotation -> @unifyAnnotation
-  callee +68:7 FunctionSig.isAsync -> @FunctionSig.isAsync
-  callee +68:24 promisesAnswer -> @promisesAnswer
-  callee +69:5 refuseOnce -> @refuseOnce
-  callee +69:26 asyncArgumentMessage -> @asyncArgumentMessage
-  callee +69:71 FunctionSig.isAsync -> @FunctionSig.isAsync
-  callee +72:3 unifyAnnotation -> @unifyAnnotation
-  callee +72:24 answerAnnotation -> @answerAnnotation
+  callee +63:7 mismatchMessage -> @mismatchMessage
+  callee +65:9 argumentLead -> @argumentLead
+  callee +68:9 CheckContext.textOf -> @CheckContext.textOf
+  local +73:7 k: i32 (let)
+  callee +74:35 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  callee +75:5 unifyAnnotation -> @unifyAnnotation
+  callee +78:7 FunctionSig.isAsync -> @FunctionSig.isAsync
+  callee +78:24 promisesAnswer -> @promisesAnswer
+  callee +79:5 refuseOnce -> @refuseOnce
+  callee +82:7 asyncArgumentMessage -> @asyncArgumentMessage
+  callee +82:28 argumentLead -> @argumentLead
+  callee +82:83 FunctionSig.isAsync -> @FunctionSig.isAsync
+  callee +86:3 unifyAnnotation -> @unifyAnnotation
+  callee +86:24 answerAnnotation -> @answerAnnotation
 function answerAnnotation(fnType: Node): Node -> @answerAnnotation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index promiseArgument
@@ -1194,21 +1225,20 @@ function promisesAnswer(fnType: Node): boolean -> @promisesAnswer
   pointer fnType: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:51 promiseArgument -> @promiseArgument
-function asyncArgumentMessage(template: TemplateInfo, index: i32, param: Node, isAsync: boolean): string -> @asyncArgumentMessage
+function asyncArgumentMessage(lead: string, param: Node, isAsync: boolean): string -> @asyncArgumentMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_str_concat nish_str_from_i32
-  pointer template: size=64 writesThrough=false captured=false
+  calls: nish_panic_index nish_str_concat
   pointer param: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 lead: string (const)
-  local +1:9 name: string (const)
-function liftArrowArgument(ctx: CheckContext, template: TemplateInfo, index: i32, arrow: Node, names: StringSet, bindings: StringMap, scope: Scope): FunctionSig | null -> @liftArrowArgument
+  local +0:9 name: string (const)
+function liftArrowArgument(ctx: CheckContext, call: Node, template: TemplateInfo, index: i32, arrow: Node, names: StringSet, bindings: StringMap, scope: Scope): FunctionSig | null -> @liftArrowArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseOnce
   escaping: index
-  calls: CheckContext.textOf answerAnnotation asyncArgumentMessage captureMode functionTypeHereMessage isVoidSpawnTemplate liftArrow mentionsUnbound nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 promiseArgument promisesAnswer refuseOnce resolveInTemplate resolveType unifyAnnotation unwrapTypeParens
+  calls: CheckContext.textOf answerAnnotation argumentLead argumentOf asyncArgumentMessage captureMode functionTypeHereMessage isVoidSpawnTemplate liftArrow mentionsUnbound nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 promiseArgument promisesAnswer refuseOnce resolveInTemplate resolveType unifyAnnotation unwrapTypeParens
   pointer ctx: size=304 writesThrough=true captured=true passedTo=refuseOnce#0 refuseOnce#0 refuseOnce#0 resolveType#1 unifyAnnotation#0 refuseOnce#0 refuseOnce#0 resolveType#1 refuseOnce#0 liftArrow#0 unifyAnnotation#0
-  pointer template: size=64 writesThrough=false captured=false passedTo=asyncArgumentMessage#0 resolveInTemplate#0 resolveInTemplate#0 isVoidSpawnTemplate#0 captureMode#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=argumentLead#0 argumentOf#0
+  pointer template: size=64 writesThrough=false captured=false passedTo=resolveInTemplate#0 resolveInTemplate#0 isVoidSpawnTemplate#0 captureMode#0
   pointer arrow: size=40 writesThrough=true captured=true passedTo=refuseOnce#1 refuseOnce#1 refuseOnce#1 liftArrow#1
   pointer names: size=8 writesThrough=false captured=false passedTo=unifyAnnotation#3 mentionsUnbound#1 mentionsUnbound#1 unifyAnnotation#3
   pointer bindings: size=40 writesThrough=true captured=true passedTo=unifyAnnotation#4 mentionsUnbound#2 resolveInTemplate#2 mentionsUnbound#2 resolveInTemplate#2 unifyAnnotation#4
@@ -1224,44 +1254,46 @@ function liftArrowArgument(ctx: CheckContext, template: TemplateInfo, index: i32
   local +5:9 isAsync: boolean (const)
   callee +6:19 promisesAnswer -> @promisesAnswer
   callee +7:5 refuseOnce -> @refuseOnce
-  callee +7:28 asyncArgumentMessage -> @asyncArgumentMessage
-  callee +11:5 refuseOnce -> @refuseOnce
-  callee +15:65 CheckContext.textOf -> @CheckContext.textOf
-  local +19:9 types: i32[] (const)
-  local +23:7 k: i32 (let)
-  local +25:11 written: Node (const)
-  local +26:11 expected: Node (const)
-  local +27:11 annotation: Node (const)
-  callee +30:16 unwrapTypeParens -> @unwrapTypeParens
-  callee +31:7 refuseOnce -> @refuseOnce
-  callee +31:35 functionTypeHereMessage -> @functionTypeHereMessage
-  local +34:13 type: i32 (const)
-  callee +34:20 resolveType -> @resolveType
-  callee +38:7 unifyAnnotation -> @unifyAnnotation
-  local +43:9 resolved: i32[] (const)
-  local +46:11 written: Node (const)
-  local +47:11 expected: Node (const)
-  local +48:11 given: i32 (const)
-  callee +51:16 mentionsUnbound -> @mentionsUnbound
-  callee +52:7 refuseOnce -> @refuseOnce
-  callee +56:44 CheckContext.textOf -> @CheckContext.textOf
-  local +61:13 type: i32 (const)
-  callee +61:20 resolveInTemplate -> @resolveInTemplate
-  local +69:7 returnType: i32 (let)
-  local +70:7 annotated: Node (let)
-  local +72:11 promised: Node | null (const)
-  callee +72:22 promiseArgument -> @promiseArgument
-  callee +74:7 refuseOnce -> @refuseOnce
-  callee +80:18 resolveType -> @resolveType
-  callee +84:15 mentionsUnbound -> @mentionsUnbound
-  callee +85:18 resolveInTemplate -> @resolveInTemplate
-  callee +89:52 isVoidSpawnTemplate -> @isVoidSpawnTemplate
-  callee +93:5 refuseOnce -> @refuseOnce
-  callee +97:14 CheckContext.textOf -> @CheckContext.textOf
-  local +101:9 fn: FunctionSig | null (const)
-  callee +101:14 liftArrow -> @liftArrow
-  callee +101:65 captureMode -> @captureMode
-  callee +105:3 unifyAnnotation -> @unifyAnnotation
+  callee +10:7 asyncArgumentMessage -> @asyncArgumentMessage
+  callee +10:28 argumentLead -> @argumentLead
+  callee +15:5 refuseOnce -> @refuseOnce
+  callee +18:30 argumentOf -> @argumentOf
+  callee +19:65 CheckContext.textOf -> @CheckContext.textOf
+  local +23:9 types: i32[] (const)
+  local +27:7 k: i32 (let)
+  local +29:11 written: Node (const)
+  local +30:11 expected: Node (const)
+  local +31:11 annotation: Node (const)
+  callee +34:16 unwrapTypeParens -> @unwrapTypeParens
+  callee +35:7 refuseOnce -> @refuseOnce
+  callee +35:35 functionTypeHereMessage -> @functionTypeHereMessage
+  local +38:13 type: i32 (const)
+  callee +38:20 resolveType -> @resolveType
+  callee +42:7 unifyAnnotation -> @unifyAnnotation
+  local +47:9 resolved: i32[] (const)
+  local +50:11 written: Node (const)
+  local +51:11 expected: Node (const)
+  local +52:11 given: i32 (const)
+  callee +55:16 mentionsUnbound -> @mentionsUnbound
+  callee +56:7 refuseOnce -> @refuseOnce
+  callee +60:44 CheckContext.textOf -> @CheckContext.textOf
+  local +65:13 type: i32 (const)
+  callee +65:20 resolveInTemplate -> @resolveInTemplate
+  local +73:7 returnType: i32 (let)
+  local +74:7 annotated: Node (let)
+  local +76:11 promised: Node | null (const)
+  callee +76:22 promiseArgument -> @promiseArgument
+  callee +78:7 refuseOnce -> @refuseOnce
+  callee +84:18 resolveType -> @resolveType
+  callee +88:15 mentionsUnbound -> @mentionsUnbound
+  callee +89:18 resolveInTemplate -> @resolveInTemplate
+  callee +93:52 isVoidSpawnTemplate -> @isVoidSpawnTemplate
+  callee +97:5 refuseOnce -> @refuseOnce
+  callee +101:14 CheckContext.textOf -> @CheckContext.textOf
+  local +105:9 fn: FunctionSig | null (const)
+  callee +105:14 liftArrow -> @liftArrow
+  callee +105:65 captureMode -> @captureMode
+  callee +109:3 unifyAnnotation -> @unifyAnnotation
 function captureMode(template: TemplateInfo): i32 -> @captureMode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isExposeTemplate isRegionRunner parallelRole
@@ -1423,16 +1455,15 @@ function captureOuter(ctx: CheckContext, expr: Node, name: string): Local | null
   callee -4:8 Scope.declare -> @Scope.declare
   callee -3:5 refuseOnce -> @refuseOnce
   callee -3:27 capturedMessage -> @capturedMessage
-function refuseResolvedMismatch(ctx: CheckContext, arg: Node, template: TemplateInfo, index: i32, fn: FunctionSig, param: Node, names: string[], types: i32[], returnType: i32): boolean -> @refuseResolvedMismatch
+function refuseResolvedMismatch(ctx: CheckContext, arg: Node, lead: string, fn: FunctionSig, param: Node, names: string[], types: i32[], returnType: i32): boolean -> @refuseResolvedMismatch
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseOnce
-  escaping: index returnType
+  escaping: lead returnType
   calls: functionTypeText mismatchMessage refuseOnce
   pointer ctx: size=304 writesThrough=true captured=false passedTo=refuseOnce#0
   pointer arg: size=40 writesThrough=false captured=false passedTo=refuseOnce#1
-  pointer template: size=64 writesThrough=false captured=false passedTo=mismatchMessage#1
-  pointer fn: size=176 writesThrough=false captured=false passedTo=mismatchMessage#3
-  pointer param: size=40 writesThrough=false captured=false passedTo=mismatchMessage#4
+  pointer fn: size=176 writesThrough=false captured=false passedTo=mismatchMessage#2
+  pointer param: size=40 writesThrough=false captured=false passedTo=mismatchMessage#3
   pointer names: size=0 writesThrough=false captured=false passedTo=functionTypeText#1
   pointer types: size=0 writesThrough=true captured=false passedTo=functionTypeText#2
   stackSites=0 stackLocals=0
@@ -1440,12 +1471,13 @@ function refuseResolvedMismatch(ctx: CheckContext, arg: Node, template: Template
   callee +0:18 functionTypeText -> @functionTypeText
   callee +1:3 refuseOnce -> @refuseOnce
   callee +1:24 mismatchMessage -> @mismatchMessage
-function matchFunctionArguments(ctx: CheckContext, template: TemplateInfo, bindings: StringMap, functions: FunctionSig[], args: Node): boolean -> @matchFunctionArguments
+function matchFunctionArguments(ctx: CheckContext, call: Node, template: TemplateInfo, bindings: StringMap, functions: FunctionSig[], args: Node): boolean -> @matchFunctionArguments
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via resolveInTemplate
-  calls: FunctionSig.isAsync FunctionSig.writtenArity answerAnnotation canonicalArgument isFunctionParameter nish_array_grow nish_panic_index nish_panic_overflow promisesAnswer refuseResolvedMismatch resolveInTemplate unwrapTypeParens
+  calls: FunctionSig.isAsync FunctionSig.writtenArity answerAnnotation argumentLead canonicalArgument isFunctionParameter nish_array_grow nish_panic_index nish_panic_overflow promisesAnswer refuseResolvedMismatch resolveInTemplate unwrapTypeParens
   pointer ctx: size=304 writesThrough=true captured=false passedTo=refuseResolvedMismatch#0
-  pointer template: size=64 writesThrough=false captured=false passedTo=resolveInTemplate#0 resolveInTemplate#0 refuseResolvedMismatch#2
+  pointer call: size=40 writesThrough=false captured=false passedTo=argumentLead#0
+  pointer template: size=64 writesThrough=false captured=false passedTo=resolveInTemplate#0 resolveInTemplate#0
   pointer bindings: size=40 writesThrough=true captured=true passedTo=resolveInTemplate#2 resolveInTemplate#2
   pointer functions: size=0 writesThrough=false captured=false
   pointer args: size=40 writesThrough=false captured=false
@@ -1479,6 +1511,7 @@ function matchFunctionArguments(ctx: CheckContext, template: TemplateInfo, bindi
   callee +32:22 canonicalArgument -> @canonicalArgument
   callee +32:66 canonicalArgument -> @canonicalArgument
   callee +34:16 refuseResolvedMismatch -> @refuseResolvedMismatch
+  callee +37:11 argumentLead -> @argumentLead
 function rejectDollarInSymbolName(ctx: CheckContext, name: string, what: string, node: Node): boolean -> @rejectDollarInSymbolName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

@@ -180,8 +180,8 @@ function hasAsync(node: Node): boolean -> @hasAsync
 function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeScript [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via storageLayouts
-  calls: Compilation.entry DiagnosticSink.report DiagnosticSink.reportPortability Edit.constructor EmittedFile.constructor EmittedProgram.constructor StringMap.get StringSet.size Walk.constructor Walk.refuse applyModuleEdits commonDirectory dirname emitModule hasAsync holds importOffset isBuiltinSpecifier isModule joinPath launcher nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq normalizePath outputPathOf relativeSpecifier resolvePath runtimeImport scriptMain storageFileText storageImport storageLayouts
-  pointer compilation: size=208 writesThrough=false captured=false passedTo=Compilation.entry#0 storageLayouts#0
+  calls: Compilation.entry Compilation.isUnusedArrayModule DiagnosticSink.report DiagnosticSink.reportPortability Edit.constructor EmittedFile.constructor EmittedProgram.constructor StringMap.get StringSet.size Walk.constructor Walk.refuse applyModuleEdits commonDirectory dirname emitModule hasAsync holds importOffset isBuiltinSpecifier isModule joinPath launcher nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq normalizePath outputPathOf relativeSpecifier resolvePath runtimeImport scriptMain storageFileText storageImport storageLayouts
+  pointer compilation: size=208 writesThrough=false captured=false passedTo=Compilation.entry#0 Compilation.isUnusedArrayModule#0 storageLayouts#0
   stackSites=3 stackLocals=2
   local +0:9 result: EmittedProgram (const)
   callee +0:18 new EmittedProgram -> @EmittedProgram.constructor
@@ -198,63 +198,64 @@ function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeSc
   local +13:9 outputs: string[] (const)
   local +14:7 anyAsync: boolean (let)
   local +15:14 unit: ModuleUnit (const)
-  local +16:11 out: string (const)
-  callee +16:17 outputPathOf -> @outputPathOf
-  callee +21:74 holds -> @holds
-  local +28:9 layouts: StorageLayout[] (const)
-  callee +28:19 storageLayouts -> @storageLayouts
-  local +29:7 k: i32 (let)
-  local +31:11 unit: ModuleUnit (const)
-  local +32:11 out: string (const)
-  local +37:11 walk: Walk (const)
-  callee +37:18 new Walk -> @Walk.constructor
-  local +39:9 slot: i32 (let)
-  local +41:13 s: StorageLayout (const)
-  callee +49:28 storageImport -> @storageImport
-  callee +54:22 hasAsync -> @hasAsync
-  local +57:16 stmt: Node (const)
-  callee +62:9 Walk.refuse -> @Walk.refuse
-  callee +66:9 Walk.refuse -> @Walk.refuse
-  callee +71:11 holds -> @holds
-  callee +81:11 isBuiltinSpecifier -> @isBuiltinSpecifier
-  local +86:13 target: i32 (const)
-  callee +86:22 StringMap.get -> @StringMap.get
-  local +87:13 dest: string (const)
-  local +88:13 hostPath: string (const)
-  local +95:15 at: string (const)
-  callee +98:11 relativeSpecifier -> @relativeSpecifier
-  callee +99:13 resolvePath -> @resolvePath
-  callee +99:29 joinPath -> @joinPath
+  local +17:11 out: string (const)
+  callee +17:17 Compilation.isUnusedArrayModule -> @Compilation.isUnusedArrayModule
+  callee +17:62 outputPathOf -> @outputPathOf
+  callee +22:74 holds -> @holds
+  local +29:9 layouts: StorageLayout[] (const)
+  callee +29:19 storageLayouts -> @storageLayouts
+  local +30:7 k: i32 (let)
+  local +32:11 unit: ModuleUnit (const)
+  local +33:11 out: string (const)
+  local +38:11 walk: Walk (const)
+  callee +38:18 new Walk -> @Walk.constructor
+  local +40:9 slot: i32 (let)
+  local +42:13 s: StorageLayout (const)
+  callee +50:28 storageImport -> @storageImport
+  callee +55:22 hasAsync -> @hasAsync
+  local +58:16 stmt: Node (const)
+  callee +63:9 Walk.refuse -> @Walk.refuse
+  callee +67:9 Walk.refuse -> @Walk.refuse
+  callee +72:11 holds -> @holds
+  callee +82:11 isBuiltinSpecifier -> @isBuiltinSpecifier
+  local +87:13 target: i32 (const)
+  callee +87:22 StringMap.get -> @StringMap.get
+  local +88:13 dest: string (const)
+  local +89:13 hostPath: string (const)
+  local +96:15 at: string (const)
+  callee +99:11 relativeSpecifier -> @relativeSpecifier
   callee +100:13 resolvePath -> @resolvePath
-  callee +105:31 relativeSpecifier -> @relativeSpecifier
-  local +108:9 edits: Edit[] (let)
-  callee +109:5 emitModule -> @emitModule
-  local +114:9 r: i32 (let)
-  local +116:13 node: Node (const)
-  callee +117:7 DiagnosticSink.report -> @DiagnosticSink.report
-  local +128:13 node: Node (const)
-  callee +129:7 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
-  local +134:11 scriptFile: boolean (const)
-  callee +134:24 StringSet.size -> @StringSet.size
-  callee +134:53 StringSet.size -> @StringSet.size
-  callee +134:82 isModule -> @isModule
-  local +135:11 header: string (const)
-  callee +136:7 runtimeImport -> @runtimeImport
+  callee +100:29 joinPath -> @joinPath
+  callee +101:13 resolvePath -> @resolvePath
+  callee +106:31 relativeSpecifier -> @relativeSpecifier
+  local +109:9 edits: Edit[] (let)
+  callee +110:5 emitModule -> @emitModule
+  local +115:9 r: i32 (let)
+  local +117:13 node: Node (const)
+  callee +118:7 DiagnosticSink.report -> @DiagnosticSink.report
+  local +129:13 node: Node (const)
+  callee +130:7 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
+  local +135:11 scriptFile: boolean (const)
+  callee +135:24 StringSet.size -> @StringSet.size
+  callee +135:53 StringSet.size -> @StringSet.size
+  callee +135:82 isModule -> @isModule
+  local +136:11 header: string (const)
   callee +137:7 runtimeImport -> @runtimeImport
-  local +142:13 at: i32 (const)
-  callee +142:18 importOffset -> @importOffset
-  local +145:13 ordered: Edit[] (const)
-  local +146:11 placed: boolean (let)
-  local +147:18 edit: Edit (const)
-  callee +149:24 new Edit -> @Edit.constructor
-  callee +155:22 new Edit -> @Edit.constructor
-  local +159:11 text: string (const)
-  callee +159:18 applyModuleEdits -> @applyModuleEdits
-  callee +164:23 new EmittedFile -> @EmittedFile.constructor
-  local +170:7 entryOut: string (let)
-  local +171:7 script: boolean (let)
-  callee +176:16 scriptMain -> @scriptMain
-  callee +180:21 new EmittedFile -> @EmittedFile.constructor
-  callee +180:49 launcher -> @launcher
-  callee +182:23 new EmittedFile -> @EmittedFile.constructor
-  callee +182:53 storageFileText -> @storageFileText
+  callee +138:7 runtimeImport -> @runtimeImport
+  local +143:13 at: i32 (const)
+  callee +143:18 importOffset -> @importOffset
+  local +146:13 ordered: Edit[] (const)
+  local +147:11 placed: boolean (let)
+  local +148:18 edit: Edit (const)
+  callee +150:24 new Edit -> @Edit.constructor
+  callee +156:22 new Edit -> @Edit.constructor
+  local +160:11 text: string (const)
+  callee +160:18 applyModuleEdits -> @applyModuleEdits
+  callee +165:23 new EmittedFile -> @EmittedFile.constructor
+  local +171:7 entryOut: string (let)
+  local +172:7 script: boolean (let)
+  callee +177:16 scriptMain -> @scriptMain
+  callee +181:21 new EmittedFile -> @EmittedFile.constructor
+  callee +181:49 launcher -> @launcher
+  callee +183:23 new EmittedFile -> @EmittedFile.constructor
+  callee +183:53 storageFileText -> @storageFileText

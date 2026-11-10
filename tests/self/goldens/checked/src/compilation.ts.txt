@@ -81,6 +81,7 @@ import ParallelCall from "./program" -> struct ParallelCall
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import StructRegistry from "./program" -> struct StructRegistry
 import StructTemplateInfo from "./program" -> struct StructTemplateInfo
+import TemplateInfo from "./program" -> struct TemplateInfo
 import basename from "./paths" -> function @basename
 import basenameWithout from "./paths" -> function @basenameWithout
 import dirname from "./paths" -> function @dirname
@@ -112,7 +113,10 @@ import manifestVersion from "./manifest" -> function @manifestVersion
 import ManifestList from "./manifest" -> struct ManifestList
 import NishManifest from "./manifest" -> struct NishManifest
 import nishExportEntry from "./manifest" -> function @nishExportEntry
+import ARRAY_SPECIFIER from "./std-modules" -> const ARRAY_SPECIFIER
 import COLLECTIONS_SPECIFIER from "./std-modules" -> const COLLECTIONS_SPECIFIER
+import isArrayMethodLocal from "./std-modules" -> function @isArrayMethodLocal
+import isArrayModule from "./std-modules" -> function @isArrayModule
 import isStdModuleName from "./std-modules" -> function @isStdModuleName
 import SECRET_STD_SPECIFIER from "./std-modules" -> const SECRET_STD_SPECIFIER
 import stdModuleName from "./std-modules" -> function @stdModuleName
@@ -294,6 +298,7 @@ struct Compilation (class) size=208 align=8 exported
   method rejectForeignShadows -> @Compilation.rejectForeignShadows
   method reportForeignShadow -> @Compilation.reportForeignShadow
   method rejectCLibrarySymbols -> @Compilation.rejectCLibrarySymbols
+  method isUnusedArrayModule -> @Compilation.isUnusedArrayModule
   method analyze -> @Compilation.analyze
   method panicsText -> @Compilation.panicsText
   method arenaText -> @Compilation.arenaText
@@ -330,6 +335,13 @@ function isRetentionCode(code: string): boolean -> @isRetentionCode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
+function isUnusedArrayImport(specifier: string, local: string, template: TemplateInfo | null): boolean -> @isUnusedArrayImport [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: local
+  calls: isArrayMethodLocal nish_str_eq
+  pointer template: size=64 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:36 isArrayMethodLocal -> @isArrayMethodLocal
 function Compilation.constructor(this: Compilation, opts: Options): void -> @Compilation.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via RuntimeTable.constructor
@@ -1686,6 +1698,16 @@ function Compilation.rejectCLibrarySymbols(this: Compilation): void -> @Compilat
   callee +41:22 isCLibrarySymbol -> @isCLibrarySymbol
   callee +43:13 reservedPrefixText -> @reservedPrefixText
   callee +44:9 DiagnosticSink.report -> @DiagnosticSink.report
+function Compilation.isUnusedArrayModule(this: Compilation, unit: ModuleUnit): boolean -> @Compilation.isUnusedArrayModule [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isArrayModule isUnusedArrayImport nish_str_eq
+  pointer this: size=208 writesThrough=false captured=false
+  pointer unit: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:10 isArrayModule -> @isArrayModule
+  local +3:16 other: ModuleUnit (const)
+  local +4:18 imp: ImportBinding (const)
+  callee +7:12 isUnusedArrayImport -> @isUnusedArrayImport
 function Compilation.analyze(this: Compilation): FactsTable -> @Compilation.analyze [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:9

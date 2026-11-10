@@ -53,10 +53,16 @@ cases/arr_bounds_returned_through_store added after R6: no rewriter to freeze it
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard_f64 added after R6: no rewriter to freeze it with
+cases/arr_filter added after R6: no rewriter to freeze it with
+cases/arr_find_index added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class_root added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_store added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_view added after R6: no rewriter to freeze it with
+cases/arr_map added after R6: no rewriter to freeze it with
+cases/arr_map_f64 added after R6: no rewriter to freeze it with
+cases/arr_map_template added after R6: no rewriter to freeze it with
+cases/arr_named_predicates added after R6: no rewriter to freeze it with
 cases/arr_path_alias_shrink added after R6: no rewriter to freeze it with
 cases/arr_path_alias_store added after R6: no rewriter to freeze it with
 cases/arr_path_callee_pop added after R6: no rewriter to freeze it with
@@ -94,6 +100,10 @@ cases/arr_range_call_two_sites added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_clone added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_dead added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_replace added after R6: no rewriter to freeze it with
+cases/arr_slice added after R6: no rewriter to freeze it with
+cases/arr_slice_bounds added after R6: no rewriter to freeze it with
+cases/arr_slice_saturate added after R6: no rewriter to freeze it with
+cases/arr_some_every added after R6: no rewriter to freeze it with
 cases/arr_sort_capture added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp_f64 added after R6: no rewriter to freeze it with
@@ -178,6 +188,7 @@ cases/dbg_fnarg_arrow added after R6: no rewriter to freeze it with
 cases/dbg_map_get added after R6: no rewriter to freeze it with
 cases/dbg_map_iter added after R6: no rewriter to freeze it with
 cases/dbg_rng added after R6: no rewriter to freeze it with
+cases/deny_panics_arr_map added after R6: no rewriter to freeze it with
 cases/deny_panics_clean added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it with
@@ -540,6 +551,8 @@ cases/simd_zero_fill added after R6: no rewriter to freeze it with
 cases/storage_attributes added after R6: no rewriter to freeze it with
 cases/storage_lend added after R6: no rewriter to freeze it with
 cases/storage_lend_bytes added after R6: no rewriter to freeze it with
+cases/storage_lend_methods_after added after R6: no rewriter to freeze it with
+cases/storage_lend_methods_before added after R6: no rewriter to freeze it with
 cases/storage_module added after R6: no rewriter to freeze it with
 cases/str_from_bytes added after R6: no rewriter to freeze it with
 cases/str_from_bytes_arrow added after R6: no rewriter to freeze it with
