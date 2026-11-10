@@ -10,6 +10,7 @@ import EFFECT_READ from "./runtime" -> const EFFECT_READ
 import EFFECT_WRITE from "./runtime" -> const EFFECT_WRITE
 import StringSet from "./map" -> struct StringSet
 import ARRAY_SPECIFIER from "./std-modules" -> const ARRAY_SPECIFIER
+import isArrayMethodLocal from "./std-modules" -> function @isArrayMethodLocal
 import compareStrings from "./strings" -> function @compareStrings
 import jsonQuote from "./strings" -> function @jsonQuote
 import N_CALL from "./nodes" -> const N_CALL
@@ -217,11 +218,13 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   callee +91:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
   callee +93:5 bodyTables -> @bodyTables
   callee +95:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-function isUnusedArrayMethod(specifier: string, template: TemplateInfo | null): boolean -> @isUnusedArrayMethod
+function isUnusedArrayMethod(specifier: string, local: string, template: TemplateInfo | null): boolean -> @isUnusedArrayMethod
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_eq
+  escaping: local
+  calls: isArrayMethodLocal nish_str_eq
   pointer template: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  callee +0:36 isArrayMethodLocal -> @isArrayMethodLocal
 function checkedText(compilation: Compilation): string -> @checkedText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze

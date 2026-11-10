@@ -114,6 +114,7 @@ import NishManifest from "./manifest" -> struct NishManifest
 import nishExportEntry from "./manifest" -> function @nishExportEntry
 import ARRAY_SPECIFIER from "./std-modules" -> const ARRAY_SPECIFIER
 import COLLECTIONS_SPECIFIER from "./std-modules" -> const COLLECTIONS_SPECIFIER
+import isArrayMethodLocal from "./std-modules" -> function @isArrayMethodLocal
 import isArrayModule from "./std-modules" -> function @isArrayModule
 import isStdModuleName from "./std-modules" -> function @isStdModuleName
 import SECRET_STD_SPECIFIER from "./std-modules" -> const SECRET_STD_SPECIFIER
@@ -1691,7 +1692,7 @@ function Compilation.rejectCLibrarySymbols(this: Compilation): void -> @Compilat
   callee +44:9 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.isUnusedArrayModule(this: Compilation, unit: ModuleUnit): boolean -> @Compilation.isUnusedArrayModule [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: isArrayModule nish_str_eq
+  calls: isArrayMethodLocal isArrayModule nish_str_eq
   pointer this: size=208 writesThrough=false captured=false
   pointer unit: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1699,6 +1700,7 @@ function Compilation.isUnusedArrayModule(this: Compilation, unit: ModuleUnit): b
   local +3:16 other: ModuleUnit (const)
   local +4:18 imp: ImportBinding (const)
   local +5:15 template: TemplateInfo | null (const)
+  callee +8:13 isArrayMethodLocal -> @isArrayMethodLocal
 function Compilation.analyze(this: Compilation): FactsTable -> @Compilation.analyze [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:9

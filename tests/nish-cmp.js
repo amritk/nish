@@ -1205,6 +1205,12 @@ const DECLARED = [
     why: "the case calls `slice` and `map` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
   },
   {
+    program: "tests/cases/arr_slice_saturate.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `slice` on an array, which the 0.37.0 seed refuses as an unknown method, so only the candidate compiles it",
+  },
+  {
     program: "tests/cases/arr_named_predicates.ts",
     file: "exit",
     changelog: "methods map, filter, some, every, findIndex and slice",

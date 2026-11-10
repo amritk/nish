@@ -102,6 +102,7 @@ cases/arr_ref_alias_dead added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_replace added after R6: no rewriter to freeze it with
 cases/arr_slice added after R6: no rewriter to freeze it with
 cases/arr_slice_bounds added after R6: no rewriter to freeze it with
+cases/arr_slice_saturate added after R6: no rewriter to freeze it with
 cases/arr_some_every added after R6: no rewriter to freeze it with
 cases/arr_sort_capture added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp added after R6: no rewriter to freeze it with

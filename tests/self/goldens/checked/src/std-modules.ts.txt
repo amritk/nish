@@ -123,13 +123,19 @@ function arrayMethodLocal(template: string): string -> @arrayMethodLocal [export
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
+function isArrayMethodLocal(local: string): boolean -> @isArrayMethodLocal [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_at
+  stackSites=0 stackLocals=0
 function arrayMethodOfLocal(local: string): string -> @arrayMethodOfLocal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: isArrayMethod nish_panic_overflow nish_str_at nish_str_eq nish_str_new
+  escaping: local
+  calls: isArrayMethod isArrayMethodLocal nish_panic_overflow nish_str_at nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
-  local +0:9 template: string (const)
-  local +4:9 method: string (const)
-  callee +7:32 isArrayMethod -> @isArrayMethod
+  callee +0:8 isArrayMethodLocal -> @isArrayMethodLocal
+  local +3:9 template: string (const)
+  local +7:9 method: string (const)
+  callee +10:32 isArrayMethod -> @isArrayMethod
 function isArrayModule(packageName: string, name: string): boolean -> @isArrayModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
