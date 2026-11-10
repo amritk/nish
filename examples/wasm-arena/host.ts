@@ -1,6 +1,9 @@
 // The host module of examples/wasm-arena: the functions client.ts imports and
 // the page supplies. The build reads only the exported signatures; the bodies
-// are the page's own TypeScript (docs/guide/using-nish/interop.md).
+// are the page's own TypeScript (docs/guide/using-nish/interop.md). The imports
+// are `export function` declarations, not arrows, because `--host` reads an
+// import's signature only from one (docs/wp50-wasm-host.md §3): biome.json
+// exempts this file from the no-function-declaration rule for that reason.
 import type { i32 } from "nish"
 
 /** What the page renders with, set by page.ts before `init` runs. */

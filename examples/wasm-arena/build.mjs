@@ -39,8 +39,10 @@ const run = (cmd, args, env) => {
   return r.stdout
 }
 
-fs.rmSync(ll, { recursive: true, force: true })
-fs.rmSync(web, { recursive: true, force: true })
+// Every output goes first, so a failed step cannot leave an older one to be run.
+for (const stale of [ll, web, path.join(out, "replay-ll"), path.join(out, "replay")]) {
+  fs.rmSync(stale, { recursive: true, force: true })
+}
 fs.mkdirSync(web, { recursive: true })
 fs.mkdirSync(ll, { recursive: true })
 

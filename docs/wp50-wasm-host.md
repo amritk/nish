@@ -435,7 +435,7 @@ the browser the ones W9 uses.
 | WebGL 2 `bufferSubData`, `bufferData`, `texSubImage2D` | `ReadableStreamBYOBReader.read(view)`: it transfers the buffer, and a `WebAssembly.Memory` buffer cannot be transferred (a `TypeError`). Read into a page buffer, then `.set` |
 | `TextDecoder.decode` | `postMessage(view, [view.buffer])`: never transfer module memory |
 | `AudioBuffer.copyToChannel`, `copyFromChannel` | an `AudioWorklet`'s `port.postMessage` of a view: it clones, which allocates, so do it once and not per frame |
-| WebTransport `datagrams.writable` and send-stream `write`: the spec copies the bytes at write. Confirmed in Chromium 153 by stage 6 (`tests/interop/chrome-arena.py`): a 32-byte view written as a datagram and overwritten with `z` straight after the `write` call comes back from the echo server as the 32 bytes written | anything else not in the left column, until it is checked |
+| WebTransport `datagrams.writable` and send-stream `write`: the spec copies the bytes at write. Checked by stage 6 (`tests/interop/chrome-arena.py`, which fails the `arena` job otherwise): a 32-byte view written as a datagram and overwritten with `z` as soon as `write` returns, before its promise settles, comes back from the echo server as the 32 bytes written. Seen locally in Chromium 153; the job's summary records CI's pinned Chromium 141 | anything else not in the left column, until it is checked |
 | `new Blob([view])`, a `fetch` body | |
 
 "Copy into a page-owned buffer" means `pageBuf.set(view.subarray(at, at + n))`
@@ -694,13 +694,15 @@ with the result: `onSnapshot(n)` after writing the bytes into the inbound ring.
   safe for any module cs will ship: §10's example is kilobytes, and cs's
   whole client would have to grow by three orders of magnitude to reach the
   limit. The loader's documentation states the 8 MB figure, and stage 6 runs
-  `loadSync` in Chromium to confirm the limit has not come back. In Chromium
-  153 the arena's module padded to 8,384,512 bytes (8 MiB − 4 KiB) loads in
+  `loadSync` in Chromium to confirm the limit has not come back. Locally, in Chromium
+  153, the arena's module padded to 8,384,512 bytes (8 MiB − 4 KiB) loads in
   5 ms; padded to 8,392,704 (8 MiB + 4 KiB) it throws `RangeError:
   WebAssembly.Compile is disallowed on the main thread, if the buffer size is
   larger than 8MB. Use WebAssembly.compile, compile on a worker thread, or use
   the flag --enable-features=WebAssemblyUnlimitedSyncCompilation`. The soak
-  checks both sides on every run.
+  asserts both sides on every run, in CI's pinned Chromium 141: the load
+  under 8 MiB must succeed at the size asked, and the one over must be
+  refused with a `RangeError`. The job's summary prints both results.
 - **The bytes inside the bundle.** `build.sh --inline <file.mjs>` writes the
   module's bytes as an ES module, `export const bytes = new Uint8Array([...])`.
   The page passes `load(bytes, imports)`. Measured on this container (raw /
@@ -848,16 +850,34 @@ writes the page and the replay into one directory. `tests/run.js`'s
 `--emit-ts` reading. The `interop` workflow's `arena` job runs it in Chromium
 for ten minutes against the band `tests/interop/chrome-arena.py` states (256
 KiB of used heap after GC between minute one and minute ten, and 1 KiB
-sampled per frame), and writes its figures to the job summary.
+sampled per frame), and writes its figures to the job summary: the browser's
+version and user agent, the renderer, the datagram and both `loadSync`
+results.
+
+**Why the page and native bits agree.** The native replay (`replay.ts`) is
+built with `--deterministic`. The page module cannot be: the flag is also the
+capability policy, and it refuses the host import `client.ts` makes (NL3054).
+The same `sim.ts` is in both, and three things make its bits agree without
+the flag. Stage 5a lowers `sin`, `cos`, `exp`, `log`, `pow` and the float `%`
+on a page module to the same `std/math.ts` functions `--deterministic` uses;
+`sim.ts` calls `sin`, `cos` and `%`, and its page IR calls `nish.sinF64`,
+`nish.cosF64` and `nish.fmodF64`, never an intrinsic. `sqrt` is the one
+intrinsic it calls, and IEEE 754 makes it exact on every target. The hash
+quiets a NaN by hand before reading its bits, as `f64ToBits` does under the
+flag. The capability policy is still enforced on `sim.ts`, by the native
+deterministic build of the same file.
 
 **WebGPU in headless Chromium.** `navigator.gpu` answers with
 `--enable-unsafe-webgpu --enable-features=Vulkan
---use-webgpu-adapter=swiftshader` on a secure context: Chromium 153 gave the
+--use-webgpu-adapter=swiftshader` on a secure context: locally, Chromium 153 gave the
 adapter `google / swiftshader` on `http://127.0.0.1`. On a `data:` URL, not a
 secure context, `navigator.gpu` is `undefined`, so the soak serves the page
 from localhost. The page keeps the WebGL 2 `bufferSubData` path the owner
-allowed (Q8) for a browser with no adapter, and the soak's summary names which
-path ran. Measured locally over 120 s on WebGPU: memory 4,194,304 bytes and the
+allowed (Q8) for a browser with no adapter. The soak fails when the page draws
+with any renderer but the one its `--expect` names, which is `webgpu` in the
+job, so a silent fall back to WebGL 2 in CI's Chromium 141 turns the job red
+rather than soaking a path this section does not claim. Measured locally, in
+Chromium 153, over 120 s on WebGPU: memory 4,194,304 bytes and the
 arena mark 89,616 throughout, used heap +1,984 bytes between the two GCs,
 about 250 bytes sampled per frame (the command encoder and texture view each
 frame's draw makes), and the hash `4e0d41bf2e08771a` after 7,203 ticks on the

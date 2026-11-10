@@ -612,10 +612,22 @@ $ cd build/arena/web && python3 -m http.server 8000
 Open `http://localhost:8000/`: WebGPU needs a secure context, which
 `localhost` is and a `file:` or `data:` page is not. Memory is fixed with
 `--memory 4`, so its `byteLength` never changes and the page's views stay
-valid for as long as it runs.
+valid for as long as it runs. The page loads its 14 KB module with
+`loadSync`, far under the 8 MB Chromium allows on the main thread (above);
+the soak in CI checks that limit is still where this page says.
 
-The simulation is compiled with `--deterministic`, so the same input gives
-the same state bit for bit in the browser, natively and under `--emit-ts`.
+A page that sends bytes out of the module's memory over WebTransport can reuse its view as
+soon as `write` returns: a datagram write copies the bytes it is given, so
+overwriting the view before the write's promise settles changes nothing that
+was sent. The soak checks that in Chromium too.
+
+The same input gives the same state bit for bit in the browser, natively
+and under `--emit-ts`. The native replay is built with `--deterministic`; the
+page module cannot be, because the flag refuses the host import `client.ts`
+makes (NL3054). Its bits agree anyway: a page module computes `Math.sin`,
+`Math.cos`, `Math.exp`, `Math.log`, `Math.pow` and a float `%` with the same
+Nish functions `--deterministic` uses, `Math.sqrt` is exact everywhere, and
+`sim.ts`'s hash reads every NaN as the one quiet NaN.
 `build/arena/replay` replays a recorded input — a seed, a tick count, and
 run-length words, `44x1` for the word 1 held for 44 ticks — and prints the
 hash the page's `hashHi` and `hashLo` give after the same ticks:

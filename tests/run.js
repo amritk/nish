@@ -32118,6 +32118,14 @@ if (!only || "wasm-arena".includes(only)) {
           `want ${want}${shown(node)}`
         )
       }
+      // The replay the user guide shows (docs/guide/using-nish/interop.md), pinned to the hash it prints there.
+      const sample = spawnSync(path.join(out, "replay"), ["1", "120", "44x1", "36x5", "39x1"], { encoding: "utf8" })
+      const sampleWant = "ticks 120 hash d26f9b16ccb7478a\n"
+      check(
+        "wasm-arena: the user guide's sample replay prints the hash the guide shows",
+        sample.status === 0 && sample.stdout === sampleWant,
+        `want ${sampleWant}${shown(sample)}`
+      )
     }
   }
 }
@@ -32226,7 +32234,7 @@ if (!only || "wasm-size".includes(only)) {
         ).stderr
       )
     let checkedSwitch = false
-    for (const { src, runtime, host: hostModule, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
+    for (const { src, runtime, host: hostModule, memory, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
       const stem = path.basename(src, ".ts")
       // The directory outlives a run: a sidecar an older build left must not pass for this one's.
       fs.rmSync(path.join(dir, `${stem}.wasm.sites.json`), { force: true })
@@ -32254,7 +32262,9 @@ if (!only || "wasm-size".includes(only)) {
           .map((f) => path.join(from, f))
       const sources = ll === null ? [] : lls === null ? [ll] : modules(lls)
       const inputs = runtime ? [...sources, "runtime/runtime-wasm.c"] : sources
-      const hostFlags = (name) => ["-o", path.join(dir, name), "--profile", "wasm-host"]
+      // A row with `memory` links with `--memory`, as the page it measures ships.
+      const memoryFlags = memory === undefined ? [] : ["--memory", String(memory)]
+      const hostFlags = (name) => ["-o", path.join(dir, name), "--profile", "wasm-host", ...memoryFlags]
       const built =
         ll === null
           ? null

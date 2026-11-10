@@ -40,6 +40,9 @@ export const keyBits = (code: string): number => {
   }
 }
 
+/** Every input bit the arena reads, for a release of all of them. */
+const ALL_KEYS: number = 31
+
 /** One key per input bit, for a script that types: bit 1 is ArrowUp, and so on. */
 export const CODES: readonly string[] = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"]
 
@@ -75,7 +78,9 @@ export interface Arena {
 /**
  * Loads the arena from `bytes` and starts it from `seed`. Nothing it answers
  * allocates per frame but the loader's call wrapper and the renderer's own
- * objects; the log is made here, `logCap` words long.
+ * objects: under WebGPU, a command encoder, its pass, its command buffer and
+ * the canvas texture's view, each frame, which the browser's API gives no way
+ * to reuse. The log is made here, `logCap` words long.
  *
  * @param bytes - client.wasm
  * @param renderer - the GPU path, or a stub under Node
@@ -196,6 +201,8 @@ const webgpuRenderer = async (canvas: HTMLCanvasElement): Promise<Renderer | nul
     storeOp: "store",
   }
   const pass: GPURenderPassDescriptor = { colorAttachments: [attachment] }
+  // The one-buffer list `submit` takes, made once; its slot is the frame's buffer.
+  const submitted: GPUCommandBuffer[] = []
   return {
     prepare: (bytes) => {
       buffer = device.createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST })
@@ -229,7 +236,8 @@ const webgpuRenderer = async (canvas: HTMLCanvasElement): Promise<Renderer | nul
       render.setBindGroup(0, group)
       render.draw(4, n)
       render.end()
-      device.queue.submit([encoder.finish()])
+      submitted[0] = encoder.finish()
+      device.queue.submit(submitted)
     },
   }
 }
@@ -319,6 +327,15 @@ export const main = async (
     const bits = keyBits(e.code)
     if (bits !== 0) {
       arena.release(bits)
+    }
+  })
+  // A key held when the page loses focus sends no keyup: release them all.
+  addEventListener("blur", () => {
+    arena.release(ALL_KEYS)
+  })
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      arena.release(ALL_KEYS)
     }
   })
   const after = options.afterFrame

@@ -925,11 +925,12 @@ export const RUNTIME_BUDGETS = [
  *
  * examples/wasm-arena/client.ts is the whole-page row (WP50 stage 6, measured
  * 2026-11-10): client.ts, sim.ts and nish/host/ring compiled with `--host
- * examples/wasm-arena/host.ts`, one `.ll` each, linked with no runtime-wasm.c. Its
- * 14,107-byte `.wasm` (gzip 6,354, brotli 5,748) is the whole simulation, the
- * renderer's instance packing and the input ring; its loader is 10,767 bytes (gzip
- * 3,522, brotli 3,090), most of it the eight module-storage views and the two host
- * imports that take a string.
+ * examples/wasm-arena/host.ts --memory 4` (the page's own build), one `.ll` each,
+ * linked with no runtime-wasm.c. Its 14,108-byte `.wasm` (gzip 6,356, brotli 5,814;
+ * one byte and 66 brotli bytes over the build without `--memory`) is the whole
+ * simulation, the renderer's instance packing and the input ring; its loader is
+ * 10,767 bytes (gzip 3,522, brotli 3,090), most of it the eight module-storage
+ * views and the two host imports that take a string.
  */
 export const WASM_HOST_SIZE_BUDGETS = [
   {
@@ -963,10 +964,11 @@ export const WASM_HOST_SIZE_BUDGETS = [
   {
     src: "examples/wasm-arena/client.ts",
     host: "examples/wasm-arena/host.ts",
+    memory: 4,
     runtime: false,
-    wasm: [14107, 6354, 5748],
+    wasm: [14108, 6356, 5814],
     loader: [10767, 3522, 3090],
-    inline: [42245, 7818, 6759],
+    inline: [42249, 7821, 6770],
   },
 ]
 
