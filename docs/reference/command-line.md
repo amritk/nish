@@ -117,7 +117,7 @@ refuse a program that reaches these
 
 <scalar-field name="--deterministic">
 
-the same float bits on every target, nothing nondeterministic
+same float bits everywhere, no clock or I/O
 
 </scalar-field>
 
