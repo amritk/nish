@@ -49,8 +49,18 @@ export const TFB_WORLD_ROWS: i32 = 10000
 /** How many queries the carrier holds: room for every slot's every key. */
 export const TFB_QUERY_ROOM: i32 = 65536
 /** The most Fortune rows one request holds, and the bytes their messages may take. */
-const TFB_FORTUNE_ROWS: i32 = 256
-const TFB_FORTUNE_BYTES: i32 = 32768
+export const TFB_FORTUNE_ROWS: i32 = 256
+export const TFB_FORTUNE_BYTES: i32 = 32768
+/** Room for a fortunes page: every message byte escaped to at most six, and the markup. */
+export const TFB_HTML_BYTES: i32 = 8 * TFB_FORTUNE_BYTES
+/** Room for a JSON answer of up to `TFB_MAX_COUNT` rows. */
+export const TFB_JSON_BYTES: i32 = 32768
+
+/** The statements both entries run. */
+export const TFB_FORTUNE_SQL: string = "select id, message from fortune"
+export const TFB_CACHE_SQL: string = "select id, randomnumber from world"
+export const TFB_UPDATE_SQL: string =
+  "update world set randomnumber = v.r from (select unnest($1::int8[]) as id, unnest($2::int8[]) as r) as v where world.id = v.id"
 
 /** A job's phase: rows being read, the update in flight, or waiting on the cache. */
 const PHASE_READ: i32 = 0
@@ -102,52 +112,52 @@ export const tfbCount = (req: HttpRequest, name: string): i32 => {
   return n > TFB_MAX_COUNT ? TFB_MAX_COUNT : n
 }
 
-/** One request in flight and everything its answer needs. */
-class TfbJob {
-  req: HttpRequest | null = null
-  /** The rows it read: `ids[k]` and `numbers[k]` for `k` below `rows`. */
-  ids: i64[]
-  numbers: i64[]
-  /** The update's parameters: each distinct id once, ascending, and its new number. */
-  updateIds: i64[]
-  updateNumbers: i64[]
-  /** The Fortune rows: id, and the message at `text[start, start + length)`. */
-  fortuneIds: i64[]
-  fortuneStart: i32[]
-  fortuneLength: i32[]
-  order: i32[]
-  text: u8[]
-  route: i32 = 0
-  phase: i32 = 0
-  /** How many rows it asks for, how many queries it queued, how many of those have had their final event. */
-  count: i32 = 0
-  queued: i32 = 0
-  finished: i32 = 0
-  rows: i32 = 0
-  updates: i32 = 0
-  textLength: i32 = 0
-  failed: boolean = false
-  /** Whether it waits in `TfbDb.waiting` for the carrier to have room. */
-  listed: boolean = false
+/** A random World id, 1 to 10000. */
+export const tfbWorldId = (): i64 => toI64(1 + toI32(Math.floor(Math.random() * 10000.0)))
 
-  constructor() {
-    this.ids = new Array<i64>(TFB_MAX_COUNT)
-    this.numbers = new Array<i64>(TFB_MAX_COUNT)
-    this.updateIds = new Array<i64>(TFB_MAX_COUNT)
-    this.updateNumbers = new Array<i64>(TFB_MAX_COUNT)
-    this.fortuneIds = new Array<i64>(TFB_FORTUNE_ROWS)
-    this.fortuneStart = new Array<i32>(TFB_FORTUNE_ROWS)
-    this.fortuneLength = new Array<i32>(TFB_FORTUNE_ROWS)
-    this.order = new Array<i32>(TFB_FORTUNE_ROWS)
-    this.text = new Array<u8>(TFB_FORTUNE_BYTES)
-  }
+/** Writes `{"id":id,"randomNumber":number}`. */
+export const tfbWriteWorld = (w: JsonWriter, id: i64, number: i64): void => {
+  w.beginObject()
+  w.key("id")
+  w.i64(id)
+  w.key("randomNumber")
+  w.i64(number)
+  w.endObject()
 }
 
-/** A random World id, 1 to 10000. */
-const worldId = (): i64 => toI64(1 + toI32(Math.floor(Math.random() * 10000.0)))
+/**
+ * Plans an update of `rows` rows read into `ids`: draws each row's new number
+ * into `numbers`, and lists each distinct id once, ascending, in `updateIds`
+ * with the number all its rows share in `updateNumbers`. Answers how many
+ * distinct ids there are.
+ */
+export const tfbPlanUpdate = (ids: i64[], numbers: i64[], rows: i32, updateIds: i64[], updateNumbers: i64[]): i32 => {
+  let n: i32 = 0
+  for (let k: i32 = 0; k < rows; k++) {
+    const id: i64 = ids[k]
+    // Insertion into the ascending list; an id already there keeps its number.
+    let at: i32 = n
+    while (at > 0 && updateIds[at - 1] > id) {
+      at -= 1
+    }
+    if (at > 0 && updateIds[at - 1] === id) {
+      numbers[k] = updateNumbers[at - 1]
+      continue
+    }
+    for (let m: i32 = n; m > at; m--) {
+      updateIds[m] = updateIds[m - 1]
+      updateNumbers[m] = updateNumbers[m - 1]
+    }
+    numbers[k] = tfbWorldId()
+    updateIds[at] = id
+    updateNumbers[at] = numbers[k]
+    n += 1
+  }
+  return n
+}
 
 /** Whether `a[as, as + al)` sorts before `b[bs, bs + bl)`, byte by byte. */
-const bytesBefore = (a: u8[], as: i32, al: i32, b: u8[], bs: i32, bl: i32): boolean => {
+const tfbBytesBefore = (a: u8[], as: i32, al: i32, b: u8[], bs: i32, bl: i32): boolean => {
   const n: i32 = al < bl ? al : bl
   for (let k: i32 = 0; k < n; k++) {
     const x: i32 = toI32(a[as + k])
@@ -158,6 +168,194 @@ const bytesBefore = (a: u8[], as: i32, al: i32, b: u8[], bs: i32, bl: i32): bool
   }
   return al < bl
 }
+
+/** Writes the ASCII `s` at `out[at]`; answers the end. */
+const tfbPut = (out: u8[], at: i32, s: string): i32 => {
+  const n: i32 = toI32(s.length)
+  for (let k: i32 = 0; k < n; k++) {
+    out[at + k] = toU8(toI32(s.charCodeAt(k)))
+  }
+  return at + n
+}
+
+/**
+ * Writes `v` in decimal at `out[at]`, a `-` first when it is negative.
+ * @returns where the digits end
+ */
+export const tfbDigits = (out: u8[], at: i32, v: i64): i32 => {
+  if (v < toI64(0)) {
+    out[at] = toU8(45)
+    return tfbDigits(out, at + 1, -v)
+  }
+  let end: i32 = at
+  if (v >= toI64(10)) {
+    end = tfbDigits(out, at, v / toI64(10))
+  }
+  out[end] = toU8(48 + toI32(v % toI64(10)))
+  return end + 1
+}
+
+/** Writes `text[start, start + length)` HTML-escaped at `out[at]`: `& < > " '` as entities, every other byte as it is. */
+const tfbEscape = (out: u8[], at: i32, text: u8[], start: i32, length: i32): i32 => {
+  let end: i32 = at
+  for (let k: i32 = 0; k < length; k++) {
+    const b: u8 = text[start + k]
+    const c: i32 = toI32(b)
+    if (c === 38) {
+      end = tfbPut(out, end, "&amp;")
+    } else if (c === 60) {
+      end = tfbPut(out, end, "&lt;")
+    } else if (c === 62) {
+      end = tfbPut(out, end, "&gt;")
+    } else if (c === 34) {
+      end = tfbPut(out, end, "&quot;")
+    } else if (c === 39) {
+      end = tfbPut(out, end, "&#39;")
+    } else {
+      out[end] = b
+      end += 1
+    }
+  }
+  return end
+}
+
+/** The row TFB adds to every fortunes answer at request time, with id 0. */
+const TFB_EXTRA_FORTUNE: string = "Additional fortune added at request time."
+
+/**
+ * One fortunes answer's rows: row `k` has id `ids[k]` and the message at
+ * `text[starts[k], starts[k] + lengths[k])`. A reader writes a message's
+ * bytes at `text[textLength]`, once `room` allows them, then calls `push`.
+ */
+export class TfbFortunes {
+  ids: i64[]
+  starts: i32[]
+  lengths: i32[]
+  order: i32[]
+  text: u8[]
+  rows: i32 = 0
+  textLength: i32 = 0
+
+  constructor() {
+    this.ids = new Array<i64>(TFB_FORTUNE_ROWS)
+    this.starts = new Array<i32>(TFB_FORTUNE_ROWS)
+    this.lengths = new Array<i32>(TFB_FORTUNE_ROWS)
+    this.order = new Array<i32>(TFB_FORTUNE_ROWS)
+    this.text = new Array<u8>(TFB_FORTUNE_BYTES)
+  }
+
+  /** Empties it for the next answer. */
+  reset(): void {
+    this.rows = 0
+    this.textLength = 0
+  }
+
+  /**
+   * Whether a row whose message is `length` bytes fits, leaving a row for the
+   * request-time one.
+   * @param length the message's bytes, negative for a NULL message
+   * @returns false when the answer must fail
+   */
+  room(length: i32): boolean {
+    return this.rows < TFB_FORTUNE_ROWS - 1 && length >= 0 && this.textLength + length <= TFB_FORTUNE_BYTES
+  }
+
+  /**
+   * Adds the row `id` whose `length` message bytes are already at `text[textLength]`.
+   * @param id the row's id
+   * @param length its message's bytes, which `room` allowed
+   */
+  push(id: i64, length: i32): void {
+    this.ids[this.rows] = id
+    this.starts[this.rows] = this.textLength
+    this.lengths[this.rows] = length
+    this.textLength += length
+    this.rows += 1
+  }
+
+  /**
+   * Adds the request-time row, sorts every row by its message's bytes and
+   * writes the page into `out`, which holds `TFB_HTML_BYTES`.
+   * @param out the page's buffer
+   * @returns the page's length, or -1 when the request-time row does not fit
+   */
+  render(out: u8[]): i32 {
+    const length: i32 = toI32(TFB_EXTRA_FORTUNE.length)
+    if (this.textLength + length > TFB_FORTUNE_BYTES) {
+      return -1
+    }
+    for (let k: i32 = 0; k < length; k++) {
+      this.text[this.textLength + k] = toU8(toI32(TFB_EXTRA_FORTUNE.charCodeAt(k)))
+    }
+    this.push(toI64(0), length)
+    const n: i32 = this.rows
+    for (let k: i32 = 0; k < n; k++) {
+      let at: i32 = k
+      while (
+        at > 0 &&
+        tfbBytesBefore(
+          this.text,
+          this.starts[k],
+          this.lengths[k],
+          this.text,
+          this.starts[this.order[at - 1]],
+          this.lengths[this.order[at - 1]]
+        )
+      ) {
+        this.order[at] = this.order[at - 1]
+        at -= 1
+      }
+      this.order[at] = k
+    }
+    let end: i32 = tfbPut(
+      out,
+      ZERO,
+      "<!DOCTYPE html><html><head><title>Fortunes</title></head><body><table><tr><th>id</th><th>message</th></tr>"
+    )
+    for (let k: i32 = 0; k < n; k++) {
+      const r: i32 = this.order[k]
+      end = tfbPut(out, end, "<tr><td>")
+      end = tfbDigits(out, end, this.ids[r])
+      end = tfbPut(out, end, "</td><td>")
+      end = tfbEscape(out, end, this.text, this.starts[r], this.lengths[r])
+      end = tfbPut(out, end, "</td></tr>")
+    }
+    return tfbPut(out, end, "</table></body></html>")
+  }
+}
+
+/** One request in flight and everything its answer needs. */
+class TfbJob {
+  req: HttpRequest | null = null
+  /** The rows it read: `ids[k]` and `numbers[k]` for `k` below `rows`. */
+  ids: i64[]
+  numbers: i64[]
+  /** The update's parameters: each distinct id once, ascending, and its new number. */
+  updateIds: i64[]
+  updateNumbers: i64[]
+  /** The Fortune rows it read. */
+  fortunes: TfbFortunes
+  route: i32 = 0
+  phase: i32 = 0
+  /** How many rows it asks for, how many queries it queued, how many of those have had their final event. */
+  count: i32 = 0
+  queued: i32 = 0
+  finished: i32 = 0
+  rows: i32 = 0
+  updates: i32 = 0
+  failed: boolean = false
+  /** Whether it waits in `TfbDb.waiting` for the carrier to have room. */
+  listed: boolean = false
+
+  constructor() {
+    this.ids = new Array<i64>(TFB_MAX_COUNT)
+    this.numbers = new Array<i64>(TFB_MAX_COUNT)
+    this.updateIds = new Array<i64>(TFB_MAX_COUNT)
+    this.updateNumbers = new Array<i64>(TFB_MAX_COUNT)
+    this.fortunes = new TfbFortunes()
+  }
+}
+
 
 /** The database half of the TechEmpower entry: a handler, its carrier and the jobs in flight. */
 export class TfbDb {
@@ -170,7 +368,6 @@ export class TfbDb {
   private json: JsonWriter
   private jsonBuf: u8[]
   private html: u8[]
-  private extra: u8[]
   private names: u8[][]
   private jsonValues: u8[][]
   private htmlValues: u8[][]
@@ -209,13 +406,9 @@ export class TfbDb {
     limits.slots = slots
     this.h = new HttpHandler(limits, listener, router)
     const types: i32[] = []
-    pool.register("fortune", "select id, message from fortune", types)
-    pool.register("cache", "select id, randomnumber from world", types)
-    pool.register(
-      "update",
-      "update world set randomnumber = v.r from (select unnest($1::int8[]) as id, unnest($2::int8[]) as r) as v where world.id = v.id",
-      types
-    )
+    pool.register("fortune", TFB_FORTUNE_SQL, types)
+    pool.register("cache", TFB_CACHE_SQL, types)
+    pool.register("update", TFB_UPDATE_SQL, types)
     const carrierLimits = new PgCarrierLimits()
     carrierLimits.queries = queries
     carrierLimits.executions = 1024
@@ -237,10 +430,9 @@ export class TfbDb {
     }
     this.freeCount = slots
     this.cacheTag = slots
-    this.jsonBuf = new Array<u8>(32768)
+    this.jsonBuf = new Array<u8>(TFB_JSON_BYTES)
     this.json = new JsonWriter(this.jsonBuf, ZERO)
-    this.html = new Array<u8>(8 * TFB_FORTUNE_BYTES)
-    this.extra = tfbAscii("Additional fortune added at request time.")
+    this.html = new Array<u8>(TFB_HTML_BYTES)
     this.names = [tfbAscii("Server"), tfbAscii("Content-Type")]
     this.jsonValues = [tfbAscii("nish"), tfbAscii("application/json")]
     this.htmlValues = [tfbAscii("nish"), tfbAscii("text/html; charset=utf-8")]
@@ -294,7 +486,7 @@ export class TfbDb {
     job.rows = 0
     job.failed = false
     job.listed = false
-    job.textLength = 0
+    job.fortunes.reset()
     if (route === TFB_DB) {
       job.count = 1
     } else if (route === TFB_QUERIES || route === TFB_UPDATES) {
@@ -329,7 +521,7 @@ export class TfbDb {
       return
     }
     while (job.queued < job.count && !job.failed) {
-      if (this.carrier.runInt(req, this.world, worldId(), index) === PG_CARRIER_FULL) {
+      if (this.carrier.runInt(req, this.world, tfbWorldId(), index) === PG_CARRIER_FULL) {
         this.list(index)
         return
       }
@@ -433,21 +625,18 @@ export class TfbDb {
     const conn: PgConnection = this.carrier.connection()
     const job: TfbJob = this.jobs[index]
     if (job.route === TFB_FORTUNES) {
+      const f: TfbFortunes = job.fortunes
       const length: i32 = conn.colLength(toI32(1))
-      if (job.rows >= TFB_FORTUNE_ROWS - 1 || length < 0 || job.textLength + length > TFB_FORTUNE_BYTES) {
+      if (!f.room(length)) {
         job.failed = true
         return
       }
       const input: u8[] = conn.inputBuffer()
       const start: i32 = conn.colStart(toI32(1))
       for (let k: i32 = 0; k < length; k++) {
-        job.text[job.textLength + k] = input[start + k]
+        f.text[f.textLength + k] = input[start + k]
       }
-      job.fortuneIds[job.rows] = conn.int(ZERO)
-      job.fortuneStart[job.rows] = job.textLength
-      job.fortuneLength[job.rows] = length
-      job.textLength += length
-      job.rows += 1
+      f.push(conn.int(ZERO), length)
     } else if (job.phase === PHASE_READ && job.rows < job.count) {
       job.ids[job.rows] = conn.int(ZERO)
       job.numbers[job.rows] = conn.int(toI32(1))
@@ -478,28 +667,7 @@ export class TfbDb {
   /** Draws each row's new number, then lists each distinct id once, ascending, with the number all its rows share. */
   private startUpdate(index: i32): void {
     const job: TfbJob = this.jobs[index]
-    let n: i32 = 0
-    for (let k: i32 = 0; k < job.rows; k++) {
-      const id: i64 = job.ids[k]
-      // Insertion into the ascending list; an id already there keeps its number.
-      let at: i32 = n
-      while (at > 0 && job.updateIds[at - 1] > id) {
-        at -= 1
-      }
-      if (at > 0 && job.updateIds[at - 1] === id) {
-        job.numbers[k] = job.updateNumbers[at - 1]
-        continue
-      }
-      for (let m: i32 = n; m > at; m--) {
-        job.updateIds[m] = job.updateIds[m - 1]
-        job.updateNumbers[m] = job.updateNumbers[m - 1]
-      }
-      job.numbers[k] = worldId()
-      job.updateIds[at] = id
-      job.updateNumbers[at] = job.numbers[k]
-      n += 1
-    }
-    job.updates = n
+    job.updates = tfbPlanUpdate(job.ids, job.numbers, job.rows, job.updateIds, job.updateNumbers)
     this.runUpdate(index)
   }
 
@@ -518,26 +686,16 @@ export class TfbDb {
     job.queued += 1
   }
 
-  /** Writes `{"id":id,"randomNumber":number}`. */
-  private writeWorld(w: JsonWriter, id: i64, number: i64): void {
-    w.beginObject()
-    w.key("id")
-    w.i64(id)
-    w.key("randomNumber")
-    w.i64(number)
-    w.endObject()
-  }
-
   private answerWorlds(index: i32): void {
     const job: TfbJob = this.jobs[index]
     const w: JsonWriter = this.json
     w.reset(this.jsonBuf, ZERO)
     if (job.route === TFB_DB) {
-      this.writeWorld(w, job.ids[0], job.numbers[0])
+      tfbWriteWorld(w, job.ids[0], job.numbers[0])
     } else {
       w.beginArray()
       for (let k: i32 = 0; k < job.rows; k++) {
-        this.writeWorld(w, job.ids[k], job.numbers[k])
+        tfbWriteWorld(w, job.ids[k], job.numbers[k])
       }
       w.endArray()
     }
@@ -550,8 +708,8 @@ export class TfbDb {
     w.reset(this.jsonBuf, ZERO)
     w.beginArray()
     for (let k: i32 = 0; k < job.count; k++) {
-      const id: i64 = worldId()
-      this.writeWorld(w, id, this.cache[toI32(id)])
+      const id: i64 = tfbWorldId()
+      tfbWriteWorld(w, id, this.cache[toI32(id)])
     }
     w.endArray()
     this.sendJson(index)
@@ -606,105 +764,15 @@ export class TfbDb {
 
   private answerFortunes(index: i32): void {
     const job: TfbJob = this.jobs[index]
-    // The request-time row, then every row's index sorted by its message's bytes.
-    const extra: i32 = job.rows
-    const length: i32 = toI32(this.extra.length)
-    if (job.textLength + length > TFB_FORTUNE_BYTES) {
+    const end: i32 = job.fortunes.render(this.html)
+    if (end < 0) {
       this.fail(index)
       return
     }
-    for (let k: i32 = 0; k < length; k++) {
-      job.text[job.textLength + k] = this.extra[k]
-    }
-    job.fortuneIds[extra] = toI64(0)
-    job.fortuneStart[extra] = job.textLength
-    job.fortuneLength[extra] = length
-    job.textLength += length
-    const n: i32 = extra + 1
-    for (let k: i32 = 0; k < n; k++) {
-      let at: i32 = k
-      while (
-        at > 0 &&
-        bytesBefore(
-          job.text,
-          job.fortuneStart[k],
-          job.fortuneLength[k],
-          job.text,
-          job.fortuneStart[job.order[at - 1]],
-          job.fortuneLength[job.order[at - 1]]
-        )
-      ) {
-        job.order[at] = job.order[at - 1]
-        at -= 1
-      }
-      job.order[at] = k
-    }
-    const out: u8[] = this.html
-    let end: i32 = this.put(
-      out,
-      ZERO,
-      "<!DOCTYPE html><html><head><title>Fortunes</title></head><body><table><tr><th>id</th><th>message</th></tr>"
-    )
-    for (let k: i32 = 0; k < n; k++) {
-      const r: i32 = job.order[k]
-      end = this.put(out, end, "<tr><td>")
-      end = this.digits(out, end, job.fortuneIds[r])
-      end = this.put(out, end, "</td><td>")
-      end = this.escape(out, end, job.text, job.fortuneStart[r], job.fortuneLength[r])
-      end = this.put(out, end, "</td></tr>")
-    }
-    end = this.put(out, end, "</table></body></html>")
     const req: HttpRequest | null = job.req
     this.release(index)
     if (req !== null) {
-      this.h.sendFields(req, 200, this.names, this.htmlValues, out, ZERO, end)
+      this.h.sendFields(req, 200, this.names, this.htmlValues, this.html, ZERO, end)
     }
-  }
-
-  /** Writes the ASCII `s` at `out[at]`; answers the end. */
-  private put(out: u8[], at: i32, s: string): i32 {
-    const n: i32 = toI32(s.length)
-    for (let k: i32 = 0; k < n; k++) {
-      out[at + k] = toU8(toI32(s.charCodeAt(k)))
-    }
-    return at + n
-  }
-
-  /** Writes `v`, at least 0, in decimal at `out[at]`; answers the end. */
-  private digits(out: u8[], at: i32, v: i64): i32 {
-    if (v < toI64(0)) {
-      out[at] = toU8(45)
-      return this.digits(out, at + 1, -v)
-    }
-    let end: i32 = at
-    if (v >= toI64(10)) {
-      end = this.digits(out, at, v / toI64(10))
-    }
-    out[end] = toU8(48 + toI32(v % toI64(10)))
-    return end + 1
-  }
-
-  /** Writes `text[start, start + length)` HTML-escaped at `out[at]`: `& < > " '` as entities, every other byte as it is. */
-  private escape(out: u8[], at: i32, text: u8[], start: i32, length: i32): i32 {
-    let end: i32 = at
-    for (let k: i32 = 0; k < length; k++) {
-      const b: u8 = text[start + k]
-      const c: i32 = toI32(b)
-      if (c === 38) {
-        end = this.put(out, end, "&amp;")
-      } else if (c === 60) {
-        end = this.put(out, end, "&lt;")
-      } else if (c === 62) {
-        end = this.put(out, end, "&gt;")
-      } else if (c === 34) {
-        end = this.put(out, end, "&quot;")
-      } else if (c === 39) {
-        end = this.put(out, end, "&#39;")
-      } else {
-        out[end] = b
-        end += 1
-      }
-    }
-    return end
   }
 }
