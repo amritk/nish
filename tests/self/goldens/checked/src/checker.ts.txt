@@ -368,10 +368,11 @@ function Checker.importSort(this: Checker): void -> @Checker.importSort [exporte
 function Checker.importArrayMethods(this: Checker): void -> @Checker.importArrayMethods [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: CheckedProgram.isMathLibrary ImportBinding.constructor StringSet.at StringSet.constructor StringSet.size arrayMethodLocal arrayMethodTemplates nish_alloc_struct nish_array_grow scanArrayMethodCalls
+  calls: CheckedProgram.isMathLibrary ImportBinding.constructor StringSet.at StringSet.constructor StringSet.size arrayMethodLocal arrayMethodTemplates mentionsArrayMethod nish_alloc_struct nish_array_grow scanArrayMethodCalls
   pointer this: size=24 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   callee -7:9 CheckedProgram.isMathLibrary -> @CheckedProgram.isMathLibrary
+  callee -7:42 mentionsArrayMethod -> @mentionsArrayMethod
   local -4:11 names: StringSet (const)
   callee -4:19 new StringSet -> @StringSet.constructor
   callee -3:5 scanArrayMethodCalls -> @scanArrayMethodCalls
@@ -1754,6 +1755,10 @@ function hasSortCall(node: Node): boolean -> @hasSortCall
   stackSites=0 stackLocals=0
   local +0:14 child: Node (const)
   callee +1:9 hasSortCall -> @hasSortCall
+function mentionsArrayMethod(text: string): boolean -> @mentionsArrayMethod
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
 function scanArrayMethodCalls(node: Node, names: StringSet): void -> @scanArrayMethodCalls
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add

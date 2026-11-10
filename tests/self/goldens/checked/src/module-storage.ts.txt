@@ -298,7 +298,7 @@ function refuseMethod(ctx: CheckContext, info: ConstInfo, node: Node, method: st
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error
 function rewrittenMethod(local: string): string -> @rewrittenMethod
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: local
   calls: arrayMethodOfLocal nish_str_eq
   stackSites=0 stackLocals=0
