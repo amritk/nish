@@ -177,8 +177,8 @@ A burst whose handlers answer without waiting is answered within one turn of
 the server's loop, and the answers go out together in one write while they
 fit the connection's 64 KiB output; a client that stops reading gets what fits
 and the rest as it reads, still in order. If the client hangs up mid-burst,
-the request whose task is waiting is cancelled and the requests behind it are
-never run. `ServeStats.sends` counts the writes.
+the task that is waiting is cancelled; requests behind it that were already
+read still run, and their answers are dropped. `ServeStats.sends` counts the writes.
 
 ## Limits
 

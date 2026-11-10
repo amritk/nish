@@ -182,6 +182,7 @@ class HttpHandler
 | `empty(r: HttpRequest, status: i32): i32` | Answers `r` with `status` and no body: a 204, or a status whose meaning is all there is to say. |
 | `end(r: HttpRequest): i32` | Ends `r`'s response. `r` is the handler's again: it goes back once the carrier has taken every byte, and the connection's next request is read. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. |
 | `fired(id: i32): boolean` | Whether watched descriptor `id` was ready in the last `wait`. |
+| `flush(): void` | Sends every answer whose send was put off, so the connection's answers to a pipelined burst go out in one write. `wait` calls it before it blocks; a program that blocks elsewhere, as `nish/net/serve` does, calls it first. |
 | `hungUp(r: HttpRequest): boolean` | Whether the client of `r` has hung up: its connection is closed or reused, or the peer ended its stream while `r` is held. A half-close counts, as nginx counts it, so a hung task is cancelled rather than kept for a reader who may be gone. |
 | `json(): JsonWriter` | The JSON writer, reset onto the handler's scratch buffer: write one value with it, then `sendJson`. One JSON body at a time, since every request shares the buffer. |
 | `pooled(): i32` | How many requests the pool has made: the most ever in flight at once. |
@@ -191,6 +192,7 @@ class HttpHandler
 | `send(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32` | Answers `r` with `status`, a `Content-Type` of `contentType` and the body `body[off .. off + len)`, in one call. |
 | `sendFields(r: HttpRequest, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32): i32` | Answers `r` with `status`, the fields `names[k]`: `values[k]` and the body `body[off .. off + len)`, in one call. |
 | `sendJson(r: HttpRequest, status: i32): i32` | Answers `r` with `status` and the value `json`'s writer holds, as `application/json`. A value the writer refused or did not finish — it outgrew `jsonBytes`, say — is answered as a 500 problem instead. |
+| `sends(): i64` | How many times the handler handed a connection's waiting output to its socket: one per connection per pass, however many answers it holds. |
 | `start(r: HttpRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32` | Starts `r`'s response: `status` (200 to 599), the fields `names[k]`: `values[k]`, and a body of `bodyLength` bytes or `HTTP1_CHUNKED`; then `write` the body and `end`. Answers `HANDLER_SENT`, or `HANDLER_DROPPED` when `r`'s connection has closed — every later `write` and `end` for it then does nothing, and `end` hands it back. |
 | `take(): HttpRequest` | The next whole request, which the program now owes an answer. Panics when none is `ready`. |
 | `wait(timeoutMs: i32): i32` | One turn of the loop: waits up to `timeoutMs` (-1 for no limit) for a socket to be ready, accepts, reads and writes what is, closes the connections past their timeouts, and answers how many whole requests are waiting for `take`. |

@@ -657,6 +657,10 @@ export class HttpHandler {
         timeout = rest
       }
     }
+    if (this.queueCount > 0) {
+      // A send `flush` made let a parked request in: it is ready now.
+      timeout = 0
+    }
     const n: i32 = pollWait(this.loop, this.readyFds, timeout)
     const now: i64 = monotonicNanos()
     this.turnAt = now
@@ -769,9 +773,8 @@ export class HttpHandler {
 
   /**
    * Takes `slot`'s events until it needs the socket again, then sends what it
-   * holds and re-arms it, or closes it once it is over. While the next
-   * request on it is queued and its output has room, the send waits for
-   * `flush`, so the answer to that request goes out with this one.
+   * holds and re-arms it, or closes it once it is over. While `owable` allows,
+   * the send waits for `flush`, so the answers behind this one go out with it.
    */
   private drive(slot: i32): void {
     const conn: Http1Connection = this.server.connection(slot)
@@ -803,10 +806,15 @@ export class HttpHandler {
     this.settle(slot, conn)
   }
 
-  /** Whether `slot`'s send can wait for `flush`: a whole request is queued behind its answer and its output is still roomy. */
+  /**
+   * Whether `slot`'s send can wait for `flush`: its output is still roomy, so
+   * more answers fit behind it, and no request on it is parked waiting for
+   * the room a send makes. `flush` runs before every poll, so a send put off
+   * here goes out before the handler waits.
+   */
   private owable(slot: i32, conn: Http1Connection): boolean {
     const at: i32 = this.current[slot]
-    return !this.draining && at >= 0 && this.requests[at].state === HANDLER_QUEUED && this.roomy(conn)
+    return !this.draining && this.roomy(conn) && (at < 0 || this.requests[at].state !== HANDLER_PARKED)
   }
 
   /** Sends what `slot` holds and re-arms it, or closes it once it is over; enqueues a parked request once there is room. */

@@ -1,8 +1,8 @@
 // A pipelined burst on one connection, as `serve` answers it: in request
 // order, in one write while the answers fit the output, across partial
-// writes when they do not, and with the rest of a burst dropped when the
-// client hangs up mid-burst. `/stats` answers the server's own counts, read
-// on the loop after each turn's flush.
+// writes when they do not, and with the waiting task cancelled when the
+// client hangs up mid-burst. `/stats` answers the server's own counts, which
+// the loop updates after each turn's flush.
 import { cancelled, readable, sleep, spawn } from "nish:async"
 import { NET_UNIX_STREAM, netClose, netLocalPort, netRead, netWrite, tcpListen, unixSocketPair } from "nish:net"
 import { Router, RouterLimits } from "nish/net/router"
@@ -12,14 +12,14 @@ import { Conn, dial, hangUp, readResponse, sendText } from "../net_serve/client"
 const BURST: i32 = 16
 const BIG: i32 = 128
 const BIG_BYTES: i32 = 60000
-const STATS: ServeStats = new ServeStats()
 
-async function handle(req: Request): Promise<Response> {
+/** The answer to `req`; `answered` and `sends` are the server's counts as the task began. */
+async function handle(req: Request, answered: i32, sends: i64): Promise<Response> {
   if (req.route === 0) {
     return new Response(200).text(`item ${req.paramNumber(0)}`)
   }
   if (req.route === 1) {
-    return new Response(200).text(`${STATS.answered} ${STATS.sends}`)
+    return new Response(200).text(`${answered} ${sends}`)
   }
   if (req.route === 2) {
     const n: i32 = req.paramNumber(0)
@@ -44,16 +44,18 @@ function statAt(r: string, k: i32): i32 {
   return toI32(parseInt(k === 0 ? text.substring(0, space) : text.substring(space + 1, toI32(text.length))))
 }
 
-async function stats(c: Conn): Promise<string> {
+/** Asks `/stats` on `c`: what the server had answered (`k` 0) or how many sends it had made (`k` 1). */
+async function askStats(c: Conn, k: i32): Promise<i32> {
   await sendText(c, "GET /stats HTTP/1.1\r\nhost: t\r\n\r\n")
-  return await readResponse(c)
+  const r: string = await readResponse(c)
+  return statAt(r, k)
 }
 
 async function client(port: i32, doneFd: i32): Promise<void> {
   // A burst that fits: answered in order, in one write.
   const a: Conn = new Conn(8192)
   await dial(a, port)
-  const before: string = await stats(a)
+  const sendsBefore: i32 = await askStats(a, 1)
   let burst: string = ""
   for (let i: i32 = 0; i < BURST; i++) {
     burst = `${burst}GET /items/${i} HTTP/1.1\r\nhost: t\r\n\r\n`
@@ -61,14 +63,15 @@ async function client(port: i32, doneFd: i32): Promise<void> {
   await sendText(a, burst)
   let inOrder: i32 = 0
   for (let i: i32 = 0; i < BURST; i++) {
-    if ((await readResponse(a)) === `200 [text/plain; charset=utf-8] item ${i}`) {
+    const r: string = await readResponse(a)
+    if (r === `200 [text/plain; charset=utf-8] item ${i}`) {
       inOrder++
     }
   }
-  const after: string = await stats(a)
+  const sendsAfter: i32 = await askStats(a, 1)
   console.log(`burst of ${BURST}: ${inOrder} answered in order`)
   // The sends between the two reads of `/stats`: the first one's answer, then the burst's.
-  console.log(`burst of ${BURST}: ${statAt(after, 1) - statAt(before, 1) - 1} write(s)`)
+  console.log(`burst of ${BURST}: ${sendsAfter - sendsBefore - 1} write(s)`)
   hangUp(a)
 
   // A burst whose answers outgrow the socket while the client does not
@@ -83,9 +86,9 @@ async function client(port: i32, doneFd: i32): Promise<void> {
   await sleep(100)
   const c: Conn = new Conn(8192)
   await dial(c, port)
-  const held: string = await stats(c)
+  const held: i32 = await askStats(c, 0)
   hangUp(c)
-  const sentEarly: i32 = statAt(held, 0) - statAt(after, 0) - 1
+  const sentEarly: i32 = held - (BURST + 2)
   console.log(`big burst: fewer than ${BIG} answered while unread: ${sentEarly < BIG}`)
   let whole: i32 = 0
   const prefix: string = "200 [application/octet-stream] "
@@ -104,23 +107,25 @@ async function client(port: i32, doneFd: i32): Promise<void> {
   console.log(`big burst: ${whole} of ${BIG} answered whole and in order`)
   hangUp(b)
 
-  // A hang-up mid-burst: the answer before the parked request arrives, the
-  // parked task is cancelled, and the requests behind it are never run.
+  // A hang-up mid-burst: the answer before the parked request arrives and
+  // the parked task is cancelled. The two requests behind it were already
+  // read, so they are still answered, in order, into a closed connection.
   const d: Conn = new Conn(8192)
   await dial(d, port)
   await sendText(
     d,
     "GET /items/1 HTTP/1.1\r\nhost: t\r\n\r\nGET /hang HTTP/1.1\r\nhost: t\r\n\r\nGET /items/2 HTTP/1.1\r\nhost: t\r\n\r\nGET /items/3 HTTP/1.1\r\nhost: t\r\n\r\n"
   )
-  console.log(`before the hang-up: ${await readResponse(d)}`)
+  const first: string = await readResponse(d)
+  console.log(`before the hang-up: ${first}`)
   await sleep(50)
   hangUp(d)
   await sleep(50)
   const e: Conn = new Conn(8192)
   await dial(e, port)
-  const last: string = await stats(e)
-  // Before it: 1 + BURST + 1 on the first connection, BIG + 1 on the next two, then /items/1 and /hang.
-  console.log(`after the hang-up: ${statAt(last, 0) - (BURST + BIG + 3)} answered on that connection`)
+  const last: i32 = await askStats(e, 0)
+  // Before it: 1 + BURST + 1 on the first connection, then BIG + 1 on the next two.
+  console.log(`after the hang-up: ${last - (BURST + BIG + 3)} answered on that connection`)
   hangUp(e)
   const one: u8[] = [1]
   netWrite(doneFd, one, 0, 1)
@@ -133,19 +138,26 @@ export async function main(): Promise<i32> {
   router.add("GET", "/big/:n")
   router.add("GET", "/hang")
   const limits: ServeLimits = new ServeLimits()
-  limits.maxRequests = BURST + BIG + 6
+  limits.maxRequests = BURST + BIG + 8
   const listener: i32 = tcpListen("127.0.0.1", 0, 16)
   const port: i32 = netLocalPort(listener)
   const fds: i32[] = [0, 0]
   unixSocketPair(NET_UNIX_STREAM, fds)
+  const stats: ServeStats = new ServeStats()
   spawn(client(port, fds[1]))
-  const done: i32 = await serveOn(listener, router, limits, handle, STATS)
+  const done: i32 = await serveOn(
+    listener,
+    router,
+    limits,
+    async (req: Request): Promise<Response> => await handle(req, stats.answered, stats.sends),
+    stats
+  )
   await readable(fds[0])
   const got: u8[] = [0]
   netRead(fds[0], got, 0, 1)
   netClose(fds[0])
   netClose(fds[1])
   netClose(listener)
-  console.log(`serve: ${done}, answered ${STATS.answered}, failed ${STATS.failed}`)
+  console.log(`serve: ${done}, answered ${stats.answered}, failed ${stats.failed}`)
   return 0
 }

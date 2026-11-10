@@ -751,6 +751,10 @@ export const serveOn = async (
     }
     h.flush()
     stats.sends = h.sends()
+    if (h.ready()) {
+      // A send let a parked request in: take it before parking.
+      continue
+    }
     st.awake = false
     await readable(h.loop)
   }
