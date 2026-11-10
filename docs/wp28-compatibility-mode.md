@@ -156,9 +156,9 @@ a direct call and nothing lost ([LANGUAGE.md](LANGUAGE.md#function-parameters)).
 A function stored, returned or held in a field is still on it;
 [wp51-function-references.md](wp51-function-references.md) (proposed, design
 only) measures a lowering for references to capture-free top-level
-functions — a tag and a `switch` — that joins this row as compat today, would
-take part of the row off the list once a stage demonstrates that each call's
-set is the members that can reach it, and leaves closures here.
+functions — a tag and a `switch` — and proposes taking them off this row into
+strict, as C2a was, with per-place sets (each call's set is the members that
+can reach it) in its first stage; closures stay here.
 
 ### 2.2 Tier 3, refused permanently
 

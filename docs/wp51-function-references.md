@@ -30,34 +30,52 @@ and so does passing a reference across the C boundary.
 
 ## 1. The decision
 
-**Compat today; strict once a stage demonstrates per-place sets.** References
-to capture-free top-level functions, lowered as a tag and a `switch` over a
-closed set (§2.3), go to compatibility mode
-([wp28-compatibility-mode.md](wp28-compatibility-mode.md)) now. Closures,
-`Function` and references across the C boundary stay refused in both modes.
+**Strict, with per-place sets a stage-1 ship requirement.** References to
+capture-free top-level functions, lowered as a tag and a `switch` over the
+members that can reach each call (§2.3), become part of the strict language:
+a `docs/LANGUAGE.md` rule, and the negative tests that refuse them today flip
+to positive. Closures, `Function` and references across the C boundary stay
+refused.
 
-- **The call, by stream** (§3.5). On a **monomorphic** site the switch
-  measured 0.99x to 1.24x faster than an indirect call, most of it inside the
-  21% layout spread (§3), and within ±3% of a direct call for a set of one.
+- **The call, by stream** (§3.5). On a **monomorphic** site an indirect call
+  measured 0.99x to 1.24x the switch, most of it inside the 21% layout spread
+  (§3), and the switch is within ±3% of a direct call for a set of one.
   On a **periodic mixed** stream it measured within ±3% of a direct call and
   3.7x to 4.7x faster than an indirect call for sets of up to four, 3.1x to
   3.3x for eight (§3.2, §3.3). On an **aperiodic** stream the selection itself
   mispredicts: the switch costs 2.4x to 4.5x a direct call, as a hand-written
-  `switch` does, and only K=2's 1.28x over an indirect call clears both the
-  band and the spread; K=4's 1.21x and K=8's 1.07x are no difference (§3.4).
+  `switch` does; K=2's 1.28x over an indirect call is past the band but not
+  known to be past that group's layout spread, and K=4's 1.21x and K=8's
+  1.07x are no difference (§3.4, §3.5).
 - **The escape proof** survives the dispatched call when every member of the
   set keeps the object local (§4). When one member does not, every call of the
   set loses it: 7.0x and 1.5 GB in the spike.
-- **Why not strict today.** A hand-written `switch` joins only its own arms; a
-  dispatcher joins every member of its set. With one set per signature, a
-  program rewritten from a `switch` to references can get slower, which is
-  wp28's test for compat. The cure is **per-place sets**: the set a call
-  dispatches over is the members that can reach that place (§2.3, §8). That
-  pass is unbuilt and unmeasured, and even per-place sets are
-  flow-insensitive, so a place that held a leaking member once joins it for
-  good (§10). Until a stage builds per-place sets and the `{u0,u1,u2}` test
-  (§9) shows no program slower than its hand switch, the construct is compat.
-  Once it does, this note's measurements argue for moving it to strict.
+- **Why strict holds, with per-place sets.** A hand-written `switch` joins
+  only its own arms; a dispatcher with one set per signature joins every
+  member of that signature, so a program rewritten from a `switch` to
+  references could get slower (the spike's case B, §4). Per-place sets cure
+  that (§2.3, §8): a place's set is exactly the tags a hand program storing
+  integer tags in the same places could hold there, so its dispatcher is the
+  switch that program must write at that call. No program is slower than the
+  same program written with integer tags and a hand `switch` over every
+  member stored into that place. What remains is flow-sensitive knowledge a
+  hand programmer could use and the pass does not (§10). The pass is unbuilt,
+  so stage 1 does not ship without it and without the `{u0,u1,u2}` test (§9).
+- **Why not wp28's compatibility mode.** Compat cannot hold this construct,
+  by wp28's own rules (line numbers at `350bad84`): its machinery, C0
+  (`--compat`), is unbuilt (`wp28-compatibility-mode.md:458`); strict is
+  normative and compat only adds acceptance (rule 1, :57-58), and with no
+  compat construct used the IR is byte-identical and every `reject_*` the
+  allow-list does not name rejects unchanged (rule 5, :75-79), so compat is a
+  flag over the strict language, not a change to it;
+  "Compat adds no rule to LANGUAGE.md" (§4.3, :239); "`src/` may never use a
+  compatibility construct" (§4.4, :244), where this construct is wanted
+  (§5.4); and `--compat` implies `--number-mode f64` (:316), a cost no
+  reference program should pay. wp28 has taken a row off its list this way
+  before: C2a, function-typed parameters, moved to "Built in strict" when
+  strict accepted them with nothing lost (`wp28-compatibility-mode.md:462`,
+  the struck-through ~~C2a~~ row). Capture-free references leave the list the
+  same way; closures stay on it.
 
 ## 2. The rule
 
@@ -157,8 +175,8 @@ reference"**: each already handles a call to a known function, and the
 dispatcher's facts are the join of its arms' by the rule they already apply to
 any function with several call sites in its body. A hand-written `switch` is
 the same join over its own arms, and with per-place sets the dispatcher joins
-no more than the arms the program could reach — the property the move from
-compat to strict waits on (§8). §6 lists every place that leaned on "no function
+no more than the arms the program could reach — the property strict rests on
+(§8). §6 lists every place that leaned on "no function
 values" and what that join does to each.
 
 ### 2.4 How the set is known in time
@@ -200,10 +218,14 @@ the same number, so no row timed a loop the optimiser removed.
   reported as none.
 - **What the band does not cover.** It is run-to-run noise of one binary. It
   says nothing about code layout and predictor aliasing between binaries: the
-  indirect **same** rows run the same instructions per call at every `K`, yet
-  spread from 427 to 516 ms (serial) and 435 to 525 ms (array), up to 21%. A
-  difference of that size between two *binaries* is not evidence on its own;
-  §3.5 leans only on differences well past it.
+  indirect **same** binaries have the same hot loop at every `K` (§12.7 shows
+  serial `K = 2` and `8`, and array `K = 4`; with addresses stripped, the
+  eight instructions either side of every `call *` in `objdump -d` differ
+  between `K = 1, 2, 4, 8` only in the addresses of string constants), yet spread from 427 to 516 ms (serial) and 435 to 525 ms
+  (array), up to 21%. A difference of that size between two *binaries* is not
+  evidence on its own. That spread was measured on the serial and array
+  groups only; the aperiodic group has no such pair, so its own spread is
+  unknown (§3.5 reads `K = 2`'s 1.28x there with that caveat).
 
 ### 3.1 The instruments
 
@@ -231,8 +253,10 @@ Each set size is run with two tag streams, built once at start-up from
   predictor can learn (§3.5). §3.4 runs a stream with no period.
 
 `K = 1` has one member, so it runs **same** only. Every indirect file is its
-switch file with §12.3's hand-edit applied; §12.3 shows the diff for `K = 4`,
-and the other sizes differ only in the table's length.
+switch file with §12.3's hand-edit applied; §12.3 shows the diff for `K = 4`.
+The table always has eight entries: the first `K` are the members and the rest
+are `null` (§12.3), so the sizes differ only in how many entries are
+non-null.
 
 Two adaptations of wp28's programs, both forced by the language as it is at
 `350bad84`, so none of the figures below compares directly with wp28's:
@@ -243,9 +267,9 @@ Two adaptations of wp28's programs, both forced by the language as it is at
 2. The switch and indirect rows read one tag per call; **direct** builds the
    same tag array (§12.1) and never reads it. The `K = 1` row does **not**
    isolate that read: its dispatcher never reads the tag, so after `opt -O3`
-   the load is dead. `serial_k1_same` disassembles to the same instructions as
-   `serial_direct`; `array_k1_same` adds one length check hoisted before the
-   loop (§12.7). No row times the element read alone.
+   the load is dead. `serial_k1_same` and `serial_direct` disassemble to
+   byte-identical output; `array_k1_same` has `array_direct`'s inner loop plus
+   one length check hoisted before it (§12.7 shows both). No row times the element read alone.
 
 ### 3.2 Dispatch, serial (§11a's shape, 400M calls)
 
@@ -286,7 +310,8 @@ print `738435298`, `71504611`, `829684326`. Maximum RSS 12 MB everywhere.
 ### 3.4 Dispatch, aperiodic stream (400M calls)
 
 The **mixed** streams above repeat every 1,024 calls. This group draws each
-call's tag from the top bits of a xorshift32 state advanced in the loop
+call's tag from `(s >>> 24) & (K - 1)`, the low bits of the top byte of a
+xorshift32 state `s` advanced in the loop
 (period 2^32 − 1), so there is no pattern short enough to learn (§12.1).
 Every variant, **direct** included, advances the same state and passes it as
 `x`, so **direct** here is slower than §3.2's and is this group's own
@@ -325,27 +350,37 @@ The three streams answer differently, so each is read on its own.
   `notrack jmpq *.LJTI0_0(,%r15,8)` (§12.2): an indirect branch. The first
   jump table is expected at five members (four cases and `default`); only
   eight was measured.
-- **Why the indirect call costs 3.7x to 4.7x on a periodic stream — inferred,
-  not counted.** No performance counter was read (§7). The indirect **same**
-  rows, where the call keeps the full calling convention and the callee's
+- **Why the indirect call costs 3.1x to 4.7x on a periodic stream — cause
+  unknown.** No performance counter was read (§7). The indirect **same** rows,
+  where the call keeps the full calling convention and the callee's
   attributes are `nounwind` only, are 0.98x to 1.26x of **direct**, so the
-  call alone does not explain the mixed rows. The likeliest cause is that the
-  indirect-target predictor did not learn the 1,024-call period that the
-  conditional predictor learned for the compare chains. It does not explain
-  everything: mixed indirect at `K = 2` (1,944 ms serial, 1,816 ms array) is
-  slower than at `K = 4` (1,572 ms, 1,602 ms).
+  call alone does not explain the mixed rows. The obvious cause, an
+  indirect-target predictor that does not learn the 1,024-call period, is
+  ruled out by the `K = 8` switch row: its `notrack jmpq *.LJTI0_0` is an
+  indirect branch on the same period-1,024 stream, and it costs only 1.25x to
+  1.33x **direct**, so an indirect branch on this stream is learned. Not
+  distinguished, with no counters to tell them apart: the `call`/`ret` pair
+  and its calling convention against code inlined into the loop; the callee
+  that stays out of line, with its own prologue and the attributes the loop
+  can no longer use; and how the return-stack and branch-target buffers treat
+  a `call *` against a `jmp *`. Nor is the order explained: mixed indirect at
+  `K = 2` (1,944 ms serial, 1,816 ms array) is slower than at `K = 4`
+  (1,572 ms, 1,602 ms), which no cause above predicts.
 - **Aperiodic.** The switch costs 2.38x to 4.52x **direct**, because which
   arm runs is decided by data no predictor can learn: the arms stay branches,
   one `test` and `jne` at `K = 2`, the three-compare chain at `K = 4`, a jump
   table at `K = 8`, with no `select` and no `cmov` in the loop (§12.7). A
   hand-written `switch` or `if` chain over the same tags is the same code and
-  pays the same. Against the band (±6%) and the 21% spread, only `K = 2`'s
-  1.28x is a difference; `K = 4`'s 1.21x and `K = 8`'s 1.07x (both indirect
-  branches there) are **none**.
+  pays the same. `K = 4`'s 1.21x and `K = 8`'s 1.07x (both indirect branches
+  there) are inside the 21% spread measured elsewhere and are **none**.
+  `K = 2`'s 1.28x is past the band (±6%) and past the spread measured on the
+  serial and array groups, but this group's own layout spread was not
+  measured (§3), so it is not known to be past that.
 - **So the switch's large advantage is a periodic-stream result.** "3.1x to
   4.7x faster than an indirect call" holds where the tags follow a short
   pattern. On a monomorphic site it is not shown past the layout spread; where
-  the tags are decided by input it is 28% at `K = 2` and none measured above.
+  the tags are decided by input it is at most 28% at `K = 2` (not known to be
+  past that group's layout spread) and none measured above.
   What holds in every stream is that the dispatcher is the `switch` a program
   writes by hand today, so at the call a reference costs what today's code
   costs. §4 is where that stops being true.
@@ -354,11 +389,12 @@ The three streams answer differently, so each is read on its own.
 
 wp28 §7.4 found that the call's own cost is the small half: the escape analysis
 was worth 8.76x there, and a callee the analysis cannot see forfeits it. That
-figure does not reproduce at `350bad84`: §11e's shape with and without
-`--no-stack-alloc` measured 1.85x here (§4.3), with the arena offset rewound
-every iteration (§12.5). The 1.85x is this note's reference for the lost
-proof. The question
-for a reference is whether the dispatcher keeps the proof when every member
+figure does not reproduce at `350bad84`: §11e's shape, adapted (§4.1), with
+and without `--no-stack-alloc` measured 1.85x here (§4.3). The likely cause is
+that `--no-stack-alloc` now rewinds the arena offset every iteration (§12.5
+shows the save and the rewind); no build without the rewind was timed, so
+that is not shown. The 1.85x is this note's reference for the lost proof. The
+question for a reference is whether the dispatcher keeps the proof when every member
 keeps the object local, and what it costs when one member does not.
 
 ### 4.1 The programs
@@ -373,16 +409,19 @@ one object made in `main` and passed down, so a member has somewhere to put
 
 Each is run with the **same** stream (every tag `0`, so the escaping arm of B
 is never taken and the row isolates the lost proof from the store) and the
-**mixed** one. The baselines are §11e as wp28 wrote it, calling `u0` directly,
-compiled as is and with `--no-stack-alloc` — wp28's instrument for "the
-object is not provable".
+**mixed** one. The baselines are §11e adapted: where wp28's loop calls
+`use(p)`, whose body is `(p.x * 3) ^ (p.y + 1)`, **direct** calls `u0(p, k)`,
+the same body with `wrappingMul` and `wrappingAdd` (§3.1's overflow
+adaptation) and a `Keep` parameter, so it has the members' signature (§12.4). It is compiled as is and with `--no-stack-alloc` — wp28's
+instrument for "the object is not provable".
 
 ### 4.2 The fact table
 
 Exactly as the compiler emitted them (`build/nish`, no flags), with
-`"probe-stack"` elided:
+`"probe-stack"` elided; §12.5 shows each signature and each `alloca` and
+allocation call the last two columns name:
 
-| Program | members `u0..u2` | member `u3` | `dispatch` | `run` | `P` in `run` | `Keep` in `main` |
+| Program | members `u0..u2` | member `u3` | `dispatch` | `run` | `P` in `run` | `Keep` in `nish_main` |
 | --- | --- | --- | --- | --- | --- | --- |
 | direct | `u0`: `nounwind willreturn readonly`; `p`, `k` `readonly nocapture` | — | — | `nounwind willreturn`; `k` `readonly nocapture` | `%P.obj = alloca %struct.P` | `%Keep.obj = alloca` |
 | direct, `--no-stack-alloc` | as direct | — | — | as direct | `nish_alloc_struct(i64 8)` per iteration, the arena offset saved before it and rewound after (`nish_arena_release` if the arena grew), §12.5 | arena |
@@ -434,8 +473,8 @@ stack proof survives the dispatched call; in B it is lost for every call of
   of that signature the program names, so the same three-way site written
   with references would pay B's 7.0x and 1.5 GB for a member it never calls.
   That is a program made slower than it can be written today, which is why
-  §2.3 makes the set per place and why the construct stays compat until a
-  stage demonstrates that pass (§8). With per-place sets the dispatcher at
+  §2.3 makes the set per place and why stage 1 does not ship without that
+  pass (§8). With per-place sets the dispatcher at
   that site is `{u0, u1, u2}`, the hand `switch`'s arms exactly, and A's
   figures apply on paper; the pass is not built, so that is a prediction.
 
@@ -518,7 +557,7 @@ trampoline per function, which is a different construct.
   `DISubprogram` flagged `DIFlagArtificial`, and its `switch` and every arm's
   call carry the **call site's** location, so a step into `h(3)` lands on the
   call line and then in the member's first line, and a backtrace shows
-  `$ref.S` between the two with the call's line — the frame a reader expects
+  `$ref.S.p` between the two with the call's line — the frame a reader expects
   from a call through a pointer.
 - **The optimised build** inlines the dispatcher into its callers (it is a few
   instructions), so in `--profile speed` the debugger sees the switch at the
@@ -527,7 +566,9 @@ trampoline per function, which is a different construct.
 ### 5.4 The rolling freeze
 
 `src/` may not use a construct until the release after it ships (CLAUDE.md,
-CI's `bootstrap` job). The first release that builds references cannot use
+CI's `bootstrap` job). Because references are strict (§8), that freeze is the
+only wait; a compat construct could never be used in `src/`
+(`wp28-compatibility-mode.md:244` at `350bad84`). The first release that builds references cannot use
 them in `src/`, and nothing in `src/` needs them first: the dispatch tables
 `src/` has (wp23 §6.2, D2 of [wp14-selfhost.md](wp14-selfhost.md) §3a) are
 central `switch`es, which is the lowering this proposal generates. The release
@@ -612,7 +653,7 @@ and have no row.
 | `docs/wp22-arrow-functions.md:55`–`59` | a callback site in Node is monomorphic, because each callee is its own instantiation and "there are no function values" | **broken** for a reference site | a reference site is polymorphic under Node (§5.1); the native build pays §3 instead |
 | `docs/wp22-arrow-functions.md:65`, 82–85 (rule 2) | "Function values stay forbidden"; a name bound to a function appears only in call position, so `const g = double`, `[double]` and `obj.f = double` are refused | **broken** | reworded to "closures and `Function` stay forbidden"; rule 2's three examples become admitted |
 | `docs/wp23-language-surface.md:21`–`23`, §6 (188–192, 205) | function values are refused and why; "a function is still never a value" | weakened | the pointer this PR adds; the text is replaced by this table when stage 1 ships |
-| `docs/wp28-compatibility-mode.md:141` (row), 190, 470 (C2b) | function values are a compat-tier construct: an indirect call and a lost fixpoint; the `NL9xxx` sort warning "passes a function value" | intact | capture-free references join the compat row today (§8); they move to strict once a stage shows per-place sets; closures stay in compat |
+| `docs/wp28-compatibility-mode.md:141` (row), 183, 463 (C2b) | function values are a compat-tier construct: an indirect call and a lost fixpoint; the `NL9xxx` sort warning "passes a function value" | weakened | capture-free references leave this row for strict, as C2a did (§8), and need neither the indirect call nor a lost fixpoint; closures stay in C2b |
 | `docs/wp26-stdlib.md:93`–`95` (§3a), 149 (§3f), 162 | no `test(name, callback)`; `jsonFields` shares a step, not a loop; `std/` APIs avoid callbacks | weakened | a capture-free test body or field step could be a reference once stage 2 ships |
 | `docs/wp49-async-server.md:127`–`129`, 147–150 | a handler cannot be stored in the router | weakened (128), intact (the rest) | a router holding an array of handler references becomes expressible |
 | `docs/wp49-async-server.md:756`–`761` | a call through a function-typed parameter in a spawned task is judged by worst-case facts; lifting that "needs facts per function value" | weakened | a reference call has its dispatcher's facts, so the region rules judge it by its set's join, not the worst case — the per-function-value facts this row asks for, if §2.4's `nodeCallees` record holds |
@@ -632,9 +673,11 @@ and have no row.
 - **Where the jump table starts, and what it costs past eight.** `K = 8` was
   a jump table (§3.5); `K = 5` to `7`, where `llc`'s threshold says the first
   one appears, were not timed, and neither was any set larger than eight.
-- **Performance counters.** No `perf stat` was read, so §3.5's
-  misprediction cause is inferred from the timings and the machine code, not
-  counted.
+- **Performance counters.** No `perf stat` was read, so why the indirect call
+  costs 3.1x to 4.7x on a periodic stream is unknown (§3.5): the `K = 8` row
+  rules out the obvious cause, and the candidates left are not distinguished.
+- **The aperiodic group's layout spread.** No pair of binaries with the same
+  loop was timed there, so `K = 2`'s 1.28x is not known to be past it.
 - **How A's 1.47x splits** between the tag load and the `switch` (§4.3).
 - **A `K = 1` control for the escape shape.** With one member there is no
   `switch`, so it would separate the tag array's cost from the dispatch's; it
@@ -654,7 +697,7 @@ and have no row.
 
 ## 8. The recommendation
 
-**Compat today. Revisit as strict once a stage demonstrates per-place sets.**
+**Strict, with per-place sets required in stage 1.**
 
 The three possible answers, against the numbers:
 
@@ -666,28 +709,36 @@ The three possible answers, against the numbers:
   is free and its advantage over an indirect call is not shown past the 21%
   layout spread. On an aperiodic stream every lowering mispredicts: the switch
   costs 2.4x to 4.5x **direct**, as a hand-written `switch` over the same tags
-  does, and beats the indirect call only at `K = 2` (1.28x). The escape proof
+  does, and differs from the indirect call only at `K = 2` (1.28x, not known
+  to be past that group's layout spread). The escape proof
   is kept whenever the set keeps it (§4.2, A). Declining leaves programs
   writing the `switch` by hand, which costs the same as the reference and is
   no safer.
-- **Compat** (wp28's tier for constructs that can cost the native build) is
-  right while admitting references can make some program slower than it can
-  be written today. With **one dispatcher per signature**, one is: a three-way
-  site over `u0..u2`, rewritten from a hand `switch` to references, pays B's
-  7.0x and 1.5 GB because `u3`, elsewhere in the program, keeps `p` (§4.3).
-  Per-place sets (§2.3) are the cure on paper, but the pass is unbuilt and
-  unmeasured (§7), and it is flow-insensitive: a place that held a leaking
-  member on one path joins it on every path (§10). So today the construct is
-  compat.
-- **Strict** follows once a stage builds the per-place pass and shows it: the
+- **Strict**, with per-place sets. With **one dispatcher per signature** a
+  reference could cost more than the code it replaces: a three-way site over
+  `u0..u2`, rewritten from a hand `switch` to references, pays B's 7.0x and
+  1.5 GB because `u3`, elsewhere in the program, keeps `p` (§4.3). That is the
+  per-signature problem, and per-place sets (§2.3) cure it: a place's set is
+  exactly the tags a hand program storing integer tags in the same places
+  could hold there, so the dispatcher at a call is the `switch` that program
+  must write at the same call, unless the hand programmer reasons about which
+  paths reach it. So no program is slower than the same program written with
+  integer tags and a hand `switch` over every member stored into that place.
+  The residual is that flow-sensitive knowledge (§10). The pass is unbuilt
+  (§7), so it is part of stage 1, and stage 1 does not ship until the
   `{u0, u1, u2}` test of §9 keeps `P` an `alloca` with `u3` escaping
-  elsewhere, and no program in that stage's tests is slower than its hand
-  `switch`. Then the dispatcher at a site joins only the members that can
-  reach it, which is the hand `switch`'s arms when the program was a hand
-  `switch`, and the construct's native cost is the cost of the code a user
-  writes without it. Its TypeScript reading is identical (class A of
+  elsewhere. Its TypeScript reading is identical (class A of
   [wp33-round-trip.md](wp33-round-trip.md) §2), because every read that could
   tell a tag from a function object is refused (§5.1).
+- **Not compat.** wp28's compatibility mode cannot be the home, by its own
+  rules (§1): C0, the `--compat` machinery, is unbuilt
+  (`wp28-compatibility-mode.md:458` at `350bad84`); compat only adds
+  acceptance over byte-identical IR (rules 1 and 5, :57-58, :75-79) and adds
+  no rule to LANGUAGE.md (:239); `src/` may never use it (:244), where §5.4
+  wants references; and it implies `--number-mode f64` (:316). wp28 moved
+  C2a, function-typed parameters, to "Built in strict" once strict accepted
+  them with nothing lost (`wp28-compatibility-mode.md:462`); capture-free references leave its list the same way, and closures
+  stay on it.
 
 What the recommendation does not rest on, because it was not measured (§7):
 `K = 5` to `7` and sets above eight, Node timings, a real program, the `K = 1`
@@ -708,9 +759,9 @@ Each stage is one PR, follows the checklist of
 [ARCHITECTURE.md](ARCHITECTURE.md#how-to-add-a-construct), and lands green on
 its own.
 
-Every stage below lands in compatibility mode (§8). The move to strict is its
-own change, made once stage 1's `{u0, u1, u2}` test and a program rewritten
-from a hand `switch` show no slowdown.
+Every stage lands in the strict language (§8). Stage 1 changes
+`docs/LANGUAGE.md` and flips the negatives that refuse references today, so it
+does not ship until its per-place pass and its `{u0, u1, u2}` test do.
 
 1. **Stage 1 — references in fields, locals, arrays and returns; calls; `===`;
    per-place sets.** Pass 1 collects the signature sets and the numbering
@@ -726,7 +777,7 @@ from a hand `switch` show no slowdown.
    (`nl2336_fnarg_arrow_returned`, `nl2334_fnarg_parameter_as_value`,
    `nl2337_fnarg_function_type_element`). A test pins that §4.3's three-way
    site over `{u0, u1, u2}` keeps `P` an `alloca` with `u3` escaping
-   elsewhere; without it, the construct cannot leave compat (§8).
+   elsewhere; stage 1 does not ship without it (§8).
 2. **Stage 2 — references as arguments, `| null` and `Map` values.** A
    function-typed parameter accepts a reference, instantiating
    `$fn.ref.<set>` once per set; `S | null` with tag `0`, the exception to
@@ -751,8 +802,8 @@ from a hand `switch` show no slowdown.
 | 6. Emitter | `$ref.S.p` generation and the call lowering; named blocks (`sw.case.N`, `sw.default`) |
 | 7. Runtime | none: no C symbol |
 | 8. Attributes | none expected: the dispatcher is an ordinary function, and its facts are the join of its place's set. A test pins §4.2's A and B facts and the three-way site of stage 1 |
-| 9. Tests | goldens `tests/cases/fnref_field`, `fnref_array`, `fnref_eq`, `fnref_escape_join`, `fnref_place_set` (`.ll`, `llvm-as`, `.out`); `reject_fnref_capture`, `reject_fnref_generic`, `reject_fnref_ffi`, `reject_fnref_print`, `reject_fnref_zero_fill`, `reject_fnref_rest`, `reject_fnref_async`, `reject_fnref_json`; an `--emit-ts` fixture; `tests/self/goldens/checked/` regenerated; `DECLARED` entries in `tests/nish-cmp.js` for the reworded diagnostics. Negatives that flip, each rewritten to the refusal that remains: `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_store`, `reject_fnarg_return` (to a capturing arrow or a parameter bound to a named callee) and `reject_arrow_as_value` (to a capturing arrow) |
-| 10. Docs | the `docs/LANGUAGE.md` rule replacing "a function is not a value" (1585) and the function-type rules (3337, 3392, 3409); a cookbook entry with the dispatcher's IR; a `docs/guide/` page on function references; §6's broken rows rewritten |
+| 9. Tests | goldens `tests/cases/fnref_field`, `fnref_array`, `fnref_eq`, `fnref_escape_join`, `fnref_place_set` (`.ll`, `llvm-as`, `.out`); `reject_fnref_capture`, `reject_fnref_generic`, `reject_fnref_ffi`, `reject_fnref_print`, `reject_fnref_zero_fill`, `reject_fnref_rest`, `reject_fnref_async`, `reject_fnref_json`; an `--emit-ts` fixture; `tests/self/goldens/checked/` regenerated; each new positive case registered with `node tests/differential/goldens.js --update`; `tests/differential/emit-ts-known.txt` regenerated under the Node `.github/workflows/ci.yml` pins; `DECLARED` entries in `tests/nish-cmp.js` for the reworded diagnostics. Negatives that flip, each rewritten to the refusal that remains: `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_store`, `reject_fnarg_return` (to a capturing arrow or a parameter bound to a named callee) and `reject_arrow_as_value` (to a capturing arrow) |
+| 10. Docs | the `docs/LANGUAGE.md` rule replacing "a function is not a value" (1585) and the function-type rules (3337, 3392, 3409); a cookbook entry with the dispatcher's IR; a `docs/guide/` page on function references; §6's broken rows rewritten; `docs/reference/` regenerated with `node scripts/gen-reference.mjs`, since `docs/LANGUAGE.md` moves |
 | 11. Security record | none: no attacker-facing code. `docs/security/async.md:130`'s claim holds (§6) |
 
 ## 10. Risks
@@ -765,20 +816,24 @@ from a hand `switch` show no slowdown.
   stays faster than an indirect call on a periodic stream and equal to a hand
   `switch` of the same size on any stream. A program with dozens of handlers
   at one site is the case to measure before stage 1 closes.
-- **A per-place set wider than it needs to be — the residual that keeps the
-  construct in compat until shown otherwise.** The pass is flow-insensitive: a
-  place that receives stores from two branches holds both sets on both paths,
-  so a place that held a leaking member once joins it everywhere, and a
-  program can still be slower than its hand `switch` (case B, 7.0x and
-  1.5 GB, §4.3). Per-alias sets (§11) are the cheap fallback if a real
+- **A per-place set wider than it needs to be — the remaining risk.** The
+  pass is flow-insensitive: a place that receives stores from two branches
+  holds both sets on both paths, so a place that held a leaking member once
+  joins it everywhere. A hand programmer storing integer tags in that place
+  writes the same `switch`, so the program is no slower than that; but one who
+  knows which path reaches a call can call `u0` directly instead, and against
+  that program the reference can lose the stack proof (case B's 7.0x and
+  1.5 GB, §4.3). Mitigated by stage 1's warning naming the member that
+  widened a dispatcher; per-alias sets (§11) are the cheap fallback if a real
   program needs a site narrower than its place.
 - **Compile-time cost.** Pass 1 now scans every value-position name, the
   per-place pass walks every store of a reference, and each distinct set gets
   a function. All are linear and small; none was measured.
 - **Generic zero-fill where `T` is a function type.** `std/threads.ts:218`
-  (`new Array<T>(blocks)`) and `std/sort.ts:170` (`new Array<T>(n)`) zero-fill
-  a generic array; instantiated at a function type, each is §2.1's refused
-  zero-fill inside `std/`, where the user cannot fix it. `src/parallel.ts:925`
+  (`new Array<T>(blocks)`) zero-fills a generic array; instantiated at a
+  function type, it is §2.1's refused zero-fill inside `std/`
+  (`std/sort.ts`'s scratch array is already exempt, `src/arrays.ts:794`
+  `isSortScratch`), where the user cannot fix it. `src/parallel.ts:925`
   already moves such a refusal (NL2520) from `std/threads.ts` to the user's
   call; stage 1 does the same for a reference `T`, or admits the `| null`
   instantiation instead.
@@ -926,12 +981,12 @@ export function main(): i32 {
 
 - **aperiodic (§3.4).** `rand_direct.ts` and `rand_k{2,4,8}_mixed.ts` keep
   the members and `call` of the serial programs and replace `run` and `main`
-  with a xorshift32 loop; the tag is the state's top bits, so no tag array is
-  built. `genrand.mjs` wrote them from the serial programs; the `_ind`
+  with a xorshift32 loop; the tag is `(s >>> 24) & (K - 1)`, the low bits of the
+  state's top byte, so no tag array is built. `genrand.mjs` wrote them from the serial programs; the `_ind`
   variants are §12.3's hand-edit of each:
 
 ```js
-// The aperiodic stream: each call's tag is the top bits of a xorshift32 state
+// The aperiodic stream: each call's tag is (s >>> 24) & (K - 1) of a xorshift32 state
 // advanced in the loop (period 2^32 - 1), so no 1,024-call pattern exists to learn.
 // Every variant, direct included, advances the same state and passes it as x.
 import { writeFileSync, readFileSync } from "node:fs"
@@ -1180,8 +1235,16 @@ file:
  define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @tags(i32 noundef %base) #1 {
 ```
 
-and linked this beside the runtime, so link-time optimisation cannot treat
-the table as constant:
+The `@wp51_fns` line is the only part that depends on `K`; `mkind.mjs`
+builds its entries as
+
+```js
+Array.from({ length: 8 }, (_, i) => i < k ? `i32 (i32, i32)* @t${i}` : "i32 (i32, i32)* null")
+```
+
+so every size has an eight-entry table whose first `K` entries are members.
+`wp51_fns.c`, linked beside the runtime (§3's build line), owns the table so
+link-time optimisation cannot treat it as constant:
 
 ```c
 /* WP51 spike: owns the function table the indirect variant loads from.
@@ -1345,6 +1408,67 @@ pass.free:
   %18 = add i64 %17, %5
   call void @nish_arena_release(i64 %18)
   br label %pass.done
+```
+
+Where `Keep` is made, the first lines of `nish_main` in each program (the
+`!tbaa` number differs between files and is the only other difference):
+
+```llvm
+; direct (esc_direct.ll)
+define noundef i32 @nish_main() #0 {
+entry:
+  %k.addr = alloca %struct.Keep*, align 8
+  %Keep.obj = alloca %struct.Keep, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds %struct.Keep, %struct.Keep* %Keep.obj, i32 0, i32 0
+  store %struct.P* null, %struct.P** %0, align 8, !tbaa !8
+  store %struct.Keep* %Keep.obj, %struct.Keep** %k.addr, align 8
+
+; direct, --no-stack-alloc (esc_direct_nostack.ll): Keep goes to the arena
+define noundef i32 @nish_main() #0 {
+entry:
+  %k.addr = alloca %struct.Keep*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Keep*
+
+; A (esc_a_same.ll)
+define noundef i32 @nish_main() #2 {
+entry:
+  %k.addr = alloca %struct.Keep*, align 8
+  %Keep.obj = alloca %struct.Keep, align 8
+  %ts.addr = alloca %struct.nish_array*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+
+; B (esc_b_same.ll)
+define noundef i32 @nish_main() #2 {
+entry:
+  %k.addr = alloca %struct.Keep*, align 8
+  %Keep.obj = alloca %struct.Keep, align 8
+  %ts.addr = alloca %struct.nish_array*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+```
+
+`run` in **direct**, where `P` is made, its entry and loop body:
+
+```llvm
+define internal noundef i32 @run(i32 noundef %n, %struct.Keep* noundef nonnull readonly align 8 dereferenceable(8) nocapture %k) #0 {
+entry:
+  %acc.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %p.addr = alloca %struct.P*, align 8
+  %P.obj = alloca %struct.P, align 8
+  ...
+for.body:
+  %2 = load i32, i32* %i.addr, align 4
+  %3 = load i32, i32* %acc.addr, align 4
+  call void @P.constructor(%struct.P* %P.obj, i32 %2, i32 %3)
+  store %struct.P* %P.obj, %struct.P** %p.addr, align 8
+  %4 = load %struct.P*, %struct.P** %p.addr, align 8
+  %5 = call i32 @u0(%struct.P* %4, %struct.Keep* %k)
+  %6 = add i32 %5, 1
+  store i32 %6, i32* %acc.addr, align 4
+  br label %for.inc
 ```
 
 `run` in A, where `P` is made:
@@ -1601,21 +1725,90 @@ for g in groups:
 
 What §3.1 and §3.5 argue from, from the linked `--profile speed` binaries:
 `objdump -d --no-show-raw-insn <binary>`, the hot loop of `nish_main` only.
-The multiply by the loop counter is strength-reduced to an `add` per member in
-the serial loops; `0x41c64e6d` is `1103515245` (`t0`), `0x15a4e35` is
-`22695477` (`t1`).
+`0x41c64e6d` is `1103515245` (`t0`), `0x15a4e35` is `22695477` (`t1`).
 
-**`K = 1`.** `serial_direct` and `serial_k1_same` disassemble to the same
-instructions (`nish_main` compared with the address column cut): no tag load
-and no bounds check, so the **K = 1** row times **direct**'s loop.
-`array_k1_same`'s inner loop is `array_direct`'s; the one addition is a length
-check hoisted before the loop, whose `jb` goes to the panic path:
+**`K = 1`.** `serial_direct` and `serial_k1_same` disassemble byte-identical
+(`diff` of the two whole `objdump -d` outputs is empty): no tag load and no
+bounds check, so the **K = 1** row times **direct**'s loop. That loop is
+unrolled four times; the multiply by the loop counter becomes a `lea` per
+copy off a counter that steps by `0x71939b4`, four times `0x41c64e6d` mod
+2^32:
+
+```asm
+1b10:	xor    %ecx,%esi
+1b12:	mov    %esi,%edx
+1b14:	sar    $0xd,%edx
+1b17:	xor    %esi,%edx
+1b19:	inc    %edx
+1b1b:	lea    0x41c64e6d(%rcx),%esi
+1b21:	xor    %edx,%esi
+1b23:	mov    %esi,%edx
+1b25:	sar    $0xd,%edx
+1b28:	xor    %esi,%edx
+1b2a:	inc    %edx
+1b2c:	lea    -0x7c736326(%rcx),%esi
+1b32:	xor    %edx,%esi
+1b34:	mov    %esi,%edx
+1b36:	sar    $0xd,%edx
+1b39:	xor    %esi,%edx
+1b3b:	inc    %edx
+1b3d:	lea    -0x3aad14b9(%rcx),%edi
+1b43:	xor    %edx,%edi
+1b45:	mov    %edi,%esi
+1b47:	sar    $0xd,%esi
+1b4a:	xor    %edi,%esi
+1b4c:	inc    %esi
+1b4e:	add    $0x71939b4,%ecx
+1b54:	add    $0xfffffffc,%eax
+1b57:	jne    1b10
+```
+
+`array_direct`'s loop, unrolled twice:
+
+```asm
+1b70:	xor    %edx,%edx
+1b80:	imul   $0x41c64e6d,(%rcx,%rdx,4),%edi
+1b87:	xor    %esi,%edi
+1b89:	mov    %edi,%esi
+1b8b:	sar    $0xd,%esi
+1b8e:	xor    %edi,%esi
+1b90:	imul   $0x41c64e6d,0x4(%rcx,%rdx,4),%edi
+1b98:	inc    %esi
+1b9a:	xor    %esi,%edi
+1b9c:	mov    %edi,%esi
+1b9e:	sar    $0xd,%esi
+1ba1:	xor    %edi,%esi
+1ba3:	inc    %esi
+1ba5:	add    $0x2,%rdx
+1ba9:	cmp    $0x400,%rdx
+1bb0:	jne    1b80
+1bb2:	inc    %eax
+1bb4:	cmp    $0x61a80,%eax
+1bb9:	jne    1b70
+```
+
+`array_k1_same` runs the same instructions at `1c00`–`1c4a`, with `%rax` for
+the base and `%ecx` for the outer counter; the one addition is a length check
+hoisted before the loop, whose `jb` goes to the panic path:
 
 ```asm
 1bd7:	mov    (%rbx),%rdi
 1bda:	cmp    $0x400,%rdi
 1be1:	jb     1f51
+1be7:	mov    0x10(%rsp),%rax
+1c00:	xor    %edx,%edx
+1c10:	imul   $0x41c64e6d,(%rax,%rdx,4),%edi
+1c35:	add    $0x2,%rdx
+1c39:	cmp    $0x400,%rdx
+1c40:	jne    1c10
+1c42:	inc    %ecx
+1c44:	cmp    $0x61a80,%ecx
+1c4a:	jne    1c00
 ```
+
+(The lines between `1c10` and `1c35` are `1b87`–`1ba3` above with `%rax` for
+`%rcx`.) In the mixed serial loops below, with no unrolling, the multiply
+becomes one `add` per member.
 
 **`serial_k2_mixed`: one compare per call.** The tag is loaded with the
 compare; the index is masked (`and $0x3ff`), so there is no bounds check.
@@ -1673,6 +1866,45 @@ load and a `call *` per iteration, the callee not inlined:
 1c13:	inc    %ebx
 1c15:	cmp    $0x17d78400,%ebx
 1c1b:	jne    1c00
+```
+
+**The indirect same loops: one `call *` per iteration, at every `K`.**
+`serial_k2_same_ind`:
+
+```asm
+1bce:	lea    0x27fb(%rip),%r12      # the table
+1be0:	mov    %ebx,%eax
+1be2:	and    $0x3ff,%eax
+1be7:	movslq (%r14,%rax,4),%rax     # the tag
+1beb:	mov    %ebx,%edi
+1bed:	call   *(%r12,%rax,8)
+1bf1:	mov    %eax,%esi
+1bf3:	inc    %ebx
+1bf5:	cmp    $0x17d78400,%ebx
+1bfb:	jne    1be0
+```
+
+`serial_k8_same_ind` is the same instructions at `1d1e` (`lea 0x27fb(%rip),%r12`)
+and `1d30`–`1d4b`, its `call *(%r12,%rax,8)` at `1d3d`. `array_k4_same_ind`:
+
+```asm
+1d14:	lea    0x2845(%rip),%rbp      # the table
+1d20:	mov    (%r15),%r14            # the array's length
+1d23:	mov    0x10(%r15),%r15
+1d27:	xor    %ebx,%ebx
+1d30:	cmp    %rbx,%r14              # the bounds check
+1d33:	je     2057
+1d39:	movslq (%r15,%rbx,4),%rax     # the tag
+1d3d:	mov    (%r12,%rbx,4),%edi
+1d41:	call   *0x0(%rbp,%rax,8)
+1d45:	mov    %eax,%esi
+1d47:	inc    %rbx
+1d4a:	cmp    $0x400,%rbx
+1d51:	jne    1d30
+1d53:	inc    %r13d
+1d56:	cmp    $0x61a80,%r13d
+1d5d:	mov    0x8(%rsp),%r15
+1d62:	jne    1d20
 ```
 
 **The aperiodic loops: branches, not selects.** `rand_k2_mixed` advances the
@@ -1734,7 +1966,6 @@ xorshift state and branches on bit 24 of it:
 	notrack		jmpq	*.LJTI0_0(,%rdx,8)
 ```
 
-No loop above holds a `cmov`: every `cmov` in these binaries (four or six
-each) is outside the loop, in the array setup before it or the number printing
-after it (`1b74: cmovs` in `serial_k2_mixed`, `1ab3: cmovs` in
-`rand_k2_mixed`).
+No loop shown above holds a `cmov`. The `cmovs` nearest each loop is after
+it, in printing the result: `1b74` in `serial_k2_mixed`, `1ab3` in
+`rand_k2_mixed`, `1c01` in `serial_k2_same_ind`.
