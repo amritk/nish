@@ -16,18 +16,27 @@
         "type": "group",
         "title": "Nish",
         "children": {
+          "/": {
+            "type": "page",
+            "title": "Nish",
+            "filepath": "docs/guide/index.md",
+            "showInSidebar": false,
+            "layout": {
+              "sidebar": false,
+              "toc": false,
+              "pageTitle": false,
+              "pageActions": false,
+              "pageNav": false,
+              "lastUpdated": false,
+              "feedback": false,
+              "fullWidth": true
+            }
+          },
           "/getting-started": {
             "type": "group",
             "title": "Getting started",
             "icon": "phosphor/regular/rocket-launch",
             "children": {
-              "/": {
-                "title": "Introduction",
-                "type": "page",
-                "filepath": "docs/guide/index.md",
-                "showInSidebar": true,
-                "hidden": false
-              },
               "/installation": {
                 "type": "page",
                 "title": "Installation",

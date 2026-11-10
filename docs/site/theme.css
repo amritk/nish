@@ -860,6 +860,71 @@ a.nish-hero__cta:hover {
   }
 }
 
+/* ── The landing page (docs/guide/index.md) ─────────────────────────────
+   Its route in scalar.config.json turns off the sidebar, the outline, the
+   page actions and the previous/next links and gives it the full width, so
+   it reads as a home page rather than the first page of the guide. What is
+   left is laid out here: the hero and the card grids across a wide column,
+   and the prose, the callout and the code in a narrower one at its centre.
+   Every rule is scoped to the page that holds the hero's host. */
+.page-node:has(> [data-nish-hero]) {
+  max-width: 1080px;
+  margin-inline: auto;
+}
+.page-node:has(> [data-nish-hero]) > :not([data-nish-hero], .t-editor__grid-element) {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.page-node:has(> [data-nish-hero]) > .t-editor__heading[data-level="2"] {
+  margin-top: 96px;
+  margin-bottom: 28px;
+  font-size: clamp(26px, 3.6vw, 36px);
+  letter-spacing: -0.02em;
+  text-align: center;
+  justify-content: center;
+}
+/* The paragraph under the hero is its lead. */
+.page-node:has(> [data-nish-hero]) > [data-nish-hero] + .t-editor__paragraph {
+  margin-top: 36px;
+  font-size: 18px;
+  line-height: 1.65;
+  color: var(--scalar-color-2);
+  text-align: center;
+  text-wrap: pretty;
+}
+.page-node:has(> [data-nish-hero]) .nish-hero__inner {
+  padding: 56px 36px 32px;
+}
+.page-node:has(> [data-nish-hero]) .nish-hero__title {
+  font-size: clamp(34px, 6.4vw, 64px);
+  text-align: center;
+}
+.page-node:has(> [data-nish-hero]) .nish-hero__actions {
+  justify-content: center;
+  margin: 30px 0 40px;
+}
+/* A grid's columns are an inline style on the element Scalar renders, so
+   only !important can fold them on a narrower screen. */
+@media (max-width: 960px) {
+  .page-node:has(> [data-nish-hero]) > .t-editor__grid-element {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 720px) {
+  .page-node:has(> [data-nish-hero]) > .t-editor__grid-element {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .page-node:has(> [data-nish-hero]) .nish-hero__inner {
+    padding: 34px 16px 16px;
+  }
+  .page-node:has(> [data-nish-hero]) > [data-nish-hero] + .t-editor__paragraph {
+    font-size: 16px;
+  }
+  .page-node:has(> [data-nish-hero]) > .t-editor__heading[data-level="2"] {
+    margin-top: 64px;
+  }
+}
+
 /* ── No motion, on request ───────────────────────────────────────────────
    Everything above rests in its finished state, so stopping the animations
    leaves a complete, still page. */
