@@ -55,12 +55,13 @@ refused.
   measured; K=8's 1.07x is inside the band and is none (§3.4, §3.5).
 - **The escape proof** survives the dispatched call when every member of the
   set keeps the object local (§4, case A). When one member does not, every
-  call of the set loses it: 6.4x to 9.0x a direct call and 1.5 GB in the
+  call of the set loses it: 6.4x to 9.1x a direct call and 1.5 GB in the
   spike (case B). When the
   escaping member is in the program but not in the hot call's set, the hot
-  call keeps it: case C, the program a per-place pass produces, is measured
-  at A's cost (0.95x to 1.09x A, inside the layout spread) with `P` an
-  `alloca` (§4).
+  call keeps it: case C, the program a per-place pass produces, keeps `P` an
+  `alloca` and 12 MB at 1.40x to 2.02x a direct call. C is not shown to cost
+  what A does: it is 0.95x to 1.37x A, past its run's band in three of six
+  readings, for a reason not known (§4.3).
 - **Why strict holds, with per-place sets.** A hand-written `switch` joins
   only its own arms; a dispatcher with one set per signature joins every
   member of that signature, so a program rewritten from a `switch` to
@@ -81,9 +82,22 @@ refused.
   strict is rule 1's other half, that strict "does not grow" (:57-58), and
   it is answered the way wp28 answered C2a, function-typed parameters, which
   moved to "Built in strict" (`wp28-compatibility-mode.md:462`) because
-  strict could take them at no cost. A capture-free reference costs exactly
-  the hand `switch` it replaces (§3.5, case C in §4.3), so it adds nothing to
-  any program's bill that the program does not already pay. Placing it in
+  strict could take them at no cost. C2b is "a value whose target the
+  checker cannot name" (:463), and its cost is what an unknown callee forfeits,
+  with "how much of a real program is reachable from its closures" left as
+  the measurement C2b takes before it ships (:533-535). A capture-free
+  reference is a **third case**, neither C2a nor C2b: the checker cannot name
+  its one target, but it names the closed set that can reach each call
+  (`F(p)`, §2.3), so what is reachable from the call is computed, per call,
+  as that set's members — the quantity wp28 asks to measure, given exactly
+  instead of estimated — and its cost is that set's join, which A, B and C
+  measure (§4.3). Against the program the invariant names (§2.3), the hand
+  `switch` over the same declaration's tags, a reference adds nothing: the
+  dispatcher is that `switch`, the same IR. Against a hand program that keeps
+  tags in finer places than a declaration — one of two arrays of the same
+  element type, one object of a class — it can cost up to case B's 6.4x to
+  9.1x and 1.5 GB (§10), and stage 1's warning names the store that widened
+  the set. Placing it in
   compat would also carry practical costs: C0 (`--compat`) is unbuilt
   (:458), `src/` may never use a compat construct (:244) where §5.4 wants
   this one, and `--compat` implies `--number-mode f64` (:316). Against
@@ -162,9 +176,38 @@ gets one set. Stage 1's places are, exactly:
 Per allocation — one set for each `new Array`, each literal, each object —
 is not a place: telling two arrays of one element type apart needs a
 points-to analysis, which stage 1 does not build. The pass is
-flow-insensitive and per place: a store of a name `f` into place `a` adds
-`f`; a store `a = b`, an argument for parameter `a`, or a `return b` into
-`a` adds `b`'s set to `a`'s; and it iterates to a fixpoint. A call through
+flow-insensitive and per place, and iterates to a fixpoint over two rules.
+
+*Every expression of a function type has a value set.* A name `f` gives
+`{f}`; a read of place `p` (a local, a parameter, `o.h`, `a[i]`, `m.get(k)`)
+gives `F(p)`; a call gives its callee's return place's set; `c ? x : y` and
+`x ?? y` give the union of their arms; `null` gives `{}`. An expression of
+any other form gives `F(S)`.
+
+*Every store context adds that set to its target place.* `docs/LANGUAGE.md`
+has no single list of assignment contexts, so stage 1's list is this one,
+checked against the checker's own assignability call sites when the pass is
+written:
+
+| Store context | Target place |
+| --- | --- |
+| `a = e`, a declaration initializer, a compound `??=` | the local's or parameter's |
+| `o.h = e`, a field initializer, a constructor argument stored to a field | the field declaration's, through the constructor parameter's |
+| `a[i] = e`, `a.push(e)`, `a.unshift(e)`, `a.fill(e)`, `a.splice(i, n, e…)`, an array literal `[e, …]` | the element type's |
+| `m.set(k, e)` (stage 2) | the `Map` value type's |
+| `for (const h of a)` | the loop variable's, from the element type's |
+| an argument for parameter `a` | the parameter's |
+| `return e`, a concise arrow body | the function's return place |
+| a field of an interface type | the union of the field declarations of every class that implements it, both ways |
+| a field of a generic class | the declaration's, shared by every instantiation |
+
+**Any store the pass does not model** — a form missing from this table, or
+an expression it cannot give a set — adds `F(S)` to its target. That keeps
+the pass sound, never precise: a forgotten form widens one place to the
+signature's set, which costs at most case B's join and never a wrong call.
+What stage 1 tests for it is in §9 (`fnref_place_set`, and a negative-shaped
+test per row above that would dispatch to a missing member if the row were
+dropped). A call through
 a reference read from place `p` dispatches over `p`'s set,
 `F(p) ⊆ F(S)`. The tags stay numbered per signature, so `===`, stores and
 loads need no translation; only the dispatcher's arms narrow. Calls whose
@@ -203,7 +246,40 @@ its dispatcher. The last arm is `default` because no other tag can reach
 the call: a non-null tag is made only by naming a member, `0` is ruled out
 above, and the set pass put every member that can flow to `p` in `F(p)`. A
 set of one has no `switch` at all; the tag is never read and the dispatcher
-is a direct call.
+is a direct call. Whether the last arm instead traps (`default:
+unreachable`-equivalent, with every member a `case`) is **open, decided in
+stage 1** by timing `fnref_place_set` both ways: if the trap is inside the
+band it ships, so a store form the pass missed fails loudly; if not, the
+`default` arm stays and soundness rests on the `F(S)` fallback above and
+its tests.
+
+**How a dispatcher's arguments line up.** The tag is the dispatcher's
+parameter `0`, and the call's argument `i` is its parameter `i + 1`, which
+every arm passes on unchanged as the member's parameter `i`. The call-site
+ranges (`src/ranges.ts:355`, `takesEntryFacts`) therefore see two hops: each
+call through `p` is one site of the dispatcher, whose parameter `i + 1`
+enters with the join of argument `i` over those sites; each arm is one site
+of its member, whose parameter `i` enters with that join. The tag joins only
+with the tag, never with a member's argument, and a member reached from
+several dispatchers or also called directly joins all of those sites, as any
+function with several callers does.
+
+**Which module owns a dispatcher.** `src/` emits one `.ll` per module
+(`ARCHITECTURE.md:32`, `:42`), and a function that is not exported is `define
+internal` (`src/emit.ts:623-636`), so a dispatcher in one module cannot call
+a member that is `internal` in another. The design: a dispatcher is emitted
+in each module that holds a call through `p`, as an `internal` copy (the
+`src/emit-map.ts` pattern for library copies, `src/emit.ts:390`), and a
+member stored into a place read from another module is marked `hidden`, as
+WP29 marks a function another module's instantiation calls
+(`src/emit.ts:625-633`). The consequence, stated rather than measured:
+`takesEntryFacts` refuses a `hidden` signature (`!sig.hidden`), so a member
+that crosses a module loses its call-site entry facts in every program,
+including its direct calls; a dispatcher copy keeps its own, being
+`internal`. Whether to lift that refusal for a member whose every caller is
+known — as a dispatcher's arms are — is **open, decided in stage 1**;
+until it is, a cross-module reference costs those facts, and none of §3's
+or §4's programs, all one module, measured it.
 
 The spike (§3, §4, §12) numbered its tags from `0` and had no `null`, so its
 `switch` cases are `0` to `K - 2`. Numbering from `1` changes only the case
@@ -416,9 +492,13 @@ The three streams answer differently, so each is read on its own.
   attributes are `nounwind` only, are 0.98x to 1.26x of **direct**, so the
   call alone does not explain the mixed rows. The obvious cause, an
   indirect-target predictor that does not learn the 1,024-call period, is
-  ruled out by the `K = 8` switch row: its `notrack jmpq *.LJTI0_0` is an
-  indirect branch on the same period-1,024 stream, and it costs only 1.25x to
-  1.33x **direct**, so an indirect branch on this stream is learned. Not
+  ruled out by the `K = 8` switch rows: in the linked binaries the hot loop
+  of `serial_k8_mixed` runs `notrack jmp *%r12` once a call, and those of
+  `array_k8_mixed` and `rand_k8_mixed` run `notrack jmp *%r10` and
+  `notrack jmp *%rdx` (§12.7, from `objdump -d` of the executables, not
+  `llc`'s output) — an indirect branch on the same period-1,024 stream — and
+  the serial and array rows cost only 1.25x to 1.33x **direct**, so an
+  indirect branch on this stream is learned. Not
   distinguished, with no counters to tell them apart: the `call`/`ret` pair
   and its calling convention against code inlined into the loop; the callee
   that stays out of line, with its own prologue and the attributes the loop
@@ -462,7 +542,7 @@ The three streams answer differently, so each is read on its own.
 wp28 §7.4 found that the call's own cost is the small half: the escape analysis
 was worth 8.76x there, and a callee the analysis cannot see forfeits it. That
 figure does not reproduce at `350bad84`: §11e's shape, adapted (§4.1), with
-and without `--no-stack-alloc` measured 1.66x to 1.98x here, across three
+and without `--no-stack-alloc` measured 1.66x to 2.19x here, across four
 runs (§4.3). The likely cause is
 that `--no-stack-alloc` now rewinds the arena offset every iteration (§12.5
 shows the save and the rewind); no build without the rewind was timed, so
@@ -525,25 +605,28 @@ site that calls `u3`.
 
 ### 4.3 What it costs
 
-Three runs of `bench.py`, every row the best of its rounds, interleaved
-(§12.6): run 0 of 7 rounds, before C existed; runs 1 (7 rounds) and 2
-(11 rounds) on a later container, a different host, with C added.
+Four runs of `bench.py`, every row the best of its rounds, interleaved
+(§12.6): run 0 of 7 rounds, before C existed, on the Intel Xeon @ 2.30GHz of
+§3; runs 1 (7 rounds) and 2 (11 rounds), with C added, on a later container
+whose CPU model was not recorded; run 3 (11 rounds) on a third container, an
+Intel Xeon @ 2.10GHz with 4 cores and 15 GB.
 
-| Program | stream | run 0 ms | / direct | run 1 ms | / direct | run 2 ms | / direct | max RSS | checksum |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| direct | — | 113 | 1.00x | 139 | 1.00x | 126 | 1.00x | 12 MB | `208457217` |
-| direct (copy) | — | 116 | 1.03x | 135 | 0.97x | 133 | 1.06x | 12 MB | `208457217` |
-| direct, `--no-stack-alloc` | — | 209 | 1.85x | 231 | 1.66x | 249 | 1.98x | 12 MB | `208457217` |
-| A, every member local | same | 168 | 1.49x | 180 | 1.29x | 187 | 1.48x | 12 MB | `208457217` |
-| A, every member local | mixed | 166 | 1.47x | 199 | 1.43x | 206 | 1.63x | 12 MB | `230433138` |
-| B, `u3` escapes | same | 792 | 7.01x | 1,062 | 7.64x | 1,129 | 8.96x | **1,527 MB** | `208457217` |
-| B, `u3` escapes | mixed | 726 | 6.42x | 948 | 6.82x | 920 | 7.30x | **1,527 MB** | `230433138` |
-| **C**, `u3` escapes after the loop | same | — | — | 196 | 1.41x | 177 | 1.40x | 12 MB | `208457217 1876114956` |
-| **C**, `u3` escapes after the loop | mixed | — | — | 205 | 1.47x | 225 | 1.79x | 12 MB | `188232515 1694092638` |
+| Program | stream | run 0 ms | / direct | run 1 ms | / direct | run 2 ms | / direct | run 3 ms | / direct | max RSS | checksum |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| direct | — | 113 | 1.00x | 139 | 1.00x | 126 | 1.00x | 115 | 1.00x | 12 MB | `208457217` |
+| direct (copy) | — | 116 | 1.03x | 135 | 0.97x | 133 | 1.06x | 133 | 1.16x | 12 MB | `208457217` |
+| direct, `--no-stack-alloc` | — | 209 | 1.85x | 231 | 1.66x | 249 | 1.98x | 252 | 2.19x | 12 MB | `208457217` |
+| A, every member local | same | 168 | 1.49x | 180 | 1.29x | 187 | 1.48x | 184 | 1.60x | 12 MB | `208457217` |
+| A, every member local | mixed | 166 | 1.47x | 199 | 1.43x | 206 | 1.63x | 169 | 1.47x | 12 MB | `230433138` |
+| B, `u3` escapes | same | 792 | 7.01x | 1,062 | 7.64x | 1,129 | 8.96x | 1,045 | 9.09x | **1,527 MB** | `208457217` |
+| B, `u3` escapes | mixed | 726 | 6.42x | 948 | 6.82x | 920 | 7.30x | 874 | 7.60x | **1,527 MB** | `230433138` |
+| **C**, `u3` escapes after the loop | same | — | — | 196 | 1.41x | 177 | 1.40x | 205 | 1.78x | 12 MB | `208457217 1876114956` |
+| **C**, `u3` escapes after the loop | mixed | — | — | 205 | 1.47x | 225 | 1.79x | 232 | 2.02x | 12 MB | `188232515 1694092638` |
 
-The copy rows put the within-run band at about ±6%. The runs disagree by
-more than that: A **same** is 1.49x, 1.29x and 1.48x **direct**, so a
-difference under about 20% between runs is not read. C prints a second
+The copy rows put the within-run band at 3%, 3%, 6% and 16% in runs 0 to 3:
+the band is the run's own, and run 3's is wide. The runs disagree by more
+than that: A **same** is 1.49x, 1.29x, 1.48x and 1.60x **direct**, so a
+difference under about 25% between runs is not read. C prints a second
 number, `u3`'s result on the one `P` after the loop.
 
 - **A keeps the proof.** `P` stays an `alloca` and SROA dissolves it; after
@@ -559,18 +642,19 @@ number, `u3`'s result on the one `P` after the loop.
   about 1.0x in §3's loops and this much here.
 - **A's same and mixed loops are the same instructions** (§12.7): the
   `cmov` does not branch on the tag, so the stream cannot change the loop.
-  Their 1% to 11% differences are run noise read against a 6% band, not the
-  stream.
+  Their 1% to 11% differences are run noise read against each run's band,
+  not the stream.
 - **B loses it, and the loss is not the stream's.** With every tag `0` the
-  escaping arm never runs, yet B is 7.0x to 9.0x **direct** and holds 1.5 GB.
+  escaping arm never runs, yet B is 7.0x to 9.1x **direct** and holds 1.5 GB.
   `dispatch` may capture `p`, so `P` is an escaping allocation in the loop
   body; it goes to the arena, and `decidePass` (`src/escape.ts:2396`–`2420`)
   refuses the loop its per-iteration mark and release for that reason. B's
   `run` has no `nish_arena_mark` (§12.5), so every `P` of the 200M
   iterations lives until `nish_main` releases the arena. `--no-stack-alloc`
   allocates as often but keeps the release, because in **direct** nothing
-  in the loop escapes, so it holds 12 MB and costs 1.7x to 2.0x.
-- **B same is slower than B mixed in all three runs** (9%, 12% and 23%).
+  in the loop escapes, so it holds 12 MB and costs 1.7x to 2.2x.
+- **B same is slower than B mixed in all four runs** (9%, 12%, 23% and
+  20%).
   Both take the same arena path for every iteration; the mixed stream runs
   `u3`'s store about a quarter of the time and the same stream never does.
   Why the run that stores less is slower is **not known**; no counter was
@@ -581,13 +665,27 @@ number, `u3`'s result on the one `P` after the loop.
   signature pay it, a program slower than it can be written today; that is
   why §2.3 makes the set per place. C is the program that per-place sets
   produce when the hot site's place holds `u0..u2` and `u3` is called
-  elsewhere: its `dispatch` has A's facts, `P` in `run` is an `alloca`, and
-  it costs 0.95x to 1.09x A in the same run, inside the layout spread of §3
-  (21%). Its loop (§12.7) has no allocation; it selects the constants
-  through a branch chain rather than A's `cmov`, so on the mixed stream it
-  can mispredict where A cannot; that is the likely reason C mixed is 5% and
-  27% over C same, and no counter was read to show it. `u3`'s one `P`, after the loop,
-  is in the arena once. C is hand-written: the pass that would produce it is
+  elsewhere: its `dispatch` has A's facts, `P` in `run` is an `alloca`, the
+  loop has no allocation (§12.7), and it holds 12 MB. Against B, the program
+  a per-signature set produces, C costs 1.40x to 2.02x **direct** where B
+  costs 6.4x to 9.1x and holds 1.5 GB. `u3`'s one `P`, after the loop, is in
+  the arena once.
+- **What C is not shown to be: A's cost.** C over A, by run, is 1.09x and
+  1.03x (run 1, band 3%), 0.95x and 1.09x (run 2, band 6%), 1.11x and 1.37x
+  (run 3, band 16%), **same** and **mixed**: past its run's own band in
+  three of six readings, run 3's **mixed** by 21 points. C is not A's
+  program — its `dispatch` has three arms where A's has four, and `opt -O3`
+  gave C a branch chain on the tag where A got two `cmov` (§12.7) — so the
+  two need not cost the same, and **why C costs more than A is not known**:
+  no counter was read. C **mixed** is 5%, 27% and 13% over C **same**; a
+  misprediction is not the explanation §3 allows, since the escape loops
+  read `ts[i % 1024]`, the same period-1,024 stream on which §3 found a
+  compare chain of up to three compares within ±3% of **direct**. What C
+  does show is the invariant's half that needs no comparison with A: C *is*
+  the hand `switch` over `{u0, u1, u2}` that the invariant (§2.3) names, the
+  same IR a hand program writes, so a reference program lowered to C costs
+  exactly that hand program, by construction. C is hand-written: the pass
+  that would produce it is
   not built (§9).
 
 ## 5. Semantics
@@ -686,15 +784,23 @@ trampoline per function, which is a different construct.
   for an `enum` (the `DIEnumerator` at `:454`, the
   `DW_TAG_enumeration_type` at `:461`), so gdb and lldb print `h = t2` rather than `h = 2`, and
   `p h == t2` works. Nothing new in the emitter but the source of the names.
-- **Line info on the switch.** The dispatcher is synthetic. It gets a
-  `DISubprogram` flagged `DIFlagArtificial`, and its `switch` and every arm's
-  call carry the **call site's** location, so a step into `h(3)` lands on the
-  call line and then in the member's first line, and a backtrace shows
-  `$ref.S.p` between the two with the call's line — the frame a reader expects
-  from a call through a pointer.
+- **Line info on the switch.** The dispatcher is synthetic and shared by
+  every call whose set is the same (§2.3), so its own instructions cannot
+  carry any one call site's location. It gets a `DISubprogram` flagged
+  `DIFlagArtificial`, and its `switch` and arms carry a location in that
+  subprogram's own scope (line `0`, the convention for compiler-generated
+  code), not a source line. What a reader sees unoptimised: a backtrace from
+  inside a member shows the member's frame, then `$ref.S.p` with no source
+  line, then the caller's frame **at the call line** — the caller's own
+  location is the one that names the site. A step into `h(3)` enters
+  `$ref.S.p`; whether gdb and lldb step through an artificial line-0 frame
+  into the member, or stop in it, was not tried, and is checked in stage 1
+  with the `-g` test of §9.
 - **The optimised build** inlines the dispatcher into its callers (it is a few
-  instructions), so in `--profile speed` the debugger sees the switch at the
-  call site, as `-O3` shows any inlined function.
+  instructions); each inlined copy's locations then carry `inlinedAt` the
+  call site, so in `--profile speed` the debugger attributes the switch to
+  the call line, as `-O3` shows any inlined function. That is LLVM's
+  inliner's rule, not something the spike's IR was checked for.
 
 ### 5.4 The rolling freeze
 
@@ -803,6 +909,15 @@ promises, module storage, classes or a parameter's own storage, not functions
 | `docs/ARCHITECTURE.md:142` | the IR holds no closure value, environment struct or indirect call | intact | a reference is an `i32`, the dispatcher a `switch` of direct calls |
 | `docs/wp14-selfhost.md:50`, `docs/ARCHITECTURE.md:136` | Nish-0 has no function values, so the emitter has no tables of closures | intact | the freeze keeps `src/` off references for a release (§5.4); a table of references is not a table of closures |
 
+**The contributor rules and the AI checklist**
+
+| Where | What it leans on | Verdict | What the text would need |
+| --- | --- | --- | --- |
+| `.claude/typescript.md:53`–`57` | `Function` is forbidden as "no dynamic function values": a function value "needs a function pointer and an indirect call", and the whole-program pass "cannot prove purity, termination or escape facts through an unknown callee"; "that is what keeps a function from being a value whichever way it is spelled" | weakened | `Function` stays forbidden (§2.2), but the reason no longer covers every spelling: a reference has neither a pointer nor an unknown callee, and its facts are its set's join (§6's first table). The sentence narrows to closures and `Function` |
+| `.claude/typescript.md:79` | `src/`'s own subset: "a function is never a value" | intact | the freeze keeps `src/` off references for one release (§5.4); after it, whether `src/` adopts them is its own change, and this line moves with it |
+| `.claude/selfhost.md:137`–`140` | Nish-0 has "no … function values" | intact | Nish-0's subset is a choice, held by the freeze; the line moves only if `src/` adopts references |
+| `docs/AI.md:3129` (checklist item 8) | "a stored or returned callback" is on the list of things a program must not use | **broken** | item 8 splits as the AI rows above do: a stored or returned *capture-free* function is admitted from stage 1, a stored or returned closure stays on the list |
+
 ## 7. Not measured
 
 - **Where the jump table starts, and what it costs past eight.** `K = 8` was
@@ -818,7 +933,15 @@ promises, module storage, classes or a parameter's own storage, not functions
   select (§4.3). The disassembly says what A adds over **direct**, a callee
   picked by data against one folded to constants (§3.5, §12.7); no variant
   with the load but no select was timed.
-- **Why B same is slower than B mixed** in all three runs (§4.3).
+- **Why B same is slower than B mixed** in all four runs (§4.3).
+- **Why C costs more than A**, by up to 1.37x in run 3, and why C **mixed**
+  is 5% to 27% over C **same** on a periodic stream (§4.3). No counter was
+  read; C's branch chain against A's `cmov` is the visible difference, not a
+  shown cause.
+- **The escape group's own layout spread.** Its copy rows give a within-run
+  band per run (3% to 16%); no relinked or reordered build of the escape
+  programs was timed, so §3's 21% is not known to apply here, and §4.3 reads
+  each run against its own band only.
 - **A `K = 1` control for the escape shape.** With one member there is no
   `switch`, so it would separate the tag array's cost from the dispatch's; it
   was not built.
@@ -861,10 +984,12 @@ The three possible answers, against the numbers:
 - **Strict**, with per-place sets. With **one dispatcher per signature** a
   reference could cost more than the code it replaces: a three-way site over
   `u0..u2`, rewritten from a hand `switch` to references, would pay B's 6.4x
-  to 9.0x and 1.5 GB because `u3`, elsewhere in the program, keeps `p` (§4.3).
+  to 9.1x and 1.5 GB because `u3`, elsewhere in the program, keeps `p` (§4.3).
   Per-place sets (§2.3) are the cure, and it is measured: case C, the
   program the pass produces when `u3` escapes at another site, keeps `P` an
-  `alloca` and costs 0.95x to 1.09x A (§4.3). A place is a declaration (a
+  `alloca` and 12 MB at 1.40x to 2.02x a direct call, against B's 6.4x to
+  9.1x and 1.5 GB (§4.3); it is the hand `switch` over `u0..u2`, the same
+  IR, so it costs what that hand program costs by construction. A place is a declaration (a
   local, a parameter, a field, a function's return) or an element type
   (`S[]`, a `Map`'s value), and its set is every member stored into it. From
   that: **no program is slower than the same program written with `i32`
@@ -882,9 +1007,17 @@ The three possible answers, against the numbers:
   `350bad84`) would admit references in compat. Strict "does not grow"
   (rule 1, :57-58), and wp28 answered that rule for C2a, function-typed
   parameters, by building them in strict because they were "free at run
-  time" (:462). References are free in the same sense: each costs exactly
-  the hand `switch` it replaces (§3.5, and C in §4.3), so they leave compat's
-  list the same way. The practical costs of compat point the same way: C0,
+  time" (:462). References are not C2a: their target is not named at the
+  call. Nor are they C2b, "a value whose target the checker cannot name"
+  (:463), whose cost is an unknown callee and whose open measurement is how
+  much of a program is reachable from it (:533-535): the checker names the
+  closed set that can reach each call, `F(p)`, so that reach is computed per
+  call, exactly, and the join over it is what A, B and C measure. In that
+  third case a reference costs exactly the hand `switch` over the same
+  declaration's tags — the dispatcher is that `switch` (§2.3, C in §4.3) —
+  and more only against a hand program that keeps tags in finer places than
+  a declaration, up to B's 6.4x to 9.1x (§10). So references leave compat's
+  list the way C2a did, with that gap stated. The practical costs of compat point the same way: C0,
   the `--compat` machinery, is unbuilt (:458); `src/` may never use compat
   (:244), where §5.4 wants references after the freeze; and compat implies
   `--number-mode f64` (:316). Closures stay on wp28's list (C2b).
@@ -932,7 +1065,16 @@ program, do.
    (§4.1) written with references: a field or local holding `u0..u2` read at
    the hot call, `u3` stored into another place and called there. Its golden
    pins the dispatcher over `{u0, u1, u2}` with A's facts and `P` an
-   `alloca` in `run`; stage 1 does not ship without it (§8). Any function
+   `alloca` in `run`; stage 1 does not ship without it (§8). Beside it, one
+   test per row of §2.3's store-context table, each storing `u3` through
+   that row's form into the hot place, so the golden shows `u3` in the
+   place's set: a row the pass drops would leave `u3` out and call `u2`
+   instead, or, with the trap arm, trap. A `-g` test steps into a reference
+   call under gdb and lldb and pins where it stops (§5.3). A two-module
+   variant stores a member of one module into a place read in the other and
+   pins the dispatcher copy and the member's `hidden` linkage (§2.3).
+   Stage 1 also settles the two open decisions of §2.3: the trap arm, and
+   whether a `hidden` member keeps its call-site entry facts. Any function
    reachable from a host-visible signature taking a reference is refused
    (§5.2).
 2. **Stage 2 — references as arguments, `| null` and `Map` values.** A
@@ -986,7 +1128,7 @@ construct" and `CLAUDE.md`'s definition of done:
   with `i32` tags whose hand `switch` covers every member stored into the same
   declaration or element type — which is the dispatch that program would have
   to write, since it has no finer place to keep a tag in either. Case C
-  measures that site (§4.3, 0.95x to 1.09x of A). The invariant says nothing
+  is that site's hand program, measured (§4.3). The invariant says nothing
   against a hand programmer who uses a finer place than a declaration, and
   these are the gaps where a reference can lose to one:
   - two arrays or `Map`s of one element type share one set, so `u3` stored
@@ -1000,7 +1142,7 @@ construct" and `CLAUDE.md`'s definition of done:
 
   Against a program that knows which member reaches a call and calls it
   directly, the widened dispatcher can lose the stack proof: case B's 6.4x to
-  9.0x and 1.5 GB (§4.3). The workaround is to keep the cold member out of the hot
+  9.1x and 1.5 GB (§4.3). The workaround is to keep the cold member out of the hot
   place — in its own field or local rather than a shared `S[]` — and stage 1's
   warning names the member that widened a dispatcher and the place it came
   through, so the user can see which store to move. Per-alias sets (§11) are
@@ -1036,10 +1178,17 @@ construct" and `CLAUDE.md`'s definition of done:
   refuses it (§5.2) for one rule across targets.
 - The numbering is declaration order; whether a debugger or a
   `nish-cmp` diff would prefer a name-sorted order.
-- The dispatcher's last arm. §2.3 makes the last member the `switch`'s
-  `default`, so a tag outside the set, which only a miscompile could make
-  (§5.1), would call that member. A trap arm would catch it at the cost of one
-  more compare per call; not measured.
+- The dispatcher's last arm — **decided in stage 1** (§2.3). The last
+  member as the `switch`'s `default` means a tag outside the set, which a
+  miscompile or a store form the pass did not model and did not widen would
+  make, calls that member. A trap arm catches it at the cost of one more
+  compare per call; not measured. Stage 1 times `fnref_place_set` both ways
+  and ships the trap if it is inside the band.
+- Cross-module members — **decided in stage 1** (§2.3). A member stored into
+  a place read in another module becomes `hidden`, and `takesEntryFacts`
+  refuses a `hidden` signature, so that member loses its call-site entry
+  facts; whether to admit a `hidden` function whose every caller is recorded
+  is the decision. No multi-module program was measured.
 - Function-type aliases (`type Handler = (x: i32) => i32`) and containers of
   references other than arrays and `Map` values, such as `Set<Handler>`:
   whether a `Set` may hold tags, and whether an alias names a set (above), is
@@ -1932,9 +2081,15 @@ python3 bench.py "$(cat groups.json)" 7     # best of 7, interleaved
 node genc.mjs                               # case C (§12.4), then build as above
 python3 bench.py '[["esc_direct", "esc_direct_copy", "esc_direct_nostack", "esc_a_same", "esc_a_mixed", "esc_b_same", "esc_b_mixed", "esc_c_same", "esc_c_mixed"]]' 7
 python3 bench.py '[["esc_direct", "esc_direct_copy", "esc_direct_nostack", "esc_a_same", "esc_a_mixed", "esc_b_same", "esc_b_mixed", "esc_c_same", "esc_c_mixed"]]' 11
+nproc; grep -m1 'model name' /proc/cpuinfo; free -g   # run 3: the same 11-round group
+python3 bench.py '[["esc_direct", "esc_direct_copy", "esc_direct_nostack", "esc_a_same", "esc_a_mixed", "esc_b_same", "esc_b_mixed", "esc_c_same", "esc_c_mixed"]]' 11
 node genrand.mjs                            # §3.4's group, then the steps above
 python3 bench.py "$(cat groups_rand.json)" 7
 ```
+
+The hosts, as §4.3 gives them: run 0 and §3 on an Intel Xeon @ 2.30GHz;
+runs 1 and 2 on a container whose CPU model was not recorded; run 3 on one
+that printed `4`, `Intel(R) Xeon(R) Processor @ 2.10GHz` and 15 GB.
 
 `groups.json` and `groups_rand.json`:
 
@@ -2234,6 +2389,49 @@ xorshift state and branches on bit 24 of it:
 	ja	.LBB0_11
 	notrack		jmpq	*.LJTI0_0(,%rdx,8)
 ```
+
+**`serial_k8_mixed`, linked: the jump table's indirect branch is in the hot
+loop** (§3.5). The excerpts from `llc` above show the `switch` lowered; this
+is the executable, from `objdump -d`. The loop head at `1b80` advances the
+eight members' state, `1bc5` to `1be0` loads the tag (`i & 1023`) and jumps
+through the table, and every arm ends in `jmp 1b80`, so `notrack jmp *%r12`
+runs once a call (three of the seven arms shown):
+
+```asm
+1b80:	xor    %r12d,%esi
+1b83:	inc    %esi
+1b85:	inc    %r14d
+1b88:	add    $0xac564b05,%ebp
+1b8e:	add    $0x41c64e6d,%ebx
+1b94:	add    $0x15a4e35,%r11d
+1b9b:	add    $0x19660d,%r10d
+1ba2:	add    $0x8088405,%r9d
+1ba9:	add    $0x343fd,%r8d
+1bb0:	add    $0x41c64e6b,%edi
+1bb6:	add    $0x10dcd,%ecx
+1bbc:	cmp    $0x17d78400,%r14d
+1bc3:	je     1c43
+1bc5:	mov    %r14d,%r12d
+1bc8:	and    $0x3ff,%r12d
+1bcf:	mov    (%rax,%r12,4),%r12d
+1bd3:	cmp    $0x6,%r12
+1bd7:	ja     1c0a
+1bd9:	movslq (%rdx,%r12,4),%r12
+1bdd:	add    %rdx,%r12
+1be0:	notrack jmp *%r12
+1be4:	xor    %ebx,%esi
+1be6:	mov    %esi,%r12d
+1be9:	sar    $0xd,%r12d
+1bed:	jmp    1b80
+1bef:	xor    %r10d,%esi
+1bf2:	mov    %esi,%r12d
+1bf5:	sar    $0xf,%r12d
+1bf9:	jmp    1b80
+```
+
+The other two `K = 8` mixed executables hold the same branch in their hot
+loops: `notrack jmp *%r10` at `1c86` in `array_k8_mixed` and
+`notrack jmp *%rdx` at `1ade` in `rand_k8_mixed`.
 
 No dispatch loop shown above holds a `cmov`. The `cmovs` nearest each loop
 is after it, in printing the result: `1b74` in `serial_k2_mixed`, `1ab3` in
