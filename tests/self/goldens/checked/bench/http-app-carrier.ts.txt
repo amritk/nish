@@ -2350,9 +2350,9 @@ import compressBound from "nish/compress/deflate" -> function @nish.compressBoun
 import GzipCompressor from "nish/compress/gzip" -> struct GzipCompressor
 import GzipFixedCompressor from "nish/compress/gzip" -> struct GzipFixedCompressor
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
-unsafe import 77:10 wrappingAdd from "nish:unsafe"
-unsafe call 533:26 wrappingAdd (node 1792)
-unsafe call 573:24 wrappingAdd (node 1947)
+unsafe import 78:10 wrappingAdd from "nish:unsafe"
+unsafe call 540:26 wrappingAdd (node 1792)
+unsafe call 580:24 wrappingAdd (node 1947)
 const HTTP_CODING_IDENTITY: i32 = 0 [exported]
 const HTTP_CODING_GZIP: i32 = 1 [exported]
 const HTTP_CODING_DEFLATE: i32 = 2 [exported]
@@ -5340,15 +5340,17 @@ function http1ResponseHead(status: i32, reason: string, names: string[], values:
   callee +0:40 http1IsFieldText -> @nish.http1IsFieldText
   local +9:9 count: i32 (const)
   local +13:9 parts: string[] (const)
-  local +14:12 i: i32 (let)
-  local +15:11 name: string (const)
-  local +16:11 value: string (const)
-  local +17:11 nameLength: i32 (const)
-  callee +18:10 http1IsToken -> @nish.http1IsToken
-  callee +18:33 http1IsFieldText -> @nish.http1IsFieldText
-  callee +22:7 http1SameWord -> @nish.http1SameWord
+  local +14:7 dated: boolean (let)
+  local +15:12 i: i32 (let)
+  local +16:11 name: string (const)
+  local +17:11 value: string (const)
+  local +18:11 nameLength: i32 (const)
+  callee +19:10 http1IsToken -> @nish.http1IsToken
+  callee +19:33 http1IsFieldText -> @nish.http1IsFieldText
   callee +23:7 http1SameWord -> @nish.http1SameWord
-  callee +35:10 http1BytesOf -> @nish.http1BytesOf
+  callee +24:7 http1SameWord -> @nish.http1SameWord
+  callee +28:9 http1SameWord -> @nish.http1SameWord
+  callee +42:10 http1BytesOf -> @nish.http1BytesOf
 function http1HexDigits(len: i32): i32 -> @nish.http1HexDigits
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -5508,7 +5510,7 @@ function http1WriteResponseHead(out: u8[], at: i32, status: i32, reason: string,
   callee +3:25 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
   local +9:9 count: i32 (const)
   local +16:7 need: i64 (let)
-  local +17:7 sendDate: boolean (let)
+  local +17:7 dated: boolean (let)
   local +18:12 i: i32 (let)
   local +19:11 name: u8[] (const)
   local +20:11 value: u8[] (const)
@@ -5518,28 +5520,29 @@ function http1WriteResponseHead(out: u8[], at: i32, status: i32, reason: string,
   callee +24:50 http1BytesAre -> @nish.http1BytesAre
   callee +27:41 http1BytesAre -> @nish.http1BytesAre
   callee +30:9 http1BytesAre -> @nish.http1BytesAre
-  callee +40:30 http1DecimalDigits -> @nish.http1DecimalDigits
-  local +51:9 limit: i32 (const)
-  local +52:7 end: i32 (let)
-  callee +52:18 http1PutStatusLine -> @nish.http1PutStatusLine
-  callee +53:9 http1PutText -> @nish.http1PutText
-  callee +54:9 http1PutCrlf -> @nish.http1PutCrlf
-  local +55:12 i: i32 (let)
-  callee +56:11 http1PutBytes -> @nish.http1PutBytes
-  callee +57:11 http1PutColonSpace -> @nish.http1PutColonSpace
-  callee +58:11 http1PutBytes -> @nish.http1PutBytes
-  callee +59:11 http1PutCrlf -> @nish.http1PutCrlf
-  callee +62:11 http1PutFixed -> @nish.http1PutFixed
-  callee +69:11 http1PutBytes -> @nish.http1PutBytes
-  callee +70:11 http1PutCrlf -> @nish.http1PutCrlf
-  callee +73:11 http1PutFixed -> @nish.http1PutFixed
-  callee +80:11 http1PutDecimal -> @nish.http1PutDecimal
-  callee +81:11 http1PutCrlf -> @nish.http1PutCrlf
-  callee +83:11 http1PutText -> @nish.http1PutText
-  callee +86:11 http1PutFixed -> @nish.http1PutFixed
-  callee +93:11 http1PutText -> @nish.http1PutText
-  callee +94:11 http1PutCrlf -> @nish.http1PutCrlf
-  callee +96:10 http1PutCrlf -> @nish.http1PutCrlf
+  local +39:9 sendDate: boolean (const)
+  callee +45:30 http1DecimalDigits -> @nish.http1DecimalDigits
+  local +56:9 limit: i32 (const)
+  local +57:7 end: i32 (let)
+  callee +57:18 http1PutStatusLine -> @nish.http1PutStatusLine
+  callee +58:9 http1PutText -> @nish.http1PutText
+  callee +59:9 http1PutCrlf -> @nish.http1PutCrlf
+  local +60:12 i: i32 (let)
+  callee +61:11 http1PutBytes -> @nish.http1PutBytes
+  callee +62:11 http1PutColonSpace -> @nish.http1PutColonSpace
+  callee +63:11 http1PutBytes -> @nish.http1PutBytes
+  callee +64:11 http1PutCrlf -> @nish.http1PutCrlf
+  callee +67:11 http1PutFixed -> @nish.http1PutFixed
+  callee +74:11 http1PutBytes -> @nish.http1PutBytes
+  callee +75:11 http1PutCrlf -> @nish.http1PutCrlf
+  callee +78:11 http1PutFixed -> @nish.http1PutFixed
+  callee +85:11 http1PutDecimal -> @nish.http1PutDecimal
+  callee +86:11 http1PutCrlf -> @nish.http1PutCrlf
+  callee +88:11 http1PutText -> @nish.http1PutText
+  callee +91:11 http1PutFixed -> @nish.http1PutFixed
+  callee +98:11 http1PutText -> @nish.http1PutText
+  callee +99:11 http1PutCrlf -> @nish.http1PutCrlf
+  callee +101:10 http1PutCrlf -> @nish.http1PutCrlf
 module std/net/websocket.ts [package nish]
 import base64StdPadEncode from "nish/crypto/base64url" -> function @nish.base64StdPadEncode
 import base64urlDecode from "nish/crypto/base64url" -> function @nish.base64urlDecode
@@ -19054,6 +19057,7 @@ const HTTP_FIELDS_PSEUDO_FORBIDDEN: i32 = -8 [exported]
 const HTTP_FIELDS_BAD_PSEUDO_VALUE: i32 = -9 [exported]
 const HTTP_FIELDS_AUTHORITY_MISMATCH: i32 = -10 [exported]
 const HTTP_FIELDS_BAD_CONTENT_LENGTH: i32 = -11 [exported]
+const HTTP_FIELDS_DATE_REPEATED: i32 = -12 [exported]
 const HTTP_FIELDS_NO_LENGTH: i64 = -1 [exported]
 const HTTP_FIELDS_METHOD: i32 = 1
 const HTTP_FIELDS_SCHEME: i32 = 2
@@ -19207,17 +19211,19 @@ function httpFieldsHasUserinfo(authority: u8[]): boolean -> @nish.httpFieldsHasU
   local +0:14 b: u8 (const)
 function httpFieldsCheckOutgoing(names: u8[][], values: u8[][]): i32 -> @nish.httpFieldsCheckOutgoing [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.httpFieldConnectionSpecific nish.httpFieldNameValid nish.httpFieldValueValid
+  calls: nish.httpFieldConnectionSpecific nish.httpFieldIs nish.httpFieldNameValid nish.httpFieldValueValid
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +4:12 k: i32 (let)
-  local +5:11 name: u8[] (const)
-  local +6:11 value: u8[] (const)
-  callee +7:10 httpFieldNameValid -> @nish.httpFieldNameValid
-  callee +10:10 httpFieldValueValid -> @nish.httpFieldValueValid
-  callee +13:9 httpFieldConnectionSpecific -> @nish.httpFieldConnectionSpecific
+  local +4:7 dated: boolean (let)
+  local +5:12 k: i32 (let)
+  local +6:11 name: u8[] (const)
+  local +7:11 value: u8[] (const)
+  callee +8:10 httpFieldNameValid -> @nish.httpFieldNameValid
+  callee +11:10 httpFieldValueValid -> @nish.httpFieldValueValid
+  callee +14:9 httpFieldConnectionSpecific -> @nish.httpFieldConnectionSpecific
+  callee +17:9 httpFieldIs -> @nish.httpFieldIs
 function HttpFields.constructor(this: HttpFields): void -> @nish.HttpFields.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=80 writesThrough=true captured=false

@@ -3584,22 +3584,22 @@ declare module "nish:simd" {
    * A `u8x16` of sixteen lanes: one `insertelement` per lane, which `opt`
    * folds to a constant vector when every lane is one.
    *
-   * @param a0 Lane 0, a `u8`; `a1` to `a15` are lanes 1 to 15 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
-   * @param a4 Lane 4.
-   * @param a5 Lane 5.
-   * @param a6 Lane 6.
-   * @param a7 Lane 7.
-   * @param a8 Lane 8.
-   * @param a9 Lane 9.
-   * @param a10 Lane 10.
-   * @param a11 Lane 11.
-   * @param a12 Lane 12.
-   * @param a13 Lane 13.
-   * @param a14 Lane 14.
-   * @param a15 Lane 15.
+   * @param a0 Lane 0, a `u8`.
+   * @param a1 Lane 1, a `u8`.
+   * @param a2 Lane 2, a `u8`.
+   * @param a3 Lane 3, a `u8`.
+   * @param a4 Lane 4, a `u8`.
+   * @param a5 Lane 5, a `u8`.
+   * @param a6 Lane 6, a `u8`.
+   * @param a7 Lane 7, a `u8`.
+   * @param a8 Lane 8, a `u8`.
+   * @param a9 Lane 9, a `u8`.
+   * @param a10 Lane 10, a `u8`.
+   * @param a11 Lane 11, a `u8`.
+   * @param a12 Lane 12, a `u8`.
+   * @param a13 Lane 13, a `u8`.
+   * @param a14 Lane 14, a `u8`.
+   * @param a15 Lane 15, a `u8`.
    * @returns The vector.
    */
   export function u8x16(
@@ -3609,52 +3609,52 @@ declare module "nish:simd" {
   /**
    * A `u16x8` of 8 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, a `u16`; `a1` to `a7` are lanes 1 to 7 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
-   * @param a4 Lane 4.
-   * @param a5 Lane 5.
-   * @param a6 Lane 6.
-   * @param a7 Lane 7.
+   * @param a0 Lane 0, a `u16`.
+   * @param a1 Lane 1, a `u16`.
+   * @param a2 Lane 2, a `u16`.
+   * @param a3 Lane 3, a `u16`.
+   * @param a4 Lane 4, a `u16`.
+   * @param a5 Lane 5, a `u16`.
+   * @param a6 Lane 6, a `u16`.
+   * @param a7 Lane 7, a `u16`.
    * @returns The vector.
    */
   export function u16x8(a0: u16, a1: u16, a2: u16, a3: u16, a4: u16, a5: u16, a6: u16, a7: u16): u16x8;
   /**
    * An `i32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, an `i32`; `a1` to `a3` are lanes 1 to 3 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
+   * @param a0 Lane 0, an `i32`.
+   * @param a1 Lane 1, an `i32`.
+   * @param a2 Lane 2, an `i32`.
+   * @param a3 Lane 3, an `i32`.
    * @returns The vector.
    */
   export function i32x4(a0: i32, a1: i32, a2: i32, a3: i32): i32x4;
   /**
    * A `u32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, a `u32`; `a1` to `a3` are lanes 1 to 3 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
+   * @param a0 Lane 0, a `u32`.
+   * @param a1 Lane 1, a `u32`.
+   * @param a2 Lane 2, a `u32`.
+   * @param a3 Lane 3, a `u32`.
    * @returns The vector.
    */
   export function u32x4(a0: u32, a1: u32, a2: u32, a3: u32): u32x4;
   /**
    * An `f32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, an `f32`; `a1` to `a3` are lanes 1 to 3 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
+   * @param a0 Lane 0, an `f32`.
+   * @param a1 Lane 1, an `f32`.
+   * @param a2 Lane 2, an `f32`.
+   * @param a3 Lane 3, an `f32`.
    * @returns The vector.
    */
   export function f32x4(a0: f32, a1: f32, a2: f32, a3: f32): f32x4;
   /**
    * An `f64x2` of 2 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, an `f64`; `a1` is lane 1.
-   * @param a1 Lane 1.
+   * @param a0 Lane 0, an `f64`.
+   * @param a1 Lane 1, an `f64`.
    * @returns The vector.
    */
   export function f64x2(a0: f64, a1: f64): f64x2;

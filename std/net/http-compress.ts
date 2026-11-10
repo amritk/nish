@@ -28,7 +28,8 @@
  * otherwise the compressed bytes are dropped and the body goes as it is. With
  * `segmentMode` set, `respondEncoded` also sends it compressed only when the
  * whole response, head included, takes fewer TCP segments of `mss` bytes (the
- * connection's `mss` if set, else the compressor's, 1448 by default): a
+ * connection's `mss` if set, else the compressor's `mss` if set, else the MSS
+ * the server read from the socket, else `HTTP_DEFAULT_MSS`, 1448): a
  * 1300-byte body that gzips to 700 still fits in one segment either way.
  *
  *  After each call `decision` says why (`HTTP_COMPRESS_SENT`, `_NOT_ACCEPTED`,
@@ -435,11 +436,17 @@ export class HttpCompressor {
   /**
    * Whether `respondEncoded` also sends the compressed response only when,
    * head included, it takes fewer TCP segments of `mss` bytes than the body
-   * as it is; off by default. `mss` is `HTTP_DEFAULT_MSS` unless the program
-   * sets it, or a connection's own `mss` overrides it.
+   * as it is; off by default. Segments are the connection's own `mss` if the
+   * program set it, else this compressor's `mss` if set, else the socket's MSS
+   * the server read on accept, else `HTTP_DEFAULT_MSS`.
    */
   segmentMode: boolean
-  /** The TCP segment size `segmentMode` counts in, in bytes: `HTTP_DEFAULT_MSS` by default, and 0 or less means that default. */
+  /**
+   * The TCP segment size `segmentMode` counts in, in bytes, when the program
+   * sets it: 0 (the default) or less means unset, so a connection's socket MSS
+   * is used, or `HTTP_DEFAULT_MSS` where there is none. A value set here wins
+   * over the socket's; a connection's own `mss` wins over it.
+   */
   mss: i32
   /** `HTTP_ENCODER_AUTO` (the default), `HTTP_ENCODER_FIXED` or `HTTP_ENCODER_LEVEL`. */
   encoder: i32
@@ -485,7 +492,7 @@ export class HttpCompressor {
     this.minSaving = 1
     this.minSavingPercent = 0
     this.segmentMode = false
-    this.mss = HTTP_DEFAULT_MSS
+    this.mss = 0
     this.encoder = HTTP_ENCODER_AUTO
     this.fixedLimit = 16384
     this.decision = HTTP_COMPRESS_NOT_ACCEPTED
@@ -610,10 +617,11 @@ export class HttpCompressor {
   /**
    * `segmentMode`'s rule, for a response of `identityBytes` bytes sent as it
    * is or `encodedBytes` compressed, heads included, at `mss` bytes a segment
-   * (`this.mss` when 0 or less): whether the compressed one takes fewer
-   * segments. When it does not, `decision` becomes
-   * `HTTP_COMPRESS_NO_FEWER_SEGMENTS`. `respondEncoded` calls it; a program
-   * driving HTTP/2 or HTTP/3 by hand may with its own head sizes.
+   * (`this.mss` when 0 or less, and `HTTP_DEFAULT_MSS` when both are, as
+   * `segmentSize` reads it): whether the compressed one takes fewer segments.
+   * When it does not, `decision` becomes `HTTP_COMPRESS_NO_FEWER_SEGMENTS`.
+   * `respondEncoded` calls it; a program driving HTTP/2 or HTTP/3 by hand may
+   * with its own head sizes.
    *
    * @param identityBytes the whole response's length sent uncompressed, head
    *   included, in bytes
