@@ -153,6 +153,12 @@ function passed by name — is no longer on this list: strict accepts it as a
 function-typed parameter of a top-level function, specialised per callee with
 a direct call and nothing lost ([LANGUAGE.md](LANGUAGE.md#function-parameters)).
 
+A function stored, returned or held in a field is still on it;
+[wp51-function-references.md](wp51-function-references.md) (proposed, design
+only) measures a strict lowering for references to capture-free top-level
+functions — a tag and a `switch` — that would take part of this row off the
+list, and leaves closures here.
+
 ### 2.2 Tier 3, refused permanently
 
 `any` and `unknown` in value positions, adding or deleting an undeclared

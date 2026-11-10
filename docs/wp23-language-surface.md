@@ -192,6 +192,12 @@ wp22 §2's measurement that a polymorphic call site is what costs 7x. A function
 value the checker cannot name, whether stored, returned or held in a field,
 still does not exist.
 
+[wp51-function-references.md](wp51-function-references.md) (proposed, design
+only) designs and measures the next step: a reference to a capture-free
+top-level function held in a local, a field or an array, lowered to a tag and
+a `switch` over a closed set, so the call stays direct and the facts are the
+join of the set's.
+
 ### 6.1 The shape that costs nothing
 
 A function parameter whose value is known at the call site monomorphises there,
