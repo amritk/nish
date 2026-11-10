@@ -499,7 +499,8 @@ reason phrase or field value holding CR, LF or another control character
 (which would end the line early and let the rest be read as a field or a
 second response); a field name that is not a token; `names` and `values` of
 different lengths; a `Content-Length` or `Transfer-Encoding` among the
-caller's fields, since the framing is decided here; a 1xx or 204 response
+caller's fields, since the framing is decided here; two `Date` fields in
+any case, since `Date` is a singleton (RFC 9110 §5.3); a 1xx or 204 response
 with a body length (RFC 9110 §15.2, §15.3.5); and any other `bodyLength`
 below zero.
 
@@ -731,7 +732,8 @@ hold a `date` in any case: the caller's wins, so a response carries one.
 
 Answers where the head ends; `HTTP1_REFUSED` for everything
 `http1ResponseHead` refuses, a `Connection` among the caller's fields when
-`connection` is given, a `connection` that is not field text, and a `date`
+`connection` is given, a `connection` that is not field text, two `date`
+fields among the caller's (a singleton, RFC 9110 §5.3), and a `date`
 that is not field text on a final status, the only one it is sent on;
 `HTTP1_NO_ROOM` when it is well formed but does not fit, the `Date` line
 counted when it is sent. Either way `out` is untouched.

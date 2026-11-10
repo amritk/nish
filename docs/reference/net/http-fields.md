@@ -14,6 +14,7 @@ import {
   HTTP_FIELDS_BAD_PSEUDO_VALUE,
   HTTP_FIELDS_BAD_VALUE,
   HTTP_FIELDS_CONNECTION_SPECIFIC,
+  HTTP_FIELDS_DATE_REPEATED,
   HTTP_FIELDS_NO_LENGTH,
   HTTP_FIELDS_OK,
   HTTP_FIELDS_PSEUDO_AFTER_FIELD,
@@ -92,7 +93,7 @@ Whether `value` may be sent as a field value: no NUL, CR or LF, and no space or 
 
 <scalar-card title="http​Fields​Check​Outgoing" icon="phosphor/regular/function" href="#httpfieldscheckoutgoing">
 
-Checks a field section a program is about to send, pseudo-headers left out: every name valid and in lowercase, every value valid, nothing connection-specific, and as many values as names.
+Checks a field section a program is about to send, pseudo-headers left out: every name valid and in lowercase, every value valid, nothing connection-specific, at most one `date` (a singleton, RFC 9110 §5.3), and as many values as names.
 
 </scalar-card>
 
@@ -146,7 +147,11 @@ and §4.3, RFC 8441 §4):
   compared without case (`HTTP_FIELDS_AUTHORITY_MISMATCH`);
 - a `content-length` that is not one run of at most eighteen digits, or two
   that disagree (`HTTP_FIELDS_BAD_CONTENT_LENGTH`). Matching it against
-  the body is the version's job, since only it sees the body.
+  the body is the version's job, since only it sees the body;
+- in a section a program sends, a second `date` field: `Date` is a
+  singleton (RFC 9110 §5.3, §6.6.1) whose value holds a comma, so two
+  cannot be combined into one and a reader cannot tell which to believe
+  (`HTTP_FIELDS_DATE_REPEATED`).
 
 </scalar-callout>
 
@@ -380,7 +385,8 @@ true when the value cannot end a line or smuggle whitespace at its
 
 Checks a field section a program is about to send, pseudo-headers left
 out: every name valid and in lowercase, every value valid, nothing
-connection-specific, and as many values as names. Answers `HTTP_FIELDS_OK`
+connection-specific, at most one `date` (a singleton, RFC 9110 §5.3), and
+as many values as names. Answers `HTTP_FIELDS_OK`
 or the first refusal. A version's writer refuses what this refuses, so
 that a program's string can never reach the wire as a field it was not.
 
@@ -511,6 +517,14 @@ A field value with a NUL, CR or LF, or whitespace at either end.
 `HTTP_FIELDS_CONNECTION_SPECIFIC: i32`
 
 A connection-specific field (RFC 9113 §8.2.2, RFC 9114 §4.2).
+
+</scalar-card>
+
+<scalar-card title="-12" icon="phosphor/regular/hash">
+
+`HTTP_FIELDS_DATE_REPEATED: i32`
+
+A `date` field that a section about to be sent holds more than once (RFC 9110 §5.3).
 
 </scalar-card>
 
