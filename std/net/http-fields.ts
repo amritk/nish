@@ -48,7 +48,11 @@
  *   compared without case (`HTTP_FIELDS_AUTHORITY_MISMATCH`);
  * - a `content-length` that is not one run of at most eighteen digits, or two
  *   that disagree (`HTTP_FIELDS_BAD_CONTENT_LENGTH`). Matching it against
- *   the body is the version's job, since only it sees the body.
+ *   the body is the version's job, since only it sees the body;
+ * - in a section a program sends, a second `date` field: `Date` is a
+ *   singleton (RFC 9110 §5.3, §6.6.1) whose value holds a comma, so two
+ *   cannot be combined into one and a reader cannot tell which to believe
+ *   (`HTTP_FIELDS_DATE_REPEATED`).
  *
  * **The date.** `httpDateWrite` writes a second since 1970 as an IMF-fixdate
  * (RFC 9110 §5.6.7), `Fri, 16 Oct 2026 08:11:54 GMT`, the form every version's
@@ -101,6 +105,9 @@ export const HTTP_FIELDS_AUTHORITY_MISMATCH: i32 = -10
 
 /** A `content-length` that is not a run of digits, or two that disagree. */
 export const HTTP_FIELDS_BAD_CONTENT_LENGTH: i32 = -11
+
+/** A `date` field that a section about to be sent holds more than once (RFC 9110 §5.3). */
+export const HTTP_FIELDS_DATE_REPEATED: i32 = -12
 
 /** `contentLength` when the section has no `content-length`. */
 export const HTTP_FIELDS_NO_LENGTH: i64 = -1
@@ -380,9 +387,10 @@ const httpFieldsHasUserinfo = (authority: u8[]): boolean => {
 /**
  * Checks a field section a program is about to send, pseudo-headers left
  * out: every name valid and in lowercase, every value valid, nothing
- * connection-specific, and as many values as names. Answers `HTTP_FIELDS_OK`
- * or the first refusal. A version's writer refuses what this refuses, so
- * that a program's string can never reach the wire as a field it was not.
+ * connection-specific, at most one `date` (a singleton, RFC 9110 §5.3), and
+ * as many values as names. Answers `HTTP_FIELDS_OK` or the first refusal. A
+ * version's writer refuses what this refuses, so that a program's string can
+ * never reach the wire as a field it was not.
  *
  * @param names the regular field names about to be sent, in order
  * @param values the value for each name, at the same index
@@ -395,6 +403,7 @@ export const httpFieldsCheckOutgoing = (names: u8[][], values: u8[][]): i32 => {
   if (n !== toI32(values.length)) {
     return HTTP_FIELDS_BAD_VALUE
   }
+  let dated: boolean = false
   for (let k: i32 = 0; k < n && k < toI32(names.length) && k < toI32(values.length); k++) {
     const name: u8[] = names[k]
     const value: u8[] = values[k]
@@ -406,6 +415,12 @@ export const httpFieldsCheckOutgoing = (names: u8[][], values: u8[][]): i32 => {
     }
     if (httpFieldConnectionSpecific(name, value)) {
       return HTTP_FIELDS_CONNECTION_SPECIFIC
+    }
+    if (httpFieldIs(name, "date")) {
+      if (dated) {
+        return HTTP_FIELDS_DATE_REPEATED
+      }
+      dated = true
     }
   }
   return HTTP_FIELDS_OK
