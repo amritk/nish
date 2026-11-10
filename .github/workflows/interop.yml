@@ -21,6 +21,12 @@
 #         stream, and resumes a TLS 1.3 session on a second HTTP/2
 #         connection (tests/interop/chrome-resume.py), with the certificate
 #         the server mints (nish/crypto/x509) and with one openssl makes.
+# arena:  examples/wasm-arena (docs/wp50-wasm-host.md §10, W9) in Playwright's
+#         Chromium for ten minutes of scripted input (tests/interop/chrome-arena.py):
+#         flat linear memory, the used heap after a forced GC at minute 1 and
+#         minute 10 within a stated band, and the recorded input replayed
+#         natively to the page's hash; then a WebTransport datagram write
+#         copying its bytes (§5.3) and loadSync either side of 8 MB (§8).
 #
 # Every tool is pinned: actions by commit, images by digest, the runner by
 # commit, h2spec by release and SHA-256, Python packages by hash
@@ -58,6 +64,15 @@ on:
       - "runtime/runtime-sandbox.c"
       - "tests/interop/**"
       - "tests/link/net_interop_server*/**"
+      # WP50 stage 6: the arena's page module, what builds and loads it, and
+      # the ring it reads its input through.
+      - "examples/wasm-arena/**"
+      - "src/interop-wasm.ts"
+      - "src/interop-dts.ts"
+      - "src/host-module.ts"
+      - "runtime/runtime-wasm.c"
+      - "runtime/page.mjs"
+      - "std/host/**"
       - ".github/workflows/interop.yml"
   push:
     branches: [main]
@@ -108,7 +123,8 @@ env:
   # mirror with no timeout of its own (docs/wp10-ci.md, "Shards and time limits").
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
 
-# Every job stops at 15 minutes, the repository's cap (docs/wp10-ci.md), and
+# Every job stops at 15 minutes, the repository's cap (docs/wp10-ci.md), but
+# `arena`, whose soak is ten minutes by design and is given 25; and
 # every step that waits on the network at 5 or 10: the slowest lane takes about
 # 3 minutes, so a limit is reached only by a hang, in the step that names it.
 jobs:
@@ -518,6 +534,118 @@ jobs:
             "$PLAYWRIGHT" sh -c "set -e
               pip install --quiet --no-deps --require-hashes -r /interop/chrome-requirements.txt
               python3 /interop/chrome-resume.py $H2_PORT /out/hash /log/server.log"
+
+      - name: The server's log
+        if: always()
+        run: docker logs nish
+
+  # The soak is ten minutes by design, so this job alone is given 25: the soak,
+  # the compiler built from the seed (about two minutes), the image pull and pip.
+  arena:
+    name: chrome wasm-arena soak (ten minutes)
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.23.4
+
+      # The runner image ships these; the action makes sure, through the cache.
+      # wasm-host links need no WASI sysroot.
+      - name: Install LLVM 18 + lld
+        timeout-minutes: 5
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18
+
+      - name: Link the LLVM 18 tools by their plain names
+        run: |
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang llc llvm-as llvm-link llvm-nm opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        timeout-minutes: 5
+        with:
+          name: nish-interop-image
+
+      - name: Pull Playwright's image
+        timeout-minutes: 10
+        run: docker pull "$PLAYWRIGHT"
+
+      # The compiler from this checkout, then the page (client.wasm under
+      # --profile wasm-host, its loader, page.js) and the native replay.
+      - name: Build the compiler and examples/wasm-arena
+        timeout-minutes: 8
+        run: |
+          bash scripts/fetch-seed.sh
+          build/seed/bin/nish src/compile.ts --link build/nish
+          node --no-warnings examples/wasm-arena/build.mjs --nish build/nish --out build/arena
+          ls -l build/arena/web
+
+      # The page over plain HTTP on localhost, a secure context; the server for
+      # the datagram check, with the certificate it mints.
+      - name: Serve the page and start the interop server
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          (cd build/arena/web && python3 -m http.server 8000 --bind 127.0.0.1 > "$RUNNER_TEMP/http.log" 2>&1 &)
+          docker load --input nish-interop.tar.gz
+          # shellcheck disable=SC2086 # $SERVE_PORTS is the flags, word by word
+          docker run -d --name nish --network host -v "$RUNNER_TEMP/out:/out" \
+            --entrypoint /interop-server nish-interop:ci \
+            serve $SERVE_PORTS --hash-file /out/hash
+          for _ in $(seq 1 100); do docker logs nish 2>&1 | grep -q '^ports ' && break; sleep 0.1; done
+          docker logs nish 2>&1 | grep -q '^ports '
+          curl -sSf -o /dev/null http://127.0.0.1:8000/index.html
+
+      - name: Chromium runs the arena for ten minutes
+        timeout-minutes: 14
+        run: |
+          docker run --rm --network host --ipc host \
+            -v "$GITHUB_WORKSPACE/tests/interop:/interop:ro" -v "$RUNNER_TEMP/out:/out" \
+            "$PLAYWRIGHT" sh -c "set -e
+              pip install --quiet --no-deps --require-hashes -r /interop/chrome-requirements.txt
+              python3 /interop/chrome-arena.py http://127.0.0.1:8000/index.html 600 /out/arena.json \
+                --webtransport $QUIC_PORT /out/hash"
+
+      # The browser's input, replayed by sim.ts compiled natively with
+      # --deterministic, must land on the hash the page printed.
+      - name: The recorded input replays natively to the same hash
+        if: always()
+        run: |
+          python3 - "$RUNNER_TEMP/out/arena.json" build/arena/replay <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, subprocess, sys
+          d = json.load(open(sys.argv[1]))
+          native = subprocess.run([sys.argv[2], "1", str(d["ticks"])] + d["runs"], capture_output=True, text=True, check=True).stdout.split()
+          h = d["heap"]
+          print("### wasm-arena: ten minutes in Chromium", d["chromium"])
+          print()
+          print("| | |\n|---|---|")
+          print(f"| renderer | {'WebGPU' if d['webgpu'] else 'WebGL 2'} ({d['gpu']}) |")
+          print(f"| frames, ticks | {d['frames']}, {d['ticks']} in {d['elapsed']} s |")
+          print(f"| memory.buffer.byteLength | {d['byteLength']}, moved after {d['moved']} frames |")
+          print(f"| arena mark | {d['mark']}, the same after every frame: {d['moved'] == 0} |")
+          print(f"| used heap after GC, minute 1 / 10 | {h['early']} / {h['late']} ({h['delta']:+d} bytes; band ±{d['heapBand']}) |")
+          print(f"| sampled allocation | {h['bytesPerFrame']} bytes a frame over {h['sampledFrames']} frames (band {d['frameBand']}) |")
+          print(f"| heaviest sites | {'; '.join(s['site'] + ' ' + str(s['bytes']) for s in h['heaviest'])} |")
+          print(f"| page hash / native replay | {d['hash']} / {native[3]} |")
+          dg = d.get("datagram", {})
+          print(f"| datagram write copies (§5.3) | {dg.get('copied')}: {dg.get('detail')} |")
+          for r in d["loadSync"]:
+              print(f"| loadSync of {r['size']} bytes (§8) | {'ok' if r['ok'] else 'refused'}: {r['detail']} |")
+          for f in d["failures"]:
+              print(f"| FAIL | {f} |")
+          if native[3] != d["hash"]:
+              print(f"native replay {native[3]} != page {d['hash']}", file=sys.stderr)
+              sys.exit(1)
+          PY
+          cat "$GITHUB_STEP_SUMMARY"
 
       - name: The server's log
         if: always()
