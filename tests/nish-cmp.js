@@ -1217,6 +1217,24 @@ const DECLARED = [
     why: "the case passes named functions to `some`, `every` and `findIndex` on an array, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
   },
   {
+    program: "tests/cases/deny_panics_arr_map.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case calls `map`, `filter`, `some`, `every` and `findIndex` on an array under `--deny-panics`, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/storage_lend_methods_after.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case lends module storage to functions that call `slice`, `map` and the other methods, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
+    program: "tests/cases/storage_lend_methods_before.ts",
+    file: "exit",
+    changelog: "methods map, filter, some, every, findIndex and slice",
+    why: "the case lends module storage to functions that call `slice`, `map` and the other methods, which the 0.37.0 seed refuses as unknown methods, so only the candidate compiles it",
+  },
+  {
     program: "tests/cases/arr_some_every.ts",
     file: "exit",
     changelog: "methods map, filter, some, every, findIndex and slice",
