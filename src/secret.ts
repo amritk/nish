@@ -1942,6 +1942,15 @@ class ReferenceScan {
    * `xs.push(raw = [...])`).
    */
   harmlessAt(node: Node, at: i32): boolean {
+    return this.harmlessUse(node, at, false)
+  }
+
+  /**
+   * `harmlessAt`, where `field` says `node` is a field of the local that
+   * holds a reference: the place the value may go (`consumed`) is then
+   * another name for part of it, so it is not harmless there.
+   */
+  harmlessUse(node: Node, at: i32, field: boolean): boolean {
     let child = node
     let i = at
     let up = this.handsOn(child, i)
@@ -1951,7 +1960,7 @@ class ReferenceScan {
       up = this.handsOn(child, i)
     }
     if (this.consumed(child, i)) {
-      return true
+      return !field
     }
     if (i < 0) {
       return false
@@ -1962,7 +1971,7 @@ class ReferenceScan {
         return child === parent.children[0]
       case N_BINARY:
         if (parent.text === "=") {
-          return child === parent.children[0] && this.harmlessAt(parent, i - 1)
+          return child === parent.children[0] && this.harmlessUse(parent, i - 1, field)
         }
         return parent.text === "===" || parent.text === "!=="
       case N_INDEX:
@@ -2047,7 +2056,12 @@ class ReferenceScan {
     )
   }
 
-  /** `local.length`, `local.lo`, `local.push(1)`, `local.method()`: the receiver of a member. */
+  /**
+   * `local.length`, `local.lo`, `local.push(1)`, `local.method()`: the
+   * receiver of a member. A field that holds a reference is harmless only
+   * under `FreshJudge.fieldUses`, where its own use is judged as the
+   * local's would be (`local.items.push(v)`, `local.a.b = v`).
+   */
   member(access: Node, at: i32): boolean {
     const call: Node | null = at > 0 ? this.ancestors[at - 1] : null
     if (call !== null && call.kind === N_CALL && call.children[0] === access) {
@@ -2064,7 +2078,10 @@ class ReferenceScan {
     if (call !== null && call.kind === N_BINARY && call.text === "=" && call.children[0] === access) {
       return true
     }
-    return !holdsReference(this.judge.table, this.judge.program.nodeTypes[access.id])
+    if (!holdsReference(this.judge.table, this.judge.program.nodeTypes[access.id])) {
+      return true
+    }
+    return this.judge.fieldUses && this.harmlessUse(access, at - 1, true)
   }
 
   /** `local` as an argument of the call or `new` that `list` belongs to. */
@@ -2150,7 +2167,6 @@ class FreshJudge {
   program: CheckedProgram
   table: TypeTable
   body: Node
-  mode: i32
   /** The function whose result is judged, for the quotes; "" at a `secret(...)`. */
   owner: string
   /** The `secret(...)` argument the needs are reported at, and the copy its diagnostic suggests. */
@@ -2163,6 +2179,14 @@ class FreshJudge {
   needs: SecretNeed[]
   judged: Local[]
   verdicts: boolean[]
+  mode: i32
+  /**
+   * Whether a use of a field of the local that holds a reference, `h.seen`
+   * in `h.seen.push(r)`, is judged by the rules for a use of the local,
+   * since a second name for the field is one into the local's memory. When
+   * it is not, any such read leaves a second reference.
+   */
+  fieldUses: boolean
 
   constructor(program: CheckedProgram, table: TypeTable, body: Node, mode: i32, owner: string, site: Node) {
     this.program = program
@@ -2178,6 +2202,7 @@ class FreshJudge {
     this.needs = []
     this.judged = []
     this.verdicts = []
+    this.fieldUses = false
   }
 
   /** `node` quoted where it is, in the function being judged. */
@@ -2456,6 +2481,27 @@ export class FreshResults {
     return start.ref
   }
 
+  /**
+   * `resultRef` for the function a region call runs: its own body is judged
+   * with `FreshJudge.fieldUses`, so it may keep what it is handed in the root
+   * it allocates, where the region walk checks what it stores. A callee is
+   * judged as `resultRef` judges it, since the walk trusts a fresh callee's
+   * answer and never sees what the callee stored into it.
+   */
+  builderRef(sig: FunctionSig): string {
+    const own = this.summarise(sig, true)
+    if (own.ref.length > 0) {
+      return own.ref
+    }
+    for (const callee of own.calls) {
+      const ref = this.resultRef(callee)
+      if (ref.length > 0) {
+        return ref
+      }
+    }
+    return ""
+  }
+
   /** `sig`'s summary, judging its body the first time it is asked for. */
   summaryOf(sig: FunctionSig): FreshSummary {
     for (const summary of this.summaries) {
@@ -2463,12 +2509,13 @@ export class FreshResults {
         return summary
       }
     }
-    const summary = this.summarise(sig)
+    const summary = this.summarise(sig, false)
     this.summaries.push(summary)
     return summary
   }
 
-  summarise(sig: FunctionSig): FreshSummary {
+  /** `sig`'s own body judged, `fieldUses` as `FreshJudge.fieldUses`. */
+  summarise(sig: FunctionSig, fieldUses: boolean): FreshSummary {
     const out = new FreshSummary(sig.name)
     const role = secretRoleOf(sig)
     const instance = sig.instance
@@ -2500,6 +2547,7 @@ export class FreshResults {
       program.enterInstance(instance)
     }
     const judge = new FreshJudge(program, this.table, body, FRESH_RETURN, sig.sourceName, body)
+    judge.fieldUses = fieldUses
     let fresh = true
     if (body.kind === N_BLOCK) {
       const values: Node[] = []

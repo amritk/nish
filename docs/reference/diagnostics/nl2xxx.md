@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 693 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 694 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -5418,7 +5418,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`)
+` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`)
 ```
 
 ## NL2352
@@ -11928,7 +11928,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-The function `region` or `regionWith` runs answers the region's root
+… runs answers the region's root, which must be memory it allocated, and …
 ```
 
 ## NL2615
@@ -12979,4 +12979,12 @@ The message of an error contains:
 
 ```text
 …the environment and the terminal answer differently on every host
+```
+
+## NL2702
+
+The message of an error contains:
+
+```text
+…: a child region's parent is the region entered when it is made, so `child` and `childWith` are called only in the function `enter` or `enterWith` runs, and that function only by them
 ```

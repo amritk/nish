@@ -4,6 +4,7 @@ entry: src/emit-region.ts src/emit.ts src/emit-secret.ts src/ir.ts src/strings.t
 import Emitter from "./emit" -> struct Emitter
 import paramValue from "./ir" -> function @paramValue
 import FunctionSig from "./program" -> struct FunctionSig
+import REGION_CHILD_NEW from "./region-check" -> const REGION_CHILD_NEW
 import REGION_CLOSE from "./region-check" -> const REGION_CLOSE
 import REGION_FREE from "./region-check" -> const REGION_FREE
 import REGION_LEAVE from "./region-check" -> const REGION_LEAVE
@@ -21,7 +22,7 @@ function emitRegionBody(emitter: Emitter, sig: FunctionSig, role: i32): void -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emit IRFunction.emitValue asBytes nish_panic_index nish_str_concat paramValue
-  pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.llvm#0 Emitter.useRuntime#0 Emitter.llvm#0 asBytes#0 Emitter.useRuntime#0 Emitter.useRuntime#0
+  pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.llvm#0 Emitter.useRuntime#0 Emitter.llvm#0 asBytes#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer sig: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -29,26 +30,30 @@ function emitRegionBody(emitter: Emitter, sig: FunctionSig, role: i32): void -> 
   callee +2:15 IRFunction.emitValue -> @IRFunction.emitValue
   callee +2:40 Emitter.useRuntime -> @Emitter.useRuntime
   callee +3:5 IRFunction.emit -> @IRFunction.emit
-  local +6:9 h: string (const)
-  callee +6:13 paramValue -> @paramValue
+  local +7:11 h: string (const)
+  callee +7:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +7:40 Emitter.useRuntime -> @Emitter.useRuntime
   callee +8:5 IRFunction.emit -> @IRFunction.emit
-  callee +8:25 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +9:5 IRFunction.emit -> @IRFunction.emit
-  local +11:11 type: string (const)
-  callee +11:18 Emitter.llvm -> @Emitter.llvm
-  local +12:11 root: string (const)
-  callee +12:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +12:43 Emitter.useRuntime -> @Emitter.useRuntime
+  local +11:9 h: string (const)
+  callee +11:13 paramValue -> @paramValue
   callee +13:5 IRFunction.emit -> @IRFunction.emit
-  callee +13:28 IRFunction.emitValue -> @IRFunction.emitValue
-  local +15:11 type: string (const)
-  callee +15:18 Emitter.llvm -> @Emitter.llvm
-  local +16:11 root: string (const)
-  callee +16:18 asBytes -> @asBytes
-  callee +16:41 paramValue -> @paramValue
-  callee +17:5 IRFunction.emit -> @IRFunction.emit
-  callee +17:26 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +13:25 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +14:5 IRFunction.emit -> @IRFunction.emit
+  local +16:11 type: string (const)
+  callee +16:18 Emitter.llvm -> @Emitter.llvm
+  local +17:11 root: string (const)
+  callee +17:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +17:43 Emitter.useRuntime -> @Emitter.useRuntime
   callee +18:5 IRFunction.emit -> @IRFunction.emit
-  callee +20:5 IRFunction.emit -> @IRFunction.emit
-  callee +20:26 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +21:5 IRFunction.emit -> @IRFunction.emit
+  callee +18:28 IRFunction.emitValue -> @IRFunction.emitValue
+  local +20:11 type: string (const)
+  callee +20:18 Emitter.llvm -> @Emitter.llvm
+  local +21:11 root: string (const)
+  callee +21:18 asBytes -> @asBytes
+  callee +21:41 paramValue -> @paramValue
+  callee +22:5 IRFunction.emit -> @IRFunction.emit
+  callee +22:26 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +23:5 IRFunction.emit -> @IRFunction.emit
+  callee +25:5 IRFunction.emit -> @IRFunction.emit
+  callee +25:26 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +26:5 IRFunction.emit -> @IRFunction.emit

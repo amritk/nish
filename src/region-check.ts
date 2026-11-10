@@ -27,6 +27,12 @@ export const REGION_CLOSE: i32 = 8
 export const REGION_REOPEN: i32 = 9
 /** `leave(r, root)`: `nish_region_leave`. */
 export const REGION_LEAVE: i32 = 10
+/** `child(f)`: `region(f)`, with the region entered now as the parent. */
+export const REGION_CHILD: i32 = 11
+/** `childWith(arg, f)`. */
+export const REGION_CHILD_WITH: i32 = 12
+/** `childNew()`: `nish_region_child_new`. */
+export const REGION_CHILD_NEW: i32 = 13
 
 /**
  * Whether `program` is `std/region.ts` as `nish:region` loads it. The package is
@@ -57,6 +63,15 @@ const roleNamed = (name: string): i32 => {
   if (name === "free") {
     return REGION_FREE
   }
+  if (name === "child") {
+    return REGION_CHILD
+  }
+  if (name === "childWith") {
+    return REGION_CHILD_WITH
+  }
+  if (name === "childNew") {
+    return REGION_CHILD_NEW
+  }
   if (name === "handleNew") {
     return REGION_NEW
   }
@@ -78,11 +93,19 @@ const regionRole = (template: TemplateInfo): i32 =>
     ? REGION_NONE
     : roleNamed(template.sourceName)
 
+/** Whether `role` makes a region and runs a function in it: `region`, `regionWith`, `child`, `childWith`. */
+export const isRegionMaker = (role: i32): boolean =>
+  role === REGION_MAKE || role === REGION_MAKE_WITH || isChildMaker(role)
+
+/** Whether `role` makes a child region: `child` or `childWith`. */
+export const isChildMaker = (role: i32): boolean => role === REGION_CHILD || role === REGION_CHILD_WITH
+
+/** Whether `role` runs an arrow in a region: one of the four makers, `enter` or `enterWith`. */
+export const isRunnerRole = (role: i32): boolean =>
+  (role >= REGION_MAKE && role <= REGION_ENTER_WITH) || isChildMaker(role)
+
 /** Whether `template` runs an arrow that must capture nothing (`captureMode` in `src/generics.ts`). */
-export const isRegionRunner = (template: TemplateInfo): boolean => {
-  const role = regionRole(template)
-  return role >= REGION_MAKE && role <= REGION_ENTER_WITH
-}
+export const isRegionRunner = (template: TemplateInfo): boolean => isRunnerRole(regionRole(template))
 
 /** The role of the instance `sig` is, or `REGION_NONE` when it is none of `nish:region`'s templates'. */
 export const regionRoleOf = (sig: FunctionSig | null): i32 => {
@@ -98,8 +121,8 @@ export const regionRoleOf = (sig: FunctionSig | null): i32 => {
 }
 
 /**
- * The role of `sig` where `program` defines or instantiates it: `handleNew` and
- * `open` take no type parameter, so they are no template's instance and are
+ * The role of `sig` where `program` defines or instantiates it: `handleNew`,
+ * `childNew` and `open` take no type parameter, so they are no template's instance and are
  * known by the module they are written in.
  */
 export const regionRoleIn = (program: CheckedProgram, sig: FunctionSig): i32 => {
@@ -112,5 +135,7 @@ export const regionRoleIn = (program: CheckedProgram, sig: FunctionSig): i32 => 
 }
 
 /** Whether `sig` is one of the intrinsics whose body the emitter writes. */
-export const isRegionIntrinsic = (program: CheckedProgram, sig: FunctionSig): boolean =>
-  regionRoleIn(program, sig) >= REGION_FREE
+export const isRegionIntrinsic = (program: CheckedProgram, sig: FunctionSig): boolean => {
+  const role = regionRoleIn(program, sig)
+  return role >= REGION_FREE && !isChildMaker(role)
+}

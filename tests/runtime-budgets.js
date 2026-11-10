@@ -680,8 +680,12 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * the caller's chunk had left into a chunk above the region's, so a loop that never
  * releases keeps its lanes' bytes rather than a chunk per lane. Measured **850 bytes**
  * against 766 on 2026-11-09 with clang 18.1.3 on linux-x64; the next 256-byte boundary.
+ * Raised to 1,536 by parent/child regions (RT-48, docs/security/runtime.md): each slot
+ * links its parent and children, `free` cascades deepest first and unlinks, and adopt
+ * refuses a region in a tree. Measured **1,486 bytes** against 850 on 2026-11-10 with
+ * clang 18.1.3 on linux-x64; the next 256-byte boundary.
  */
-const RUNTIME_REGION_TEXT_BUDGET = 1024
+const RUNTIME_REGION_TEXT_BUDGET = 1536
 /**
  * The same file with `-DNISH_THREADS=1`: the table's spin lock, the thread number taken
  * from a process-wide counter, and the innermost entered handle, which is thread-local.
@@ -689,8 +693,10 @@ const RUNTIME_REGION_TEXT_BUDGET = 1024
  * as `runtime.c`'s threads build has, so neither number covers the other's room.
  * Raised to 1,280 by ASYNC-15's carve (as above): measured **1,099 bytes** against 994 on
  * 2026-11-09 with clang 18.1.3 on linux-x64; the next 256-byte boundary.
+ * Raised to 1,792 by parent/child regions (as above): measured **1,733 bytes** against
+ * 1,099 on 2026-11-10 with clang 18.1.3 on linux-x64; the next 256-byte boundary.
  */
-const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1280
+const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1792
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-async.c`
@@ -713,7 +719,7 @@ const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1280
  * 256-byte boundary.
  *
  * Raised to 4,608 by keeping a waited descriptor registered (WP49 stage 6, part 4,
- * ASYNC-19): the per-descriptor table of generations and parked waits, the re-arm with
+ * ASYNC-20): the per-descriptor table of generations and parked waits, the re-arm with
  * `EPOLL_CTL_MOD`, the reader of an event that wakes only the waits parked on its
  * descriptor, and the fall-back that fails a reused number's old waits. In return a
  * steady-state wait makes one system call instead of four. Measured **4,405 bytes**

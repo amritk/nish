@@ -570,8 +570,9 @@ overflow is `sumWrapping`.
 `runtime/nish.mjs` answers the import with
 `runtime/core.mjs`, where a vector is a fresh typed array of its lanes,
 made once and never written after, whose element type does the lane's
-arithmetic; a mask is an array of booleans, and a rotate is two shifts and
-an `or`. `tests/run.js`'s `simd` section holds the native, WASI and Node
+arithmetic: an integer lane wraps through its array type (`Uint8Array` for
+a `u8` lane), and an `f32` lane rounds through `Float32Array`. A mask is an
+array of booleans, and a rotate is two shifts and an `or`. `tests/run.js`'s `simd` section holds the native, WASI and Node
 outputs to one.
 
 </scalar-detail>
@@ -1643,6 +1644,7 @@ The new vector.
 ### rotl
 
 Each lane rotated left by `count`, `llvm.fshl` with `v` as both halves.
+Signed and unsigned lanes rotate alike.
 
 ```ts
 function rotl<V extends IntegerVector>(
@@ -1673,6 +1675,7 @@ The vector of rotated lanes.
 ### rotr
 
 Each lane rotated right by `count`, `llvm.fshr` with `v` as both halves.
+Signed and unsigned lanes rotate alike.
 
 ```ts
 function rotr<V extends IntegerVector>(

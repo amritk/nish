@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 857
+export const RULE_COUNT: i32 = 858
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -95,6 +95,8 @@ const diagnosticRules = (): string[] => [
   "NL2477",
   ", which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region, and objects and arrays, which it shares with the spawner",
   "NL2673",
+  "` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`)",
+  "NL2351",
   ": a channel has one receiver, either one task spawned outside any loop or the parent in a later statement of the block that has the scope's block as one of its statements, and inside a scope's block the parent receives nothing, so the parent's one wait is the join",
   "NL2480",
   "` is a `Secret` field, which is read only as a call's argument or an `===`/`!==` operand: bound, returned, chosen or stored, it would be a second owner of the key the holder's `wipe()` ends, so pass it to `expose`, `exposeWith` or a function that takes a `Secret`",
@@ -121,8 +123,6 @@ const diagnosticRules = (): string[] => [
   "NL2479",
   "` is not a member a program may name: an atomic is read and updated only by calling its methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race with the update a task makes at the same moment",
   "NL2514",
-  "` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`)",
-  "NL2351",
   ": a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope",
   "NL2476",
   " is not written as a literal: typed JSON reads a class's options from its text when it writes the class's code, so `json` is an object literal, `rename` an object literal of string literals and `optional` an array literal of string literals",
@@ -229,6 +229,8 @@ const diagnosticRules = (): string[] => [
   "NL2620",
   " and cannot be stored in a field: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it",
   "NL2364",
+  ": a child region's parent is the region entered when it is made, so `child` and `childWith` are called only in the function `enter` or `enterWith` runs, and that function only by them",
+  "NL2702",
   ": a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`",
   "NL2485",
   "` is the binding of a `using` declaration of `arena()` and cannot be read: it holds the mark its block releases to when it ends, and nothing but that release may see or move the mark",
@@ -795,6 +797,8 @@ const diagnosticRules = (): string[] => [
   "NL2382",
   "`set` copies from an array of the receiver's element type, so it expects ",
   "NL2396",
+  " runs answers the region's root, which must be memory it allocated, and ",
+  "NL2614",
   ": `static` members are not supported (use a top-level function or const)",
   "NL2027",
   ": initializers must be literals (assign other values in the constructor)",
@@ -853,8 +857,6 @@ const diagnosticRules = (): string[] => [
   "NL3054",
   "Interface inheritance (`extends`) is not supported; list every field",
   "NL2215",
-  "The function `region` or `regionWith` runs answers the region's root",
-  "NL2614",
   " (use `if` / `else`; only an integer switch lowers to a jump table)",
   "NL2009",
   ", a buffer the page would lend wasm: pass it through module storage",
