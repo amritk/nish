@@ -680,7 +680,8 @@ const mathCallee = (walk: Walk, node: Node): string => {
     (head.kind === N_MEMBER &&
       head.children.length === 1 &&
       head.children[0].kind === N_IDENT &&
-      head.children[0].text === "Math") ||
+      head.children[0].text === "Math" &&
+      listedWord(MATH_ROUTED, head.text + "F64")) ||
     (head.kind === N_IDENT && (head.text === "f64ToBits" || head.text === "f32ToBits"))
   if (!spelled) {
     return ""
