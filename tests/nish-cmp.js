@@ -1130,6 +1130,36 @@ const DECLARED = [
     changelog: "nish.host",
     why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
   },
+  {
+    program: "tests/cases/obj_spread_class.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.37.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_narrowed.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.37.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_nested.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.37.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_order.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.37.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "docs/cookbook/obj-spread.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.37.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
 ]
 
 /**
