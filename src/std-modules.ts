@@ -308,6 +308,14 @@ export const arrayMethodLocal = (template: string): string => `${ARRAY_LOCAL_PRE
  */
 export const isArrayMethodLocal = (local: string): boolean => local.startsWith(ARRAY_LOCAL_PREFIX)
 
+/**
+ * The array method a call of the std template imported under `local` was
+ * written as (`sort` for `SORT_LOCAL`, `map` for `Array.prototype.mapIndexed`),
+ * or `""` when `local` is no such name.
+ */
+export const rewrittenArrayMethod = (local: string): string =>
+  local === SORT_LOCAL ? "sort" : arrayMethodOfLocal(local)
+
 /** The suffix of a template for a callback of two parameters (`mapIndexed`). */
 const INDEXED_SUFFIX: string = "Indexed"
 
