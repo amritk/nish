@@ -152,10 +152,15 @@ uint64_t nish_arena_used(void);
  * entered and makes its handle stale. `nish_region_adopt` instead moves the
  * chunks of a region that is not entered onto the thread's current arena, so
  * they live on until that arena releases below them, and makes its handle
- * stale: an `awaitAll` lane's region, once the lane has answered. The wasm
+ * stale: an `awaitAll` lane's region, once the lane has answered; it panics
+ * on a child region or a region with children. `nish_region_child_new` makes
+ * a region whose parent is the one entered last on this thread, and panics
+ * when none is; freeing a region frees its children, deepest first, and
+ * panics before freeing anything when any of them is entered. The wasm
  * profile has none of these (scripts/build.sh refuses IR that names them);
  * wasi has. */
 uint64_t nish_region_new(void);
+uint64_t nish_region_child_new(void);
 void *nish_region_enter(uint64_t r);
 void nish_region_leave(uint64_t r, void *root);
 void nish_region_free(uint64_t r);
