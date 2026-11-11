@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 889
+export const RULE_COUNT: i32 = 890
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -247,6 +247,8 @@ const diagnosticRules = (): string[] => [
   "NL2447",
   "`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version",
   "NL2486",
+  " cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map",
+  "NL2732",
   "` cannot be used here: a handle may only be opened by `using`, called, or lent to a parameter of its type, so that the close its `using` block emits is the last thing that names it",
   "NL2560",
   "` holds a `Secret` field and is made only by `new`: its constructor is the one place that field is set, from `secret(v)`, so an object literal or a decoded document cannot build it",

@@ -1230,10 +1230,10 @@ program, do.
    zero-filled storage of §2.1 with new codes in `src/codes.ts`; `src/emit.ts`
    writes each generated dispatcher as `$ref.S.p` and lowers a reference
    call to a call of it; `===` lowers to `icmp eq`; `-g` gets the enumeration type and the
-   artificial dispatcher (§5.3). NL2336, NL2334 and NL2337's wordings change
+   artificial dispatcher (§5.3). NL2336's and NL2334's wordings change
    (§6), and their `tests/wordings/` programs with them
-   (`nl2336_fnarg_arrow_returned`, `nl2334_fnarg_parameter_as_value`,
-   `nl2337_fnarg_function_type_element`). `fnref_place_set` is case C
+   (`nl2336_fnarg_arrow_returned`, `nl2334_fnarg_parameter_as_value`);
+   NL2337 is retired (`tests/wordings/unreachable.txt`). `fnref_place_set` is case C
    (§4.1) written with references: a field or local holding `u0..u2` read at
    the hot call, `u3` stored into another place and called there. Its golden
    pins the dispatcher over `{u0, u1, u2}` with A's facts and `P` an
@@ -1291,7 +1291,7 @@ construct" and `CLAUDE.md`'s definition of done:
 | 2. Parser and validator | no new syntax: a function type and a bare name already parse; the validator keeps `Function` refused |
 | 3. Types | a function type outside a parameter: `llvmType` `i32`, `alignOf` 4, `assignable` by signature, the annotation resolver (`src/annotations.ts:224`); `src/interop-abi.ts`'s `cType` and `tsKeyword`, `src/interop-wasm.ts`'s `wasmType` and bridging decision, and `src/interop-napi.ts`'s readers and boxers each **refuse** it with `reject_fnref_ffi`'s code rather than leave it unmapped, since a type with no N-API row silently drops the function from the addon (§5.2); `src/debug.ts` the enumeration type (§5.3) |
 | 4. Checker | pass-1 signature sets; the post-pass-2 per-place sets; the generated dispatchers and their `nodeCallees` record (§2.4); value-position names; reference calls; the §2.2 refusals and §2.1's zero-fill refusals (`new Array<S>(n)`, module storage); the `hostVisible` refusal (§5.2) |
-| 5. Diagnostics | new NL codes in `src/codes.ts` for each §2.2 wording, the zero-fill refusals, `reject_fnref_ffi` and the escape-join refusal, each with a `tests/wordings/` program; the `performance`-class warning for a set past eight members; NL2336, NL2334 and NL2337 reworded with their wordings programs |
+| 5. Diagnostics | new NL codes in `src/codes.ts` for each §2.2 wording, the zero-fill refusals, `reject_fnref_ffi` and the escape-join refusal, each with a `tests/wordings/` program; the `performance`-class warning for a set past eight members; NL2336 and NL2334 reworded with their wordings programs, NL2337 retired |
 | 6. Emitter | the generated dispatcher written as `$ref.S.p`, and the call lowering; named blocks (`sw.case.N`, `sw.default`) |
 | 7. Runtime | none: no C symbol, so no `RuntimeTable` row and no budget move |
 | 8. Attributes | none expected: the dispatcher is a checker-generated function, ordinary to the fact collector, and its facts are the join of its place's set. `fnref_escape_join` pins §4.2's A and B facts; `fnref_place_set` pins C's |

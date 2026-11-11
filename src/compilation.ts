@@ -2617,10 +2617,19 @@ export class Compilation {
         let refused = false
         let i = 0
         while (i < arity && !refused) {
-          // Only a pointer has a place to lose: a scalar argument is a
-          // register, whatever a member's facts say of its name.
+          // Only a value with storage behind it has a place to lose: a
+          // scalar argument is a register, whatever a member's facts say of
+          // its name. A `Result`, a maybe, a region handle and a vector may
+          // each carry one, so they count with pointers and nullables.
           const type = members.length > 0 ? members[0].paramTypes[i] : 0
-          const placed = this.table.isPointer(type) || this.table.isNullable(type)
+          const t = this.table
+          const placed =
+            t.isPointer(type) ||
+            t.isNullable(type) ||
+            t.isResult(type) ||
+            t.isMaybe(type) ||
+            t.isRegion(type) ||
+            t.isVector(type)
           let keeper = -1
           let other = -1
           let k = placed ? 0 : members.length

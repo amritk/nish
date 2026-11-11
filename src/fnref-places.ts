@@ -769,7 +769,6 @@ const numberMembers = (pass: RefPass, modules: RefModule[]): void => {
     for (const sig of found) {
       pass.members.push(sig)
       pass.memberTypes.push(referenceTypeOf(pass.table, sig))
-      sig.refTag = pass.members.length
     }
   }
   // A tag is the position among the functions of one signature, from 1.
@@ -971,11 +970,6 @@ const exposeMember = (module: RefModule, sig: FunctionSig): void => {
   }
 }
 
-/**
- * Give every call through a reference its dispatcher, rewriting `h(x)` to
- * `$ref.<module>.<signature>.<n>(h, x)` with the dispatcher as its callee in
- * every table the call was checked into. Answers whether anything changed.
- */
 /**
  * Puts every reference call of `program` back in the shape it was written in
  * (`written`), with the reference as its callee, or in the shape the emitter

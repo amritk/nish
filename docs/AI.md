@@ -965,9 +965,13 @@ export const main = (): i32 => {
   is refused (NL2725 when it captures, NL2336 when it does not); so are a
   generic (NL2719), `async` (NL2721), `declare` (NL2722) or rest-parameter
   (NL2723) function, one with a function parameter (NL2720), and a method
-  (NL2726).
+  (NL2726). A written function type has no rest, optional or defaulted
+  parameter either: `(x: i32, y?: i32) => i32` is NL2723.
 - **No empty value.** `new Array<Op>(n)` (NL2724) and `Op | null` are
   refused; a module `const` cannot hold one either.
+- **Not a `Map` value.** `Map<K, Op>` is refused (NL2732): keep the
+  references in an array, `const ops: Op[] = [inc, dec]`, and store the index
+  in the `Map`.
 - **Called, compared, stored, passed — nothing else.** Not printed or
   interpolated (NL2731), ordered, joined or encoded as JSON.
 - **Not a function argument**: a variable holding a reference cannot fill an

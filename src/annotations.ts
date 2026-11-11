@@ -24,6 +24,8 @@ import { deferInstantiation, instantiateWritten } from "./generics"
 import { REGION_SPECIFIER, SIMD_SPECIFIER, simdMaskWidth } from "./nish-modules"
 import {
   FLAG_DEFAULT,
+  FLAG_OPTIONAL,
+  FLAG_REST,
   FLAG_READONLY,
   FLAG_STATIC,
   N_FIELD,
@@ -183,11 +185,6 @@ export const rejectForeignPointer = (ctx: CheckContext, type: i32, position: str
   return true
 }
 
-/**
- * Resolve one annotation into a type id. Anything outside the rigid set is a
- * rejection: the language has no `any`, no `unknown`, no union but `T | null`, no
- * generics beyond `Array<T>`, and no structural object types.
- */
 /** Whether `name` spells `nish:region`'s `Region` here: imported from it, under any local name, or inside it. */
 export const namesRegion = (ctx: CheckContext, name: string): boolean => {
   const imported = ctx.program.importNamed(name)
@@ -197,18 +194,35 @@ export const namesRegion = (ctx: CheckContext, name: string): boolean => {
   return name === "Region" && ctx.program.isRegionLibrary()
 }
 
-/**
- * `(x: A, y: B) => R` outside a parameter of a top-level function: the
- * function reference type of that signature (WP51 S1). Every parameter is one
- * the caller passes and none is itself a function, because a function that
- * takes a function is a template with no single body a tag could name.
- */
+/** `node` with any parentheses around it taken off. */
 const unwrapTypeParen = (node: Node): Node =>
   node.kind === N_TYPE_PAREN ? unwrapTypeParen(node.children[0]) : node
 
+/**
+ * `(x: A, y: B) => R` outside a parameter of a top-level function: the
+ * function reference type of that signature (WP51 S1). Every parameter is one
+ * the caller passes -- none is a rest, optional or defaulted one -- and none is
+ * itself a function, because a function that takes a function is a template
+ * with no single body a tag could name.
+ */
 const resolveFunctionReference = (node: Node, ctx: CheckContext): i32 => {
   const params: i32[] = []
   for (const param of node.children[0].children) {
+    let partial = ""
+    if ((param.flags & FLAG_REST) !== 0) {
+      partial = "a rest parameter"
+    } else if ((param.flags & FLAG_OPTIONAL) !== 0) {
+      partial = "an optional parameter"
+    } else if ((param.flags & FLAG_DEFAULT) !== 0) {
+      partial = "a parameter with a default"
+    }
+    if (partial !== "") {
+      return ctx.errorType(
+        param,
+        `\`${ctx.textOf(node)}\` has ${partial}: a function reference names a function whose every parameter ` +
+          "the caller passes"
+      )
+    }
     if (unwrapTypeParen(param.children[1]).kind === N_TYPE_FUNCTION) {
       return ctx.errorType(
         param,
@@ -229,6 +243,11 @@ const resolveFunctionReference = (node: Node, ctx: CheckContext): i32 => {
   return ctx.table.fnRefOf(params, result)
 }
 
+/**
+ * Resolve one annotation into a type id. Anything outside the rigid set is a
+ * rejection: the language has no `any`, no `unknown`, no union but `T | null`, no
+ * generics beyond `Array<T>`, and no structural object types.
+ */
 export const resolveType = (node: Node, ctx: CheckContext): i32 => {
   switch (node.kind) {
     case N_TYPE_PAREN:

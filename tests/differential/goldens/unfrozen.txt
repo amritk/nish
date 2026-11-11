@@ -247,6 +247,11 @@ cases/fnref_escape_join added after R6: no rewriter to freeze it with
 cases/fnref_field added after R6: no rewriter to freeze it with
 cases/fnref_generic added after R6: no rewriter to freeze it with
 cases/fnref_place_set added after R6: no rewriter to freeze it with
+cases/fnref_row_assign added after R6: no rewriter to freeze it with
+cases/fnref_row_generic_class added after R6: no rewriter to freeze it with
+cases/fnref_row_index_store added after R6: no rewriter to freeze it with
+cases/fnref_row_interface added after R6: no rewriter to freeze it with
+cases/fnref_row_nullish added after R6: no rewriter to freeze it with
 cases/fnref_stores added after R6: no rewriter to freeze it with
 cases/host_handle_native added after R6: no rewriter to freeze it with
 cases/hygiene_quiet added after R6: no rewriter to freeze it with

@@ -219,7 +219,7 @@ const hostReferenceMessage = (what: string): string =>
   `${what} holds a function reference that code outside this program can reach: a reference is a tag this ` +
   "program's dispatcher reads, not an address, and a host could hand back one no dispatcher knows"
 
-/** Whether `type` holds a reference: is one, or an array or nullable of one. */
+/** Whether `type` holds a reference: is one, or an array, nullable, maybe or `Result` of one. */
 const holdsFnRef = (table: TypeTable, type: i32): boolean => {
   if (type < 0) {
     return false
@@ -227,19 +227,28 @@ const holdsFnRef = (table: TypeTable, type: i32): boolean => {
   if (table.isFnRef(type)) {
     return true
   }
-  if (table.isArray(type) || table.isNullable(type)) {
+  if (table.isArray(type) || table.isNullable(type) || table.isMaybe(type)) {
     return holdsFnRef(table, table.refOf(type))
+  }
+  if (table.isResult(type)) {
+    return holdsFnRef(table, table.okOf(type)) || holdsFnRef(table, table.errOf(type))
   }
   return false
 }
 
-/** The classes `type` names, directly or as an array element or nullable, added to `into`. */
+/**
+ * The classes `type` names, directly or through an array, a nullable, a maybe
+ * or either arm of a `Result`, added to `into`.
+ */
 const classesOf = (table: TypeTable, type: i32, into: i32[]): void => {
   if (type < 0) {
     return
   }
-  if (table.isArray(type) || table.isNullable(type)) {
+  if (table.isArray(type) || table.isNullable(type) || table.isMaybe(type)) {
     classesOf(table, table.refOf(type), into)
+  } else if (table.isResult(type)) {
+    classesOf(table, table.okOf(type), into)
+    classesOf(table, table.errOf(type), into)
   } else if (table.isStruct(type) && into.indexOf(type) < 0) {
     into.push(type)
   }

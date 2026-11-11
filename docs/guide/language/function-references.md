@@ -103,6 +103,9 @@ and naming one where a value is expected is an error:
 - a **generic** function (`NL2719`), an **`async`** function (`NL2721`), a
   function declared in C (`NL2722`), a function with a **rest parameter**
   (`NL2723`), and a function that takes a function parameter (`NL2720`);
+- a **function type** with a rest, optional or defaulted parameter, such as
+  `(x: i32, y?: i32) => i32` (`NL2723`): a call through a reference passes
+  every parameter;
 - a **method**, `c.step`, which needs its object (`NL2726`);
 - an **arrow written inside a function**. One that reads a variable of the
   function around it would need to carry that variable with it, which a
@@ -142,6 +145,37 @@ export const main = (): i32 => {
 It cannot be ordered with `<`, joined, encoded as JSON, or made nullable
 (`Op | null`); store an index or an enum beside it when you need one of
 those.
+
+It cannot be a `Map` value yet either (`NL2732`). Keep the references in an
+array and store each one's index in the `Map`:
+
+```ts nish:err NL2732
+type Op = (x: i32) => i32;
+
+const inc = (x: i32): i32 => x + 1;
+
+export const main = (): i32 => {
+  const byName = new Map<string, Op>();
+  byName.set("inc", inc);
+  return byName.size;
+};
+```
+
+```ts nish:ok
+type Op = (x: i32) => i32;
+
+const inc = (x: i32): i32 => x + 1;
+const dec = (x: i32): i32 => x - 1;
+
+export const main = (): i32 => {
+  const ops: Op[] = [inc, dec];
+  const byName = new Map<string, i32>();
+  byName.set("inc", 0);
+  byName.set("dec", 1);
+  const at = byName.get("dec") ?? 0;
+  return ops[at](5);
+};
+```
 
 A reference is not a function argument either. A parameter whose function
 type is written out in the parameter list, as in `apply` below, is filled in

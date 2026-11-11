@@ -200,7 +200,9 @@ export const isCollectionTemplate = (template: StructTemplateInfo): boolean =>
  * boolean, an enum or a class; an interface is stored inline and has no
  * identity, and an array, a nullable type and a `Result` wait for a program
  * that needs one. A value is stored as it is, so it is anything but `void` and
- * an interface, whose record would be copied in rather than shared.
+ * an interface, whose record would be copied in rather than shared. A function
+ * reference is refused as a value until a `Map` value is a place the reference
+ * pass tracks (WP51 stage 2); as a key it fails the key rule.
  */
 const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string => {
   if (args.length !== template.typeParams.length || args.length === 0) {
@@ -219,6 +221,12 @@ const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateIn
     return ""
   }
   const value = args[1]
+  if (table.isFnRef(value)) {
+    return (
+      `\`${shown}\` cannot hold a function reference as its value: a \`Map\` value is not yet a place whose functions ` +
+      "the compiler tracks; keep the references in an array and store the index in the map"
+    )
+  }
   if (value === T_VOID || isInterfaceType(ctx, value)) {
     return (
       `\`${table.typeName(value)}\` cannot be the value type of \`${shown}\`: a value is stored in the table as it is, ` +
@@ -1948,13 +1956,13 @@ const writtenNames = (fn: FunctionSig): string[] => {
  */
 const argumentOf = (call: Node, name: string, index: i32): string => argumentWords(call, name, index, false)
 
-/** `argumentOf` at the start of a sentence. */
 /** The name a call spells its callee with, `spawn` for `s.spawn(...)`; the template's own name otherwise. */
 const calleeSpelling = (call: Node, template: TemplateInfo): string => {
   const callee = call.children[0]
   return callee.kind === N_MEMBER || callee.kind === N_IDENT ? callee.text : template.sourceName
 }
 
+/** `argumentOf` at the start of a sentence. */
 const argumentLead = (call: Node, name: string, index: i32): string => argumentWords(call, name, index, true)
 
 const argumentWords = (call: Node, name: string, index: i32, capital: boolean): string => {

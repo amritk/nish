@@ -2019,7 +2019,10 @@ export const main = (): void => {
   - `` `abs` is declared in C: a function reference names a function this program defines ``
     (NL2722, `reject_fnref_ffi`);
   - `` `sum` has a rest parameter: a function reference names a function whose every parameter the caller passes ``
-    (NL2723, `reject_fnref_rest`);
+    (NL2723, `reject_fnref_rest`), and a written function type with a rest,
+    optional or defaulted parameter,
+    `` `(x: i32, y?: i32) => i32` has an optional parameter: a function reference names a function whose every parameter the caller passes ``
+    (NL2723, `reject_fnref_type_optional`, `reject_fnref_type_rest`);
   - `` `apply` takes a function parameter, so it has no single body to refer to ``
     (NL2720, `tests/wordings/nl2720_fnref_template`), and a function type
     whose own parameter is written as a function type,
@@ -2094,8 +2097,10 @@ export const main = (): void => {
 Still refused: a closure (an arrow that captures), a reference to a method, a
 generic or an `async` function, a nullable reference (`F | null` is the
 nullable-scalar refusal of [Nullable types](types.md#nullable-types)), a reference as
-a `Map` value under `-o` (`Map.set` is reachable from the host, NL2727), and a
-reference passed for an inline function parameter (NL2728).
+a `Map` value (a `Map` value is not yet a place the compiler tracks, so
+`` `Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map ``,
+NL2732, `reject_fnref_map`; keep the references in an array and the index in
+the `Map`), and a reference passed for an inline function parameter (NL2728).
 
 ## Async functions: `async` and `await`
 

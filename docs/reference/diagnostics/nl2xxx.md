@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 723 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 724 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -13771,4 +13771,29 @@ The message of an error contains:
 
 ```text
 ` is a function reference: it can be called, compared, stored and passed, nothing else
+```
+
+## NL2732
+
+The message of an error contains:
+
+```text
+… cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map
+```
+
+[`nl2732_fnref_map_value.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2732_fnref_map_value.ts):
+
+```ts
+// NL2732: a function reference as a `Map` value is refused until a `Map`
+// value is a place the reference pass tracks.
+type Op = (x: i32) => i32
+
+export const main = (): void => {
+  const m = new Map<string, Op>()
+  console.log(`${m.size}`)
+}
+```
+
+```text
+`Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map
 ```
