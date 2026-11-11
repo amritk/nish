@@ -198,6 +198,18 @@ Up to `len` bytes of `buf[off, off + len)`.
 
 </scalar-card>
 
+<scalar-card title="parse​Float" icon="phosphor/regular/function" href="#parsefloat">
+
+The decimal number at the start of `s`, as an `f64`: ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded.
+
+</scalar-card>
+
+<scalar-card title="parse​Int" icon="phosphor/regular/function" href="#parseint">
+
+The base-10 integer at the start of `s`, as an `i32`: ASCII whitespace, an optional sign, then digits, stopping at the first other character (`parseInt("42px")` is `42`).
+
+</scalar-card>
+
 <scalar-card title="peer​Credentials" icon="phosphor/regular/function" href="#peercredentials">
 
 The peer of the Unix socket `fd` as the kernel recorded it when the connection was made (the `connect`, or the `socketpair`): `out` gets its pid, uid and gid.
@@ -618,6 +630,12 @@ The two output streams, with Nish's one-argument signatures.
 
 </scalar-card>
 
+<scalar-card title="Date​Constructor" icon="phosphor/regular/cube" href="#dateconstructor">
+
+`Date`, merged into the `DateConstructor` `lib.es2022` declares.
+
+</scalar-card>
+
 <scalar-card title="Disposable" icon="phosphor/regular/cube" href="#disposable">
 
 A value `using` may bind: one whose `[Symbol.dispose]()` ends its scope.
@@ -633,6 +651,12 @@ An insertion-ordered map with SameValueZero keys (`-0` is `+0` and `NaN` is `NaN
 <scalar-card title="Math" icon="phosphor/regular/cube" href="#math">
 
 `Math`.
+
+</scalar-card>
+
+<scalar-card title="Number​Constructor" icon="phosphor/regular/cube" href="#numberconstructor">
+
+`Number(value)`: `value` as an `f64`, in both number modes.
 
 </scalar-card>
 
@@ -667,11 +691,14 @@ A string: UTF-8 bytes.
 </scalar-card>
 
 <scalar-card title="String​Constructor" icon="phosphor/regular/cube" href="#stringconstructor">
+
+`String.fromBytes` is Nish's, not JavaScript's, so it merges into the `StringConstructor` `lib.es2022` declares.
+
 </scalar-card>
 
 <scalar-card title="Symbol​Constructor" icon="phosphor/regular/cube" href="#symbolconstructor">
 
-Returns a new unique Symbol value.
+The disposable protocol `using` reads: declared here so that a program using `nish/threads`'s scope, a `Mutex`'s lock, `arena()` or a handle class needs no `"ESNext.Disposable"` in its `lib`.
 
 </scalar-card>
 
@@ -1791,6 +1818,64 @@ what stderr says before the exit.
 </scalar-field>
 
 <scalar-field name="returns" type="never">
+</scalar-field>
+
+### parseFloat
+
+The decimal number at the start of `s`, as an `f64`: ASCII whitespace,
+then the longest decimal literal (`[sign] digits [. digits] [e [sign]
+digits]`, `. digits`, or `[sign] Infinity`), correctly rounded.
+`parseFloat("3.14xyz")` is `3.14` and `parseFloat("1e")` is `1`. One
+deviation from JavaScript: a `0x` prefix is read as hexadecimal
+(`parseFloat("0x1A")` is `26`, where JavaScript stops at the `x` and gives
+`0`). Under `--deterministic` a `0x` string reads as `--emit-ts` reads it
+on every target: the hex integer, correctly rounded, stopping at a hex
+float's `.` or `p` (`0x1p3` is `1`). Exactly one argument. Capability: none.
+
+```ts
+function parseFloat(s: string): f64
+```
+
+<scalar-field name="s" type="string" required>
+
+the text read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+the number, or `NaN` when there is none (`parseFloat("abc")`,
+  `parseFloat("")`, `parseFloat(".")`).
+
+</scalar-field>
+
+### parseInt
+
+The base-10 integer at the start of `s`, as an `i32`: ASCII whitespace,
+an optional sign, then digits, stopping at the first other character
+(`parseInt("42px")` is `42`). Three deviations from JavaScript: there is no
+`NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`,
+`parseInt("")`); a value beyond the `i32` range saturates as `toI32` does
+(`parseInt("99999999999")` is `2147483647`); and a `0x` prefix is not
+hexadecimal (`parseInt("0x10")` is `0`). Always an `i32`, under
+`--number-mode f64` too, where `Number` reads a wider value. Exactly one
+argument: there is no radix, since base 10 is the only one. A non-string is
+refused: "`parseInt` expects a string, got i32". Capability: none.
+
+```ts
+function parseInt(s: string): i32
+```
+
+<scalar-field name="s" type="string" required>
+
+the text read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the integer, or `0` when there are no digits.
+
 </scalar-field>
 
 ### peerCredentials
@@ -4277,7 +4362,7 @@ it, and a typed array that flows into a binding spelled `T[]` may be pushed
 there. A numeric literal argument to `push`, `indexOf` or `fill` takes the
 element type, so `wide.push(3)` on an `i64[]` pushes an `i64` three. An
 unknown method is refused with the supported list: "Unknown method `shift` on
-i32[]"; there is no `map`, `shift`, `slice` or `toString` on an array.
+i32[]"; there is no `shift`, `find` or `toString` on an array.
 
 ```ts
 interface Array<T>
@@ -4286,12 +4371,18 @@ interface Array<T>
 | Member | |
 | --- | --- |
 | `length: number` | Gets or sets the length of the array. This is a number one higher than the highest index in the array. |
+| `every(predicate: (value: T, index: number) => boolean): boolean` | Whether `predicate` answers `true` for every element, stopping at the first that does not, as `Array.prototype.every` does; an empty array answers `true`. The callback rules are `map`'s. Capability: none. |
 | `fill(value: T, start?: number, end?: number): this` | Store `value` into every slot of `[start, end)`, each end relative (a negative one counts back from the length) and then clamped into `[0, a.length]`, as `TypedArray.prototype.fill`'s are, so no range is out of range, a reversed range fills nothing, and `fill` never panics. Arrays of numbers only, of any width and ranged integers included (a ranged element checks `value` once, before the fill); on any other array it is refused: "`set` copies bytes, so it needs an array whose elements are numbers (`u8[]`, `i32[]`, `f64[]`, ...), got string[]" (NL2395).<br><br>`value` is the element type ("`fill` expects u8 (the element type of u8[]), got string"), one to three arguments are taken (NL2398), and each end is a number. It is a statement: its answer cannot be used as a value, and JavaScript's answer is the array the program already holds.<br><br>A float end converts as JavaScript's `ToIntegerOrInfinity` does: `NaN` is `0`, a fraction truncates toward zero (`2.7` is `2`, `-0.5` is `0`), and an infinity or a value past the `i64` range saturates, then clamps, so in f64 mode `a.fill(v, 0, 1 / 0)` fills all of it. An unsigned end is never negative, whatever its width: a `u64` of 2^63 or more as a start fills nothing and as an end fills to the length. Natively a `u8[]` fill is one `memset`.<br><br>Under Node it is `Array.prototype.fill`, which has `TypedArray.prototype.fill`'s meaning for every argument Nish admits, except that an `i64` or `u64` end is a `bigint` there and throws a `TypeError`, as all 64-bit arithmetic does. A `readonly T[]` refuses it: "Cannot `fill` through readonly u8[] (declare it u8[] to write through it)". Capability: none. |
+| `filter(predicate: (value: T, index: number) => boolean): T[]` | A new array of the elements for which `predicate` answers `true`, in order, as `Array.prototype.filter` gives. The predicate answers a `boolean` and takes the element, or the element and its index, under the callback rules of `map`. Capability: none. |
+| `findIndex(predicate: (value: T, index: number) => boolean): number` | The index of the first element for which `predicate` answers `true`, or `-1`, as `Array.prototype.findIndex` gives. The callback rules are `map`'s. There is no `find`: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and points here. Capability: none. |
 | `indexOf(searchElement: T, fromIndex?: number): number` | The first index whose element is `=== searchElement`: strings by content, classes, interfaces and arrays by identity, floats by `==` on the number (so a `NaN` element is never found, as in JavaScript). One argument; an argument of another type than the element is refused. Capability: none. |
 | `join(separator?: string): string` | The elements joined by `separator`. `string[]` only: "`join` requires string[], got i32[]", because converting an element would allocate once per element. One pass sums the lengths, then one allocation holds the result. Like a concatenation, the result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated. Capability: none. |
+| `map<U>(callbackfn: (value: T, index: number) => U): U[]` | A new array of `callbackfn(element)` for each element, in order, as `Array.prototype.map` gives. The callback takes the element, or the element and its index; a third parameter (JavaScript's array argument) is refused (NL2698), as is a second argument to `map` itself. It is a top-level function or an arrow reading only `const` locals and parameters, and the call compiles to a loop that calls it directly (`std/array`'s `map`). Capability: none. |
 | `pop(): T \| undefined` | Remove the last element. An empty array panics and exits 1 (`index out of range: 0 >= 0`): there is no `undefined` to return, so the answer is `T` in Nish. Behind a test that the array holds an element, such as `if (a.length > 0)`, the check is proven away. The capacity is untouched, so the next `push` reuses the storage. Takes no argument. Capability: none. |
 | `push(...items: T[]): number` | Append one element, growing the capacity by doubling (4 from an empty array). An array never grows past 2^31 − 1 elements, in either number mode: the push that would fails as an allocation does, `nish: out of memory` and exit 1. An element of the wrong type is refused: "Cannot push string onto i32[]". A `readonly T[]` refuses it under its own name. Capability: none. |
 | `set(source: readonly T[], offset?: number): void` | Copy every element of `source` into this array from `offset` on, with `TypedArray.prototype.set`'s meaning. Arrays of numbers only, of any width and ranged integers included, and `source` has this array's element type (a `readonly` array may be the source, since it is only read); another element type is refused: "`set` copies from an array of the receiver's element type, so it expects u8[], got i32[]" (NL2396), and a non-number receiver as for `fill` (NL2395). One or two arguments (NL2397). It is a statement: "`set` returns void and can only be used as a statement".<br><br>The range written is checked: `0 <= offset` and `offset + source.length <= a.length`, or the program panics with `slice out of range: [offset, offset + src.length) of length a.length` and exits 1, the message `s.slice` gives; a range that ends exactly at `a.length`, and an empty `source` at `a.length`, are in range, where JavaScript throws a `RangeError` for exactly these offsets. An overlapping `source` (`a.set(a)`, or two headers over one buffer from a C host) is copied as if it were read first.<br><br>A float offset converts as for `fill`'s ends (`NaN` is `0`, a fraction truncates, an infinity or a value past the `i64` range saturates), and a saturated offset fails the range check with the saturated value in the message, for example `slice out of range: [9223372036854775807, -9223372036854775808) of length 4` for `1e300`. An unsigned offset is never negative: a `u64` of 2^63 or more panics, printed signed. A `readonly T[]` refuses it: "Cannot `set` through readonly u8[] (declare it u8[] to write through it)".<br><br>Under Node, `runtime/nish.mjs` adds `set` to `Array.prototype` with the copy-first semantics and the native panic; a TypeScript host without it has no `set` on a plain array, and an `i64` or `u64` offset is a `bigint` there and throws a `TypeError`. Capability: none. |
+| `slice(start?: number, end?: number): T[]` | A copy of the elements from `start` up to `end`, in a new array, with string `slice`'s rule: the range must satisfy `0 <= start <= end <= length`, and anything else panics with `slice out of range: [start, end) of length n` and exits 1, where JavaScript counts a negative index back from the length and clamps the rest. `start` is `0` and `end` the length by default; a third argument is refused (NL2699). Under Node the prelude's `sliceArray` applies the same check. Capability: none. |
+| `some(predicate: (value: T, index: number) => boolean): boolean` | Whether `predicate` answers `true` for some element, stopping at the first that does, as `Array.prototype.some` does; an empty array answers `false`. The callback rules are `map`'s. Capability: none. |
 | `sort(compareFn?: (a: T, b: T) => number): this` | Sort in place, stably, as `Array.prototype.sort` does: element for element Node's order for any consistent comparator. The comparator is required (NL2620: `a.sort()` compares as strings in JavaScript and is refused, "`sort` needs a comparator: write `xs.sort((a, b) => a - b)`") and is the one argument (NL2619: "`sort` takes one comparator"); only "positive or not" is read of its answer, so `-0` and `NaN` count as zero. A `readonly T[]` ("Cannot `sort` through readonly") and `process.argv` ("`process.argv` is read-only") are refused.<br><br>The comparator is a compile-time function argument: a top-level function, or an arrow reading only the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused. The sort costs one scratch array of `n` elements, released before it returns. `(a, b) => a - b` is checked arithmetic on `i32` elements: two a full range apart (`[2147483647, -1]`) panic with `attempt to subtract with overflow`, where `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow.<br><br>Where JavaScript leaves the order to the implementation, so does Nish: an array holding `NaN` under `(a, b) => a - b`, or a comparator that is not a consistent order, comes out a permutation of its elements but not necessarily Node's permutation; give `NaN` a place of its own in the comparator to agree. Under Node and `--emit-ts` the call is the platform's own `Array.prototype.sort`. Capability: none. |
 
 ### CPtr
@@ -4341,6 +4432,23 @@ interface Console
 | --- | --- |
 | `error(x: string \| number \| boolean): void` | The same, on stderr — the stream a compiler's diagnostics belong on. Identical rules and identical messages under its own name. Capability: none. |
 | `log(x: string \| number \| boolean): void` | Writes `x` and a newline to stdout with one `write(2)`; statement position only (as a value it is refused); exactly one argument. Arrays and objects are rejected: it accepts a string, a number or a boolean. In a parallel body it is refused, as output is a write the caller can see. Capability: none. |
+
+### DateConstructor
+
+`Date`, merged into the `DateConstructor` `lib.es2022` declares. Nish has no
+`Date` object: `Date.now()` is its one member, and `new Date()`, `Date()`,
+`Date.parse`, `Date.UTC`, any other member, and `Date` or `Date.now` used as
+a value are each refused: "`new Date()` is refused: Nish has no `Date`
+object; the one `Date` member is `Date.now()`, the wall clock in
+milliseconds" (NL2401).
+
+```ts
+interface DateConstructor
+```
+
+| Member | |
+| --- | --- |
+| `now(): number` | The wall clock, `CLOCK_REALTIME`, in whole milliseconds since 1970-01-01 UTC, as JavaScript answers it: the milliseconds are counted as integers and then converted, so the value is exact and a time before 1970 floors. An `f64` in both number modes, because an `i32` of milliseconds overflowed in January 1970. It can go backwards when the clock is corrected, so an interval is `monotonicNanos`'s job, not this one's. A wasm32 build has no operating system to ask, and refuses it. Capability: clock. |
 
 ### Disposable
 
@@ -4456,6 +4564,53 @@ interface Math
 | `tan(x: number): number` | The tangent, fdlibm's, compiled into the module so that no target calls libm: exact near every multiple of π/2 and within one ulp. Capability: none. |
 | `trunc(x: number): number` | `x` with its fraction dropped. Runs on the same two paths as `floor`, with the same bits on either. Capability: none. |
 
+### NumberConstructor
+
+`Number(value)`: `value` as an `f64`, in both number modes. Nish has no
+`new Number` and no member of `Number`; the call is the conversion, merged
+into the `NumberConstructor` `lib.es2022` declares.
+
+A string is parsed with JavaScript's `Number(s)` rules: ASCII whitespace
+(` \t\n\v\f\r`, not the Unicode spaces JavaScript also trims) is trimmed
+on both sides, then the whole string must be one literal, so `Number("")`
+and `Number("   ")` are `0`, `Number("  7.5  ")` is `7.5`, and
+`Number("12px")`, `Number("1e")` and `Number("nan")` are `NaN`.
+`Number("0x1A")` is `26`, as in JavaScript, and a hex float such as `0x1p3`
+is also accepted, which JavaScript rejects; the `0b` and `0o` prefixes are
+`NaN`, which JavaScript reads. Under `--deterministic` a `0x` string reads
+as `--emit-ts` reads it on every target: a hex float is `NaN`, and a hex
+integer is correctly rounded whatever the C library.
+
+An `i32` or an `i64` converts as `toF64` does, a `boolean` is `1` or `0`,
+and an `f64` is itself. A numeric literal argument is typed `f64`
+(`Number(2.5)` works in i32 mode). Exactly one argument; anything other than
+a string, a number or a boolean is refused: "`Number` expects a string,
+number, or boolean, got i32[]". Capability: none.
+
+```ts
+interface NumberConstructor
+```
+
+`value` as an `f64`, by the rules on `NumberConstructor` above.
+Capability: none.
+
+```ts
+NumberConstructor(value?: any): number
+```
+
+<scalar-field name="value" type="any">
+
+a string, an `i32`, an `i64`, an `f64` or a `boolean`;
+  `nish` requires it, though `lib`'s signature marks it optional.
+
+</scalar-field>
+
+<scalar-field name="returns" type="number">
+
+an `f64`, in both number modes.
+
+</scalar-field>
+
 ### Process
 
 The running process: its exit, its command line and its host.
@@ -4480,8 +4635,9 @@ keeps, and a `--emit-header` prototype spells such a parameter `const
 nish_array *`.
 
 Everything that reads works (`length`, `a[i]`, `for...of`, `indexOf`, `join`,
-passing it on to another `readonly T[]`); every write is refused under its
-own name, an element store ("Cannot assign to an element of readonly i32[]
+`map`, `filter`, `some`, `every`, `findIndex`, `slice`, passing it on to
+another `readonly T[]`); every write is refused under its own name, an
+element store ("Cannot assign to an element of readonly i32[]
 (declare it i32[] to write through it)"), `push`, `pop`, `set`, `fill` and
 `sort` included. A `T[]` widens into a `readonly T[]`, and never back:
 "Argument 1 of `fill`: expected i32[], got readonly i32[]". It is shallow, as
@@ -4499,8 +4655,14 @@ interface ReadonlyArray<T>
 | Member | |
 | --- | --- |
 | `readonly length: number` | Gets the length of the array. This is a number one higher than the highest element defined in an array. |
+| `every(predicate: (value: T, index: number) => boolean): boolean` | Whether `predicate` answers `true` for every element, stopping at the first that does not, as `Array.prototype.every` does; an empty array answers `true`. The callback rules are `map`'s. Capability: none. |
+| `filter(predicate: (value: T, index: number) => boolean): T[]` | A new array of the elements for which `predicate` answers `true`, in order, as `Array.prototype.filter` gives. The predicate answers a `boolean` and takes the element, or the element and its index, under the callback rules of `map`. Capability: none. |
+| `findIndex(predicate: (value: T, index: number) => boolean): number` | The index of the first element for which `predicate` answers `true`, or `-1`, as `Array.prototype.findIndex` gives. The callback rules are `map`'s. There is no `find`: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and points here. Capability: none. |
 | `indexOf(searchElement: T, fromIndex?: number): number` | The first index whose element is `=== searchElement`, as on `T[]`: one argument, strings by content, classes, interfaces and arrays by identity, and a `NaN` element is never found. Capability: none. |
 | `join(separator?: string): string` | The elements joined by `separator`, as on `string[]`: `string[]` only, and the result is held to 2^31 − 1 bytes. Capability: none. |
+| `map<U>(callbackfn: (value: T, index: number) => U): U[]` | A new array of `callbackfn(element)` for each element, in order, as `Array.prototype.map` gives. The callback takes the element, or the element and its index; a third parameter (JavaScript's array argument) is refused (NL2698), as is a second argument to `map` itself. It is a top-level function or an arrow reading only `const` locals and parameters, and the call compiles to a loop that calls it directly (`std/array`'s `map`). Capability: none. |
+| `slice(start?: number, end?: number): T[]` | A copy of the elements from `start` up to `end`, in a new array, with string `slice`'s rule: the range must satisfy `0 <= start <= end <= length`, and anything else panics with `slice out of range: [start, end) of length n` and exits 1, where JavaScript counts a negative index back from the length and clamps the rest. `start` is `0` and `end` the length by default; a third argument is refused (NL2699). Under Node the prelude's `sliceArray` applies the same check. Capability: none. |
+| `some(predicate: (value: T, index: number) => boolean): boolean` | Whether `predicate` answers `true` for some element, stopping at the first that does, as `Array.prototype.some` does; an empty array answers `false`. The callback rules are `map`'s. Capability: none. |
 
 ### ResultMethods
 
@@ -4669,7 +4831,7 @@ It cannot refuse arithmetic on a handle or an `as` cast, which `nish` does;
 a handle stays assignable to `number`.
 
 ```ts
-type HostHandle<K extends string> = number & reflection | 0
+type HostHandle<K extends string> = number & { readonly __nishHostKind: K } | 0
 ```
 
 ### Result

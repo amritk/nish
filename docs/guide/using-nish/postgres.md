@@ -595,7 +595,8 @@ goes.) Each distinct key is
 bound once however many requests ask for it, and each row goes back to every
 one of them. The one exception is keys chosen to collide in the batcher's
 table: past 1024 slots of probing a key is bound again rather than found,
-and each copy is answered the same.
+and each copy is answered the same. Such keys also cost more per request;
+see "Large batches" below.
 
 `PG_BATCH_INT` keys are bound as a text `int8[]`, one `arrayInt` each. The
 statement's `$1::int8[]` would take the [binary builder](#binary-integer-array-parameters)
@@ -691,10 +692,14 @@ yourself, as they arrive. The live suite's `explain` scenario
   waiting, and `queueBytes` (64 KiB) their text keys; `runs` (16) the
   executions in flight at once. A cap out of range, an empty `name` or
   `select`, or a NUL in them or in `orderBy` panics in the constructor.
-- **Large batches.** A take's cost per request stays flat as `maxRequests`
-  grows: memory grows with the largest take so far, not with the cap, and
-  finding a key's duplicate stops after 1024 probes, past which the key is
-  simply bound again. For a take of thousands of requests, raise the other
+- **Large batches.** For ordinary keys, a take's cost per request stays
+  flat as `maxRequests` grows: memory grows with the largest take so far,
+  not with the cap, and finding a key's duplicate stops after 1024 probes,
+  past which the key is simply bound again. Int keys built to share one
+  table hash are the exception: each still costs at most 1024 probes, but
+  from 1,024 to 65,536 such keys the measured time per key rose 2.3×
+  (2.8 µs to 6.4 µs, against a 35% noise band), where spread keys stayed
+  within noise. For a take of thousands of requests, raise the other
   caps with it: `queueSize` to at least `maxRequests`, `maxBytes` to fit
   every key's text (about 20 bytes an int8 key), the connection's `maxOutput`
   above `maxBytes`, and `maxMessage` if a single row is large.
@@ -934,10 +939,116 @@ open; and `next()` with one still open.
 [`tests/postgres/carrier.ts`](https://github.com/amritk/nish/blob/main/tests/postgres/carrier.ts) is a whole
 program that serves HTTP while a query sleeps on a live server.
 
+## Awaiting a query from a task
+
+`nish/net/postgres-async` is a pool for an [`async`](../language/async.md) program: a
+spawned task awaits its query, and while it waits on the socket the executor
+runs the program's other tasks. It is three calls, not one, because a spawned
+task may write only numbers into what it shares: `pgAsyncClaim` and
+`pgAsyncRelease` mark a connection taken and free, and `pgAsyncQuery` builds
+its result in the task's own memory.
+
+```ts
+import { spawn } from "nish:async"
+import { secret, wipe } from "nish:secret"
+import { PgConfig, pgTarget } from "nish/net/postgres"
+import {
+  PgAsyncParams, PgAsyncPool, pgAsyncClaim, pgAsyncConnect, pgAsyncQuery, pgAsyncRelease,
+} from "nish/net/postgres-async"
+
+async function title(pool: PgAsyncPool, id: i32): Promise<void> {
+  const ticket: i32 = await pgAsyncClaim(pool)
+  if (ticket < 0) {
+    return // -1: no live connection; -2: none came free within claimWaitMs
+  }
+  const params = new PgAsyncParams()
+  params.int(id)
+  const r = await pgAsyncQuery(pool, ticket, "select title from article where id = $1", params)
+  pgAsyncRelease(pool, ticket, r.reusable)
+  if (r.ok() && r.rows > 0) {
+    console.log(r.text(0, 0))
+  }
+}
+
+export async function main(): Promise<i32> {
+  const config = new PgConfig()
+  config.user = "app"
+  const pool = new PgAsyncPool(4)
+  const password = secret(passwordBytes())
+  const live: i32 = await pgAsyncConnect(pool, config, password, pgTarget("127.0.0.1", 5432))
+  wipe(password)
+  spawn(title(pool, 1))
+  spawn(title(pool, 2))
+  // ... wait for the tasks, then pool.close()
+  return live === pool.size ? 0 : 1
+}
+```
+
+- **Run each query in a spawned task.** The task's memory, and every buffer,
+  row and string its query built, is freed when the task ends, so a server
+  that runs thousands of queries stays the same size. A query awaited in
+  `main` keeps about 9 KB until `main` returns.
+- **Claim, query, release, once each.** A ticket names one connection and one
+  claim of it. Give it to `pgAsyncRelease` exactly once, with the result's
+  `reusable`: a second release, or a ticket from before `close()`, panics, so
+  two tasks never share a connection.
+- **Waiting for a connection.** When all are claimed, `pgAsyncClaim` sleeps
+  1 ms, then twice as long up to 16 ms, and answers -2 once it has slept
+  `claimWaitMs` (5000 by default). A connection given back is found on the
+  waiter's next look, so up to 16 ms later.
+- **A result.** `ok()` is true when the server ran the statement; `failure`
+  is the `PG_ERR_*` code (0 with `errorCode` and `errorMessage` for an error
+  the server sent, 8 for a NUL in the SQL or a text parameter, 9 for a lost
+  socket, with `socketError`). `rows` and `columns` count what came back;
+  read a cell with `text`, `int` or `isNull`, which panic outside the result.
+- **Caps.** `maxMessage` (1 MiB) bounds one message, `maxColumns`
+  (1664) a row, `maxRows` (100000) and `maxResultBytes` (16 MiB: each row's
+  bytes and 16 a cell, each command tag's and error's bytes) a result. Rows,
+  tags and errors past `maxRows` or `maxResultBytes` are read and dropped,
+  and the query fails 2 (`PG_ERR_TOO_BIG`) with the rows that fit. `maxMessage` and `maxResultBytes` take 1024 to 2^30-1,
+  `maxColumns` 1 to 65535 and `maxRows` 1 to 2^24; `pgAsyncQuery` panics on
+  a cap outside its range.
+- **Reuse.** A connection goes back to the pool only when its query ended
+  idle, changed no setting and left no bytes after its answer. A
+  transaction left open, a `SET`, a lost socket, a frame no query expects,
+  a message past `maxMessage` or a row past `maxColumns` closes it, so no
+  task inherits another's session. `pgAsyncConnect` fills the slots that
+  have no connection; call it again when `live()` falls.
+- **The target** is a Unix socket or a numeric address: the pool resolves no
+  names. Parameters go in text, never spliced into the SQL.
+
+A wait has no deadline of its own: a server that accepts and never answers
+holds the task awaiting it until the task is cancelled, by `cancelAfter` in
+`nish:async` or by a server's `deadline`. A cancelled claim answers -3 and
+holds nothing; a cancelled query fails with `socketError` -3 and its
+connection is closed, since its answer would reach nobody, and the pool
+dials another. The server is sent no CancelRequest, so bound a slow statement
+with its `statement_timeout` as well. The constructor panics on a size outside 1..64, and
+`pgAsyncConnect` on a target that failed or a host name.
+
+A handler of [`nish/net/serve`](async-server.md#reaching-the-programs-state)
+reaches the pool the same way: written as an arrow in `main`, it captures
+`pool`, and each request's task claims, queries and releases, then answers
+with a cell of the result, which is the task's own memory:
+
+```ts
+return await serve(8080, router, new ServeLimits(), async (req: Request): Promise<Response> => {
+  const ticket: i32 = await pgAsyncClaim(pool)
+  if (ticket < 0) {
+    return new Response(503).text("no connection\n")
+  }
+  const params = new PgAsyncParams()
+  params.int(req.paramNumber(0))
+  const r = await pgAsyncQuery(pool, ticket, "select title from article where id = $1", params)
+  pgAsyncRelease(pool, ticket, r.reusable)
+  return r.ok() && r.rows > 0 ? new Response(200).text(r.text(0, 0)) : new Response(404)
+})
+```
+
 ## What it does not do
 
-TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query
-cancellation, binary-format parameters other than `int4[]` and `int8[]`,
+TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), a CancelRequest
+for a cancelled query, binary-format parameters other than `int4[]` and `int8[]`,
 binary results for a type other
 than an integer, `bool`, `float8`, time, text or a one-dimensional `int2[]`,
 `int4[]` or `int8[]`, so a `text[]`, a `numeric` and an array of more than

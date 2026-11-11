@@ -1,0 +1,3 @@
+`run` runs as a spawned task
+grows `out.bytes` with `spawnPiped`
+storage outside the region that grows inside it would move into the region and be freed with it

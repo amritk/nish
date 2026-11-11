@@ -134,8 +134,13 @@ const accepted = new Set([
 // carry no row. Its waits, `sleep`, `readable` and `writable`, park the task on
 // the executor: a timer, or the readiness of a descriptor some other builtin
 // opened under its own label, and they read no byte of it, so they carry no
-// row either. The check is that the list is exactly those five.
-const ASYNC_EXPORTS = "spawn, awaitAll, sleep, readable, writable"
+// row either. The bounded waits, `readableWithin` and `writableWithin`, are the
+// same waits with a deadline timer. The task controls, `taskId`, `cancel`,
+// `cancelled` and `cancelAfter`, name, flag or time out a task of this program
+// and touch nothing outside it, so they carry no row. The check is that the
+// list is exactly those eleven.
+const ASYNC_EXPORTS =
+  "spawn, awaitAll, sleep, readable, writable, readableWithin, writableWithin, taskId, cancel, cancelled, cancelAfter"
 const moduleExports = declaration(modules, "nishModuleExports", "nish-modules.ts")
 const asyncList = /ASYNC_SPECIFIER\) \{\s*return "([^"]+)"/.exec(moduleExports)
 if (asyncList === null) {

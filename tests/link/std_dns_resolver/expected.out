@@ -79,6 +79,17 @@ PASS  search: NXDOMAIN and no server for the other family move on
 PASS  search: and the name under a later domain resolves
 PASS  search: with no later answer, the unreachable family's error stands
 PASS  search: after every candidate was asked
+PASS  fallback: host.corp moves the search on to host
+PASS  fallback: a later candidate's NODATA is DNS_RESOLVE_NOT_FOUND
+PASS  settle: with neither family answered, the lookup runs on
+PASS  settle: with A answered and AAAA asking, the lookup ends
+PASS  settle: the AAAA query is owed a close
+PASS  settle: the answer is the A
+PASS  settle: AAAA answered with A asking ends it too
+PASS  settle: the answer is the AAAA
+PASS  settle: one family's NODATA is no address to keep
+PASS  settle: a finished lookup is settled already
+PASS  settle: and its answer stands
 PASS  search: NXDOMAIN from both moves to foo.b.test
 PASS  search: NODATA and an unreachable family after an NXDOMAIN candidate is DNS_RESOLVE_NO_ANSWER
 PASS  search: with no third candidate asked
@@ -118,4 +129,4 @@ PASS  cancel: before any send, the sends owed become closes
 PASS  cancel: and nothing was sent
 PASS  ipv6 server: sent to its address
 PASS  close: DNS_CLOSE is its own kind
-dns-resolver: 120 passed, 0 failed, 0 skipped
+dns-resolver: 131 passed, 0 failed, 0 skipped

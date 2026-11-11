@@ -1510,8 +1510,23 @@ booleans, in both positions, as the object JS already models —
 `{ ok: true, value }` or `{ ok: false, error }`. `--emit-dts` declares the
 same union for the wasm build, and the generated loader packs an argument and
 unpacks a result. A `Result` held by pointer still does not cross either JS
-boundary, for the reason a string does not: it is arena memory the next call
-may recycle.
+boundary: it is arena memory the next call may recycle.
+
+**A wasm export's `string` result is a JS string; a `string` parameter is
+not bridged** (`docs/wp50-wasm-host.md` §7). The loader decodes the result's
+UTF-8 bytes with `TextDecoder` straight out of the arena, before it releases
+the call's mark, so the page never holds module memory; an invalid sequence
+becomes U+FFFD. An export that takes a `string` is left out of the `.d.ts`
+and the loader with
+`` argument 1 (s) is `string`, which the wasm bridge carries only as a result: have the page `encodeInto` module storage and pass the byte count (`nish/host/text`) ``:
+the page writes the text into a `u8[]` module storage and the module reads
+it back with `textRead` (`tests/run.js`, section `host-import-text`).
+Going the other way, `textRead(buf, n)` answers `null` for an `n` that is
+negative or past the buffer, and each writer (`textWrite`, `textWriteInt`,
+`textWriteF64`) takes the offset to write at and answers the offset after
+what it wrote, so writes chain. **Text that does not fit writes nothing and
+answers -1, and a writer handed a -1 offset answers -1 without writing**, so
+a chain that overflowed once stays -1 to its end.
 
 A **ranged parameter** (`integer<Lo, Hi>`, [Types](#types)) crosses as the
 `i32` it is, and is checked where every call passes through
@@ -1959,19 +1974,23 @@ export const step = (): void => {
   `X[i]` and `X.length` are what remain.
 - **Its name is a place, not a value.** Binding, returning, storing or
   passing `X` itself is
-  `` Module storage `X` is a place, not a value: index it (`X[i]`) or read `X.length`, lend it only to a parameter declared `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself ``
+  `` Module storage `X` is a place, not a value: index it (`X[i]`) or read `X.length`, lend it only to a parameter declared `u8[]`, `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` or to a host function's buffer window, and never alias, return or store the array itself ``
   (NL2677, `reject_storage_pass_whole`). The two exceptions are lendings:
   a **scalar** storage passed to a parameter spelled with a typed-array name
   (which has no `push`, `pop` or `length =`), as in
   `const total = (xs: Int32Array): i32 => …; total(SCORES)`
-  (`tests/cases/storage_lend`), and to a host function's buffer window
+  (`tests/cases/storage_lend`), or a byte storage passed to a `u8[]` or
+  `readonly u8[]` parameter, the spelling a byte buffer has
+  (`tests/cases/storage_lend_bytes`, which `nish/host/text` writes through),
+  and to a host function's buffer window
   ([Host modules](#host-modules-the-functions-a-page-supplies)). A record
   storage is never lent. A lending to a function of the same module holds
   only while that function keeps the parameter in place: it may index it,
-  read `.length`, loop over it with `for of`, call a method that reads it
-  (`at`, `indexOf`, `slice`, `map`, …), call `fill`, `sort`, `reverse` or
-  `copyWithin` as a statement, and lend it on to another such parameter or a
-  buffer window. Anything else (binding it under another name, returning it,
+  read `.length` (never assign it or `++` it), loop over it with `for of`,
+  call a method that reads it (`at`, `indexOf`, `slice`, `map`, …), call
+  `fill`, `sort`, `reverse` or `copyWithin` as a statement, copy it with
+  `String.fromBytes`, and lend it on to another such parameter or a buffer
+  window. Anything else (binding it under another name, returning it,
   passing it to an `i32[]` parameter, which could `push`) is
   `` Module storage `X` cannot be lent to `f`, which lets its parameter `a` go further than indexing: … ``
   (NL2684, `reject_storage_lend_respell_arg`, `_const`, `_return`). The
@@ -3608,19 +3627,119 @@ async function run(): Promise<void> {
   the cycle, direct or mutual (NL2648,
   `reject_async_await_self`, `reject_async_await_mutual`). Write it as a loop.
 - **A spawned task's arguments outlive the spawner.** `spawn(f(x))` may
-  return, and its caller with it, while `f` still waits, so `f` never reads
-  the spawner's memory: a number, a `boolean` or an enum is copied by value,
-  and a `string` is copied into the task's own region before the task first
-  runs (`async_sleep_spawn_string`, `tests/link/async_spawn_args`). An
-  argument of any other type — an array, a class, an interface, a `Map` —
-  would be read after it was freed, and is
+  return, and its caller with it, while `f` still waits. A number, a
+  `boolean` or an enum is copied by value, and a `string` is copied into the
+  task's own region before the task first runs (`async_sleep_spawn_string`,
+  `tests/link/async_spawn_args`). An object, an array, a `Map` or a `Set` is
+  shared: the task holds the spawner's own, and sees and updates its numbers
+  (`async_spawn_shared`). A function that feeds a task a shared argument,
+  itself or through a callee, releases no arena scope over what it allocated,
+  so the object outlives every task that holds it
+  (`tests/link/async_spawn_shared_outlives`). An argument of any other type —
+  `T | null`, a `Region`, a `Secret` — is
   `` `spawn` hands `f` an argument of type `T`, which lives in the spawner's
   region and is freed when the spawner returns `` (NL2673,
-  `reject_async_spawn_array_arg`). Copy what the task needs into a `string`
-  or numbers, or await the call instead of spawning it.
+  `reject_async_spawn_array_arg`). A shared object or array that holds, in
+  any field or element, a `Region`, a `Secret`, a handle class a `using`
+  block closes, or a scope, lock, guard or channel of `nish/threads` is
+  refused too, with what it holds named: its spawner may free, wipe or close
+  that part while the task still waits (NL2691,
+  `reject_async_spawn_region_field`, `reject_async_spawn_secret_field`,
+  `reject_async_spawn_handle`, `reject_async_spawn_threads_field`).
+- **A spawned task keeps its own memory out of what it shares.** The task's
+  region is freed when the task ends, so the region rules hold it to a
+  shared argument, and everything reachable from it, as memory outside its
+  region ([Regions](#regions-nishregion)): storing an object or a `string`
+  it made into a field or an element is NL2609, directly, through an alias,
+  a method or a callee (`reject_async_spawn_store_region`, `reject_async_spawn_store_string`,
+  `reject_async_spawn_store_alias`, `reject_async_spawn_store_method`,
+  `reject_async_spawn_store_callee`, `reject_async_spawn_store_reachable`,
+  `reject_async_spawn_store_element`, `reject_async_spawn_store_bound`,
+  `reject_async_spawn_await_all`). A call that hands a function or method
+  both a shared object it writes into and a `string` or object of the
+  task's is NL2609 as well, since nothing says the one is not kept in the
+  other (`reject_async_spawn_store_string_callee`,
+  `reject_async_spawn_store_string_method`,
+  `reject_async_spawn_store_copied`), and growing a shared array, `Map` or
+  `Set` — `push`, `set`, `add`, `spawnPiped` appending to its output
+  arrays, on the argument or on what a method answers out of it — is NL2615
+  (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
+  `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`), and so
+  is a builtin with no body of its own that does either, `reserve` on a
+  shared `Map` (`reject_async_spawn_grow_reserve`) or `jsonDecode` into a
+  shared object (`reject_async_spawn_store_json`). Copy
+  numbers into it instead. The task keeps none of what it shares in memory
+  of its own: a shared object, or anything reachable from it, put into a
+  constructor argument, an array or object literal, a field or element
+  store, `push`, a `Map`'s `set` or a `Set`'s `add`, a method that may keep
+  its argument in its receiver, or a callee that stores one argument into
+  another is NL2610, as in a `region(...)` body
+  (`reject_async_spawn_keep_holder`, `reject_async_spawn_keep_literal`), and
+  so is an element read out of a shared array (`for (const t of shared)`,
+  `reject_async_spawn_keep_element`). An object a helper makes may hold
+  what the helper was handed, so in a task a fresh helper's answer other
+  than a string, awaited or not, carries its arguments' origins too, and a
+  store through a holder a helper built from the shared object is NL2609
+  (`reject_async_spawn_keep_returned`). An argument is left out of that
+  join only when the answer's type cannot reach it: no class, array or
+  string type the answer may hold (through fields, elements, a nullable or a
+  union) is one the argument may hold, and neither side holds a class that
+  implements an interface. So a `PgAsyncResult` awaited from a query on a
+  shared `PgAsyncPool` is the task's own, while a `Holder` of a shared
+  `Tally` or a `Badge` of an interface `Tally` implements is still the
+  shared object's (`reject_async_spawn_answer_reach`). Read and update the
+  shared object in place instead. Three refusals are conservative, and known to refuse
+  sound programs: a call that hands a callee both a shared object it writes
+  into and any string or object of the task's, even when the callee writes
+  only numbers; a store into the shared object of what an `await` answers
+  (`const x = await helper(tally); tally.child = x`), since an awaited
+  answer is unknown to the walk; and a store of the task's memory into a
+  holder a helper answered from the shared object (`wrap(tally).note = s`),
+  which may be the task's alone. A task may not itself spawn a task with an
+  object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
+  `reject_async_spawn_nested`); a task with only copied arguments may.
+- **A spawned task's function argument captures only what the task may
+  share.** A top-level function, or an arrow written at the call, is a
+  compile-time argument: the call is an instance with the function in its
+  body (`async_spawn_fn_arg`). The arrow may read locals of the function it
+  is written in when each is a number, a `boolean` or an enum, copied into
+  the task's frame, or an object or array that holds, through any field or
+  element, no `Region`, no `Secret`, no handle class and no `nish/threads`
+  scope, lock, guard or channel. Its strings and nested objects are fine (a
+  `PgAsyncPool` holds both). Any other capture is NL2690: a `string`, a
+  nullable value or a union itself, or an object holding a `Region`
+  (`reject_async_spawn_block_arg`, `reject_async_spawn_handler_holds_region`).
+  A capture of a handle, or of an object holding a `Secret`, is refused
+  sooner, by the rule for any arrow argument (NL2588,
+  `reject_async_spawn_handler_holds_handle`,
+  `reject_async_spawn_handler_holds_secret`); the capture rule refuses them
+  as well, a check behind that one. A captured object is shared with
+  the task as if handed to it: the spawner releases no arena scope over it,
+  and the arrow's body is walked with the task's rules, the capture as memory
+  the task does not own, so the arrow may update its numbers and call its
+  methods (a serve handler awaiting a query on a captured `PgAsyncPool`) but
+  may not store the task's memory into it or grow it (NL2609, NL2615,
+  `async_spawn_handler_reach`, `reject_async_spawn_handler_*`). The arrow's
+  parameters carry what the task passes at each direct call; one it reaches
+  through a further function parameter is unknown, so storing it into a
+  capture is refused. Each arrow is an instance of its own, so a refused
+  arrow at one call site is not hidden by an admitted one at another.
 - **Each spawned task has a region of its own**, entered whenever the task
   runs and freed when it finishes, so what a task allocates is given back
   when it ends, not when `main` does (`tests/link/async_region_per_task`).
+- **Each `awaitAll` call has a region of its own**, made before it first
+  runs and entered whenever it runs. When the call finishes, what it allocated joins the
+  caller's memory, so an answer that points into it (a `string`, an array, a
+  class) stays readable, and is given back when the caller's would be. So two
+  calls that each hold memory across an `await` never free or overwrite each
+  other's, whatever its size or whichever finishes first
+  (`async_await_all_lanes_large`, `tests/link/async_await_all_lanes`). What a
+  call allocates and does not answer is given back when it finishes, so its
+  temporaries never reach the caller's memory
+  (`tests/link/async_await_all_retain`). What the caller does keep is the
+  answer and about 1.3 KB more per call, the unused end of the region's
+  first block, until the caller's own memory is given back (ASYNC-17 in
+  `docs/security/async.md`).
 - **A `main` that never waits runs the loop too.** An `async` `main` that
   awaits nothing compiles to a plain call, as any such function does; one
   that spawns tasks returns first, then the executor runs every task it
@@ -3686,10 +3805,62 @@ export async function main(): Promise<i32> {
   are `readable` and `writable`.
 - **It takes one `i32`**: `` `readable` takes one `i32` `` (NL2672,
   `reject_async_wait_argument`).
-- **A wait has no deadline of its own.** A descriptor that never becomes
-  ready parks its task, and the program, until it does
-  ([`docs/security/async.md`](security/async.md), ASYNC-6); cancellation is a
-  later stage of WP49.
+- **`readable` and `writable` have no deadline of their own.** A descriptor
+  that never becomes ready parks its task until it does, or until the task
+  is cancelled; `readableWithin` and `writableWithin`, below, take one
+  ([`docs/security/async.md`](security/async.md), ASYNC-6).
+
+#### Bounding a wait and cancelling a task
+
+`nish:async` bounds a descriptor wait, and cancels a task, with six more
+calls:
+
+| Call | Answers |
+| --- | --- |
+| `await readableWithin(fd, ms)`, `await writableWithin(fd, ms)` | `true` once `fd` is ready; `false` when `ms` milliseconds passed first, when the wait could not be made, or when the task is cancelled. A negative `ms` waits without a limit |
+| `taskId()` | the running task's handle, an `i64`; `main`'s is 0 |
+| `cancel(task)` | `true` when the task was still running, so it is now cancelled; `false` for a finished task or `main` |
+| `cancelled()` | whether the running task has been cancelled |
+| `cancelAfter(task, ms)` | as `cancel`, `ms` milliseconds from now unless the task finishes first; a later call replaces the deadline, a negative `ms` removes it |
+
+A cancel is cooperative: it never stops a task in the middle of its code.
+Every `sleep`, `readable`, `writable` or bounded wait the task has parked
+answers `false` at once, and every one it makes later answers `false`
+without parking, so the task runs on to its end, its `using` bindings
+dispose and its region is freed. A task that does not await is not reached
+until it does. A handle names its task and no later one: a handle kept past
+its task's end, once the executor reuses the task's slot, cancels nothing
+([`docs/security/async.md`](security/async.md), ASYNC-18).
+
+```ts
+import { cancelAfter, cancelled, readableWithin, taskId } from "nish:async"
+
+async function serveOne(fd: i32): Promise<void> {
+  // The whole task gets two seconds; this one read gets half of one.
+  cancelAfter(taskId(), 2000)
+  const ready = await readableWithin(fd, 500)
+  if (!ready) {
+    console.log(cancelled() ? "cancelled" : "timed out")
+    return
+  }
+}
+```
+
+- **The bounded waits are waits.** Each is written only where it is
+  awaited (NL2671, `reject_async_within_bare`) and takes two `i32`s:
+  `` `readableWithin` takes two `i32`s: the descriptor it waits on, and the
+  milliseconds it waits at most before it answers false `` (NL2692,
+  `reject_async_within_argument`).
+- **The cancellation calls are plain calls**, written anywhere, the task's
+  handle an `i64`: `` `cancel` from `nish:async` takes one `i64`, a task's
+  handle from `taskId()` `` (NL2693, `reject_async_cancel_argument`).
+- **`spawn` runs its task to its first wait** before it returns, so a cancel
+  written after `spawn(f(x))` lands after `f` has run that far.
+- `std/net/serve` cancels a handler's task when its client hangs up, when
+  its `deadline` passes and when the server stops; the async `fetch` and the
+  async Postgres pool answer a cancelled wait as a failure of their own
+  (`tests/link/async_cancel`, `tests/link/net_serve_hangup`,
+  `tests/link/std_postgres_async_cancel`).
 
 **Where it is not Node.** The source is TypeScript and runs under Node, but
 the resume order is not Node's, and these are declared differences:
@@ -3701,7 +3872,7 @@ the resume order is not Node's, and these are declared differences:
 | A rejected promise throws at the `await` | There is no `throw`: a failure is the call's `Result` or `null`, as every Nish call reports it |
 | `spawn(f(x))` runs `f` to its first `await`, and the rest of `f` after the current task yields | `spawn(f(x))` runs `f` at once until it first waits on the outside world, then returns; a task that never waits has finished, its output printed, before `spawn` returns (`async_spawn`) |
 | `setTimeout` and socket callbacks run on libuv's loop, which keeps the process alive while anything is registered | `sleep`, `readable` and `writable` park a task on the executor; the program exits once `main` has returned and no task waits, a synchronous `main` included |
-| A `string` passed to a spawned call is a shared reference | It is copied into the task's region; any other non-number argument is refused (NL2673) |
+| A `string` passed to a spawned call is a shared reference | It is copied into the task's region; an object, array, `Map` or `Set` is shared, and the task may store only numbers into it (NL2609, NL2615) and keep none of it in memory of its own (NL2610); one holding a `Region`, `Secret`, handle or `nish/threads` value is refused (NL2691), as is any other argument (NL2673) |
 | A task that never awaits holds the thread, as here | The same: the executor is cooperative and does not preempt a task |
 
 A program whose output does not depend on how its tasks interleave prints the
@@ -3721,7 +3892,10 @@ answers `true`, or `false` at once for a negative `ms`
 (`tests/emit-ts/async/sleep`); `readable` and `writable` have no Node
 counterpart a task can await, so a program that calls either is
 `--emit-ts cannot write readable or writable from nish:async` (NL4017,
-`tests/emit-ts/async/refused-readable`). A program whose spawned tasks print in an
+`tests/emit-ts/async/refused-readable`), and so is one that calls
+`readableWithin`, `writableWithin`, `taskId`, `cancel`, `cancelled` or
+`cancelAfter`, since a Node promise is not a task the executor can cancel
+(NL4018, `tests/emit-ts/async/refused-cancel`). A program whose spawned tasks print in an
 interleaving prints the same lines in another order (`async_spawn`, the
 `order` row of `tests/differential/emit-ts-known.txt`).
 
@@ -3940,7 +4114,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_par_arena`).
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
@@ -4589,7 +4763,7 @@ element's arena, which a task does not share, and each rule is reported at the
   allocates on the way is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -5687,6 +5861,53 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   (`tests/cases/cls_literal_methodless`). The `nish/threads` classes keep
   their own refusal, NL2515 (see "Atomics"), and a class holding a `Secret`
   keeps NL2545.
+- An **object spread** `{ ...s, x: 1 }` copies `s`'s fields into the
+  literal, one store per field, and is otherwise the literal written out:
+  the spread and `{ x: 1, y: s.y }` emit the same IR, an `alloca` where the
+  literal stays local and an arena allocation where it escapes
+  (`tests/run.js` "object spread", `tests/cases/obj_spread_twin`). Each
+  spread is evaluated once, in source order with the entries around it, and
+  the entry written later wins: a field set after a spread overrides it, and
+  of two spreads the later one supplies the fields both have; only the
+  fields no later entry overrides are stored
+  (`tests/cases/obj_spread_order`). A field holding an object is copied as
+  the reference it is (`obj_spread_nested`), a class instance spreads its
+  fields and none of its methods, as Node's spread does
+  (`obj_spread_class`), and a nullable source spreads once narrowed
+  (`obj_spread_narrowed`); a write to the source after the spread leaves the
+  copy as it was (`obj_spread_class`). The literal must still set every
+  field of its type, by the spread or by name: a spread that supplies only
+  some of them leaves the rest
+  `` Object literal for `Point` is missing field `z` ``
+  (`reject_object_spread_missing_field`). Each form whose Node reading would
+  differ from the copy is refused:
+
+  | Form | Code | Tests |
+  | --- | --- | --- |
+  | no contextual class or interface type, `const o = { ...s }`: ``An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)`` | NL2709 | `reject_object_spread_no_target`, `reject_ffi_handle_walk_spread` |
+  | a source that is not a class or interface value, `{ ...n }` for an `i32` | NL2705 | `reject_object_spread` |
+  | a source that may be `null`, which Node spreads as no field at all: narrow it first | NL2703 | `reject_object_spread_nullable` |
+  | a union source, whose fields depend on the variant it holds | NL2704 | `reject_object_spread_union` |
+  | a class instance with a field the target does not declare, which Node would carry on the object | NL2706 | `reject_object_spread_class_extra` |
+  | an interface value with a field the target does not declare | NL2707 | `reject_object_spread_extra_field` |
+  | a copied field whose type differs from the target's, `i32` into `i64`: the copy converts nothing. A field a later entry sets by name is not copied, so its type is not checked (`obj_spread_override_type`); one a later spread supplies is still checked | NL2708 | `reject_object_spread_field_type` |
+  | a field set by name before a spread that always overwrites it, TypeScript's TS2783 | NL2710 | `reject_object_spread_overwritten` |
+
+  An interface value may hold any class that implements it, and such a
+  class may declare fields after the interface's prefix (see `implements`
+  below): Node copies every own field of the instance, the native copy only
+  the interface's. So once the whole program is checked, a spread of an
+  interface `I` into a type that lacks a field of some class implementing
+  `I` is
+  `` Spread of `Named` into `Tagged` may spread an instance of `Item`, which implements it with field `weight` besides: … ``
+  (NL3055, `reject_object_spread_width`); spread a value of the class type
+  instead. A spread into the typed JSON options of a class is NL2711
+  (`reject_json_options_spread`). One gap remains: Nish accepts `private`
+  on a field and ignores it, so a class instance with a `private` field
+  spreads into a type that declares that field, where `tsc` refuses the
+  spread; under Node the copy is the same object either way. A computed key is still refused
+  (NL1041). NL1061, Phase 0's old refusal of every object spread, is
+  retired and never reused.
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
@@ -6305,13 +6526,40 @@ attributes #1 = { "wasm-import-module"="host" "wasm-import-name"="fill" }
   `` move that code into a module the host file imports `` (NL3049); other
   statements are skipped unread.
 - **What crosses.** The integer and float widths, `boolean`, a ranged integer,
-  an enum, a `HostHandle`, and `void` as a result. `i64` and `u64` are a
-  `bigint` on the page's side (`import type { i64 } from "nish"`). Refused,
-  each naming the explicit form: an object, a class, a function, `unknown` or
-  `any` (NL2661), a generic function (NL2662), a `Promise` (NL2663), a
-  `string` parameter (NL2665: strings cross in WP50 stage 4, so until then the
-  program writes the text into module storage and passes its length) and a
-  `string` result (NL2667). An array crosses only as a buffer window, below.
+  an enum, a `HostHandle`, a `string` parameter, and `void` as a result. `i64`
+  and `u64` are a `bigint` on the page's side
+  (`import type { i64 } from "nish"`). Refused, each naming the explicit form:
+  an object, a class, a function, `unknown` or `any` (NL2661), a generic
+  function (NL2662), a `Promise` (NL2663) and a `string` result (NL2667): the
+  page writes text into module storage instead (`nish/host/text`). An array
+  crosses only as a buffer window, below.
+- **A `string` argument is its UTF-8 bytes, lent for the call.** It lowers to
+  two wasm values, the address of the string's bytes and their count, read
+  from the string's own header, so nothing is copied on the module's side;
+  the loader's wrapper decodes them with `TextDecoder` into a JS string before
+  the page's function runs, and an invalid sequence becomes U+FFFD. The
+  string may be a literal, a concatenation or a template; one the module
+  built lives in the export's arena, which is released after the export
+  returns (`tests/cases/host_import_string`; `tests/run.js`, section
+  `host-import-text`;
+  [cookbook](IR_COOKBOOK.md#a-string-to-the-page-its-bytes-and-their-count)):
+
+  ```ts
+  // web/host.ts
+  export function say(s: string): void { console.log(s); }
+  // app.ts
+  say(`hello ${n}`);
+  ```
+
+  ```llvm
+  declare void @say(i8*, i32) #2
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i8* %0)
+  %2 = bitcast i8* %1 to i64*
+  %3 = load i64, i64* %2, align 8
+  %4 = trunc i64 %3 to i32
+  %5 = getelementptr inbounds i8, i8* %1, i64 8
+  call void @say(i8* %5, i32 %4)
+  ```
 - **Each host function is a declaration with the wasm import attributes**:
   module `host`, its own name. It carries no other attribute, and its callers
   lose `readnone` and `willreturn` as for a C declaration. `wasm-ld` makes it
@@ -6427,7 +6675,9 @@ exception:
   words) and which carries `kind` (`panic`, `index`, `slice`, `overflow`,
   `memory`, `exit`, `divide`, or `trap`, `reentry` or `exception` for a
   module that died some other way) and `site`, the panic site's number
-  (-1 for none).
+  (-1 for none). An array's `xs.slice` out of range throws with `kind`
+  `panic`, not `slice`: its check is `std/array.ts`'s own `panic(...)`,
+  though the message reads as string `slice`'s does.
 - **Before it throws, the loader calls `onPanic`.** `load(bytes, { onPanic,
   sites })` takes the reporter; the default, `reportPanic` from `nish/page`,
   writes `nish: <message>` to `console.error`, as a native program writes it
@@ -6855,14 +7105,18 @@ check that branches to `nish_panic_div`
 ([Checked integer division](#checked-integer-division)).
 
 - *Lowering:* `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an
-  `f32`, `double` for an `f64`); on the signed integer widths `nsw` where
-  proven to fit and otherwise `llvm.s*.with.overflow` and a branch to
-  `nish_panic_overflow`, plain through a `nish:unsafe` `wrapping*` call,
-  never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type)
+  `f32`, `double` for an `f64`); on a page module (above, `Math.sin`) or
+  under [`--deterministic`](#--deterministic) a float `%` or `%=` is a call
+  to `std/math.ts`'s `fmodF64` in place of `frem`, whose libm `fmod` that
+  link lacks, an `f32` widened to `f64` and the exact result narrowed back;
+  on the signed integer widths `nsw` where proven to fit and otherwise
+  `llvm.s*.with.overflow` and a branch to `nish_panic_overflow`, plain
+  through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type)
   are preceded by a divisor check that branches to `nish_panic_div`.
 - *Tests:* `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`,
-  `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`;
-  `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed`
+  `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`,
+  `wasm_math_rem`; `reject_type_mismatch`, `reject_u_mixed_signedness`,
+  `reject_f32_mixed`
 
 **`+`** on two `string` gives a `string`.
 
@@ -7105,9 +7359,9 @@ divide with overflow` is simply unreachable on an unsigned type.
 - `obj.method(args)` calls a class method with `obj` as `this`
   (`tests/cases/cls_this_method_call`); `this.method(args)` inside a method
   likewise.
-- `xs.push(v)` is the only array method (`tests/cases/arr_push`;
-  `` Unknown method `pop` on i32[] (supported: push) ``); strings have no
-  methods (`` Unknown method `toUpperCase` on string `` *(CLI only)*).
+- An array has the methods of [Arrays and strings as receivers](#arrays-and-strings-as-receivers)
+  (`tests/cases/arr_push`); any other is
+  `` Unknown method `shift` on i32[] (supported: push, pop, …) ``.
 - Builtins are called by dotted name (`console.log`, `Math.sqrt`,
   `process.exit`) or bare name (`toI32`, `parseInt`, `Number`,
   `readFileSync`); a user function with the same bare name shadows the
@@ -7693,7 +7947,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | [`nish:net`](reference/nish-net.md) | sockets and the readiness loop |
 | [`nish:term`](reference/nish-term.md) | terminal input |
 | [`nish:unsafe`](reference/nish-unsafe.md) | unchecked access, wrapping arithmetic |
-| [`nish:async`](reference/nish-async.md) | spawning and awaiting tasks |
+| [`nish:async`](reference/nish-async.md) | tasks: spawn, await, wait, cancel |
 | [`nish:simd`](reference/nish-simd.md) | sixteen-byte vectors |
 
 **[`nish:fs`](reference/nish-fs.md)** exports `readFileSync`,
@@ -7742,7 +7996,9 @@ global too ([`nish:term`](#nishterm-terminal-input)).
 `readCString`. They are **reached only through the import**
 ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 
-**[`nish:async`](reference/nish-async.md)** exports `spawn`, `awaitAll`.
+**[`nish:async`](reference/nish-async.md)** exports `spawn`, `awaitAll`,
+`sleep`, `readable`, `writable`, `readableWithin`, `writableWithin`,
+`taskId`, `cancel`, `cancelled`, `cancelAfter`.
 They are **reached only through the import**
 ([Async functions](#async-functions-async-and-await)).
 
@@ -7888,8 +8144,16 @@ answer an `f64`. `floor`, `ceil` and `trunc` have two paths on x86-64 (see
   they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which
   run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that
   does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with
-  no `--target` that is an x86-64 host.
-- *Tests:* `math_intrinsics`, `math_rounding`; `reject_math_i32`
+  no `--target` that is an x86-64 host. On a page module (a wasm build with
+  no WASI, or an `--emit-dts` compile, whose IR `--profile wasm` or
+  `wasm-host` links with no libm), `sin`, `cos`, `exp` and `log` are calls
+  to `std/math.ts`'s `sinF64`, `cosF64`, `expF64` and `logF64` instead,
+  fdlibm's, copied in like `tan`, within one ulp of V8; `--profile wasi`
+  keeps the intrinsics. Under [`--deterministic`](#--deterministic) they
+  are those calls on every target, `--emit-ts` included.
+- *Tests:* `math_intrinsics`, `math_rounding`, `wasm_math_exp`,
+  `wasm_math_std`; `reject_wasm_math_f32`
+  (`` `Math.sin` requires an f64 argument, got f32 ``); `reject_math_i32`
   (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``).
 
 **`Math.tan(x: f64): f64`** is exact near every multiple of π/2 and within
@@ -7917,8 +8181,12 @@ C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`);
 agrees with C.
 
 - *Lowering:* `llvm.pow.f64` plus a `select` for the cases where ECMAScript
-  and C99 differ.
-- *Tests:* `math_intrinsics`; `tests/differential/corpus/f64_pow_spec`.
+  and C99 differ. On a page module it is a call to `std/math.ts`'s
+  `powF64`, copied in like `tan`, which answers ECMAScript's cases itself,
+  within one ulp of V8.
+- *Tests:* `math_intrinsics`, `wasm_math_std`;
+  `tests/differential/corpus/f64_pow_spec`; `reject_wasm_math_arity`
+  (`` `Math.pow` expects exactly 2 arguments, got 1 ``).
 
 **`Math.round(x: f64): f64`** is JavaScript's round-half-up, and keeps `x`'s
 sign: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a
@@ -8000,7 +8268,7 @@ argument is typed `f64` by context (`Math.sqrt(2)` works in both modes).
 
 ### Numeric conversions
 
-The reference for each conversion, with its parameter and its answer, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
+The reference for each conversion, with its parameter and its answer, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts), on [the globals page](reference/builtins.md) (`Number` under `NumberConstructor`); the rules are here.
 
 | Function | Takes | Gives |
 | --- | --- | --- |
@@ -8066,6 +8334,8 @@ identity.
 
 **`f64ToBits(x: f64): i64`** reinterprets the 64 bits and never converts the
 value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`.
+Under [`--deterministic`](#--deterministic) a NaN gives
+`0x7FF8000000000000` (`quietBitsF64`).
 
 - *Lowering:* one `bitcast`, so a function that only reinterprets bits stays
   `readnone`.
@@ -8074,7 +8344,8 @@ value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`.
 
 **`f32ToBits(x: f32): i32`** is the same for an `f32`'s 32 bits, signed as an
 `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is
-`-2147483648`.
+`-2147483648`. Under [`--deterministic`](#--deterministic) a NaN gives
+`0x7FC00000` (`quietBitsF32`).
 
 - *Lowering:* one `bitcast float to i32`; under Node, `runtime/nish.mjs`
   supplies it from a `DataView`.
@@ -8089,7 +8360,9 @@ for every `x` except `NaN`, which is not `===` to itself.
 **`Number(x: string | i32 | i64 | f64 | boolean): f64`** parses a string with
 JavaScript's `Number(s)` rules (below). A `boolean` converts with `true` as
 `1`, and an `f64` is the identity. A numeric literal argument is typed `f64`
-(`Number(2.5)` works in i32 mode).
+(`Number(2.5)` works in i32 mode). Under
+[`--deterministic`](#--deterministic) a string goes to `std/math.ts`'s
+`numberExact` instead, which reads a `0x` integer the same on every target.
 
 - *Lowering:* `i32`/`i64`: `sitofp`; `boolean`: `uitofp`; `f64`: identity.
 - *Tests:* `parse_numbers`; `reject_number_array`
@@ -8113,7 +8386,9 @@ or `[sign] Infinity`), correctly rounded. It answers `NaN` when there is none
 (`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`,
 `"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like
 `strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and
-gives `0`).
+gives `0`). Under [`--deterministic`](#--deterministic) a string goes to
+`std/math.ts`'s `parseFloatExact` instead, which reads a `0x` integer the
+same on every target.
 
 - *Lowering:* `strtod`.
 - *Tests:* `parse_numbers`.
@@ -8185,8 +8460,10 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
   every pair (`unsafe_wrapping`). In a module
   constant's initialiser the call folds, wrapping, where `2147483647 + 1` is
   refused ([Module constants](#module-constants)).
-- **Under Node** `runtime/nish.mjs` answers the import; a program that stays
-  in range prints the same as natively (`unsafe_get_set` and
+- **Under Node** `runtime/nish.mjs` answers the import, and the five are
+  `xs[i]`, `xs[i] = v`, `(a + b) | 0`, `(a - b) | 0` and `Math.imul` on an
+  `i32`, and `BigInt.asIntN(64, …)` on the BigInt an `i64` is there; a program
+  that stays in range prints the same as natively (`unsafe_get_set` and
   `unsafe_wrapping` are run both ways by `tests/run.js`). `readCString` has no
   Node form: its `CPtr` comes only from a `declare function`, which Node cannot
   call, so a program that reads one is native only, as every FFI program is
@@ -8334,7 +8611,8 @@ vector: `v` is unchanged.
   (`reject_simd_secret`) and not nullable (`reject_simd_nullable`).
 - **Under Node** `runtime/nish.mjs` resolves the import to `runtime/core.mjs`,
   where a vector is a typed array whose element type does the lane's
-  arithmetic. `--emit-ts` writes the import as `nish/runtime`'s. A load or a
+  arithmetic: a `u8` lane wraps through `Uint8Array`, an `f32` lane rounds
+  through `Float32Array`. `--emit-ts` writes the import as `nish/runtime`'s. A load or a
   store checks the whole vector and panics with the native words.
   `tests/run.js`'s `simd` section runs every `simd_*` program with a `.out`
   natively, under `--profile wasi` (where a sysroot is installed) and under
@@ -8395,8 +8673,10 @@ Reference: [`nish:simd`](reference/nish-simd.md).
   and the width or more is
   `` `rotl` count 32 is not below the lane width of u32x4, 32 bits: a shift by the width or more moves every bit out, and a rotate by it is a rotate by 0 ``
   (NL2631, `reject_simd_shift_count`). LLVM gives a shift by the width no
-  meaning, and a rotate by it is a rotate by 0. They are what ChaCha20,
-  SHA-256 and other add-rotate-xor code is built from (`simd_chacha_quarter`).
+  meaning, and a rotate by it is a rotate by 0. `shr` is logical on `u8x16`,
+  `u16x8` and `u32x4` and arithmetic (it copies the sign) on `i32x4`; a
+  rotate is the same on either. They are what ChaCha20, SHA-256 and other
+  add-rotate-xor code is built from (`simd_chacha_quarter`).
 - **A mask is a compare's answer, held only as a value.** `eq` and the rest on
   two vectors answer `mask8x16`, `mask16x8`, `mask32x4` or `mask64x2` by lane
   width, an `<N x i1>`; there is no constructor
@@ -8420,8 +8700,10 @@ Reference: [`nish:simd`](reference/nish-simd.md).
   a wrong count, a variable or an index past the end is refused
   (NL2632 to NL2635, `reject_simd_shuffle`).
 - **Under Node** each operation is a function of `runtime/core.mjs` over the
-  typed arrays, and a mask is an array of booleans. `tests/run.js`'s `simd`
-  section holds the native, WASI and Node outputs to one.
+  typed arrays: an integer lane wraps through its array type, a float lane
+  rounds through `Float32Array`, a mask is an array of booleans, and a rotate
+  is two shifts and an `or`. `tests/run.js`'s `simd` section holds the native,
+  WASI and Node outputs to one.
 
 ### Constant time: `ctSelect` and `ctEq`
 
@@ -8598,8 +8880,11 @@ that caller. This builtin is the store that stays (#385).
 - **It is a global, and not in a `nish:` module.** It is backed by the C
   runtime, so by the rule [Builtin modules](#builtin-modules-nish) sets it may
   be imported, but no module exports it yet. It works under the wasi profile,
-  which links `runtime.c`; a freestanding wasm module linked with
-  `runtime-wasm.c` has no `nish_wipe`, as it has no strings.
+  which links `runtime.c`; a freestanding wasm module has no `nish_wipe`:
+  it links `runtime-wasm.c`, which supplies the arena, arrays, the panics and
+  `floor`/`ceil`/`trunc` but no wipe, and, when it uses
+  strings, `runtime-text.c`, which has the strings and the digits but not the
+  wipe.
 
 The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2) is
 **class A**: `runtime/nish.mjs` supplies it as a loop that sets every element
@@ -9033,8 +9318,9 @@ Reference: [`nish:region`](reference/nish-region.md).
 | --- | --- |
 | `Region<T>` | a handle to a region whose root is a `T`: a 64-bit number, not a pointer |
 | `region(f)`, `regionWith(arg, f)` | a new region, whose root is what `f` answers; `f`'s allocations land in it |
+| `child(f)`, `childWith(arg, f)` | a new region whose *parent* is the region entered now; called only in the `f` an `enter` or `enterWith` runs |
 | `enter(r, f)`, `enterWith(r, arg, f)` | `f(root)` (or `f(root, arg)`), allocating in the region |
-| `free(r)` | gives the region's memory back; `r` and every copy of it are dead |
+| `free(r)` | gives the region's memory back; `r` and every copy of it are dead. Freeing a parent frees its children first, deepest first; freeing a child unlinks it from its parent |
 
 `f` is an arrow or a named function, and an arrow captures nothing (NL2335),
 so the ways into a region are its root, `arg` and module state. The checker
@@ -9046,17 +9332,18 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 
 | Refused | Code |
 | --- | --- |
-| region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant or [module storage](#module-storage), whose elements are pointer-free, and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`) |
-| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_arrow_compose`, `reject_region_arrow_twice`, `reject_region_fixpoint_chain`) |
+| region memory stored into outer memory: a field or an element, including `this` stored by a constructor `f` reaches (`h.l = this`). Module state cannot hold region memory at all, since a module binding is a number, `boolean` or string constant or [module storage](#module-storage), whose elements are pointer-free, and a top-level `let` is refused first (`reject_region_ctor_module_state`) | **NL2609** (`reject_region_to_outer`, `reject_region_ctor_this_arg`, `reject_region_store_string`, `reject_region_arrow_keep`, `reject_region_arrow_generic`; a spawned task's region into what it shares, `reject_async_spawn_store_region`) |
+| outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a field or element store, a constructor argument (`new Game(g.host)`) or a field of a literal | **NL2610** (`reject_region_outer_string_ctor`, `reject_region_outer_string_literal`, a spawned task's shared object kept by its own memory, `reject_async_spawn_keep_holder`, `reject_region_arrow_link`, `reject_region_arrow_result`, `reject_region_arrow_compose`, `reject_region_arrow_twice`, `reject_region_fixpoint_chain`) |
 | `enter`'s or `enterWith`'s `f` answering anything but a number, a `boolean`, an `enum` or a `Region`: an array, an object or a string | **NL2611** (`reject_region_enter_result`, `reject_region_enter_string`) |
 | `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee | **NL2612** (`reject_region_threads`) |
 | a value whose type holds a `Region` at any depth crossing to another thread: a task's argument or answer, a parallel body's capture, a value sent on a channel | **NL2613** (`reject_region_task_arg_field`, `reject_region_task_answer`, `reject_region_channel_map`, `reject_region_parallel_capture`) |
 | `region`'s or `regionWith`'s `f` answering anything but memory it allocated: `region(() => moduleValue)`, `regionWith(g, (a) => a)` | **NL2614** (`reject_region_root_module`, `reject_region_root_arg`) |
-| outer storage growing inside `f`, directly or through a callee: `push` on an outer array (arrays have no `unshift` or `splice`; the rule names them so it holds if they come), `Map.set` or `Set.add` on an outer `Map` or `Set` | **NL2615** (`reject_region_grow_push`, `reject_region_grow_map`, `reject_region_grow_set`, each with a `_callee` twin, `reject_region_arrow_grow`) |
+| outer storage growing inside `f`, directly or through a callee: `push` on an outer array (arrays have no `unshift` or `splice`; the rule names them so it holds if they come), `Map.set` or `Set.add` on an outer `Map` or `Set` | **NL2615** (`reject_region_grow_push`, `reject_region_grow_map`, `reject_region_grow_set`, each with a `_callee` twin, `reject_region_arrow_grow`; a spawned task growing what it shares, `reject_async_spawn_grow`) |
 | a call inside `f` the region rules have no facts for. No program reaches it today, since every function, instantiation, lifted arrow and `declare function` has whole-program facts; it stays so that such a callee is never let through unexamined (`tests/wordings/unreachable.txt`) | **NL2616** |
 | `Arena.mark` or `Arena.used` inside `f`, or a callee reaching one: inside a region they would read the region's own arena, not the thread's | **NL2617** (`reject_region_arena_mark` through `region`, `reject_region_arena_used_callee` through `enter` and a callee) |
 | `new Region<T>()` | **NL2618** (`reject_region_new`) |
-| `region`, `regionWith`, `enter`, `enterWith` or `free` in a parallel body or a spawned function, directly or through a callee | NL2351 (`reject_region_enter_spawned`, `reject_region_parallel_callee`) |
+| `child` or `childWith` outside the `f` an `enter` or `enterWith` runs, or in a function that something other than an `enter` also calls: with no region entered there is no parent | **NL2702** (`reject_region_child_outside`, `reject_region_child_callee`; a helper making the child, called from `main`, `reject_region_child_helper_main`, or from the function `enter` runs, `reject_region_child_helper_f`) |
+| `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` in a parallel body or a spawned function, directly or through a callee | NL2351 (`reject_region_enter_spawned`, `reject_region_parallel_callee`, `reject_region_child_parallel`, `reject_region_child_spawned`, `reject_region_child_with_parallel`, `reject_region_child_plain_spawned`) |
 | `using r = region(f)`, in any declarator: a block does not free a region | NL2387 (`reject_region_using_first`, `reject_region_using_second`) |
 
 - **`Arena.mark` and `Arena.used` are refused inside `f`** (NL2617). Inside a
@@ -9078,10 +9365,68 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   memory, or answered by `enter`, stays on its thread and is allowed.
 - `using a = arena()` inside `f` is allowed, and so is `enter` of a second
   region: only numbers come out of it.
+- **A child region may point into its parent's memory that existed before the
+  current `enter`**: what the root `enter` handed in reaches, and, in the
+  child's `f`, what `childWith`'s `arg` reaches when the root reaches it
+  (`tests/cases/region_child_keep`, `region_child_chain`, `region_child_map`).
+  The parent outlives the child, since freeing the parent frees the child,
+  and nothing can release that memory while the parent lives: a scope opened
+  during an `enter` rewinds only to a mark taken after the `enter` began, so
+  it releases only what this `enter` allocated. That memory *new in this
+  `enter`* is what the child may not keep (NL2610,
+  `reject_region_child_new_memory`). The other rules hold the parent as outer
+  memory: the child's memory stored into the parent's is NL2609
+  (`reject_region_child_to_parent`), growing a parent array, `Map` or `Set`
+  in the child's `f` is NL2615 (`reject_region_child_grow`), and the parent's
+  memory as the child's root is NL2614 (`reject_region_child_root_parent`,
+  and `reject_region_child_root_listed`, where it is read back out of a list
+  the child's `f` made). The child's `f` may keep the parent's memory in the
+  root it allocated, by a field or element store or a `push` onto that
+  root's own array (`tests/cases/region_child_builder_list`). Only `f`'s
+  own body may: a function it calls that keeps what it is handed in the
+  memory it answers makes that answer NL2614, under `regionWith` as under
+  `childWith` (`reject_region_helper_keeps_arg`,
+  `reject_region_child_helper_keeps_arg`).
+  A plain `region()` made inside `enter` stays independent of the region
+  entered, and keeps the rules above.
+- **What the root reaches counts as older than this `enter` only while `f`
+  stores nothing into memory the root may reach.** Once `f` stores into
+  memory that may be older than this `enter` — a field, `push`, or a callee
+  that writes into what it is handed, such as `Map.set` — anywhere in its
+  body, a value read off the root may be one it allocated, so `childWith`
+  handing it is NL2610 (`reject_region_child_root_readback`,
+  `reject_region_child_root_push`). A store into memory `f` made counts only
+  when `f` also puts the root's reach (other than a string) into memory it
+  made, as `[root]` or `new Holder(root)` does
+  (`tests/cases/region_child_fresh_list`, `tests/cases/region_child_local_map`);
+  then a store through it may put new memory in the root's reach
+  (`reject_region_child_alias_field`, `reject_region_child_alias_element`).
+  The check is not ordered: a store after the `childWith` counts too, and
+  one such store makes every `childWith` in `f` hand outer memory rather
+  than the parent's. To collect root nodes in a list, collect them in the
+  child's `f`, as above. A call's result handed to `childWith` is memory
+  this `enter` may have allocated, even when the callee only reads the root,
+  so a child may not keep it.
+- **In an `enter` of a handle that may be a child's, the root's reach may be
+  its ancestors' memory as well as the child's own.** A child made there may
+  keep it, but it may not grow (NL2615), keep memory other than an ancestor's
+  (NL2610 for outer memory, `reject_region_child_handle_in`; NL2609 for memory
+  new in this `enter`, `reject_region_child_handle_new`), nor be stored into
+  outer memory (NL2609, `reject_region_child_handle_out`). Nor may such a
+  root grow: a handle that reaches `enter` through a parameter is one, even
+  when every caller hands a plain region (NL2615,
+  `reject_region_child_handle_param`). A handle may be a child's when its type
+  is one `child` or `childWith` answers somewhere in the program, unless the
+  handle is a call of `region` or `regionWith` or a variable bound only ever
+  to one: a parameter, a field or an element of that type may hold a child's
+  (`tests/cases/region_child_plain`).
 - **Every call checks its handle at run time.** `enter`, `enterWith` and
   `free` stop the program on a handle that is 0, freed already, or another
   thread's; `enter` of a region already entered and `free` of an entered one
-  stop it too, so freeing twice is a panic and never a double free. Each call
+  (or of a parent with an entered child) stop it too, so freeing twice is a
+  panic and never a double free. A child's handle is dead once its parent is
+  freed (`tests/link/region_child_stale`), and `child` with no region entered
+  stops the program. Each call
   is a `region` site under [`--deny-panics`](#panic-sites)
   (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
   regions `region` stops the program as well.
@@ -9546,7 +9891,7 @@ been asked to stop. All four are C in `runtime/runtime-host.c`, a translation
 unit of its own with its own `.text*` ceiling, which `scripts/build.sh` compiles
 beside `runtime.c` as it does the others.
 
-Reference: [`nish:fs`](reference/nish-fs.md), [`nish:process`](reference/nish-process.md).
+Reference: [`nish:fs`](reference/nish-fs.md), [`nish:process`](reference/nish-process.md), and [the globals page](reference/builtins.md) for `Date.now` (under `DateConstructor`) and `crypto`.
 
 | Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
@@ -9741,6 +10086,8 @@ no `--threads`.
 **`totalMemory(): i64`** answers bytes of **physical memory**, or **-1**
 where the host does not say. It is the machine's, not a cgroup's limit.
 
+- *Lowering:* `_SC_PHYS_PAGES` times the page size on Linux, `hw.memsize` on
+  Darwin.
 - *Tests:* `os_memory`; `reject_os_memory_wasm`.
 
 **Capabilities.** `spawn`, `kill` and `waitPid` carry `process.spawn`, the
@@ -9969,6 +10316,8 @@ call whatever the answer.
 socket sends, or **a plain `-1`, never an errno,** for every other descriptor
 and every call on wasm. It never panics.
 
+- *Lowering:* Linux's `TCP_INFO` `tcpi_snd_mss`, or `TCP_MAXSEG` where that
+  is not above `0` and on Darwin.
 - *Tests:* `net_mss`; `reject_net_mss_arity`, `reject_net_mss_type`;
   `net_mss` in `tests/run.js` for wasm32 and WASI.
 
@@ -10747,6 +11096,11 @@ The reference for each member, with its parameters and its answer, is its doc co
 | `set(src, offset?)` | arrays | `void` |
 | `fill(value, start?, end?)` | arrays | `void` |
 | `sort(cmp)` | arrays | `T[]` |
+| `map(f)` | arrays | `U[]` |
+| `filter(pred)` | arrays | `T[]` |
+| `some(pred)`, `every(pred)` | arrays | `boolean` |
+| `findIndex(pred)` | arrays | `number` |
+| `slice(start?, end?)` | arrays | `T[]` |
 | `length` | strings | `number` |
 | `charCodeAt(i)` | strings | `number` |
 | `substring(start, end?)` | strings | `string` |
@@ -10848,6 +11202,52 @@ is written in; an arrow reading a `let` is refused
   `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`,
   `reject_arr_sort_readonly`, `reject_arr_sort_argv`,
   `reject_arr_sort_capture_let`.
+
+**`a.map(f: (x: T[, i: number]) => U): U[]`** answers a new array of
+`f(a[i])` (or `f(a[i], i)`) for each element, in order, as
+`Array.prototype.map` gives. The callback takes one or two parameters; a
+third, JavaScript's array argument, is refused
+(`` The callback of `map` takes 3 parameters, and Nish passes at most two … ``,
+NL2698), and so is a second argument to `map` itself (JavaScript's
+`thisArg`). It is a compile-time function argument under the comparator's
+rule. See [Callback methods and `slice`](#callback-methods-and-slice).
+
+- *Lowering:* compiled to `std/array.ts`'s `map` or `mapIndexed`, called
+  directly.
+- *Tests:* `arr_map`, `arr_map_f64`, `arr_map_template`;
+  `reject_arr_map_third_param`, `reject_arr_map_this_arg`,
+  `reject_arr_map_capture_let`.
+
+**`a.filter(pred: (x: T[, i: number]) => boolean): T[]`** answers a new
+array of the elements `pred` keeps, in order. `pred` answers `boolean`
+(`reject_arr_filter_not_boolean`); the callback rules are `map`'s.
+
+- *Tests:* `arr_filter`; `reject_arr_filter_not_boolean`.
+
+**`a.some(pred)`, `a.every(pred)`: `boolean`** answer whether some (every)
+element satisfies `pred`, stopping at the first that decides; an empty array
+answers `false` (`true`).
+
+- *Tests:* `arr_some_every`.
+
+**`a.findIndex(pred): number`** answers the first index `pred` accepts, or
+`-1`. There is **no `find`**: TypeScript types its answer `T | undefined`
+and Nish has no `undefined`, so `xs.find(f)` is refused and points here
+(`` `find` is not supported: TypeScript types its answer `T | undefined` … ``,
+NL2697).
+
+- *Tests:* `arr_find_index`; `reject_arr_find`.
+
+**`a.slice(start: number = 0, end: number = a.length): T[]`** answers a copy
+of `a[start..end)`, with `s.slice`'s rule: `0 <= start <= end <= a.length`,
+or the program **panics** with
+`slice out of range: [start, end) of length len` and exits 1, where
+JavaScript counts a negative index from the end and clamps the rest. It
+takes zero to two arguments (NL2699), each a `number`, where `s.slice` takes
+any integer type. It works on a `readonly T[]`, and the copy is a mutable
+`T[]`.
+
+- *Tests:* `arr_slice`, `arr_slice_bounds`; `reject_arr_slice_args`.
 
 **`s.length`** is a `number`, the UTF-8 byte length.
 
@@ -10989,7 +11389,7 @@ type, so `wide.push(3)` on an `i64[]` is an `i64` three
 
 #### Sorting with a comparator
 
-`xs.sort(cmp)` is the one array method that takes a function. The checker
+`xs.sort(cmp)` sorts with a function the program passes. The checker
 rewrites the call to `sortWith(xs, cmp)` from `std/sort.ts`, which the program
 does not import: a `.sort(` call is what loads it. Because `cmp` is a
 compile-time function parameter, each comparator gets its own instantiation
@@ -11035,6 +11435,70 @@ receiver or `process.argv`, and a comparator that reads a `let` of the
 function it is written in (`reject_arr_sort_capture_let`). A comparator is an
 arrow argument like any other, so it may read that function's `const` locals
 and parameters (`arr_sort_capture`), under the rule in [Function parameters](#function-parameters).
+
+#### Callback methods and `slice`
+
+`xs.map(f)`, `xs.filter(f)`, `xs.some(f)`, `xs.every(f)`, `xs.findIndex(f)`
+and `xs.slice(...)` are lowered as `sort` is: the checker rewrites the call to
+a template of `std/array.ts`, which a call of one of those names loads, and the
+callback is a compile-time function parameter, so each callback gets an
+instantiation of its own whose loop calls it directly. `xs.map(f)` and
+`map(xs, f)` with `map` imported from `nish/array` are the same call and
+compile to one instance (`arr_map_template`). The template is picked by the
+callback's arity: `map` for `(x) => ...`, `mapIndexed` for `(x, i) => ...`, and
+`slice`, `sliceFrom` or `sliceAll` by the argument count.
+
+The callback takes the element, or the element and its index, as TypeScript
+allows. JavaScript passes a third argument, the array itself; Nish refuses a
+callback that declares one (NL2698), since the array is the receiver the call
+already names. A callback that declares no parameter, `xs.map(() => 0)`, is
+refused too, though TypeScript accepts it: the template is picked by the
+callback's arity, and there is none for zero, so write `(_x) => 0`. The
+callback rule is the comparator's: a top-level function, or
+an arrow that reads only the `const` locals and parameters of the function it
+is written in (`reject_arr_map_capture_let`).
+
+Each method walks the array from index 0 and calls the callback once per
+element, in order, up to the length the array had when the call began, as
+`Array.prototype` does; `some`, `every` and `findIndex` stop at the first
+element that decides. A callback that shrinks the array ends the walk at the
+new length, where JavaScript goes on and skips the missing indices. `map` and
+`filter` answer a new array, so writing into it does not touch the receiver;
+an element that is an `interface` record is stored inline and copied, so
+`filter(...)[0].id = 10` leaves the receiver's record as it was, as it would
+under Node (`arr_filter`).
+
+**There is no `find`.** TypeScript types `xs.find(f)` as `T | undefined`, and
+Nish has no `undefined`: a program testing `r !== null` would pass `tsc` and
+mean something else under Node. The call is refused with a message that
+points to `findIndex` (NL2697, `reject_arr_find`):
+`const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`.
+
+**`slice` panics where JavaScript clamps.** The bounds rule is string
+`slice`'s: `0 <= start <= end <= xs.length`, and anything else exits 1 with
+`slice out of range: [start, end) of length n` (`arr_slice_bounds`). A
+negative index, which JavaScript counts from the end, and an end past the
+length, which it clamps, are both outside. A `number` bound under
+`--number-mode f64` is made an integer before the check, as `llvm.fptosi.sat`
+does: a fraction is truncated toward zero (`xs.slice(0.9, 2.5)` is
+`xs.slice(0, 2)`), `NaN` is 0, and `±Infinity` or a magnitude of 2^63 or more
+saturates to the `i64` limits, so it fails the check and the message prints
+the limit (`slice out of range: [-9223372036854775808, 9223372036854775807) of
+length 3`; `arr_map_f64`, `arr_slice_saturate`). The bounds are `number`
+only, where string `slice` takes any integer type: an `i64` or `u32` bound is
+refused (`` Argument 2 of `slice`: expected i32, got i64 ``;
+`reject_arr_slice_i64_bound`), so convert it first: with `toI32(n)` in the
+default i32 mode, and with `Number(n)` under `--number-mode f64`, where the
+message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is not a
+`slice` [panic site](#panic-sites): its check is `std/array.ts`'s own
+`panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
+proof at the call removes, and `--deny-panics` refuses it
+(`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
+is the runtime's `sliceArray`, which applies the same check with the same
+words, so the two agree on every input; `map`, `filter`, `some`, `every` and
+`findIndex` are the platform's own `Array.prototype` methods there, and an
+answer that holds records inline is copied with the runtime's `copyRecords`,
+as the native `push` copies.
 
 ### Bulk writes: `set` and `fill`
 
@@ -11154,7 +11618,8 @@ instruction for instruction, because the annotation is a promise to the checker
 and not a value.
 
 - **Everything that reads still works**: `a.length`, `a[i]`, `for...of`,
-  `indexOf`, `join`, passing it on to another `readonly T[]`.
+  `indexOf`, `join`, `map`, `filter`, `some`, `every`, `findIndex`, `slice`,
+  passing it on to another `readonly T[]`.
 - **Everything that writes is refused**: `a[i] = v` and `a[i] op= v` are
   `` Cannot assign to an element of readonly i32[] (declare it i32[] to write through it) ``
   (`reject_arr_readonly_store`), and `push` / `pop` are
@@ -11209,8 +11674,8 @@ a mutable `T[]` — and it is exact where the fixpoint is not
 (`` `process.argv` is read-only ``), because it is a value and not an
 annotation.
 
-There are no other array or string methods (`map`, `shift`, `toUpperCase`,
-`charAt`, ...) — `slice` is a string method and an array has none — and no
+There are no other array or string methods (`shift`, `find`, `reduce`,
+`toUpperCase`, `charAt`, ...) and no
 `toString` (template literals and `console.log` convert numbers);
 string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under
@@ -12044,8 +12509,11 @@ export const main = (): i32 => {
   | `presence` naming a field, or a presence field, the class does not declare | NL2495 | `json_reject_presence_misspelt_field`, `json_reject_presence_misspelt_flag` |
   | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded by a presence field of its own or is renamed or made optional; a field recorded twice | NL2592 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `reject_json_presence_twice` |
 
-  A spread or a computed key in the literal is refused by Phase 0 as it is
-  anywhere (NL1061, NL1041; `reject_json_options_spread`,
+  A spread in the literal is
+  `` `User.json` spreads another value into the typed JSON options: … ``,
+  because the options are read from the class's text, where a spread names
+  nothing (NL2711, `reject_json_options_spread`), and a computed key is
+  refused by Phase 0 as it is anywhere (NL1041,
   `json_reject_options_computed`), a subclass by `extends`
   (`json_reject_options_subclass`), and a second `static readonly json` is a
   duplicate member (`reject_json_options_twice`). The options are not a
@@ -12448,6 +12916,51 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
   the program against the file before it looks in its cache, so the file is not
   part of the cache key and a cache hit is held to it too. `--fix` and
   `--emit-ast` refuse the flag.
+
+#### `--deterministic`
+
+`--deterministic`, on a compile or `nish run`, promises that the program's
+`f64` and `f32` results are the same bits natively on x86-64 and AArch64, on
+wasm32 and in the `--emit-ts` reading under Node
+([wp50-wasm-host.md §9](wp50-wasm-host.md#9-w7-the-same-bits-on-every-target)):
+
+- `Math.sin`, `cos`, `exp`, `log` and `pow` lower to `std/math.ts`'s
+  `sinF64`, `cosF64`, `expF64`, `logF64` and `powF64` on every target, as on a
+  page module, and a float `%` to `fmodF64` (an `f32` widened and the exact
+  result narrowed back). The `--emit-ts` reading imports those functions, and
+  `tanF64`, `atan2F64` and `hypotF64`, from `./nish/math.ts` in place of
+  `Math`. `+ - * /`, `sqrt` and the exact builtins need nothing: they are
+  correctly rounded everywhere, and every C unit and the program's IR are
+  compiled with `-ffp-contract=off` with or without the flag.
+- `f64ToBits` and `f32ToBits` give the canonical quiet NaN,
+  `0x7ff8000000000000` and `0x7fc00000`, for every NaN (`quietBitsF64` and
+  `quietBitsF32`); targets differ in the sign and payload of a NaN an
+  operation makes.
+- A program that reaches a nondeterministic capability — `clock`, `entropy`,
+  `env`, `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` or `tty` — is
+  refused with the chain that reaches it, as the capability policy refuses
+  one: NL3052 the file system, NL3053 another machine or program (`net`,
+  `process.spawn`), NL3054 C code or a host import (`ffi`), NL2700 the clock
+  and the random source, NL2701 the environment and the terminal.
+- `Number(s)`, `parseFloat(s)` and `parseInt(s)` read a string with one
+  grammar on every target, the one `--emit-ts` reads: a `0x` integer, read by
+  `std/math.ts`'s `numberExact` and `parseFloatExact` (which the flag calls
+  in their place) and correctly rounded on any libc, and no hex float, so
+  `Number("0x1p3")` is NaN and `parseFloat("0x1p3")` is 1 where a native build
+  without the flag lets `strtod` read 8 (`deterministic_parse`). Every decimal
+  spelling already agreed: glibc, musl and Node round them all correctly.
+
+```text
+main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now
+```
+
+The float corpus, `tests/differential/corpus/float/`, holds every operation
+and `Math` builtin over ±0, subnormals, the normal extremes, ±Infinity, NaN,
+integers near 2^53, multiples of π/4, NaN payloads read through
+`f64ToBits` and `f32ToBits`, and 94 strings through `Number`, `parseFloat` and
+`parseInt` to one `expected.txt` on each target
+(`tests/run.js`, sections `deterministic` and `float-corpus`; the
+`reject_deterministic_*` cases).
 
 #### The sandbox
 
@@ -13573,6 +14086,10 @@ by the caller.
 - **`--emit-arena <file.json>`** writes every allocation site of the program
   with where its memory goes, beside the IR, and changes no byte of it; see
   [Arena placement](#arena-placement) below.
+- **`--explain-memory`** prints, beside the warnings, every loop and function
+  of the program's own modules that keeps the memory it allocates past its
+  scope, and why, and changes no byte of the IR; see
+  [Explaining kept memory](#explaining-kept-memory) below.
 - **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and a
   `DIFile` per source file a declaration comes from — the name as it was given
   on the command line, with `.` for the directory, so the metadata depends only
@@ -13705,9 +14222,11 @@ right side may resize the array
 range outside the receiver
 
 - *What proves it away:* nothing yet: `substring` clamps instead, and is not a
-  site (`tests/cases/panics_slice`, `str_from_bytes_oob`,
-  `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`,
-  `net_write2_bounds`)
+  site; an array's `xs.slice` is not a `slice` site but a `call` reaching
+  `std/array.ts`'s `panic` ([Callback methods and
+  `slice`](#callback-methods-and-slice)) (`tests/cases/panics_slice`,
+  `str_from_bytes_oob`, `reject_deny_panics_from_bytes`,
+  `io_write_bytes_bounds`, `net_write2_bounds`)
 
 **`divide`**: integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1`
 when signed
@@ -14036,6 +14555,84 @@ site is memory the program holds on purpose, so it is never marked.
   `--emit-panics` is: `nish run` and `--fix` refuse it, and so does
   `--emit-ast`, which stops before the facts exist (exit 2).
 
+### Explaining kept memory
+
+**`--explain-memory`** answers, before the program is deployed, the question a
+memory budget turns on: which loops hand back what each pass allocated, and
+which do not. The [memory model](#memory-model) gives a pass of a loop, and a
+function, an arena scope of its own when it can prove what they allocated is
+unreachable at the end; one stored allocation, in the loop or in any callee,
+refuses the scope, and the memory the pass allocated then stays until the next
+bracket out. The warnings name such a refusal only where they can also name a
+rewrite; this report names every one, on stderr, after the warnings (an
+excerpt of `tests/cases/explain_memory`):
+
+```
+tests/cases/explain_memory.ts:21:1: memory: `remember` keeps what it allocates until the memory of its caller is released, because the allocation on line 22 is stored into memory, where this analysis stops following it
+tests/cases/explain_memory.ts:43:20: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `extra` returns
+tests/cases/explain_memory.ts:43:40: memory: this loop's update allocates on every pass, outside the scope a pass takes, and keeps it until `extra` returns
+tests/cases/explain_memory.ts:60:3: memory: this loop keeps what each pass allocates until `main` returns, because line 61 keeps what the pass allocated in `last`, which is declared outside the loop
+tests/cases/explain_memory.ts:76:10: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `main` returns
+explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass; 1 of 4 allocating functions with a scalar result keep what they allocate past the call
+```
+
+- **A loop** is listed when its passes allocate — themselves, or through a
+  callee that leaves memory behind — and no scope releases it at the end of
+  each pass. The line says where it does go back: at the end of the pass of the
+  scoped loop around it, at the end of the `using a = arena()` block around it,
+  when the function returns, or, in a function with no scope, when its caller's
+  memory is (in `main`, never: "for the rest of the run"). The reason is the
+  first refusal the analysis met, the one NL9011 names. A loop whose every
+  allocation goes back with a `using a = arena()` block or a scoped loop
+  inside its body keeps nothing past the pass and is not listed. A condition or `for` update that allocates is
+  listed on its own line — both, when both do — because it runs outside the
+  bracket a pass takes whether or not the body has one; a `do...while`
+  condition's line follows the lines of the loops in its body.
+- **A function** is listed when it answers a number, a `boolean`, an enum or
+  nothing, leaves memory behind, and has no scope of its own. A function that
+  answers memory (a string, an array, an object) is not, nor is a constructor,
+  which answers the object it builds: what it allocates goes to its caller with
+  the result, and whether the caller gives it back is the
+  caller's line.
+- **The summary** counts the loops whose passes allocate and the functions that
+  answer no memory and allocate, and how many of each keep it. A budget in CI
+  can hold that count, or the listed lines, against a golden, as
+  `tests/run.js` does with a case's `<name>.memory`
+  (`tests/cases/explain_memory`).
+- **The program's own modules only**, as `--deny-retention` judges them. A
+  generic function, or one that takes a function parameter, is explained once
+  per instantiation, under its instantiated name (`` `each<twice>` ``), after
+  the functions declared outright (`tests/cases/explain_memory_calls`).
+- **A callee the analysis cannot see counts as allocating.** In a function
+  that allocates, a loop with no scope that calls one is listed, since nothing
+  proves its passes leave no memory behind. A function that allocates nothing
+  the analysis can see is not examined.
+- **A callee's leak is its caller's.** A function whose kept allocation is a
+  call names that callee. One whose own allocation is held where the analysis
+  does not prove it dead names that first, whatever its callees do. One that
+  keeps memory only because a function down its calls holds an allocation the
+  analysis does not prove dead names that function, the one the doubt starts
+  in, even when that function's own scope gives its memory back: the doubt
+  passes up every call.
+- **A function is judged by what it still holds when it returns.** One with
+  no scope of its own keeps nothing when every allocation it leaves is inside
+  a scoped pass or a `using a = arena()` block, so it is counted and not
+  listed; one that is listed names the line of the first allocation it holds.
+- **Under `--no-elision`** no automatic scope is taken, so every allocating
+  loop and function is listed except the passes and blocks the program
+  brackets itself with `using a = arena()`.
+- **What it does not promise.** It reports the scopes the compiler takes, not
+  the bytes: a listed loop over three passes costs nothing, and memory the
+  program keeps on purpose — an array it pushes onto for its whole run — is
+  listed with the line that keeps it. It does not measure memory at run time.
+- `--explain-memory` changes no byte of the IR. `nish run` accepts it. A build
+  refused after the analysis has run (by `--deny-retention`, or a check that
+  follows it) still prints the report after the errors, since it says why each
+  refused loop keeps its memory; one refused earlier prints none. With
+  `--emit-ast`, which stops before the facts exist, with `--json`, whose
+  stderr is diagnostic objects only, and with `--fix`, which compiles nothing,
+  it is a usage error (exit 2).
+
 ## Forbidden constructs (Phase 0 validator)
 
 `src/validator.ts` walks the whole syntax tree before the checker and rejects
@@ -14159,7 +14756,6 @@ fragment `tests/run.js` matches and the case that proves it.
 | `yield` | `` `yield` is forbidden in Nish (no coroutine runtime) `` | `reject_yield` |
 | regex literals | `Regular expression literals are forbidden in Nish (no regex engine in the runtime)` | `reject_regex`, `reject_regex_class` |
 | `bigint` literals (`10n`) | `` `bigint` literals are forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_literal` |
-| object spread `{ ...a }` | `Object spread is forbidden in Nish (set each field by name)` (NL1061, Phase 0) | `reject_object_spread` |
 | `{ __proto__: x }` | `` `__proto__` is forbidden in Nish (no prototype chain) `` | `reject_proto_literal` |
 | `x.__proto__` | `` `__proto__` access is forbidden in Nish (no prototype chain) `` | `reject_proto_access` |
 | `x.prototype` | `` `.prototype` access is forbidden in Nish (no prototype chain) `` | `reject_prototype_access` |

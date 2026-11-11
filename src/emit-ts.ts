@@ -26,6 +26,7 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
+import { internalErrorFor } from "./ice"
 import {
   applyModuleEdits,
   emitModule,
@@ -58,6 +59,7 @@ import {
 } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, joinPath, normalizePath, relativePath, resolvePath } from "./paths"
+import { isMathModule } from "./std-modules"
 import { StringBuilder } from "./strings"
 
 /** The specifier every emitted module imports the runtime by. */
@@ -270,6 +272,41 @@ const runtimeImport = (keyword: string, names: StringSet): string =>
   names.size() === 0 ? "" : `${keyword} ${braceList(names)} from "${RUNTIME}"\n`
 
 /**
+ * The import line of what `--deterministic` routed to `nish/math`, from where
+ * `out` is written to where the math library is (`outputPathOf`). A name with
+ * no `nish/math` module to import it from stops the compile with an internal
+ * error (exit 70): the loader adds the module whenever the walk routes a call.
+ */
+const mathImport = (
+  out: string,
+  outputs: string[],
+  modules: ModuleUnit[],
+  names: StringSet,
+  json: boolean
+): string => {
+  if (names.size() === 0) {
+    return ""
+  }
+  let k = 0
+  for (const unit of modules) {
+    if (k < outputs.length && isMathModule(unit.packageName, unit.name)) {
+      const target = outputs[k]
+      return `import ${braceList(names)} from "${relativeSpecifier(out, target)}"\n`
+    }
+    k = k + 1
+  }
+  noMathModule(json)
+  return ""
+}
+
+/** Stop with an internal error (exit 70): a call was routed to `nish/math` and the loader did not add it. */
+const noMathModule = (json: boolean): void => {
+  process.exit(
+    internalErrorFor("emit-ts: a call routed to nish/math, and no nish/math module was loaded", json)
+  )
+}
+
+/**
  * The launcher: install the Node host, run `main`, exit with its code. An
  * entry written as top-level code (`src/script.ts`) runs as it is imported,
  * so importing it is the whole run, and a run that ends exits 0, as the
@@ -337,7 +374,8 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
   const outputs: string[] = []
   let anyAsync = false
   for (const unit of modules) {
-    const out = outputPathOf(unit, base)
+    // `std/array.ts` loaded by a string's `slice` and used by nothing.
+    const out = compilation.isUnusedArrayModule(unit) ? "" : outputPathOf(unit, base)
     if (out === ".." || out.startsWith("../") || out.startsWith("/")) {
       result.unwritable = `--emit-ts cannot place ${unit.path}, which lies above the directory of the program's other modules`
       return result
@@ -360,6 +398,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     walk.warnStubs = unit.packageName === ROOT_PACKAGE
+    walk.deterministic = unit.checker.ctx.deterministic
     let slot = 0
     while (slot < layouts.length) {
       const s = layouts[slot]
@@ -455,10 +494,15 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     // A file with no import or export is a script to tsc, whose alias would be
     // global and meet the page's own `HostHandle`: `export {}` keeps it the file's.
-    const scriptFile = walk.helpers.size() === 0 && walk.widths.size() === 0 && !isModule(unit.file)
+    const scriptFile =
+      walk.helpers.size() === 0 &&
+      walk.widths.size() === 0 &&
+      walk.mathNames.size() === 0 &&
+      !isModule(unit.file)
     const header =
       runtimeImport("import", walk.helpers) +
       runtimeImport("import type", walk.widths) +
+      mathImport(out, outputs, modules, walk.mathNames, compilation.opts.json) +
       (walk.hostHandle ? HOST_HANDLE_ALIAS : "") +
       (walk.hostHandle && scriptFile ? "export {}\n" : "") +
       (walk.usesStorage ? walk.storageImport : "")

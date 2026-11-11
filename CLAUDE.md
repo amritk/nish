@@ -14,6 +14,7 @@ only the guide your task touches; the rules there are authoritative:
 | copy or port code in | [`.claude/licensing.md`](.claude/licensing.md) |
 | work in `std/crypto`, `std/net` or `docs/security/` | [`docs/security/README.md`](docs/security/README.md) |
 | write a *program* in Nish | [`docs/AI.md`](docs/AI.md), then [`docs/guide/`](docs/guide/index.md) |
+| pick up a work package ("pick up WP50") | its page, `docs/roadmap/wpN-*.md`, and [`docs/roadmap/index.md`](docs/roadmap/index.md) → "Picking up a work package"; tick its box in the PR that lands the stage |
 
 **An untyped emit-ts walk knows nothing.** In `src/emit-ts-*.ts`, read
 types only through `walk.typeAt`, and treat a null binding table
@@ -30,6 +31,10 @@ for its skip count like a local run (`AGENTS.md` → "Trusting a test run"). Run
 the whole `npm test` locally only when the change is to the suite itself
 (`tests/run.js`'s structure, `tests/pool.js`) or CI cannot answer (a fork PR),
 and say so in the PR body.
+
+A change to `std/` or `src/` that moves any nish-cmp corpus program's IR adds
+narrow `DECLARED` entries to `tests/nish-cmp.js` (program + file, the PR's
+release-note words) in the same PR; run nish-cmp before pushing.
 
 A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
 comment, a `@param` per parameter and a `@returns` for a non-`void` return:

@@ -44,14 +44,18 @@ check that branches to `nish_panic_div`
 ([Checked integer division](#checked-integer-division)).
 
 - *Lowering:* `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an
-  `f32`, `double` for an `f64`); on the signed integer widths `nsw` where
-  proven to fit and otherwise `llvm.s*.with.overflow` and a branch to
-  `nish_panic_overflow`, plain through a `nish:unsafe` `wrapping*` call,
-  never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type)
+  `f32`, `double` for an `f64`); on a page module (above, `Math.sin`) or
+  under [`--deterministic`](builtins.md#--deterministic) a float `%` or `%=` is a call
+  to `std/math.ts`'s `fmodF64` in place of `frem`, whose libm `fmod` that
+  link lacks, an `f32` widened to `f64` and the exact result narrowed back;
+  on the signed integer widths `nsw` where proven to fit and otherwise
+  `llvm.s*.with.overflow` and a branch to `nish_panic_overflow`, plain
+  through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type)
   are preceded by a divisor check that branches to `nish_panic_div`.
 - *Tests:* `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`,
-  `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`;
-  `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed`
+  `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`,
+  `wasm_math_rem`; `reject_type_mismatch`, `reject_u_mixed_signedness`,
+  `reject_f32_mixed`
 
 **`+`** on two `string` gives a `string`.
 
@@ -294,9 +298,9 @@ divide with overflow` is simply unreachable on an unsigned type.
 - `obj.method(args)` calls a class method with `obj` as `this`
   (`tests/cases/cls_this_method_call`); `this.method(args)` inside a method
   likewise.
-- `xs.push(v)` is the only array method (`tests/cases/arr_push`;
-  `` Unknown method `pop` on i32[] (supported: push) ``); strings have no
-  methods (`` Unknown method `toUpperCase` on string `` *(CLI only)*).
+- An array has the methods of [Arrays and strings as receivers](builtins.md#arrays-and-strings-as-receivers)
+  (`tests/cases/arr_push`); any other is
+  `` Unknown method `shift` on i32[] (supported: push, pop, …) ``.
 - Builtins are called by dotted name (`console.log`, `Math.sqrt`,
   `process.exit`) or bare name (`toI32`, `parseInt`, `Number`,
   `readFileSync`); a user function with the same bare name shadows the

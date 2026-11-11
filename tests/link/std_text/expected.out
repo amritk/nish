@@ -55,6 +55,43 @@ PASS  replaceAll: a needle at both ends
 PASS  replaceAll: the whole string as the needle
 PASS  replaceAll: an empty text answers empty
 PASS  replaceAll: a multi-character replacement is copied whole, and the needle is literal
+PASS  split: separators at both ends and side by side give empty pieces
+PASS  split: and the pieces are in order
+PASS  split: a separator that never occurs gives the whole text
+PASS  split: and that is one piece
+PASS  split: the empty text is one empty piece
+PASS  split: and that piece is empty
+PASS  split: the separator alone is two empty pieces
+PASS  split: a multi-byte ASCII separator
+PASS  split: overlapping candidates match leftmost, once each
+PASS  split: the whole text as the separator
+PASS  split: a two-byte separator
+PASS  split: a four-byte separator, a surrogate pair under Node
+PASS  split: multi-byte text on an ASCII separator
+PASS  split: an ASCII separator inside a decomposed character
+PASS  asciiUpper: the ASCII letters change
+PASS  asciiLower: the ASCII letters change
+PASS  asciiUpper: the empty text
+PASS  asciiLower: the empty text
+PASS  asciiUpper: only a to z move
+PASS  asciiLower: only A to Z move
+PASS  asciiUpper: ß and é are not ASCII and stay
+PASS  asciiLower: É is not ASCII and stays
+PASS  asciiUpper: a four-byte sequence passes through
+PASS  asciiLower: a four-byte sequence passes through
+PASS  asciiUpper: the length is the input's
+PASS  padStart: zeros in front
+PASS  padEnd: spaces after
+PASS  padStart: a several-character fill repeats and is cut at the width
+PASS  padEnd: and the same after
+PASS  padStart: a fill that fits exactly is not cut
+PASS  padStart: a width equal to the length changes nothing
+PASS  padEnd: a width below the length changes nothing
+PASS  padStart: a negative width changes nothing
+PASS  padStart: an empty fill changes nothing
+PASS  padEnd: an empty fill changes nothing
+PASS  padStart: the empty text is all fill
+PASS  padEnd: a fill longer than the room is cut
 PASS  firstDifference: equal line lists answer -1
 PASS  firstDifference: the index of the first differing line
 PASS  firstDifference: a difference on the very first line
@@ -72,4 +109,4 @@ PASS  codePointLength: a mix of every width
 PASS  codePointLength: continuation-range Latin-1 counts one each
 PASS  codePointLength: the pair written as two escapes is one
 PASS  codePointLength: a lone surrogate is one
-text: 74 passed, 0 failed, 0 skipped
+text: 111 passed, 0 failed, 0 skipped

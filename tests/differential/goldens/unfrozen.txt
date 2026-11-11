@@ -53,10 +53,16 @@ cases/arr_bounds_returned_through_store added after R6: no rewriter to freeze it
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard_f64 added after R6: no rewriter to freeze it with
+cases/arr_filter added after R6: no rewriter to freeze it with
+cases/arr_find_index added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class_root added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_store added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_view added after R6: no rewriter to freeze it with
+cases/arr_map added after R6: no rewriter to freeze it with
+cases/arr_map_f64 added after R6: no rewriter to freeze it with
+cases/arr_map_template added after R6: no rewriter to freeze it with
+cases/arr_named_predicates added after R6: no rewriter to freeze it with
 cases/arr_path_alias_shrink added after R6: no rewriter to freeze it with
 cases/arr_path_alias_store added after R6: no rewriter to freeze it with
 cases/arr_path_callee_pop added after R6: no rewriter to freeze it with
@@ -94,6 +100,10 @@ cases/arr_range_call_two_sites added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_clone added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_dead added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_replace added after R6: no rewriter to freeze it with
+cases/arr_slice added after R6: no rewriter to freeze it with
+cases/arr_slice_bounds added after R6: no rewriter to freeze it with
+cases/arr_slice_saturate added after R6: no rewriter to freeze it with
+cases/arr_some_every added after R6: no rewriter to freeze it with
 cases/arr_sort_capture added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp_f64 added after R6: no rewriter to freeze it with
@@ -106,8 +116,11 @@ cases/asi_continuation added after R6: no rewriter to freeze it with
 cases/asi_statements added after R6: no rewriter to freeze it with
 cases/async_attributes added after R6: no rewriter to freeze it with
 cases/async_await_all added after R6: no rewriter to freeze it with
+cases/async_await_all_arrays added after R6: no rewriter to freeze it with
+cases/async_await_all_lanes_large added after R6: no rewriter to freeze it with
 cases/async_await_chain added after R6: no rewriter to freeze it with
 cases/async_await_single added after R6: no rewriter to freeze it with
+cases/async_cancel added after R6: no rewriter to freeze it with
 cases/async_lowered added after R6: no rewriter to freeze it with
 cases/async_main added after R6: no rewriter to freeze it with
 cases/async_mark_text added after R6: no rewriter to freeze it with
@@ -115,6 +128,9 @@ cases/async_result added after R6: no rewriter to freeze it with
 cases/async_sleep added after R6: no rewriter to freeze it with
 cases/async_sleep_spawn_string added after R6: no rewriter to freeze it with
 cases/async_spawn added after R6: no rewriter to freeze it with
+cases/async_spawn_fn_arg added after R6: no rewriter to freeze it with
+cases/async_spawn_handler_reach added after R6: no rewriter to freeze it with
+cases/async_spawn_shared added after R6: no rewriter to freeze it with
 cases/attr_panic_charcodeat added after R6: no rewriter to freeze it with
 cases/bytes_fill added after R6: no rewriter to freeze it with
 cases/bytes_offset_float added after R6: no rewriter to freeze it with
@@ -172,16 +188,21 @@ cases/dbg_fnarg_arrow added after R6: no rewriter to freeze it with
 cases/dbg_map_get added after R6: no rewriter to freeze it with
 cases/dbg_map_iter added after R6: no rewriter to freeze it with
 cases/dbg_rng added after R6: no rewriter to freeze it with
+cases/deny_panics_arr_map added after R6: no rewriter to freeze it with
 cases/deny_panics_clean added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it with
 cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
 cases/deny_retention_clean added after R6: no rewriter to freeze it with
+cases/deterministic_bits added after R6: no rewriter to freeze it with
+cases/deterministic_parse added after R6: no rewriter to freeze it with
 cases/entry_shebang added after R6: no rewriter to freeze it with
 cases/enum_loop_for_update added after R6: no rewriter to freeze it with
 cases/enum_loop_held_several added after R6: no rewriter to freeze it with
 cases/enum_loop_join_gap added after R6: no rewriter to freeze it with
 cases/enum_narrowing added after R6: no rewriter to freeze it with
+cases/explain_memory added after R6: no rewriter to freeze it with
+cases/explain_memory_calls added after R6: no rewriter to freeze it with
 cases/export_loader_names_no_storage added after R6: no rewriter to freeze it with
 cases/export_memory_native added after R6: no rewriter to freeze it with
 cases/f32_to_bits added after R6: no rewriter to freeze it with
@@ -196,6 +217,7 @@ cases/ffi_handle_arena added after R6: no rewriter to freeze it with
 cases/ffi_handle_class_template added after R6: no rewriter to freeze it with
 cases/ffi_handle_positions added after R6: no rewriter to freeze it with
 cases/ffi_owned_string added after R6: no rewriter to freeze it with
+cases/ffi_pointer stale since R6: tests/cases/ffi_pointer.ts changed since the rewrite was frozen (1193b1ec0373ec6c -> f84ebbd595f99a70)
 cases/ffi_string_loops added after R6: no rewriter to freeze it with
 cases/ffi_string_param added after R6: no rewriter to freeze it with
 cases/ffi_string_return added after R6: no rewriter to freeze it with
@@ -380,6 +402,13 @@ cases/obj_lit_nullable_field added after R6: no rewriter to freeze it with
 cases/obj_lit_nullable_local added after R6: no rewriter to freeze it with
 cases/obj_lit_nullable_return added after R6: no rewriter to freeze it with
 cases/obj_lit_nullable_ternary added after R6: no rewriter to freeze it with
+cases/obj_spread_class added after R6: no rewriter to freeze it with
+cases/obj_spread_narrowed added after R6: no rewriter to freeze it with
+cases/obj_spread_nested added after R6: no rewriter to freeze it with
+cases/obj_spread_order added after R6: no rewriter to freeze it with
+cases/obj_spread_override_type added after R6: no rewriter to freeze it with
+cases/obj_spread_twin added after R6: no rewriter to freeze it with
+cases/obj_spread_twin_written added after R6: no rewriter to freeze it with
 cases/optional_chain_bounds added after R6: no rewriter to freeze it with
 cases/optional_chain_field added after R6: no rewriter to freeze it with
 cases/optional_chain_generic added after R6: no rewriter to freeze it with
@@ -482,12 +511,22 @@ cases/port_utf8_offset_helper_return added after R6: no rewriter to freeze it wi
 cases/port_utf8_offset_index added after R6: no rewriter to freeze it with
 cases/port_utf8_offset_loop_bound added after R6: no rewriter to freeze it with
 cases/region_cache added after R6: no rewriter to freeze it with
+cases/region_child_builder_list added after R6: no rewriter to freeze it with
+cases/region_child_chain added after R6: no rewriter to freeze it with
+cases/region_child_fresh_list added after R6: no rewriter to freeze it with
+cases/region_child_keep added after R6: no rewriter to freeze it with
+cases/region_child_local_map added after R6: no rewriter to freeze it with
+cases/region_child_map added after R6: no rewriter to freeze it with
+cases/region_child_plain added after R6: no rewriter to freeze it with
 cases/region_copied_churn added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
 cases/reserved_label_names added after R6: no rewriter to freeze it with
 cases/reserved_label_names_dbg added after R6: no rewriter to freeze it with
+cases/result_loop_outer_let added after R6: no rewriter to freeze it with
+cases/result_loop_payloads added after R6: no rewriter to freeze it with
+cases/result_loop_return_alloc added after R6: no rewriter to freeze it with
 cases/rng_bitwise added after R6: no rewriter to freeze it with
 cases/rng_entries added after R6: no rewriter to freeze it with
 cases/rng_entry_bitwise_panic added after R6: no rewriter to freeze it with
@@ -531,6 +570,9 @@ cases/simd_values added after R6: no rewriter to freeze it with
 cases/simd_zero_fill added after R6: no rewriter to freeze it with
 cases/storage_attributes added after R6: no rewriter to freeze it with
 cases/storage_lend added after R6: no rewriter to freeze it with
+cases/storage_lend_bytes added after R6: no rewriter to freeze it with
+cases/storage_lend_methods_after added after R6: no rewriter to freeze it with
+cases/storage_lend_methods_before added after R6: no rewriter to freeze it with
 cases/storage_module added after R6: no rewriter to freeze it with
 cases/str_from_bytes added after R6: no rewriter to freeze it with
 cases/str_from_bytes_arrow added after R6: no rewriter to freeze it with
@@ -568,6 +610,7 @@ cases/union_types added after R6: no rewriter to freeze it with
 cases/unsafe_get_set added after R6: no rewriter to freeze it with
 cases/unsafe_wrapping added after R6: no rewriter to freeze it with
 cases/wall_clock added after R6: no rewriter to freeze it with
+cases/wasm_math_std added after R6: no rewriter to freeze it with
 cases/wipe_bytes added after R6: no rewriter to freeze it with
 corpus/bit_fnv1a stale since R6: its flags moved: the store holds `--wrapping` and `corpus/bit_fnv1a.args` now says `(none)`
 corpus/bit_i64 stale since R6: tests/differential/corpus/bit_i64.ts changed since the rewrite was frozen (37bc5d4b4613df3f -> f7c5558235ba86d2)

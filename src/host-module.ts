@@ -86,18 +86,45 @@ import {
   TOK_USHR_ASSIGN,
 } from "./tokens"
 
-/** What `hostModuleText` read: the blanked text, or an NL3049 message and its span. */
+/**
+ * One exported host function the build cannot import, and why: reported only
+ * when a Nish module imports `name`, since a page's file may export what the
+ * page alone calls.
+ */
+export class HostRefusal {
+  name: string
+  message: string
+  start: i32
+  end: i32
+  /** Set once an import has reported it, so a second import does not. */
+  reported: boolean
+
+  constructor(name: string, message: string, start: i32, end: i32) {
+    this.name = name
+    this.message = message
+    this.start = start
+    this.end = end
+    this.reported = false
+  }
+}
+
+/**
+ * What `hostModuleText` read: the blanked text, or an NL3049 message and its
+ * span; and the functions it blanked for a signature no import can hold.
+ */
 export class HostText {
   text: string
   problem: string
   start: i32
   end: i32
+  refusals: HostRefusal[]
 
   constructor(text: string, problem: string, start: i32, end: i32) {
     this.text = text
     this.problem = problem
     this.start = start
     this.end = end
+    this.refusals = []
   }
 }
 
@@ -277,16 +304,12 @@ const closing = (tokens: Tokens, i: i32): i32 => {
 class Kept {
   firsts: i32[]
   lasts: i32[]
-  problem: string
-  start: i32
-  end: i32
+  refusals: HostRefusal[]
 
   constructor() {
     this.firsts = []
     this.lasts = []
-    this.problem = ""
-    this.start = 0
-    this.end = 0
+    this.refusals = []
   }
 
   keep(first: i32, last: i32): void {
@@ -302,11 +325,13 @@ const isWord = (tokens: Tokens, i: i32, word: string): boolean =>
  * An `export [async] function` at token `i`: keep its signature and the
  * braces of its body, and answer the token after the body. An overload, a
  * signature ended by `;`, is left blank. A `{` written where a type goes is an
- * object type, which no host function's signature can hold.
+ * object type, which no host function's signature can hold: the function is
+ * left blank too, and its first one recorded as its refusal.
  */
 const keepFunction = (tokens: Tokens, i: i32, kept: Kept): i32 => {
   let depth = 0
   let params = false
+  let refused = false
   let k = i
   while (k < tokens.kinds.length) {
     const kind = tokens.kinds[k]
@@ -318,15 +343,22 @@ const keepFunction = (tokens: Tokens, i: i32, kept: Kept): i32 => {
     }
     if (kind === TOK_LBRACE) {
       if (depth > 0 || typePosition(tokens.kinds[k - 1])) {
-        const name = isWord(tokens, i + 1, "async") ? tokens.values[i + 3] : tokens.values[i + 2]
-        kept.problem = hostTypeProblem(depth > 0 ? "A parameter" : "The result", name, "an object type")
-        kept.start = tokens.starts[k]
-        kept.end = tokens.ends[closing(tokens, k)]
-        return tokens.kinds.length
+        const last = closing(tokens, k)
+        if (!refused) {
+          const name = isWord(tokens, i + 1, "async") ? tokens.values[i + 3] : tokens.values[i + 2]
+          const where = depth > 0 ? "A parameter" : "The result"
+          const message = hostTypeProblem(where, name, "an object type")
+          kept.refusals.push(new HostRefusal(name, message, tokens.starts[k], tokens.ends[last]))
+          refused = true
+        }
+        k = last + 1
+        continue
       }
       const body = closing(tokens, k)
-      kept.keep(i, k)
-      kept.keep(body, body)
+      if (!refused) {
+        kept.keep(i, k)
+        kept.keep(body, body)
+      }
       return body + 1
     }
     if (kind === TOK_SEMICOLON && depth === 0) {
@@ -359,9 +391,6 @@ const keepExports = (text: string, tokens: Tokens): HostText => {
       const after = isWord(tokens, i + 1, "async") ? i + 2 : i + 1
       if (after < n && tokens.kinds[after] === TOK_FUNCTION) {
         i = keepFunction(tokens, i, kept)
-        if (kept.problem.length > 0) {
-          return new HostText(text, kept.problem, kept.start, kept.end)
-        }
         continue
       }
       const enumAt = i + 1 < n && tokens.kinds[i + 1] === TOK_CONST ? i + 2 : i + 1
@@ -419,7 +448,9 @@ const keepExports = (text: string, tokens: Tokens): HostText => {
     k = k + 1
   }
   out.add(blank(text, at, text.length))
-  return new HostText(out.toText(), "", 0, 0)
+  const read = new HostText(out.toText(), "", 0, 0)
+  read.refusals = kept.refusals
+  return read
 }
 
 /** `text[from, to)` as spaces, each line break kept, so every offset after it is unchanged. */
@@ -476,6 +507,28 @@ export const markHostFunctions = (file: Node): void => {
   }
 }
 
+/**
+ * `file` without the exported functions `refusals` names, so the checker binds
+ * only what the build can import, and an import of a refused one is answered
+ * with its refusal rather than as a missing export.
+ */
+export const dropRefused = (file: Node, refusals: HostRefusal[]): void => {
+  if (refusals.length === 0) {
+    return
+  }
+  const names = new StringSet()
+  for (const refusal of refusals) {
+    names.add(refusal.name)
+  }
+  const kept: Node[] = []
+  for (const stmt of file.children) {
+    if (stmt.kind !== N_FUNCTION || !names.has(stmt.children[0].text)) {
+      kept.push(stmt)
+    }
+  }
+  file.children = kept
+}
+
 /** NL2661: a position holding what no host function's signature can hold. */
 export const hostTypeProblem = (where: string, name: string, spelled: string): string =>
   `${where} of host function \`${name}\` is ${spelled}, and only a scalar, an enum or a \`HostHandle\` crosses between the page and wasm: write it into module storage and pass its index`
@@ -524,31 +577,26 @@ const SCALAR_NAMES = (): StringSet => {
   return names
 }
 
-/** One refusal the sweep found: its message and the node it points at. */
-export class HostProblem {
-  message: string
-  node: Node
-
-  constructor(message: string, node: Node) {
-    this.message = message
-    this.node = node
-  }
-}
+/** The refusal of host function `name`, pointing at `node`. */
+const refusalAt = (name: string, message: string, node: Node): HostRefusal =>
+  new HostRefusal(name, message, node.start, node.end)
 
 /**
  * The refusals a host module's exported signatures earn before any type is
  * resolved (WP50 §12): what the checker would otherwise refuse in words about
  * Nish code the page never wrote as Nish. A generic function is not one
  * import (NL2662), a `Promise` cannot be waited for (NL2663) and a `string`
- * parameter is stage 4's (NL2665); every other non-scalar is NL2661. A buffer
+ * result cannot be received (NL2667); every other non-scalar is NL2661. A
+ * `string` parameter crosses from stage 4 as its bytes' address and count,
+ * which the loader decodes; NL2665, which refused it until then, is retired. A buffer
  * is a window (§5.3, stage 3): one of six elements (NL2681), followed by
  * `at: u32, n: u32` (NL2682), never a wider index (NL2683); a typed array is
  * rewritten here as the array the checker resolves. NL2664, which refused
  * every buffer until stage 3, is retired. A name the module declares — an enum or a
  * `HostHandle` alias — is left for the checker.
  */
-export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[] => {
-  const problems: HostProblem[] = []
+export const hostSignatureProblems = (file: Node, parser: Parser): HostRefusal[] => {
+  const problems: HostRefusal[] = []
   const local = new StringSet()
   for (const stmt of file.children) {
     if (stmt.kind === N_ENUM || stmt.kind === N_TYPE_ALIAS) {
@@ -564,7 +612,8 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[]
     const name = stmt.children[0].text
     if (stmt.children.length > 4 && stmt.children[4].children.length > 0) {
       problems.push(
-        new HostProblem(
+        refusalAt(
+          name,
           `Host function \`${name}\` is generic, and a wasm import is one function with one signature: write it once per type it takes`,
           stmt.children[4]
         )
@@ -574,7 +623,8 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[]
     const result = stmt.children[2]
     if ((stmt.flags & FLAG_ASYNC) !== 0 || isTypeNamed(result, "Promise")) {
       problems.push(
-        new HostProblem(
+        refusalAt(
+          name,
           `Host function \`${name}\` returns a \`Promise\`, which wasm cannot wait for: await it in the page and call an export with the result`,
           result.kind === N_EMPTY ? stmt.children[0] : result
         )
@@ -592,13 +642,9 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[]
         continue // the checker's own refusal: a parameter needs a type
       }
       if (isTypeNamed(type, "string")) {
-        problems.push(
-          new HostProblem(
-            `Parameter \`${p}\` of host function \`${name}\` is a \`string\`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length`,
-            type
-          )
-        )
-      } else if (isBuffer(type, typed, scalars)) {
+        continue // WP50 S4: the bytes' address and count, decoded by the loader
+      }
+      if (isBuffer(type, typed, scalars)) {
         if (windowElement(type) === "") {
           problems.push(windowElementProblem(p, name, type))
           continue
@@ -620,7 +666,8 @@ export const hostSignatureProblems = (file: Node, parser: Parser): HostProblem[]
     }
     if (isTypeNamed(answer, "string")) {
       problems.push(
-        new HostProblem(
+        refusalAt(
+          name,
           `Host function \`${name}\` returns a \`string\`, which wasm cannot receive: return the text by writing it into a module-storage u8[] the module names, and return its length`,
           answer
         )
@@ -680,7 +727,7 @@ const typedElement = (name: string): string => {
  * its own words: the page's index is a wasm32 address's width, and a wider one
  * would be one more conversion that can lose bits on every call.
  */
-const windowPairProblem = (params: Node[], next: i32, p: string, name: string): HostProblem | null => {
+const windowPairProblem = (params: Node[], next: i32, p: string, name: string): HostRefusal | null => {
   let i = next
   while (i < next + 2) {
     if (i >= params.length) {
@@ -689,7 +736,8 @@ const windowPairProblem = (params: Node[], next: i32, p: string, name: string): 
     const type = unparen(params[i].children[1])
     if (isTypeNamed(type, "u64") || isTypeNamed(type, "i64")) {
       const role = i === next ? "first element" : "element count"
-      return new HostProblem(
+      return refusalAt(
+        name,
         `Parameter \`${params[i].children[0].text}\` of host function \`${name}\` is \`${type.text}\`, the ${role} of the window \`${p}\`: a window's index and count are \`u32\`, the width of a wasm32 address`,
         type
       )
@@ -702,8 +750,9 @@ const windowPairProblem = (params: Node[], next: i32, p: string, name: string): 
   return null
 }
 
-const windowMissing = (p: string, name: string, param: Node): HostProblem =>
-  new HostProblem(
+const windowMissing = (p: string, name: string, param: Node): HostRefusal =>
+  refusalAt(
+    name,
     `Parameter \`${p}\` of host function \`${name}\` is a buffer window with no \`at: u32, n: u32\` after it: a window is the buffer followed by the first element the page may touch and how many`,
     param
   )
@@ -728,15 +777,16 @@ const asWindow = (type: Node, parser: Parser): void => {
 }
 
 /** A buffer parameter whose element no window lends. */
-const windowElementProblem = (p: string, name: string, type: Node): HostProblem =>
-  new HostProblem(
+const windowElementProblem = (p: string, name: string, type: Node): HostRefusal =>
+  refusalAt(
+    name,
     `Parameter \`${p}\` of host function \`${name}\` is ${spell(type)}, and a buffer window lends only \`u8[]\`, \`u16[]\`, \`u32[]\`, \`i32[]\`, \`f32[]\` or \`f64[]\` (or the typed array of each): copy the values into one of those`,
     type
   )
 
 /** A parameter or result whose type is none a wasm import carries. */
-const typeProblem = (where: string, name: string, type: Node): HostProblem =>
-  new HostProblem(hostTypeProblem(where, name, spell(type)), type)
+const typeProblem = (where: string, name: string, type: Node): HostRefusal =>
+  refusalAt(name, hostTypeProblem(where, name, spell(type)), type)
 
 const unparen = (type: Node): Node => (type.kind === N_TYPE_PAREN ? unparen(type.children[0]) : type)
 

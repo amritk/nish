@@ -13,6 +13,7 @@
 # listed one that agrees, on one whose row has moved, and on a listed name
 # the corpus no longer has. A build, emit or timeout failure is never listed.
 
+cases/async_cancel refused  # refused: NL4011 under --emit-ts
 cases/async_spawn order  # differ: stdout line 1 differs
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
 cases/caps_ffi_handle ffi  # refused: NL4010 under --emit-ts
@@ -70,6 +71,13 @@ cases/os_spawn host  # differ: exit 0 vs 1: throw new Error( [spawn]
 cases/os_wait host  # differ: exit 0 vs 1: throw new Error( [spawn]
 cases/perf_rng_counter range  # differ: exit 1 vs 0
 cases/region_cache refused  # refused: NL4015 under --emit-ts
+cases/region_child_builder_list refused  # refused: NL4015 under --emit-ts
+cases/region_child_chain refused  # refused: NL4015 under --emit-ts
+cases/region_child_fresh_list refused  # refused: NL4015 under --emit-ts
+cases/region_child_keep refused  # refused: NL4015 under --emit-ts
+cases/region_child_local_map refused  # refused: NL4015 under --emit-ts
+cases/region_child_map refused  # refused: NL4015 under --emit-ts
+cases/region_child_plain refused  # refused: NL4015 under --emit-ts
 cases/region_copied_churn refused  # refused: NL4015 under --emit-ts
 cases/rng_entry_bitwise_panic range  # differ: exit 1 vs 0
 cases/rng_entry_panic range  # differ: exit 1 vs 0

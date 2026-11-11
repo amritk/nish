@@ -4,7 +4,8 @@
  * runtime next to compiled Nish modules. Everything here is a contract shared
  * with `src/runtime.ts` (the IR side) and the implementation, which is
  * several translation units: `runtime/runtime.c` holds the core every program
- * touches — the arena, strings, arrays, number formatting, the panics —
+ * touches — the arena, arrays, the panics — `runtime/runtime-text.c` holds
+ * strings and number formatting (freestanding, so a wasm module links it too),
  * `runtime/runtime-os.c` holds everything that wraps a system call: the file
  * functions, the directory and subprocess calls, `nish_getenv`, the monotonic
  * clock, `nish_platform` / `nish_arch` — and runtime-parallel.c, runtime-host.c,
@@ -51,7 +52,8 @@ extern "C" {
  * ELF refuses to link that against a non-TLS definition. `scripts/build.sh
  * --threads` passes the macro to every input, which is how `nish --threads
  * --link` keeps the two halves in step. The same definition is in
- * runtime/runtime.c and runtime/runtime-wasm.c. */
+ * runtime/runtime.c and runtime/runtime-wasm.c, and runtime/runtime-text.c
+ * repeats it for its inlined allocation fast path. */
 #ifdef NISH_THREADS
 #define NISH_TLS _Thread_local
 #else
@@ -94,7 +96,8 @@ static inline __attribute__((unused)) const char *nish_cpath(const nish_str *s) 
  * `off` and `cap` are `uint64_t` and not `size_t` because that `i64` is what
  * the inlined fast path bumps and compares on every target: under wasm32 a
  * `size_t` pair would put them at bytes 4 and 8 while compiled code reads 8
- * and 16. runtime.c and runtime-wasm.c static-assert these offsets. */
+ * and 16. runtime.c and runtime-wasm.c static-assert these offsets, and
+ * runtime-text.c, which keeps its own copy of the struct, asserts all four. */
 struct nish_arena {
   char *buf;
   uint64_t off;
@@ -146,12 +149,22 @@ uint64_t nish_arena_used(void);
  * already entered panics. `nish_region_leave` must name the region entered
  * last on this thread, puts back the arena its enter displaced and records
  * `root`. `nish_region_free` frees every chunk of a region that is not
- * entered and makes its handle stale. The wasm profile has none of these
- * (scripts/build.sh refuses IR that names them); wasi has. */
+ * entered and makes its handle stale. `nish_region_adopt` instead moves the
+ * chunks of a region that is not entered onto the thread's current arena, so
+ * they live on until that arena releases below them, and makes its handle
+ * stale: an `awaitAll` lane's region, once the lane has answered; it panics
+ * on a child region or a region with children. `nish_region_child_new` makes
+ * a region whose parent is the one entered last on this thread, and panics
+ * when none is; freeing a region frees its children, deepest first, and
+ * panics before freeing anything when any of them is entered. The wasm
+ * profile has none of these (scripts/build.sh refuses IR that names them);
+ * wasi has. */
 uint64_t nish_region_new(void);
+uint64_t nish_region_child_new(void);
 void *nish_region_enter(uint64_t r);
 void nish_region_leave(uint64_t r, void *root);
 void nish_region_free(uint64_t r);
+void nish_region_adopt(uint64_t r);
 
 /* ---- The async executor (runtime-async.c) --------------------------------
  * Linked only into a program whose IR names `@nish_async_`
@@ -166,7 +179,16 @@ void nish_region_free(uint64_t r);
  * resume, blocking in the kernel until one is ready, or null when nothing is
  * ready and nothing waits. `nish_async_stat` answers 0: nodes allocated, 1:
  * completions dropped because their task had finished, 2: spawned tasks not yet
- * finished. */
+ * finished.
+ *
+ * Cancellation is cooperative. A task's handle (`nish_async_task_id`) is its
+ * slot and generation, and `main`'s is 0. `nish_async_cancel` flags a task and
+ * fires the waits it is parked on, which then read 0, as does every later wait
+ * it makes; it answers 1 when it flagged a live task other than `main`.
+ * `nish_async_cancelled` answers 1 inside a flagged task, and
+ * `nish_async_cancel_after` arms a timer that cancels the task in `ms`.
+ * `nish_async_wait_fd_within` is `nish_async_wait_fd` that reads 0 when `ms`
+ * pass first. */
 void *nish_async_spawn(int32_t kind, uint64_t bytes);
 void *nish_async_enter(void *node);
 void nish_async_leave(void *node, void *prev);
@@ -177,6 +199,11 @@ int32_t nish_async_poll(uint64_t token);
 void *nish_async_next(void);
 void *nish_async_copy_str(const void *s);
 int32_t nish_async_stat(int32_t which);
+uint64_t nish_async_wait_fd_within(int32_t fd, int32_t dir, int32_t ms);
+int64_t nish_async_task_id(void);
+int32_t nish_async_cancel(int64_t handle);
+int32_t nish_async_cancelled(void);
+int32_t nish_async_cancel_after(int64_t handle, int32_t ms);
 
 /* ---- String operations ------------------------------------------------- */
 /* Copy `len` bytes into a new arena string (`bytes` need not be terminated). */
@@ -248,7 +275,7 @@ nish_str *nish_str_from_i32(int32_t v);
 nish_str *nish_str_from_f64(double v);
 /* The bytes `nish_str_from_f64` would hold, written into `out` with no NUL;
    returns the length. 32 bytes is room to spare: the longest spelling,
-   -0.0000012345678901234567, is 25 (runtime.c says why, and runtime-test.c
+   -0.0000012345678901234567, is 25 (runtime-text.c says why, and runtime-test.c
    pins it). For a caller that writes numbers into its own buffer. */
 #define NISH_F64_MAX 32
 int nish_f64_format(double v, char out[NISH_F64_MAX]);

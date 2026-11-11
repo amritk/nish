@@ -37,7 +37,7 @@ server's `close_notify` or its framing says so. Revocation is not checked
 
 | File | Functions |
 | --- | --- |
-| `std/net/fetch.ts` | `fetchSync`, `httpErrorName`, `httpChooseProxy`, `httpProxyFor`, `httpNoProxyMatch`; `HttpRequest` (`header`), `HttpOptions`, `HttpResponse` (`header`), `HttpBodyReader` (`read`, `readAll`); `FetchSyncClient` (`setProxies`, `fetch`, `close`, `exchange`, `open`, `tunnel`, `send`, `head`, `pump`, `fill`, `writeAll`, `dial`, `wait`, `watch`, `unwatch`, `quiet`, `leftover`, `overdue`, `readDeadline`, `hostRefusal`, `drop`, `drain`, `readBody`, `refuseBody`, `failWait`, `refuse`, `fail`, `loadTrust`, `secure`, `receiveTls`, `flushTls`, `failTls`, `readRaw`, `writeRaw`); and the helpers (`httpClientParser`, `httpClientIsRedirect`, `httpClientIdempotent`, `httpClientDropField`, `httpClientLower`, `httpClientTrim`, `httpClientTrimDots`, `httpClientPort`, `httpClientHostText`, `httpClientUrlText`, `httpClientRedact`, `httpClientProxyUrl`, `httpClientProxyAuth`, `httpClientBodyCap`, `httpClientTotalMs`, `httpClientMaxRedirects`); `hostRefusal` and the policy branches of `open`, `dial` and `fetch` are [`outbound.md`](outbound.md)'s; the async client: `fetch`, `FetchError`, `FetchResponse` (`header`, `text`, `bytes`), `FetchPool` (`idle`, `close`, `take`, `put`, `drop`), `RequestInit` (`header`), `HttpClientConn` (`overdue`, `close`, `release`), `httpClientFillAsync`, `httpClientPumpAsync`, `httpClientWriteAsync`, `httpClientDialAsync`, `httpClientOpenAsync`, `httpClientSendAsync`, `httpClientBodyAsync`, `httpClientExchangeAsync`, `httpClientFetchAsync`, and the helpers both clients share (`httpClientTarget`, `httpClientRoute`, `httpClientRequestHead`, `httpClientRedirect`, `httpClientResolve`, `httpClientEnvProxies`, `httpClientParserFault`, `httpClientField`, `httpClientHostRefusal`, `httpClientWaitText`, `httpClientDeadline`, `HttpClientFault`, `HttpClientHop`, `HttpClientRoute`) |
+| `std/net/fetch.ts` | `fetchSync`, `httpErrorName`, `httpChooseProxy`, `httpProxyFor`, `httpNoProxyMatch`; `HttpRequest` (`header`), `HttpOptions`, `HttpResponse` (`header`), `HttpBodyReader` (`read`, `readAll`); `FetchSyncClient` (`setProxies`, `fetch`, `close`, `exchange`, `open`, `tunnel`, `send`, `head`, `pump`, `fill`, `writeAll`, `dial`, `wait`, `watch`, `unwatch`, `quiet`, `leftover`, `overdue`, `readDeadline`, `hostRefusal`, `drop`, `drain`, `readBody`, `refuseBody`, `failWait`, `refuse`, `fail`, `loadTrust`, `secure`, `receiveTls`, `flushTls`, `failTls`, `readRaw`, `writeRaw`); and the helpers (`httpClientParser`, `httpClientIsRedirect`, `httpClientIdempotent`, `httpClientDropField`, `httpClientLower`, `httpClientTrim`, `httpClientTrimDots`, `httpClientPort`, `httpClientHostText`, `httpClientUrlText`, `httpClientRedact`, `httpClientProxyUrl`, `httpClientProxyAuth`, `httpClientBodyCap`, `httpClientTotalMs`, `httpClientMaxRedirects`); `hostRefusal` and the policy branches of `open`, `dial` and `fetch` are [`outbound.md`](outbound.md)'s; the async client: `fetch`, `FetchError`, `FetchResponse` (`header`, `text`, `bytes`), `FetchPool` (`idle`, `close`, `take`, `put`, `drop`), `RequestInit` (`header`), `HttpClientConn` (`overdue`, `close`, `release`), `httpClientFillAsync`, `httpClientPumpAsync`, `httpClientWriteAsync`, `httpClientReadRawAsync`, `httpClientWriteRawAsync`, `httpClientReceiveTlsAsync`, `httpClientFlushTlsAsync`, `httpClientSecureAsync`, `httpClientTunnelAsync`, `httpClientLookupAsync`, `httpClientDialAsync`, `httpClientOpenAsync`, `httpClientSendAsync`, `httpClientBodyAsync`, `httpClientExchangeAsync`, `httpClientFetchAsync`, and the helpers both clients share (`httpClientTarget`, `httpClientRoute`, `httpClientRequestHead`, `httpClientRedirect`, `httpClientResolve`, `httpClientEnvProxies`, `httpClientParserFault`, `httpClientField`, `httpClientHostRefusal`, `httpClientWaitText`, `httpClientDeadline`, `httpClientLoadTrust`, `httpClientTlsStart`, `httpClientTlsOpening`, `httpClientTlsFault`, `httpClientTlsVerify`, `httpClientTlsClose`, `httpClientConnectHead`, `httpClientAnswers`, `HttpClientFault`, `HttpClientHop`, `HttpClientRoute`) |
 
 Out of scope: the request writer and response parser of
 `std/net/http1-client-codec.ts` ([`http1-client-codec.md`](http1-client-codec.md)), the URL
@@ -86,8 +86,10 @@ taken for the end of a body.
 | HF-8 | Low | `std/net/fetch.ts` (`FetchSyncClient.fetch`, `open`) | `errorText` named a request URL, a redirect's `Location` and a proxy setting whole, so a password in the userinfo or a token in the query went wherever a program reports its errors, a log or a CI transcript. | **Fixed** before the module shipped: every URL an error names, the target of a request refused before it is sent included, goes through `httpClientRedact`, which builds it from the parsed URL's scheme, host, port and path alone and marks a query or fragment left out with `?...`; a text that does not parse, or has no host, is not echoed at all. Two scans of the raw text came first and each leaked: cutting at `?` before stripping the userinfo left a password holding a `?` or `#`, and stripping to the last `@` first deleted a query's `?` along with everything before an `@` in it, leaving its token (`http://h/p?email=a@b.com&token=T`). Only the parser tells a password's `@`, `?` or `/` from a query's. The redaction is of the URL the parser sees: a text that parses differently from what its writer meant is named as parsed, so in `http://admin:8080/s3cret@example.com/` the `8080` is a port and `/s3cret@example.com/` a path, which is echoed (`but a password that reads as a port leaves a valid URL, and its path is echoed as a path`). Before, `and the error names it without its password or query` (for a request URL and for a proxy setting) and `a refused Location is named without its password or query` failed; after, they pass, as do the checks for an `@` in a query, fragment or path, URLs whose password holds `://`, `/`, `?`, `#` or `@` after a non-numeric start, which do not parse, a redirect whose query holds an `@`, and a scheme-less or unparseable proxy setting. |
 | HF-9 | Low | `std/net/fetch.ts` (`FetchSyncClient.fill`, `writeRaw`) | `totalTimeoutMs` was checked only by a wait. A body whose next bytes were always on the socket before the client asked for them never waited, so a fetch read on past its deadline. | **Fixed** before the module shipped: `overdue` fails the fetch with `HTTP_E_TOTAL_TIMEOUT` before every read and every write once the deadline has passed. Before, `a body whose rest is already waiting is still cut off once totalTimeoutMs has passed` failed; after, it passes. |
 | HF-3 | Low | `std/net/fetch.ts` (`FetchSyncClient.fetch`, `send`, `dial`) | Each fetch makes its field arrays, its response, the response's copies of the parser's fields, the lookup's address arrays and its error text afresh, so they stay in the arena until the program resets it, as HC-1 records for the parser beneath. Bounded for each fetch by `maxRedirects + 1` heads of `HTTP_CLIENT_MAX_HEADERS` fields within the parser's caps. | **Open, accepted for now.** A long-running program fetches inside an arena it resets; a per-connection arena closes it with HC-1. |
-| HF-10 | Low | `std/net/fetch.ts` (`httpClientFillAsync`, `httpClientWriteAsync`, `httpClientDialAsync`) | The async `fetch` has no deadline on a single wait: `readable` and `writable` take none, so `readTimeoutMs` bounds nothing and `totalTimeoutMs` is checked only when a wait ends. A server that accepts and then never sends a byte holds the task, and its socket, until the connection drops. Other tasks keep running. | **Open, accepted for now.** It needs a wait with a deadline in `nish:async` (a compiler change, out of this stage). The guide and the doc comment of `RequestInit` say so; `fetchSync` keeps every deadline. |
-| HF-11 | Low | `std/net/fetch.ts` (`httpClientDialAsync`, through `httpClientResolve`) | The async `fetch` looks a name up with the blocking resolver, so a slow nameserver stalls every task in the process for up to `connectTimeoutMs`. | **Open, accepted for now.** Bounded by `connectTimeoutMs`; an IP literal does no lookup. The guide and `fetch`'s doc comment say the lookup blocks. |
+| HF-10 | Low | `std/net/fetch.ts` (`httpClientFillAsync`, `httpClientWriteAsync`, `httpClientDialAsync`, `httpClientReadRawAsync`) | The async `fetch` has no deadline on a single wait: `readable` and `writable` take none, so `readTimeoutMs` bounds nothing and `totalTimeoutMs` is checked only when a wait ends. A server that accepts and then never sends a byte, or never sends its ServerHello in the TLS handshake, holds the task, and its socket, until the connection drops. Other tasks keep running. | **Fixed** by the cancellation stage of WP49. Every wait of the async `fetch` goes through `httpClientWaitAsync`, which awaits `readableWithin` or `writableWithin` from `nish:async` for the time left: `readTimeoutMs` for a read (or `connectTimeoutMs` for the connect), and never past what is left of `totalTimeoutMs`. A wait that times out answers `HTTP_E_READ_TIMEOUT`, `HTTP_E_CONNECT_TIMEOUT` or `HTTP_E_TOTAL_TIMEOUT` as `fetchSync`'s would, and its socket is closed. A fetch whose task is cancelled (`cancel`, or a deadline set with `cancelAfter`) answers the new `HTTP_E_CANCELLED` at its next wait, the name lookup's sleeps included. A bounded wait that answers `false` before its time is up is one the poller refused (the process at its descriptor limit, ASYNC-4 in `async.md`), not a timeout: it answers `HTTP_E_IO` rather than wait again, as waiting again would fail at once and spin until the deadline; no test reaches the descriptor limit, so this branch is pinned by review only. Before: `link/net_fetch_async_deadline`'s first fetch, against a listener never accepted from, parked its task until the test's timeout killed it; after: "read: read timeout, within 2 s: true", "total: total timeout, within 2 s: true" and "cancelled: cancelled, within 2 s: true", with "main: still running, true". |
+| HF-11 | Low | `std/net/fetch.ts` (`httpClientDialAsync`, through `httpClientResolve`) | The async `fetch` looked a name up with the blocking resolver, so a slow nameserver stalled every task in the process for up to `connectTimeoutMs`. | **Fixed.** `httpClientLookupAsync` drives a `DnsResolver` through a `DnsClient` on a poll loop of its own, sleeping on the executor between non-blocking polls, so a slow nameserver parks only the fetching task. It reads the same `/etc/resolv.conf` and `/etc/hosts` as `resolveHost` (`dnsLoadSystem`), or `HttpOptions.dns`, so its servers, tries and timeouts are the blocking path's; its answers go through the same outbound filter, and `connectTimeoutMs` bounds it. Before: the blocking lookup held the only thread, so a DNS server that is a task of the same program could never answer; after: `link/net_fetch_async_dns_slow` holds the answer until another task has fetched, and `literal` prints before `named`. |
+| HF-12 | Low | `std/net/fetch.ts` (`httpClientOpenAsync`) | The async `fetch` refused every https URL with `HTTP_E_TLS`, naming `fetchSync`, because the TLS handshake and record layer blocked; a program that needed https and concurrency had neither in one call. | **Fixed.** The handshake and the record layer are driven from the task (`httpClientSecureAsync`, `httpClientReceiveTlsAsync`, `httpClientFlushTlsAsync`), with the roots, the chain, name and validity checks and the error text `fetchSync` uses. Before: `link/net_fetch_async_policy`'s `an https URL is HTTP_E_TLS, naming fetchSync, without a connection`; after: `link/net_fetch_async_https`, whose every refusal is compared with `fetchSync`'s on the same URL. |
+| HF-13 | Medium | the async runtime and `awaitAll` (`runtime/runtime-region.c`, `runtime/runtime-async.c`, `src/emit-async.ts`), reached through `fetch` | Two tasks run by one `awaitAll`, each holding a large allocation (from about 256 KB) across an `await`, corrupt each other's memory: a fetch beside a DNS lookup panicked with `DnsResolver.result: 0 is not a lookup in progress`, and once died with SIGSEGV. The same tasks under `spawn` are sound. | **Fixed outside this module** (the `awaitall-regions` stage of WP49, [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) ASYNC-14). Every `awaitAll` call ran in its caller's arena, so the first call to finish and release handed back memory a sibling still held. Each call that waits now has a region of its own, joined to the caller's memory when it finishes. Before: `tests/link/async_await_all_lanes` and `tests/cases/async_await_all_lanes_large` died with SIGSEGV (exit 139); after: both print their expected output. `link/net_fetch_async_dns_slow` still uses `spawn`, which was always sound. |
 
 ## The async fetch
 
@@ -99,11 +101,33 @@ refused, redacted or followed holds for both by construction. What differs:
 
 - **It waits on the executor.** The connect, each write and each read park
   the task on `writable` or `readable` from `nish:async` rather than blocking
-  in `poll`, so a slow server holds up its own task alone. The name lookup
-  still blocks the process (HF-11), and a wait has no deadline (HF-10).
-- **https is refused, never done in the way.** The TLS handshake and record
-  layer block, so `httpClientOpenAsync` answers `HTTP_E_TLS`, naming
-  `fetchSync`, before a name is looked up or a socket opened.
+  in `poll`, so a slow server holds up its own task alone. Each wait has
+  the deadline `fetchSync`'s `poll` would have (HF-10), and a cancelled
+  task's fetch answers `HTTP_E_CANCELLED`.
+- **The name lookup parks only its task** (HF-11). An address literal is
+  parsed where the lookup starts and needs no resolver; any other name goes
+  to a `DnsResolver` of one lookup, driven by a `DnsClient` on a poll loop of
+  the lookup's own: the task polls that loop without waiting and sleeps on
+  the executor between polls, in slices that grow from 1 ms to 16 ms and never
+  pass the resolver's next retry. `localhost` and a hosts entry answer without
+  a query. The servers, tries and timeouts are the system's
+  (`dnsLoadSystem`, as `resolveHost` reads them) or `HttpOptions.dns`; the
+  answers pass the outbound filter as the blocking path's do; and
+  `connectTimeoutMs` ends the lookup with `HTTP_E_CONNECT_TIMEOUT`.
+  `fetchSync` keeps the blocking `resolveHost`.
+- **https is the same TLS as `fetchSync`'s** (HF-12). The roots are loaded
+  before a name is looked up (so roots that cannot be read are
+  `HTTP_E_CERTIFICATE` without a connection); the handshake runs on the
+  task, each flight flushed with `writable` and each record read with
+  `readable`; the chain, the name and the validity are checked by the same
+  `httpClientTlsVerify` call, so a refusal has `fetchSync`'s code and
+  sentence; a body ends at the server's `close_notify` and one cut off
+  without it is `HTTP_E_TLS`. Through an http proxy it is a CONNECT tunnel
+  first, and bytes after the proxy's `200` belong to TLS.
+- **https is never pooled.** Each https fetch opens its own connection, sends
+  `close_notify` once its body is read and closes it, so no TLS state is
+  kept between fetches or between tasks; `FetchPool` holds plain-http
+  connections only.
 - **The body is read whole before `fetch` answers**, capped by
   `maxBodyBytes` (and by the outbound policy's cap under one), so a body
   without end costs at most that and fails with `HTTP_E_BODY_TOO_LARGE`. The
@@ -140,8 +164,8 @@ sent through `http_proxy` in absolute form with the origin's `Host`; a POST's
 fields and `Content-Length` body; a 404 as an answer; a redirect answered
 unfollowed by default, followed within the origin, `HTTP_E_REDIRECT_REFUSED`
 across origins, and `HTTP_E_TOO_MANY_REDIRECTS` past `maxRedirects`;
-`HTTP_E_BODY_TOO_LARGE` past `maxBodyBytes`; `HTTP_E_URL`; https refused as
-`HTTP_E_TLS` without a connection; `HTTP_E_BLOCKED` under an outbound policy,
+`HTTP_E_BODY_TOO_LARGE` past `maxBodyBytes`; `HTTP_E_URL`; an https URL whose
+roots cannot be read refused as `HTTP_E_CERTIFICATE` without a connection; `HTTP_E_BLOCKED` under an outbound policy,
 with an error text that holds neither the URL's password nor its query (HF-8);
 a redirect followed even when its own body fails to read; a hop to another
 origin under `crossOriginRedirects` that drops `Authorization` and keeps the
@@ -157,6 +181,31 @@ before its answer is the same rule as `fetchSync`'s, pinned there; the async
 side has no check of its own for it yet. `link/net_fetch_async` checks
 that a slow fetch does not hold up a second, and `link/net_fetch_async_overlap`
 that `awaitAll` has two requests at the server at once.
+
+`tests/link/net_fetch_async_https` runs `net_http_fetch_tls`'s loopback TLS
+servers and CONNECT proxy and checks: a trusted server answers, by name and
+by IP literal; a connection ends with a `close_notify` and is not pooled; an
+expired certificate, one for another name, a chain to an untrusted root and
+a good server under other roots are each `HTTP_E_CERTIFICATE` with
+`fetchSync`'s code and sentence; a server that does not speak TLS is
+`HTTP_E_TLS` as from `fetchSync`; a body cut off without a `close_notify` is
+`HTTP_E_TLS`, one with no length ends at it, and an alert is named; a CONNECT
+tunnel through `https_proxy`; and a handshake the server never answers parks
+only its task, shown by order. `tests/link/net_fetch_async_https_flat` checks
+that 200 https fetches past a warm-up leave `Arena.used()` where it was.
+`tests/link/net_fetch_async_dns_slow` checks, by order, that a lookup held by
+its DNS server does not stop another task's fetch; that `HttpOptions.dns`
+names the server; that the answer is `HTTP_E_BLOCKED` under the default
+outbound policy; and that a server that never answers ends the lookup at
+`connectTimeoutMs`.
+`tests/link/net_fetch_async_deadline` checks HF-10: against a listener that
+takes the request and never answers, `readTimeoutMs` ends a fetch, so does
+`totalTimeoutMs` with no read limit, and a fetch whose task is cancelled by
+`cancelAfter` answers `HTTP_E_CANCELLED`, each within 2 s.
+The connect bound (`connectTimeoutMs`, `HTTP_E_CONNECT_TIMEOUT`) is not
+tested: a connect to a loopback listener completes, or is refused, at once, so
+no local peer leaves the connect pending; it goes through the same
+`httpClientWaitAsync` as the read bound, which is.
 
 ## Fuzzing
 
@@ -364,8 +413,9 @@ at once (`an alert the proxy sends in the same segment as its 200 is read by
 TLS, not lost`).
 
 **The async fetch's checks** are `link/net_fetch_async`,
-`link/net_fetch_async_overlap`, `link/net_fetch_async_policy` and
-`link/net_fetch_async_flat`, each `exits with 0 and stdout matches
+`link/net_fetch_async_overlap`, `link/net_fetch_async_policy`,
+`link/net_fetch_async_flat`, `link/net_fetch_async_https`,
+`link/net_fetch_async_https_flat` and `link/net_fetch_async_dns_slow`, each `exits with 0 and stdout matches
 expected.out`, with a line per property in its `expected.out`; what they
 cover, and what is pinned only on the `fetchSync` side, is listed under
 [The async fetch](#the-async-fetch).

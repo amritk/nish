@@ -512,7 +512,7 @@ export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTabl
   return (
     `\`${fn.sourceName}\` reads or moves the arena, and \`${intrinsicName(sig)}\` runs it on several threads that ` +
     "each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, " +
-    "nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`)"
+    "nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`)"
   )
 }
 
@@ -1509,7 +1509,7 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
 }
 
 /** Whether `info` is a class `nish/threads` declares: a scope, a lock, its guard or a channel. */
-const isThreadsLayout = (info: StructInfo): boolean => {
+export const isThreadsLayout = (info: StructInfo): boolean => {
   const instance = info.instance
   if (instance !== null) {
     return isThreadsModule(instance.template.home.program)

@@ -532,6 +532,12 @@ export class IRModule {
    * number's empty text is not filed: `addMetadata("")` scans, as before.
    */
   metadataNumbers: StringMap
+  /**
+   * `!N` for each number in `metadata`, formatted once when the number is
+   * handed out: a node is referenced far more often than it is made, and
+   * `toText` prints the same reference again.
+   */
+  metadataRefs: string[]
   /** Named metadata lines (`!llvm.dbg.cu = !{...}`), printed before the numbered nodes. */
   namedMetadata: string[]
   /** `!N` of each `!llvm.module.flags` entry, printed as that one named line after the others. */
@@ -553,6 +559,7 @@ export class IRModule {
     this.targetHeader = []
     this.metadata = []
     this.metadataNumbers = new StringMap()
+    this.metadataRefs = []
     this.namedMetadata = []
     this.moduleFlags = []
     this.definitionAttrs = ""
@@ -562,11 +569,22 @@ export class IRModule {
   addMetadata(text: string): string {
     let index = text.length === 0 ? this.metadata.indexOf(text) : this.metadataNumbers.get(text, -1)
     if (index < 0) {
-      index = this.metadata.length
-      this.metadata.push(text)
-      this.fileMetadata(text, index)
+      index = this.pushMetadata(text)
+      // The lookup that missed shows no number holds the text, so it is filed
+      // without the second lookup `fileMetadata` would make.
+      if (text.length > 0) {
+        this.metadataNumbers.set(text, index)
+      }
     }
-    return `!${index}`
+    return this.metadataRefs[index]
+  }
+
+  /** Append `text` under the next number, with its `!N`, and answer the number. */
+  pushMetadata(text: string): i32 {
+    const index = this.metadata.length
+    this.metadata.push(text)
+    this.metadataRefs.push(`!${index}`)
+    return index
   }
 
   /** File `text`, now at `index`, in `metadataNumbers` unless a lower number already holds it. */
@@ -586,9 +604,7 @@ export class IRModule {
    * class itself — so its number is handed out before its text exists.
    */
   reserveMetadata(): string {
-    const index = this.metadata.length
-    this.metadata.push("")
-    return `!${index}`
+    return this.metadataRefs[this.pushMetadata("")]
   }
 
   setMetadata(ref: string, text: string): void {
@@ -704,7 +720,7 @@ export class IRModule {
       }
       let m = 0
       while (m < this.metadata.length) {
-        nodes.push(`!${m} = ${this.metadata[m]}`)
+        nodes.push(`${this.metadataRefs[m]} = ${this.metadata[m]}`)
         m = m + 1
       }
       sections.push(nodes.join("\n"))

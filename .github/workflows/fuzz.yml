@@ -1,7 +1,7 @@
 # The weekly fuzzing campaign: every target in tests/fuzz/targets/ fuzzed for
 # half an hour (a dispatch sets the time) under
 # -fsanitize=fuzzer,address,undefined, one runner per target. ci.yml's
-# `fuzz-smoke` job runs the same targets for a minute on every pull request;
+# `fuzz-smoke` job runs the same targets for 30 seconds on every pull request;
 # this is the run long enough to go deep.
 #
 # A crash, a sanitizer report, a timeout (an input over a second) or an

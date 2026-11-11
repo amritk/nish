@@ -1,0 +1,2 @@
+an arrow that reads `step` of type string of the function it is written in
+a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share

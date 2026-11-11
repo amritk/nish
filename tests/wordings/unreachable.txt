@@ -22,6 +22,7 @@ NL2316  retired: the same refusal one level up for a generic class or interface,
 NL2333  retired: `integer<Lo, Hi>` refused as reserved until ranged integers landed (WP31 W1); `integer` is the type now, and a malformed one is NL2378-NL2383
 NL2357  retired: `get` refused as "not supported yet" until its `V | undefined` landed (WP32 S3); each place that refuses a maybe has its own code now, NL2361-NL2369
 NL2294  retired: `a constrained type parameter is not supported yet`, the refusal WP18 G6 replaced; a constraint is accepted now, and what it may name is NL2326/NL2327 (tests/cases/reject_generic_constraint)
+NL1061  retired: `Object spread is forbidden in`, the Phase 0 refusal object spread replaced when it became field copies; each form it still refuses has its own code now, NL2702-NL2710 and NL3055 (tests/cases/reject_object_spread*)
 NL2004  retired: the `implements` field-order rule, reworded since
 NL2017  retired: a field clashing with a method, reworded since
 NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`Result` rule
@@ -61,6 +62,7 @@ NL2287  retired before it ever fired: WP23 reserved the number, and no message i
 NL2288  retired: `Enums cannot be exported`, the refusal WP34 N1 replaced; an exported enum is imported now (tests/link/enum_export_uses), and importing one that is not exported is NL2045 (tests/link/enum_import_not_exported)
 NL2276  retired: `Type aliases cannot be exported`, the refusal WP34 N1 replaced; an exported alias is imported now (tests/link/alias_export_class), and importing one that is not exported is NL2045 (tests/link/alias_import_not_exported)
 NL2664  retired: a typed-array parameter of a host function refused until buffer windows landed (WP50 S3); a window's element is NL2681 now, and its `at: u32, n: u32` pair NL2682/NL2683
+NL2665  retired: a `string` parameter of a host function, refused until strings crossed (WP50 S4); it passes as its UTF-8 bytes' address and count, which the loader decodes
 NL8010  retired: WP33's float Math.min/max/round row; they lower to compare-and-select (llvm.minimum/maximum on wasm) and a copysign now, which answer NaN and -0 as JavaScript does, so no site diverges (tests/cases/port_num_libm pins the quiet)
 NL8011  retired: WP33's printed negative zero; the reference reading's console (runtime/nish.mjs) prints String(x), so -0 prints 0 there as it does natively and no site diverges (tests/cases/port_num_negzero pins the quiet)
 NL2391  retired: `The task given to `spawn` must be a top-level function named at the call, not an arrow`, the refusal WP29's task forms replaced; an arrow task reads its function's `const` locals and is lifted into a function named after that function (tests/link/thread_task_arrow)

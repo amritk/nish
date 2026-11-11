@@ -60,7 +60,7 @@ struct IRFunction (class) size=184 align=8 exported
   method newBlock -> @IRFunction.newBlock
   method placeBlock -> @IRFunction.placeBlock
   method toText -> @IRFunction.toText
-struct IRModule (class) size=104 align=8 exported
+struct IRModule (class) size=112 align=8 exported
   field sourceFileName: string index=0 offset=0
   field typeDecls: string[] index=1 offset=8
   field globals: string[] index=2 offset=16
@@ -71,11 +71,13 @@ struct IRModule (class) size=104 align=8 exported
   field targetHeader: string[] index=7 offset=56
   field metadata: string[] index=8 offset=64
   field metadataNumbers: StringMap index=9 offset=72
-  field namedMetadata: string[] index=10 offset=80
-  field moduleFlags: string[] index=11 offset=88
-  field definitionAttrs: string index=12 offset=96
+  field metadataRefs: string[] index=10 offset=80
+  field namedMetadata: string[] index=11 offset=88
+  field moduleFlags: string[] index=12 offset=96
+  field definitionAttrs: string index=13 offset=104
   constructor -> @IRModule.constructor
   method addMetadata -> @IRModule.addMetadata
+  method pushMetadata -> @IRModule.pushMetadata
   method fileMetadata -> @IRModule.fileMetadata
   method reserveMetadata -> @IRModule.reserveMetadata
   method setMetadata -> @IRModule.setMetadata
@@ -355,42 +357,51 @@ function IRModule.constructor(this: IRModule, sourceFileName: string): void -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: sourceFileName
   calls: StringMap.constructor nish_alloc_struct
-  pointer this: size=104 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:28 new StringMap -> @StringMap.constructor
 function IRModule.addMetadata(this: IRModule, text: string): string -> @IRModule.addMetadata [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: via IRModule.pushMetadata
   escaping: text
-  calls: IRModule.fileMetadata StringMap.get nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
-  pointer this: size=104 writesThrough=false captured=false passedTo=IRModule.fileMetadata#0
+  calls: IRModule.pushMetadata StringMap.get StringMap.set nish_panic_index nish_str_eq
+  pointer this: size=112 writesThrough=false captured=false passedTo=IRModule.pushMetadata#0
   stackSites=0 stackLocals=0
-  local -3:9 index: i32 (let)
-  callee -3:67 StringMap.get -> @StringMap.get
-  callee +1:7 IRModule.fileMetadata -> @IRModule.fileMetadata
+  local +0:9 index: i32 (let)
+  callee +0:67 StringMap.get -> @StringMap.get
+  callee +2:15 IRModule.pushMetadata -> @IRModule.pushMetadata
+  callee +6:9 StringMap.set -> @StringMap.set
+function IRModule.pushMetadata(this: IRModule, text: string): i32 -> @IRModule.pushMetadata [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: text
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  pointer this: size=112 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -1:11 index: i32 (const)
 function IRModule.fileMetadata(this: IRModule, text: string, index: i32): void -> @IRModule.fileMetadata [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringMap.set
   escaping: index text
   calls: StringMap.get StringMap.set
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 known: i32 (const)
   callee +0:19 StringMap.get -> @StringMap.get
   callee +2:7 StringMap.set -> @StringMap.set
 function IRModule.reserveMetadata(this: IRModule): string -> @IRModule.reserveMetadata [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish_array_grow nish_str_concat nish_str_from_i32
-  pointer this: size=104 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRModule.pushMetadata
+  calls: IRModule.pushMetadata nish_panic_index
+  pointer this: size=112 writesThrough=false captured=false passedTo=IRModule.pushMetadata#0
   stackSites=0 stackLocals=0
-  local -1:11 index: i32 (const)
+  callee +0:30 IRModule.pushMetadata -> @IRModule.pushMetadata
 function IRModule.setMetadata(this: IRModule, ref: string, text: string): void -> @IRModule.setMetadata [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: ref text
   calls: IRModule.fileMetadata StringMap.get StringMap.set metadataIndex nish_panic_index nish_str_eq
-  pointer this: size=104 writesThrough=false captured=false passedTo=IRModule.fileMetadata#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=IRModule.fileMetadata#0
   stackSites=0 stackLocals=0
   local -2:11 index: i32 (const)
   callee -2:19 metadataIndex -> @metadataIndex
@@ -404,7 +415,7 @@ function IRModule.addModuleFlag(this: IRModule, text: string): void -> @IRModule
   sharedWrite: +0:5
   escaping: text
   calls: IRModule.addMetadata nish_array_grow
-  pointer this: size=104 writesThrough=false captured=false passedTo=IRModule.addMetadata#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=IRModule.addMetadata#0
   stackSites=0 stackLocals=0
   callee +0:27 IRModule.addMetadata -> @IRModule.addMetadata
 function IRModule.addNamedMetadata(this: IRModule, line: string): void -> @IRModule.addNamedMetadata [exported method]
@@ -412,49 +423,49 @@ function IRModule.addNamedMetadata(this: IRModule, line: string): void -> @IRMod
   sharedWrite: +0:7
   escaping: line
   calls: nish_array_grow nish_str_eq
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addTypeDecl(this: IRModule, text: string): void -> @IRModule.addTypeDecl [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: text
   calls: nish_array_grow nish_str_eq
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addGlobal(this: IRModule, text: string): void -> @IRModule.addGlobal [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: text
   calls: nish_array_grow nish_str_eq
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addDeclaration(this: IRModule, text: string): void -> @IRModule.addDeclaration [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: text
   calls: nish_array_grow nish_str_eq
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addRawDefinition(this: IRModule, text: string): void -> @IRModule.addRawDefinition [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: text
   calls: nish_array_grow nish_str_eq
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addFunction(this: IRModule, fn: IRFunction): void -> @IRModule.addFunction [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: fn
   calls: nish_array_grow
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   pointer fn: size=184 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function IRModule.attrGroupFor(this: IRModule, attrs: string[]): string -> @IRModule.attrGroupFor [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   pointer attrs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -4:11 text: string (const)
@@ -462,8 +473,8 @@ function IRModule.attrGroupFor(this: IRModule, attrs: string[]): string -> @IRMo
 function IRModule.toText(this: IRModule): string -> @IRModule.toText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.toText
-  calls: IRFunction.toText attributeGroup nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
-  pointer this: size=104 writesThrough=false captured=false
+  calls: IRFunction.toText attributeGroup nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=5 stackLocals=5
   local +0:11 sections: string[] (const)
   local +1:11 header: string[] (const)

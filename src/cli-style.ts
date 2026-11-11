@@ -64,6 +64,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--capabilities", "", "print what the program can reach, on stderr")
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
+  menu.row("--deterministic", "", "same float bits everywhere, no clock or I/O")
   menu.row("--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches")
   menu.row("--emit-capabilities", "<file.json>", "write the capability report")
   menu.row("--update-capability-lock", "", "record what each dependency reaches")
@@ -81,6 +82,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--emit-checked", "", "print what the checker recorded")
   menu.row("--emit-panics", "<file.json>", "list every place the program can panic")
   menu.row("--emit-arena", "<file.json>", "write the arena retention report")
+  menu.row("--explain-memory", "", "why loops and functions keep their memory")
 
   menu.section("Code generation")
   menu.row("--number-mode", "i32|f64", "what a bare number is; i32 by default")

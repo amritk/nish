@@ -51,6 +51,7 @@ import {
   panicTailCallees,
 } from "./emit-builtins"
 import { isBuiltinFunction } from "./builtins"
+import { isExecutorCall } from "./nish-modules"
 import { numericLiteralValue } from "./constants"
 import { builtinCapability, CAP_FFI, CAP_NONE, CAP_UNLABELLED, CAPABILITY_COUNT } from "./capabilities"
 import { newArrayLengthChecked } from "./emit-arrays"
@@ -61,7 +62,7 @@ import {
   stringifyCallee,
   stringConstructCallees,
 } from "./emit-strings"
-import { unlabelledBuiltinError } from "./ice"
+import { internalError, unlabelledBuiltinError } from "./ice"
 import {
   analyzeEscapes,
   decideLoopScopes,
@@ -98,6 +99,7 @@ import { StringMap, StringSet } from "./map"
 import { compareStrings } from "./strings"
 import {
   FLAG_CONST,
+  FLAG_OBJECT_SPREAD,
   N_ARRAY,
   N_BINARY,
   N_BLOCK,
@@ -124,6 +126,7 @@ import {
   N_PROPERTY,
   N_RETURN,
   N_TRY,
+  N_SPREAD,
   N_STRING,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
@@ -140,6 +143,7 @@ import {
   CaptureTarget,
   arrowCallee,
   captureTarget,
+  capturesOf,
   isAtomicMethod,
   isChannelReader,
   isChannelSend,
@@ -239,6 +243,8 @@ export class PointerParamFacts {
   /** Calls the pointer is passed to, by callee symbol and parameter index (0 is `this`). */
   passedToCallees: string[]
   passedToIndices: i32[]
+  /** `passedToCallees` resolved in the table being propagated, `null` for a callee not in it (`FactGraph`). */
+  passedToFacts: (FunctionFacts | null)[]
   /** `sizeof` of the pointee, for `dereferenceable`; 0 when it is not emitted (arrays). */
   size: i32
   /** The alignment the pointer is guaranteed to have; see `pointerAlign`. */
@@ -305,6 +311,7 @@ export class PointerParamFacts {
     this.polluted = false
     this.passedToCallees = []
     this.passedToIndices = []
+    this.passedToFacts = []
     this.elementsFree = false
   }
 }
@@ -317,12 +324,15 @@ export class CallSite {
   escapes: boolean
   /** The call, which the arena-loop diagnostic reports at and names the line of. */
   node: Node
+  /** `callee` resolved in the table being propagated, or `null` (`FactGraph`). */
+  target: FunctionFacts | null
 
   constructor(callee: string, flow: i32, escapes: boolean, node: Node) {
     this.callee = callee
     this.flow = flow
     this.escapes = escapes
     this.node = node
+    this.target = null
   }
 }
 
@@ -349,11 +359,19 @@ export class LoopScope {
    * arena-loop diagnostic has no rewrite to offer and says nothing.
    */
   handsBack: boolean
+  /**
+   * A pass bumps the arena, itself or through a callee that leaves memory
+   * behind: whether there is anything for a scope to release, which is what
+   * `--explain-memory` reads to tell a loop that keeps memory from one that
+   * has none to give back.
+   */
+  allocates: boolean
 
   constructor(loop: Node, body: Node) {
     this.loop = loop
     this.body = body
     this.scoped = false
+    this.allocates = false
     this.why = 0
     this.at = null
     this.name = ""
@@ -448,12 +466,15 @@ export class ValueDesc {
   params: string[]
   owns: string[]
   ctors: string[]
+  /** `ctors` resolved in the table being propagated, `null` for one not in it (`FactGraph`). */
+  ctorFacts: (FunctionFacts | null)[]
   unknown: boolean
 
   constructor() {
     this.params = []
     this.owns = []
     this.ctors = []
+    this.ctorFacts = []
     this.unknown = false
   }
 }
@@ -479,6 +500,8 @@ export class DirtMark {
   value: ValueDesc | null
   args: ValueDesc[]
   ctor: string
+  /** `ctor` resolved in the table being propagated, or `null` (`FactGraph`). */
+  ctorFacts: FunctionFacts | null
   kind: i32
   below: boolean
   active: boolean
@@ -491,6 +514,7 @@ export class DirtMark {
     this.value = null
     this.args = []
     this.ctor = ""
+    this.ctorFacts = null
     this.kind = kind
     this.below = below
     this.active = kind === DIRT_ESCAPE
@@ -529,6 +553,8 @@ class LocalPath {
  */
 export class ArgEdge {
   callee: string
+  /** `callee` resolved in the table being propagated, or `null` (`FactGraph`). */
+  target: FunctionFacts | null
   param: string
   owner: PrivateArray | null
   /** Where the argument's memory lives (`MemPath`). */
@@ -552,6 +578,7 @@ export class ArgEdge {
 
   constructor(callee: string, index: i32, param: string, owner: PrivateArray | null, path: MemPath) {
     this.callee = callee
+    this.target = null
     this.param = param
     this.owner = owner
     this.path = path
@@ -702,6 +729,12 @@ export class FunctionFacts {
    */
   wholeCallees: StringSet
   /**
+   * A `nish/map` instance lowered at every call (`markMapRoute`): its body
+   * is not what runs, so how far its routed callees write its receiver
+   * reaches it only along `passedToCallees` (`propagate`).
+   */
+  routed: boolean
+  /**
    * The arrays only this call reaches (`PrivateArray`). A store into one of
    * their own slots writes nothing a caller, a thread or a task can see.
    */
@@ -758,6 +791,11 @@ export class FunctionFacts {
   /** An allocation may survive the call other than through the return value. */
   allocLeaks: boolean
   /**
+   * `allocLeaks` for an allocation of the function's own, before any callee's
+   * flows up: which of the two `--explain-memory` names as the reason.
+   */
+  leaksItself: boolean
+  /**
    * WP9: an allocation is reachable *by the caller* after the call, other than
    * through the return value (fixpoint over callees). Refines `allocLeaks`,
    * which also counts a value assigned to a local of the frame; see the header
@@ -794,6 +832,14 @@ export class FunctionFacts {
    * (`arenaMessage`), and what a region's own `f` is not refused for.
    */
   usesRegion: boolean
+  /**
+   * WP49 stage 5, part 3: spawns a task with an object or array it shares,
+   * directly or through a callee (fixpoint). The task holds it past the call
+   * and past the spawner's return, in the executor's queue, which is a root
+   * no parameter names: so no scope of this function's may release what the
+   * call allocated, whatever `contained` reads off its roots.
+   */
+  feedsTasks: boolean
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[]
   /** `EscapeResult.escapingNodes`: the sites whose value escapes. */
@@ -909,6 +955,7 @@ export class FunctionFacts {
     this.paramStores = []
     this.keepsUnknown = false
     this.wholeCallees = new StringSet()
+    this.routed = false
     this.privateArrays = []
     this.writesOutput = false
     this.writeSite = null
@@ -937,6 +984,7 @@ export class FunctionFacts {
     this.allocates = false
     this.directArena = false
     this.allocLeaks = false
+    this.leaksItself = false
     this.allocEscapes = false
     this.returnsAllocation = false
     this.returnsFreshElements = false
@@ -944,6 +992,7 @@ export class FunctionFacts {
     this.readsArenaState = false
     this.opensArena = false
     this.usesRegion = false
+    this.feedsTasks = false
     this.callSites = []
     this.escapingNodes = []
     this.carriedStores = []
@@ -1207,6 +1256,11 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     if (parent.kind === N_LIST) {
       return classifyArgumentUse(unit, table, parent, node)
     }
+    // `{ ...s }` copies each of `s`'s fields into the literal's object
+    // (`emitSpreadCopy`): the source is read, and nothing keeps it.
+    if (parent.kind === N_SPREAD && (parent.flags & FLAG_OBJECT_SPREAD) !== 0) {
+      return use(USE_READ)
+    }
     if (parent.kind === N_CALL) {
       return use(USE_NONE) // the callee position of `p(...)`, which the checker refuses anyway
     }
@@ -1351,6 +1405,48 @@ const isInlineField = (program: CheckedProgram, table: TypeTable, access: Node):
   return field !== null && field.inline()
 }
 
+/**
+ * Whether the `spawn(...)` at `node` hands its task an object or array it
+ * shares (`TypeTable.sharedWithTask`): a value the task holds in place.
+ */
+const spawnsShared = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
+  const args = node.children[1].children
+  if (args.length !== 1) {
+    return false
+  }
+  const callee = program.nodeCallees[unwrapParens(args[0]).id]
+  if (callee === null) {
+    return false
+  }
+  for (let i = 0; i < callee.paramTypes.length; i++) {
+    if (!callee.isCompileTime(i) && table.sharedWithTask(callee.paramTypes[i])) {
+      return true
+    }
+  }
+  // WP49 stage 5, part 8: an arrow the task is handed may capture an object it shares.
+  for (const slot of capturesOf(callee)) {
+    if (table.sharedWithTask(slot.type())) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `call` is the task of a `spawn(...)` from `nish:async`. */
+const isSpawnedTask = (unit: AnalysisUnit, call: Node): boolean => {
+  let node = call
+  let parent = unit.parents.parentOf(node)
+  while (parent !== null && parent.kind === N_PAREN) {
+    node = parent
+    parent = unit.parents.parentOf(node)
+  }
+  if (parent === null) {
+    return false
+  }
+  const spawn = unit.parents.parentOf(parent)
+  return spawn !== null && spawn.kind === N_CALL && unit.program.nodeBuiltins[spawn.id] === "async.spawn"
+}
+
 /** An argument of `f(...)` or `new C(...)`: the list is the parent, the call is above it. */
 const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, node: Node): ParamUse => {
   const program = unit.program
@@ -1365,7 +1461,18 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     }
     const callee = program.nodeCallees[owner.id]
     if (callee !== null) {
-      return argumentUse(callee, index + (callee.owner !== null ? 1 : 0))
+      // WP49 stage 5: a spawned task holds an object or array it is handed
+      // in place for as long as it runs, past the spawner's return, so the
+      // spawner's region must too. A string is copied into the task's region.
+      const at = index + (callee.owner !== null ? 1 : 0)
+      if (
+        at < callee.paramTypes.length &&
+        table.sharedWithTask(callee.paramTypes[at]) &&
+        isSpawnedTask(unit, owner)
+      ) {
+        return use(USE_ESCAPE)
+      }
+      return argumentUse(callee, at)
     }
     // `xs.push(p)` stores `p` into the array, `Ok(p)` / `Err(p)` store it into
     // the `Result` they build (WP16), `r.unwrapOr(p)` hands it back as the
@@ -2468,6 +2575,23 @@ class FactCollector {
       for (const property of init.children) {
         if (property.kind === N_PROPERTY && property.children.length > 0) {
           this.noteStore(key, `.${property.text}`, property.children[0])
+        } else if (property.kind === N_SPREAD) {
+          // `...s` stores each field it copies with what `s` reaches, the
+          // root a written-out `f: s.f` would name.
+          const copy = program.nodeSpreadCopies[property.id]
+          if (copy !== null) {
+            for (const name of copy.fields) {
+              this.noteStore(key, `.${name}`, property.children[0])
+            }
+          } else {
+            // Which fields it copies is unknown, so anything below the
+            // object may be anything.
+            const mark = new DirtMark(DIRT_STORE, key, "", true)
+            const desc = this.valueOf(property.children[0])
+            desc.unknown = true
+            mark.value = desc
+            this.facts.dirt.push(mark)
+          }
         }
       }
       return
@@ -2591,8 +2715,10 @@ class FactCollector {
       for (const property of v.children) {
         if (property.kind === N_PROPERTY && property.children.length > 0) {
           this.describe(property.children[0], desc)
+        } else if (property.kind === N_SPREAD) {
+          this.describe(property.children[0], desc) // its fields reach what the source reaches
         } else {
-          desc.unknown = true // a spread, which the validator refuses, or anything else
+          desc.unknown = true
         }
       }
       return
@@ -3012,6 +3138,11 @@ class FactCollector {
         this.noteWholeReach(reads.name, methodReceiver(node))
       }
     }
+    // WP50 S5: a page module's float `%` calls `fmodF64` (`floatRemainderOf`).
+    const rem = program.floatRemainderOf(node)
+    if (rem !== null) {
+      this.addUserCallee(rem.name, node)
+    }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
     // (`emitWalk`); the loop records the reader, and the rest are its owner's.
     if (node.kind === N_FOR_OF) {
@@ -3150,12 +3281,14 @@ class FactCollector {
       this.facts.offerCapability(CAP_FFI, callee.sourceName, call, 0)
     }
     // WP27 S3.1: a string that may hold a NUL is searched for one before C
-    // reads it, and a hit panics (`emitForeignString`).
+    // reads it, and a hit panics (`emitForeignString`). A host function reads
+    // the string as `(p, n)`, so it has no such check (WP50 S4).
     const args = call.children[1].children
+    const host = hostFunction(callee)
     let i = 0
     while (i < args.length && i < callee.paramTypes.length) {
       const arg = args[i]
-      if (this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(arg)) {
+      if (!host && this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(arg)) {
         const checks: string[] = []
         foreignStringCallees(checks)
         this.addCallees(checks)
@@ -3343,6 +3476,15 @@ class FactCollector {
   collectClassFacts(node: Node): void {
     const program = this.unit.program
     const table = this.table
+    if (node.kind === N_SPREAD && (node.flags & FLAG_OBJECT_SPREAD) !== 0) {
+      // `{ ...s }` loads each field it copies off `s`, the reads a written-out
+      // `f: s.f` makes; with no record of what it copies, it reads anyway.
+      const copy = program.nodeSpreadCopies[node.id]
+      if ((copy === null || copy.fields.length > 0) && !this.isStackOwned(node.children[0])) {
+        this.facts.readsMemory = true
+      }
+      return
+    }
     if (node.kind === N_MEMBER) {
       const receiver = node.children[0]
       const type = program.nodeTypes[receiver.id]
@@ -3750,14 +3892,18 @@ class FactCollector {
     if (imported === "async.spawn") {
       this.facts.effect = EFFECT_WRITE
       this.facts.willReturn = false
+      if (spawnsShared(this.unit.program, this.table, node)) {
+        this.facts.feedsTasks = true
+      }
       return
     }
     if (imported === "async.awaitAll") {
       return
     }
     // WP49 stage 5: `await sleep(ms)` and the descriptor waits make a wait on
-    // the executor and may suspend the function at it.
-    if (imported === "async.sleep" || imported === "async.readable" || imported === "async.writable") {
+    // the executor and may suspend the function at it; the cancellation calls
+    // (part 7) write the executor's state.
+    if (isExecutorCall(imported)) {
       this.facts.effect = EFFECT_WRITE
       this.facts.willReturn = false
       return
@@ -3853,6 +3999,7 @@ const collectFacts = (
     facts.directArena = memory.directArena
     facts.allocates = memory.directArena
     facts.allocLeaks = memory.allocLeaks
+    facts.leaksItself = memory.allocLeaks
     facts.allocEscapes = memory.allocEscapes
     facts.returnsAllocation = memory.returnsAllocation
     facts.returnsFreshElements = memory.returnsFreshElements
@@ -4131,6 +4278,7 @@ const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolea
  */
 const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts): void => {
   const routed = routeCalleesOf(table, sig)
+  facts.routed = true
   const receiver: PointerParamFacts | null =
     sig.paramNames.length > 0 ? facts.pointerParam(sig.paramNames[0]) : null
   for (const callee of routed) {
@@ -4338,10 +4486,19 @@ const markJsonRoute = (
     facts.allocates = true
     facts.allocatesItself = true
     facts.allocLeaks = true
+    facts.leaksItself = true
     facts.allocEscapes = true
     facts.resizesArray = true
     facts.callees.add("nish_array_grow")
     markParallelEntry(facts, "nish_alloc_struct", false)
+    // What it makes is stored below `out`: a region or a task that hands it
+    // an object of another's is told so (`judgeCallee`), as for a body that
+    // stores a fresh allocation there.
+    for (const pp of facts.pointerParams) {
+      pp.writesReach = true
+      pp.writesDeep = true
+      pp.polluted = true
+    }
   }
 }
 
@@ -4446,6 +4603,9 @@ export const analyzeFunctions = (
   // Round 1: plain facts and the capture fixpoint, which the escape analysis needs.
   const first = collectRound(units, table, opts, null, null)
   propagate(first, runtime)
+  if (checkingPropagate()) {
+    checkPropagate(first, collectRound(units, table, opts, null, null), runtime)
+  }
   const escapes = new EscapeSet()
   const owners: AnalysisUnit[] = []
   const sigs: FunctionSig[] = []
@@ -4480,12 +4640,15 @@ export const analyzeFunctions = (
   // then: it is syntax plus the call graph, and neither moves between rounds.
   const facts = collectRound(units, table, opts, escapes, first)
   propagate(facts, runtime)
+  if (checkingPropagate()) {
+    checkPropagate(facts, collectRound(units, table, opts, escapes, first), runtime)
+  }
   propagateCapabilities(facts)
   for (const f of facts.list) {
-    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation
+    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.feedsTasks
     // What a function stores into a parameter it fills is its caller's, so
-    // no scope of its own may release it.
-    f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0
+    // no scope of its own may release it; nor what a task it spawned holds.
+    f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0 && !f.feedsTasks
   }
   scopeParallelBodies(units, facts)
   settleCalleeScopes(facts)
@@ -4838,101 +5001,502 @@ const clearRecursiveWillReturn = (facts: FactsTable): void => {
   }
 }
 
-/** Propagate effects, termination, pointer facts and allocation facts to a fixpoint. */
+/**
+ * The call graph `propagate` works over, built once per table so no pass
+ * hashes a symbol. A function's callees are one flat run, `calleeStart[i]` up
+ * to `calleeStart[i + 1]` for the function at index i of `FactsTable.list`,
+ * each with its facts (`null` for a runtime or unknown symbol), its runtime
+ * entry, its name and whether the caller hands it a receiver whole
+ * (`FunctionFacts.wholeCallees`). Every other name a visit reads is resolved
+ * onto the record that holds it: `ArgEdge.target`, `CallSite.target`,
+ * `PointerParamFacts.passedToFacts`, `DirtMark.ctorFacts` and
+ * `ValueDesc.ctorFacts`.
+ *
+ * `callers` is each of those reads turned round, once per pair: the functions
+ * whose visit reads the facts of the function at index g are
+ * `callers[callerStart[g]]` up to `callerStart[g + 1]`. A read missing from it
+ * is one the worklist would not revisit on, which is what
+ * `NISH_CHECK_PROPAGATE` is there to catch (`checkPropagate`).
+ */
+class FactGraph {
+  calleeStart: i32[]
+  calleeFacts: (FunctionFacts | null)[]
+  calleeRuntime: (RuntimeFunction | null)[]
+  calleeName: string[]
+  calleeWhole: boolean[]
+  callerStart: i32[]
+  callers: i32[]
+
+  constructor() {
+    this.calleeStart = []
+    this.calleeFacts = []
+    this.calleeRuntime = []
+    this.calleeName = []
+    this.calleeWhole = []
+    this.callerStart = []
+    this.callers = []
+  }
+}
+
+/**
+ * Resolves the names one function's visit reads (`resolve`) and keeps each
+ * function it reads once, as a (reader, read) pair `buildFactGraph` turns
+ * round. `seen[g]` is the last reader that recorded g.
+ */
+class GraphReads {
+  facts: FactsTable
+  reader: i32
+  seen: i32[]
+  from: i32[]
+  to: i32[]
+
+  constructor(facts: FactsTable) {
+    this.facts = facts
+    this.reader = -1
+    this.seen = []
+    this.from = []
+    this.to = []
+    while (this.seen.length < facts.list.length) {
+      this.seen.push(-1)
+    }
+  }
+
+  /** The facts of `name`, or `null`; the reader now depends on them. */
+  resolve(name: string): FunctionFacts | null {
+    const g = this.facts.indexOf(name)
+    if (g < 0 || g >= this.facts.list.length || g >= this.seen.length) {
+      return null
+    }
+    if (this.seen[g] !== this.reader) {
+      this.seen[g] = this.reader
+      this.from.push(this.reader)
+      this.to.push(g)
+    }
+    return this.facts.list[g]
+  }
+
+  /** `value.ctors` resolved into `value.ctorFacts`. */
+  resolveValue(value: ValueDesc): void {
+    value.ctorFacts = []
+    for (const name of value.ctors) {
+      value.ctorFacts.push(this.resolve(name))
+    }
+  }
+}
+
+/** Build `facts`' `FactGraph`, resolving every name `visitFacts` reads; see `FactGraph`. */
+const buildFactGraph = (facts: FactsTable, runtime: RuntimeTable): FactGraph => {
+  const graph = new FactGraph()
+  const reads = new GraphReads(facts)
+  let fi = 0
+  for (const f of facts.list) {
+    reads.reader = fi
+    graph.calleeStart.push(graph.calleeName.length)
+    let c = 0
+    while (c < f.callees.size()) {
+      const name = f.callees.at(c)
+      graph.calleeFacts.push(reads.resolve(name))
+      graph.calleeRuntime.push(runtime.lookup(name))
+      graph.calleeName.push(name)
+      graph.calleeWhole.push(f.wholeCallees.has(name))
+      c = c + 1
+    }
+    for (const site of f.callSites) {
+      site.target = reads.resolve(site.callee)
+    }
+    for (const pp of f.pointerParams) {
+      pp.passedToFacts = []
+      for (const name of pp.passedToCallees) {
+        pp.passedToFacts.push(reads.resolve(name))
+      }
+    }
+    for (const edge of f.argEdges) {
+      edge.target = reads.resolve(edge.callee)
+    }
+    for (const edge of f.wholeReaches) {
+      edge.target = reads.resolve(edge.callee)
+    }
+    for (const d of f.dirt) {
+      d.ctorFacts = d.ctor.length > 0 ? reads.resolve(d.ctor) : null
+      const value = d.value
+      if (value !== null) {
+        reads.resolveValue(value)
+      }
+      for (const arg of d.args) {
+        reads.resolveValue(arg)
+      }
+    }
+    for (const store of f.paramStores) {
+      reads.resolveValue(store.value)
+    }
+    fi = fi + 1
+  }
+  graph.calleeStart.push(graph.calleeName.length)
+  // The pairs turned round, grouped by the function read.
+  const counts: i32[] = []
+  while (counts.length < facts.list.length) {
+    counts.push(0)
+  }
+  for (const g of reads.to) {
+    if (g >= 0 && g < counts.length) {
+      counts[g] = counts[g] + 1
+    }
+  }
+  const next: i32[] = []
+  let total = 0
+  for (const count of counts) {
+    graph.callerStart.push(total)
+    next.push(total)
+    total = total + count
+  }
+  graph.callerStart.push(total)
+  while (graph.callers.length < total) {
+    graph.callers.push(0)
+  }
+  let k = 0
+  while (k < reads.to.length && k < reads.from.length) {
+    const g = reads.to[k]
+    if (g >= 0 && g < next.length) {
+      const at = next[g]
+      next[g] = at + 1
+      if (at >= 0 && at < graph.callers.length) {
+        graph.callers[at] = reads.from[k]
+      }
+    }
+    k = k + 1
+  }
+  return graph
+}
+
+/**
+ * Propagate effects, termination, pointer facts and allocation facts to a fixpoint.
+ *
+ * The answer is the one whole passes over `facts.list` in order, until a pass
+ * changes nothing, would give, and is reached the same way: a pass visits, in
+ * list order, only the functions marked since their last visit. A visit
+ * (`visitFacts`) that changes a function marks it and every function that
+ * reads it (`FactGraph.callers`); one at or before the visit's own index waits
+ * for the next pass, one after it comes in this one, which is where a whole
+ * pass would reach it. A function nothing marked would change nothing, so the
+ * visits that do change something are the whole passes' own, in their order.
+ * That order is part of the answer: `writeSite` names the own-slot store that
+ * first set `writesElsewhere`, and another order could reach a different one.
+ * `NISH_CHECK_PROPAGATE` checks the result twice: one more whole pass must
+ * change nothing (`checkSettled`), and whole passes run from the start must
+ * agree (`checkPropagate`).
+ */
 const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
   clearRecursiveWillReturn(facts)
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const f of facts.list) {
-      let c = 0
-      while (c < f.callees.size()) {
-        if (propagateCallee(facts, runtime, f, f.callees.at(c))) {
-          changed = true
-        }
-        c = c + 1
-      }
-      if (composeArguments(facts, f)) {
-        changed = true
-      }
-      if (settleKeeps(f)) {
-        changed = true
-      }
-      // A pointer-returning callee that allocates makes its result an allocation of this function.
-      for (const site of f.callSites) {
-        const callee = facts.get(site.callee)
-        if (callee === null || !callee.allocates) {
-          continue
-        }
-        if (site.escapes && !f.allocEscapes) {
-          // WP9: this function stored the callee's result where its own caller can reach it.
-          f.allocEscapes = true
-          changed = true
-        }
-        if (site.flow === FLOW_LOCAL && !f.directArena) {
-          f.directArena = true
-          changed = true
-        } else if (site.flow === FLOW_RETURNED && !f.returnsAllocation) {
-          f.returnsAllocation = true
-          changed = true
-        } else if (site.flow === FLOW_LEAKS && !f.allocLeaks) {
-          f.allocLeaks = true
-          changed = true
-        }
-      }
-      // A pointer inherits what every callee it is passed to does with the
-      // corresponding parameter. An unknown callee is assumed to do both.
-      for (const pp of f.pointerParams) {
-        let i = 0
-        while (i < pp.passedToCallees.length) {
-          const g = facts.get(pp.passedToCallees[i])
-          let writes = true
-          let shared = true
-          let captures = true
-          let outlives = true
-          if (g !== null) {
-            const target = g.pointerParamAt(pp.passedToIndices[i])
-            if (target !== null) {
-              writes = target.writesThrough
-              shared = target.writesShared
-              captures = target.captured
-              outlives = target.outlives
+  const graph = buildFactGraph(facts, runtime)
+  const list = facts.list
+  const marked: boolean[] = []
+  while (marked.length < list.length) {
+    marked.push(true)
+  }
+  let again = true
+  while (again) {
+    again = false
+    let i = 0
+    while (i < list.length && i < marked.length) {
+      if (marked[i]) {
+        marked[i] = false
+        // The visit is a call, which ends what the loop bound proved about
+        // `i`, so the write after it tests the bound again.
+        if (visitFacts(graph, i, list[i]) && i < marked.length) {
+          marked[i] = true
+          again = true
+          let r = i + 1 < graph.callerStart.length ? graph.callerStart[i] : 0
+          const end = i + 1 < graph.callerStart.length ? graph.callerStart[i + 1] : 0
+          while (r >= 0 && r < end && r < graph.callers.length) {
+            const ci = graph.callers[r]
+            if (ci >= 0 && ci < marked.length) {
+              marked[ci] = true
             }
+            r = r + 1
           }
-          if (writes && !pp.writesThrough) {
-            pp.writesThrough = true
-            changed = true
-          }
-          if (shared && !pp.writesShared) {
-            pp.writesShared = true
-            changed = true
-          }
-          if (captures && !pp.captured) {
-            pp.captured = true
-            changed = true
-          }
-          if (outlives && !pp.outlives) {
-            pp.outlives = true
-            changed = true
-          }
-          i = i + 1
         }
+      }
+      i = i + 1
+    }
+  }
+  if (checkingPropagate()) {
+    checkSettled(graph, list)
+  }
+  nameWriteVia(graph, list)
+}
+
+/**
+ * `NISH_CHECK_PROPAGATE`'s first test: one more whole pass over what the
+ * worklist settled must change nothing. `visitFacts` reports a move of any
+ * fact it settles, so this sees an incomplete fixpoint in every field; a
+ * function that moves stops the compile with an internal error naming it.
+ */
+const checkSettled = (graph: FactGraph, list: FunctionFacts[]): void => {
+  let i = 0
+  for (const f of list) {
+    if (visitFacts(graph, i, f)) {
+      process.exit(
+        internalError(
+          `propagate: \`${f.sourceName}\` moved on one more whole pass over the settled facts (NISH_CHECK_PROPAGATE)`
+        )
+      )
+    }
+    i = i + 1
+  }
+}
+
+/**
+ * The answer `propagate` reproduces, the slow way: whole passes over
+ * `facts.list` in order, every function visited on each, until a pass changes
+ * nothing. Only `checkPropagate` runs it.
+ */
+const propagateWhole = (facts: FactsTable, runtime: RuntimeTable): void => {
+  clearRecursiveWillReturn(facts)
+  const graph = buildFactGraph(facts, runtime)
+  const list = facts.list
+  let again = true
+  while (again) {
+    again = false
+    let i = 0
+    for (const f of list) {
+      if (visitFacts(graph, i, f)) {
+        again = true
+      }
+      i = i + 1
+    }
+  }
+  nameWriteVia(graph, list)
+}
+
+/** Whether `a` and `b` name the same store, or both none (`checkPropagate`). */
+const sameSite = (a: Node | null, b: Node | null): boolean => {
+  if (a === null || b === null) {
+    return a === null && b === null
+  }
+  return a === b
+}
+
+/** Whether `f` and `g` say the same of every pointer parameter (`checkPropagate`). */
+const sameParams = (f: FunctionFacts, g: FunctionFacts): boolean => {
+  if (f.pointerParams.length !== g.pointerParams.length) {
+    return false
+  }
+  let i = 0
+  while (i < f.pointerParams.length && i < g.pointerParams.length) {
+    const a = f.pointerParams[i]
+    const b = g.pointerParams[i]
+    if (
+      a.name !== b.name ||
+      a.writesThrough !== b.writesThrough ||
+      a.writesShared !== b.writesShared ||
+      a.captured !== b.captured ||
+      a.outlives !== b.outlives ||
+      a.writesReach !== b.writesReach ||
+      a.writesDeep !== b.writesDeep ||
+      a.keptInThis !== b.keptInThis ||
+      a.polluted !== b.polluted ||
+      a.elementsFree !== b.elementsFree
+    ) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
+/** Whether `NISH_CHECK_PROPAGATE` is set to anything (`checkPropagate`). */
+const checkingPropagate = (): boolean => {
+  const flag: string | null = getenv("NISH_CHECK_PROPAGATE")
+  return flag !== null && flag.length > 0
+}
+
+/**
+ * `NISH_CHECK_PROPAGATE`'s second test (`checkSettled` is the first):
+ * `fresh`, the same table collected
+ * again, is settled by whole passes (`propagateWhole`), and every function of
+ * `facts`, which the worklist settled, must agree with it: its attributes,
+ * its pointer parameters, the shared-write flags, and the `writeSite` and
+ * `writeVia` it names. A difference means a read is missing from
+ * `FactGraph.callers`, or the worklist's visits left round-robin order.
+ * `writeSite` is first-come, so either can move it with every flag still
+ * right, and one more pass over the settled table would change nothing: only
+ * a run from the start sees it. The compile then stops with an internal error
+ * naming the function and what differs; when every function agrees it says
+ * so on stderr, which is how a test knows the check ran. Unset, nothing is
+ * collected twice.
+ */
+const checkPropagate = (facts: FactsTable, fresh: FactsTable, runtime: RuntimeTable): void => {
+  // `fresh` shares its `CallSite`s with `facts` (`collectRound` hands both
+  // `memory.callSites`), so this rewrites `site.target`; nothing reads it after.
+  propagateWhole(fresh, runtime)
+  if (fresh.list.length !== facts.list.length) {
+    process.exit(internalError("propagate: the table collected again differs (NISH_CHECK_PROPAGATE)"))
+  }
+  let i = 0
+  while (i < facts.list.length && i < fresh.list.length) {
+    const f = facts.list[i]
+    const what = differsFrom(f, fresh.list[i])
+    if (what.length > 0) {
+      process.exit(
+        internalError(
+          `propagate: \`${f.sourceName}\`'s ${what} differs from whole passes' (NISH_CHECK_PROPAGATE)`
+        )
+      )
+    }
+    i = i + 1
+  }
+  console.error(`propagate: ${facts.list.length} functions agree with whole passes (NISH_CHECK_PROPAGATE)`)
+}
+
+/** What `f`, settled by the worklist, says that `g`, settled by whole passes, does not; `""` when they agree (`checkPropagate`). */
+const differsFrom = (f: FunctionFacts, g: FunctionFacts): string => {
+  if (f.sourceName !== g.sourceName) {
+    return "name"
+  }
+  if (!sameSite(f.writeSite, g.writeSite)) {
+    return "writeSite"
+  }
+  if (f.writeVia !== g.writeVia) {
+    return "writeVia"
+  }
+  if (
+    f.sharedWrite !== g.sharedWrite ||
+    f.writesPastParams !== g.writesPastParams ||
+    f.writesElsewhere !== g.writesElsewhere
+  ) {
+    return "shared-write flags"
+  }
+  if (functionAttributes(f).join(" ") !== functionAttributes(g).join(" ")) {
+    return "attributes"
+  }
+  if (!sameParams(f, g)) {
+    return "pointer parameters"
+  }
+  if (f.leaksItself !== g.leaksItself) {
+    return "leaksItself"
+  }
+  return ""
+}
+
+/** One visit of `f`, the function at index `fi`, against what everything it reads now says; answers whether anything about `f` moved. */
+const visitFacts = (graph: FactGraph, fi: i32, f: FunctionFacts): boolean => {
+  let changed = false
+  let c = fi < graph.calleeStart.length ? graph.calleeStart[fi] : 0
+  const end = fi + 1 < graph.calleeStart.length ? graph.calleeStart[fi + 1] : 0
+  // `buildFactGraph` pushes the four callee arrays together, so they are one
+  // length; the tests against each are what proves every access in range.
+  while (c >= 0 && c < end && c < graph.calleeFacts.length && c < graph.calleeRuntime.length) {
+    if (c < graph.calleeName.length && c < graph.calleeWhole.length) {
+      const callee = graph.calleeName[c]
+      if (propagateCallee(f, graph.calleeFacts[c], graph.calleeRuntime[c], callee, graph.calleeWhole[c])) {
+        changed = true
+      }
+    }
+    c = c + 1
+  }
+  if (composeArguments(f)) {
+    changed = true
+  }
+  if (settleKeeps(f)) {
+    changed = true
+  }
+  // A pointer-returning callee that allocates makes its result an allocation of this function.
+  for (const site of f.callSites) {
+    const callee = site.target
+    if (callee === null || !callee.allocates) {
+      continue
+    }
+    if (site.escapes && !f.allocEscapes) {
+      // WP9: this function stored the callee's result where its own caller can reach it.
+      f.allocEscapes = true
+      changed = true
+    }
+    if (site.flow === FLOW_LOCAL && !f.directArena) {
+      f.directArena = true
+      changed = true
+    } else if (site.flow === FLOW_RETURNED && !f.returnsAllocation) {
+      f.returnsAllocation = true
+      changed = true
+    } else if (site.flow === FLOW_LEAKS) {
+      f.leaksItself = true
+      if (!f.allocLeaks) {
+        f.allocLeaks = true
+        changed = true
       }
     }
   }
-  nameWriteVia(facts, runtime)
+  // A pointer inherits what every callee it is passed to does with the
+  // corresponding parameter. An unknown callee is assumed to do both.
+  for (const pp of f.pointerParams) {
+    let i = 0
+    while (i < pp.passedToFacts.length && i < pp.passedToIndices.length) {
+      const g = pp.passedToFacts[i]
+      let writes = true
+      let shared = true
+      let captures = true
+      let outlives = true
+      let reach = true
+      let deep = true
+      if (g !== null) {
+        const target = g.pointerParamAt(pp.passedToIndices[i])
+        if (target !== null) {
+          writes = target.writesThrough
+          shared = target.writesShared
+          captures = target.captured
+          outlives = target.outlives
+          reach = target.writesReach
+          deep = target.writesDeep
+        }
+      }
+      // A routed instance (`markMapRoute`) has no body whose argument
+      // edges carry how far its routed callees write: this is the only
+      // path that reaches it by. A body's own edges carry it already
+      // (`callWrites`), and more narrowly. `polluted` is not carried:
+      // the routed table code is type-erased, so it would call a map of
+      // numbers dirty.
+      if (f.routed && reach && !pp.writesReach) {
+        pp.writesReach = true
+        changed = true
+      }
+      if (f.routed && deep && !pp.writesDeep) {
+        pp.writesDeep = true
+        changed = true
+      }
+      if (writes && !pp.writesThrough) {
+        pp.writesThrough = true
+        changed = true
+      }
+      if (shared && !pp.writesShared) {
+        pp.writesShared = true
+        changed = true
+      }
+      if (captures && !pp.captured) {
+        pp.captured = true
+        changed = true
+      }
+      if (outlives && !pp.outlives) {
+        pp.outlives = true
+        changed = true
+      }
+      i = i + 1
+    }
+  }
+  return changed
 }
 
-/** One caller/callee edge; answers whether anything about the caller moved. */
+/**
+ * One caller/callee edge, the callee's facts and runtime entry already looked
+ * up (`FactGraph`), and `whole` when `f` hands it a receiver whole; answers
+ * whether anything about the caller moved.
+ */
 const propagateCallee = (
-  facts: FactsTable,
-  runtime: RuntimeTable,
   f: FunctionFacts,
-  callee: string
+  calleeFacts: FunctionFacts | null,
+  rt: RuntimeFunction | null,
+  callee: string,
+  whole: boolean
 ): boolean => {
   let changed = false
-  const calleeFacts = facts.get(callee)
-  const rt = runtime.lookup(callee)
   // The inline arena allocator is not in the runtime table (it is emitted as
   // an IR definition), but callers must still see it as a writing, willreturn
   // callee.
@@ -4952,7 +5516,7 @@ const propagateCallee = (
     calleeReturns = hasAttr(rt.attrs, "willreturn")
     calleeNoReturn = rt.noreturn
   }
-  if (!f.writesElsewhere && writesShared(f, calleeFacts, rt, callee) && markPastWrite(f, true)) {
+  if (!f.writesElsewhere && writesShared(f, calleeFacts, rt, callee, whole) && markPastWrite(f, true)) {
     changed = true
   }
   const merged = maxEffect(f.effect, calleeEffect)
@@ -5001,6 +5565,10 @@ const propagateCallee = (
     }
     if (calleeFacts.usesRegion && !f.usesRegion) {
       f.usesRegion = true
+      changed = true
+    }
+    if (calleeFacts.feedsTasks && !f.feedsTasks) {
+      f.feedsTasks = true
       changed = true
     }
   }
@@ -5143,7 +5711,8 @@ const relaxEdge = (f: FunctionFacts, e: i32, g: FunctionFacts): boolean => {
 
 /**
  * WP29 P1: calling `callee` from `f`, whose facts and runtime entry the caller
- * has already looked up, writes shared memory whatever `f` hands it. An
+ * has already looked up, writes shared memory whatever `f` hands it, `whole`
+ * when `f` hands it a receiver whole (`FunctionFacts.wholeCallees`). An
  * unknown callee is assumed to, as it is assumed to write at all. A user
  * callee whose arguments `f` records answers only for what it writes past its
  * parameters (`FunctionFacts.writesPastParams`); `composeArguments` answers
@@ -5153,10 +5722,11 @@ const writesShared = (
   f: FunctionFacts,
   calleeFacts: FunctionFacts | null,
   rt: RuntimeFunction | null,
-  callee: string
+  callee: string,
+  whole: boolean
 ): boolean => {
   if (calleeFacts !== null) {
-    return f.wholeCallees.has(callee) ? calleeFacts.sharedWrite : calleeFacts.writesElsewhere
+    return whole ? calleeFacts.sharedWrite : calleeFacts.writesElsewhere
   }
   if (callee === "nish_alloc_struct") {
     return false // the inline arena allocator; see `FunctionFacts.sharedWrite`
@@ -5310,8 +5880,8 @@ const markPath = (f: FunctionFacts, path: MemPath, deep: boolean): boolean => {
 }
 
 /** Whether `value` is clean as `f` now sees it: no parameter's memory, nothing of unknown origin. */
-const valueClean = (facts: FactsTable, f: FunctionFacts, value: ValueDesc): boolean =>
-  value.params.length === 0 && !valueUnknown(facts, f, value)
+const valueClean = (f: FunctionFacts, value: ValueDesc): boolean =>
+  value.params.length === 0 && !valueUnknown(f, value)
 
 /** Mark the parameter `name` of `f` as polluted, or every pointer parameter when `name` is ""; answers whether that moved anything. */
 const polluteName = (f: FunctionFacts, name: string): boolean => {
@@ -5389,10 +5959,9 @@ const isDirty = (f: FunctionFacts, key: string): boolean => {
   return false
 }
 
-/** Whether a constructor named in `ctors` may keep anything, or is unknown. */
-const keepsAnything = (facts: FactsTable, ctors: string[]): boolean => {
-  for (const name of ctors) {
-    const g = facts.get(name)
+/** Whether a constructor in `ctors` (`ValueDesc.ctorFacts`) may keep anything, or is unknown. */
+const keepsAnything = (ctors: (FunctionFacts | null)[]): boolean => {
+  for (const g of ctors) {
     if (g === null || g.keepsUnknown) {
       return true
     }
@@ -5401,8 +5970,8 @@ const keepsAnything = (facts: FactsTable, ctors: string[]): boolean => {
 }
 
 /** Whether `value`, as `f` sees it now, may be memory of unknown origin: an object of `f`'s own that is dirty, or a constructor that keeps anything. */
-const valueUnknown = (facts: FactsTable, f: FunctionFacts, value: ValueDesc): boolean => {
-  if (value.unknown || keepsAnything(facts, value.ctors)) {
+const valueUnknown = (f: FunctionFacts, value: ValueDesc): boolean => {
+  if (value.unknown || keepsAnything(value.ctorFacts)) {
     return true
   }
   for (const key of value.owns) {
@@ -5414,15 +5983,15 @@ const valueUnknown = (facts: FactsTable, f: FunctionFacts, value: ValueDesc): bo
 }
 
 /** Set `d`'s `active` and `unknown` from what `f`'s callees and objects now say (`DirtMark`); answers whether anything moved. */
-const settleDirt = (facts: FactsTable, f: FunctionFacts, d: DirtMark): boolean => {
+const settleDirt = (f: FunctionFacts, d: DirtMark): boolean => {
   let active = d.active
   let unknown = d.unknown
   const value = d.value
   if (d.kind === DIRT_STORE && value !== null) {
-    unknown = unknown || valueUnknown(facts, f, value)
+    unknown = unknown || valueUnknown(f, value)
     active = active || unknown || value.params.length > 0
   } else if (d.kind === DIRT_INIT) {
-    const g = facts.get(d.ctor)
+    const g = d.ctorFacts
     if (g === null || g.keepsUnknown) {
       active = true
       unknown = true
@@ -5432,7 +6001,7 @@ const settleDirt = (facts: FactsTable, f: FunctionFacts, d: DirtMark): boolean =
         i = i + 1 // the constructor's parameter 0 is `this`
         const kept = g.pointerParamAt(i)
         if (kept !== null && kept.keptInThis) {
-          const vague = valueUnknown(facts, f, arg)
+          const vague = valueUnknown(f, arg)
           if (vague || arg.params.length > 0) {
             active = true
           }
@@ -5472,8 +6041,8 @@ const PAST_ELSEWHERE: i32 = 2
  * caller's parameter for memory rooted at one, and anywhere otherwise. A
  * private array is taken as anywhere, as it was before the distinction.
  */
-const pastBelow = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): i32 => {
-  const g = facts.get(edge.callee)
+const pastBelow = (f: FunctionFacts, edge: ArgEdge): i32 => {
+  const g = edge.target
   // A table's receiver, taken whole (`wholeReaches`), is its `this`.
   const index = edge.index < 0 ? 0 : edge.index
   // Every write to or below a parameter marks it `writesReach`, or
@@ -5496,8 +6065,7 @@ const pastBelow = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): i32 => {
 }
 
 /** Whether the call along `edge` writes shared memory through its argument: one not private, that the callee writes. */
-const edgeWrites = (facts: FactsTable, edge: ArgEdge): boolean =>
-  !edge.isPrivate() && writesArgument(facts.get(edge.callee), edge.index)
+const edgeWrites = (edge: ArgEdge): boolean => !edge.isPrivate() && writesArgument(edge.target, edge.index)
 
 /**
  * A callee writes what `edge` hands it, `deep` past its slots: the caller
@@ -5514,12 +6082,12 @@ const callWrites = (f: FunctionFacts, edge: ArgEdge, deep: boolean): boolean => 
  * argument is only as clean as that object, so it is marked once the object
  * is dirty. Answers whether the mark moved.
  */
-const keepsOwn = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): boolean => {
+const keepsOwn = (f: FunctionFacts, edge: ArgEdge): boolean => {
   const mark = edge.dirt
   if (mark === null || mark.active) {
     return false
   }
-  const g = facts.get(edge.callee)
+  const g = edge.target
   const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
   // A callee that may store memory not the caller's into what it is handed.
   const polluted = g === null || target === null || target.polluted
@@ -5573,10 +6141,10 @@ const settleKeeps = (f: FunctionFacts): boolean => {
  * parameters unless the argument is one of them as it is, which then writes
  * through too. A change here is seen again on the fixpoint's next pass.
  */
-const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
+const composeArguments = (f: FunctionFacts): boolean => {
   let changed = false
   for (const d of f.dirt) {
-    if (settleDirt(facts, f, d)) {
+    if (settleDirt(f, d)) {
       changed = true
     }
   }
@@ -5599,34 +6167,34 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   for (const edge of f.wholeReaches) {
     // A table's method writes its receiver only when it writes through its
     // `this` (parameter 0): `has` and a fused `get`'s `probe` read it.
-    const g = facts.get(edge.callee)
+    const g = edge.target
     const self: PointerParamFacts | null = g === null ? null : g.pointerParamAt(0)
     const writes = g === null || (g.sharedWrite && (self === null || self.writesReach))
     if (writes && callWrites(f, edge, false)) {
       changed = true
     }
-    const past = pastBelow(facts, f, edge)
+    const past = pastBelow(f, edge)
     if (past !== PAST_NONE && markPastWrite(f, past === PAST_ELSEWHERE)) {
       changed = true
     }
   }
   for (const store of f.paramStores) {
-    if (!valueClean(facts, f, store.value) && polluteName(f, store.name)) {
+    if (!valueClean(f, store.value) && polluteName(f, store.name)) {
       changed = true
     }
   }
   for (const edge of f.argEdges) {
-    if (keepsOwn(facts, f, edge)) {
+    if (keepsOwn(f, edge)) {
       changed = true
     }
-    const past = pastBelow(facts, f, edge)
+    const past = pastBelow(f, edge)
     if (past !== PAST_NONE && markPastWrite(f, past === PAST_ELSEWHERE)) {
       changed = true
     }
   }
   for (const edge of f.argEdges) {
     // What the callee writes of the argument, the caller writes of what the argument reaches.
-    const g = facts.get(edge.callee)
+    const g = edge.target
     const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
     const reached = g === null || (target !== null && target.writesReach && g.sharedWrite)
     if (reached && callWrites(f, edge, target === null || target.writesDeep)) {
@@ -5640,14 +6208,14 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
       changed = true
     }
     const owner = edge.owner
-    if (owner !== null && !owner.lost && keepsArgument(facts.get(edge.callee), edge.index)) {
+    if (owner !== null && !owner.lost && keepsArgument(g, edge.index)) {
       owner.lost = true
       changed = true
       if (owner.site !== null && markPastWrite(f, true)) {
         changed = true
       }
     }
-    if (!edgeWrites(facts, edge)) {
+    if (!edgeWrites(edge)) {
       continue
     }
     // WP29: an object this call made itself (`ROOT_OWN`) is memory no caller,
@@ -5689,9 +6257,9 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
 }
 
 /** Whether `f` hands `callee` an argument or a table it writes shared memory through (`composeArguments`). */
-const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): boolean => {
+const writesAnArgument = (f: FunctionFacts, callee: string): boolean => {
   for (const edge of f.wholeReaches) {
-    if (edge.callee === callee && pastBelow(facts, f, edge) !== PAST_NONE) {
+    if (edge.callee === callee && pastBelow(f, edge) !== PAST_NONE) {
       return true
     }
   }
@@ -5699,10 +6267,10 @@ const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): 
     // A capture's edge is to the arrow, which this function never calls: the
     // instance it called to hand the capture over is the one to name.
     const named = edge.callee === callee || edge.via === callee
-    if (named && pastBelow(facts, f, edge) !== PAST_NONE) {
+    if (named && pastBelow(f, edge) !== PAST_NONE) {
       return true
     }
-    if (!named || !edgeWrites(facts, edge)) {
+    if (!named || !edgeWrites(edge)) {
       continue
     }
     // An object of the caller's own is a shared write only where it may hold
@@ -5711,7 +6279,7 @@ const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): 
     if (edge.path.kind !== ROOT_OWN) {
       return true
     }
-    const g = facts.get(edge.callee)
+    const g = edge.target
     const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
     if (reachesForeign(f, edge.path.name, edge.path.steps, target === null || target.writesDeep)) {
       return true
@@ -5728,8 +6296,10 @@ const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): 
  * depending on which entry point loaded it. Here it is the first callee in the
  * function's own call order: the order its body reaches them.
  */
-const nameWriteVia = (facts: FactsTable, runtime: RuntimeTable): void => {
-  for (const f of facts.list) {
+const nameWriteVia = (graph: FactGraph, list: FunctionFacts[]): void => {
+  let fi = -1
+  for (const f of list) {
+    fi = fi + 1
     if (!f.sharedWrite || f.writeSite !== null) {
       continue
     }
@@ -5744,14 +6314,24 @@ const nameWriteVia = (facts: FactsTable, runtime: RuntimeTable): void => {
     if (f.writeSite !== null) {
       continue
     }
-    let c = 0
-    while (c < f.callees.size() && f.writeVia.length === 0) {
-      const callee = f.callees.at(c)
+    let c = fi < graph.calleeStart.length ? graph.calleeStart[fi] : 0
+    const end = fi + 1 < graph.calleeStart.length ? graph.calleeStart[fi + 1] : 0
+    // The four callee arrays are one length (`buildFactGraph` pushes them
+    // together); testing each is what proves every access in range.
+    while (c >= 0 && c < end && f.writeVia.length === 0) {
       if (
-        writesShared(f, facts.get(callee), runtime.lookup(callee), callee) ||
-        writesAnArgument(facts, f, callee)
+        c < graph.calleeName.length &&
+        c < graph.calleeFacts.length &&
+        c < graph.calleeRuntime.length &&
+        c < graph.calleeWhole.length
       ) {
-        f.writeVia = callee
+        const callee = graph.calleeName[c]
+        if (
+          writesShared(f, graph.calleeFacts[c], graph.calleeRuntime[c], callee, graph.calleeWhole[c]) ||
+          writesAnArgument(f, callee)
+        ) {
+          f.writeVia = callee
+        }
       }
       c = c + 1
     }

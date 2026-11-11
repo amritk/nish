@@ -2,12 +2,22 @@
 
 # nish/math
 
-`Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish rather than libm, so a program answers the same on every target, wasm included, and the optimiser sees the whole function.
+`Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, and on a freestanding wasm build `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow` and the `%` of two `f64`s, in Nish rather than libm, so a program answers the same on every target and the optimiser sees the whole function.
 
 ```ts
 import {
   atan2F64,
+  cosF64,
+  expF64,
+  fmodF64,
   hypotF64,
+  logF64,
+  numberExact,
+  parseFloatExact,
+  powF64,
+  quietBitsF32,
+  quietBitsF64,
+  sinF64,
   tanF64,
 } from "nish/math";
 ```
@@ -33,15 +43,75 @@ export const main = (): i32 => {
 
 </scalar-card>
 
+<scalar-card title="cos​F64" icon="phosphor/regular/function" href="#cosf64">
+
+`Math.cos(x)`: fdlibm's `cos`, its reduction shared with `tan`.
+
+</scalar-card>
+
+<scalar-card title="exp​F64" icon="phosphor/regular/function" href="#expf64">
+
+`Math.exp(x)`: fdlibm's `__ieee754_exp`, a reduction by ln 2 and a rational approximation on [-ln2/2, ln2/2].
+
+</scalar-card>
+
+<scalar-card title="fmod​F64" icon="phosphor/regular/function" href="#fmodf64">
+
+The remainder `x % y` on `f64`, as JavaScript and C's `fmod` define it: e_fmod.c's shift-and-subtract, exact, over one 64-bit word rather than two 32-bit ones.
+
+</scalar-card>
+
 <scalar-card title="hypot​F64" icon="phosphor/regular/function" href="#hypotf64">
 
 `Math.hypot(x, y)`: fdlibm's core, rescaled by a power of two outside [1e-150, 1e150].
 
 </scalar-card>
 
+<scalar-card title="log​F64" icon="phosphor/regular/function" href="#logf64">
+
+`Math.log(x)`: fdlibm's `__ieee754_log`, `x` split as 2^k * (1 + f) and log(1 + f) taken from a polynomial in f / (2 + f).
+
+</scalar-card>
+
+<scalar-card title="number​Exact" icon="phosphor/regular/function" href="#numberexact">
+
+`Number(s)` of a string under `--deterministic` (WP50 §9): the grammar the `--emit-ts` reading has, on every target.
+
+</scalar-card>
+
+<scalar-card title="parse​Float​Exact" icon="phosphor/regular/function" href="#parsefloatexact">
+
+`parseFloat(s)` under `--deterministic` (WP50 §9): the grammar the `--emit-ts` reading has, on every target.
+
+</scalar-card>
+
+<scalar-card title="pow​F64" icon="phosphor/regular/function" href="#powf64">
+
+`Math.pow(x, y)`: fdlibm's `__ieee754_pow`, log2(x) in extra precision times `y`, then 2 raised to that, with JavaScript's answers where fdlibm's differ.
+
+</scalar-card>
+
+<scalar-card title="quiet​Bits​F32" icon="phosphor/regular/function" href="#quietbitsf32">
+
+`f32ToBits` under `--deterministic`: the bits of `x`, with every NaN as the one quiet NaN, `0x7fc00000`, for the reason `quietBitsF64` gives.
+
+</scalar-card>
+
+<scalar-card title="quiet​Bits​F64" icon="phosphor/regular/function" href="#quietbitsf64">
+
+`f64ToBits` under `--deterministic` (WP50 §9): the bits of `x`, except that every NaN answers the one quiet NaN, `0x7ff8000000000000`.
+
+</scalar-card>
+
+<scalar-card title="sin​F64" icon="phosphor/regular/function" href="#sinf64">
+
+`Math.sin(x)`: fdlibm's `sin`, its reduction shared with `tan`.
+
+</scalar-card>
+
 <scalar-card title="tan​F64" icon="phosphor/regular/function" href="#tanf64">
 
-`Math.tan(x)`: fdlibm's reduction and kernel, with `tanLarge` past 2^20 * pi/2.
+`Math.tan(x)`: fdlibm's reduction and kernel, with `trigLarge` past 2^20 * pi/2.
 
 </scalar-card>
 
@@ -49,36 +119,48 @@ export const main = (): i32 => {
 
 <scalar-detail title="A program does not import this module">
 
-A call to one of the three is what
-loads it (the checker's `importMath`), and the compiler copies each function
-here that the call reaches into the calling module as an `internal`
-function, so this file writes no `.ll` of its own. Under Node and `tsc` the
-calls are the platform's `Math`, so nothing here runs there.
+A call to `Math.atan2`,
+`Math.tan` or `Math.hypot` is what loads it (the checker's `importMath`), and
+the compiler copies each function here that the call reaches into the
+calling module as an `internal` function, so this file writes no `.ll` of
+its own. On `--profile wasm` and `--profile wasm-host`, where no libm is
+linked, and on every target under `--deterministic`, a call to the other
+five and an `f64` `%` load it too; elsewhere they stay LLVM's intrinsics and
+`frem`. Under Node and `tsc` the calls are the platform's `Math`, so nothing
+here runs there, except under `--deterministic`, whose `--emit-ts` reading
+imports these functions in place of `Math`.
 
 </scalar-detail>
 
 <scalar-detail title="Exactness">
 
-Each is within one ulp of the correctly rounded result, and
-exactly JavaScript's value for every NaN, signed zero and infinity — every
-`atan2` infinity pairing, and `hypot`'s Infinity when either operand is
-infinite, even beside a NaN. Measured against mpmath over 2.8
-million random and edge-case operands: `tan` 0.83 ulp, `atan2` 0.84 ulp,
-`hypot` 0.93 ulp (`tests/cases/math_std_edges` pins the special values).
+Each is exactly JavaScript's value for every NaN, signed
+zero and infinity — every `atan2` infinity pairing, and `hypot`'s Infinity
+when either operand is infinite, even beside a NaN. `tan`, `atan2` and
+`hypot` are within one ulp of the correctly rounded result, measured
+against mpmath over 2.8 million random and edge-case operands: `tan` 0.83
+ulp, `atan2` 0.84 ulp, `hypot` 0.93 ulp (`tests/cases/math_std_edges` pins
+the special values). `sin`, `cos`, `exp`, `log` and `pow` are fdlibm's, as
+V8's `Math` is, and are within one ulp of V8 (`tests/run.js`'s `wasm-math`
+compares them on its operand grid); they are not measured against a
+correctly rounded reference. `fmodF64` is exact, as `%` is.
 
 </scalar-detail>
 
-<scalar-detail title="`tan`">
+<scalar-detail title="`sin`, `cos` and `tan`">
 
-**`tan`** is fdlibm's `__kernel_tan` behind its Cody-Waite reduction for
-|x| below 2^20·π/2, with the quadrant's parity read from the rounding
+**`sin`, `cos` and `tan`** are fdlibm's kernels behind its Cody-Waite
+reduction for |x| below 2^20·π/2, with the quadrant read from the rounding
 constant. Larger arguments reduce by an integer Payne-Hanek: 192 bits of
 2/π against the 53-bit mantissa, which is exact near every multiple of π/2
 a double can name. **`atan2`** is fdlibm's, with the quotient `y/x`
 carried as a double-double, so the argument reduction loses nothing, and
 π − atan taken in double-double. **`hypot`** is fdlibm's core on operands
 in [1e-150, 1e150], where neither square can overflow, and a power-of-two
-rescale into that range otherwise.
+rescale into that range otherwise. **`exp`**, **`log`** and **`pow`** are
+fdlibm's, `pow` with JavaScript's answers where C's differ (`x ** NaN` and
+`(±1) ** ±Infinity` are NaN). **`fmod`** is e_fmod.c's shift-and-subtract
+on one 64-bit integer rather than two 32-bit words.
 
 </scalar-detail>
 
@@ -113,6 +195,79 @@ The angle from the positive x axis to the point `(x, y)`, in
 
 </scalar-field>
 
+### cosF64
+
+`Math.cos(x)`: fdlibm's `cos`, its reduction shared with `tan`.
+
+```ts
+function cosF64(x: f64): f64
+```
+
+<scalar-field name="x" type="f64" required>
+
+The angle, in radians.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+The cosine of `x`; NaN for a NaN or an infinite `x`, and 1
+  when `|x| < 2^-27`.
+
+</scalar-field>
+
+### expF64
+
+`Math.exp(x)`: fdlibm's `__ieee754_exp`, a reduction by ln 2 and a
+rational approximation on [-ln2/2, ln2/2].
+
+```ts
+function expF64(x: f64): f64
+```
+
+<scalar-field name="x" type="f64" required>
+
+The exponent.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+e raised to `x`; Infinity past 709.78, +0 below -745.13, NaN for
+  a NaN, and 0 for -Infinity.
+
+</scalar-field>
+
+### fmodF64
+
+The remainder `x % y` on `f64`, as JavaScript and C's `fmod` define it:
+e_fmod.c's shift-and-subtract, exact, over one 64-bit word rather than two
+32-bit ones.
+
+```ts
+function fmodF64(x: f64, y: f64): f64
+```
+
+<scalar-field name="x" type="f64" required>
+
+The dividend.
+
+</scalar-field>
+
+<scalar-field name="y" type="f64" required>
+
+The divisor.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+`x - n * y` for the integer n that truncates `x / y`, exactly,
+  with `x`'s sign; NaN when `x` is infinite, `y` is a zero or either is
+  NaN, and `x` itself when `y` is infinite and `x` finite.
+
+</scalar-field>
+
 ### hypotF64
 
 `Math.hypot(x, y)`: fdlibm's core, rescaled by a power of two outside
@@ -142,9 +297,176 @@ The square root of `x * x + y * y`, computed without the squares
 
 </scalar-field>
 
+### logF64
+
+`Math.log(x)`: fdlibm's `__ieee754_log`, `x` split as 2^k * (1 + f) and
+log(1 + f) taken from a polynomial in f / (2 + f).
+
+```ts
+function logF64(x: f64): f64
+```
+
+<scalar-field name="x" type="f64" required>
+
+The operand.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+The natural logarithm of `x`; -Infinity for a zero of either
+  sign, NaN below zero or for a NaN, and Infinity for Infinity.
+
+</scalar-field>
+
+### numberExact
+
+`Number(s)` of a string under `--deterministic` (WP50 §9): the grammar the
+`--emit-ts` reading has, on every target. A `0x` integer after optional
+ASCII whitespace and sign is read here, correctly rounded whatever the libc,
+and anything but whitespace after its digits, a hex float's `.` or `p`
+included, makes the string NaN. Every other spelling is the runtime's
+`Number`, which already agrees across targets.
+
+```ts
+function numberExact(s: string): f64
+```
+
+<scalar-field name="s" type="string" required>
+
+The string to read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+The number `s` spells, or NaN.
+
+</scalar-field>
+
+### parseFloatExact
+
+`parseFloat(s)` under `--deterministic` (WP50 §9): the grammar the
+`--emit-ts` reading has, on every target. A `0x` integer after optional
+ASCII whitespace and sign is read here, correctly rounded whatever the libc,
+and reading stops at its last digit, so `0x1p3` is 1; `0x` with no digit is
+the `0` before it. Every other spelling is the runtime's `parseFloat`, which
+already agrees across targets.
+
+```ts
+function parseFloatExact(s: string): f64
+```
+
+<scalar-field name="s" type="string" required>
+
+The string to read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+The number at the start of `s`, or NaN.
+
+</scalar-field>
+
+### powF64
+
+`Math.pow(x, y)`: fdlibm's `__ieee754_pow`, log2(x) in extra precision times
+`y`, then 2 raised to that, with JavaScript's answers where fdlibm's differ.
+
+```ts
+function powF64(x: f64, y: f64): f64
+```
+
+<scalar-field name="x" type="f64" required>
+
+The base.
+
+</scalar-field>
+
+<scalar-field name="y" type="f64" required>
+
+The exponent.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+`x` raised to `y`; 1 when `y` is a zero, NaN when `y` is NaN or
+  when `x` is ±1 and `y` infinite (where C's pow gives 1), and NaN for a
+  negative finite `x` and a non-integer `y`.
+
+</scalar-field>
+
+### quietBitsF32
+
+`f32ToBits` under `--deterministic`: the bits of `x`, with every NaN as the
+one quiet NaN, `0x7fc00000`, for the reason `quietBitsF64` gives.
+
+```ts
+function quietBitsF32(x: f32): i32
+```
+
+<scalar-field name="x" type="f32" required>
+
+The value to read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The IEEE 754 bits of `x`, with every NaN as `0x7fc00000`.
+
+</scalar-field>
+
+### quietBitsF64
+
+`f64ToBits` under `--deterministic` (WP50 §9): the bits of `x`, except that
+every NaN answers the one quiet NaN, `0x7ff8000000000000`. A NaN's sign and
+payload are whatever the instruction that made it chose, which differs
+between x86-64, arm64, wasm and V8, so the flag makes them one value; a
+`bitsToF64` of any NaN pattern is left as it is.
+
+```ts
+function quietBitsF64(x: f64): i64
+```
+
+<scalar-field name="x" type="f64" required>
+
+The value to read.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i64">
+
+The IEEE 754 bits of `x`, with every NaN as `0x7ff8000000000000`.
+
+</scalar-field>
+
+### sinF64
+
+`Math.sin(x)`: fdlibm's `sin`, its reduction shared with `tan`.
+
+```ts
+function sinF64(x: f64): f64
+```
+
+<scalar-field name="x" type="f64" required>
+
+The angle, in radians.
+
+</scalar-field>
+
+<scalar-field name="returns" type="f64">
+
+The sine of `x`; NaN for a NaN or an infinite `x`, and `x`
+  itself when `|x| < 2^-26`, a zero's sign kept.
+
+</scalar-field>
+
 ### tanF64
 
-`Math.tan(x)`: fdlibm's reduction and kernel, with `tanLarge` past
+`Math.tan(x)`: fdlibm's reduction and kernel, with `trigLarge` past
 2^20 * pi/2.
 
 ```ts

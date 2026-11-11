@@ -77,7 +77,8 @@ static void *nish_cross_block(uint64_t size) {
  * value. */
 static int nish_since(uint64_t mark, uintptr_t p) {
   for (const nish_xchunk *c = (const nish_xchunk *)nish_arena.chunks; c; c = c->next) {
-    uintptr_t base = (uintptr_t)(c + 1), end = base + c->cap;
+    /* Bit 0 of `cap` marks a carved chunk (runtime.c's NISH_CHUNK_CARVED). */
+    uintptr_t base = (uintptr_t)(c + 1), end = base + (c->cap & ~(uint64_t)1);
     int marked = mark >= base && mark <= end;
     if (p >= (marked ? (uintptr_t)mark : base) && p < end) return 1;
     if (marked) return 0;

@@ -54,6 +54,14 @@ function argumentCapabilities(): i32 -> @argumentCapabilities [exported]
   callee +1:9 capabilityIndex -> @capabilityIndex
   callee +2:9 capabilityIndex -> @capabilityIndex
   callee +3:9 capabilityIndex -> @capabilityIndex
+function deterministicRefusals(): i32 -> @deterministicRefusals [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nondeterministic
+  stackSites=0 stackLocals=0
+  callee +0:49 nondeterministic -> @nondeterministic
+function deterministicReason(c: i32): string -> @deterministicReason [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function isDeterministic(mask: i32): boolean -> @isDeterministic [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nondeterministic

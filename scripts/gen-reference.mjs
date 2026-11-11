@@ -608,9 +608,24 @@ const typeText = (t) => {
       return `[${(t.elements ?? []).map(typeText).join(", ")}]`
     case "typeOperator":
       return `${t.operator} ${typeText(t.target)}`
+    case "reflection":
+      return objectTypeText(t.declaration)
     default:
       return t.type
   }
+}
+
+/** An inline object type, `{ readonly k: T; f(x: X): Y }`, from the declaration TypeDoc gives it. */
+const objectTypeText = (decl) => {
+  const members = [
+    ...(decl?.signatures ?? []).map((sig) => signatureText("", sig, true, false)),
+    ...(decl?.children ?? []).map((c) =>
+      c.signatures?.length
+        ? c.signatures.map((sig) => signatureText(c.name, sig, true, false)).join("; ")
+        : `${c.flags?.isReadonly ? "readonly " : ""}${c.name}${c.flags?.isOptional ? "?" : ""}: ${typeText(c.type)}`
+    ),
+  ]
+  return members.length === 0 ? "{}" : `{ ${members.join("; ")} }`
 }
 
 const typeParams = (tps) =>
@@ -876,28 +891,33 @@ const renderFunction = (f, ctx, fallback) => {
     if (desc && (i === 0 || desc !== firstDesc)) {
       out.push(desc)
     }
-    out.push(`\`\`\`ts\n${signatureText(`function ${f.name}`, sig)}\n\`\`\``)
-    if (sig.parameters?.length) {
-      for (const [j, p] of sig.parameters.entries()) {
-        const req = p.flags?.isOptional || p.defaultValue !== undefined ? "" : " required"
-        const pc = c.parameters?.[j]?.comment ?? p.comment
-        out.push(
-          tag(
-            "scalar-field",
-            `name="${attr(`${p.flags?.isRest ? "..." : ""}${p.name}`)}" type="${attr(typeText(p.type))}"${req}`,
-            summary(pc, ctx)
-          )
-        )
-      }
-    }
-    const ret = typeText(sig.type)
-    if (ret !== "void") {
-      out.push(
-        tag("scalar-field", `name="returns" type="${attr(ret)}"`, blockTag(c.comment, "@returns", ctx))
-      )
-    }
+    out.push(`\`\`\`ts\n${signatureText(`function ${f.name}`, sig)}\n\`\`\``, ...signatureFields(sig, c, ctx))
   }
   return out.join("\n\n")
+}
+
+/**
+ * One field per parameter of `sig`, then its return unless `void`, each
+ * described by the matching tag of `c`, the signature that carries the docs.
+ */
+const signatureFields = (sig, c, ctx) => {
+  const out = []
+  for (const [j, p] of (sig.parameters ?? []).entries()) {
+    const req = p.flags?.isOptional || p.defaultValue !== undefined ? "" : " required"
+    const pc = c.parameters?.[j]?.comment ?? p.comment
+    out.push(
+      tag(
+        "scalar-field",
+        `name="${attr(`${p.flags?.isRest ? "..." : ""}${p.name}`)}" type="${attr(typeText(p.type))}"${req}`,
+        summary(pc, ctx)
+      )
+    )
+  }
+  const ret = typeText(sig.type)
+  if (ret !== "void") {
+    out.push(tag("scalar-field", `name="returns" type="${attr(ret)}"`, blockTag(c.comment, "@returns", ctx)))
+  }
+  return out
 }
 
 const renderType = (t, ctx) => {
@@ -918,6 +938,14 @@ const renderClass = (c, ctx) => {
   }
   const word = c.kind === Kind.klass ? "class" : "interface"
   out.push(`\`\`\`ts\n${word} ${c.name}${typeParams(c.typeParameters)}\n\`\`\``)
+  // An interface's call signatures, each shown as a function's would be.
+  for (const sig of c.signatures ?? []) {
+    const sigDesc = summary(sig.comment, ctx)
+    if (sigDesc) {
+      out.push(sigDesc)
+    }
+    out.push(`\`\`\`ts\n${signatureText(c.name, sig)}\n\`\`\``, ...signatureFields(sig, sig, ctx))
+  }
   const rows = (c.children ?? []).flatMap((m) => memberRow(m, c.name, ctx))
   if (rows.length > 0) {
     out.push(["| Member | |", "| --- | --- |", ...rows].join("\n"))
@@ -1010,9 +1038,11 @@ const renderPage = ({ mod, spec, title, source, page, comment, intro, note, fall
     out.push(usage)
   }
   const cardOf = (m, icon) => {
-    const doc = m.signatures
-      ? (m.signatures[0].comment ?? fallback?.get(m.name)?.signatures?.[0]?.comment)
-      : m.comment
+    // A function's card reads its first signature; an interface's, its own doc.
+    const doc =
+      m.signatures && m.kind === Kind.func
+        ? (m.signatures[0].comment ?? fallback?.get(m.name)?.signatures?.[0]?.comment)
+        : m.comment
     const first = firstSentence(summary(doc, ctx).split(/\n\s*\n/)[0] ?? "")
     // The anchor is filled in once the page's headings are known (see below).
     return tag("scalar-card", `title="${attr(cardTitle(m.name))}" icon="${icon}" href="#${CARD}"`, first)
@@ -1130,8 +1160,10 @@ const renderIndex = (pages) => {
 /**
  * The builtin modules with Nish source behind them (`src/nish-modules.ts`,
  * `isNishSourceModule`): a program imports `nish:region`, never `nish/region`,
- * which the compiler refuses. Each gets one page, from its `std/` source,
- * under its builtin name, in place of the `runtime/nish.d.ts` page.
+ * which the compiler refuses. Their page comes from `runtime/nish.d.ts`, as
+ * every builtin module's does, so the reference and the editor read one doc
+ * source; the `std/` file gets no page of its own, and its comments say only
+ * how the module is built.
  */
 const SOURCE_MODULES = new Set(["region", "secret"])
 
@@ -1153,8 +1185,15 @@ const collectPages = (project) => {
         s.fileName === "runtime/nish.d.ts" &&
         (r.kind !== Kind.variable || /^\s*(?:declare\s+)?(?:var|const|let)\b/.test(dtsLines[s.line - 1]))
     )
+  // A global's own signatures likewise: lib's `parseInt(string, radix?)` goes,
+  // and so does a call signature only lib's interface declares.
+  const ownSignatures = (r) => {
+    const sigs = r.signatures?.filter(own)
+    return sigs?.length ? sigs : undefined
+  }
   const ownOnly = (r) => ({
     ...r,
+    signatures: ownSignatures(r),
     children: r.children
       ?.filter(own)
       .map((c) => (c.signatures ? { ...c, signatures: c.signatures.filter(own) } : c))
@@ -1176,9 +1215,7 @@ const collectPages = (project) => {
       continue
     }
     const name = m.name.replace(/^nish:/, "")
-    if (SOURCE_MODULES.has(name)) {
-      continue
-    }
+    const sourced = SOURCE_MODULES.has(name)
     const at = dtsLines.findIndex((l) => l.startsWith(`declare module ${JSON.stringify(m.name)}`))
     pages.push({
       mod: m,
@@ -1192,6 +1229,12 @@ const collectPages = (project) => {
         `The \`${m.name}\` builtin module: the globals of the same names, importable. ` +
         "Its members are declared in `runtime/nish.d.ts`; " +
         `[the language reference](${languageLink("builtin-modules-nish", `${outDir}/nish-${name}.md`)}) is the normative list.`,
+      // Said whatever the module comment says, so the page names what to import.
+      note: sourced
+        ? `The \`${m.name}\` builtin module, whose source is \`std/${name}.ts\`. ` +
+          `A program imports it as \`${m.name}\`; the compiler refuses \`nish/${name}\`. ` +
+          `[The language reference](${languageLink("builtin-modules-nish", `${outDir}/nish-${name}.md`)}) is the normative list.`
+        : "",
       fallback: globals,
     })
   }
@@ -1200,23 +1243,21 @@ const collectPages = (project) => {
       continue
     }
     const rel = m.name.slice("std/".length)
+    // A builtin module's page is its `runtime/nish.d.ts` one, made above.
+    if (SOURCE_MODULES.has(rel)) {
+      continue
+    }
     const source = `std/${rel}.ts`
-    const builtin = SOURCE_MODULES.has(rel)
-    const spec = builtin ? `nish:${rel}` : `nish/${rel}`
+    const spec = `nish/${rel}`
     pages.push({
       mod: m,
       spec,
       title: spec,
       source,
-      page: `${outDir}/${builtin ? `nish-${rel}` : rel}.md`,
+      page: `${outDir}/${rel}.md`,
       comment: leadingComment(fs.readFileSync(path.join(root, source), "utf8")),
       intro: "",
-      // Said whatever the module comment says, so the page names what to import.
-      note: builtin
-        ? `The \`${spec}\` builtin module, whose source is \`${source}\`. ` +
-          `A program imports it as \`${spec}\`; the compiler refuses \`nish/${rel}\`. ` +
-          `[The language reference](${languageLink("builtin-modules-nish", `${outDir}/nish-${rel}.md`)}) is the normative list.`
-        : "",
+      note: "",
     })
   }
   return pages.sort((a, b) => (a.page < b.page ? -1 : 1))
@@ -1246,10 +1287,10 @@ const routeTitle = (p) => (p.spec === null ? "Globals" : p.title)
 const AREAS = [
   {
     title: "Core",
-    about: "Numbers, bytes, sorting, randomness and the test runner",
+    about: "Numbers, bytes, array loops, sorting, randomness and the test runner",
     key: "/core/..",
     icon: "atom",
-    names: ["base64", "bytes", "math", "pair", "random", "sort", "testing"],
+    names: ["array", "base64", "bytes", "math", "pair", "random", "sort", "testing"],
   },
   {
     title: "Collections",

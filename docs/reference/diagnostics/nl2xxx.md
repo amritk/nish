@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 686 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 709 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -5418,7 +5418,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`)
+` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`)
 ```
 
 ## NL2352
@@ -7247,7 +7247,7 @@ export const tidy = (s: string): string => trim(s);
 ```
 
 ```text
-This call to `trim` may panic: it reaches the `index` site at std/text.ts:157:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+This call to `trim` may panic: it reaches the `index` site at std/text.ts:163:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
 ```
 
 ## NL2459
@@ -11888,7 +11888,7 @@ A rest parameter copies each `Cell` record it gathers, so a write through the co
 The message of an error contains:
 
 ```text
-…region memory kept by memory outside the region points at freed memory once `free` runs
+…region memory kept by memory outside the region points at freed memory once …
 ```
 
 ## NL2610
@@ -11928,7 +11928,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-The function `region` or `regionWith` runs answers the region's root
+… runs answers the region's root, which must be memory it allocated, and …
 ```
 
 ## NL2615
@@ -12459,21 +12459,10 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
+` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
 ```
 
-[`nl2665_host_string_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2665_host_string_parameter.ts) (compiled with `--target wasm32 --host tests/wordings/host/text.ts`):
-
-```ts
-import { log } from "./host/text"
-export function f(): i32 {
-  return 0
-}
-```
-
-```text
-Parameter `s` of host function `log` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length
-```
+**Retired**: a `string` parameter of a host function, refused until strings crossed (WP50 S4); it passes as its UTF-8 bytes' address and count, which the loader decodes
 
 ## NL2666
 
@@ -12665,7 +12654,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region
+…, which lives in the spawner's region and is freed when the spawner returns, while the task may still wait: a spawned task takes numbers, `boolean`s, enums and `string`s, which are copied into its own region, and objects and arrays, which it shares with the spawner
 ```
 
 ## NL2674
@@ -12825,6 +12814,475 @@ The message of an error contains:
 
 ```text
 ` is not available: index it, and keep a count beside it for the slots in use
+```
+
+## NL2689
+
+The message of an error contains:
+
+```text
+…what a task hands on may be memory of its own region, freed while the task it spawned still holds it
+```
+
+[`nl2689_task_nested_spawn.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2689_task_nested_spawn.ts):
+
+```ts
+// NL2689: a spawned task may not itself spawn a task with an object or an
+// array: what it hands on may be memory of its own region, which is freed when
+// it ends while the task it spawned still holds it.
+import { sleep, spawn } from "nish:async"
+
+class Box {
+  n: i32 = 0
+}
+
+async function inner(box: Box): Promise<void> {
+  await sleep(1)
+  console.log(`${box.n}`)
+}
+
+async function outer(n: i32): Promise<void> {
+  const box = new Box()
+  box.n = n
+  spawn(inner(box))
+}
+
+export async function main(): Promise<i32> {
+  spawn(outer(3))
+  return 0
+}
+```
+
+```text
+`outer` runs as a spawned task, in a region of its own that is freed when it ends, and spawns a task with an object or an array, itself or through a callee: what a task hands on may be memory of its own region, freed while the task it spawned still holds it
+```
+
+## NL2690
+
+The message of an error contains:
+
+```text
+…a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share…
+```
+
+[`nl2690_spawn_capture.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2690_spawn_capture.ts):
+
+```ts
+// NL2690: a spawned task's function argument captures only numbers, booleans,
+// enums and objects or arrays it may share. The arrow reads the string `tag`
+// of `start`, which the task may not share.
+import { sleep, spawn } from "nish:async"
+
+async function later(f: (n: i32) => i32, n: i32): Promise<void> {
+  await sleep(1)
+  console.log(`${f(n)}`)
+}
+
+async function start(base: i32): Promise<void> {
+  const tag = `n${base}`
+  spawn(later((n: i32): i32 => n + tag.length, 2))
+}
+
+export async function main(): Promise<i32> {
+  await start(40)
+  return 0
+}
+```
+
+```text
+`spawn` hands `later<(n) => ...>` an arrow that reads `tag` of type string of the function it is written in: a spawned task's function argument captures only numbers, booleans, enums and objects or arrays it may share, because the task may run after that function returns; pass the value to the task as an argument of its own, or hand it a top-level function
+```
+
+## NL2691
+
+The message of an error contains:
+
+```text
+…a task shares with its spawner only objects and arrays whose every part outlives the spawner's call; pass the task what it needs of it instead
+```
+
+## NL2692
+
+The message of an error contains:
+
+```text
+` takes two `i32`s: the descriptor it waits on, and the milliseconds it waits at most before it answers false
+```
+
+## NL2693
+
+The message of an error contains:
+
+```text
+` from `nish:async` takes …
+```
+
+## NL2694
+
+The message of an error contains:
+
+```text
+`nish.host` is an array of strings, each the path of a host module relative to `package.json`
+```
+
+## NL2695
+
+The message of an error contains:
+
+```text
+…a `nish.host` entry is a host module's path relative to the directory `package.json` is in
+```
+
+## NL2696
+
+The message of an error contains:
+
+```text
+…a `nish.host` entry names a host module the package has
+```
+
+## NL2697
+
+The message of an error contains:
+
+```text
+`find` is not supported: TypeScript types its answer `T | undefined`, and Nish has no `undefined`, so a test of it would pass `tsc` and mean something else under Node; use `findIndex` and index the array, `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`
+```
+
+## NL2698
+
+The message of an error contains:
+
+```text
+… parameters, and Nish passes at most two, the element and its index: JavaScript's third, the array itself, is the receiver the call already names, so read that instead
+```
+
+## NL2699
+
+The message of an error contains:
+
+```text
+`slice` on an array expects 0 to 2 arguments, got …
+```
+
+## NL2700
+
+The message of an error contains:
+
+```text
+…the clock and the random source answer differently on every run
+```
+
+## NL2701
+
+The message of an error contains:
+
+```text
+…the environment and the terminal answer differently on every host
+```
+
+## NL2702
+
+The message of an error contains:
+
+```text
+…: a child region's parent is the region entered when it is made, so `child` and `childWith` are called only in the function `enter` or `enterWith` runs, and that function only by them
+```
+
+## NL2703
+
+The message of an error contains:
+
+```text
+…` may spread `null`, which under Node copies no field at all: narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)
+```
+
+[`nl2703_object_spread_nullable.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2703_object_spread_nullable.ts):
+
+```ts
+// NL2703: Spreading `null` copies no field under Node, so a maybe-null source is
+// narrowed first.
+interface Point {
+  x: i32;
+}
+
+class Holder {
+  point: Point | null = null;
+}
+
+export const main = (): i32 => {
+  const h = new Holder();
+  const p: Point = { ...h.point };
+  return p.x;
+};
+```
+
+```text
+Spread of `Point | null` into `Point` may spread `null`, which under Node copies no field at all: narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)
+```
+
+## NL2704
+
+The message of an error contains:
+
+```text
+…`: which fields a spread copies depends on the variant it holds at run time, so narrow it to one variant first, or set the fields by name
+```
+
+[`nl2704_object_spread_union.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2704_object_spread_union.ts):
+
+```ts
+// NL2704: Which fields a union value has depends on the variant it holds, so a spread
+// of one is refused until it is narrowed.
+enum Kind {
+  Dot,
+  Box,
+}
+
+interface Dot {
+  readonly kind: Kind.Dot;
+  x: i32;
+}
+
+interface Box {
+  readonly kind: Kind.Box;
+  side: i32;
+}
+
+interface Out {
+  kind: Kind;
+  x: i32;
+}
+
+export const pick = (m: Dot | Box): i32 => {
+  const o: Out = { ...m, x: 1 };
+  return o.x;
+};
+
+export const main = (): i32 => {
+  const d: Dot = { kind: Kind.Dot, x: 3 };
+  return pick(d);
+};
+```
+
+```text
+Spread of the union `Dot | Box` into `Out`: which fields a spread copies depends on the variant it holds at run time, so narrow it to one variant first, or set the fields by name
+```
+
+## NL2705
+
+The message of an error contains:
+
+```text
+…`: only a value of a class or interface the program declares has fields an object spread copies one by one, so set each field by name
+```
+
+[`nl2705_object_spread_not_struct.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2705_object_spread_not_struct.ts):
+
+```ts
+// NL2705: An object spread copies a declared class's or interface's fields one by one;
+// a number has none, and Node would copy nothing at all from it.
+interface Point {
+  x: i32;
+}
+
+export const main = (): i32 => {
+  const a: i32 = 1;
+  const p: Point = { ...a, x: 2 };
+  return p.x;
+};
+```
+
+```text
+Spread of `i32` into `Point`: only a value of a class or interface the program declares has fields an object spread copies one by one, so set each field by name
+```
+
+## NL2706
+
+The message of an error contains:
+
+```text
+…` does not declare: Node copies every own field of an instance and none of its methods, so a class instance is spread only into a type that declares each of its fields; otherwise set the fields by name
+```
+
+[`nl2706_object_spread_class_extra.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2706_object_spread_class_extra.ts):
+
+```ts
+// NL2706: Node copies every own field of a class instance, so one is spread only into a
+// type that declares each of them.
+interface Point {
+  x: i32;
+}
+
+class Tagged {
+  x: i32 = 1;
+  tag: i32 = 2;
+}
+
+export const main = (): i32 => {
+  const p: Point = { ...new Tagged() };
+  return p.x;
+};
+```
+
+```text
+Spread of the `Tagged` instance into `Point` copies its field `tag`, which `Point` does not declare: Node copies every own field of an instance and none of its methods, so a class instance is spread only into a type that declares each of its fields; otherwise set the fields by name
+```
+
+## NL2707
+
+The message of an error contains:
+
+```text
+…` does not declare, and Node would carry it on the object anyway: spread a value whose every field the target declares, or set the fields by name
+```
+
+[`nl2707_object_spread_extra_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2707_object_spread_extra_field.ts):
+
+```ts
+// NL2707: Node carries every field of the source onto the object, so a source field
+// the target does not declare is refused rather than dropped.
+interface Point {
+  x: i32;
+}
+
+interface Point3 {
+  x: i32;
+  z: i32;
+}
+
+export const main = (): i32 => {
+  const a: Point3 = { x: 1, z: 2 };
+  const p: Point = { ...a };
+  return p.x;
+};
+```
+
+```text
+Spread of `Point3` into `Point` copies field `z`, which `Point` does not declare, and Node would carry it on the object anyway: spread a value whose every field the target declares, or set the fields by name
+```
+
+## NL2708
+
+The message of an error contains:
+
+```text
+…`: a spread copies each field as it is, so the two types must be the same; set it by name (`…
+```
+
+[`nl2708_object_spread_field_type.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2708_object_spread_field_type.ts):
+
+```ts
+// NL2708: A spread copies each field as it is, so a field's type in the source and the
+// target must be the same.
+interface Wide {
+  x: i64;
+}
+
+interface Narrow {
+  x: i32;
+}
+
+export const main = (): i32 => {
+  const a: Narrow = { x: 1 };
+  const w: Wide = { ...a };
+  return 0;
+};
+```
+
+```text
+Field `x` spread from `Narrow` is `i32`, but `Wide` declares it `i64`: a spread copies each field as it is, so the two types must be the same; set it by name (`x: s.x`)
+```
+
+## NL2709
+
+The message of an error contains:
+
+```text
+An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)
+```
+
+[`nl2709_object_spread_no_target.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2709_object_spread_no_target.ts):
+
+```ts
+// NL2709: A spread copies its source's fields into the target's layout, so the literal
+// needs a declared class or interface type to copy into.
+interface Point {
+  x: i32;
+}
+
+export const main = (): i32 => {
+  const a: Point = { x: 1 };
+  const p = { ...a };
+  return p.x;
+};
+```
+
+```text
+An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)
+```
+
+## NL2710
+
+The message of an error contains:
+
+```text
+…` after it, which TypeScript refuses (TS2783): set it after the spread, or leave it out
+```
+
+[`nl2710_object_spread_overwritten.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2710_object_spread_overwritten.ts):
+
+```ts
+// NL2710: A field set by name and then always overwritten by a later spread is
+// TypeScript's TS2783; the name was dead, so it is refused.
+interface Point {
+  x: i32;
+  y: i32;
+}
+
+export const main = (): i32 => {
+  const a: Point = { x: 1, y: 2 };
+  const p: Point = { x: 5, ...a };
+  return p.x;
+};
+```
+
+```text
+Field `x` is set by name and then always overwritten by the spread of `Point` after it, which TypeScript refuses (TS2783): set it after the spread, or leave it out
+```
+
+## NL2711
+
+The message of an error contains:
+
+```text
+… spreads another value into the typed JSON options: typed JSON reads a class's options from its text, where a spread names nothing it can see, so write each option out by name
+```
+
+[`nl2711_json_options_spread.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2711_json_options_spread.ts):
+
+```ts
+// NL2711: Typed JSON options are read from the class's text: a spread into them names
+// nothing that text can show, so it is refused with its own message.
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+const base: i32 = 0;
+
+class User {
+  static readonly json = { ...base, optional: ["id"] };
+  id: i32 = 0;
+}
+
+export const main = (): i32 => {
+  const w = new JsonWriter(new Array<u8>(64), 0);
+  jsonEncode(w, new User());
+  return w.failed;
+};
+```
+
+```text
+`User.json` spreads another value into the typed JSON options: typed JSON reads a class's options from its text, where a spread names nothing it can see, so write each option out by name
 ```
 
 ## NL2712

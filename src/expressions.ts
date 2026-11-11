@@ -77,6 +77,7 @@ import {
 } from "./members"
 import {
   FLAG_ACCESSOR,
+  FLAG_OBJECT_SPREAD,
   FLAG_SPREAD_ARGUMENT,
   FLAG_ANGLE,
   FLAG_CONST,
@@ -186,6 +187,10 @@ export const refuseExpressionForm = (ctx: CheckContext, node: Node): void => {
       }
       break
     case N_SPREAD:
+      if ((node.flags & FLAG_OBJECT_SPREAD) !== 0) {
+        // An object literal's entry: `checkObjectLiteral` says what it may spread.
+        break
+      }
       if ((node.flags & FLAG_SPREAD_ARGUMENT) !== 0) {
         ctx.error(
           node,

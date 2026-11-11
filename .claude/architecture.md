@@ -71,7 +71,8 @@ Compilation                                                            src/compi
 
   | Unit | What it holds | Today | Ceiling |
   | --- | --- | --- | --- |
-  | `runtime/runtime.c` | the core every program touches, a closed set | 3,606 (3,731 with `-DNISH_THREADS=1`) | 3,606 (3,840) |
+  | `runtime/runtime.c` | the core every program touches, a closed set | 1,723 (1,938 with `-DNISH_THREADS=1`) | 1,723 (1,938) |
+  | `runtime/runtime-text.c` | strings and number formatting, freestanding so a wasm module links it too | 1,787 | 1,787 |
   | `runtime/runtime-os.c` | the syscall wrappers: files, directories, processes, the environment | 1,530 | 1,536 |
   | `runtime/runtime-parallel.c` | dividing a range of work across threads | 286 (905 threaded) | 320 (1,024) |
   | `runtime/runtime-cross.c` | the copies of a task's, a map's, a channel's or a guard's strings and arrays across arenas, and a map element kept as its chunk rewinds | 1,170 (1,235 threaded) | 1,280 (1,280) |
@@ -123,7 +124,7 @@ Compilation                                                            src/compi
 | Which ABI guarantees do the tests pin? | `docs/ARCHITECTURE.md` → "ABI contracts and the tests that guard them" |
 | Why is attribute Y sound? | `docs/ARCHITECTURE.md` → "Attribute soundness rules", and the comment beside the code |
 | Why is the semantics different from JavaScript here? | `docs/FAQ.md`, `docs/wp13-differential.md` |
-| What is the plan and who owns what? | `docs/MASTER_PLAN.md` (§7 conventions, §8 agent brief) |
+| What is the plan and who owns what? | `docs/MASTER_PLAN.md` (§7 conventions, §8 agent brief); each package's state and next stage on `docs/roadmap/` |
 | How does the harness work? | `.claude/testing.md`, then `docs/ARCHITECTURE.md` → "Test harness" |
 
 ## Repository layout
@@ -137,7 +138,8 @@ src/                the compiler, in Nish, built by the last release (see selfho
   emit*.ts …         attributes, escape analysis, target table, ir builder, runtime ABI
   interop-*.ts       C header, wasm .d.ts and N-API shim generators
 std/                 the standard library, in Nish
-runtime/             runtime.c (core), runtime-os.c (the syscall wrappers),
+runtime/             runtime.c (core), runtime-text.c (strings and number
+                     formatting), runtime-os.c (the syscall wrappers),
                      runtime-parallel.c (threads), runtime-host.c (clock, entropy,
                      file times, signals), runtime-net.c (sockets), nish.h,
                      nish.d.ts (the builtins, for npm run check), runtime-wasm.c,

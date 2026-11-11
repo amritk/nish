@@ -115,6 +115,12 @@ refuse a program that reaches these
 
 </scalar-field>
 
+<scalar-field name="--deterministic">
+
+same float bits everywhere, no clock or I/O
+
+</scalar-field>
+
 <scalar-field name="--sandbox[=best-effort]">
 
 confine a Linux binary to what main reaches
@@ -194,6 +200,12 @@ list every place the program can panic
 <scalar-field name="--emit-arena" type="&lt;file.json&gt;">
 
 write the arena retention report
+
+</scalar-field>
+
+<scalar-field name="--explain-memory">
+
+why loops and functions keep their memory
 
 </scalar-field>
 

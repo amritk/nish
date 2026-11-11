@@ -4,7 +4,8 @@
 // process. Everything a wave allocates is reclaimed when it returns (its
 // parameters are all numbers, so its arena scope is automatic), which keeps
 // this process small across 100,000 sessions; nothing here is measured.
-import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollWait, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
+import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollRemove, pollWait, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
+import { monotonicNanos } from "nish:process";
 import { qcCrypto, qcFinishedPacket, qcInitial, qcReadFlight } from "../net_quic_conn/client";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { RELAY_CLOSE, RELAY_DATA, RELAY_HELLO_OK, RELAY_PROTOCOL_VERSION } from "../../../examples/relay/frame";
@@ -18,6 +19,18 @@ const SOAK_HELLO: i32 = 1;
 const SOAK_DATA: i32 = 2;
 const SOAK_CLOSE: i32 = 3;
 const SOAK_DONE: i32 = 4;
+
+/**
+ * How long a wave may take, in milliseconds, before the sessions still open
+ * count as unfinished. A wave takes tens of milliseconds; one that crosses a
+ * relay checkpoint waits out the relay's `sh` for its resident set, which a
+ * loaded runner can stretch past a second. Bounded by the clock, not by turns
+ * of the loop: a turn costs microseconds when a socket is ready, and a turn
+ * budget let a busy runner give up on a session the relay then closed.
+ */
+const SOAK_WAVE_MS: i64 = 20000;
+/** How long a session waits for its HELLO_OK before it sends the HELLO again, in milliseconds. */
+const SOAK_HELLO_AGAIN_MS: i64 = 1000;
 
 /** Whether `c` has received a datagram of `type`. */
 const has = (c: RigClient, type: i32): boolean => {
@@ -65,9 +78,13 @@ export const wave = (relayPort: i32, echoFd: i32, echoPort: i32, first: i32, cou
     stages.push(SOAK_FLIGHT);
   }
   const grant: string = rigGrant("127.0.0.1", echoPort);
+  const helloAt: i64[] = new Array<i64>(count);
+  const deadline: i64 = monotonicNanos() / 1000000 + SOAK_WAVE_MS;
   let done: i32 = 0;
-  for (let round: i32 = 0; round < 20000 && done < count; round++) {
+  let now: i64 = monotonicNanos() / 1000000;
+  while (done < count && now < deadline) {
     pollWait(loop, ready, n32(5));
+    now = monotonicNanos() / 1000000;
     echoAll(echoFd, rx, from, meta);
     for (let k: i32 = 0; k < count; k++) {
       const c: RigClient = clients[k];
@@ -85,6 +102,7 @@ export const wave = (relayPort: i32, echoFd: i32, echoPort: i32, first: i32, cou
       } else if (stages[k] === SOAK_OPENING && c.status() === "200") {
         // A datagram that overtakes its session's 200 is dropped (WT-4), so the HELLO waits for it.
         c.send(rigHello(grant, RELAY_PROTOCOL_VERSION));
+        helloAt[k] = now;
         stages[k] = SOAK_HELLO;
       } else if (stages[k] === SOAK_HELLO && has(c, RELAY_HELLO_OK)) {
         c.send(rigData(first + k, n32(64), n32(7)));
@@ -94,11 +112,15 @@ export const wave = (relayPort: i32, echoFd: i32, echoPort: i32, first: i32, cou
         c.send(bye);
         stages[k] = SOAK_CLOSE;
       } else if (stages[k] === SOAK_CLOSE && c.closeCode >= 0) {
+        // Out of the loop's set: the relay may still answer a late ACK, and a socket nobody reads stays ready,
+        // so every wait of the wave would return at once.
+        pollRemove(loop, c.fd);
         stages[k] = SOAK_DONE;
         done++;
-      } else if (stages[k] === SOAK_HELLO && toI32(c.datagrams.length) === 0 && round % 200 === 199) {
+      } else if (stages[k] === SOAK_HELLO && toI32(c.datagrams.length) === 0 && now - helloAt[k] >= SOAK_HELLO_AGAIN_MS) {
         // Datagrams are not sent again: a HELLO lost on the way is sent again.
         c.send(rigHello(grant, RELAY_PROTOCOL_VERSION));
+        helloAt[k] = now;
       } else {
         c.ackIfNew();
       }

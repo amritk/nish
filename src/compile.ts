@@ -796,6 +796,8 @@ export const main = (): number => {
       opts.denyPanics = true
     } else if (value === "--deny-retention") {
       opts.denyRetention = true
+    } else if (value === "--explain-memory") {
+      opts.explainMemory = true
     } else if (value === "--emit-arena") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -842,6 +844,8 @@ export const main = (): number => {
     } else if (value === "--plain") {
       irFlag = irFlag.length === 0 ? value : irFlag
       opts.optimizeAttributes = false
+    } else if (value === "--deterministic") {
+      opts.deterministic = true
     } else if (value === "--strict-exports") {
       opts.strictExports = true
     } else if (value === "--no-strict-exports") {
@@ -1037,8 +1041,11 @@ export const main = (): number => {
   }
   // After the `run` refusals, which already cover `--fix` under `run`, so
   // that this one is only ever about a compile.
-  if (fix && (productFlag.length > 0 || irFlag.length > 0)) {
-    const refused = productFlag.length > 0 ? productFlag : irFlag
+  if (fix && (productFlag.length > 0 || irFlag.length > 0 || opts.explainMemory)) {
+    let refused = productFlag.length > 0 ? productFlag : irFlag
+    if (refused.length === 0) {
+      refused = "--explain-memory"
+    }
     console.error(
       `compile: \`${refused}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
     )
@@ -1145,9 +1152,19 @@ export const main = (): number => {
   // The retention warnings and the arena placements come from the body checks
   // and the whole-program facts, which `--emit-ast` never reaches, so there
   // would be nothing to deny or to write.
-  if (emitAst && (opts.denyRetention || opts.emitArena.length > 0)) {
+  if (emitAst && (opts.denyRetention || opts.emitArena.length > 0 || opts.explainMemory)) {
+    let flag = opts.explainMemory ? "--explain-memory" : "--emit-arena"
+    if (opts.denyRetention) {
+      flag = "--deny-retention"
+    }
+    console.error(`compile: \`${flag}\` reports on a checked program, and --emit-ast stops before the check`)
+    return 2
+  }
+  // `--json` promises a stderr of diagnostic objects, one per line, and the
+  // memory report is prose.
+  if (json && opts.explainMemory) {
     console.error(
-      `compile: \`${opts.denyRetention ? "--deny-retention" : "--emit-arena"}\` reports on a checked program, and --emit-ast stops before the check`
+      "compile: `--explain-memory` prints a report for people, and --json keeps stderr to diagnostics"
     )
     return 2
   }
@@ -1276,6 +1293,12 @@ export const main = (): number => {
   }
   if (!compilation.check()) {
     report(compilation, json)
+    // A refusal after the facts are found, `--deny-retention`'s above all,
+    // is when the report is wanted most: it says why each refused loop
+    // keeps its memory.
+    if (opts.explainMemory && compilation.factsSettled) {
+      console.error(compilation.explainMemoryText())
+    }
     return 1
   }
   const warningStyle = new WarningStyle()
@@ -1321,6 +1344,12 @@ export const main = (): number => {
   if (opts.updateCapabilityLock && compilation.capabilityLockText.length > 0) {
     writeFileSync(compilation.capabilityLockPath, compilation.capabilityLockText)
     console.error(`wrote ${compilation.capabilityLockPath}`)
+  }
+  // The memory report goes to stderr with the warnings, read off the facts
+  // the check settled, and ahead of the capability line, which stays the last
+  // thing before the program's own output.
+  if (opts.explainMemory) {
+    console.error(compilation.explainMemoryText())
   }
   // WP35: read off the checked program, so answered here, before the dump
   // returns and before `run` starts the program -- the line is the last
@@ -2382,9 +2411,9 @@ const sqliteCflags = (): string => {
  *
  * A hit is the stored key equal to this one, byte for byte (CLI-8). A miss
  * compiles into a scratch directory of the entry's own, empties the entry's
- * key, moves the seventeen objects in with one `mv` -- a `rename` each, inside one
+ * key, moves the eighteen objects in with one `mv` -- a `rename` each, inside one
  * directory -- and writes the key last, so a key on disk always stands beside
- * seventeen whole objects of its own recipe (CLI-5). Two misses at once each compile
+ * eighteen whole objects of its own recipe (CLI-5). Two misses at once each compile
  * their own and move them over the other's; both sets are the same recipe's,
  * and an object is only ever replaced whole, so a link that reads one while
  * another lands reads a whole object either way.

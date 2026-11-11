@@ -607,9 +607,31 @@ leaves the IR unchanged.
   `main` does not reach — C code it links included. It adds a few lines to the
   IR. With it, `--allow fs.read=<dir>` and `--allow fs.write=<dir>` grant a
   capability beneath one directory. See [The sandbox](sandbox.md).
+- **`--deterministic`** makes floats answer the same bits on every target:
+  natively on x86-64 and Arm, in a wasm build, and in the `--emit-ts`
+  reading under Node. `Math.sin`, `cos`, `exp`, `log`, `pow` and a float `%`
+  run the standard library's own versions instead of the platform's, and
+  `f64ToBits` gives one bit pattern for every NaN. `Number(s)`,
+  `parseFloat(s)` and `parseInt(s)` read a string the way the `--emit-ts`
+  reading does, so a hex float such as `"0x1p3"` is not read as 8. A program
+  that reads the clock, a random number, the environment, a file, the
+  network, another process, the terminal, C code or a page's host import is
+  refused, because those answer differently on every run. Exit code 1, naming
+  the call:
+
+  ```text
+  main.ts:2:15: error: `main` reaches `clock`, which `--deterministic` refuses: the clock and the random source answer differently on every run; the chain that reaches it: main.ts:2:15 calls Date.now
+  ```
+
+  Use it for a simulation a server and a browser both run and must agree on
+  ([`--deterministic`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#--deterministic)).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
+- **`--explain-memory`** prints every loop and function that keeps the memory
+  it allocates past its arena scope, and why
+  ([Memory](../language/memory.md#what-you-do-have-to-think-about)). `nish run`
+  takes the flag; `--emit-ast`, `--json` and `--fix` do not.
 - **`--emit-ast`** and **`--emit-checked`** print what the compiler parsed and
   what its checker recorded, one line per node.
 

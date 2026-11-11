@@ -83,8 +83,12 @@ test is **data, not code**: a source file next to the output it must produce.
   on each side. Each entry carries a `why` and the `changelog` words the
   release notes carry for the change, which both lists check against
   `CHANGELOG.md` and the pending notes; a declared difference is reported, an
-  undeclared one fails, and an entry that matches nothing fails as stale, so the
-  reseed after the release retires it. Declare only what the comparison reaches. The example is #427:
+  undeclared one fails, and nish-cmp's full run names each entry that matches
+  nothing, which the reseed after the release retires. A nish-cmp entry names a
+  program, a file or an `undo`: one naming none excuses every difference, and
+  the tool refuses it before compiling. The PR that moves the IR declares it
+  ([`CLAUDE.md`](../CLAUDE.md#definition-of-done)). Declare only what the
+  comparison reaches. The example is #427:
   CG-8 took `willreturn` from `nish_str_concat`, nish-cmp's list named the
   programs it moved, the fuzzer had no list, and every seeded `npm test` failed
   until #438 gave it one. CI's `nish-cmp` job runs both against the seed, since
@@ -564,9 +568,10 @@ corpus, CI's jobs, and "Reading a crash". The rules a change has to keep:
   ASan and UBSan, single-threaded and `-DNISH_THREADS`. Both skip, with a
   reason, when clang cannot link the sanitizers. Read the skip line.
 - **CI**: `fuzz-smoke` (`ci.yml`, every PR) runs `fuzz.sh --smoke` for 30
-  seconds a target from `-seed=1`, then `runtime_sanitize`, and fails on a
-  skip. `fuzz.yml` (Saturdays and on dispatch) fuzzes each target for 30
-  minutes and uploads crashes and the grown corpus as `fuzz-<name>`.
+  seconds a target from `-seed=1`, one target per core (`FUZZ_JOBS`), then
+  `runtime_sanitize`, and fails on a skip. `fuzz.yml` (Saturdays and on
+  dispatch) fuzzes each target for 30 minutes and uploads crashes and the
+  grown corpus as `fuzz-<name>`.
 
 ## Example case
 

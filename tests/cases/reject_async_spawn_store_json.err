@@ -1,0 +1,2 @@
+hands `tally` to `jsonDecode<Tally>`, which may grow it
+hands `d` to `jsonDecode<Tally>`, which writes into `tally` and may keep it there

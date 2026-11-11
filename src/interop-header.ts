@@ -248,8 +248,11 @@ export const generateHeader = (
   const lines: string[] = []
   lines.push(banner(compilation, "--emit-header", "/* "))
   lines.push(" *")
-  lines.push(` * C ABI of the ${LANGUAGE} modules listed below. Link the .ll module(s) and`)
-  lines.push(` * runtime/runtime.c next to your C code; include runtime/${RUNTIME_HEADER}'s`)
+  lines.push(` * C ABI of the ${LANGUAGE} modules listed below. Link the .ll module(s),`)
+  lines.push(" * runtime/runtime.c, runtime/runtime-text.c (strings and number formatting)")
+  lines.push(" * and runtime/runtime-os.c, compiled with -ffp-contract=off, next to your C")
+  lines.push(" * code, or hand runtime/runtime.c to scripts/build.sh, which does both;")
+  lines.push(` * include runtime/${RUNTIME_HEADER}'s`)
   lines.push(" * directory with -I. Strings (nish_str) and arrays (nish_array, { len, cap,")
   lines.push(" * data }) live in the arena: a returned value is valid until")
   lines.push(" * nish_reset_arena() / nish_arena_release(). A `const nish_array *` parameter")

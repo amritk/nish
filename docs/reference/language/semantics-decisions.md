@@ -988,6 +988,10 @@ by the caller.
 - **`--emit-arena <file.json>`** writes every allocation site of the program
   with where its memory goes, beside the IR, and changes no byte of it; see
   [Arena placement](#arena-placement) below.
+- **`--explain-memory`** prints, beside the warnings, every loop and function
+  of the program's own modules that keeps the memory it allocates past its
+  scope, and why, and changes no byte of the IR; see
+  [Explaining kept memory](#explaining-kept-memory) below.
 - **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and a
   `DIFile` per source file a declaration comes from — the name as it was given
   on the command line, with `.` for the directory, so the metadata depends only
@@ -1120,9 +1124,11 @@ right side may resize the array
 range outside the receiver
 
 - *What proves it away:* nothing yet: `substring` clamps instead, and is not a
-  site (`tests/cases/panics_slice`, `str_from_bytes_oob`,
-  `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`,
-  `net_write2_bounds`)
+  site; an array's `xs.slice` is not a `slice` site but a `call` reaching
+  `std/array.ts`'s `panic` ([Callback methods and
+  `slice`](builtins.md#callback-methods-and-slice)) (`tests/cases/panics_slice`,
+  `str_from_bytes_oob`, `reject_deny_panics_from_bytes`,
+  `io_write_bytes_bounds`, `net_write2_bounds`)
 
 **`divide`**: integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1`
 when signed
@@ -1450,3 +1456,81 @@ site is memory the program holds on purpose, so it is never marked.
 - `--emit-arena` changes no byte of the IR, and it is a product, as
   `--emit-panics` is: `nish run` and `--fix` refuse it, and so does
   `--emit-ast`, which stops before the facts exist (exit 2).
+
+## Explaining kept memory
+
+**`--explain-memory`** answers, before the program is deployed, the question a
+memory budget turns on: which loops hand back what each pass allocated, and
+which do not. The [memory model](#memory-model) gives a pass of a loop, and a
+function, an arena scope of its own when it can prove what they allocated is
+unreachable at the end; one stored allocation, in the loop or in any callee,
+refuses the scope, and the memory the pass allocated then stays until the next
+bracket out. The warnings name such a refusal only where they can also name a
+rewrite; this report names every one, on stderr, after the warnings (an
+excerpt of `tests/cases/explain_memory`):
+
+```
+tests/cases/explain_memory.ts:21:1: memory: `remember` keeps what it allocates until the memory of its caller is released, because the allocation on line 22 is stored into memory, where this analysis stops following it
+tests/cases/explain_memory.ts:43:20: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `extra` returns
+tests/cases/explain_memory.ts:43:40: memory: this loop's update allocates on every pass, outside the scope a pass takes, and keeps it until `extra` returns
+tests/cases/explain_memory.ts:60:3: memory: this loop keeps what each pass allocates until `main` returns, because line 61 keeps what the pass allocated in `last`, which is declared outside the loop
+tests/cases/explain_memory.ts:76:10: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `main` returns
+explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass; 1 of 4 allocating functions with a scalar result keep what they allocate past the call
+```
+
+- **A loop** is listed when its passes allocate — themselves, or through a
+  callee that leaves memory behind — and no scope releases it at the end of
+  each pass. The line says where it does go back: at the end of the pass of the
+  scoped loop around it, at the end of the `using a = arena()` block around it,
+  when the function returns, or, in a function with no scope, when its caller's
+  memory is (in `main`, never: "for the rest of the run"). The reason is the
+  first refusal the analysis met, the one NL9011 names. A loop whose every
+  allocation goes back with a `using a = arena()` block or a scoped loop
+  inside its body keeps nothing past the pass and is not listed. A condition or `for` update that allocates is
+  listed on its own line — both, when both do — because it runs outside the
+  bracket a pass takes whether or not the body has one; a `do...while`
+  condition's line follows the lines of the loops in its body.
+- **A function** is listed when it answers a number, a `boolean`, an enum or
+  nothing, leaves memory behind, and has no scope of its own. A function that
+  answers memory (a string, an array, an object) is not, nor is a constructor,
+  which answers the object it builds: what it allocates goes to its caller with
+  the result, and whether the caller gives it back is the
+  caller's line.
+- **The summary** counts the loops whose passes allocate and the functions that
+  answer no memory and allocate, and how many of each keep it. A budget in CI
+  can hold that count, or the listed lines, against a golden, as
+  `tests/run.js` does with a case's `<name>.memory`
+  (`tests/cases/explain_memory`).
+- **The program's own modules only**, as `--deny-retention` judges them. A
+  generic function, or one that takes a function parameter, is explained once
+  per instantiation, under its instantiated name (`` `each<twice>` ``), after
+  the functions declared outright (`tests/cases/explain_memory_calls`).
+- **A callee the analysis cannot see counts as allocating.** In a function
+  that allocates, a loop with no scope that calls one is listed, since nothing
+  proves its passes leave no memory behind. A function that allocates nothing
+  the analysis can see is not examined.
+- **A callee's leak is its caller's.** A function whose kept allocation is a
+  call names that callee. One whose own allocation is held where the analysis
+  does not prove it dead names that first, whatever its callees do. One that
+  keeps memory only because a function down its calls holds an allocation the
+  analysis does not prove dead names that function, the one the doubt starts
+  in, even when that function's own scope gives its memory back: the doubt
+  passes up every call.
+- **A function is judged by what it still holds when it returns.** One with
+  no scope of its own keeps nothing when every allocation it leaves is inside
+  a scoped pass or a `using a = arena()` block, so it is counted and not
+  listed; one that is listed names the line of the first allocation it holds.
+- **Under `--no-elision`** no automatic scope is taken, so every allocating
+  loop and function is listed except the passes and blocks the program
+  brackets itself with `using a = arena()`.
+- **What it does not promise.** It reports the scopes the compiler takes, not
+  the bytes: a listed loop over three passes costs nothing, and memory the
+  program keeps on purpose — an array it pushes onto for its whole run — is
+  listed with the line that keeps it. It does not measure memory at run time.
+- `--explain-memory` changes no byte of the IR. `nish run` accepts it. A build
+  refused after the analysis has run (by `--deny-retention`, or a check that
+  follows it) still prints the report after the errors, since it says why each
+  refused loop keeps its memory; one refused earlier prints none. With
+  `--emit-ast`, which stops before the facts exist, with `--json`, whose
+  stderr is diagnostic objects only, and with `--fix`, which compiles nothing,
+  it is a usage error (exit 2).

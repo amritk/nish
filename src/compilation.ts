@@ -51,7 +51,7 @@
 import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
-import { arenaBlockFindings, arenaLoopFindings } from "./escape"
+import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
 import { Checker } from "./checker"
@@ -60,7 +60,7 @@ import { codeFor } from "./codes"
 import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { AsyncRegistry, finalizeAsync } from "./emit-async"
 import { emitProgram } from "./emit"
-import { spellCSymbolsApart } from "./generics"
+import { implementsDeclaration, spellCSymbolsApart } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -84,6 +84,8 @@ import {
   capabilityIndex,
   capabilityName,
   capabilityNames,
+  deterministicReason,
+  deterministicRefusals,
   everyCapabilityName,
   optInCapabilities,
 } from "./capabilities"
@@ -118,9 +120,12 @@ import {
   FunctionSig,
   ImportBinding,
   ParallelCall,
+  SpreadCopy,
   STRUCT_CLASS,
+  StructInfo,
   StructRegistry,
   StructTemplateInfo,
+  TemplateInfo,
 } from "./program"
 import {
   basename,
@@ -160,7 +165,10 @@ import {
   nishExportEntry,
 } from "./manifest"
 import {
+  ARRAY_SPECIFIER,
   COLLECTIONS_SPECIFIER,
+  isArrayMethodLocal,
+  isArrayModule,
   isStdModuleName,
   SECRET_STD_SPECIFIER,
   stdModuleName,
@@ -190,14 +198,22 @@ import {
   scopeSymbol,
 } from "./parallel"
 import { rejectAwaitCycles } from "./async-check"
-import { crossingMessage, holdsRegion, regionCallFindings } from "./region-rules"
+import { ChildSites, crossingMessage, holdsRegion, regionCallFindings, taskFindings } from "./region-rules"
+import { isChildMaker, regionRoleOf } from "./region-check"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
-import { jsonQuote, splitByte } from "./strings"
+import { jsonQuote, splitByte, StringBuilder } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
-import { HostText, hostModuleText, hostSignatureProblems, markHostFunctions } from "./host-module"
+import {
+  HostRefusal,
+  HostText,
+  dropRefused,
+  hostModuleText,
+  hostSignatureProblems,
+  markHostFunctions,
+} from "./host-module"
 import {
   buildModeOf,
   buildsPageModule,
@@ -313,6 +329,11 @@ export class ModuleUnit {
    */
   importedIdentities: string[]
   importedNames: string[]
+  /**
+   * A host module's exports no wasm import can carry, dropped from `file`:
+   * `check` reports the ones a Nish module imports, and only those.
+   */
+  hostRefusals: HostRefusal[]
 
   constructor(
     path: string,
@@ -338,6 +359,7 @@ export class ModuleUnit {
     this.signaturesFailed = false
     this.importedIdentities = []
     this.importedNames = []
+    this.hostRefusals = []
   }
 }
 
@@ -358,6 +380,27 @@ export class EmittedModule {
 /** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
   code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016"
+
+/**
+ * Whether an import emits nothing and names nothing the program wrote: one of
+ * the `nish/array` templates the checker gives a module for each array-method
+ * name it calls (`importArrayMethods`, under a dotted local) that no call
+ * instantiated, or that bound no template. The `--emit-checked` dump leaves it
+ * out, and `std/array.ts` is unused when every `nish/array` import is one. An
+ * import the program wrote is never unused, called or not, because the
+ * emitted TypeScript still names it.
+ *
+ * @param specifier The import's module specifier.
+ * @param local The import's local name.
+ * @param template The template it bound, or `null` for none.
+ * @returns `true` when the import is a synthesised, uninstantiated `nish/array` one.
+ */
+export const isUnusedArrayImport = (
+  specifier: string,
+  local: string,
+  template: TemplateInfo | null
+): boolean =>
+  specifier === ARRAY_SPECIFIER && isArrayMethodLocal(local) && (template === null || template.count === 0)
 
 export class Compilation {
   opts: Options
@@ -421,6 +464,13 @@ export class Compilation {
    * validator throws, and a program it refuses prints no tree on either side.
    */
   dumpOnly: boolean
+  /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
+  hostRefused: boolean
+  /**
+   * The check got as far as the whole-program facts, so `explainMemoryText`
+   * can read them even when a later refusal (`--deny-retention`) fails it.
+   */
+  factsSettled: boolean
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[]
   /**
@@ -486,6 +536,7 @@ export class Compilation {
     this.workingDir = cwd === null ? "" : cwd
     this.unreadableRoot = ""
     this.hostIdentities = new StringSet()
+    this.hostRefused = false
     this.facts = null
     this.analysisUnits = []
     this.rootPackageDir = ""
@@ -501,6 +552,7 @@ export class Compilation {
     this.grantArgTexts = []
     this.capabilityLockPath = ""
     this.capabilityLockText = ""
+    this.factsSettled = false
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -589,7 +641,10 @@ export class Compilation {
     const firstDiagnostic = this.sink.count()
     const filesBefore = this.sink.fileOrder.size()
     const discovered = this.discover(path, name, packageOverride)
-    if (this.modules.length === first) {
+    // A refused `nish.host` is reported against `package.json`, which no
+    // import edge reaches, so `settleLoad` would drop it; there is nothing past
+    // the entry to settle.
+    if (this.modules.length === first || this.hostRefused) {
       return discovered // already loaded, unreadable, or it did not parse
     }
     let i = first
@@ -770,15 +825,14 @@ export class Compilation {
     if (parser.diagnostics.length > 0) {
       return false
     }
-    if (host) {
+    let refusals: HostRefusal[] = []
+    if (read !== null) {
       source.host = true
-      const problems = hostSignatureProblems(file, parser)
-      for (const problem of problems) {
-        this.sink.report(source, problem.node.start, problem.node.end, problem.message)
+      refusals = read.refusals
+      for (const refusal of hostSignatureProblems(file, parser)) {
+        refusals.push(refusal)
       }
-      if (problems.length > 0) {
-        return false
-      }
+      dropRefused(file, refusals)
       markHostFunctions(file)
     }
     const isEntry = this.modules.length === 0
@@ -803,7 +857,9 @@ export class Compilation {
     checker.ctx.wasm = isWasmBuild(this.opts)
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
     checker.ctx.pageModule = buildsPageModule(this.opts)
+    checker.ctx.deterministic = this.opts.deterministic
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
+    unit.hostRefusals = refusals
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
     // with `--threads`, because every worker a region starts bumps an arena of
     // its own. It is a soundness requirement rather than a default: the rules
@@ -817,6 +873,10 @@ export class Compilation {
     this.modules.push(unit)
     if (isEntry) {
       this.hostIdentities = this.hostModules()
+      if (this.hostRefused) {
+        unit.refused = true
+        return false
+      }
     }
 
     // Phase 0 before pass 1a, so what is forbidden by design is refused before
@@ -964,7 +1024,7 @@ export class Compilation {
         path: "",
         name: "",
         packageName: "",
-        error: `\`${REGION_STD_SPECIFIER}\` is the builtin module \`${REGION_SPECIFIER}\`: import \`Region\`, \`region\`, \`regionWith\`, \`enter\`, \`enterWith\` and \`free\` from \`${REGION_SPECIFIER}\``,
+        error: `\`${REGION_STD_SPECIFIER}\` is the builtin module \`${REGION_SPECIFIER}\`: import \`Region\`, \`region\`, \`regionWith\`, \`child\`, \`childWith\`, \`enter\`, \`enterWith\` and \`free\` from \`${REGION_SPECIFIER}\``,
       }
       return spelled
     }
@@ -1222,6 +1282,10 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false // pass 1 and module resolution ran during load
     }
+    this.reportHostRefusals()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     // Before anything records: a `noPanic` list turns the recording on.
     const manifest = this.rootManifest()
     const nish = this.readRootNish(manifest)
@@ -1342,6 +1406,7 @@ export class Compilation {
         this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
       }
     }
+    this.rejectWideSpreads()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -1385,6 +1450,7 @@ export class Compilation {
       layoutInlineArrays(contexts, mode)
       proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     }
+    this.factsSettled = true
     this.reportArenaLoops()
     this.denyRetention()
     this.checkParallel()
@@ -1481,10 +1547,37 @@ export class Compilation {
   }
 
   /**
+   * The refusals of the host exports a Nish module imports, each once (WP50
+   * §12): a host file may export what the page alone calls, in types no wasm
+   * import carries, and the build reads only the names it imports.
+   */
+  reportHostRefusals(): void {
+    for (const unit of this.modules) {
+      for (const imp of unit.checker.program.imports) {
+        const index = isBuiltinSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
+        if (index < 0) {
+          continue
+        }
+        const host = this.modules[index]
+        for (const refusal of host.hostRefusals) {
+          if (refusal.name === imp.importedName && !refusal.reported) {
+            refusal.reported = true
+            this.sink.report(host.source, refusal.start, refusal.end, refusal.message)
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * The identities of the host modules (WP50 §3): each `--host` path, relative
    * to the working directory, and each `"nish".host` entry, relative to the
    * root manifest. A manifest whose `"nish"` field is refused names none here;
-   * `check` reports it (NL3036).
+   * `check` reports it (NL3036). A `host` value that is not an array of
+   * strings (NL2694), an entry that is empty or absolute (NL2695) and one that
+   * names no file (NL2696) are each reported where `package.json` writes it,
+   * and `hostRefused` then stops the load: read as Nish, the page's module
+   * would only be refused for being TypeScript.
    */
   hostModules(): StringSet {
     const out = new StringSet()
@@ -1500,8 +1593,26 @@ export class Compilation {
       return out
     }
     const dir = dirname(source.path)
-    for (const entry of manifestHost(source.text, nish.hostAt).entries) {
-      out.add(this.identityOf(joinPath([dir, entry])))
+    const host = manifestHost(source.text, nish.hostAt, nish.hostEnd)
+    for (const problem of host.problems) {
+      this.sink.report(source, problem.start, problem.end, problem.message)
+      this.hostRefused = true
+    }
+    let i = 0
+    while (i < host.list.entries.length && i < host.list.offsets.length && i < host.list.ends.length) {
+      const entry = host.list.entries[i]
+      const path = joinPath([dir, entry])
+      if (readFileSyncOrNull(path) === null) {
+        this.sink.report(
+          source,
+          host.list.offsets[i],
+          host.list.ends[i],
+          `there is no \`${entry}\` in the directory \`package.json\` is in: a \`nish.host\` entry names a host module the package has`
+        )
+        this.hostRefused = true
+      }
+      out.add(this.identityOf(path))
+      i = i + 1
     }
     return out
   }
@@ -1814,7 +1925,8 @@ export class Compilation {
   refuseCapabilities(): void {
     const allow = this.opts.allowCapabilities & this.manifestAllow
     const deny = this.opts.denyCapabilities | this.manifestDeny
-    const refused = deny | (~allow & ~optInCapabilities() & allCapabilities())
+    const flagged = this.opts.deterministic ? deterministicRefusals() : 0
+    const refused = deny | (~allow & ~optInCapabilities() & allCapabilities()) | flagged
     if (refused === 0 || this.modules.length === 0) {
       return
     }
@@ -1875,6 +1987,15 @@ export class Compilation {
    * loop above is told so once rather than for each call it makes.
    */
   reportRefusal(source: SourceFile, site: Node, sig: FunctionSig, c: i32, hops: string[]): void {
+    if (this.refusedOnlyByDeterministic(c)) {
+      this.sink.report(
+        source,
+        site.start,
+        site.end,
+        `\`${sig.sourceName}\` reaches \`${capabilityName(c)}\`, which \`--deterministic\` refuses: ${deterministicReason(c)}; the chain that reaches it: ${hops.join(", ")}`
+      )
+      return
+    }
     this.sink.report(
       source,
       site.start,
@@ -2208,6 +2329,18 @@ export class Compilation {
     )
   }
 
+  /**
+   * Whether `--deterministic` is the only part of the policy that refuses
+   * capability `c`: then its refusal says why the flag refuses it, under a code
+   * of its own, and otherwise `--deny` or the allowlist is named as before.
+   */
+  refusedOnlyByDeterministic(c: i32): boolean {
+    const bit = 1 << c
+    const allow = this.opts.allowCapabilities & this.manifestAllow
+    const deny = this.opts.denyCapabilities | this.manifestDeny
+    return this.opts.deterministic && (deny & bit) === 0 && (allow & bit) !== 0
+  }
+
   /** Which part of the policy refuses capability `c`, as the refusal names it: the first of the four that does. */
   refusedBy(c: i32): string {
     const bit = 1 << c
@@ -2448,9 +2581,26 @@ export class Compilation {
     const fresh = new FreshResults(programs, this.table, facts)
     const scopeName = scopeSymbol(programs)
     const table = this.table
+    // A `child` call is judged after every `enter` walk has said where it is made.
+    const sites = new ChildSites()
+    for (const unit of this.modules) {
+      for (const call of unit.checker.program.regionCalls) {
+        if (isChildMaker(regionRoleOf(call.sig))) {
+          sites.childTypes.push(call.sig.returnType)
+        }
+      }
+    }
+    // Which handles are plain matters only to a program that makes a child.
+    for (let i = 0; i < this.modules.length && sites.childTypes.length > 0; i++) {
+      const program = this.modules[i].checker.program
+      sites.scan(program, program.file)
+    }
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.regionCalls) {
+        if (isChildMaker(regionRoleOf(call.sig))) {
+          continue
+        }
         const findings = regionCallFindings(
           programs,
           table,
@@ -2459,9 +2609,15 @@ export class Compilation {
           call.node,
           call.sig,
           scopeName,
-          fresh
+          fresh,
+          sites
         )
         for (const finding of findings) {
+          this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
+        }
+      }
+      for (const call of program.asyncSpawns) {
+        for (const finding of taskFindings(programs, table, facts, program, call.node, call.sig, fresh)) {
           this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
         }
       }
@@ -2511,6 +2667,28 @@ export class Compilation {
             )
             break
           }
+        }
+      }
+    }
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const call of program.regionCalls) {
+        if (!isChildMaker(regionRoleOf(call.sig))) {
+          continue
+        }
+        const findings = regionCallFindings(
+          programs,
+          table,
+          facts,
+          program,
+          call.node,
+          call.sig,
+          scopeName,
+          fresh,
+          sites
+        )
+        for (const finding of findings) {
+          this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
         }
       }
     }
@@ -3118,6 +3296,67 @@ export class Compilation {
   }
 
   /**
+   * An object spread whose source is an interface some class implements with
+   * more fields. The native copy reads the interface's fields, the prefix of
+   * every implementer (`checkImplements`), where Node copies every own field
+   * of the instance the value holds, so the two would build different
+   * objects. Which classes implement an interface is known only once every
+   * module is checked, so this runs then, over every spread any body or
+   * instance recorded (`spreadCopies`).
+   */
+  rejectWideSpreads(): void {
+    const classes: StructInfo[] = []
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (info.kind === STRUCT_CLASS && info.implementsNames.length > 0) {
+          classes.push(info)
+        }
+      }
+    }
+    if (classes.length === 0) {
+      return
+    }
+    // A spread in a generic body is recorded once per instance, at one place.
+    const reported = new StringSet()
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const copy of program.spreadCopies) {
+        const iface = program.struct(this.table.nameOf(copy.source))
+        if (iface === null || iface.kind === STRUCT_CLASS) {
+          continue
+        }
+        const place = `${copy.file.path}:${copy.at.start}:${copy.source}`
+        if (reported.has(place)) {
+          continue
+        }
+        for (const cls of classes) {
+          if (cls.fields.length > iface.fields.length && implementsDeclaration(cls, iface)) {
+            this.reportWideSpread(copy, cls, cls.fields[iface.fields.length].name)
+            reported.add(place)
+            break
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * The refusal of spread `copy`, whose interface source may hold an instance
+   * of class `cls`, which carries field `extra` beyond the interface's.
+   */
+  reportWideSpread(copy: SpreadCopy, cls: StructInfo, extra: string): void {
+    this.sink.report(
+      copy.file,
+      copy.at.start,
+      copy.at.end,
+      `Spread of \`${this.table.typeName(copy.source)}\` into \`${this.table.typeName(copy.into)}\` may ` +
+        `spread an instance of \`${cls.name}\`, which implements it with field \`${extra}\` besides: Node copies every own ` +
+        "field of the instance a value holds, and the native copy only the interface's, so spread a value " +
+        "of a class type, or set the fields by name"
+    )
+  }
+
+  /**
    * NL3040: a defined function whose symbol is a name some module declares as
    * a C function, which the link would bind both to and the fact table would
    * key both under. Only the root package's functions can be one, as every
@@ -3241,6 +3480,33 @@ export class Compilation {
   }
 
   /**
+   * Whether `unit` is `std/array.ts` and nothing needs it: every `nish/array`
+   * import is one the checker gave a module for a call of a method named
+   * `map`, `slice`, ... (`importArrayMethods`, under a dotted local), and no
+   * call instantiated it. The checker adds those before any type is known, so
+   * a string's `slice` loads the module too; then it emits nothing, and the
+   * `--emit-checked` dump and the `--emit-ts` output leave it out. An import
+   * the program wrote keeps the module, instantiated or not, because the
+   * emitted TypeScript still names it.
+   */
+  isUnusedArrayModule(unit: ModuleUnit): boolean {
+    if (!isArrayModule(unit.packageName, unit.name)) {
+      return false
+    }
+    for (const other of this.modules) {
+      for (const imp of other.checker.program.imports) {
+        if (
+          imp.specifier === ARRAY_SPECIFIER &&
+          !isUnusedArrayImport(imp.specifier, imp.localName, imp.template)
+        ) {
+          return false
+        }
+      }
+    }
+    return true
+  }
+
+  /**
    * The whole-program attribute fixpoint, computed once per compilation.
    * `emit()` reads it, and so does `--emit-checked`, whose dump prints the
    * facts of every function the way stage0's `src/dump.ts` prints them; running it
@@ -3277,6 +3543,42 @@ export class Compilation {
   arenaText(): string {
     const facts = this.analyze()
     return arenaJson(this.analysisUnits, facts)
+  }
+
+  /**
+   * The `--explain-memory` report: one line per loop whose passes keep what
+   * they allocate and per function that keeps what it allocates past its
+   * return, each with the first thing that refused its scope, and a summary.
+   * The program's own modules only, as `--deny-retention` judges them: a
+   * dependency's memory is its author's to explain. It reads the facts `emit`
+   * reads, memoised by `analyze`, and changes no byte of the IR.
+   */
+  explainMemoryText(): string {
+    const facts = this.analyze()
+    const report = new MemoryReport()
+    const lines = new StringBuilder()
+    for (const unit of this.analysisUnits) {
+      const source = unit.program.source
+      if (!this.inRootPackage(source)) {
+        continue
+      }
+      const from = report.notes.length
+      explainMemory(unit, this.table, facts, report)
+      let i = from
+      while (i < report.notes.length) {
+        const note = report.notes[i]
+        lines.add(
+          `${source.path}:${source.lineOf(note.node.start)}:${source.columnOf(note.node.start)}: memory: `
+        )
+        lines.add(`${note.message}\n`)
+        i = i + 1
+      }
+    }
+    lines.add(
+      `explain-memory: ${report.loopsKept} of ${report.loops} allocating loops keep what a pass allocates past the pass; ` +
+        `${report.functionsKept} of ${report.functions} allocating functions with a scalar result keep what they allocate past the call`
+    )
+    return lines.toText()
   }
 
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */

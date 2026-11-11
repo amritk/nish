@@ -340,7 +340,8 @@ These come up often enough to know before you meet them:
 | --- | --- | --- |
 | `if (xs.length)` | `NL2188`: a condition must be a `boolean` | `if (xs.length !== 0)` |
 | `a == b` | `NL1047`: loose equality | `a === b` |
-| `xs.map(f)`, `.filter`, `.forEach` | `NL2249`: unknown method | a `for...of` loop |
+| `xs.forEach(f)`, `.reduce` | `NL2249`: unknown method | a `for...of` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work ([Arrays and strings](../language/arrays-and-strings.md)) |
+| `xs.find(f)` | `NL2697`: `find` answers `T \| undefined` | `const i = xs.findIndex(f)`, then `xs[i]` when `i >= 0` |
 | `String(n)`, `n.toString()` | `NL2247`: unknown function, `NL2249`: unknown method | `` `${n}` `` |
 | `promise.then(f)`, `Promise.all`, a promise in a variable | `NL2650`, `NL2649`, `NL2654`: a promise is never a value | `await` each call where it is made, or `awaitAll` ([Async functions](../language/async.md)) |
 

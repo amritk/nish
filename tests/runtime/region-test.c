@@ -72,6 +72,74 @@ static void *fill(uint64_t r, uint64_t payload) {
 
 #define REGIONS 100000
 #define ROUNDS 10
+#define DEPTH 1000000
+
+/* The index part of a handle. */
+static uint64_t slot_index(uint64_t r) { return r & 0xffffff; }
+
+/* Children: made under the region entered last, freed with their parent,
+   deepest first, and their slots reused afterwards. */
+static void children(void) {
+  uint64_t p = nish_region_new();
+  nish_region_enter(p);
+  uint64_t c1 = nish_region_child_new();
+  uint64_t c2 = nish_region_child_new();
+  uint64_t c3 = nish_region_child_new();
+  nish_region_enter(c2);
+  uint64_t g = nish_region_child_new();
+  nish_region_enter(g);
+  char *in_g = nish_alloc_struct(40);
+  memset(in_g, 7, 40);
+  nish_region_leave(g, in_g);
+  nish_region_leave(c2, NULL);
+  nish_region_leave(p, NULL);
+  CHECK(nish_region_enter(g) == in_g, "a grandchild keeps its root while its parents live");
+  nish_region_leave(g, in_g);
+
+  /* Freeing a child unlinks it, and the parent's later free does not see it. */
+  nish_region_free(c2);
+  nish_region_free(c1);
+  uint64_t c4 = nish_region_new();
+  uint64_t c5 = nish_region_new();
+  CHECK(slot_index(c4) == slot_index(c1) && slot_index(c5) == slot_index(c2), "a freed child's slot is reused first");
+  nish_region_free(c4);
+  nish_region_free(c5);
+  nish_region_free(p);
+  uint64_t a = nish_region_new();
+  uint64_t b = nish_region_new();
+  uint64_t c = nish_region_new();
+  CHECK(slot_index(a) == slot_index(p) && slot_index(b) == slot_index(c3),
+        "freeing the parent frees its live child, the parent's slot last");
+  CHECK(slot_index(c) == slot_index(c5), "and the slots freed before it come after");
+  nish_region_free(a);
+  nish_region_free(b);
+  nish_region_free(c);
+
+  /* A chain DEPTH deep, and a parent with DEPTH children: freed without a
+     stack frame a level and without one walk per child. */
+  static uint64_t chain[DEPTH];
+  chain[0] = nish_region_new();
+  for (int i = 1; i < DEPTH; i++) {
+    nish_region_enter(chain[i - 1]);
+    chain[i] = nish_region_child_new();
+  }
+  for (int i = DEPTH - 2; i >= 0; i--) nish_region_leave(chain[i], NULL);
+  nish_region_enter(chain[DEPTH - 1]);
+  nish_alloc_struct(16);
+  nish_region_leave(chain[DEPTH - 1], NULL);
+  nish_region_free(chain[0]);
+  uint64_t wide = nish_region_new();
+  nish_region_enter(wide);
+  for (int i = 0; i < DEPTH; i++) {
+    uint64_t k = nish_region_child_new();
+    if (i % 3 == 0) nish_region_free(k);
+  }
+  nish_region_leave(wide, NULL);
+  nish_region_free(wide);
+  uint64_t after = nish_region_new();
+  CHECK(slot_index(after) == slot_index(wide), "the wide parent's slot is the last one freed");
+  nish_region_free(after);
+}
 
 static void positive(void) {
   /* The thread's own arena, with a chunk in it, and what it looked like. */
@@ -156,6 +224,9 @@ static void positive(void) {
   /* 64 KiB chunks would keep about 6.5 GB reserved and 450 MB resident here. */
   CHECK(peak < ((uint64_t)128 << 20), "100,000 live sessions stay under 128 MiB resident, peak %llu KiB",
         (unsigned long long)(peak >> 10));
+
+  /* After the resident-set rounds: the deep chain's slot table would count. */
+  children();
 }
 
 #ifdef NISH_THREADS
@@ -223,6 +294,39 @@ int main(int argc, char **argv) {
     nish_region_enter(other);
     nish_region_leave(r, NULL);
   } else if (!strcmp(mode, "leave-unentered")) nish_region_leave(r, NULL);
+  else if (!strcmp(mode, "child-no-parent")) nish_region_child_new();
+  else if (!strcmp(mode, "child-stale")) {
+    nish_region_enter(r);
+    uint64_t c = nish_region_child_new();
+    nish_region_leave(r, NULL);
+    nish_region_free(r);
+    nish_region_enter(c);
+  } else if (!strcmp(mode, "grandchild-stale")) {
+    nish_region_enter(r);
+    uint64_t c = nish_region_child_new();
+    nish_region_enter(c);
+    uint64_t g = nish_region_child_new();
+    nish_region_leave(c, NULL);
+    nish_region_leave(r, NULL);
+    nish_region_free(r);
+    nish_region_free(g);
+  } else if (!strcmp(mode, "free-child-entered")) {
+    nish_region_enter(r);
+    uint64_t c = nish_region_child_new();
+    nish_region_leave(r, NULL);
+    nish_region_enter(c);
+    nish_region_free(r);
+  } else if (!strcmp(mode, "adopt-child")) {
+    nish_region_enter(r);
+    uint64_t c = nish_region_child_new();
+    nish_region_leave(r, NULL);
+    nish_region_adopt(c);
+  } else if (!strcmp(mode, "adopt-parent")) {
+    nish_region_enter(r);
+    nish_region_child_new();
+    nish_region_leave(r, NULL);
+    nish_region_adopt(r);
+  }
 #ifdef NISH_THREADS
   else if (!strcmp(mode, "thread")) {
     pthread_t t;

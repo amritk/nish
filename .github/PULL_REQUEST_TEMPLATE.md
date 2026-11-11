@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What does this PR change and why? Which work package (docs/MASTER_PLAN.md §5) does it belong to? -->
+<!-- What does this PR change and why? Which work package (docs/MASTER_PLAN.md §5) does it belong to? If it lands a stage, tick its box on docs/roadmap/<the package's note name> and move that page's "Next" on. -->
 
 ## Changes
 
@@ -11,7 +11,8 @@
 <!-- How did you verify this works? -->
 
 - [ ] `npm run check` passes (the ambient type-check of `src/`, `std/` and `tests/nish/`)
-- [ ] `npm test` passes with LLVM 18 on `PATH`, undegraded (no `DEGRADED:` line); skip count: <!-- n -->
+- [ ] Every CI `test (…, shard N/8)` row green and undegraded on the current head (no `DEGRADED:` line); skip counts read from the shard summaries: <!-- n -->
+- [ ] `node tests/run.js <filter>` passes for each section or program the change touches
 - [ ] `npm run lint` passes
 - [ ] Markdown changed: `node docs/check-links.mjs` passes
 - [ ] New construct: implemented in `src/`, golden `.ll`, native round trip (`.out`), at least one `reject_*` case

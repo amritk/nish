@@ -1,0 +1,11 @@
+connected: 2
+cancel: true
+hold: ok=false failure=9 socket=-3 reusable=false cell=- cancelled=true
+dropped: 1
+quick: ok=true failure=0 socket=0 reusable=true cell=q cancelled=false
+greedy: first true, second -3, cancelled true
+cancel: true
+quick: slept false
+quick: claim -3, cancelled true
+quick: ok=true failure=0 socket=0 reusable=true cell=q cancelled=false
+dropped: 1, claimed: 0 0

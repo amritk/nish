@@ -43,7 +43,7 @@ them for review.
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
 | `runner (shard <i>/3)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
 | `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3 --delegate-ir-checks` ([shards](#shards-and-time-limits)), which links and runs each program and delegates the checks of its compile (goldens, `llvm-as`, `opt`, declares, `--emit-panics`, rejections) to `test`, which makes them on Linux. Each run's summary line and every skip, with its reason, go to the job summary |
-| `lint` | Ubuntu | `npm ls --package-lock-only` (skipped on tags, on `release/next` and on the Release PR's merge-queue run), `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
+| `lint` | Ubuntu | `npm ls --package-lock-only`, `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
 
 Every job that compiles anything compiles with `src/`, built from the seed:
 there is no other compiler in the repository. The jobs that compared two
@@ -73,8 +73,10 @@ fixed point.
 
 ### Shards and time limits
 
-Every job stops at 15 minutes (`timeout-minutes`) but `test` (25) and
-`runtime-net` (20), and every LLVM install step at 5 (10 for Homebrew). Without them a job that hangs runs to GitHub's six-hour
+Every job stops at 15 minutes (`timeout-minutes`) but `test` (25),
+`runtime-net` (20) and interop.yml's `arena` (25: its Chromium soak of
+examples/wasm-arena runs ten minutes by design, docs/wp50-wasm-host.md §10),
+and every LLVM install step at 5 (10 for Homebrew). Without them a job that hangs runs to GitHub's six-hour
 limit: on #502 three jobs waited on one `apt-get update` fetch from
 archive.ubuntu.com from 19:22 to 01:22 and no test ran. apt has no timeout of
 its own, so every `apt-get` is also handed `$APT_OPTS` (30 s per connection,
@@ -97,7 +99,8 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
 - **`test`**, eight ways. `node tests/run.js --shard <i>/<n>` splits the suite.
   Every shard builds stage1 and runs everything before the `tests/link/`
   programs but the two sections there that are dealt (`term-io` and
-  `--emit-ts`), about two minutes. Shard 1 runs every section after them
+  `--emit-ts`): about 200 s of setup, stage1 and pre-link sections per shard
+  (measured in the paragraph on the eight-way split, below). Shard 1 runs every section after them
   that is not dealt, together with the link programs whose output a later
   check reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
   `tests/run.js`: term-io, `--emit-ts`, WP14 self-hosting, crypto-bench, the
@@ -159,7 +162,11 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   shard 1's 62 s of steps after the suite, 218 s. The link costs and the
   groups' costs are read from that run's four logs. With 946 link programs
   now, the job is split eight ways: about 390 s of the table each, after
-  about 200 s of setup, stage1 and pre-link sections that every shard runs.
+  about 200 s of setup, stage1 and pre-link sections that every shard runs
+  (job start to its first link program in three shards of `main`'s runs at
+  `2d10118`, `ea8b601` and `2f4f8e3`: 152 to 223 s, of which 28 to 45 s
+  are the steps before Test; a shard dealt a slow pre-link section, as
+  shard 5 at `ea8b601` was, takes longer).
   A filtered run sends every `tail` group to shard 1, as it sent all of
   that, and counts none of them in its deal.
 
@@ -367,17 +374,19 @@ no `SKIP` line (`.claude/testing.md`). A shard is not a filter, which is why
 `--shard` cuts at a section boundary and delegates rather than filtering
 ([shards](#shards-and-time-limits)).
 
-A newer measurement, per section rather than per check, on `e1449d5`: one
+A newer measurement, per section rather than per check, on `e1449d5` (an
+unsharded local run, before the link pool and the eight-way split described
+under [Shards](#shards-and-time-limits)): one
 unsharded local run of 2014 s spent 1305 s on the `tests/link/` programs, 344 s
 on WP14 self-hosting (its fixed point included, which CI delegates), 96 s on the
 WP13 differential and 56 s building stage1. Every other section took under
 35 s, and they came to 213 s together. CI's `test` step took 24 min 29 s on the
-same commit. The shard split follows from those numbers: the link programs are
-the part worth dealing out, and WP14 is the one section large enough to deal
-with them.
+same commit. That is why the link programs were the first thing dealt out, and WP14 the
+one section then large enough to deal with them.
 
-Since the link programs run through a worker pool (`defaultJobs()`, four on a
-hosted runner), they are no longer most of a shard. In
+The link programs have since moved to a worker pool (`defaultJobs()`, four on a
+hosted runner), so in a shard they are no longer most of the time. These
+figures are from the four-shard era, before the split into eight. In
 [run 40093958447](https://github.com/amritk/nish/actions/runs/40093958447),
 with #909's cheaper link profile as well, the 719 programs took 431 s of wall
 clock across the four `test` shards, 16 to 254 s per shard, against 123-192 s
@@ -387,7 +396,7 @@ of steps after the suite), crypto-bench (268 s, shard 2) and WP14
 self-hosting (137 s, shard 3). The longest `test` job took 11 min 59 s, on
 shard 1.
 
-Six weeks later, in
+Six weeks later, still on four shards, in
 [run 40820090678](https://github.com/amritk/nish/actions/runs/40820090678),
 the longest `test` job took 20 min 0 s, again shard 1: 5.6 minutes before the
 link programs, which every shard repeated, and 13.2 after them, which shard 1

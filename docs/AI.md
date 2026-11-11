@@ -49,7 +49,7 @@ stdout, nothing on stderr, every field 1-based with `endLine`/`endColumn`
 exclusive:
 
 ```json
-{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":20,"severity":"error","code":"NL2249","message":"Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort)"}
+{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":23,"severity":"error","code":"NL2249","message":"Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice)"}
 ```
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
@@ -165,7 +165,8 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill, sort) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
+| `xs.reduce(f)`, `.forEach`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
+| `xs.find(f)` | `` `find` is not supported: TypeScript types its answer `T \| undefined` … `` (NL2697) | `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }` |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `a?.b`, `a ?? b` | `?.` only in a chain that ends in `??`; `??` only on a `T \| null`, a chain or `m.get(k)` | `a?.b ?? d`, `a ?? d`, or `if (a !== null)` first |
 | `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |
@@ -191,7 +192,8 @@ rejects. This table is the highest-value part of the page.
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
 | `abstract class`, `declare class`, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class` is not supported `` / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
 | `{ m() { … } }`, `{ "a": 1 }`, `const C = class { }` | ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` / `Object literal keys must be plain identifiers` / `Classes must be named` | fields with identifier keys, a top-level function over the interface, a named top-level class |
-| `{ ...base, x: 1 }`, `{ [k]: v }`, `[k]: i32` in a class or interface | `Object spread is forbidden in Nish (set each field by name)` / `Computed property names are forbidden in Nish (member names are fixed at compile time)` | every field written by name (`{ x: 1, y: base.y }`); a `Map` for a keyed table |
+| `const o = { ...base }` with no annotation; `{ ...maybe }` for a `T \| null`; `{ ...base }` copying a field the target lacks | ``An object literal with a spread needs a contextual class or interface type…`` / ``Spread of `T \| null` into `T` may spread `null`…`` / ``Spread of `Point3` into `Point` copies field `z`, which `Point` does not declare…`` | annotate the literal's type (`const p: Point = { ...base, x: 1 }`); narrow the source first; spread a value whose fields the target declares, or set the fields by name |
+| `{ [k]: v }`, `[k]: i32` in a class or interface | `Computed property names are forbidden in Nish (member names are fixed at compile time)` | a `Map` for a keyed table |
 | `type Pair = { a: i32 }` (inline object type) | `` Unsupported type `{ a: i32 }` `` | declare an `interface` |
 | `A \| B` unions of anything but tagged classes and interfaces | `` Union types other than `T \| null` are forbidden `` | a [discriminated union](#discriminated-unions): a tag field first in each variant |
 | `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
@@ -898,8 +900,9 @@ export const main = (): i32 => {
   (`` The arrow reads `k`, a `let` of the function it is written in: ... bind the value to a `const` before the call ``),
   read `this` (bind `const self = this`), or read a function-typed parameter
   of its function. An arrow inside another arrow, or given to a method, a
-  constructor, `expose` or `exposeWith`, captures nothing; `xs.sort(cmp)`'s
-  comparator is the exception, and captures as an arrow argument does.
+  constructor, `expose` or `exposeWith`, captures nothing; the callbacks of
+  the array methods `sort`, `map`, `filter`, `some`, `every` and `findIndex`
+  are the exception, and capture as an arrow argument does.
 - **The argument's type must match exactly**: `(x: i32) => i64` for a
   `(x: i32) => i32` parameter is refused. A generic function cannot be passed
   by name — write `(x) => identity(x)`.
@@ -2282,7 +2285,10 @@ answers `a` — the same order Node gives; the comparator is required (`a.sort()
 is refused, since JavaScript would compare strings), a readonly array and
 `process.argv` are refused, `a - b` panics on `i32` values a full range apart
 (compare with `a > b ? 1 : a < b ? -1 : 0` there), and the comparator may read the caller's `const` locals and parameters but not
-a `let`, as any arrow argument may. That is every array method there is. A
+a `let`, as any arrow argument may. `a.map(f)`, `a.filter(f)`, `a.some(f)`,
+`a.every(f)`, `a.findIndex(f)` and `a.slice(start, end)` answer as in JavaScript
+(a callback takes the element, and the index if it names two parameters). That is
+every array method there is. A
 window into a buffer is `(buf, offset, length)`; there is no view type.
 
 **Strings.** `s.length` (**bytes**), `s.charCodeAt(i)` (the byte, bounds-checked),
@@ -2793,15 +2799,16 @@ the module (NL4015).
 
 ## Recipes for what is missing
 
-**Iterate and transform** — there is no `map`, and no function to pass it:
+**Iterate and accumulate** — there is no `reduce` or `forEach` (`map`, `filter`, `some`, `every`, `findIndex` and `slice` work); fold in a loop:
 
 ```ts nish:ok-body
 const xs: i32[] = [1, 2, 3];
-const doubled: i32[] = [];
-for (const x of xs) {
-  doubled.push(x * 2);
+const doubled = xs.map((x) => x * 2);
+let sum = 0;
+for (const x of doubled) {
+  sum += x;
 }
-console.log(`${doubled.length}`);
+console.log(`${sum}`);
 ```
 
 **Convert a number to a string** — there is no `toString` and no `String()`:
@@ -2944,6 +2951,22 @@ event waits for `end`. The batcher reads no clock: when to take is the loop's ch
 `tests/postgres/live`'s `batch` scenario runs it against a server, and the user
 guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
 its walk-through.)
+
+**Serve HTTP from an `async` program** — there is no `app.get(path, cb)`:
+`serve(port, router, limits, handle)` from `nish/net/serve` runs the loop and
+calls your one `async function handle(req: Request): Promise<Response>` in a
+task of its own per request, so `handle` may `await sleep(ms)` or a socket
+while others are answered. Add routes with `router.add(method, pattern)` and
+`switch (req.route)` on the numbers it answered (0, 1, 2 ...); read
+`req.param(k)` by index, `req.paramNumber(k)`, `req.query(name)`,
+`req.header(lowercaseName)`, `req.text()`; answer with
+`new Response(status).text(s)`, `.json(s)` or `.bytes(type, buf, off, len)`,
+and `refuse(req)` for 404 and 405. `ServeLimits` caps connections, `inFlight`
+(503 past it), `headerBytes` (431), `bodyBytes` (413) and `responseBytes`
+(500), and `headTimeout` and `idleTimeout` close a slow or idle connection; pipelined answers keep request order. `--emit-ts` refuses it (NL4017).
+(No block, as for `nish/text`; `tests/link/net_serve` is its program, and the
+user guide's [async server page](guide/using-nish/async-server.md) its
+walk-through.)
 
 **Call another service from a route handler** — there is no `await fetch()`
 in a handler (an `async` task does not wait on a socket yet) and no event-loop

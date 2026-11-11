@@ -74,7 +74,7 @@ import {
   taskThisCaptureMessage,
   thisCaptureMessage,
 } from "./parallel"
-import { isRegionRunner, REGION_ENTER_WITH, REGION_MAKE, regionRoleOf } from "./region-check"
+import { isRegionRunner, isRunnerRole, regionRoleOf } from "./region-check"
 import { recordRegionCall } from "./region-rules"
 import {
   isExposeTemplate,
@@ -167,6 +167,7 @@ import {
   StructTemplateInfo,
   TemplateInfo,
 } from "./program"
+import { rewrittenArrayMethod } from "./std-modules"
 import { Local, STORAGE_PARAM, Scope, TypeOrigin, unknownOrigin } from "./symbols"
 import {
   intBits,
@@ -1562,7 +1563,7 @@ export const checkGenericCall = (
   i = 0
   while (i < parameters.children.length && i < args.children.length) {
     if (functional && isFunctionParameter(parameters.children[i])) {
-      const fn = resolveFunctionArgument(ctx, template, i, args.children[i], names, bindings, scope)
+      const fn = resolveFunctionArgument(ctx, expr, template, i, args.children[i], names, bindings, scope)
       if (fn === null) {
         return T_ERROR
       }
@@ -1599,7 +1600,7 @@ export const checkGenericCall = (
     }
     tuple.push(bound)
   }
-  if (!matchFunctionArguments(ctx, template, bindings, functions, args)) {
+  if (!matchFunctionArguments(ctx, expr, template, bindings, functions, args)) {
     return T_ERROR
   }
   // WP29 P1: a reduce over a string or a class is refused at this call, before
@@ -1636,8 +1637,11 @@ export const checkGenericCall = (
   }
   // A generic method's signature starts with `this` (WP18 G8).
   const offset = template.owner === null ? 0 : 1
+  // The first argument its parameter refuses, reported after the loop so a
+  // pass allocates nothing.
+  let bad = -1
   i = 0
-  while (i < args.children.length && i < argTypes.length) {
+  while (bad < 0 && i < args.children.length && i < argTypes.length) {
     if (
       !sig.isCompileTime(i + offset) &&
       argTypes[i] !== T_ERROR &&
@@ -1645,18 +1649,22 @@ export const checkGenericCall = (
       !recordMemberEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
       !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])
     ) {
-      if (ctx.table.isEnumMemberType(sig.paramTypes[i + offset])) {
-        enterMember(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset])
-        return T_ERROR
-      }
-      const want = ctx.table.typeName(sig.paramTypes[i + offset])
-      ctx.error(
-        args.children[i],
-        `Argument ${i + 1} of \`${sig.sourceName}\`: expected ${want}, got ${ctx.table.typeName(argTypes[i])}`
-      )
-      return T_ERROR
+      bad = i
     }
     i = i + 1
+  }
+  if (bad >= 0) {
+    const param = sig.paramTypes[bad + offset]
+    if (ctx.table.isEnumMemberType(param)) {
+      enterMember(ctx, args.children[bad], argTypes[bad], param)
+      return T_ERROR
+    }
+    const want = ctx.table.typeName(param)
+    ctx.error(
+      args.children[bad],
+      `${argumentLead(expr, sig.sourceName, bad)}: expected ${want}, got ${ctx.table.typeName(argTypes[bad])}`
+    )
+    return T_ERROR
   }
   ctx.program.nodeCallees[expr.id] = sig
   // WP29 P1: whether the body may run on several threads at once is a
@@ -1675,7 +1683,7 @@ export const checkGenericCall = (
   }
   // `nish:region`: so is the function a region runs (`Compilation.checkRegions`).
   const regionRole = regionRoleOf(sig)
-  if (regionRole >= REGION_MAKE && regionRole <= REGION_ENTER_WITH) {
+  if (isRunnerRole(regionRole)) {
     recordRegionCall(ctx.program.regionCalls, expr, sig)
   }
   return sig.returnType
@@ -1932,19 +1940,39 @@ const writtenNames = (fn: FunctionSig): string[] => {
 }
 
 /**
+ * How a refusal names argument `index` of a call of the function `name`. A call
+ * written `xs.map(f)` arrives rewritten to a std template called on `xs`
+ * (`arrays.ts`), so it is named as written: the method, counting the arguments
+ * after the receiver. The receiver itself is never refused here: the rewrite
+ * happens only on an array, which always matches the template's `T[]`.
+ */
+const argumentOf = (call: Node, name: string, index: i32): string => argumentWords(call, name, index, false)
+
+/** `argumentOf` at the start of a sentence. */
+const argumentLead = (call: Node, name: string, index: i32): string => argumentWords(call, name, index, true)
+
+const argumentWords = (call: Node, name: string, index: i32, capital: boolean): string => {
+  const callee = call.children[0]
+  const method = callee.kind === N_IDENT ? rewrittenArrayMethod(callee.text) : ""
+  if (method === "") {
+    return `${capital ? "A" : "a"}rgument ${index + 1} of \`${name}\``
+  }
+  return `${capital ? "A" : "a"}rgument ${index} of \`${method}\``
+}
+
+/**
  * The refusal for a function argument whose signature is not its parameter's
  * function type, `wanted` spelled as the caller has it: as written while a
  * type parameter may still be unbound, and resolved once every one is.
  */
 const mismatchMessage = (
   table: TypeTable,
-  template: TemplateInfo,
-  index: i32,
+  lead: string,
   fn: FunctionSig,
   param: Node,
   wanted: string
 ): string =>
-  `Argument ${index + 1} of \`${template.sourceName}\`: \`${fn.sourceName}\` is ` +
+  `${lead}: \`${fn.sourceName}\` is ` +
   `\`${functionTypeText(table, writtenNames(fn), fn.paramTypes, fn.returnType)}\`, and \`${param.children[0].text}\` is ` +
   `\`${wanted}\`; a function argument must have exactly its parameter's type`
 
@@ -1985,6 +2013,7 @@ const mentionsUnbound = (annotation: Node, names: StringSet, bindings: StringMap
  */
 const resolveFunctionArgument = (
   ctx: CheckContext,
+  call: Node,
   template: TemplateInfo,
   index: i32,
   arg: Node,
@@ -2003,9 +2032,9 @@ const resolveFunctionArgument = (
     ctx.program.nodeTypes[written.id] = T_VOID
   }
   if (written.kind === N_ARROW) {
-    return liftArrowArgument(ctx, template, index, written, names, bindings, scope)
+    return liftArrowArgument(ctx, call, template, index, written, names, bindings, scope)
   }
-  const lead = `Argument ${index + 1} of \`${template.sourceName}\` must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`
+  const lead = `${argumentLead(call, template.sourceName, index)} must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`
   if (written.kind !== N_IDENT) {
     refuseOnce(ctx, arg, `${lead}; a function is never a value computed at run time`)
     return null
@@ -2031,8 +2060,8 @@ const resolveFunctionArgument = (
       refuseOnce(
         ctx,
         arg,
-        `\`${name}\` is generic, so it names no one function to pass as argument ${index + 1} of ` +
-          `\`${template.sourceName}\`; pass an arrow that calls it, such as \`(x) => ${name}(x)\``
+        `\`${name}\` is generic, so it names no one function to pass as ${argumentOf(call, template.sourceName, index)}; ` +
+          `pass an arrow that calls it, such as \`(x) => ${name}(x)\``
       )
       return null
     }
@@ -2049,7 +2078,7 @@ const resolveFunctionArgument = (
     refuseOnce(
       ctx,
       arg,
-      `Argument ${index + 1} of \`${template.sourceName}\`: \`${name}\` has a rest parameter, which a call through a function parameter does not gather; declare it \`${fn.paramNames[fn.restIndex]}: T[]\` to pass it here`
+      `${argumentLead(call, template.sourceName, index)}: \`${name}\` has a rest parameter, which a call through a function parameter does not gather; declare it \`${fn.paramNames[fn.restIndex]}: T[]\` to pass it here`
     )
     return null
   }
@@ -2057,7 +2086,17 @@ const resolveFunctionArgument = (
   if (fn.writtenArity() !== wanted.length) {
     // Said now, in the words of the exact-type rule, rather than as a type
     // parameter the callee failed to bind.
-    refuseOnce(ctx, arg, mismatchMessage(ctx.table, template, index, fn, param, template.home.textOf(fnType)))
+    refuseOnce(
+      ctx,
+      arg,
+      mismatchMessage(
+        ctx.table,
+        argumentLead(call, template.sourceName, index),
+        fn,
+        param,
+        template.home.textOf(fnType)
+      )
+    )
     return null
   }
   let k = 0
@@ -2066,7 +2105,11 @@ const resolveFunctionArgument = (
     k = k + 1
   }
   if (fn.isAsync() !== promisesAnswer(fnType)) {
-    refuseOnce(ctx, arg, asyncArgumentMessage(template, index, param, fn.isAsync()))
+    refuseOnce(
+      ctx,
+      arg,
+      asyncArgumentMessage(argumentLead(call, template.sourceName, index), param, fn.isAsync())
+    )
     return null
   }
   unifyAnnotation(ctx, answerAnnotation(fnType), fn.returnType, names, bindings)
@@ -2088,8 +2131,7 @@ const answerAnnotation = (fnType: Node): Node => {
 const promisesAnswer = (fnType: Node): boolean => promiseArgument(fnType.children[1]) !== null
 
 /** An async function passed where the parameter is not `=> Promise<T>`, or the other way. */
-const asyncArgumentMessage = (template: TemplateInfo, index: i32, param: Node, isAsync: boolean): string => {
-  const lead = `Argument ${index + 1} of \`${template.sourceName}\``
+const asyncArgumentMessage = (lead: string, param: Node, isAsync: boolean): string => {
   const name = param.children[0].text
   return isAsync
     ? `${lead} is \`async\`, and \`${name}\` does not return a \`Promise<T>\`: an async function is passed only where the function type says it is awaited`
@@ -2106,6 +2148,7 @@ const asyncArgumentMessage = (template: TemplateInfo, index: i32, param: Node, i
  */
 const liftArrowArgument = (
   ctx: CheckContext,
+  call: Node,
   template: TemplateInfo,
   index: i32,
   arrow: Node,
@@ -2120,14 +2163,18 @@ const liftArrowArgument = (
   const params = arrow.children[1].children
   const isAsync = (arrow.flags & FLAG_ASYNC) !== 0
   if (isAsync !== promisesAnswer(fnType)) {
-    refuseOnce(ctx, arrow, asyncArgumentMessage(template, index, param, isAsync))
+    refuseOnce(
+      ctx,
+      arrow,
+      asyncArgumentMessage(argumentLead(call, template.sourceName, index), param, isAsync)
+    )
     return null
   }
   if (params.length !== wanted.length) {
     refuseOnce(
       ctx,
       arrow,
-      `The arrow passed as argument ${index + 1} of \`${template.sourceName}\` takes ${params.length} ` +
+      `The arrow passed as ${argumentOf(call, template.sourceName, index)} takes ${params.length} ` +
         `parameter(s), and \`${param.children[0].text}\` is \`${template.home.textOf(fnType)}\``
     )
     return null
@@ -2533,8 +2580,7 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
 const refuseResolvedMismatch = (
   ctx: CheckContext,
   arg: Node,
-  template: TemplateInfo,
-  index: i32,
+  lead: string,
   fn: FunctionSig,
   param: Node,
   names: string[],
@@ -2542,7 +2588,7 @@ const refuseResolvedMismatch = (
   returnType: i32
 ): boolean => {
   const wanted = functionTypeText(ctx.table, names, types, returnType)
-  refuseOnce(ctx, arg, mismatchMessage(ctx.table, template, index, fn, param, wanted))
+  refuseOnce(ctx, arg, mismatchMessage(ctx.table, lead, fn, param, wanted))
   return false
 }
 
@@ -2555,6 +2601,7 @@ const refuseResolvedMismatch = (
  */
 const matchFunctionArguments = (
   ctx: CheckContext,
+  call: Node,
   template: TemplateInfo,
   bindings: StringMap,
   functions: FunctionSig[],
@@ -2594,7 +2641,16 @@ const matchFunctionArguments = (
       }
       same = same && canonicalArgument(table, fn.returnType) === canonicalArgument(table, returnType)
       if (!same) {
-        return refuseResolvedMismatch(ctx, args.children[i], template, i, fn, param, names, types, returnType)
+        return refuseResolvedMismatch(
+          ctx,
+          args.children[i],
+          argumentLead(call, template.sourceName, i),
+          fn,
+          param,
+          names,
+          types,
+          returnType
+        )
       }
       k = k + 1
     }

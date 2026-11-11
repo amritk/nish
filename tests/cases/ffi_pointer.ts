@@ -5,9 +5,10 @@
 //
 //   - A `CPtr` comes *out* of a foreign call and goes back *into* one. It is
 //     `i8*` in the IR and the compiler makes no other claim about it.
-//   - `null` arrives only from C: a foreign function may return `CPtr | null`
-//     and may not take one, so a pointer is narrowed with `!== null` before it
-//     is handed back.
+//   - `null` reaches C only as the literal or a narrowed pointer: a foreign
+//     function may return `CPtr | null` and may take one, but a `CPtr | null`
+//     the program holds is narrowed with `!== null` before it is handed back
+//     (docs/LANGUAGE.md, "A `null` reaches C only as the literal").
 //   - The declarations carry no attributes at all, and the caller pays: `main`
 //     keeps only `nounwind` while `doubled`, which calls no C, keeps
 //     `willreturn readnone`.

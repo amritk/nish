@@ -7,7 +7,8 @@
 #   scripts/fuzz.sh --replay [<name>]              every corpus and regression
 #                                                  input once; a crash fails
 #   scripts/fuzz.sh --smoke                        every target: build, replay,
-#                                                  then a short fixed-seed run
+#                                                  then a short fixed-seed run,
+#                                                  FUZZ_JOBS targets at a time
 #
 # A target is `tests/fuzz/targets/<name>.ts` exporting
 # `export const fuzzOne = (data: u8[]): void` (tests/fuzz/README.md). It is
@@ -24,6 +25,12 @@
 #                        std/ beside itself, so the seed would fuzz its own std.
 #   FUZZ_SMOKE_SECONDS   --smoke's fuzzing time per target (default 20)
 #   FUZZ_SEED            --smoke's libFuzzer -seed (default 1)
+#   FUZZ_JOBS            how many targets --smoke builds and fuzzes at once
+#                        (default: the online cores). Each libFuzzer run is one
+#                        process on one core, so a serial smoke left three of a
+#                        CI runner's four idle; four at a time ran as many
+#                        inputs per target as one at a time, in a quarter of
+#                        the wall time.
 #   FUZZ_OUT             where binaries, scratch corpora and artifacts go
 #                        (default build/fuzz)
 #
@@ -39,12 +46,14 @@ NISH="${NISH:-build/nish}"
 FUZZ_OUT="${FUZZ_OUT:-build/fuzz}"
 FUZZ_SMOKE_SECONDS="${FUZZ_SMOKE_SECONDS:-20}"
 FUZZ_SEED="${FUZZ_SEED:-1}"
+FUZZ_JOBS="${FUZZ_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
 CC="${CC:-clang}"
 
 # The runtime's C units: tests/run.js's RUNTIME_C, which its `fuzz` section
 # checks this list against. runtime-wasm.c is wasm32's alone.
 RUNTIME_C=(
   runtime/runtime.c
+  runtime/runtime-text.c
   runtime/runtime-os.c
   runtime/runtime-parallel.c
   runtime/runtime-cross.c
@@ -72,7 +81,7 @@ die() {
 }
 
 usage() {
-  sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit "${1:-2}"
 }
 
@@ -99,7 +108,7 @@ build_runtime() {
   local src obj
   for src in "${RUNTIME_C[@]}"; do
     obj="$FUZZ_OUT/obj/$(basename "$src" .c).o"
-    "$CC" "${SAN_FLAGS[@]}" -DNISH_FUZZ_ABORT -Iruntime -c "$src" -o "$obj" \
+    "$CC" "${SAN_FLAGS[@]}" -ffp-contract=off -DNISH_FUZZ_ABORT -Iruntime -c "$src" -o "$obj" \
       || die "compiling $src under the sanitizers failed (is libclang-rt-18-dev installed?)"
     runtime_objs+=("$obj")
   done
@@ -213,13 +222,54 @@ case "$mode" in
     [ $# -eq 0 ] || usage
     mapfile -t names < <(targets)
     [ ${#names[@]} -gt 0 ] || die "no targets in tests/fuzz/targets/"
+    [[ "$FUZZ_JOBS" =~ ^[1-9][0-9]*$ ]] || die "FUZZ_JOBS must be a positive integer, not '$FUZZ_JOBS'"
+    # The lanes share the runtime objects, so they are built here, once,
+    # before any lane starts: a lane that found them missing would build them
+    # itself, into the same files as the others.
+    build_runtime
+    logs="$FUZZ_OUT/smoke"
+    rm -rf "$logs"
+    mkdir -p "$logs"
+    # Each target is a lane writing its own log and, as it exits, its status,
+    # so the logs are printed whole and in target order once every lane is
+    # done, and one target's crash does not stop the others. The status comes
+    # from an EXIT trap: the lane stops at its first failing step under
+    # `set -e`, which a status written after the lane, or a lane run as a
+    # condition, would not keep.
+    running=0
     for name in "${names[@]}"; do
-      build "$name"
-      replay "$name"
-      rm -rf "$FUZZ_OUT/work/$name"
-      run "$name" -seed="$FUZZ_SEED" -max_total_time="$FUZZ_SMOKE_SECONDS" -print_final_stats=1
+      if [ "$running" -ge "$FUZZ_JOBS" ]; then
+        # A lane's status is read from its file below, not from here.
+        wait -n || true
+        running=$((running - 1))
+      fi
+      (
+        status_file="$logs/$name.status"
+        trap 'echo "$?" >"$status_file"' EXIT
+        build "$name"
+        replay "$name"
+        rm -rf "$FUZZ_OUT/work/$name"
+        run "$name" -seed="$FUZZ_SEED" -max_total_time="$FUZZ_SMOKE_SECONDS" -print_final_stats=1
+      ) >"$logs/$name.log" 2>&1 &
+      running=$((running + 1))
     done
-    echo "fuzz.sh: smoke passed over ${#names[@]} targets"
+    wait
+    # Under GitHub Actions each target's log folds into a group of its own.
+    group=""
+    [ "${GITHUB_ACTIONS:-}" = true ] && group=1
+    failed=()
+    for name in "${names[@]}"; do
+      [ -n "$group" ] && echo "::group::fuzz.sh: $name"
+      cat "$logs/$name.log"
+      [ -n "$group" ] && echo "::endgroup::"
+      status="$(cat "$logs/$name.status" 2>/dev/null || echo missing)"
+      [ "$status" = 0 ] || failed+=("$name (exit $status)")
+    done
+    if [ ${#failed[@]} -gt 0 ]; then
+      echo "fuzz.sh: smoke failed in ${#failed[@]} of ${#names[@]} targets: ${failed[*]}" >&2
+      exit 1
+    fi
+    echo "fuzz.sh: smoke passed over ${#names[@]} targets, $FUZZ_JOBS at a time"
     ;;
   -h | --help)
     usage 0

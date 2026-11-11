@@ -1,0 +1,3 @@
+hands `t.m` to `Map<string, i32>.set`, which may grow it
+hands `t.s` to `Set<string>.add`, which may grow it
+storage outside the region that grows inside it

@@ -45,11 +45,14 @@ import {
   emitAwaitAll,
   emitKernelWait,
   emitSpawn,
+  emitTaskCall,
+  isTaskCallName,
   isAwaitAllDeclaration,
   suspends,
   transformAsync,
 } from "./emit-async"
 import { jsonRouteOf } from "./json-typed"
+import { isExecutorCall } from "./nish-modules"
 import {
   functionAttributes,
   paramAttributes,
@@ -57,6 +60,7 @@ import {
   AnalysisUnit,
   FactsTable,
   FunctionFacts,
+  hostFunction,
 } from "./attributes"
 import { capabilityIndex } from "./capabilities"
 import { DebugInfo } from "./debug"
@@ -227,6 +231,7 @@ import {
   nodeName,
 } from "./nodes"
 import { Options } from "./options"
+import { TbaaCache } from "./tbaa"
 import { irEscapeInto, StringBuilder } from "./strings"
 
 import {
@@ -305,6 +310,8 @@ export class Emitter {
   runtime: RuntimeTable
   facts: FactsTable
   module: IRModule
+  /** The TBAA nodes `module` already holds (`src/tbaa.ts`). */
+  tbaa: TbaaCache
   /** The function being emitted. */
   fn: IRFunction
   /** Its facts: stack sites and the arena scope. */
@@ -402,6 +409,8 @@ export class Emitter {
   asyncHeads: string[]
   asyncCounts: i32[]
   asyncPrivates: boolean[]
+  /** Under `ASYNC_ALL`, each member's lane slot: its region's handle while it waits, else 0. */
+  asyncLanes: string[]
   /** The poll block of each await of the function being emitted, in state order. */
   asyncPolls: string[]
 
@@ -419,6 +428,7 @@ export class Emitter {
     this.runtime = runtime
     this.facts = facts
     this.module = new IRModule(this.program.source.path)
+    this.tbaa = new TbaaCache()
     const noParams: IRParam[] = []
     const noNames: string[] = []
     this.fn = new IRFunction("", noParams, "void")
@@ -431,6 +441,7 @@ export class Emitter {
     this.asyncHeads = []
     this.asyncCounts = []
     this.asyncPrivates = []
+    this.asyncLanes = []
     this.asyncPolls = []
     this.tailCallId = -1
     this.uncopied = -1
@@ -1112,8 +1123,15 @@ export class Emitter {
     const params: string[] = []
     let i = 0
     while (i < sig.paramNames.length) {
-      // WP50 S3: a window passes the array's data pointer (`emitHostWindow`).
-      params.push(isHostWindow(this.table, sig.paramTypes[i]) ? "i8*" : this.hostAbi(sig.paramTypes[i]))
+      const type = sig.paramTypes[i]
+      if (type === T_STRING) {
+        // WP50 S4: a string passes its bytes and their count (`emitHostString`).
+        params.push("i8*")
+        params.push("i32")
+      } else {
+        // WP50 S3: a window passes the array's data pointer (`emitHostWindow`).
+        params.push(isHostWindow(this.table, type) ? "i8*" : this.hostAbi(type))
+      }
       i = i + 1
     }
     const group = this.module.attrGroupFor([
@@ -1796,8 +1814,11 @@ export class Emitter {
     if (imported === "async.spawn") {
       return emitSpawn(this, expr)
     }
-    if (imported === "async.sleep" || imported === "async.readable" || imported === "async.writable") {
-      return emitKernelWait(this, expr, imported) // WP49 stage 5: a wait on the executor
+    if (isExecutorCall(imported)) {
+      // WP49 stage 5: a wait on the executor, or (part 7) a cancellation call
+      return isTaskCallName(imported)
+        ? emitTaskCall(this, expr, imported)
+        : emitKernelWait(this, expr, imported)
     }
     if (imported.length > 0) {
       // A dotted canonical name (`process.exit`) belongs to the emitter for
@@ -1841,8 +1862,10 @@ export class Emitter {
       let value = this.table.resultByValue(want)
         ? emitPackedResult(this, args.children[i], want, calleePrivate)
         : this.emitArgument(args.children[i], sig, i)
-      // WP27 S3.1: C takes the bytes, not the header (`emitForeignString`).
-      if (sig.foreign() && this.table.stripNull(want) === T_STRING) {
+      // WP27 S3.1: C takes the bytes, not the header (`emitForeignString`). A
+      // host function takes the header too, and `emitHostString` splits it
+      // into the bytes and their count (WP50 S4).
+      if (sig.foreign() && !hostFunction(sig) && this.table.stripNull(want) === T_STRING) {
         value = emitForeignString(this, args.children[i], value, sig, i)
       }
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)

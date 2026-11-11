@@ -234,13 +234,15 @@ export class RuntimeTable {
     )
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
     this.add(plain("nish_arena_release", "declare void @nish_arena_release(i64 noundef)", EFFECT_WRITE))
-    // WP46: `nish:region`'s four calls (runtime/runtime-region.c), each written
+    // WP46: `nish:region`'s calls (runtime/runtime-region.c), each written
     // by the body of one of `std/region.ts`'s intrinsics (`src/emit-region.ts`).
     // `enter` and `leave` swap the thread's arena, so every one is a write.
     this.add(plain("nish_region_new", "declare noundef i64 @nish_region_new()", EFFECT_WRITE))
+    this.add(plain("nish_region_child_new", "declare noundef i64 @nish_region_child_new()", EFFECT_WRITE))
     this.add(plain("nish_region_enter", "declare i8* @nish_region_enter(i64 noundef)", EFFECT_WRITE))
     this.add(plain("nish_region_leave", "declare void @nish_region_leave(i64 noundef, i8*)", EFFECT_WRITE))
     this.add(plain("nish_region_free", "declare void @nish_region_free(i64 noundef)", EFFECT_WRITE))
+    this.add(plain("nish_region_adopt", "declare void @nish_region_adopt(i64 noundef)", EFFECT_WRITE))
     // WP49 stage 5: the executor (runtime/runtime-async.c), linked only for IR
     // that declares one of these (scripts/build.sh's `async_wanted`). Every
     // one touches the executor's state, and `spawn` and the waits panic when
@@ -270,6 +272,28 @@ export class RuntimeTable {
     )
     this.add(
       mayNotReturn("nish_async_poll", "declare noundef i32 @nish_async_poll(i64 noundef)", EFFECT_WRITE)
+    )
+    // Part 7: the bounded descriptor wait and the cancellation calls.
+    this.add(
+      mayNotReturn(
+        "nish_async_wait_fd_within",
+        "declare noundef i64 @nish_async_wait_fd_within(i32 noundef, i32 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
+    this.add(mayNotReturn("nish_async_task_id", "declare noundef i64 @nish_async_task_id()", EFFECT_WRITE))
+    this.add(
+      mayNotReturn("nish_async_cancel", "declare noundef i32 @nish_async_cancel(i64 noundef)", EFFECT_WRITE)
+    )
+    this.add(
+      mayNotReturn("nish_async_cancelled", "declare noundef i32 @nish_async_cancelled()", EFFECT_WRITE)
+    )
+    this.add(
+      mayNotReturn(
+        "nish_async_cancel_after",
+        "declare noundef i32 @nish_async_cancel_after(i64 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
     )
     this.add(
       mayNotReturn(

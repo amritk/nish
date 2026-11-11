@@ -382,11 +382,81 @@ interface Process {
 declare var process: Process;
 
 // ---- Numeric conversions (there is no cast in Nish) ----------------------
-// `Number`, `parseInt` and `parseFloat` are `lib.es2022`'s and are not
-// declared here; docs/LANGUAGE.md -> Numeric conversions has their rules.
 // Nothing converts implicitly: a mixed operation, an initializer of another
 // numeric type and a call with the wrong numeric type are each refused until
-// one of the functions below is written.
+// one of the functions below is written. `Number`, `parseInt` and
+// `parseFloat` are `lib.es2022`'s too. `Number`'s call repeats lib's signature;
+// `parseInt` and `parseFloat` add Nish's own as an overload beside lib's, as
+// `runtime/core/numbers.d.ts` declares them. An `i32` and an `f64` are both
+// `number` to `tsc`, so what it accepts does not change; `nish` refuses lib's
+// radix.
+
+/**
+ * `Number(value)`: `value` as an `f64`, in both number modes. Nish has no
+ * `new Number` and no member of `Number`; the call is the conversion, merged
+ * into the `NumberConstructor` `lib.es2022` declares.
+ *
+ * A string is parsed with JavaScript's `Number(s)` rules: ASCII whitespace
+ * (` \t\n\v\f\r`, not the Unicode spaces JavaScript also trims) is trimmed
+ * on both sides, then the whole string must be one literal, so `Number("")`
+ * and `Number("   ")` are `0`, `Number("  7.5  ")` is `7.5`, and
+ * `Number("12px")`, `Number("1e")` and `Number("nan")` are `NaN`.
+ * `Number("0x1A")` is `26`, as in JavaScript, and a hex float such as `0x1p3`
+ * is also accepted, which JavaScript rejects; the `0b` and `0o` prefixes are
+ * `NaN`, which JavaScript reads. Under `--deterministic` a `0x` string reads
+ * as `--emit-ts` reads it on every target: a hex float is `NaN`, and a hex
+ * integer is correctly rounded whatever the C library.
+ *
+ * An `i32` or an `i64` converts as `toF64` does, a `boolean` is `1` or `0`,
+ * and an `f64` is itself. A numeric literal argument is typed `f64`
+ * (`Number(2.5)` works in i32 mode). Exactly one argument; anything other than
+ * a string, a number or a boolean is refused: "`Number` expects a string,
+ * number, or boolean, got i32[]". Capability: none.
+ */
+interface NumberConstructor {
+  /**
+   * `value` as an `f64`, by the rules on `NumberConstructor` above.
+   * Capability: none.
+   *
+   * @param value a string, an `i32`, an `i64`, an `f64` or a `boolean`;
+   *   `nish` requires it, though `lib`'s signature marks it optional.
+   * @returns an `f64`, in both number modes.
+   */
+  (value?: any): number;
+}
+
+/**
+ * The base-10 integer at the start of `s`, as an `i32`: ASCII whitespace,
+ * an optional sign, then digits, stopping at the first other character
+ * (`parseInt("42px")` is `42`). Three deviations from JavaScript: there is no
+ * `NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`,
+ * `parseInt("")`); a value beyond the `i32` range saturates as `toI32` does
+ * (`parseInt("99999999999")` is `2147483647`); and a `0x` prefix is not
+ * hexadecimal (`parseInt("0x10")` is `0`). Always an `i32`, under
+ * `--number-mode f64` too, where `Number` reads a wider value. Exactly one
+ * argument: there is no radix, since base 10 is the only one. A non-string is
+ * refused: "`parseInt` expects a string, got i32". Capability: none.
+ *
+ * @param s the text read.
+ * @returns the integer, or `0` when there are no digits.
+ */
+declare function parseInt(s: string): i32;
+/**
+ * The decimal number at the start of `s`, as an `f64`: ASCII whitespace,
+ * then the longest decimal literal (`[sign] digits [. digits] [e [sign]
+ * digits]`, `. digits`, or `[sign] Infinity`), correctly rounded.
+ * `parseFloat("3.14xyz")` is `3.14` and `parseFloat("1e")` is `1`. One
+ * deviation from JavaScript: a `0x` prefix is read as hexadecimal
+ * (`parseFloat("0x1A")` is `26`, where JavaScript stops at the `x` and gives
+ * `0`). Under `--deterministic` a `0x` string reads as `--emit-ts` reads it
+ * on every target: the hex integer, correctly rounded, stopping at a hex
+ * float's `.` or `p` (`0x1p3` is `1`). Exactly one argument. Capability: none.
+ *
+ * @param s the text read.
+ * @returns the number, or `NaN` when there is none (`parseFloat("abc")`,
+ *   `parseFloat("")`, `parseFloat(".")`).
+ */
+declare function parseFloat(s: string): f64;
 
 /**
  * `x` as an `i32`. An integer of 32 bits or more wraps to its low 32 bits, a
@@ -2123,10 +2193,34 @@ declare function setTerminalRestore(bytes: string): i32;
 
 // ---- `Date` and `crypto` (WP34 N3) -----------------------------------------------
 //
-// `lib.es2022` already declares `Date`, whose `now()` is Nish's one member of it,
-// so nothing is added: `tsc` accepting `new Date()` is `tsc` not being Nish's
-// checker. `crypto` is a Web API that `lib.es2022` leaves out, so it is
-// declared with its one member, typed as Nish types it.
+// `lib.es2022` already declares `Date`, whose `now()` is Nish's one member of it;
+// `DateConstructor` below repeats lib's signature of it to document it, and adds
+// nothing: `tsc` accepting `new Date()` is `tsc` not being Nish's checker.
+// `crypto` is a Web API that `lib.es2022` leaves out, so it is declared with its
+// one member, typed as Nish types it.
+
+/**
+ * `Date`, merged into the `DateConstructor` `lib.es2022` declares. Nish has no
+ * `Date` object: `Date.now()` is its one member, and `new Date()`, `Date()`,
+ * `Date.parse`, `Date.UTC`, any other member, and `Date` or `Date.now` used as
+ * a value are each refused: "`new Date()` is refused: Nish has no `Date`
+ * object; the one `Date` member is `Date.now()`, the wall clock in
+ * milliseconds" (NL2401).
+ */
+interface DateConstructor {
+  /**
+   * The wall clock, `CLOCK_REALTIME`, in whole milliseconds since 1970-01-01
+   * UTC, as JavaScript answers it: the milliseconds are counted as integers and
+   * then converted, so the value is exact and a time before 1970 floors. An
+   * `f64` in both number modes, because an `i32` of milliseconds overflowed in
+   * January 1970. It can go backwards when the clock is corrected, so an
+   * interval is `monotonicNanos`'s job, not this one's. A wasm32 build has no
+   * operating system to ask, and refuses it. Capability: clock.
+   *
+   * @returns the milliseconds, an `f64`.
+   */
+  now(): number;
+}
 
 /** The system's random source, with its one member. */
 declare var crypto: {
@@ -3366,8 +3460,9 @@ declare module "nish:unsafe" {
  * **Under Node.** `runtime/nish.mjs` answers the import with
  * `runtime/core.mjs`, where a vector is a fresh typed array of its lanes,
  * made once and never written after, whose element type does the lane's
- * arithmetic; a mask is an array of booleans, and a rotate is two shifts and
- * an `or`. `tests/run.js`'s `simd` section holds the native, WASI and Node
+ * arithmetic: an integer lane wraps through its array type (`Uint8Array` for
+ * a `u8` lane), and an `f32` lane rounds through `Float32Array`. A mask is an
+ * array of booleans, and a rotate is two shifts and an `or`. `tests/run.js`'s `simd` section holds the native, WASI and Node
  * outputs to one.
  *
  * Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-sixteen-byte-vectors
@@ -3490,22 +3585,22 @@ declare module "nish:simd" {
    * A `u8x16` of sixteen lanes: one `insertelement` per lane, which `opt`
    * folds to a constant vector when every lane is one.
    *
-   * @param a0 Lane 0, a `u8`; `a1` to `a15` are lanes 1 to 15 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
-   * @param a4 Lane 4.
-   * @param a5 Lane 5.
-   * @param a6 Lane 6.
-   * @param a7 Lane 7.
-   * @param a8 Lane 8.
-   * @param a9 Lane 9.
-   * @param a10 Lane 10.
-   * @param a11 Lane 11.
-   * @param a12 Lane 12.
-   * @param a13 Lane 13.
-   * @param a14 Lane 14.
-   * @param a15 Lane 15.
+   * @param a0 Lane 0, a `u8`.
+   * @param a1 Lane 1, a `u8`.
+   * @param a2 Lane 2, a `u8`.
+   * @param a3 Lane 3, a `u8`.
+   * @param a4 Lane 4, a `u8`.
+   * @param a5 Lane 5, a `u8`.
+   * @param a6 Lane 6, a `u8`.
+   * @param a7 Lane 7, a `u8`.
+   * @param a8 Lane 8, a `u8`.
+   * @param a9 Lane 9, a `u8`.
+   * @param a10 Lane 10, a `u8`.
+   * @param a11 Lane 11, a `u8`.
+   * @param a12 Lane 12, a `u8`.
+   * @param a13 Lane 13, a `u8`.
+   * @param a14 Lane 14, a `u8`.
+   * @param a15 Lane 15, a `u8`.
    * @returns The vector.
    */
   export function u8x16(
@@ -3515,52 +3610,52 @@ declare module "nish:simd" {
   /**
    * A `u16x8` of 8 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, a `u16`; `a1` to `a7` are lanes 1 to 7 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
-   * @param a4 Lane 4.
-   * @param a5 Lane 5.
-   * @param a6 Lane 6.
-   * @param a7 Lane 7.
+   * @param a0 Lane 0, a `u16`.
+   * @param a1 Lane 1, a `u16`.
+   * @param a2 Lane 2, a `u16`.
+   * @param a3 Lane 3, a `u16`.
+   * @param a4 Lane 4, a `u16`.
+   * @param a5 Lane 5, a `u16`.
+   * @param a6 Lane 6, a `u16`.
+   * @param a7 Lane 7, a `u16`.
    * @returns The vector.
    */
   export function u16x8(a0: u16, a1: u16, a2: u16, a3: u16, a4: u16, a5: u16, a6: u16, a7: u16): u16x8;
   /**
    * An `i32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, an `i32`; `a1` to `a3` are lanes 1 to 3 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
+   * @param a0 Lane 0, an `i32`.
+   * @param a1 Lane 1, an `i32`.
+   * @param a2 Lane 2, an `i32`.
+   * @param a3 Lane 3, an `i32`.
    * @returns The vector.
    */
   export function i32x4(a0: i32, a1: i32, a2: i32, a3: i32): i32x4;
   /**
    * A `u32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, a `u32`; `a1` to `a3` are lanes 1 to 3 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
+   * @param a0 Lane 0, a `u32`.
+   * @param a1 Lane 1, a `u32`.
+   * @param a2 Lane 2, a `u32`.
+   * @param a3 Lane 3, a `u32`.
    * @returns The vector.
    */
   export function u32x4(a0: u32, a1: u32, a2: u32, a3: u32): u32x4;
   /**
    * An `f32x4` of 4 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, an `f32`; `a1` to `a3` are lanes 1 to 3 in order.
-   * @param a1 Lane 1.
-   * @param a2 Lane 2.
-   * @param a3 Lane 3.
+   * @param a0 Lane 0, an `f32`.
+   * @param a1 Lane 1, an `f32`.
+   * @param a2 Lane 2, an `f32`.
+   * @param a3 Lane 3, an `f32`.
    * @returns The vector.
    */
   export function f32x4(a0: f32, a1: f32, a2: f32, a3: f32): f32x4;
   /**
    * An `f64x2` of 2 lanes, one argument per lane, lane 0 first.
    *
-   * @param a0 Lane 0, an `f64`; `a1` is lane 1.
-   * @param a1 Lane 1.
+   * @param a0 Lane 0, an `f64`.
+   * @param a1 Lane 1, an `f64`.
    * @returns The vector.
    */
   export function f64x2(a0: f64, a1: f64): f64x2;
@@ -4009,6 +4104,7 @@ declare module "nish:simd" {
   export function shr<V extends IntegerVector>(v: V, count: i32): V;
   /**
    * Each lane rotated left by `count`, `llvm.fshl` with `v` as both halves.
+   * Signed and unsigned lanes rotate alike.
    *
    * @param v A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
    * @param count An integer literal below the lane width: 0 to 7, 15 or 31
@@ -4018,6 +4114,7 @@ declare module "nish:simd" {
   export function rotl<V extends IntegerVector>(v: V, count: i32): V;
   /**
    * Each lane rotated right by `count`, `llvm.fshr` with `v` as both halves.
+   * Signed and unsigned lanes rotate alike.
    *
    * @param v A `u8x16`, `u16x8`, `i32x4` or `u32x4`.
    * @param count An integer literal below the lane width: 0 to 7, 15 or 31
@@ -4367,8 +4464,9 @@ declare module "nish:secret" {
    * copy.set(raw)`, then `secret(copy)`.
    *
    * @param value The key material, of a shape a `Secret` may hold (NL2428).
-   * @returns The `Secret`, which needs an owner: a `const` or `let`, a
-   *   `return`, or `wipe` (NL2439 otherwise).
+   * @returns The `Secret`, holding `value` itself and not a copy, so its
+   *   storage is the storage `wipe` later zeroes. It needs an owner: a
+   *   `const` or `let`, a `return`, or `wipe` (NL2439 otherwise).
    */
   export function secret<T>(value: T): Secret<T>;
   /**
@@ -4379,7 +4477,8 @@ declare module "nish:secret" {
    * (NL2449), and declares a return type that holds no `Secret` (NL2451; an
    * arrow writes it down, NL2452): that type is what leaves.
    *
-   * @param s The `Secret` to read, borrowed.
+   * @param s The `Secret` to read, borrowed: it can be exposed again, and is
+   *   still to be wiped.
    * @param f The function the value is handed to.
    * @returns What `f` answers.
    */
@@ -4509,6 +4608,28 @@ declare module "nish:region" {
    * @returns The handle.
    */
   export function regionWith<A, T>(arg: A, f: (arg: A) => T): Region<T>;
+  /**
+   * A new region whose parent is the region entered now: `f()` runs with every
+   * allocation landing in it, and what it answers is the root. The child may
+   * keep memory the parent's root reaches, and `free` of the parent frees it
+   * too. Called outside an `enter` or `enterWith` `f` it is NL2702, and it
+   * stops the program when no region is entered.
+   *
+   * @param f Makes the root. It answers memory it allocated, never the
+   *   parent's (NL2614).
+   * @returns The handle.
+   */
+  export function child<T>(f: () => T): Region<T>;
+  /**
+   * `child`, with one outside argument handed to `f`.
+   *
+   * @param arg Memory the parent's root reaches, which `f` may keep in the
+   *   child, or outer memory it may only read (NL2610).
+   * @param f Makes the root from `arg`. It answers memory it allocated, never
+   *   `arg` itself (NL2614).
+   * @returns The handle.
+   */
+  export function childWith<A, T>(arg: A, f: (arg: A) => T): Region<T>;
   /**
    * `f(root)`, with every allocation landing in the region. Stops the program
    * on a dead, foreign or already-entered handle.
@@ -4757,6 +4878,71 @@ declare module "nish:async" {
    *   made (an `fd` that is not open). A regular file is always ready.
    */
   export function writable(fd: i32): Promise<boolean>;
+  /**
+   * Suspend the task until `fd` has bytes to read, or its peer has hung up,
+   * or `ms` milliseconds pass, whichever comes first. Written only as
+   * `await readableWithin(fd, ms)` inside an `async` function (NL2671).
+   * Refused under `--emit-ts` (NL4018).
+   *
+   * @param fd An open descriptor: a socket, a pipe or a terminal.
+   * @param ms The most milliseconds to wait; a negative `ms` waits without a
+   *   limit, as `readable` does.
+   * @returns `true` once `fd` is ready; `false` when `ms` passed first, when
+   *   the wait could not be made, or when the task is cancelled.
+   */
+  export function readableWithin(fd: i32, ms: i32): Promise<boolean>;
+  /**
+   * Suspend the task until `fd` takes bytes without blocking, or `ms`
+   * milliseconds pass, whichever comes first. Written only as
+   * `await writableWithin(fd, ms)` inside an `async` function (NL2671).
+   * Refused under `--emit-ts` (NL4018).
+   *
+   * @param fd An open descriptor: a socket, a pipe or a terminal.
+   * @param ms The most milliseconds to wait; a negative `ms` waits without a
+   *   limit, as `writable` does.
+   * @returns `true` once `fd` is ready; `false` when `ms` passed first, when
+   *   the wait could not be made, or when the task is cancelled.
+   */
+  export function writableWithin(fd: i32, ms: i32): Promise<boolean>;
+  /**
+   * The running task's handle, to hand to `cancel` or `cancelAfter`. `main`'s
+   * handle is 0, which no call cancels. Refused under `--emit-ts` (NL4018).
+   *
+   * @returns The handle, an `i64` that names this task and no later one.
+   */
+  export function taskId(): i64;
+  /**
+   * Cancel a task: every `sleep`, `readable` or `writable` it is waiting on
+   * answers `false` at once, and so does every one it makes later, so it runs
+   * on to its end, its `using` bindings dispose and its region is freed. A
+   * task is never stopped in the middle of its code. Refused under
+   * `--emit-ts` (NL4018).
+   *
+   * @param task A handle `taskId()` answered.
+   * @returns `true` while the task is still running, so it is now cancelled
+   *   (a second `cancel` of it answers `true` too); `false` for a task that
+   *   has finished, or for `main`.
+   */
+  export function cancel(task: i64): boolean;
+  /**
+   * Whether the running task has been cancelled. Refused under `--emit-ts`
+   * (NL4018).
+   *
+   * @returns `true` once `cancel` was called on it, or its `cancelAfter`
+   *   deadline passed.
+   */
+  export function cancelled(): boolean;
+  /**
+   * Cancel a task `ms` milliseconds from now, unless it finishes first. A
+   * later call replaces the deadline; a negative `ms` removes it. Refused
+   * under `--emit-ts` (NL4018).
+   *
+   * @param task A handle `taskId()` answered.
+   * @param ms The milliseconds until the task is cancelled.
+   * @returns `true` when the task is still running and the deadline is set
+   *   (or removed); `false` for a task that has finished or is `main`.
+   */
+  export function cancelAfter(task: i64, ms: i32): boolean;
 }
 
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
@@ -5150,7 +5336,7 @@ interface Math {
  * there. A numeric literal argument to `push`, `indexOf` or `fill` takes the
  * element type, so `wide.push(3)` on an `i64[]` pushes an `i64` three. An
  * unknown method is refused with the supported list: "Unknown method `shift` on
- * i32[]"; there is no `map`, `shift`, `slice` or `toString` on an array.
+ * i32[]"; there is no `shift`, `find` or `toString` on an array.
  */
 interface Array<T> {
   /** The element count, read-only: assigning to it is refused. */
@@ -5304,6 +5490,72 @@ interface Array<T> {
    * @param offset the first slot written, `0` by default.
    */
   set(source: readonly T[], offset?: number): void;
+  /**
+   * A new array of `callbackfn(element)` for each element, in order, as
+   * `Array.prototype.map` gives. The callback takes the element, or the
+   * element and its index; a third parameter (JavaScript's array argument) is
+   * refused (NL2698), as is a second argument to `map` itself. It is a
+   * top-level function or an arrow reading only `const` locals and parameters,
+   * and the call compiles to a loop that calls it directly (`std/array`'s
+   * `map`). Capability: none.
+   *
+   * @param callbackfn called once per element, with the element and its index.
+   * @returns a new array of the callback's answers, of the receiver's length.
+   */
+  map<U>(callbackfn: (value: T, index: number) => U): U[];
+  /**
+   * A new array of the elements for which `predicate` answers `true`, in
+   * order, as `Array.prototype.filter` gives. The predicate answers a
+   * `boolean` and takes the element, or the element and its index, under the
+   * callback rules of `map`. Capability: none.
+   *
+   * @param predicate called once per element, with the element and its index.
+   * @returns a new array of the elements kept.
+   */
+  filter(predicate: (value: T, index: number) => boolean): T[];
+  /**
+   * Whether `predicate` answers `true` for some element, stopping at the first
+   * that does, as `Array.prototype.some` does; an empty array answers `false`.
+   * The callback rules are `map`'s. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `true`.
+   * @returns `true` when some element satisfies `predicate`.
+   */
+  some(predicate: (value: T, index: number) => boolean): boolean;
+  /**
+   * Whether `predicate` answers `true` for every element, stopping at the
+   * first that does not, as `Array.prototype.every` does; an empty array
+   * answers `true`. The callback rules are `map`'s. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `false`.
+   * @returns `true` when no element fails `predicate`.
+   */
+  every(predicate: (value: T, index: number) => boolean): boolean;
+  /**
+   * The index of the first element for which `predicate` answers `true`, or
+   * `-1`, as `Array.prototype.findIndex` gives. The callback rules are
+   * `map`'s. There is no `find`: TypeScript types its answer `T | undefined`
+   * and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and
+   * points here. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `true`.
+   * @returns the first such index, or `-1`.
+   */
+  findIndex(predicate: (value: T, index: number) => boolean): number;
+  /**
+   * A copy of the elements from `start` up to `end`, in a new array, with
+   * string `slice`'s rule: the range must satisfy `0 <= start <= end <=
+   * length`, and anything else panics with `slice out of range: [start, end)
+   * of length n` and exits 1, where JavaScript counts a negative index back
+   * from the length and clamps the rest. `start` is `0` and `end` the length
+   * by default; a third argument is refused (NL2699). Under Node the prelude's
+   * `sliceArray` applies the same check. Capability: none.
+   *
+   * @param start the first index copied, `0` by default.
+   * @param end the index after the last copied, the length by default.
+   * @returns a new array of `end - start` elements.
+   */
+  slice(start?: number, end?: number): T[];
 }
 
 /**
@@ -5314,8 +5566,9 @@ interface Array<T> {
  * nish_array *`.
  *
  * Everything that reads works (`length`, `a[i]`, `for...of`, `indexOf`, `join`,
- * passing it on to another `readonly T[]`); every write is refused under its
- * own name, an element store ("Cannot assign to an element of readonly i32[]
+ * `map`, `filter`, `some`, `every`, `findIndex`, `slice`, passing it on to
+ * another `readonly T[]`); every write is refused under its own name, an
+ * element store ("Cannot assign to an element of readonly i32[]
  * (declare it i32[] to write through it)"), `push`, `pop`, `set`, `fill` and
  * `sort` included. A `T[]` widens into a `readonly T[]`, and never back:
  * "Argument 1 of `fill`: expected i32[], got readonly i32[]". It is shallow, as
@@ -5347,6 +5600,72 @@ interface ReadonlyArray<T> {
    * @returns the joined string.
    */
   join(separator?: string): string;
+  /**
+   * A new array of `callbackfn(element)` for each element, in order, as
+   * `Array.prototype.map` gives. The callback takes the element, or the
+   * element and its index; a third parameter (JavaScript's array argument) is
+   * refused (NL2698), as is a second argument to `map` itself. It is a
+   * top-level function or an arrow reading only `const` locals and parameters,
+   * and the call compiles to a loop that calls it directly (`std/array`'s
+   * `map`). Capability: none.
+   *
+   * @param callbackfn called once per element, with the element and its index.
+   * @returns a new array of the callback's answers, of the receiver's length.
+   */
+  map<U>(callbackfn: (value: T, index: number) => U): U[];
+  /**
+   * A new array of the elements for which `predicate` answers `true`, in
+   * order, as `Array.prototype.filter` gives. The predicate answers a
+   * `boolean` and takes the element, or the element and its index, under the
+   * callback rules of `map`. Capability: none.
+   *
+   * @param predicate called once per element, with the element and its index.
+   * @returns a new array of the elements kept.
+   */
+  filter(predicate: (value: T, index: number) => boolean): T[];
+  /**
+   * Whether `predicate` answers `true` for some element, stopping at the first
+   * that does, as `Array.prototype.some` does; an empty array answers `false`.
+   * The callback rules are `map`'s. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `true`.
+   * @returns `true` when some element satisfies `predicate`.
+   */
+  some(predicate: (value: T, index: number) => boolean): boolean;
+  /**
+   * Whether `predicate` answers `true` for every element, stopping at the
+   * first that does not, as `Array.prototype.every` does; an empty array
+   * answers `true`. The callback rules are `map`'s. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `false`.
+   * @returns `true` when no element fails `predicate`.
+   */
+  every(predicate: (value: T, index: number) => boolean): boolean;
+  /**
+   * The index of the first element for which `predicate` answers `true`, or
+   * `-1`, as `Array.prototype.findIndex` gives. The callback rules are
+   * `map`'s. There is no `find`: TypeScript types its answer `T | undefined`
+   * and Nish has no `undefined`, so `xs.find(...)` is refused (NL2697) and
+   * points here. Capability: none.
+   *
+   * @param predicate called in order, with the element and its index, until it answers `true`.
+   * @returns the first such index, or `-1`.
+   */
+  findIndex(predicate: (value: T, index: number) => boolean): number;
+  /**
+   * A copy of the elements from `start` up to `end`, in a new array, with
+   * string `slice`'s rule: the range must satisfy `0 <= start <= end <=
+   * length`, and anything else panics with `slice out of range: [start, end)
+   * of length n` and exits 1, where JavaScript counts a negative index back
+   * from the length and clamps the rest. `start` is `0` and `end` the length
+   * by default; a third argument is refused (NL2699). Under Node the prelude's
+   * `sliceArray` applies the same check. Capability: none.
+   *
+   * @param start the first index copied, `0` by default.
+   * @param end the index after the last copied, the length by default.
+   * @returns a new array of `end - start` elements.
+   */
+  slice(start?: number, end?: number): T[];
 }
 
 /**
@@ -5444,6 +5763,10 @@ interface String {
   endsWith(searchString: string, endPosition?: number): boolean;
 }
 
+/**
+ * `String.fromCharCode`, `lib.es2022`'s own member of `StringConstructor`,
+ * repeated so that its byte meaning in Nish is documented.
+ */
 interface StringConstructor {
   /**
    * The one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. One

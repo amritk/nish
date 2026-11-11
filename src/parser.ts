@@ -42,6 +42,7 @@ import { Lexer, withoutSeparators } from "./lexer"
 import { StringMap } from "./map"
 import {
   FLAG_ABSTRACT,
+  FLAG_OBJECT_SPREAD,
   FLAG_SPREAD_ARGUMENT,
   FLAG_ACCESSOR,
   FLAG_ANGLE,
@@ -4634,10 +4635,11 @@ export class Parser {
     const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const propertyStart = this.start
-      // `{ ...a }`, object spread, for Phase 0 to refuse (NL1061): the
-      // N_SPREAD an array literal's `...a` is, among the properties.
+      // `{ ...a }`, object spread: the N_SPREAD an array literal's `...a`
+      // is, among the properties, for the checker (`checkObjectLiteral`).
       if (this.at(TOK_DOT_DOT_DOT)) {
         const spread = this.node(N_SPREAD, propertyStart, this.end)
+        spread.flags = FLAG_OBJECT_SPREAD
         this.advance()
         spread.children.push(this.parseExpression())
         spread.end = this.previousEnd

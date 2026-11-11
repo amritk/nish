@@ -56,8 +56,12 @@ the Homebrew LLVM is needed for the `wasm`, `wasm-host` and `wasi` profiles (`wa
 
 `wasm-opt` (binaryen: `apt-get install binaryen`, `brew install binaryen`) is
 optional. When it is on `PATH`, `scripts/build.sh --profile wasm-host` runs
-`wasm-opt -Oz` on the module, and the build line says whether it ran. Without
-it the module is complete, just not as small.
+`wasm-opt -Oz --strip-target-features` on the module, and the build line says
+whether it ran: `add.wasm` goes from 102 bytes to 74. Without it the module
+is complete and works the same. clang 18 also runs a `wasm-opt` it finds,
+after any optimising wasm link, and keeps a `target_features` section for it
+that build.sh's pass then drops. `NISH_WASM_OPT=0` links with neither pass,
+even with binaryen installed: the bytes a machine without it builds.
 
 <a id="wasi-optional-for---profile-wasi" style="scroll-margin-top: 65px"></a>
 
@@ -261,11 +265,11 @@ routes are
   # in the glibc container, where build/nish runs
   build/nish app.ts -o app.ll
   # on the musl host, with its own clang and the runtime from this repository
-  clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
+  clang app.ll runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c runtime/runtime-parallel.c \
     runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
     runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-chacha20.c \
     runtime/runtime-term.c runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c \
-    runtime/runtime-shm.c runtime/runtime-region.c -lm -o app
+    runtime/runtime-shm.c runtime/runtime-region.c -ffp-contract=off -lm -o app
   ```
 
   `--link`ing inside the container is the mistake to avoid: it shells out to the
@@ -374,7 +378,8 @@ release exists, take its version from
 Unpack it and run `bin/nish` from wherever you like; put that on `PATH` if you
 want it there. Keep the directory intact rather than moving the binary out of
 it: `--link` runs `scripts/build.sh` and compiles the C runtime
-(`runtime/runtime.c` and `runtime/runtime-os.c`, the system-call half), and the
+(`runtime/runtime.c`, `runtime/runtime-text.c`, the strings and number
+formatting, `runtime/runtime-os.c`, the system-call half, and the rest), and the
 compiler finds all of them relative to its own location — `bin/nish` alone in a
 directory can still emit IR with `-o`, but `--link` will tell you it cannot
 find `scripts/build.sh`.
@@ -401,7 +406,7 @@ it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
 skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
-`runtime/` (the C runtime — sixteen translation units, the wasm subset and their
+`runtime/` (the C runtime — seventeen translation units, the wasm subset and their
 header — and `runtime/sqlite/`, SQLite's vendored source),
 `scripts/build.sh` (the link pipeline), `std/` (the standard library) and
 `docs/AI.md` (the rules card). The
@@ -416,19 +421,24 @@ any working directory — and the binary runs from inside its own platform
 package for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
-on the `clang` line, and it is sixteen files:
+on the `clang` line, and it is seventeen files:
 
 ```bash
-clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
+clang app.ll runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c runtime/runtime-parallel.c \
   runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
   runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-chacha20.c \
   runtime/runtime-term.c runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c \
-  runtime/runtime-shm.c runtime/runtime-region.c -lm -o app
+  runtime/runtime-shm.c runtime/runtime-region.c -ffp-contract=off -lm -o app
 ```
 
-`runtime.c` is the part every program touches — the arena, strings, arrays,
-number formatting, the panics — and `runtime-os.c` wraps the system calls:
-files, directories, subprocesses, `getenv`, the monotonic clock.
+`runtime.c` is the part every program touches — the arena, arrays, the
+panics — `runtime-text.c` holds strings and number formatting, and
+`runtime-os.c` wraps the system calls: files, directories, subprocesses,
+`getenv`, the monotonic clock.
+
+`-ffp-contract=off` keeps clang from fusing a C `a*b+c` into one rounding
+where the CPU has a fused multiply-add (every arm64, x86-64 at v3): the runtime
+then prints the same float on every target, as `scripts/build.sh` compiles it.
 
 `runtime-parallel.c` divides work across threads for `nish/threads` (a program
 built with `--threads`, as every importer of `nish/threads` is, also needs
@@ -449,12 +459,14 @@ kernels of `nish/compress/checksum`, `runtime-sandbox.c` the confinement a
 `nish/sync/shm`. They are separate so that each carries its own measured size
 ceiling
 ([docs/wp7-runtime.md](https://github.com/amritk/nish/blob/main/docs/wp7-runtime.md));
-nothing in the core calls into the others, so a line that names only
-`runtime.c` and `runtime-os.c` still links a program that uses none of the
-other nine.
+the core is three files that call each other — `runtime-os.c` builds strings
+with `runtime-text.c`'s `nish_str_new` — and calls into none of the others, so a
+line that names only `runtime.c`, `runtime-text.c` and `runtime-os.c` links a
+program that uses none of the other fourteen. Leave out `runtime-text.c` and it
+does not link at all: `nish_str_new` is undefined.
 
 `scripts/build.sh` compiles the other
-nine beside any
+sixteen beside any
 `runtime.c` it is handed, so a build that goes through it — every `--link`,
 and every `--profile` recipe in these documents — needs to name only the one.
 

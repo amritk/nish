@@ -1,1 +1,0 @@
---target wasm32 --host tests/wordings/host/text.ts
