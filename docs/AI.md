@@ -1694,9 +1694,9 @@ export const main = (): i32 => {
 
 A tree node keeps `first` and `next` links, **not a `kids: Node[]` per
 node**. Every `kids` is a 24-byte header plus a block that doubles as it
-grows, and the blocks it outgrows stay in the arena; a walk follows two
-pointers per child instead of one. On a 4M-node tree the links took 0.52x the
-memory and 0.68x the time of `kids`.
+grows, and the blocks it outgrows stay in the arena; a walk over `kids`
+follows two pointers per child where the links follow one. On a 4M-node
+tree the links took 0.52x the memory and 0.68x the time of `kids`.
 
 ```ts nish:ok
 class Node {
