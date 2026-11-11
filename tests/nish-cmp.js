@@ -526,6 +526,11 @@ const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
   )
+const PIPELINED_WRITE = "answers pipelined requests in one write"
+const pipelinedWrite = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: PIPELINED_WRITE, why }))
+  )
 const DATE_SINGLETON = "Refuse a response that carries two Date fields"
 const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1529,6 +1534,56 @@ const DECLARED = [
     "tests/link/tfb_db/main.ts",
     "tests/link/tfb_entry/main.ts",
   ]),
+  // WP49 stage 6, part 3: `HttpHandler` holds owed sends (`flush`, `sends`),
+  // so every program that reaches std/net/handler.ts lays it out again.
+  ...pipelinedWrite(
+    "HttpHandler gains owed sends, flush() and sends(), so serve answers a pipelined burst in one write; the handler struct grows and every module that reaches it moves",
+    {
+      "bench/http1-server.ts": ["http1-server.h"],
+      "examples/http-app/main.ts": ["main.h"],
+      "tests/link/net_handler/main.ts": ["main.h"],
+      "tests/link/net_handler_descriptors/main.ts": ["main.h"],
+      "tests/link/net_handler_overlong/main.ts": ["main.h"],
+      "tests/link/net_handler_short/main.ts": ["main.h"],
+      "tests/link/net_handler_unbegun/main.ts": ["main.h"],
+      "tests/link/net_http_app/main.ts": ["main.h"],
+      "tests/link/net_serve/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_deadline/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_hangup/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_pg/main.ts": ["handler.ll", "main.h", "main.ll", "postgres-carrier.ll", "serve.ll"],
+      "tests/link/net_serve_pipelined_flat/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_server_field/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_server_panic/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_serve_shutdown/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/net_upstream/main.ts": ["main.h"],
+      "tests/link/net_upstream_release/main.ts": ["main.h"],
+      "tests/link/std_postgres_async/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_flat/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["handler.ll", "main.h", "postgres-carrier.ll"],
+      "tests/link/std_postgres_carrier/main.ts": ["main.h"],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["main.h"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["main.h"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["main.h"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["main.h"],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": ["main.h"],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["main.h"],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": ["main.h"],
+      "tests/link/tfb_async_db/main.ts": ["async-db-server.ll", "db-server.ll", "handler.ll", "main.h", "main.ll", "postgres-carrier.ll", "serve.ll"],
+      "tests/link/tfb_async_entry/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
+      "tests/link/tfb_db/main.ts": ["main.h"],
+    }
+  ),
+  {
+    program: "tests/link/net_serve_burst/main.ts",
+    file: "exit",
+    changelog: PIPELINED_WRITE,
+    why: "the program reads ServeStats.sends, which the 0.38.0 seed does not have, so only the candidate compiles it (WP49 stage 6, part 3)",
+  },
 ]
 
 /**
