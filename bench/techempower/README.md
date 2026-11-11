@@ -93,6 +93,30 @@ and, for the gate, its
 and its
 [re-measurement after the `serve` and pool fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6).
 
+### Profiling the async entry against the explicit one
+
+```bash
+bash bench/techempower/profile.sh                 # plaintext, json and db
+bash bench/techempower/profile.sh --only db       # one test
+bash bench/techempower/profile.sh --help
+```
+
+`profile.sh` asks where each request's time goes, not how fast it is. It
+builds both entries of each pair with `-g` into `build/tfb/profile/`. Then it
+drives them one after the other on `/plaintext` (256 connections, 16
+pipelined), `/json` (64) and `/db` (64), and records three phases per entry:
+
+- **perf:** `perf record -e cpu-clock:u` for the top user-space frames (a
+  software event, so it needs no hardware counters), with req/s and the
+  server's CPU per request from `/proc`.
+- **strace:** `strace -c -f` for the system calls per request.
+- **callgrind:** `valgrind --tool=callgrind`, switched on only for a wrk
+  window, for instructions per request (Ir) and the top frames by self Ir.
+
+It needs `perf`, `valgrind` and `strace` beside `wrk`, and writes
+`summary.md` per test and for the run. The recorded profile is in
+[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-where-the-async-entrys-time-goes-a-profile-wp49-stage-6).
+
 ## The database entry
 
 `db-server.ts` is the handler and `db-main.ts` the program, run as one
