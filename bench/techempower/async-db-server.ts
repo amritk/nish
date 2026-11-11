@@ -298,10 +298,24 @@ export const tfbServeDb = async (
         // task ready in this loop turn had its chance to join, and keeps each
         // row's randomNumber for its follower; a follower yields a loop turn
         // at a time until its batch is answered.
-        if (db.batchCount === TFB_BATCH_MOST) {
-          // Full: this request opens a batch of its own.
-          db.batchCount = 0
-          db.batchGen = (db.batchGen + 1) % TFB_BATCH_GEN_WRAP
+        // A batch opens only once the batch before it in its place was
+        // answered: one connection's answer can lag a few milliseconds behind
+        // the others', long enough for a ring's worth of newer batches.
+        let open: boolean = true
+        while (true) {
+          if (db.batchCount === TFB_BATCH_MOST) {
+            // Full: this request opens a batch of its own.
+            db.batchCount = 0
+            db.batchGen = (db.batchGen + 1) % TFB_BATCH_GEN_WRAP
+          }
+          if (!open || db.batchCount > 0 || tfbBatchFree(db, db.batchGen)) {
+            break
+          }
+          open = await sleep(0)
+        }
+        if (!open) {
+          db.failures += 1
+          return new Response(503)
         }
         const id: i64 = tfbWorldId()
         const gen: i32 = db.batchGen
@@ -337,8 +351,9 @@ export const tfbServeDb = async (
           db.batchOk[keep] = read ? toU8(1) : toU8(0)
         } else {
           let waiting: boolean = true
-          // A newer generation in its place: the ring came round, and its answer is gone.
-          while (waiting && db.batchGens[keep] < gen) {
+          // Its place still free holds the batch before it. Once taken, any
+          // generation but its own means the ring came round and its answer is gone.
+          while (waiting && tfbBatchFree(db, gen)) {
             waiting = await sleep(0)
           }
           if (!waiting || db.batchGens[keep] !== gen) {
@@ -444,6 +459,19 @@ export const tfbServeDb = async (
     },
     stats
   )
+
+/**
+ * Whether batch `gen`'s place in the ring is free for it: it holds the answer
+ * of the batch before it there, or none yet. Free, batch `gen` may open; once
+ * it opened, its followers wait while its place is still free.
+ * @param db what every request's task shares
+ * @param gen a batch generation
+ * @returns true when `gen`'s place holds the generation `TFB_BATCH_RING` before it, or -1
+ */
+const tfbBatchFree = (db: TfbAsyncDb, gen: i32): boolean => {
+  const held: i32 = db.batchGens[gen % TFB_BATCH_RING]
+  return held === -1 || held === (gen - TFB_BATCH_RING + TFB_BATCH_GEN_WRAP) % TFB_BATCH_GEN_WRAP
+}
 
 /**
  * Batch `base / TFB_BATCH_MOST`'s first `count` ids as the World read's one
