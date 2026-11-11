@@ -391,7 +391,7 @@ export class PgConfig {
    * Read by the carrier only: `PG_TLS_DISABLE` (the default), `PG_TLS_REQUIRE`
    * or `PG_TLS_VERIFY_FULL`. TLS needs a TCP target.
    */
-  tls: i32 = PG_TLS_DISABLE
+  tls: i32 = 0
   /**
    * Read by the carrier only, under `PG_TLS_VERIFY_FULL`: a PEM file of the
    * roots to trust; empty means the system's store.

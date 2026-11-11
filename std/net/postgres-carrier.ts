@@ -200,7 +200,7 @@ const PG_CARRIER_TLS_KEY_BYTES: i32 = 32
 /** The most ciphertext read from a socket at once: one largest record and its header. */
 const PG_CARRIER_TLS_READ_BYTES: i32 = 16645
 /** The byte a server answers an SSLRequest with to go on with TLS. */
-const PG_CARRIER_TLS_YES: u8 = 83
+const PG_CARRIER_TLS_YES: i32 = 83
 
 /**
  * The caps a `PgCarrier` is built with, all set before it starts: nothing
@@ -265,7 +265,10 @@ export class PgCarrier {
   private readonly made: boolean[]
   private readonly deadlines: i64[]
   private readonly errors: i32[]
-  private readonly tlsMode: i32
+  // TLS (`PgConfig.tls`): the name checked and the roots it is checked
+  // against, each slot's phase (`PG_CARRIER_TLS_*`), its client, how much of
+  // the SSLRequest has gone out; the SSLRequest itself, the one byte its
+  // answer is read into, and the buffer ciphertext is read through.
   private readonly tlsName: string
   private readonly trust: TlsClientTrust | null
   private readonly tlsPhase: i32[]
@@ -303,6 +306,7 @@ export class PgCarrier {
   failure: i32 = 0
   /** Behind a `PG_CARRIER_FAILED` for a lost connection: the socket error that ended it (`-110` for a connect timeout), or 0. */
   socketError: i32 = 0
+  private readonly tlsMode: i32
   private readonly watchId: i32
   private readonly loop: i32
   private qFreeCount: i32 = 0
@@ -807,7 +811,7 @@ export class PgCarrier {
       }
       if (got <= 0) {
         this.fail(s, got)
-      } else if (this.tlsAnswer[0] !== PG_CARRIER_TLS_YES) {
+      } else if (toI32(this.tlsAnswer[0]) !== PG_CARRIER_TLS_YES) {
         this.failTls(s, 0)
       } else {
         this.tlsConns[s] = pgCarrierTlsStart(this.tlsName)
