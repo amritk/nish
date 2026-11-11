@@ -2199,9 +2199,11 @@ const resolveFunctionArgument = (
  * WP51 stage 2: the reference `written` (a local, field or element of
  * reference type `type`) given for the function parameter at `index`,
  * rewritten in the call into the arrow `($a0, ...) => written($a0, ...)` and
- * lifted as an arrow written there is. The arrow captures what the expression
- * reads, so the reference is the one the call site holds, and each call
- * through it is a call through a reference, resolved over its place's set
+ * lifted as an arrow written there is. The arrow captures the locals the
+ * expression reads, by value at the call, and reads the field or element
+ * through them at each call it makes, so an expression that calls or assigns
+ * is refused (`readsOnly`): it would run again at each. Each call through
+ * the reference is a call through a reference, resolved over its place's set
  * like any other (`src/fnref-places.ts`). A form that runs its function away
  * from the call — on another thread, in a task, a region or over a secret —
  * takes no reference: its arrow captures by its own rules, and a reference
@@ -2227,6 +2229,17 @@ const referenceArgument = (
       ctx,
       arg,
       `\`${shown}\` is a function reference: \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
+    )
+    return null
+  }
+  if (!readsOnly(written)) {
+    // The arrow reads the reference each time the callee calls it, so an
+    // expression that calls a function or writes would run again at each.
+    refuseOnce(
+      ctx,
+      arg,
+      `\`${shown}\` calls or assigns as it is read, and it would be read at each call \`${calleeSpelling(call, template)}\` makes: ` +
+        `read it into a \`const\` first, since \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
     )
     return null
   }
@@ -2285,6 +2298,35 @@ const referenceArgument = (
   program.gathered = true
   program.nodeTypes[arrow.id] = T_VOID
   return liftArrowArgument(ctx, call, template, index, arrow, names, bindings, scope)
+}
+
+/**
+ * Whether reading `expr` only reads: names, `this`, numbers, fields and
+ * elements, with arithmetic in an index, and no call or assignment, so that
+ * reading it again inside the arrow `referenceArgument` writes has no effect
+ * the call site would not have had.
+ */
+const readsOnly = (expr: Node): boolean => {
+  const kind = expr.kind
+  if (kind === N_IDENT || kind === N_THIS || kind === N_NUMBER) {
+    return true
+  }
+  if (kind === N_PAREN || kind === N_MEMBER) {
+    return readsOnly(expr.children[0])
+  }
+  if (kind === N_INDEX) {
+    return readsOnly(expr.children[0]) && readsOnly(expr.children[1])
+  }
+  if (kind === N_UNARY) {
+    return (expr.text === "-" || expr.text === "~") && readsOnly(expr.children[0])
+  }
+  if (kind === N_BINARY) {
+    const op = expr.text
+    const arithmetic =
+      op === "+" || op === "-" || op === "*" || op === "&" || op === "|" || op === "^" || op === "<<" || op === ">>"
+    return arithmetic && readsOnly(expr.children[0]) && readsOnly(expr.children[1])
+  }
+  return false
 }
 
 /**

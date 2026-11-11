@@ -72,7 +72,7 @@ import {
   methodReferenceMessage,
   nullableReference,
   opaqueReferenceMessage,
-  refuseNullableCall
+  refuseNullableCall,
 } from "./fnrefs"
 import { ParentTable } from "./parents"
 import {
