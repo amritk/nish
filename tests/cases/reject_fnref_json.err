@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Stage.op`, which is `(i32) => i32`

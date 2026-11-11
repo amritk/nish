@@ -50,7 +50,9 @@
 
 import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
-import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
+import { RefModule, resolveReferences } from "./fnref-places"
+import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
+import { analyzeFunctions, AnalysisUnit, FactsTable, FunctionFacts, PointerParamFacts } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
@@ -1398,6 +1400,24 @@ export class Compilation {
         unit.parents.link(unit.file)
       }
     }
+    // WP51 §2.3: every body is checked, so each call through a function
+    // reference gets the dispatcher of the set its callee's place can hold.
+    const refModules: RefModule[] = []
+    for (const unit of this.modules) {
+      refModules.push(
+        new RefModule(unit.checker.program, unit.checker.ctx, unit.file, unit.parents, unit.nodeCount)
+      )
+    }
+    if (resolveReferences(this.table, refModules)) {
+      let r = 0
+      while (r < refModules.length) {
+        this.modules[r].nodeCount = refModules[r].nodeCount
+        r = r + 1
+      }
+      if (this.sink.hasErrors()) {
+        return false
+      }
+    }
     // WP53 §4: the handle rules read the checked tables, so they run once
     // every body, every instance's included, has checked clean.
     for (const unit of this.modules) {
@@ -1437,6 +1457,11 @@ export class Compilation {
       programs.push(unit.checker.program)
     }
     const mode = buildModeOf(this.opts, programs)
+    // WP51 §5.2: no function reference crosses into code this compiler did not see.
+    refuseHostReferences(contexts, mode)
+    if (this.sink.hasErrors()) {
+      return false
+    }
     // Which array fields live inside their objects (`src/inline-arrays.ts`).
     // Every body has to be checked to know, and everything after this reads
     // the layout it settles: the ranges, the attribute facts, the emitter.
@@ -2524,6 +2549,7 @@ export class Compilation {
     this.checkScopes(facts)
     this.checkSecrets(facts)
     this.checkRegions(facts)
+    this.checkReferenceSites(facts)
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.parallelCalls) {
@@ -2562,6 +2588,90 @@ export class Compilation {
         if (!refused && warning.length > 0) {
           this.sink.reportPerformance(program.source, call.node.start, call.node.end, warning)
         }
+      }
+    }
+  }
+
+  /**
+   * WP51 §2.2: a call through a reference whose set holds a member that keeps
+   * an argument and one that does not is refused, since the dispatcher's
+   * facts are its arms' join and every call would lose the argument's stack
+   * place; a set past eight members is warned, naming the stores that
+   * widened it. Both read the facts the attribute fixpoint settled.
+   */
+  checkReferenceSites(facts: FactsTable): void {
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      let s = 0
+      while (s < program.refSites.length) {
+        const call = program.refSites[s]
+        const members = program.refSiteDispatchers[s].refMembers
+        const via = program.refSiteVia[s]
+        const shown = program.refSiteShown[s]
+        const arity = members.length > 0 ? members[0].writtenArity() : 0
+        let refused = false
+        let i = 0
+        while (i < arity && !refused) {
+          // Only a value with storage behind it has a place to lose: a
+          // scalar argument is a register, whatever a member's facts say of
+          // its name. A `Result`, a maybe, a region handle and a vector may
+          // each carry one, so they count with pointers and nullables.
+          const type = members.length > 0 ? members[0].paramTypes[i] : 0
+          const t = this.table
+          const placed =
+            t.isPointer(type) ||
+            t.isNullable(type) ||
+            t.isResult(type) ||
+            t.isMaybe(type) ||
+            t.isRegion(type) ||
+            t.isVector(type)
+          let keeper = -1
+          let other = -1
+          let keeperSig: FunctionSig | null = null
+          let otherSig: FunctionSig | null = null
+          const judged: FunctionSig[] = placed ? members : []
+          let k = 0
+          for (const member of judged) {
+            // The fact escape analysis reads of a callee (`calleeCaptures`):
+            // a pointer's `outlives` also holds when it is passed on to a
+            // function that keeps it, which `escaping` alone does not see.
+            // A member with no facts keeps, as it does there.
+            const f = facts.get(member.name)
+            const name = member.paramNames[i]
+            const pointer: PointerParamFacts | null = f !== null ? f.pointerParam(name) : null
+            const keeps = f === null || (pointer !== null ? pointer.outlives : f.escaping.has(name))
+            if (keeps && keeper < 0) {
+              keeper = k
+              keeperSig = member
+            } else if (!keeps && other < 0) {
+              other = k
+              otherSig = member
+            }
+            k = k + 1
+          }
+          if (keeperSig !== null && otherSig !== null && keeper >= 0 && keeper < via.length) {
+            const message = escapeJoinMessage(
+              shown,
+              keeperSig.sourceName,
+              otherSig.sourceName,
+              keeperSig.paramNames[i],
+              passedOnlyTo(facts.get(keeperSig.name), keeperSig.paramNames[i]),
+              via[keeper]
+            )
+            this.sink.report(program.source, call.start, call.end, message)
+            refused = true
+          }
+          i = i + 1
+        }
+        if (!refused && members.length > WIDE_SET) {
+          this.sink.reportPerformance(
+            program.source,
+            call.start,
+            call.end,
+            wideSetMessage(shown, members.length, via)
+          )
+        }
+        s = s + 1
       }
     }
   }
@@ -3833,6 +3943,24 @@ export class Compilation {
 }
 
 /** Whether `program` uses the global `name`: it imports it from `nish/collections`, implicitly or not (WP32). */
+/**
+ * The callee `name` escapes into when being handed to it is its only escape
+ * (`FunctionFacts.passedOn`), or "" when it is kept outright or not at all.
+ */
+const passedOnlyTo = (f: FunctionFacts | null, name: string): string => {
+  if (f === null || f.keptOutright.has(name) || f.pointerParam(name) !== null) {
+    return ""
+  }
+  let i = 0
+  while (i + 1 < f.passedOn.length) {
+    if (f.passedOn[i] === name) {
+      return f.passedOn[i + 1]
+    }
+    i = i + 2
+  }
+  return ""
+}
+
 const importsCollection = (program: CheckedProgram, name: string): boolean => {
   for (const imp of program.imports) {
     if (imp.importedName === name && imp.specifier === COLLECTIONS_SPECIFIER) {

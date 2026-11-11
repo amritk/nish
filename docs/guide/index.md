@@ -134,6 +134,7 @@ and the language specification.
   [errors and `Result`](language/errors.md),
   [maps and sets](language/maps-and-sets.md), [generics](language/generics.md),
   [modules](language/modules.md), [memory](language/memory.md),
+  [function references](language/function-references.md),
   [regions](language/regions.md), [vectors (SIMD)](language/simd.md) and
   [async functions](language/async.md).
 - **Using Nish** — [the command-line interface](using-nish/cli.md),

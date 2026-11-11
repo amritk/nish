@@ -287,8 +287,9 @@ green run that skipped half its checks should not look like one that proved
 everything. Two rules of the language shape how it is used, and both are worth
 knowing before writing a case with it:
 
-- **A function is not a value**, so there is no `test(name, () => ...)`. The
-  suite is driven by straight-line calls.
+- **An arrow inside a function is not a value**, so there is no
+  `test(name, () => ...)`: only a capture-free top-level function can be held
+  as a reference. The suite is driven by straight-line calls.
 - **Every assertion answers a `boolean`**, because a failure cannot throw and be
   caught: an out-of-range index *panics* and ends the process, so a check that a
   later read depends on is a branch —

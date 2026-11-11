@@ -1,1 +1,1 @@
-Unknown field `read` on class `File` (it is a method; call it)
+`f.read` is a method: a function reference names a top-level function, and a method needs its receiver

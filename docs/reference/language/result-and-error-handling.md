@@ -113,8 +113,10 @@ still costs something against C and Rust, are in
 
 There is deliberately no `unwrap()`: `expect(message)` says the same thing and
 insists on a reason. There is no `map` / `andThen` / `orElse` either — they
-need function values, which Nish forbids because the whole-program pass
-cannot prove purity, termination or escape through an unknown callee.
+need a callback written at the call, often a closure, which a
+[function reference](declarations.md#function-references) cannot hold, and through an
+unknown callee the whole-program pass cannot prove purity, termination or
+escape.
 Narrowing plus `orReturn()` covers what those combinators are for.
 
 ## The three rules

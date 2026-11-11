@@ -1,0 +1,1 @@
+can reach `a`, which passes `s` to `count`, which this compiler counts as keeping it, and `b`, which does not, so every call here would allocate `s` in the arena

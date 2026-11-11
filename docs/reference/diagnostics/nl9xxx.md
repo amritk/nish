@@ -2,7 +2,7 @@
 
 # NL9xxx\: performance warnings
 
-The 16 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 17 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL9001
 
@@ -367,4 +367,67 @@ export const lastLine = (rows: i32): i32 => {
 
 ```text
 `last` is given a new allocation on every pass of this loop and drops the one the pass before gave it: nothing can reach that value again and nothing frees it while the loop runs, so memory grows with every pass. Declare `last` with `const` inside the loop when only its pass reads it, or keep what the last pass needs as numbers and build the value once after the loop
+```
+
+## NL9017
+
+The message of a warning `--no-warn-performance` turns off contains:
+
+```text
+… functions, more than eight, so it branches on a `switch` of them where a direct call would not…
+```
+
+[`nl9017_fnref_wide_set.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl9017_fnref_wide_set.ts):
+
+```ts
+// NL9017: a call through a reference whose set holds more than eight
+// functions branches on a `switch` of them where a direct call would not.
+function f0(x: i32): i32 {
+  return x + 0;
+}
+
+function f1(x: i32): i32 {
+  return x + 1;
+}
+
+function f2(x: i32): i32 {
+  return x + 2;
+}
+
+function f3(x: i32): i32 {
+  return x + 3;
+}
+
+function f4(x: i32): i32 {
+  return x + 4;
+}
+
+function f5(x: i32): i32 {
+  return x + 5;
+}
+
+function f6(x: i32): i32 {
+  return x + 6;
+}
+
+function f7(x: i32): i32 {
+  return x + 7;
+}
+
+function f8(x: i32): i32 {
+  return x + 8;
+}
+
+export const main = (): i32 => {
+  const ops: ((x: i32) => i32)[] = [f0, f1, f2, f3, f4, f5, f6, f7, f8];
+  let total = 0;
+  for (const op of ops) {
+    total = total + op(2);
+  }
+  return total;
+};
+```
+
+```text
+this call through `op` can reach 9 functions, more than eight, so it branches on a `switch` of them where a direct call would not; they came in through `ops: ((x: i32) => i32)[] = [f0, f1, f2, f3, f4, f5, f6, f7, f8]` (nl9017_fnref_wide_set.ts:40)
 ```

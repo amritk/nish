@@ -38,7 +38,6 @@ and where it is specified.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
 - [WP27: Calling C](wp27-ffi.md): whether S4 (C structs) and S5 (`errno`) happen at all.
 - [WP28: Compatibility mode](wp28-compatibility-mode.md): whether to accept compatibility mode, and its open questions.
-- [WP51: References to capture-free top-level functions](wp51-function-references.md): the recommendation, strict with per-place sets, the escape-join refusal and no tag check in a speed build.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
 
 ## Picking up a work package
@@ -68,8 +67,8 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
 | [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md) | In progress | 3 of 4 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
+| [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 2 of 4 |
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | Proposed | 2 of 13 |
-| [WP51: References to capture-free top-level functions](wp51-function-references.md) | Proposed | 1 of 4 |
 
 ## Landed
 

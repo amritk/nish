@@ -71,7 +71,7 @@ import {
   TemplateInfo,
 } from "./program"
 import { StringSet } from "./map"
-import { isNumeric, T_BOOL, T_CPTR, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
+import { isNumeric, T_BOOL, T_CPTR, T_ERROR, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
 import {
   handleFieldMessage,
   handleHeaderMessage,
@@ -490,9 +490,12 @@ const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void =>
  * the emitter can write without evaluating anything.
  */
 const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 => {
+  // A function reference is a tag only a function's name gives (WP51 §2.1):
+  // a number is not one, though both are an `i32`.
+  const number = ctx.table.isFnRef(want) ? T_I32 : want
   switch (expr.kind) {
     case N_NUMBER:
-      return want
+      return number
     case N_STRING:
       return ctx.table.stripNull(want) === T_STRING ? want : T_STRING
     case N_TEMPLATE:
@@ -505,7 +508,7 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
     case N_NULL:
       return ctx.table.isNullable(want) ? want : -1
     case N_UNARY:
-      return expr.text === "-" && expr.children[0].kind === N_NUMBER ? want : -1
+      return expr.text === "-" && expr.children[0].kind === N_NUMBER ? number : -1
     default:
       return -1
   }

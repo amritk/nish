@@ -71,6 +71,11 @@
                 "title": "Functions",
                 "filepath": "docs/guide/language/functions.md"
               },
+              "/function-references": {
+                "type": "page",
+                "title": "Function references",
+                "filepath": "docs/guide/language/function-references.md"
+              },
               "/control-flow": {
                 "type": "page",
                 "title": "Control flow",

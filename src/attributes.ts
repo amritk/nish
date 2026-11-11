@@ -771,6 +771,19 @@ export class FunctionFacts {
   callsNoReturn: boolean
   /** Parameter names that escape; decides `nocapture` for strings. */
   escaping: StringSet
+  /**
+   * The `escaping` names that escape other than by being handed to a user
+   * function under the conservative rule in `noteUse`: returned, stored,
+   * aliased, or given to a runtime entry.
+   */
+  keptOutright: StringSet
+  /**
+   * Pairs, name then callee as the source spells it: a parameter that
+   * escapes because it is handed to that user function, the first such call
+   * only. The escape-join refusal names the callee when this is the only
+   * reason (`keptOutright` lacks the name).
+   */
+  passedOn: string[]
   /** User functions and runtime symbols called directly, by LLVM symbol. */
   callees: StringSet
   /** Parameter names in signature order (`this` first for methods). */
@@ -974,6 +987,8 @@ export class FunctionFacts {
     this.willReturn = true
     this.callsNoReturn = false
     this.escaping = new StringSet()
+    this.keptOutright = new StringSet()
+    this.passedOn = []
     this.callees = new StringSet()
     this.paramNames = paramNames
     this.pointerParams = []
@@ -2164,6 +2179,7 @@ class FactCollector {
 
   escapeParam(name: string): void {
     this.facts.escaping.add(name)
+    this.facts.keptOutright.add(name)
     const pointer = this.facts.pointerParam(name)
     if (pointer !== null) {
       pointer.captured = true
@@ -2190,8 +2206,11 @@ class FactCollector {
       if (pointer !== null && callee !== null) {
         pointer.passedToCallees.push(callee.name)
         pointer.passedToIndices.push(found.index)
-      } else {
-        this.facts.escaping.add(name)
+      } else if (this.facts.escaping.add(name) && callee !== null) {
+        this.facts.passedOn.push(name)
+        this.facts.passedOn.push(callee.sourceName)
+      } else if (callee === null) {
+        this.facts.keptOutright.add(name)
       }
       return
     }
@@ -4191,6 +4210,16 @@ const collectStatedFacts = (
   // tail (`emitParamRangeChecks`). Its callers keep the tail they recorded for
   // the entry they no longer check, which is sound and costs nothing: they call
   // this function, and it calls the same two.
+  // WP51: a dispatcher whose set is empty traps (`emitEmptyDispatcher`), and
+  // a debug build checks a dispatcher's tag on entry, which may panic
+  // (`emitTagCheck`). Its body, a `switch` of direct calls, says neither.
+  if (sig.dispatcher && sig.refMembers.length === 0) {
+    facts.hasTrap = true
+  } else if (sig.dispatcher && opts.profile === "debug") {
+    const tail: string[] = []
+    panicTailCallees(tail)
+    collector.addCallees(tail)
+  }
   if (checksRangesInPrologue(table, opts, sig)) {
     const tail: string[] = []
     panicTailCallees(tail)
@@ -4481,6 +4510,7 @@ const handsParamsTo = (facts: FunctionFacts, runtime: string): void => {
   facts.callees.add(runtime)
   for (const name of facts.paramNames) {
     facts.escaping.add(name)
+    facts.keptOutright.add(name)
   }
 }
 
