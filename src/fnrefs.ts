@@ -235,8 +235,8 @@ const paramList = (decl: Node): Node | null => {
 /**
  * §5.2: no reference crosses into code this compiler did not see. A
  * parameter or return of a function `hostVisible` answers yes for, the entry
- * point among them, and a field of a class reachable from one -- of every
- * class where the build hands out its layouts -- is refused, since a host
+ * point among them, or of a `declare function`, and a field of a class reachable from one -- of every
+ * class where the build hands out every layout -- is refused, since a host
  * could store or pass a tag no dispatcher's set holds. A compile-time
  * function parameter is bound at a call this compiler checked, so it is not
  * in scope.
@@ -255,7 +255,7 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
         !sig.definedIn(program.source) ||
         sig.dispatcher ||
         sig.compileTimeOnly() ||
-        !hostVisible(mode, exported, entry)
+        (!sig.foreign() && !hostVisible(mode, exported, entry))
       ) {
         continue
       }
@@ -295,7 +295,7 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
   }
   for (const ctx of contexts) {
     for (const info of ctx.program.structList) {
-      if (info.origin !== ctx.program.source || (!mode.layoutsShared && reached.indexOf(info.type) < 0)) {
+      if (info.origin !== ctx.program.source || (!mode.everyLayoutShared && reached.indexOf(info.type) < 0)) {
         continue
       }
       for (const field of info.fields) {
@@ -322,3 +322,46 @@ const fieldNode = (info: StructInfo, name: string): Node => {
   }
   return decl
 }
+
+/** How a member came into a call's set, after "reaches `h`". */
+const reachText = (via: string): string =>
+  via !== "" ? `through ${via}` : "through a value whose functions this compiler cannot follow"
+
+/**
+ * The escape-join refusal (§2.2): a call through `shown` whose set holds
+ * `keeper`, which keeps its parameter `param`, and `other`, which does not.
+ */
+export const escapeJoinMessage = (
+  shown: string,
+  keeper: string,
+  other: string,
+  param: string,
+  via: string
+): string =>
+  `this call through \`${shown}\` can reach \`${keeper}\`, which keeps \`${param}\`, and \`${other}\`, which does ` +
+  `not, so every call here would allocate \`${param}\` in the arena; \`${keeper}\` reaches \`${shown}\` ` +
+  `${reachText(via)}: call \`${keeper}\` directly, or store it where \`${shown}\` does not read`
+
+/** The warning for a call whose set passes eight members (§2.2), naming the stores that widened it. */
+export const wideSetMessage = (shown: string, count: i32, vias: string[]): string => {
+  const seen = new StringSet()
+  const named: string[] = []
+  let wide = false
+  for (const via of vias) {
+    if (via === "") {
+      wide = true
+    } else if (seen.add(via)) {
+      named.push(via)
+    }
+  }
+  if (wide) {
+    named.push("a value whose functions this compiler cannot follow")
+  }
+  return (
+    `this call through \`${shown}\` can reach ${count} functions, more than eight, so it branches on a ` +
+    `\`switch\` of them where a direct call would not; they came in through ${named.join(", ")}`
+  )
+}
+
+/** The size past which a call's set is warned. */
+export const WIDE_SET: i32 = 8

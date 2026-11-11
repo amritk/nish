@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 885
+export const RULE_COUNT: i32 = 887
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -1073,6 +1073,8 @@ const diagnosticRules = (): string[] => [
   "NL2101",
   "` requires two operands of the same numeric type, got ",
   "NL2102",
+  "`, which does not, so every call here would allocate `",
+  "NL2729",
   "a guard is handed only to a function named at the call",
   "NL2536",
   '"`) are not supported; modules have no top-level code',
@@ -1817,6 +1819,8 @@ const performanceRules = (): string[] => [
   "NL9012",
   "--unchecked-indexing is deprecated and reaches only the modules of the entry package, never a dependency or the standard library: call `uncheckedGet` and `uncheckedSet` from `",
   "NL9014",
+  " functions, more than eight, so it branches on a `switch` of them where a direct call would not",
+  "NL9017",
   "so entering the range keeps its check on every iteration of this loop",
   "NL9013",
   "allocates a dynamically sized array on every iteration of this loop",

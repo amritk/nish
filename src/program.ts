@@ -1790,6 +1790,17 @@ export class CheckedProgram {
   /** WP51: beside each of `refCalls`, the reference type it calls through. */
   refCallTypes: i32[]
   /**
+   * WP51: every call through a reference once it has its dispatcher, with the
+   * callee as written and, beside each of the dispatcher's members, where it
+   * came into the callee's place (`` `k.f = u3` (main.ts:12) ``, or "" when it
+   * came in only by widening). The escape-join refusal and the wide-set
+   * warning read them after the attribute fixpoint.
+   */
+  refSites: Node[]
+  refSiteDispatchers: FunctionSig[]
+  refSiteShown: string[]
+  refSiteVia: string[][]
+  /**
    * Call or identifier node id -> the canonical builtin it resolved to, for
    * the names a `nish:` import brought in, and `""` for every other node. The
    * emitter dispatches builtins on the identifier's own text, which under an
@@ -2002,6 +2013,10 @@ export class CheckedProgram {
     this.refCalls = []
     this.refCallTables = []
     this.refCallTypes = []
+    this.refSites = []
+    this.refSiteDispatchers = []
+    this.refSiteShown = []
+    this.refSiteVia = []
     this.floatRemainder = null
     this.nodeBuiltins = []
     this.builtinImports = new StringMap()

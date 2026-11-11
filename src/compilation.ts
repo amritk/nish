@@ -51,7 +51,7 @@
 import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
-import { refuseHostReferences } from "./fnrefs"
+import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
 import { portabilityFindings } from "./portability"
@@ -2554,6 +2554,7 @@ export class Compilation {
     this.checkScopes(facts)
     this.checkSecrets(facts)
     this.checkRegions(facts)
+    this.checkReferenceSites(facts)
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.parallelCalls) {
@@ -2592,6 +2593,65 @@ export class Compilation {
         if (!refused && warning.length > 0) {
           this.sink.reportPerformance(program.source, call.node.start, call.node.end, warning)
         }
+      }
+    }
+  }
+
+  /**
+   * WP51 §2.2: a call through a reference whose set holds a member that keeps
+   * an argument and one that does not is refused, since the dispatcher's
+   * facts are its arms' join and every call would lose the argument's stack
+   * place; a set past eight members is warned, naming the stores that
+   * widened it. Both read the facts the attribute fixpoint settled.
+   */
+  checkReferenceSites(facts: FactsTable): void {
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      let s = 0
+      while (s < program.refSites.length) {
+        const call = program.refSites[s]
+        const members = program.refSiteDispatchers[s].refMembers
+        const via = program.refSiteVia[s]
+        const shown = program.refSiteShown[s]
+        const arity = members.length > 0 ? members[0].writtenArity() : 0
+        let refused = false
+        let i = 0
+        while (i < arity && !refused) {
+          let keeper = -1
+          let other = -1
+          let k = 0
+          while (k < members.length) {
+            const f = facts.get(members[k].name)
+            const keeps = f !== null && f.escaping.has(members[k].paramNames[i])
+            if (keeps && keeper < 0) {
+              keeper = k
+            } else if (!keeps && other < 0) {
+              other = k
+            }
+            k = k + 1
+          }
+          if (keeper >= 0 && other >= 0) {
+            const message = escapeJoinMessage(
+              shown,
+              members[keeper].sourceName,
+              members[other].sourceName,
+              members[keeper].paramNames[i],
+              via[keeper]
+            )
+            this.sink.report(program.source, call.start, call.end, message)
+            refused = true
+          }
+          i = i + 1
+        }
+        if (!refused && members.length > WIDE_SET) {
+          this.sink.reportPerformance(
+            program.source,
+            call.start,
+            call.end,
+            wideSetMessage(shown, members.length, via)
+          )
+        }
+        s = s + 1
       }
     }
   }

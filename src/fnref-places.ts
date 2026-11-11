@@ -51,6 +51,7 @@ import {
   Node,
 } from "./nodes"
 import { ParentTable } from "./parents"
+import { basename } from "./paths"
 import {
   CheckedProgram,
   ConstInfo,
@@ -94,6 +95,9 @@ class RefPass {
   storeTarget: i32[]
   storePlace: i32[]
   storeMember: i32[]
+  /** Where each store is written: the value stored and its module, for the diagnostics that name it. */
+  storeNode: Node[]
+  storeModule: i32[]
   sigCount: i32
   /** The calls through a reference: the node, its table, its module, and the place its callee's value went to. */
   siteCalls: Node[]
@@ -121,6 +125,8 @@ class RefPass {
     this.storeTarget = []
     this.storePlace = []
     this.storeMember = []
+    this.storeNode = []
+    this.storeModule = []
     this.sigCount = 0
     this.siteCalls = []
     this.siteTables = []
@@ -211,23 +217,60 @@ class RefPass {
     return local.place
   }
 
-  storeFrom(target: i32, place: i32): void {
+  storeFrom(target: i32, place: i32, node: Node): void {
     this.storeTarget.push(target)
     this.storePlace.push(place)
     this.storeMember.push(-1)
+    this.storeNode.push(node)
+    this.storeModule.push(this.module)
   }
 
-  storeOne(target: i32, sig: FunctionSig): void {
+  storeOne(target: i32, sig: FunctionSig, node: Node): void {
     let k = 0
     while (k < this.members.length) {
       if (this.members[k] === sig) {
         this.storeTarget.push(target)
         this.storePlace.push(-1)
         this.storeMember.push(k)
+        this.storeNode.push(node)
+        this.storeModule.push(this.module)
         return
       }
       k = k + 1
     }
+  }
+
+  /**
+   * The store that first names member `k` in a place whose set flows into
+   * `place`, or -1 when `k` came in only by widening.
+   */
+  storeOf(place: i32, k: i32): i32 {
+    const into: boolean[] = []
+    while (into.length < this.placeTypes.length) {
+      into.push(false)
+    }
+    into[place] = true
+    let moved = true
+    while (moved) {
+      moved = false
+      let s = 0
+      while (s < this.storeTarget.length) {
+        const from = this.storePlace[s]
+        if (from >= 0 && into[this.storeTarget[s]] && !into[from]) {
+          into[from] = true
+          moved = true
+        }
+        s = s + 1
+      }
+    }
+    let s = 0
+    while (s < this.storeTarget.length) {
+      if (this.storeMember[s] === k && into[this.storeTarget[s]]) {
+        return s
+      }
+      s = s + 1
+    }
+    return -1
   }
 
   /** `node`'s value flows into `target` (-1: nowhere the pass follows); its parts are walked. */
@@ -264,35 +307,35 @@ class RefPass {
       case N_IDENT: {
         const named = this.fnRefs[node.id]
         if (named !== null) {
-          this.storeOne(target, named)
+          this.storeOne(target, named, node)
           return
         }
         const local = this.locals[node.id]
         if (local !== null) {
-          this.storeFrom(target, this.localPlace(local, type))
+          this.storeFrom(target, this.localPlace(local, type), node)
           return
         }
         break
       }
       case N_MEMBER:
         this.scan(node.children[0])
-        this.storeFrom(target, this.fieldPlace(node.text, type))
+        this.storeFrom(target, this.fieldPlace(node.text, type), node)
         return
       case N_INDEX:
         this.scan(node.children[0])
         this.scan(node.children[1])
-        this.storeFrom(target, this.elementPlace(type))
+        this.storeFrom(target, this.elementPlace(type), node)
         return
       case N_CALL: {
         const site = this.scanCall(node)
         if (!site) {
           const callee = this.callees[node.id]
           if (callee !== null && !callee.dispatcher) {
-            this.storeFrom(target, this.returnPlace(callee, type))
+            this.storeFrom(target, this.returnPlace(callee, type), node)
             return
           }
           if (this.arrayMethod(node, false) >= 0) {
-            this.storeFrom(target, this.elementPlace(type))
+            this.storeFrom(target, this.elementPlace(type), node)
             return
           }
         }
@@ -472,7 +515,7 @@ class RefPass {
           const decl = head.children[0].children[0]
           const local = this.locals[decl.id]
           if (local !== null && this.table.isFnRef(local.type)) {
-            this.storeFrom(this.localPlace(local, local.type), this.elementPlace(local.type))
+            this.storeFrom(this.localPlace(local, local.type), this.elementPlace(local.type), node)
           }
         }
         this.scan(node.children[1])
@@ -601,6 +644,36 @@ class RefPass {
     list[at] = member
     return true
   }
+}
+
+/**
+ * Where store `s` is written, as a diagnostic names it: the statement around
+ * the stored value and its file and line, `` `k.f = u3` (main.ts:12) ``.
+ */
+const storeText = (pass: RefPass, modules: RefModule[], s: i32): string => {
+  const module = modules[pass.storeModule[s]]
+  let node = pass.storeNode[s]
+  const value = node
+  let up = module.parents.parentOf(node)
+  while (up !== null && up.kind !== N_BLOCK && up.kind !== N_EXPR_STMT && up.kind !== N_ARROW) {
+    const above = module.parents.parentOf(up)
+    if (above === null || (up.kind === N_LIST && above.kind !== N_CALL && above.kind !== N_NEW)) {
+      break
+    }
+    node = up
+    up = above
+  }
+  const source = module.program.source
+  let text = source.text.substring(node.start, node.end)
+  if (text.indexOf("\n") >= 0) {
+    node = value
+    text = source.text.substring(node.start, node.end)
+  }
+  if (text.endsWith(";")) {
+    text = text.substring(0, text.length - 1)
+  }
+  const file = basename(source.path)
+  return `\`${text}\` (${file}:${source.lineOf(node.start)})`
 }
 
 /** A function's reference type: the signature as the caller writes it. */
@@ -929,6 +1002,18 @@ export const resolveReferences = (table: TypeTable, modules: RefModule[]): boole
       }
     }
     pass.siteTables[s][call.id] = dispatcher
+    // What the diagnostics after the attribute fixpoint name (§2.2): the
+    // callee as written and where each member came into its place.
+    const via: string[] = []
+    for (const k of pass.placeMembers[place]) {
+      const store = pass.storeOf(place, k)
+      via.push(store >= 0 ? storeText(pass, modules, store) : "")
+    }
+    const shown = args[0]
+    module.program.refSites.push(call)
+    module.program.refSiteDispatchers.push(dispatcher)
+    module.program.refSiteShown.push(module.program.source.text.substring(shown.start, shown.end))
+    module.program.refSiteVia.push(via)
     s = s + 1
   }
   // The parents of every new node, and of the arguments that moved.
