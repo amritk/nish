@@ -21671,8 +21671,12 @@ if (dealtHere("releaseChecks")) {
   // program to show.
   if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(only)) {
     const guideDir = path.join(root, "docs", "guide")
+    // The writing-nish agent skill is AI.md's short form, published to agents by the
+    // docs site (`agentSkills` in scalar.config.json), so its examples are held to
+    // the same markers.
     const docPages = [
       path.join(root, "docs", "AI.md"),
+      path.join(root, "skills", "writing-nish", "SKILL.md"),
       ...fs
         .readdirSync(guideDir, { recursive: true })
         .filter((f) => f.endsWith(".md"))

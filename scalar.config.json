@@ -1334,17 +1334,24 @@
     }
   },
   "assetsDir": "docs/site",
+  "agentSkills": [{ "filepath": "skills/writing-nish/SKILL.md" }],
   "siteConfig": {
     "isPrivate": true,
     "theme": "docs/site/theme.css",
     "logo": { "lightMode": "docs/site/logo-light.png", "darkMode": "docs/site/logo-dark.png" },
+    "rss": {
+      "path": "/reference/changelog",
+      "title": "Nish changelog",
+      "description": "Every Nish release: what changed in the compiler, the runtime and the standard library."
+    },
     "head": {
       "scripts": [{ "path": "docs/site/site.js", "defer": true }],
       "links": [
         { "rel": "icon", "type": "image/x-icon", "href": "/favicon.ico" },
         { "rel": "icon", "type": "image/svg+xml", "href": "/mark.svg" },
         { "rel": "icon", "type": "image/png", "href": "/favicon-32.png" },
-        { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" }
+        { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" },
+        { "rel": "alternate", "type": "application/rss+xml", "title": "Nish changelog", "href": "/reference/changelog/rss.xml" }
       ]
     }
   }

@@ -187,6 +187,16 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   reader needs may live only in the hero.
 - The icons beside the sidebar's groups and the header's links are the `icon`
   keys in `scalar.config.json`.
+- The changelog's RSS feed, `/reference/changelog/rss.xml`, is `siteConfig.rss`
+  in `scalar.config.json`: each `CHANGELOG.md` heading carrying an ISO date
+  (`## [0.38.0] - 2026-11-10`) is one item, so a release heading keeps its date.
+- The site publishes [`skills/writing-nish/SKILL.md`](../skills/writing-nish/SKILL.md)
+  as an agent skill (`agentSkills` in `scalar.config.json`), served with a
+  discovery index at `/.well-known/agent-skills/index.json`. A skill is one
+  self-contained file, so it is [`AI.md`](AI.md)'s short form and links to the
+  rules card by absolute URL; a change to AI.md's loop, its "What you must
+  unlearn" table or its checklist updates the skill too, and `npm test`
+  compiles the skill's marked examples as it does AI.md's.
 
 To see a change, run `npx @scalar/cli project preview scalar.config.json`
 (it needs Node 24) and look at the landing page, a page with tables and code,
