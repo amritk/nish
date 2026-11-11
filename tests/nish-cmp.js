@@ -1540,9 +1540,17 @@ const DECLARED = [
       "tests/link/net_serve_pg/main.ts": ["main.h", "main.ll", "postgres-async.ll", "serve.ll"],
       "tests/link/std_postgres_async_cancel/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
       "tests/link/std_postgres_async_caps_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
-      "tests/link/std_postgres_async_double_release_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": [
+        "main.h",
+        "main.ll",
+        "postgres-async.ll",
+      ],
       "tests/link/std_postgres_async_flat/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
-      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
+        "main.h",
+        "main.ll",
+        "postgres-async.ll",
+      ],
       "tests/link/std_postgres_async_release_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
       "tests/link/std_postgres_async_size_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
     }
