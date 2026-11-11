@@ -120,6 +120,17 @@ export class QuicDatagramQueue {
     return this.count > 0 && k >= 0 && k < toI32(this.lengths.length) ? this.lengths[k] : -1
   }
 
+  /**
+   * Forgets the oldest datagram unsent and counts it in `dropped`, for one
+   * that no packet can carry any more; an empty ring is left as it is.
+   */
+  dropOldest(): void {
+    if (this.count > 0 && this.dropped < 2147483647) {
+      this.dropped = this.dropped + 1
+    }
+    this.drop()
+  }
+
   /** Forgets the oldest datagram. */
   private drop(): void {
     if (this.count > 0) {

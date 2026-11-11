@@ -566,7 +566,7 @@ export class QuicRecovery {
    * this path, 1200 until path MTU discovery validates more. The initial and
    * minimum windows and congestion avoidance's step are counted in it.
    */
-  datagramSize: i64 = QUIC_RECOVERY_DATAGRAM_SIZE
+  datagramSize: i64 = 1200
   /** How many congestion events reduced the window, and how many of them were persistent congestion. */
   congestionEvents: i32 = 0
   /**
