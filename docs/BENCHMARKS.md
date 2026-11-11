@@ -1402,6 +1402,198 @@ async, top 12 user-space frames by self samples (perf, cpu-clock:u):
 
 </details>
 
+<!-- http-codec-baseline:begin -->
+## HTTP/1 codec baseline
+
+The explicit TechEmpower entry ([bench/techempower/](https://github.com/amritk/nish/blob/main/bench/techempower/README.md): `main.ts` and `server.ts` on `Http1Server`), measured before the codec and head stages of [#1416](https://github.com/amritk/nish/issues/1416) change anything. It records where a request's instructions go, the throughput against `uws` and `go-fasthttp`, and a request shaped like a browser's, so each later stage is read against these figures. It measures; it fixes nothing.
+
+| | |
+| --- | --- |
+| Date | 2026-11-11 |
+| Sources | `main` at `1e18a10c`. The branch commit the figures ran at, `4099299e`, adds only the `varied` case to `bench/http1-request`: `std/`, `src/` and `runtime/` are `main`'s |
+| nish | nish 0.38.0, `build/nish` from `npm run build` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.30GHz, 4 logical cores, 15 GiB (a cloud VM, no hardware performance counters) |
+| OS | linux 6.18.44-fc-v378 (x64); `ulimit -n` 20000, `net.core.somaxconn` 4096 |
+| Pinning | server on CPU 0, wrk on CPUs 1–3: **client-shared**, as in [TechEmpower json and plaintext](#techempower-json-and-plaintext) |
+| Twins | `uws` (uWebSockets.js v20.71.0 on Node 26.12.0) and `go-fasthttp` (go1.27.2), built by `bash bench/http-twins/build.sh uws go-fasthttp`; the other twins were not built and are left out |
+
+Each figure comes from one tool:
+
+| figure | tool |
+| --- | --- |
+| Ir per request, frames by self Ir | callgrind (valgrind 3.22.0), through `profile.sh` |
+| frames by self samples | `perf record -e cpu-clock:u` (perf 6.8.12, Ubuntu's `linux-tools-generic`, installed after `apt-get update`) |
+| system calls per request | `strace -c -f` |
+| req/s, band | wrk 4.1.0 (Ubuntu's `wrk` package), through `run.sh` or the browser-head script below |
+| peak RSS | the server's `VmHWM` in `/proc/<pid>/status` |
+| instructions per request in `bench/http1-request` | cachegrind `--cache-sim=no` (`run.mjs --instructions`) |
+
+### Where a request's instructions go
+
+`bash bench/techempower/profile.sh --only plaintext` and `--only json`: `/plaintext` at 256 connections, 16 pipelined, and `/json` at 64, with `profile.sh`'s TFB-shaped request head (`Host`, an 86-byte `Accept` and `Connection`). The method is [the async profile's](#techempower-where-the-async-entrys-time-goes-a-profile-wp49-stage-6).
+
+| test | Ir per request | system calls per request | CPU µs per request | req/s under perf |
+| --- | ---: | ---: | ---: | ---: |
+| `/plaintext` (256, 16 pipelined) | 5,422 | 0.129 | 0.69 | 1,431k |
+| `/json` (64) | 6,608 | 2.025 | 6.70 | 149k |
+
+`/plaintext` repeats #1410's 5,419 Ir per request to 0.06%. The top 20 frames by self Ir, grouped. `http1HeadAppend` copies the request's head into the parser's buffer (`std/net/http1-codec.ts`), so it is parse, not head write as the plan grouped it.
+
+| group | frames | `/plaintext` Ir/req | share | `/json` Ir/req | share |
+| --- | --- | ---: | ---: | ---: | ---: |
+| parse | `http1Next`, `http1TakeLine`, `http1HeadAppend` | 3,105 | 57.3% | 3,182 | 48.2% |
+| head write | `http1WriteResponseHead`, `http1PutBytes`, `http1PutStatusLine`, `http1PutCrlf`, `http1PutDecimal`, `http1PutText`, `http1PutFixed`, `http1ServerReason`, `http1DecimalDigits` | 1,356 | 25.0% | 1,210 | 18.3% |
+| loop and I/O | `TfbServer.resume`, `nish_main`, `Http1Connection.bodyRoom`, `.acquire`, `.feed`, `.inputRoom`, `Http1Server.send`, `.settle`, `nish_arena_release` | 792 | 14.6% | 1,474 | 22.3% |
+| JSON body | `jsonWriterPutString` | — | | 434 | 6.6% |
+| other | `__memcpy_avx_unaligned_erms` | 153 | 2.8% | 161 | 2.4% |
+| below the top 20 | | 16 | 0.3% | 147 | 2.2% |
+
+On `/json` `http1PutFixed`, `http1ServerReason` and `http1DecimalDigits` fall below the top 20, so its head-write row holds the other six frames and those three are in the last row.
+
+On `/json` `nish_main` (586) holds the inlined handler and the rest of the JSON body, so the loop row is high there. The frames, `/plaintext`:
+
+```text
+    2182.0  nish.http1Next                    parse
+     901.1  nish.http1WriteResponseHead       head write
+     670.2  nish.http1TakeLine                parse
+     332.1  TfbServer.resume                  loop
+     323.5  nish_main                         loop
+     252.9  nish.http1HeadAppend              parse
+     153.1  __memcpy_avx_unaligned_erms       other
+     145.5  nish.http1PutBytes                head write
+      77.3  nish.http1PutStatusLine           head write
+      76.3  nish.http1PutCrlf                 head write
+      54.2  nish.http1PutDecimal              head write
+      50.2  nish.Http1Connection.bodyRoom     loop
+      41.1  nish.http1PutText                 head write
+      40.1  nish.http1PutFixed                head write
+      36.3  nish_arena_release                loop
+      34.8  nish.Http1Connection.acquire      loop
+      13.0  nish.http1ServerReason            head write
+       8.5  nish.Http1Server.send             loop
+       7.0  nish.http1DecimalDigits           head write
+       6.8  nish.Http1Connection.feed         loop
+```
+
+perf, `/plaintext`, share of user-space samples: `http1Next` 39.3%, `http1WriteResponseHead` 14.5%, `http1TakeLine` 10.1%, `nish_main` 7.9%, `TfbServer.resume` 6.1%, libc's `memmove` 4.4%, `http1HeadAppend` 2.5%, `http1PutBytes` 2.1%. On `/json` the samples spread into the kernel's edges: `http1Next` 21.7%, `nish_main` 11.3%, `__vdso_clock_gettime` 10.2%, `http1WriteResponseHead` 7.3%, `__send` 6.4%, `http1TakeLine` 5.8%, `__libc_recv` 4.7%.
+
+### Throughput against the twins
+
+`bash bench/techempower/run.sh --only plaintext` and `--only json`, in the foreground: 3 interleaved, rotated rounds of 10 s. `async` is `async-main.ts`, for reference. RSS is the highest `VmHWM` of any round.
+
+`/plaintext`, 16 pipelined, req/s, median (min):
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1,476,151 (1,475,436) | 1,293,031 (923,606) | 984,476 (977,314) | 1,126,038 (1,045,334) | 91.2 |
+| entry-copy | 1,423,090 (1,186,981) | 1,082,668 (1,030,347) | 979,756 (934,204) | 1,230,008 (1,060,673) | 91.2 |
+| async | 1,111,278 (1,094,883) | 1,033,061 (1,006,149) | 757,356 (728,859) | 445,161 (365,170)* | 95.8 |
+| uws | 724,620 (700,639) | 691,228 (647,412) | 648,733 (643,709) | 688,184 (640,315)* | 65.4 |
+| go-fasthttp | 798,743 (785,254) | 711,971 (705,509) | 650,169 (634,510) | 608,451 (581,211) | 369.3 |
+| band (entry against entry-copy) | 3.6% | 16.3% | 0.5% | 9.2% | |
+
+`/json`, one request at a time, req/s, median (min):
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 120,712 (116,946) | 147,387 (144,013) | 165,061 (156,733) | 193,174 (190,365) | 208,919 (205,984) | 199,400 (193,117) | 3.1 |
+| entry-copy | 121,550 (117,939) | 141,308 (141,176) | 172,207 (170,335) | 195,023 (184,087) | 219,278 (199,600) | 198,411 (122,304) | 3.1 |
+| async | 117,083 (113,248) | 142,578 (142,433) | 160,549 (159,292) | 179,248 (174,356) | 179,346 (174,368) | 177,977 (168,013) | 7.6 |
+| uws | 106,014 (105,783) | 126,524 (124,944) | 141,878 (141,408) | 159,263 (158,618) | 175,123 (130,089) | 169,712 (167,088) | 57.7 |
+| go-fasthttp | 91,289 (91,169) | 101,389 (94,911) | 107,326 (106,273) | 107,418 (106,720) | 100,777 (99,775) | 98,230 (98,178) | 25.4 |
+| band (entry against entry-copy) | 0.7% | 4.1% | 4.3% | 1.0% | 5.0% | 0.5% | |
+
+A `*` cell had socket errors: `async` read errors in all three rounds at 16384 (4,270, 1,336 and 4,221), and `uws` 515 timeouts in one. The twins' `/json` answer is 8 bytes longer than the entry's and carries a counter.
+
+- On this VM the entry leads both twins everywhere, unlike the 2026-10-21 record above (324k for the entry against 412k for `uws` at 256). On `/plaintext` at 256 it is 2.0× `uws` and 1.8× `go-fasthttp`. The figures are client-shared: wrk on three cores is the ceiling the entry reaches, so the twins' rows are their own and the entry's is partly wrk's.
+- The 1024 band is 16.3%: the two copies' medians, 1,293,031 and 1,082,668, are that far apart, and `entry` has one round at 923,606. Both copies are still above both twins at 1024.
+- The entry's peak RSS on `/plaintext` is 91.2 MiB, reached across a run whose highest level is 16384 connections. It is 3.1 MiB on `/json`, whose highest level is 512.
+
+### A browser-shaped request
+
+`profile.sh`'s TFB head is an 86-byte `Accept` and two short fields. A browser's is several times that, and the parser's cost grows with it. A non-pipelined wrk run at 256 connections sends this 759-byte `/plaintext` head (756 on `/json`) through `wrk -H`: `Host`, `Connection`, a 101-byte Chrome `User-Agent`, a 135-byte `Accept`, `Accept-Language`, `Accept-Encoding: gzip, deflate, br, zstd`, a 192-byte `Cookie` (a session id, a CSRF token, two analytics cookies, `theme` and `lang`), `Referer`, `Upgrade-Insecure-Requests` and three `Sec-Fetch-*` fields. It ran 3 rotated rounds of 10 s, each server started afresh and warmed for 1 s, with the same pinning as `run.sh`.
+
+| contestant | `/plaintext` req/s, median (min) | `/json` req/s, median (min) | peak RSS, MiB |
+| --- | ---: | ---: | ---: |
+| entry | 187,080 (160,222) | 183,238 (169,737) | 2.9 |
+| entry-copy | 179,077 (164,422) | 196,529 (182,344) | 2.9 |
+| uws | 175,311 (168,073) | 167,847 (144,441) | 57.5 |
+| go-fasthttp | 102,033 (100,461) | 90,923 (90,678) | 18.6 |
+| band | 4.3% | 7.3% | |
+
+No round had a non-2xx answer or a socket error. Without pipelining each request costs a `recv` and a `send`, so the entry leads `uws` by 6.7% on `/plaintext` and 9.2% on `/json`, just past bands of 4.3% and 7.3%. The parser's cost shows in instructions, below, more than here.
+
+The codec benches, with no socket:
+
+| bench | case | instructions a request | ns, median (band) |
+| --- | --- | ---: | ---: |
+| `bench/http1-request` | `short`, a 37-byte GET | 3,896 | 222.1 (±4.3%) |
+| | `browser`, a 756-byte GET with a 251-byte bearer token | 10,529 | 548.9 (±6.6%) |
+| | `api`, a POST with a 61-byte JSON body | 8,650 | 545.0 (±0.7%) |
+| | `pipelined`, `api` and `browser` in one read | 9,346 | 1,064.0 for both (±0.7%) |
+| | `split`, `browser` in two reads | 10,872 | 603.5 (±3.2%) |
+| | `json1k` | 21,488 | 1,153.4 (±0.7%) |
+| | `varied`, three answers that never repeat a head | 4,201 | 678.3 for three (±0.1%) |
+
+`bench/http1-parse`, the parser alone (24 rounds, baseline x86-64, `u8x16` on SSE2), ns a head, median. `new` is `main`'s parser and the figure this baseline records; `old` is an earlier one `freeze.mjs` froze, with `old-copy` its noise band:
+
+| head | `old` | `old-copy` (band) | new | new against `old` |
+| --- | ---: | ---: | ---: | ---: |
+| loadgen GET, 337 bytes | 250.0 | 260.1 (±4.0%) | 199.4 | −20.2% |
+| loadgen POST, 447 bytes | 339.1 | 359.6 (±6.0%) | 272.4 | −19.7% |
+| browser GET, 1,028 bytes | 739.6 | 757.8 (±2.5%) | 552.5 | −25.3% |
+
+A browser head costs 2.7 times `short` in `bench/http1-request` (10,529 against 3,896): 6,633 more instructions for 719 more bytes, about 9.2 a byte.
+
+`varied` costs 305 instructions a request more than `short` (4,201 against 3,896). Its three heads differ, so a head kept from the request before cannot serve any of them. A head stage that reuses the response head must leave `varied` within its band of this figure: there the check is pure overhead.
+
+### Targets, ranked
+
+For the codec stage, the parser's and the writer's byte loops in `std/net/http1-codec.ts`, by `/plaintext` Ir per request:
+
+1. `http1Next`: 2,182 (40.2%; 39.3% of perf's samples). The request line and the field loop.
+2. `http1TakeLine`: 670 (12.4%). The scan for a line's end.
+3. The writer's byte loops: `http1PutBytes` 146, `http1PutCrlf` 76, `http1PutDecimal` 54, `http1PutText` 41, `http1PutFixed` 40 and `http1DecimalDigits` 7. 364 together (6.7%).
+4. `http1HeadAppend`: 253 (4.7%). The copy of the request head into the parser's buffer.
+
+For the head stage, reusing the response head within a Date tick in `std/net/http1-server.ts`:
+
+1. `http1WriteResponseHead` and everything under it: 1,356 Ir per `/plaintext` request (25.0%) and 1,210 per `/json` (18.3%). Within a Date tick the entry's head is the same bytes every time, so a reused head costs one copy of those bytes instead.
+2. Of that, `http1WriteResponseHead`'s own 901, outside the put helpers.
+3. `http1PutStatusLine` 77 and `http1ServerReason` 13, which a reused head skips with the rest.
+
+The miss case is `bench/http1-request`'s `varied`, at 4,201 instructions a request.
+
+### Commands
+
+```sh
+apt-get update && apt-get install -y wrk linux-tools-generic valgrind strace
+npm run build
+bash bench/http-twins/build.sh uws go-fasthttp    # Node 26.12.0 and go1.27.2 (bench/http-twins/README.md)
+bash bench/techempower/profile.sh --only plaintext
+bash bench/techempower/profile.sh --only json     # build/tfb/profile/summary.md
+bash bench/techempower/run.sh --only plaintext
+bash bench/techempower/run.sh --only json         # build/tfb/results.md
+node bench/http1-request/run.mjs --rounds 11
+node bench/http1-request/run.mjs --instructions
+node bench/http1-parse/run.mjs
+```
+
+The browser-head run starts each server as `run.sh` does and drives it with:
+
+```sh
+taskset -c 1-3 wrk -t 3 -c 256 -d 10s --timeout 8 \
+  -H "Host: tfb-server" -H "Connection: keep-alive" \
+  -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
+  -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" \
+  -H "Accept-Language: en-GB,en-US;q=0.9,en;q=0.8" -H "Accept-Encoding: gzip, deflate, br, zstd" \
+  -H "Cookie: session=8f3a9c2e7b1d4f6a0e5c9b2d7f1a3e6c; csrftoken=Qm9vZ2llV29vZ2llQm9vZ2llV29vZ2llQm9v; _ga=GA1.1.1234567890.1731300000; _ga_XYZ123=GS1.1.1731300000.4.1.1731300456.0.0.0; theme=dark; lang=en" \
+  -H "Referer: https://tfb-server/" -H "Upgrade-Insecure-Requests: 1" \
+  -H "Sec-Fetch-Dest: document" -H "Sec-Fetch-Mode: navigate" -H "Sec-Fetch-Site: same-origin" \
+  http://127.0.0.1:<port>/plaintext
+```
+<!-- http-codec-baseline:end -->
+
 <!-- syscall-cost:begin -->
 ## Syscall cost
 

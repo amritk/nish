@@ -114,8 +114,14 @@ pipelined), `/json` (64) and `/db` (64), and records three phases per entry:
   window, for instructions per request (Ir) and the top frames by self Ir.
 
 It needs `perf`, `valgrind` and `strace` beside `wrk`, and writes
-`summary.md` per test and for the run. The recorded profile is in
-[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-where-the-async-entrys-time-goes-a-profile-wp49-stage-6).
+`summary.md` per test and for the run. On Ubuntu,
+`apt-get update && apt-get install -y wrk linux-tools-generic valgrind strace`
+installs them; a fresh cloud image needs the `update` first, and its `perf`
+is under `/usr/lib/linux-tools-*/` when the running kernel has no matching
+`linux-tools` package, where `profile.sh` looks for it. The recorded profiles are in
+[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-where-the-async-entrys-time-goes-a-profile-wp49-stage-6),
+and the explicit entry's, against `uws` and `go-fasthttp`, in
+[the HTTP/1 codec baseline](../../docs/BENCHMARKS.md#http1-codec-baseline).
 
 ## The database entry
 
