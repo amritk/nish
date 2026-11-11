@@ -1,0 +1,1 @@
+`(x: i32, y?: i32) => i32` has an optional parameter: a function reference names a function whose every parameter the caller passes

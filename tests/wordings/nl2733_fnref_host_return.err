@@ -1,0 +1,1 @@
+The return type of `pick` holds a function reference that code outside this program can reach: a reference is a tag this program's dispatcher reads, not an address, and a host could hand back one no dispatcher knows

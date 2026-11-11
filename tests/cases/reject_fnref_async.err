@@ -1,0 +1,1 @@
+`later` is async: a function reference cannot hold it, because its call is a promise

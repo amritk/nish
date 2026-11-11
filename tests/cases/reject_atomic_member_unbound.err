@@ -1,1 +1,1 @@
-Unknown field `add` on class `AtomicI64` (it is a method; call it)
+`a.add` is a method: a function reference names a top-level function, and a method needs its receiver

@@ -14,9 +14,10 @@ struct Local (class) size=64 align=8 exported
   field literalKey: string index=4 offset=32
   field type: i32 index=5 offset=40
   field storage: i32 index=6 offset=44
-  field mutable: boolean index=7 offset=48
-  field fresh: boolean index=8 offset=49
-  field captureOf: Local | null index=9 offset=56
+  field place: i32 index=7 offset=48
+  field mutable: boolean index=8 offset=52
+  field fresh: boolean index=9 offset=53
+  field captureOf: Local | null index=10 offset=56
   constructor -> @Local.constructor
 struct TypeOrigin (class) size=32 align=8 exported
   field annotation: Node index=0 offset=0

@@ -204,9 +204,12 @@ crosses to C, then the exact rules.
 - **A function reports failure with a `Result`**, the only way it can; the
   payload is unreachable until the discriminant is tested
   ([Result and error handling](#result-and-error-handling)).
-- **A function type** is allowed only on a parameter of a top-level
-  function, and names the callee chosen at each call
-  ([Function parameters](#function-parameters)).
+- **A function type** written inline on a parameter of a top-level
+  function names the callee chosen at each call
+  ([Function parameters](#function-parameters)); anywhere else it is the type
+  of a reference to a capture-free top-level function, which can be held,
+  passed, called and compared, nothing else
+  ([Function references](#function-references)).
 
 ### In memory and in C
 
@@ -270,9 +273,12 @@ Every other type is a pointer, 8 bytes and 8-aligned, to:
   functions of one module. In C, a `nish_result_<T>_<E>_word` by value, and a
   `struct nish_result_<T>_<E> *` otherwise.
 
-A function type, `(x: T) => U`, is no value at all: it has no LLVM type and
-no parameter, and the callee is compiled into the instantiation's body as a
-direct call. Not in C.
+A function type, `(x: T) => U`, written inline on a parameter of a
+top-level function is no value at all: it has no LLVM type and no parameter,
+and the callee is compiled into the instantiation's body as a direct call.
+Anywhere else it is a function reference, LLVM `i32`, 4 / 4: a tag naming
+one of the program's functions of that signature, never an address
+([Function references](#function-references)). Not in C.
 
 Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`; a type is
 interned, and two types are the same type exactly when they are the same
@@ -1382,8 +1388,10 @@ still costs something against C and Rust, are in
 
 There is deliberately no `unwrap()`: `expect(message)` says the same thing and
 insists on a reason. There is no `map` / `andThen` / `orElse` either — they
-need function values, which Nish forbids because the whole-program pass
-cannot prove purity, termination or escape through an unknown callee.
+need a callback written at the call, often a closure, which a
+[function reference](#function-references) cannot hold, and through an
+unknown callee the whole-program pass cannot prove purity, termination or
+escape.
 Narrowing plus `orReturn()` covers what those combinators are for.
 
 ### The three rules
@@ -1679,10 +1687,8 @@ spelling; the two compile to identical IR, instruction for instruction
   `reject_fn_two_names`), with the signature on the arrow itself. Annotating
   the `const` is
   `` Function `f` takes its signature from the arrow; drop the annotation on `f` ``
-  (`reject_arrow_annotated`), because the annotation would be a function type,
-  and a function type annotates a parameter of a top-level function and
-  nothing else ([Function parameters](#function-parameters)). A function
-  returning `void` uses a block.
+  (`reject_arrow_annotated`): the signature is written once, on the arrow. A
+  function returning `void` uses a block.
 - A **concise body** (`=> n * 2`) means exactly what a block with one `return`
   means, everywhere the difference could show. It takes the return type as its
   contextual type, so an object literal gets its struct, a class value converts
@@ -1691,12 +1697,18 @@ spelling; the two compile to identical IR, instruction for instruction
   local, so the caller brackets the call with the arena reclaim
   ([Memory model](#memory-model)). `tests/cases/fn_arrow_concise` pins all five,
   each of which the block form has always had.
-- **A function is not a value** in either spelling: a name bound to one may
-  only be called, or passed for a function-typed parameter, so
-  `const alias = double` is `` Unknown identifier `double` ``
-  (`tests/cases/reject_arrow_as_value`). A callback the checker can name at
-  the call is a [function parameter](#function-parameters), resolved at compile
-  time; a function held in a field, a local or an array does not exist.
+- **A capture-free top-level function is a value** in either spelling: a
+  name bound to a non-generic, non-async function this program defines, with
+  no rest parameter, is a value of its function type, so
+  `const alias = double` is a [function reference](#function-references). It
+  can be held in a local, a field, an array element, a return value or a type
+  alias, passed, called and compared with `===` and `!==`, and nothing else
+  (`tests/cases/fnref_field`, `fnref_array`, `fnref_eq`, `fnref_stores`). An
+  arrow that is not a top-level `const` is no reference: one that captures is
+  `` this arrow captures `k`: a function reference names a top-level function and carries no environment ``
+  (`tests/cases/reject_arrow_as_value`), and one that does not is
+  `` an arrow in value position is not yet a function reference: declare it as a top-level function and name it ``
+  (`reject_fnarg_arrow_value`).
 - Every parameter and the return type must be annotated
   (`` Parameter `x` needs a type annotation ``;
   `` Function `f` needs an explicit return type annotation ``,
@@ -1744,8 +1756,8 @@ spelling; the two compile to identical IR, instruction for instruction
   signature with no body, `function f(): void;`, is
   `Functions must have a body`), an anonymous `export default function ()`
   (`Functions must be named`, `reject_fn_anonymous`),
-  function expressions, an arrow anywhere but as a function argument
-  (`reject_fnarg_arrow_value`),
+  function expressions, an arrow anywhere but as a top-level `const` or a
+  function argument (`reject_fnarg_arrow_value`, `reject_arrow_as_value`),
   and nested function declarations (`Unsupported statement in Phase 1:
   FunctionDeclaration`, `reject_fn_nested`, in a template nothing
   instantiates too, `reject_fn_nested_template`; an `import` in a body is
@@ -1816,9 +1828,10 @@ had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
   instances gathers the caller's objects.
 - **Not on a function-typed parameter**, which a call names by value
   (`reject_param_function_default`, `reject_param_function_type`), and a
-  function with a rest parameter is never passed as a function value
-  (`reject_param_rest_function_value`): called through the parameter, Node
-  would gather differently.
+  function with a rest parameter is never passed for a function parameter
+  (`reject_param_rest_function_value`) nor held in a function reference
+  (NL2729, `reject_fnref_rest`): called through either, Node would gather
+  differently.
 - **No spread argument**: `total(...xs)` is
   `Spread arguments are not supported` (`reject_param_spread_call`); pass `xs`
   to a parameter of array type.
@@ -3393,18 +3406,21 @@ new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
 
 ### Function parameters
 
-A parameter of a top-level function may have a **function type**, and its
-argument is then a function the checker can name at the call: a top-level
+A parameter of a top-level function may have a **function type** written
+inline in its annotation, and its argument is then a function the checker can
+name at the call: a top-level
 function written by name, or an arrow written right there. Such a function is
 a template, with or without type parameters, and **each callee it is given is
 an instantiation of its own**, exactly as each type-argument tuple is: one
 `define` per (template, type arguments, function arguments), whose body calls
-its callee directly (`tests/cases/fnarg_named`). There is no function pointer,
-no indirect call and no function value anywhere; the parameter has no LLVM
-parameter at all, and the whole-program fixpoint sees an ordinary direct call
+its callee directly (`tests/cases/fnarg_named`). There is no function pointer
+and no indirect call; the parameter has no LLVM parameter at all, and the whole-program fixpoint sees an ordinary direct call
 it can prove things through ([wp23-language-surface.md](wp23-language-surface.md)
 §6, and [wp28-compatibility-mode.md](wp28-compatibility-mode.md) §7.4 for what
-the other kind of callee would cost).
+the other kind of callee would cost). A parameter whose function type comes
+through an alias (`type F = (x: i32) => i32`, then `f: F`) is not a function
+parameter but an ordinary parameter holding a
+[function reference](#function-references).
 
 ```typescript
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x) + 1;
@@ -3445,7 +3461,7 @@ export const main = (): i32 => {
   of the key, so the innermost call is still direct
   (`tests/cases/fnarg_forward`). Storing, returning, comparing or putting it
   in an array is
-  `` `f` is a function parameter and can only be called or passed on as a function argument: a function is never a value in Nish, so it cannot be stored, returned, compared or put in an array ``
+  `` `f` is a function parameter and can only be called or passed on as a function argument: it names the callee each call is compiled for, not a value, so it cannot be stored, returned, compared or put in an array ``
   (`tests/cases/reject_fnarg_store`, `reject_fnarg_return`).
 - **An arrow may read the `const` locals and the parameters of the function
   it is written in** (WP29 capture). Each name it reads is handed to it as an
@@ -3498,31 +3514,39 @@ export const main = (): i32 => {
   `tests/link/mem_capture_parallel_forward`, `mem_capture_async`), and a
   captured `parts` array is not released by `join`, whose release depends on
   order rather than escape (`mem_join_parts_captured`). An arrow anywhere but
-  as such an
-  argument is
-  `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own: a function is never a value in Nish, so it cannot be stored, returned or called where it stands ``
-  (`tests/cases/reject_fnarg_arrow_value`).
+  as such an argument or as a top-level `const` is
+  `` an arrow in value position is not yet a function reference: declare it as a top-level function and name it ``
+  (`tests/cases/reject_fnarg_arrow_value`), or NL2731 when it captures
+  ([Function references](#function-references)).
 - **A function argument has exactly its parameter's type**, once the type
   parameters are bound, because the body calls it with those types and reads
   that result:
   `` Argument 1 of `apply`: `widen` is `(x: i32) => i64`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type ``
   (`tests/cases/reject_fnarg_mismatch`). The argument must be the name of a
   top-level function or an arrow — a local, a member or any other expression is
-  refused (`reject_fnarg_not_name`), a generic function names no one function
+  refused (`reject_fnarg_not_name`), a function reference among them
+  (`` `h` is a function reference: `apply` takes a top-level function or an arrow named at the call ``,
+  NL2734, `tests/wordings/nl2734_fnref_to_function_parameter`), a generic function names no one function
   and is refused with the arrow to write instead (`reject_fnarg_generic_name`),
   and an arrow takes exactly its type's parameters (`reject_fnarg_arity`). An
   unannotated arrow parameter whose type no value argument binds
   (`reject_fnarg_infer`) and a block-bodied arrow whose result only it could
   bind (`reject_fnarg_block_return`) must be annotated.
-- **A function type annotates a parameter of a top-level function and nothing
-  else.** A field, a local, an array element, a return type or an alias of one
-  is
-  `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: a function is never a value in Nish, so it cannot be the type of a field, a local, an element, a return value or an alias ``
-  (`tests/cases/reject_fnarg_field`, `reject_fnarg_local`,
-  `reject_fnarg_return_type`, `reject_fnarg_alias`), and a parameter of a
-  method, a constructor, a `declare function`, an arrow or another function
-  type is `` `f` cannot have a function type here: ... `` naming which
-  (`reject_fnarg_method`, `reject_fnarg_nested`).
+- **Only a top-level function's parameter makes a function type a function
+  parameter.** Written inline on a parameter of a method or a constructor, or
+  of a function type that is itself a function parameter's, it is
+  `` `f` cannot have a function type here: a function type may only annotate a parameter of a top-level function, which is monomorphised for each function it is given, and this is a parameter of a method or a constructor ``,
+  with `a parameter of a function type` for the second
+  (`tests/cases/reject_fnarg_method`, `reject_fnarg_nested`); a method or a
+  constructor takes a reference through an alias instead. Anywhere else — a
+  field, a local, an array element, a return type, an alias — a function type
+  is the type of a [function reference](#function-references), and what is
+  stored there is checked against it:
+  `` Field `run` of class `Handler` is (i32) => i32 but its initializer is i32 ``
+  (`reject_fnarg_field`),
+  `` Return type mismatch: function returns (i32) => i32 but expression is i32 ``
+  (`reject_fnarg_return_type`), and a reference local is initialised where it
+  is declared, `` Variable `g` must be initialized `` (`reject_fnarg_local`).
 - **Across modules**, an instantiation is made in the template's module
   (WP18 G7), so it may call a private function, or an arrow, of the module that
   asked. That callee is `hidden` rather than `internal` — in the final link,
@@ -3535,6 +3559,142 @@ export const main = (): i32 => {
   (`tests/link/thread_scope_libc_named_tasks`, #610). The interop sidecars
   describe no instantiation that was given a function, and no lifted arrow:
   neither has a name a host could call.
+
+### Function references
+
+A name bound to a top-level function, in either spelling, written anywhere but
+a call's callee or a function argument is a **function reference**: a value
+of the function's type, `(x: i32) => i32`. A function type names a reference
+everywhere but inline on a parameter of a top-level function
+([Function parameters](#function-parameters)): on a local, a field, an array
+element, a return type, a type alias, and a parameter typed through an alias.
+
+```typescript
+type Op = (x: i32) => i32;
+
+const double = (x: i32): i32 => x * 2;
+const negate = (x: i32): i32 => 0 - x;
+
+class Stage {
+  op: Op;
+  constructor(op: Op) {
+    this.op = op;
+  }
+  run(x: i32): i32 {
+    return this.op(x);   // a direct call of the dispatcher for `Op`
+  }
+}
+
+export const main = (): void => {
+  const s = new Stage(double);
+  console.log(`${s.run(5)}`);  // 10
+  s.op = negate;
+  console.log(`${s.run(5)}`);  // -5
+};
+```
+
+- **What a reference can hold.** A function this program defines, at the top
+  level of a module, that is not generic, not `async`, has no rest parameter
+  and takes no function parameter, and whose arrow, if it is one, captures
+  nothing. Each other kind is refused where it is named:
+  - `` `id` is generic: a function reference names one non-generic top-level function ``
+    (NL2725, `tests/cases/reject_fnref_generic`);
+  - `` `later` is async: a function reference cannot hold it, because its call is a promise ``
+    (NL2727, `reject_fnref_async`);
+  - `` `abs` is declared in C: a function reference names a function this program defines ``
+    (NL2728, `reject_fnref_ffi`);
+  - `` `sum` has a rest parameter: a function reference names a function whose every parameter the caller passes ``
+    (NL2729, `reject_fnref_rest`), and a written function type with a rest,
+    optional or defaulted parameter,
+    `` `(x: i32, y?: i32) => i32` has an optional parameter: a function reference names a function whose every parameter the caller passes ``
+    (NL2729, `reject_fnref_type_optional`, `reject_fnref_type_rest`);
+  - `` `bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name ``
+    (NL2739, `tests/wordings/nl2739_fnref_guard`);
+  - `` `apply` takes a function parameter, so it has no single body to refer to ``
+    (NL2726, `tests/wordings/nl2726_fnref_template`), and a function type
+    whose own parameter is written as a function type,
+    `` `(g: (x: i32) => i32) => i32` takes a function parameter, so no function it could name has a single body to refer to ``
+    (NL2735, `tests/wordings/nl2735_fnref_type_function_param`);
+  - a method, `` `c.step` is a method: a function reference names a top-level function, and a method needs its receiver ``
+    (NL2732, `tests/cases/reject_fnarg_alias`);
+  - an arrow that captures,
+    `` this arrow captures `k`: a function reference names a top-level function and carries no environment ``
+    (NL2731, `reject_arrow_as_value`, `reject_fnref_capture`), and one that
+    does not but is not a top-level `const`,
+    `` an arrow in value position is not yet a function reference: declare it as a top-level function and name it ``
+    (NL2336, `reject_fnarg_arrow_value`).
+- **Where a reference goes.** It is held in a local, a field (of a class or an
+  interface), an array element or a return value, and passed as an argument
+  to a parameter typed through an alias, of a function, a method or a
+  constructor (`tests/cases/fnref_field`, `fnref_array`, `fnref_stores`,
+  `fnref_generic`). A reference has no zero value: a local is initialised
+  where it is declared (`reject_fnarg_local`), and
+  `new Array<(i32) => i32>(n)` is
+  `` `new Array<(i32) => i32>(n)` would zero-fill with 0, which names no function; build it with `[]` and `push` instead ``
+  (NL2730, `reject_fnref_zero_fill`). For the same reason an array of
+  references has no `fill`, `unshift` or `splice`: `fill` is refused as a
+  byte copy (`reject_fnref_row_fill`), the other two as an unknown method
+  (`reject_fnref_row_unshift`, `reject_fnref_row_splice`). A module constant may not hold one
+  (`` Module constant `alias` must be a number, boolean, or string, not (i32) => i32; there is no top-level code to build anything else ``).
+  An arrow argument may capture a `const` reference local like any other
+  value (`fnref_capture`).
+- **What a reference does.** It is called — `h(3)`, `this.op(4)`, or
+  an element called in place — and compared with `===` and `!==`, which are true when the two
+  name the same function (`fnref_eq`). Nothing else: printing it, putting it in
+  a template string or any other use is
+  `` `f` is a function reference: it can be called, compared, stored and passed, nothing else ``
+  (NL2737, `reject_fnref_print`); `jsonEncode` refuses a type that holds one
+  (`` `jsonEncode` cannot handle `Stage.op`, which is `(i32) => i32` ``,
+  `reject_fnref_json`); `<` and the other orderings take numbers only; and a
+  function type inside another type prints in parentheses,
+  `((i32) => i32)[]` (`reject_fnref_type_name`). A reference is not passed
+  for an inline function parameter (NL2734,
+  [Function parameters](#function-parameters)).
+- **In memory a reference is an `i32` tag**, the function's position, from 1,
+  among the program's functions of that signature: never an address. A call
+  through it is a direct call of an internal **dispatcher**,
+  `@$ref.<module>.<signature>.<n>`, that takes the tag and the arguments,
+  switches on the tag and tail-calls each function directly, the last one as
+  the `default` arm; there is no function pointer and no indirect call
+  (`tests/cases/fnref_field`). Each place — a local or a parameter, a
+  function's return, a field, and the elements of every array of one reference
+  type — has a set, the functions that can flow into it, and a call dispatches
+  over its place's set only: a set of one's dispatcher is one tail call with
+  no `switch`, and an empty set's dispatcher traps (`fnref_empty_set`,
+  `fnref_place_set`).
+  The dispatcher carries the attributes its members share, so a call through a
+  set whose members all leave an argument alone leaves it on the stack. A set
+  that mixes members that keep a pointer argument with members that do not is
+  refused,
+  `` this call through `h` can reach `u3`, which keeps `p`, and `u0`, which does not, so every call here would allocate `p` in the arena; ... ``
+  (NL2736, `reject_fnref_escape_join`, `fnref_escape_join`), and a set past
+  eight members is warning NL9017, a `switch` where a direct call would not
+  branch (`tests/wordings/nl9017_fnref_wide_set`). Under `--profile debug` the
+  dispatcher first checks that the tag is in its set and panics with
+  `function reference holds a function outside its place's set` if it is not;
+  the speed build checks nothing (`fnref_debug_check`). The IR is in
+  [IR_COOKBOOK.md](IR_COOKBOOK.md#a-function-reference-in-a-field).
+- **A reference does not cross to a host.** A tag means something only to this
+  program's dispatchers, so in an open-world build (`-o`) an exported function
+  whose parameter or return type holds a reference, or a class an exported
+  signature reaches with such a field, is
+  `` Parameter `f` of `apply` holds a function reference that code outside this program can reach: a reference is a tag this program's dispatcher reads, not an address, and a host could hand back one no dispatcher knows ``
+  (NL2733, `reject_fnref_host`, `reject_fnref_host_field`,
+  `reject_fnref_no_strict`, `tests/wordings/nl2733_fnref_host_return`). A
+  closed-world `--link` build exports such a function between its own modules
+  (`tests/link/fnref_cross_module`).
+
+Still refused: a closure (an arrow that captures), a reference to a method, a
+generic or an `async` function, a nullable reference (`F | null` is the
+nullable-scalar refusal of [Nullable types](#nullable-types)), a reference as
+a `Map` value (a `Map` value is not yet a place the compiler tracks, so
+`` `Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map ``,
+NL2738, `reject_fnref_map`; keep the references in an array and the index in
+the `Map`), and a reference passed for an inline function parameter (NL2734).
+An array of references, or a nullable, `Maybe` or `Result` holding one, is
+refused as a `Map` value the same way (`Map<string, Op[]>`,
+`Map<string, Op[] | null>`; `reject_fnref_map_array`,
+`reject_fnref_map_nullable`).
 
 ### Async functions: `async` and `await`
 
@@ -4909,6 +5069,12 @@ breaks one is refused with that rule's own code:
     bump(g);
   }
   ```
+
+  A guard helper is named, never held: naming it as a value is
+  `` `bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name ``
+  (NL2739, `reject_mutex_guard_helper_ternary_alias`,
+  `reject_mutex_guard_helper_nullish`), because the rules below follow the
+  function a call names.
 
   The helper's parameter is held to R3–R5 in its body exactly as `g` is in the
   block, so it can only read and store through it, and R5 follows the call, so
@@ -6495,8 +6661,10 @@ Each of these is refused, and each refusal is pinned by a case:
 - **`syscall`, by name**: `` `declare function syscall` is refused ``
   (`reject_ffi_syscall`). It is variadic and bypasses libc; declare the libc
   function that wraps the system call.
-- **A callback.** A function is never a value, so an arrow passed to a
-  declared C function is refused (`reject_ffi_callback`).
+- **A callback.** C never calls into Nish: an arrow passed to a declared C
+  function is refused (`reject_ffi_callback`), and a
+  [function reference](#function-references) is a tag only this program's
+  dispatchers read, not an address, so it is not a `CPtr` either.
 - **A read through a `CPtr`.** `p[0]` is `Cannot index a value of type CPtr`
   (`reject_ffi_pointer_deref`); `readCString` above is the one read.
 - **Inline assembly.** `asm("nop")` is an unknown function (`reject_ffi_asm`).
@@ -7753,7 +7921,7 @@ stores `calls`, keeps `i < xs.length` and `i < c.v.length`
 (`arr_range_call_loop`), and one that stores `v` ends `c.v`'s facts
 (`arr_range_call_rebind`). A builtin handed only numbers, booleans and
 strings — `console.log`, `panic`, a string method — has the empty summary,
-since without a function value what a call is handed is all it can reach:
+since a call handed no function reference can reach only what it is handed:
 the one mutable module state, [module storage](#module-storage), is named
 only by the program's code (its module's, or an importer's when it is
 exported), never reached by a builtin, and its length never changes, so no call can
@@ -10149,9 +10317,9 @@ scope's region it is refused on an array a task may read, as `fill` is. Anything
 but a `u8[]` is `` `crypto.getRandomValues` fills a `u8[]`, got i32[] ``
 (NL2402).
 
-**A descriptor, not a handler.** A handler would be a function value, which the
-language does not have, and would run between any two instructions of the
-program. A descriptor is what a server's loop can wait on beside its sockets
+**A descriptor, not a handler.** A handler would be a callback the runtime
+calls, which a [function reference](#function-references) is not, and would
+run between any two instructions of the program. A descriptor is what a server's loop can wait on beside its sockets
 (WP34 N5 will add that wait); until then `readSignal` is the blocking read.
 Underneath it is a handler rather than a Linux `signalfd`, because a `signalfd`
 hears only a signal blocked in every thread, and a mask reaches only the thread
@@ -15084,14 +15252,22 @@ messages are exact for the cases cited; other entries quote the checker
 - **an arrow inside another arrow that reads the function's locals**:
   `` The arrow reads `k` from outside the arrow it is written in: ... ``
   (`reject_fnarg_capture_nested`)
-- **an arrow anywhere but as a function argument**:
-  `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, ... ``
-  (`reject_fnarg_arrow_value`)
-- **a function type anywhere but on a parameter of a top-level function**:
-  `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: ... ``
-  / `` `f` cannot have a function type here: ... `` (`reject_fnarg_field`,
-  `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`,
-  `reject_fnarg_method`, `reject_fnarg_nested`)
+- **an arrow anywhere but as a function argument or a top-level `const`**:
+  `` an arrow in value position is not yet a function reference: declare it as a top-level function and name it ``
+  (`reject_fnarg_arrow_value`), or, when it captures,
+  `` this arrow captures `k`: a function reference names a top-level function and carries no environment ``
+  (`reject_arrow_as_value`, `reject_fnref_capture`)
+- **a function type written inline on a parameter of a method, a constructor
+  or a function type**:
+  `` `f` cannot have a function type here: ... `` (`reject_fnarg_method`,
+  `reject_fnarg_nested`)
+- **a function reference to a function it cannot hold, or used other than
+  called, compared, stored or passed**: NL2725, NL2726, NL2727, NL2728,
+  NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736, NL2737, NL2738 and
+  NL2739 (`reject_fnref_generic`, `_async`, `_ffi`, `_rest`, `_zero_fill`,
+  `_host`, `_host_field`, `_no_strict`, `_escape_join`,
+  `_escape_join_transitive`, `_print`, `_json`, `_map`, `_map_array`, `reject_fnarg_alias`,
+  `reject_mutex_guard_helper_*`; [Function references](#function-references))
 - **a function argument that is not a function's name or an arrow, or does not
   match**:
   `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... ``
