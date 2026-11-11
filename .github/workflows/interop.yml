@@ -14,8 +14,10 @@
 #         mid-transfer, each new path validated before it is trusted.
 # h2spec: every h2spec case against the HTTP/2 server.
 # curl:   curl --http3 and --http2, a GET of a 1 MB file and a POST with a
-#         body each; and curl --http2 resuming a TLS 1.3 session on a second
-#         connection, which the server's log must call `tls: resumed`.
+#         body each; curl --http1.1, plain and over TLS, a GET of /hello and of
+#         /big's 2 MiB chunked and a POST echoed back, small and of 1 MB; and
+#         curl --http2 resuming a TLS 1.3 session on a second connection,
+#         which the server's log must call `tls: resumed`.
 # chrome: Playwright's Chromium opens a WebTransport session pinned by
 #         serverCertificateHashes and echoes a datagram and a bidirectional
 #         stream, and resumes a TLS 1.3 session on a second HTTP/2
@@ -386,7 +388,7 @@ jobs:
         run: docker logs nish
 
   curl:
-    name: curl --http3 and --http2
+    name: curl --http3, --http2 and --http1.1
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -430,6 +432,28 @@ jobs:
           # -w prints the version even for a transfer that failed, so the transfer must succeed too.
           check "curl --http2 says it spoke HTTP/2" "$(curl_in -sSfk --http2 -o /dev/null -w '%{http_version}' "https://127.0.0.1:$H2_PORT/file" || echo ' (failed)')" "2"
           check "curl --http3-only says it spoke HTTP/3" "$(curl_in -sSfk --http3-only -o /dev/null -w '%{http_version}' "https://127.0.0.1:$QUIC_PORT/file" || echo ' (failed)')" "3"
+          exit "$fail"
+
+      # The HTTP/1.1 ports serve tests/link/net_http1_server's routes, not --www:
+      # /hello's short body with a length, /big's 2 MiB chunked (byte k is
+      # (7k + 3) mod 256), and /echo, which streams a body back chunked.
+      - name: GET and POST over HTTP/1.1, plain and over TLS
+        run: |
+          curl_in() { docker run --rm --network host -v "$RUNNER_TEMP/www:/www:ro" --entrypoint curl "$CURL" --max-time 60 "$@"; }
+          big="$(python3 -c 'import sys; sys.stdout.buffer.write(bytes((k * 7 + 3) & 255 for k in range(2097152)))' | sha256sum)"
+          file="$(sha256sum < "$RUNNER_TEMP/www/file")"
+          fail=0
+          check() {
+            if [ "$2" = "$3" ]; then echo "PASS  $1"; else echo "FAIL  $1: got '$2', want '$3'"; fail=1; fi
+          }
+          for base in "http://127.0.0.1:$H1_PORT" "https://127.0.0.1:$H1S_PORT"; do
+            check "curl --http1.1 GET $base/hello" "$(curl_in -sSfk --http1.1 "$base/hello")" "hello from nish/net/http1"
+            check "curl --http1.1 GET $base/big, 2 MiB chunked" "$(curl_in -sSfk --http1.1 "$base/big" | sha256sum)" "$big"
+            check "curl --http1.1 POST $base/echo" "$(curl_in -sSfk --http1.1 --data-binary 'a body of 21 bytes...' "$base/echo")" "a body of 21 bytes..."
+            # 1 MiB is past curl's threshold for Expect: 100-continue, which /echo answers first.
+            check "curl --http1.1 POST $base/echo of the 1 MB file" "$(curl_in -sSfk --http1.1 --data-binary @/www/file "$base/echo" | sha256sum)" "$file"
+            check "curl --http1.1 says it spoke HTTP/1.1 to $base" "$(curl_in -sSfk --http1.1 -o /dev/null -w '%{http_version}' "$base/hello" || echo ' (failed)')" "1.1"
+          done
           exit "$fail"
 
       - name: curl --http2 resumes a TLS 1.3 session
