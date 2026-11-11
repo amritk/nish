@@ -32180,6 +32180,79 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
   }
 }
 
+// ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------
+//
+// docs/wp50-wasm-host.md §10. examples/wasm-arena/build.mjs links client.ts for
+// the page (`--profile wasm-host`) and replay.ts natively under
+// `--deterministic`; node-run.mjs drives the page's own startArena under Node
+// with scripted input for a few thousand frames and prints the hash and the
+// recorded input. The same input replayed natively, and under the `--emit-ts`
+// reading of replay.ts, gives the same 64-bit hash. The ten-minute Chromium
+// soak is interop.yml's `arena` job.
+if (!only || "wasm-arena".includes(only)) {
+  const why = wasmHostTools()
+  if (why !== null) {
+    skip(`wasm-arena: ${why}`)
+  } else {
+    const out = path.join(buildDir, "wasm-arena")
+    fs.rmSync(out, { recursive: true, force: true })
+    const built = spawnSync("node", ["examples/wasm-arena/build.mjs", "--nish", NISH, "--out", out], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (check("wasm-arena: build.mjs links the page module and the native replay", built.status === 0, shown(built))) {
+      const frames = 3000
+      const ran = spawnSync("node", ["examples/wasm-arena/node-run.mjs", path.join(out, "web"), String(frames)], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      let page = null
+      try {
+        page = ran.status === 0 ? JSON.parse(ran.stdout) : null
+      } catch {
+        page = null
+      }
+      check(
+        `wasm-arena: the page runs ${frames} frames under Node with memory and the arena's mark held still and no input dropped`,
+        page !== null && page.steady === true && page.byteLength === 4 * 1024 * 1024 && page.overflow === 0 && page.ticks > frames,
+        page === null ? shown(ran) : JSON.stringify({ ...page, runs: page.runs.length })
+      )
+      if (page !== null) {
+        const args = ["1", String(page.ticks), ...page.runs]
+        const want = `ticks ${page.ticks} hash ${page.hash}\n`
+        const native = spawnSync(path.join(out, "replay"), args, { encoding: "utf8" })
+        check(
+          `wasm-arena: the recorded input replays natively to the page's hash (${page.hash}, ${page.ticks} ticks)`,
+          native.status === 0 && native.stdout === want,
+          `want ${want}${shown(native)}`
+        )
+        const emitted = path.join(out, "ts")
+        const ts = spawnSync(NISH, ["examples/wasm-arena/replay.ts", "--deterministic", "--emit-ts", emitted], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        const node =
+          ts.status === 0
+            ? spawnSync("node", [...emitTsNodeFlags, path.join(emitted, "entry.ts"), ...args], { cwd: root, encoding: "utf8" })
+            : ts
+        check(
+          "wasm-arena: the --emit-ts reading of replay.ts gives the same hash under Node",
+          node.status === 0 && node.stdout === want,
+          `want ${want}${shown(node)}`
+        )
+      }
+      // The replay the user guide shows (docs/guide/using-nish/interop.md), pinned to the hash it prints there.
+      const sample = spawnSync(path.join(out, "replay"), ["1", "120", "44x1", "36x5", "39x1"], { encoding: "utf8" })
+      const sampleWant = "ticks 120 hash d26f9b16ccb7478a\n"
+      check(
+        "wasm-arena: the user guide's sample replay prints the hash the guide shows",
+        sample.status === 0 && sample.stdout === sampleWant,
+        `want ${sampleWant}${shown(sample)}`
+      )
+    }
+  }
+}
+
 if (!only || "wasm-size".includes(only)) {
   // The ceilings are bytes clang 18 wrote on linux-x64, like the runtime's.
   const host = `${process.platform}-${process.arch}`
@@ -32284,14 +32357,37 @@ if (!only || "wasm-size".includes(only)) {
         ).stderr
       )
     let checkedSwitch = false
-    for (const { src, runtime, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
+    for (const { src, runtime, host: hostModule, memory, ...ceilings } of WASM_HOST_SIZE_BUDGETS) {
       const stem = path.basename(src, ".ts")
       // The directory outlives a run: a sidecar an older build left must not pass for this one's.
       fs.rmSync(path.join(dir, `${stem}.wasm.sites.json`), { force: true })
       fs.rmSync(stubLog, { force: true })
-      const ll = wasmHostCompile(dir, stem)
-      const inputs = ll === null ? [] : runtime ? [ll, "runtime/runtime-wasm.c"] : [ll]
-      const hostFlags = (name) => ["-o", path.join(dir, name), "--profile", "wasm-host"]
+      // A row with a host module is a program of several modules (examples/wasm-arena):
+      // one .ll each, linked together as build.mjs links them.
+      const lls = hostModule === undefined ? null : path.join(dir, `${stem}-ll`)
+      if (lls !== null) {
+        fs.rmSync(lls, { recursive: true, force: true })
+      }
+      const compiled =
+        lls === null
+          ? null
+          : spawnSync(
+              NISH,
+              [src, "--target", "wasm32", "--host", hostModule, "--emit-dts", path.join(dir, `${stem}.d.ts`), "-o", `${lls}/`],
+              { cwd: root, encoding: "utf8" }
+            )
+      const ll = lls === null ? wasmHostCompile(dir, stem) : compiled.status === 0 ? lls : null
+      const modules = (from) =>
+        fs
+          .readdirSync(from)
+          .filter((f) => f.endsWith(".ll"))
+          .sort()
+          .map((f) => path.join(from, f))
+      const sources = ll === null ? [] : lls === null ? [ll] : modules(lls)
+      const inputs = runtime ? [...sources, "runtime/runtime-wasm.c"] : sources
+      // A row with `memory` links with `--memory`, as the page it measures ships.
+      const memoryFlags = memory === undefined ? [] : ["--memory", String(memory)]
+      const hostFlags = (name) => ["-o", path.join(dir, name), "--profile", "wasm-host", ...memoryFlags]
       const built =
         ll === null
           ? null
@@ -32317,6 +32413,10 @@ if (!only || "wasm-size".includes(only)) {
           measured.every((n, i) => n <= ceiling[i]),
           "shrink it, or raise WASM_HOST_SIZE_BUDGETS in tests/runtime-budgets.js with the measurement and why"
         )
+      }
+      if (lls !== null) {
+        // The plain-bytes and no-imports checks below are of a program with no host module.
+        continue
       }
       const bareLinks = !clangFindsWasmOpt(ll)
       if (!checkedSwitch) {
@@ -33382,6 +33482,66 @@ if (!only || "differential".includes(only) || "goldens".includes(only)) {
     `differential: the frozen rewrites (${summary || "no summary"})`,
     rewrites.status === 0,
     rewrites.stdout + rewrites.stderr
+  )
+}
+
+// ---- Object spread: a lowering, not a construct of its own ----
+// `{ ...b, x: 1 }` is stored as the fields of `b` the literal does not write over, then the
+// fields it writes, so it owes the program written out by hand the same IR. The goldens
+// cannot say so: each `obj_spread_*` golden matches only itself. `obj_spread_twin_written.ts`
+// is `obj_spread_twin.ts` with every spread written out; the two must emit the same module once
+// value names are set aside, a local literal must be an `alloca` in both, and the one that
+// escapes through the return must still be allocated in the arena in both -- a spread that
+// stopped being seen as a fresh literal, or one that started copying through a temporary
+// struct, moves one of those counts.
+if (!only || "spread".includes(only)) {
+  const fixtures = path.join(root, "tests", "cases")
+  const out = path.join(buildDir, "spread-twin")
+  const emit = (name) => {
+    const dir = path.join(out, name)
+    fs.mkdirSync(dir, { recursive: true })
+    const run = spawnSync(NISH, [path.join(fixtures, `${name}.ts`), "-o", `${dir}/`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ll = path.join(dir, `${name}.ll`)
+    return run.status === 0 && fs.existsSync(ll) ? stripHeader(fs.readFileSync(ll, "utf8")) : null
+  }
+  // `%5`, `%t3`, `%p.addr` and the like name a value; `%struct.*` names a type and stays.
+  const unnamed = (ir) => ir.replace(/%(?!struct\.)[\w.]+/g, "%v")
+  const spread = emit("obj_spread_twin")
+  const written = emit("obj_spread_twin_written")
+  check(
+    "object spread: a spread literal and its written-out twin emit the same IR, value names aside",
+    spread !== null && written !== null && unnamed(spread) === unnamed(written),
+    spread === null || written === null ? "a fixture did not compile" : "the two modules differ"
+  )
+  const count = (ir, re) => (ir === null ? -1 : (ir.match(re) || []).length)
+  const arena = /call i8\* @nish_alloc_struct\(/g
+  check(
+    "object spread: only the literal that escapes is allocated in the arena, in both spellings",
+    count(spread, arena) === 1 && count(written, arena) === 1,
+    `nish_alloc_struct calls: spread ${count(spread, arena)}, written ${count(written, arena)}`
+  )
+  // `firstX` reads its argument only through `{ ...b }`: were the spread's loads left out
+  // of its memory facts, it would be `readnone`, and LLVM could fold two calls across a
+  // store to `b`.
+  const groupOf = (ir, fn) => {
+    const def = ir === null ? null : ir.match(new RegExp(`^define [^\\n]*@${fn}\\([^\\n]*\\) #(\\d+)`, "m"))
+    const group = def === null ? null : ir.match(new RegExp(`^attributes #${def[1]} = \\{([^}]*)\\}`, "m"))
+    return group === null ? "" : group[1]
+  }
+  const firstX = groupOf(spread, "firstX")
+  check(
+    "object spread: a function that reads its argument only through a spread reads memory",
+    /\breadonly\b|memory\(read/.test(firstX) && !/\breadnone\b/.test(firstX),
+    `@firstX attributes: { ${firstX} }`
+  )
+  const local = /= alloca %struct\.Point,/g
+  check(
+    "object spread: the literal that stays local is an alloca, in both spellings",
+    count(spread, local) >= 1 && count(spread, local) === count(written, local),
+    `Point allocas: spread ${count(spread, local)}, written ${count(written, local)}`
   )
 }
 

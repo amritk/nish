@@ -99,6 +99,7 @@ import { StringMap, StringSet } from "./map"
 import { compareStrings } from "./strings"
 import {
   FLAG_CONST,
+  FLAG_OBJECT_SPREAD,
   N_ARRAY,
   N_BINARY,
   N_BLOCK,
@@ -125,6 +126,7 @@ import {
   N_PROPERTY,
   N_RETURN,
   N_TRY,
+  N_SPREAD,
   N_STRING,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
@@ -1253,6 +1255,11 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     }
     if (parent.kind === N_LIST) {
       return classifyArgumentUse(unit, table, parent, node)
+    }
+    // `{ ...s }` copies each of `s`'s fields into the literal's object
+    // (`emitSpreadCopy`): the source is read, and nothing keeps it.
+    if (parent.kind === N_SPREAD && (parent.flags & FLAG_OBJECT_SPREAD) !== 0) {
+      return use(USE_READ)
     }
     if (parent.kind === N_CALL) {
       return use(USE_NONE) // the callee position of `p(...)`, which the checker refuses anyway
@@ -2568,6 +2575,23 @@ class FactCollector {
       for (const property of init.children) {
         if (property.kind === N_PROPERTY && property.children.length > 0) {
           this.noteStore(key, `.${property.text}`, property.children[0])
+        } else if (property.kind === N_SPREAD) {
+          // `...s` stores each field it copies with what `s` reaches, the
+          // root a written-out `f: s.f` would name.
+          const copy = program.nodeSpreadCopies[property.id]
+          if (copy !== null) {
+            for (const name of copy.fields) {
+              this.noteStore(key, `.${name}`, property.children[0])
+            }
+          } else {
+            // Which fields it copies is unknown, so anything below the
+            // object may be anything.
+            const mark = new DirtMark(DIRT_STORE, key, "", true)
+            const desc = this.valueOf(property.children[0])
+            desc.unknown = true
+            mark.value = desc
+            this.facts.dirt.push(mark)
+          }
         }
       }
       return
@@ -2691,8 +2715,10 @@ class FactCollector {
       for (const property of v.children) {
         if (property.kind === N_PROPERTY && property.children.length > 0) {
           this.describe(property.children[0], desc)
+        } else if (property.kind === N_SPREAD) {
+          this.describe(property.children[0], desc) // its fields reach what the source reaches
         } else {
-          desc.unknown = true // a spread, which the validator refuses, or anything else
+          desc.unknown = true
         }
       }
       return
@@ -3450,6 +3476,15 @@ class FactCollector {
   collectClassFacts(node: Node): void {
     const program = this.unit.program
     const table = this.table
+    if (node.kind === N_SPREAD && (node.flags & FLAG_OBJECT_SPREAD) !== 0) {
+      // `{ ...s }` loads each field it copies off `s`, the reads a written-out
+      // `f: s.f` makes; with no record of what it copies, it reads anyway.
+      const copy = program.nodeSpreadCopies[node.id]
+      if ((copy === null || copy.fields.length > 0) && !this.isStackOwned(node.children[0])) {
+        this.facts.readsMemory = true
+      }
+      return
+    }
     if (node.kind === N_MEMBER) {
       const receiver = node.children[0]
       const type = program.nodeTypes[receiver.id]

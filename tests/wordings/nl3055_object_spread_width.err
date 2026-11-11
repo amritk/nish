@@ -1,0 +1,1 @@
+Spread of `Named` into `Tagged` may spread an instance of `Item`, which implements it with field `weight` besides: Node copies every own field of the instance a value holds, and the native copy only the interface's, so spread a value of a class type, or set the fields by name

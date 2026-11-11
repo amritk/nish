@@ -249,7 +249,7 @@ function Expansion.constructor(this: Expansion, ancestor: Instantiation, index: 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: ancestor index
   pointer this: size=16 writesThrough=true captured=false
-  pointer ancestor: size=184 writesThrough=true captured=true
+  pointer ancestor: size=192 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function StructExpansion.constructor(this: StructExpansion, ancestor: StructInstantiation, index: i32): void -> @StructExpansion.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -366,7 +366,7 @@ function expandingAncestor(ctx: CheckContext, from: Instantiation | null, templa
   escaping: from
   calls: Expansion.constructor chainArguments growingArgument nish_alloc_struct
   pointer ctx: size=312 writesThrough=false captured=false passedTo=growingArgument#0
-  pointer from: size=184 writesThrough=true captured=true
+  pointer from: size=192 writesThrough=true captured=true
   pointer template: size=64 writesThrough=false captured=false passedTo=chainArguments#0
   pointer args: size=0 writesThrough=true captured=true passedTo=chainArguments#1
   stackSites=0 stackLocals=0
@@ -490,7 +490,7 @@ function nonTerminatingMessage(table: TypeTable, template: TemplateInfo, ancesto
   calls: TypeTable.typeName chainArguments chainParameters instanceDisplayName nish_panic_index nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=instanceDisplayName#0 instanceDisplayName#0 TypeTable.typeName#0
   pointer template: size=64 writesThrough=true captured=true passedTo=chainParameters#0
-  pointer ancestor: size=184 writesThrough=false captured=false
+  pointer ancestor: size=192 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
   stackSites=0 stackLocals=0
   local +0:7 earlier: TemplateInfo (let)

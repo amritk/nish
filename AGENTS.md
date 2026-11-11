@@ -36,7 +36,9 @@ prebuilt native compiler. The sibling repos' Bun rules do not apply here. The
 reference documents are [`docs/LANGUAGE.md`](./docs/LANGUAGE.md) (what the language is) and
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (how the compiler is put
 together); [`docs/MASTER_PLAN.md`](./docs/MASTER_PLAN.md) is the work-package
-plan, with the conventions every agent follows in §7 and a brief template in §8.
+plan, with the conventions every agent follows in §7 and a brief template in §8,
+and [`docs/roadmap/`](./docs/roadmap/index.md) holds each package's state, a box
+per stage, and the stage to do next.
 
 ## Workflow
 

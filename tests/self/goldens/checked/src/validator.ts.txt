@@ -44,11 +44,9 @@ import N_MODULE_CONST from "./nodes" -> const N_MODULE_CONST
 import N_NAMESPACE from "./nodes" -> const N_NAMESPACE
 import N_NEW from "./nodes" -> const N_NEW
 import N_NUMBER from "./nodes" -> const N_NUMBER
-import N_OBJECT from "./nodes" -> const N_OBJECT
 import N_PAREN from "./nodes" -> const N_PAREN
 import N_PROPERTY from "./nodes" -> const N_PROPERTY
 import N_REGEX from "./nodes" -> const N_REGEX
-import N_SPREAD from "./nodes" -> const N_SPREAD
 import N_STRING from "./nodes" -> const N_STRING
 import N_SWITCH from "./nodes" -> const N_SWITCH
 import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
@@ -132,7 +130,7 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void -> 
   sharedWrite: via rejectFunctionModifiers
   escaping: inTypePosition
   calls: CheckContext.error CheckContext.errorAtKey CheckContext.errorFix admitChain chainWithoutDefault checkNullUnion computedNameForbidden forbiddenOperator forbiddenType forbiddenValue isIteratorMethod isThreadsSource isUndefined nish_panic_index nish_str_concat nish_str_eq refuseUndefinedIn rejectComputedEnumMembers rejectForbiddenAssertion rejectForbiddenCall rejectForbiddenIndex rejectForbiddenMember rejectForbiddenNew rejectFunctionModifiers rejectImportForms rejectVar strictEqualityFix unwrapParens visit visitDeclaration
-  pointer ctx: size=312 writesThrough=true captured=false passedTo=rejectFunctionModifiers#0 CheckContext.error#0 CheckContext.error#0 admitChain#0 CheckContext.error#0 CheckContext.error#0 rejectForbiddenMember#0 rejectForbiddenIndex#0 CheckContext.error#0 checkNullUnion#0 CheckContext.error#0 visit#0 CheckContext.error#0 visit#0 CheckContext.errorAtKey#0 CheckContext.error#0 visit#0 rejectForbiddenNew#0 rejectForbiddenCall#0 CheckContext.error#0 CheckContext.error#0 rejectForbiddenAssertion#0 rejectComputedEnumMembers#0 CheckContext.errorFix#0 strictEqualityFix#0 visit#0 rejectVar#0 visitDeclaration#0 rejectVar#0 refuseUndefinedIn#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 rejectImportForms#0 CheckContext.error#0 visit#0
+  pointer ctx: size=312 writesThrough=true captured=false passedTo=rejectFunctionModifiers#0 CheckContext.error#0 CheckContext.error#0 admitChain#0 CheckContext.error#0 CheckContext.error#0 rejectForbiddenMember#0 rejectForbiddenIndex#0 CheckContext.error#0 checkNullUnion#0 CheckContext.error#0 visit#0 CheckContext.errorAtKey#0 CheckContext.error#0 visit#0 rejectForbiddenNew#0 rejectForbiddenCall#0 CheckContext.error#0 CheckContext.error#0 rejectForbiddenAssertion#0 rejectComputedEnumMembers#0 CheckContext.errorFix#0 strictEqualityFix#0 visit#0 rejectVar#0 visitDeclaration#0 rejectVar#0 refuseUndefinedIn#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 rejectImportForms#0 CheckContext.error#0 visit#0
   pointer node: size=40 writesThrough=false captured=false passedTo=rejectFunctionModifiers#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 rejectForbiddenMember#1 rejectForbiddenIndex#1 CheckContext.error#1 checkNullUnion#1 CheckContext.errorAtKey#1 isIteratorMethod#0 rejectForbiddenNew#1 rejectForbiddenCall#1 CheckContext.error#1 CheckContext.error#1 rejectForbiddenAssertion#1 rejectComputedEnumMembers#1 CheckContext.errorFix#1 strictEqualityFix#1 rejectVar#1 rejectVar#1 refuseUndefinedIn#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 rejectImportForms#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 rejectFunctionModifiers -> @rejectFunctionModifiers
@@ -151,53 +149,50 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void -> 
   callee +39:7 rejectForbiddenIndex -> @rejectForbiddenIndex
   callee +42:7 CheckContext.error -> @CheckContext.error
   callee +47:7 checkNullUnion -> @checkNullUnion
-  local +53:18 member: Node (const)
-  callee +55:11 CheckContext.error -> @CheckContext.error
-  callee +57:9 visit -> @visit
-  callee +65:9 CheckContext.error -> @CheckContext.error
-  callee +65:37 computedNameForbidden -> @computedNameForbidden
-  callee +66:9 visit -> @visit
-  callee +70:9 CheckContext.errorAtKey -> @CheckContext.errorAtKey
-  callee +80:15 isIteratorMethod -> @isIteratorMethod
-  callee +80:41 isThreadsSource -> @isThreadsSource
-  callee +81:11 CheckContext.error -> @CheckContext.error
-  callee +81:39 computedNameForbidden -> @computedNameForbidden
-  local +83:18 i: i32 (let)
-  callee +84:11 visit -> @visit
-  callee +90:7 rejectForbiddenNew -> @rejectForbiddenNew
-  callee +93:7 rejectForbiddenCall -> @rejectForbiddenCall
-  local +96:13 message: string (const)
-  callee +96:23 forbiddenOperator -> @forbiddenOperator
-  callee +98:9 CheckContext.error -> @CheckContext.error
-  callee +103:7 CheckContext.error -> @CheckContext.error
-  callee +109:7 rejectForbiddenAssertion -> @rejectForbiddenAssertion
-  callee +112:7 rejectComputedEnumMembers -> @rejectComputedEnumMembers
-  local +115:13 message: string (const)
-  callee +115:23 forbiddenOperator -> @forbiddenOperator
-  callee +117:9 CheckContext.errorFix -> @CheckContext.errorFix
-  callee +117:37 strictEqualityFix -> @strictEqualityFix
-  local +123:20 child: Node (const)
-  callee +124:16 isUndefined -> @isUndefined
-  callee +125:13 visit -> @visit
-  callee +133:7 rejectVar -> @rejectVar
-  local +137:18 decl: Node (const)
-  callee +138:9 visitDeclaration -> @visitDeclaration
-  callee +142:7 rejectVar -> @rejectVar
-  callee +143:7 refuseUndefinedIn -> @refuseUndefinedIn
-  callee +146:7 CheckContext.error -> @CheckContext.error
-  callee +152:7 CheckContext.error -> @CheckContext.error
-  local +159:13 body: i32 (const)
-  local +160:13 named: boolean (const)
-  callee +168:9 CheckContext.error -> @CheckContext.error
-  callee +177:9 CheckContext.error -> @CheckContext.error
-  callee +186:7 CheckContext.error -> @CheckContext.error
+  callee +54:9 CheckContext.error -> @CheckContext.error
+  callee +54:37 computedNameForbidden -> @computedNameForbidden
+  callee +55:9 visit -> @visit
+  callee +59:9 CheckContext.errorAtKey -> @CheckContext.errorAtKey
+  callee +69:15 isIteratorMethod -> @isIteratorMethod
+  callee +69:41 isThreadsSource -> @isThreadsSource
+  callee +70:11 CheckContext.error -> @CheckContext.error
+  callee +70:39 computedNameForbidden -> @computedNameForbidden
+  local +72:18 i: i32 (let)
+  callee +73:11 visit -> @visit
+  callee +79:7 rejectForbiddenNew -> @rejectForbiddenNew
+  callee +82:7 rejectForbiddenCall -> @rejectForbiddenCall
+  local +85:13 message: string (const)
+  callee +85:23 forbiddenOperator -> @forbiddenOperator
+  callee +87:9 CheckContext.error -> @CheckContext.error
+  callee +92:7 CheckContext.error -> @CheckContext.error
+  callee +98:7 rejectForbiddenAssertion -> @rejectForbiddenAssertion
+  callee +101:7 rejectComputedEnumMembers -> @rejectComputedEnumMembers
+  local +104:13 message: string (const)
+  callee +104:23 forbiddenOperator -> @forbiddenOperator
+  callee +106:9 CheckContext.errorFix -> @CheckContext.errorFix
+  callee +106:37 strictEqualityFix -> @strictEqualityFix
+  local +112:20 child: Node (const)
+  callee +113:16 isUndefined -> @isUndefined
+  callee +114:13 visit -> @visit
+  callee +122:7 rejectVar -> @rejectVar
+  local +126:18 decl: Node (const)
+  callee +127:9 visitDeclaration -> @visitDeclaration
+  callee +131:7 rejectVar -> @rejectVar
+  callee +132:7 refuseUndefinedIn -> @refuseUndefinedIn
+  callee +135:7 CheckContext.error -> @CheckContext.error
+  callee +141:7 CheckContext.error -> @CheckContext.error
+  local +148:13 body: i32 (const)
+  local +149:13 named: boolean (const)
+  callee +157:9 CheckContext.error -> @CheckContext.error
+  callee +166:9 CheckContext.error -> @CheckContext.error
+  callee +175:7 CheckContext.error -> @CheckContext.error
+  callee +179:9 CheckContext.error -> @CheckContext.error
+  callee +181:9 CheckContext.error -> @CheckContext.error
   callee +190:9 CheckContext.error -> @CheckContext.error
-  callee +192:9 CheckContext.error -> @CheckContext.error
-  callee +201:9 CheckContext.error -> @CheckContext.error
-  callee +210:7 rejectImportForms -> @rejectImportForms
-  callee +221:7 CheckContext.error -> @CheckContext.error
-  local +231:14 child: Node (const)
-  callee +232:5 visit -> @visit
+  callee +199:7 rejectImportForms -> @rejectImportForms
+  callee +210:7 CheckContext.error -> @CheckContext.error
+  local +220:14 child: Node (const)
+  callee +221:5 visit -> @visit
 function rejectImportForms(ctx: CheckContext, node: Node): void -> @rejectImportForms
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

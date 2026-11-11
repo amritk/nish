@@ -2,8 +2,12 @@
 
 **Status: in progress.** Stage 1, the router (`std/net/router.ts`), and
 stage 2's HTTP/1.1 half, the handler (`std/net/handler.ts`) with the example
-server `examples/http-app`, are built. The handler over HTTP/2 and HTTP/3,
-static files and compression are planned and unbuilt.
+server `examples/http-app`, are built. Stage 4's response half is built
+too, as `nish/net/http-compress` rather than `nish/net/compress`: `gzip` by
+`Accept-Encoding` for any of the three servers, opt-in, and
+`respondEncoded` on HTTP/1.1. The handler over HTTP/2 and HTTP/3, static
+files, `deflate` as a response coding, and decoding a request body under a
+decompression-bomb limit are planned and unbuilt (*2026-11-08*).
 
 Issue #485 asks for the pieces every HTTP server on `nish/net` would otherwise
 rebuild: one handler interface across HTTP/1.1, 2 and 3, routing, static
@@ -154,7 +158,11 @@ both runs.
   is built (§5); the same `HttpRequest` and answers over `http2-tls` and
   `http3-server`, with Alt-Svc advertising h3, are the follow-up §5 explains.
 - **Stage 3, static files:** `nish/net/static`.
-- **Stage 4, compression:** `nish/net/compress`.
+- **Stage 4, compression:** `nish/net/compress`. Built for responses as
+  `nish/net/http-compress` (`HttpCompressor`, `httpAcceptEncoding`, on
+  `nish/compress/deflate`), pinned by `tests/link/std_http_compress`;
+  `deflate` as a coding and request bodies with a decompression-bomb limit
+  are not.
 - **The example server:** `examples/http-app`, with logging, configuration and
   graceful shutdown, is built (§5).
 

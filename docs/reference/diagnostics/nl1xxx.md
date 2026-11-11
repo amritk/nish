@@ -610,24 +610,7 @@ The message of an error contains:
 Object spread is forbidden in …
 ```
 
-[`nl1061_object_spread.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl1061_object_spread.ts):
-
-```ts
-// NL1061: An object literal sets each field by name; spread would copy a layout it cannot see.
-interface Point {
-  x: i32;
-}
-
-export const main = (): i32 => {
-  const a: Point = { x: 1 };
-  const p: Point = { ...a };
-  return p.x;
-};
-```
-
-```text
-Object spread is forbidden in Nish (set each field by name)
-```
+**Retired**: `Object spread is forbidden in`, the Phase 0 refusal object spread replaced when it became field copies; each form it still refuses has its own code now, NL2702-NL2710 and NL3055 (tests/cases/reject_object_spread*)
 
 ## NL1062
 
