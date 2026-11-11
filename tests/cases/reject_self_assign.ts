@@ -1,5 +1,5 @@
 // `p.x = p.x` stores a field into itself; the right-hand side was meant to
-// be another point's (NL2691).
+// be another point's (NL2714).
 class Point {
   x: i32;
   y: i32;

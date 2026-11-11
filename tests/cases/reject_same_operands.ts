@@ -1,4 +1,4 @@
-// `a.w === a.w` is always true: one side was meant to be `b.w` (NL2692).
+// `a.w === a.w` is always true: one side was meant to be `b.w` (NL2715).
 class Size {
   w: i32;
   constructor(w: i32) {

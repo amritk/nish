@@ -1,4 +1,4 @@
-// Reading a field and dropping it does nothing either (NL2690).
+// Reading a field and dropping it does nothing either (NL2713).
 class Box {
   n: i32;
   constructor(n: i32) {

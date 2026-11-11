@@ -233,14 +233,14 @@ only once the program has no other error, so they show up last.
 
 | You wrote | Code | Write instead |
 | --- | --- | --- |
-| a local nothing reads, or only stores into (`n++` that nothing reports) | NL2689 | use it, delete it, or name it `_n`; a loop that only counts is `for (const _x of xs)` |
-| a statement with no call, store or `await` in it: `a === b;`, `p.x + 1;` | NL2690 | `a = b`, or delete the line |
-| `x = x`, `p.x = p.x` | NL2691 | the value you meant to store |
-| the same operand on both sides: `a.w === a.w`, `xs[i] - xs[i]`, `ok && ok` | NL2692 | the other operand you meant; to compare a value with itself, copy it to a second `const` first. On a float, `x !== x` (NaN) and `x - x` are allowed |
-| `if (c) … else if (c) …`, the same condition again | NL2693 | the condition you meant for the second branch |
-| `u < 0` or `u >= 0` on a `u8`, `u16`, `u32`, `u64` | NL2694 | test before the subtraction that would wrap, or use a signed type |
+| a local nothing reads, or only stores into (`n++` that nothing reports) | NL2712 | use it, delete it, or name it `_n`; a loop that only counts is `for (const _x of xs)` |
+| a statement with no call, store or `await` in it: `a === b;`, `p.x + 1;` | NL2713 | `a = b`, or delete the line |
+| `x = x`, `p.x = p.x` | NL2714 | the value you meant to store |
+| the same operand on both sides: `a.w === a.w`, `xs[i] - xs[i]`, `ok && ok` | NL2715 | the other operand you meant; to compare a value with itself, copy it to a second `const` first. On a float, `x !== x` (NaN) and `x - x` are allowed |
+| `if (c) … else if (c) …`, the same condition again | NL2716 | the condition you meant for the second branch |
+| `u < 0` or `u >= 0` on a `u8`, `u16`, `u32`, `u64` | NL2717 | test before the subtraction that would wrap, or use a signed type |
 
-```ts nish:err-body NL2689
+```ts nish:err-body NL2712
 const xs = [3, 4];
 let total = 0;
 for (const x of xs) {

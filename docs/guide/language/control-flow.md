@@ -228,7 +228,7 @@ meant. Nish refuses them, where other compilers warn or say nothing:
   branch can never run;
 - an unsigned value tested for its sign, `u < 0`, which is always false.
 
-```ts nish:err NL2693
+```ts nish:err NL2716
 const size = (n: i32): string => {
   if (n > 10) {
     return "big";

@@ -1,5 +1,5 @@
 // A u32 is never negative, so this guard never fires: the bound was meant to
-// be checked before the subtraction wrapped (NL2694).
+// be checked before the subtraction wrapped (NL2717).
 const remaining = (have: u32, take: u32): u32 => {
   const left: u32 = have - take;
   if (left < 0) {

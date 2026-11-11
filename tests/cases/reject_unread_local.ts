@@ -1,5 +1,5 @@
 // A local that is computed and never read is a value the program forgot to
-// use: here `total` was meant to be returned (src/hygiene.ts, NL2689).
+// use: here `total` was meant to be returned (src/hygiene.ts, NL2712).
 const sum = (xs: i32[]): i32 => {
   let total: i32 = 0;
   for (const x of xs) {

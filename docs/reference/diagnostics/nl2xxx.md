@@ -12827,7 +12827,7 @@ The message of an error contains:
 ` is not available: index it, and keep a count beside it for the slots in use
 ```
 
-## NL2689
+## NL2712
 
 The message of an error contains:
 
@@ -12835,10 +12835,10 @@ The message of an error contains:
 …: use it, delete it, or rename it `_…
 ```
 
-[`nl2689_unread_local.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2689_unread_local.ts):
+[`nl2712_unread_local.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2712_unread_local.ts):
 
 ```ts
-// NL2689: a local nothing reads is a value the program forgot to use; a name
+// NL2712: a local nothing reads is a value the program forgot to use; a name
 // that starts with `_` says it is unused on purpose.
 export const main = (): i32 => {
   const total: i32 = 2 + 3;
@@ -12851,7 +12851,7 @@ export const main = (): i32 => {
 `doubled` is declared but never read: use it, delete it, or rename it `_doubled` if it is unused on purpose
 ```
 
-## NL2690
+## NL2713
 
 The message of an error contains:
 
@@ -12859,10 +12859,10 @@ The message of an error contains:
 This statement has no effect: its value is computed and thrown away…
 ```
 
-[`nl2690_no_effect.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2690_no_effect.ts):
+[`nl2713_no_effect.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2713_no_effect.ts):
 
 ```ts
-// NL2690: a statement with no call, store or `await` in it computes a value
+// NL2713: a statement with no call, store or `await` in it computes a value
 // and throws it away.
 export const main = (): i32 => {
   let state: i32 = 0;
@@ -12876,7 +12876,7 @@ export const main = (): i32 => {
 This statement has no effect: its value is computed and thrown away (to assign, write `=`); delete it, or use the value
 ```
 
-## NL2691
+## NL2714
 
 The message of an error contains:
 
@@ -12884,10 +12884,10 @@ The message of an error contains:
 …` to itself, which does nothing
 ```
 
-[`nl2691_self_assign.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2691_self_assign.ts):
+[`nl2714_self_assign.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2714_self_assign.ts):
 
 ```ts
-// NL2691: a value stored into itself does nothing.
+// NL2714: a value stored into itself does nothing.
 export const main = (): i32 => {
   let n: i32 = 4;
   n = n;
@@ -12899,7 +12899,7 @@ export const main = (): i32 => {
 `n = n` assigns `n` to itself, which does nothing
 ```
 
-## NL2692
+## NL2715
 
 The message of an error contains:
 
@@ -12907,10 +12907,10 @@ The message of an error contains:
 …` does not depend on its value; one of them is probably meant to be something else (to mean it, copy the value to a second `const` first)
 ```
 
-[`nl2692_same_operands.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2692_same_operands.ts):
+[`nl2715_same_operands.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2715_same_operands.ts):
 
 ```ts
-// NL2692: with the same operand on both sides, `===` is always true; the
+// NL2715: with the same operand on both sides, `===` is always true; the
 // other side was meant to be something else.
 export const main = (): i32 => {
   const a: i32 = 1;
@@ -12926,7 +12926,7 @@ export const main = (): i32 => {
 Both operands of `===` are `a`, so `a === a` does not depend on its value; one of them is probably meant to be something else (to mean it, copy the value to a second `const` first)
 ```
 
-## NL2693
+## NL2716
 
 The message of an error contains:
 
@@ -12934,10 +12934,10 @@ The message of an error contains:
 …` is already tested by an earlier branch of this `if`, so this branch never runs; test something else, or merge the two branches
 ```
 
-[`nl2693_repeated_condition.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2693_repeated_condition.ts):
+[`nl2716_repeated_condition.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2716_repeated_condition.ts):
 
 ```ts
-// NL2693: an `else if` that repeats an earlier condition can never run.
+// NL2716: an `else if` that repeats an earlier condition can never run.
 const size = (n: i32): i32 => {
   if (n > 10) {
     return 2;
@@ -12954,7 +12954,7 @@ export const main = (): i32 => size(5) - 1;
 `n > 10` is already tested by an earlier branch of this `if`, so this branch never runs; test something else, or merge the two branches
 ```
 
-## NL2694
+## NL2717
 
 The message of an error contains:
 
@@ -12962,10 +12962,10 @@ The message of an error contains:
 …; compare a signed value, or against a bound other than 0
 ```
 
-[`nl2694_unsigned_zero.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2694_unsigned_zero.ts):
+[`nl2717_unsigned_zero.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2717_unsigned_zero.ts):
 
 ```ts
-// NL2694: an unsigned value is never below zero, so this test always answers
+// NL2717: an unsigned value is never below zero, so this test always answers
 // the same.
 export const main = (): i32 => {
   const n: u32 = toU32(7);

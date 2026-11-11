@@ -6716,7 +6716,7 @@ error, because it is a bug far more often than it is a choice. Each rule fires o
 where the answer is certain, and each has a spelling that says "on purpose".
 Rules (`src/hygiene.ts`):
 
-- **A local is read at least once** (NL2689). A `let` or `const`, a
+- **A local is read at least once** (NL2712). A `let` or `const`, a
   `for...of` binding included, that nothing reads is
   `` `x` is declared but never read `` (`reject_unread_local`,
   `reject_unread_for_of`). Storing into a local is not reading it: `n++` or
@@ -6730,14 +6730,14 @@ Rules (`src/hygiene.ts`):
   `for (const _item of xs)` (`hygiene_quiet`). A `using` binding is exempt,
   because its block's end uses it. A `Result` local has its own rule (NL2032,
   [Result and error handling](#result-and-error-handling)).
-- **A statement has an effect** (NL2690). An expression statement with no
+- **A statement has an effect** (NL2713). An expression statement with no
   call, `new`, store, `++`, `--` or `await` anywhere in it is
   `This statement has no effect` (`reject_no_effect_statement`,
   `reject_no_effect_member`). `state === next;` adds
   `` (to assign, write `=`) ``. A lone name is left to the rule above.
-- **A value is not assigned to itself** (NL2691). `x = x`, `p.x = p.x`
+- **A value is not assigned to itself** (NL2714). `x = x`, `p.x = p.x`
   and `xs[i] = xs[i]` do nothing (`reject_self_assign`).
-- **An operator has two different operands** (NL2692). With the same
+- **An operator has two different operands** (NL2715). With the same
   operand on both sides, `===` `!==` `==` `!=` `<` `<=` `>` `>=` `&&` `||` `&`
   `|` `^` `-` `/` `%` give an answer that does not depend on it, so the
   expression is refused (`reject_same_operands`, `reject_same_operands_index`).
@@ -6748,12 +6748,12 @@ Rules (`src/hygiene.ts`):
   test, so only `<` and `>` are refused there, which are false for every
   value (`reject_same_operands_float_ordered`). To compare a value with
   itself on purpose, copy it to a second `const` first (`hygiene_quiet`).
-- **An `else if` tests something new** (NL2693). A condition the same as an
+- **An `else if` tests something new** (NL2716). A condition the same as an
   earlier one in the same `if`/`else if` chain can never pass, because the
   earlier branch took every case it would match (`reject_repeated_condition`).
   A condition with a call in it can answer differently the second time, and
   is not compared.
-- **An unsigned value is not compared with zero for its sign** (NL2694).
+- **An unsigned value is not compared with zero for its sign** (NL2717).
   `u < 0` and `0 > u` are always false, and `u >= 0` and `0 <= u` always
   true, for a `u8`, `u16`, `u32` or `u64` (`reject_unsigned_zero`,
   `reject_unsigned_zero_reversed`).
