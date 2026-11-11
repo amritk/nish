@@ -212,6 +212,16 @@ then a branch over all of them where a direct call would not branch.
 Built with `--profile debug`, a call through a reference also checks that
 the reference holds one of those functions, and panics if it does not.
 
+Under a debugger, a program built with `-g` prints a reference as the
+function it holds. Stepping into a call through one takes two steps: the
+first stops in the generated chooser, named `$ref.` and the call's signature,
+the second in the function. To step straight through, tell gdb to skip the
+choosers:
+
+```
+(gdb) skip -rfu '^\$ref\.'
+```
+
 A reference stays inside your program. A library built with `-o` cannot
 export a function whose parameter or return type holds one, or whose
 classes have a field of one, because code outside the program could hand back a value

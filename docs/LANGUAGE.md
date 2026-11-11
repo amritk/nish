@@ -3604,7 +3604,7 @@ export const main = (): void => {
   - `` `abs` is declared in C: a function reference names a function this program defines ``
     (NL2728, `reject_fnref_ffi`);
   - `` `sum` has a rest parameter: a function reference names a function whose every parameter the caller passes ``
-    (NL2729, `reject_fnref_rest`), and a written function type with a rest,
+    (NL2729, `reject_fnref_rest`; a defaulted parameter the same, `nl2729_fnref_default`), and a written function type with a rest,
     optional or defaulted parameter,
     `` `(x: i32, y?: i32) => i32` has an optional parameter: a function reference names a function whose every parameter the caller passes ``
     (NL2729, `reject_fnref_type_optional`, `reject_fnref_type_rest`);
@@ -3643,9 +3643,12 @@ export const main = (): void => {
   name the same function (`fnref_eq`). Nothing else: printing it, putting it in
   a template string or any other use is
   `` `f` is a function reference: it can be called, compared, stored and passed, nothing else ``
-  (NL2737, `reject_fnref_print`); `jsonEncode` refuses a type that holds one
+  (NL2737, `reject_fnref_print`, and as `JSON.stringify`'s argument,
+  `reject_fnref_stringify`); `jsonEncode` refuses a type that holds one
   (`` `jsonEncode` cannot handle `Stage.op`, which is `(i32) => i32` ``,
-  `reject_fnref_json`); `<` and the other orderings take numbers only; and a
+  `reject_fnref_json`); `<` and the other orderings take numbers only (`reject_fnref_order`,
+  `reject_fnref_order_gt`), as `+` and the other arithmetic does
+  (`reject_fnref_arith`); and a
   function type inside another type prints in parentheses,
   `((i32) => i32)[]` (`reject_fnref_type_name`). A reference is not passed
   for an inline function parameter (NL2734,
@@ -8256,9 +8259,9 @@ import { write } from "nish:io";
   with an import is `` `panic` is already declared in this module `` instead
   (`reject_nish_import_clash`).
 - A name keeps its kind. `argv`, `platform` and `arch` are values, and calling
-  one is refused (`reject_nish_property_call`); the functions are not values,
-  for the reason no function in this language is one
-  (`reject_nish_builtin_value`).
+  one is refused (`reject_nish_property_call`); the functions are not values:
+  a builtin is not a capture-free top-level function of this program, so it
+  cannot be a reference (`reject_nish_builtin_value`).
 - `exit` terminates control flow exactly as `process.exit` does, so a
   non-`void` function may end with it (`io_nish_rename`).
 - Diagnostics name the canonical builtin whatever the call site calls it:
