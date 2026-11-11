@@ -48,6 +48,7 @@ import {
   resolveTemplateConstraints,
 } from "./generics"
 import {
+  FLAG_ABSTRACT,
   FLAG_COMPUTED,
   FLAG_CONST,
   FLAG_FOREIGN,
@@ -789,6 +790,12 @@ export class Checker {
     const nameNode = stmt.children[0]
     const name = nameNode.text
     const what = kind === STRUCT_CLASS ? "class" : "interface"
+    // WP27 S4.1: a C struct has one layout, and a template has none until `T`
+    // is bound. An abstract or interface `declare` is refused by its header.
+    if (kind === STRUCT_CLASS && (stmt.flags & (FLAG_FOREIGN | FLAG_ABSTRACT)) === FLAG_FOREIGN) {
+      this.ctx.error(stmt, "A generic `declare class` is not supported: a C struct layout has no type parameters")
+      return
+    }
     if (name.length === 0) {
       this.ctx.error(stmt, kind === STRUCT_CLASS ? "Classes must be named" : "Interfaces must be named")
       return

@@ -290,6 +290,12 @@ export const emitNew = (emitter: Emitter, expr: Node): string => {
   // The class named, not the type it converts to.
   const info = structInfoOf(emitter, intrinsicType(emitter.program, expr))
   const obj = allocate(emitter, info, expr)
+  if (info.layout) {
+    // A C struct layout (WP27 S4.1) has no constructor: `new` zero-fills it.
+    const ty = structTypeName(info)
+    emitter.fn.emit(`store ${ty} zeroinitializer, ${ty}* ${obj}, align 8`)
+    return obj
+  }
   initInlineArrays(emitter, info, obj)
   constructObject(emitter, info, obj, expr.children[2].children, expr)
   return obj
@@ -337,6 +343,11 @@ export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
     // The array lives in the object, so the field's value is its header's
     // address; only an element access or a `.length` ever asks for it.
     return inlineHeaderPointer(emitter, info, emitter.emitExpression(expr.children[0]), field)
+  }
+  if (field !== null && field.nested !== null) {
+    // A layout embedded by value (WP27 S4.1): its value is its address
+    // inside the outer object, read only as a receiver or a foreign argument.
+    return structFieldPointer(emitter, info, emitter.emitExpression(expr.children[0]), field)
   }
   if (field !== null && field.boxed) {
     process.exit(
@@ -507,7 +518,16 @@ export const structTypeDeclarations = (emitter: Emitter): string[] => {
   // The array header, as a list rather than the flag stage0's `src/` uses, because
   // `noteStruct` is a free function here and has nothing to close over.
   const headers: string[] = []
+  // A nested layout (WP27 S4.1) needs its body here even when this module
+  // only imported the class that embeds it, so it joins the list.
+  const infos: StructInfo[] = []
   for (const info of emitter.program.structList) {
+    infos.push(info)
+  }
+  let at = 0
+  while (at < infos.length) {
+    const info = infos[at]
+    at = at + 1
     if (declared.indexOf(info.name) >= 0) {
       continue
     }
@@ -515,6 +535,10 @@ export const structTypeDeclarations = (emitter: Emitter): string[] => {
     const types: string[] = []
     for (const field of info.fields) {
       types.push(fieldLLVMType(emitter, field))
+      const nested = field.nested
+      if (nested !== null) {
+        infos.push(nested)
+      }
     }
     const body = types.length > 0 ? ` ${types.join(", ")} ` : ""
     lines.push(`%struct.${info.name} = type {${body}}`)
@@ -565,11 +589,15 @@ export const structTypeDeclarations = (emitter: Emitter): string[] => {
 /**
  * The LLVM type of one field in its struct body. An inline array field is one
  * member, so no field's index moves: the header, then its `K` slots
- * (`src/inline-arrays.ts`).
+ * (`src/inline-arrays.ts`). A nested layout is its whole body, by value.
  */
 const fieldLLVMType = (emitter: Emitter, field: FieldInfo): string => {
   if (field.boxed) {
     return SLICE_TYPE
+  }
+  const nested = field.nested
+  if (nested !== null) {
+    return structTypeName(nested)
   }
   if (!field.inline()) {
     return emitter.llvm(field.type)

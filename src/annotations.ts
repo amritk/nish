@@ -19,6 +19,7 @@ import { rejectStoredMask, simdImportMessage, simdLaneType, simdMaskLane } from 
 import { LANGUAGE } from "./branding"
 import { CheckContext, NUMBER_MODE_I32 } from "./context"
 import { AliasInfo, STRUCT_CLASS, StructInfo } from "./program"
+import { layoutClass } from "./structs"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
 import { REGION_SPECIFIER, SIMD_SPECIFIER, simdMaskWidth } from "./nish-modules"
@@ -144,6 +145,15 @@ const elementType = (node: Node, ctx: CheckContext): i32 => {
   }
   if (rejectStoredMask(ctx, elem, "an array element", node)) {
     return T_ERROR
+  }
+  // WP27 S4.1: an element is a pointer to an object, and C wants the structs
+  // themselves side by side; S4.2 lays out an array of structs.
+  const layout = layoutClass(ctx.program, ctx.table, ctx.table.stripNull(elem))
+  if (layout !== null) {
+    return ctx.errorType(
+      node,
+      `\`declare class ${layout.name}\` cannot be an array element: a C struct layout is lent to C one at a time, by pointer`
+    )
   }
   // `nish:secret`: an element outlives the function that made the secret.
   if (ctx.table.holdsSecret(elem)) {

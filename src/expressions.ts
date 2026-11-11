@@ -3422,7 +3422,12 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   let i = 0
   while (i < args.children.length) {
     const arg = args.children[i]
+    if (sig.foreign()) {
+      // WP27 S4.1: C borrows a nested layout field by its interior address.
+      ctx.embeddedRead = unwrapParens(arg).id
+    }
     const got = checkExpression(ctx, arg, scope, sig.paramTypes[i])
+    ctx.embeddedRead = -1
     const refused = refuseForeignNullable(ctx, sig, i, arg, got, sig.name)
     if (!refused && got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
       const wantName = ctx.table.typeName(sig.paramTypes[i])
@@ -3466,7 +3471,7 @@ const refuseForeignNullable = (
   }
   ctx.error(
     arg,
-    `Argument ${i + 1} of \`${shown}\` is a \`CPtr | null\` the program holds: a nullable foreign parameter takes the literal \`null\` or a pointer narrowed with \`!== null\`, so C is never handed a null by a path nobody tested`
+    `Argument ${i + 1} of \`${shown}\` is a \`${ctx.table.typeName(got)}\` the program holds: a nullable foreign parameter takes the literal \`null\` or a pointer narrowed with \`!== null\`, so C is never handed a null by a path nobody tested`
   )
   return true
 }

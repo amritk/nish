@@ -171,6 +171,9 @@ const linkReceiver = (ctx: CheckContext, access: Node, receiverExpr: Node, recei
 /** `receiver.name` where `receiver` is a value, or a dotted builtin otherwise. */
 export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const receiverExpr = expr.children[0]
+  // WP27 S4.1: whether the caller admits this read of a nested layout field.
+  const embedded = ctx.embeddedRead === expr.id
+  ctx.embeddedRead = -1
   if (!isValueReceiver(ctx, receiverExpr, scope)) {
     if ((expr.flags & FLAG_OPTIONAL) !== 0) {
       ctx.errorAtProperty(expr, neverNullMessage(ctx, receiverExpr))
@@ -185,7 +188,9 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
     }
     return checkNamespaceProperty(ctx, expr, receiverExpr.text, expr.text)
   }
+  ctx.embeddedRead = unwrapParens(receiverExpr).id
   const receiver = linkReceiver(ctx, expr, receiverExpr, checkExpression(ctx, receiverExpr, scope, -1))
+  ctx.embeddedRead = -1
   if (receiver === T_ERROR) {
     return T_ERROR
   }
@@ -213,7 +218,7 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
     return checkArrayProperty(ctx, expr, receiver)
   }
   if (ctx.table.isStruct(receiver)) {
-    return checkStructProperty(ctx, expr, receiver)
+    return checkStructProperty(ctx, expr, receiver, embedded)
   }
   if (ctx.table.isUnion(receiver)) {
     return checkUnionTag(ctx, expr, receiver)
@@ -264,7 +269,7 @@ const checkEnumMember = (ctx: CheckContext, expr: Node, info: EnumInfo): i32 => 
   return info.type
 }
 
-const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
+const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32, embedded: boolean): i32 => {
   const info = structOf(ctx, receiver)
   if (info === null) {
     return T_ERROR
@@ -282,6 +287,15 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
     ctx.errorAtProperty(
       expr,
       `Unknown field \`${expr.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\``
+    )
+    return T_ERROR
+  }
+  if (field.nested !== null && !embedded) {
+    // WP27 S4.1: a nested layout is a struct inside its object, and its read
+    // is that interior address, which must not outlive the object.
+    ctx.errorAtProperty(
+      expr,
+      `\`${ctx.textOf(expr)}\` is a \`declare class\` embedded in its object: read or write its fields (\`${ctx.textOf(expr)}.<field>\`) or pass it to a \`declare function\`, but it cannot be held as a value`
     )
     return T_ERROR
   }
@@ -971,6 +985,13 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
   if (secretFieldOf(ctx.table, info) !== null) {
     return ctx.errorType(expr, holderLiteralMessage(info.name))
   }
+  // WP27 S4.1: a layout class is built zero-filled by `new` and filled by C.
+  if (info.layout) {
+    return ctx.errorType(
+      expr,
+      `\`declare class ${info.name}\` is built with \`new ${info.name}()\`, which zero-fills it: an object literal cannot lay out a C struct`
+    )
+  }
   // Native lowering would give a literal the class's layout and its methods,
   // but under Node it is a plain object and a call on it throws (#656). The
   // `nish/threads` classes keep their own refusal, NL2515, from the scope pass.
@@ -1063,7 +1084,9 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
   if (!isValueReceiver(ctx, receiverExpr, scope)) {
     return ctx.errorType(target, `Cannot assign to \`${ctx.textOf(target)}\``)
   }
+  ctx.embeddedRead = unwrapParens(receiverExpr).id
   const receiver = checkExpression(ctx, receiverExpr, scope, -1)
+  ctx.embeddedRead = -1
   if (receiver === T_ERROR) {
     return T_ERROR
   }
@@ -1123,6 +1146,14 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
       `Unknown field \`${target.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\``
     )
     return T_ERROR
+  }
+  if (field.nested !== null) {
+    // WP27 S4.1: the nested struct is part of its object, and is changed
+    // field by field, as C changes it without a struct assignment.
+    return ctx.errorType(
+      target,
+      `Cannot assign to \`${ctx.textOf(target)}\`: a \`declare class\` embedded in its object is written field by field`
+    )
   }
   if (field.readonly && !assignableReadonly(ctx, info, target, receiverExpr, expr.text)) {
     const where = info.kind === STRUCT_CLASS ? " outside its constructor" : ""

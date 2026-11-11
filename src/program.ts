@@ -1034,9 +1034,17 @@ export class FieldInfo {
    * (`src/json-typed.ts`, docs/LANGUAGE.md, "Typed JSON").
    */
   wireName: string
+  /**
+   * WP27 S4.1: the layout class this field of a layout class embeds by
+   * value, as C embeds a nested struct; `null` for any other field. The
+   * LLVM member is `%struct.<nested>`, not a pointer, and a read is the
+   * address of that member inside the object (`emitPropertyAccess`).
+   */
+  nested: StructInfo | null
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
+    this.nested = null
     this.type = type
     this.index = 0
     this.offset = 0
@@ -1153,9 +1161,20 @@ export class StructInfo {
    * shape 2); shape 1 calls it on the field as it is, `null` included.
    */
   handleTested: boolean
+  /**
+   * WP27 S4.1: a `declare class`, a C struct layout. Its fields are foreign
+   * scalars, `CPtr`s and nested layouts, laid out as clang lays out the C
+   * struct; `new` zero-fills it and a `declare function` takes it by pointer
+   * (docs/wp27-ffi.md §9).
+   */
+  layout: boolean
+  /** Pass 1b is collecting this layout's fields, so a nesting cycle is caught. */
+  laying: boolean
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
+    this.layout = false
+    this.laying = false
     this.kind = kind
     this.origin = origin
     this.type = type

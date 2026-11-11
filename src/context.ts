@@ -234,6 +234,14 @@ export class CheckContext {
    */
   awaitedCall: i32
   /**
+   * WP27 S4.1: the id of the member expression that may read a nested layout
+   * field, or -1. A read of one is the address of a struct inside its object,
+   * so it is legal only as the receiver of a further member or as an
+   * argument a `declare function` borrows. Those callers set it before
+   * checking the read, standing in for a parent pointer as `forOfWalk` does.
+   */
+  embeddedRead: i32
+  /**
    * WP29: parallel to `arrowOuterScopes`, each arrow being checked, its own
    * parameter scope, and what it may read of its function's names, one of the
    * `CAPTURE_*` modes (`src/parallel.ts`): every arrow argument but one given
@@ -367,6 +375,7 @@ export class CheckContext {
     this.awaitStatement = null
     this.awaitedCall = -1
     this.forOfWalk = null
+    this.embeddedRead = -1
     this.errored = false
     this.typeBindings = new StringMap()
     this.functionBindings = new FunctionBindings()
