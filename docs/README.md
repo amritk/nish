@@ -187,6 +187,9 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   reader needs may live only in the hero.
 - The icons beside the sidebar's groups and the header's links are the `icon`
   keys in `scalar.config.json`.
+- The changelog's RSS feed, `/reference/changelog/rss.xml`, is `siteConfig.rss`
+  in `scalar.config.json`: each `CHANGELOG.md` heading carrying an ISO date
+  (`## [0.38.0] - 2026-11-10`) is one item, so a release heading keeps its date.
 
 To see a change, run `npx @scalar/cli project preview scalar.config.json`
 (it needs Node 24) and look at the landing page, a page with tables and code,
