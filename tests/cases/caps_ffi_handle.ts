@@ -1,4 +1,4 @@
-// WP40 H1.2: a `using` of a handle class is `ffi` at the `using` itself: its
+// WP53 H1.2: a `using` of a handle class is `ffi` at the `using` itself: its
 // block calls the close `[Symbol.dispose]` names at every exit. The report keeps
 // the shortest chain per capability, so `main`'s witness is that close, called
 // at the `using` line (distance 0), rather than the constructor's `fopen` the

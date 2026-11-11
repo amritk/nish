@@ -1,4 +1,4 @@
-// WP40 H1.1, Rows 5 and 35: the forms a handle or its pointer may not take
+// WP53 H1.1, Rows 5 and 35: the forms a handle or its pointer may not take
 // that pass every other check, one per method: the pointer bound by `using`,
 // tested by `??` or against another bound pointer, assigned to a `let`,
 // compared inside a `new`'s argument, a handle chosen by `?:` as

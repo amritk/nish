@@ -1134,7 +1134,7 @@ export class StructInfo {
    */
   jsonTag: string
   /**
-   * WP40 §4a. A class with one `CPtr` field is an owned foreign handle: the
+   * WP53 §4a. A class with one `CPtr` field is an owned foreign handle: the
    * field is the C resource it owns, its `[Symbol.dispose]` closes it, and
    * `src/handles.ts` keeps every value of the class where that close is the only
    * one. Set in `declareStruct`, before a field is collected.
@@ -1143,7 +1143,7 @@ export class StructInfo {
   /** The handle's `CPtr` field, or `""` for any other struct. */
   handleField: string
   /**
-   * WP40 H1.2: the C function the handle's `[Symbol.dispose]` calls, once
+   * WP53 H1.2: the C function the handle's `[Symbol.dispose]` calls, once
    * `src/handles.ts` has found it sound; what every exit of a `using` block
    * calls on the field. `null` for any other struct.
    */

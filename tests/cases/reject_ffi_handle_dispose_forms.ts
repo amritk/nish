@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 35: more dispose bodies that are close to one of the two
+// WP53 H1.1, Row 35: more dispose bodies that are close to one of the two
 // shapes (§4b) but run something besides the one close. A file of their own
 // keeps each case's refusals under the twenty a compile prints.
 declare function opendir(path: string): CPtr

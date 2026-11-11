@@ -91,9 +91,9 @@ export const isForeignType = (table: TypeTable, t: i32): boolean =>
   isForeignScalar(t) || table.stripNull(t) === T_CPTR
 
 /**
- * A buffer a `declare function` takes (WP40 B1.1): a `u8[]` or a `readonly
+ * A buffer a `declare function` takes (WP53 B1.1): a `u8[]` or a `readonly
  * u8[]`, which C sees as a pointer to its bytes and whose length is held to
- * the `u64` after it (`docs/wp40-ffi-buffers-handles.md` §3a). It is kept out
+ * the `u64` after it (`docs/wp53-ffi-buffers-handles.md` §3a). It is kept out
  * of `isForeignType` because it is not one value with nothing to be wrong
  * about: it is valid only in a run that a count closes, which is a rule about
  * the parameter list rather than about one type.

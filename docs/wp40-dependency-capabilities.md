@@ -17,9 +17,9 @@ compiles to the IR it compiled to before.
 where this note disagrees with it, LANGUAGE.md wins. The security record is
 [security/capabilities.md](security/capabilities.md).
 
-(The number 40 is shared with
-[wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md), an unrelated
-work package; the two are told apart by their names.)
+(The FFI buffers-and-handles note once shared the number 40; it is now
+WP53, [wp53-ffi-buffers-handles.md](wp53-ffi-buffers-handles.md), an
+unrelated work package.)
 
 ## 1. Why
 

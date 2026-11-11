@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 19: an exported function's parameter is not a borrowing one,
+// WP53 H1.1, Row 19: an exported function's parameter is not a borrowing one,
 // since a caller in another module could keep what it lends.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

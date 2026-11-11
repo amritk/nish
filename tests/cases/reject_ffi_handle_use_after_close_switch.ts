@@ -1,4 +1,4 @@
-// WP40 H1.3, §4c: a `using` in one `case` block closes when that block ends,
+// WP53 H1.3, §4c: a `using` in one `case` block closes when that block ends,
 // so a later `case` cannot read it.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d H2: a closure's parameter is not a borrowing one. The `.err`
+// WP53 H1.1, §4d H2: a closure's parameter is not a borrowing one. The `.err`
 // names the arrow's parameter by position, since the function type the arrow
 // is lent to is refused too, in the same words.
 declare function fopen(path: string, mode: string): CPtr | null

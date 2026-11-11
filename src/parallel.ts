@@ -1546,7 +1546,7 @@ export const isThreadsLayout = (info: StructInfo): boolean => {
  * An arrow given to an ordinary function's parameter may capture none of them,
  * since its callee may hand it on to a parallel form or a `spawn`, nor a
  * foreign handle or its pointer, whose every name the handle rules keep inside
- * the `using` block that opens it (WP40 §4). The parallel forms and `spawn`
+ * the `using` block that opens it (WP53 §4). The parallel forms and `spawn`
  * meet a handle by the handle rules' own refusal, as before.
  */
 const captureObstacle = (
@@ -2957,7 +2957,7 @@ const walkScopes = (
       } else if (
         !isScopeCall(program, init, scopeType) &&
         !isLockCall(program, init) &&
-        openedHandle(program, table, init) === null // WP40 H1.2: its block closes it
+        openedHandle(program, table, init) === null // WP53 H1.2: its block closes it
       ) {
         out.push(new ScopeFinding(decl, usingNotScopeMessage()))
       }

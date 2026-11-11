@@ -113,7 +113,7 @@ the record that found it. The notes below the table name each such finding.
    in the runtime. RT-15 (Medium), a `string` a `declare function` returns
    (WP27 S3.2), is counted the same way. So is RT-16 (Medium), `readCString`
    and the literal `null` a `CPtr | null` parameter takes (WP27 S3.3), and
-   RT-18 (Medium), a `u8[]` lent to C with its count checked (WP40 B1.2), and
+   RT-18 (Medium), a `u8[]` lent to C with its count checked (WP53 B1.2), and
    RT-20 (Medium), the C resource a `using` owns (#861). RT-21 (Low),
    `nish_argv_init` testing `malloc`'s answer for null only after computing
    from it, was found by #888's harness stage while building the runtime under

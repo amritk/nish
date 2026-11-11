@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 10: a `scope()` task capturing a handle could call it from
+// WP53 H1.1, Row 10: a `scope()` task capturing a handle could call it from
 // another thread, and after the close.
 import { scope } from "nish/threads"
 declare function fopen(path: string, mode: string): CPtr | null

@@ -916,7 +916,7 @@ reference never crosses the boundary in either direction:
   mode added later is refused until `src/visibility.ts` says it is closed.
 
 A real C callback — a code pointer C can call — is
-[wp27-ffi.md](wp27-ffi.md)'s and [wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md)'s
+[wp27-ffi.md](wp27-ffi.md)'s and [wp53-ffi-buffers-handles.md](wp53-ffi-buffers-handles.md)'s
 question, and this note does not move it: it would need an exported
 trampoline per function, which is a different construct.
 
@@ -1027,7 +1027,7 @@ promises, module storage, classes or a parameter's own storage, not functions
 | `docs/LANGUAGE.md:8766`, `src/builtins.ts:1060` | a builtin or array method takes no function value | intact | no builtin takes a reference in stage 1 |
 | `src/arrays.ts:1068` | a compiler helper is "a class because Nish-0 has no closures (as `PerfWalk` is)": the compiler's own language, not the user's | intact | closures stay refused; the freeze keeps `src/` off references for a release (§5.4) |
 | `docs/LANGUAGE.md:9537`, `docs/IR_COOKBOOK.md:942`, 1236 | `sort`'s comparator is called directly, no pointer | weakened | a reference comparator gives one `switch` instantiation, inlined like §3's |
-| `docs/LANGUAGE.md:6267`, `docs/wp27-ffi.md:510`, `docs/wp40-ffi-buffers-handles.md:1270` (and 620, 679, 835, 869, 1389) | no C callbacks (`reject_ffi_callback`) | intact, extended | `reject_fnref_ffi` (§5.2) |
+| `docs/LANGUAGE.md:6267`, `docs/wp27-ffi.md:510`, `docs/wp53-ffi-buffers-handles.md:1270` (and 620, 679, 835, 869, 1389) | no C callbacks (`reject_ffi_callback`) | intact, extended | `reject_fnref_ffi` (§5.2) |
 | `docs/security/async.md:130` | a dispatch is a `switch` over known handlers | intact | a tag can only be made by naming a member; the `default` arm cannot reach outside the set |
 
 **The language reference and the user guide**

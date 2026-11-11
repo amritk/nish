@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 7: a `Result` arm of a handle class names it outside a
+// WP53 H1.1, Row 7: a `Result` arm of a handle class names it outside a
 // borrowing parameter; a fallible open is a `CPtr | null` field.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

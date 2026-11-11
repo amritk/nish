@@ -1,4 +1,4 @@
-// WP40 B1.2: a `u8[]` passed to `read` is written by C in place, and the bytes
+// WP53 B1.2: a `u8[]` passed to `read` is written by C in place, and the bytes
 // it wrote are the array's own afterwards. The count is the buffer's length,
 // proven, so the call to `read` carries no check; `write` is passed the count
 // `read` returned, which one `ffi-length` check compares against the length.

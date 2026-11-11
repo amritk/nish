@@ -1,4 +1,4 @@
-// WP40 H1.3, §6 row 15: a method cannot keep a lent handle, or its own `this`,
+// WP53 H1.3, §6 row 15: a method cannot keep a lent handle, or its own `this`,
 // in a field of another class.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

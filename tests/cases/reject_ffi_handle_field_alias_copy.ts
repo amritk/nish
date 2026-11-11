@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 16b: a `const` bound to the pointer may not be copied to a
+// WP53 H1.1, Row 16b: a `const` bound to the pointer may not be copied to a
 // second `const`.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 18: the `using` block is the only caller of a handle's
+// WP53 H1.1, Row 18: the `using` block is the only caller of a handle's
 // dispose.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

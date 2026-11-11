@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 4: inside the class, a closure capturing a `const` read from
+// WP53 H1.1, Row 4: inside the class, a closure capturing a `const` read from
 // the pointer could outlive the call. An arrow argument may read its function's
 // `const` locals, but never a `CPtr`: the capture rule refuses it by type
 // before the handle rules are asked.

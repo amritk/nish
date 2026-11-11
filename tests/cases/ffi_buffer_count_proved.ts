@@ -1,4 +1,4 @@
-// WP40 B1.2: the one count the compiler proves is `toU64(x.length)` where `x`
+// WP53 B1.2: the one count the compiler proves is `toU64(x.length)` where `x`
 // is the buffer argument itself, a `const` local or a parameter named alone,
 // and no later argument may resize an array. `constLocal` and `param` carry
 // no check in the IR. Each of the other three keeps its `ffi-length` check,

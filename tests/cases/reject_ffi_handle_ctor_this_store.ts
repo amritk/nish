@@ -1,4 +1,4 @@
-// WP40 H1.3, #566: `this` cannot be stored from the handle class's own
+// WP53 H1.3, #566: `this` cannot be stored from the handle class's own
 // constructor. This is refused by the ordinary value rule, as a method's
 // `this` stored is; it does not test the constructor branch, which only
 // `_ctor_this_lend` and `_ctor_this_receiver` reach.

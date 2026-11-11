@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 6: an array of handles would hold them past the `using` block
+// WP53 H1.1, Row 6: an array of handles would hold them past the `using` block
 // that closes each.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

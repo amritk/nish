@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 29: an object literal holding a handle would keep it past the
+// WP53 H1.1, Row 29: an object literal holding a handle would keep it past the
 // call.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
