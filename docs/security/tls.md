@@ -210,7 +210,7 @@ Fuzzed by `tests/fuzz/targets/tls-client-hello.ts`, `tests/fuzz/targets/tls-reco
 | `tls-record` | `TlsRecordReader` and `TlsRecordProtection` under the clear state and each of the three suites with RFC 8448's or a synthetic secret: raw bytes in chunks, or a script the writer seals (KeyUpdate included), checking `next()` against `tlsRecordLength` and what `open` answers | 395,065 (16 KiB buffers and a key install per input make it the slowest target) |
 | `tls-server-flight` | The client's readers into a `TlsServerFlightView` (`tlsReadServerHello`, `tlsReadEncryptedExtensions`, `tlsReadCertificate`, `tlsReadCertificateVerify`, `tlsReadNewSessionTicket`) at the offset and trim the first bytes choose, checking every window lies inside the input; and `TlsClient` fed a server's flight in chunks the input sizes, at the levels it chooses, checking a refusal is an alert and leaves the client failed | not yet run under libFuzzer; CI's fuzz smoke replays its 12-seed corpus |
 
-`tls-client-hello` and `tls-record` each ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding; `tls-server-flight`, added with the client, came later and has had only CI's replay.
+`tls-client-hello` and `tls-record` each ran for 31 minutes (1,861 s, one core each, four at a time) on a commit of #910's branch that `main` does not hold (the PR squashed, so no SHA names it), starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding; `tls-server-flight`, added with the client, came later and has had only CI's replay.
 
 **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
 
@@ -1226,7 +1226,7 @@ so a reader can see each departure against it.
 
 Names of files, functions and tests are those the stages use, and RFC sections
 are RFC 8446's; the existing code it describes is as of commit b515c1b, and its
-`file:line` anchors are at 394c439. What #652 and #665 changed when `main` was
+anchors are by function name, except those stated at 4bbb392; the line numbers it once gave were taken at a commit that is not on `main`. What #652 and #665 changed when `main` was
 merged at 4bbb392 is described as of 4bbb392, and each sentence that says so
 names it.
 
@@ -1760,20 +1760,19 @@ As TLS-1 records for the other secrets:
   on a resumed one, so `tlsExchange` always rebuilds the array, extracts
   under it and wipes it, and its one `secureZero` is unconditional. The
   constant moves out of `tlsHandshakeFromEcdhe256` and
-  `tlsHandshakeFromEcdhe384` (`std/net/tls.ts:399`, `:403` at 394c439),
+  `tlsHandshakeFromEcdhe384` (`std/net/tls.ts`),
   which take the salt instead; wiping a public constant's copy costs one
   store.
 - **The master secret.** A resumed handshake sends no Certificate or
   CertificateVerify, so it never runs `sign`, where a full handshake derives
   the master secret and wipes it (`tlsMasterSecretInto` to `secureZero(master)`,
-  `std/net/tls.ts:1338-1384` at 394c439). That step is split out of `sign`
+  in `TlsServer.sign`). That step is split out of `sign`
   into one method both paths call once the server Finished is sent, the
   master-secret step `TlsServer.masterSecretStep`.
 
   Before its `using arena()` block opens, it points `clientApplicationSecret`,
   `serverApplicationSecret`, `exporterSecret` and `expectedClientFinished` at
-  the slot's arrays, as `sign` does today (`std/net/tls.ts:1303-1307` at
-  394c439), so the derivations below write into the pool's `Secret` fields
+  the slot's arrays, as `sign` does today (the assignments at the top of `sign`), so the derivations below write into the pool's `Secret` fields
   `TlsServer.wipe` reaches, not into ones the block releases. Then, in order,
   as `sign` does today, it derives the master secret from the handshake secret;
   the client and server application traffic secrets ("c ap traffic", "s ap
