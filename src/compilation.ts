@@ -120,6 +120,7 @@ import {
   FunctionSig,
   ImportBinding,
   ParallelCall,
+  SpreadCopy,
   STRUCT_CLASS,
   StructInfo,
   StructRegistry,
@@ -3300,22 +3301,29 @@ export class Compilation {
         }
         for (const cls of classes) {
           if (cls.fields.length > iface.fields.length && implementsDeclaration(cls, iface)) {
-            const extra = cls.fields[iface.fields.length].name
-            this.sink.report(
-              copy.file,
-              copy.at.start,
-              copy.at.end,
-              `Spread of \`${this.table.typeName(copy.source)}\` into \`${this.table.typeName(copy.into)}\` may ` +
-                `spread an instance of \`${cls.name}\`, which implements it with field \`${extra}\` besides: Node copies every own ` +
-                "field of the instance a value holds, and the native copy only the interface's, so spread a value " +
-                "of a class type, or set the fields by name"
-            )
+            this.reportWideSpread(copy, cls, cls.fields[iface.fields.length].name)
             reported.add(place)
             break
           }
         }
       }
     }
+  }
+
+  /**
+   * The refusal of spread `copy`, whose interface source may hold an instance
+   * of class `cls`, which carries field `extra` beyond the interface's.
+   */
+  reportWideSpread(copy: SpreadCopy, cls: StructInfo, extra: string): void {
+    this.sink.report(
+      copy.file,
+      copy.at.start,
+      copy.at.end,
+      `Spread of \`${this.table.typeName(copy.source)}\` into \`${this.table.typeName(copy.into)}\` may ` +
+        `spread an instance of \`${cls.name}\`, which implements it with field \`${extra}\` besides: Node copies every own ` +
+        "field of the instance a value holds, and the native copy only the interface's, so spread a value " +
+        "of a class type, or set the fields by name"
+    )
   }
 
   /**

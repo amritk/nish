@@ -81,6 +81,7 @@ import EnumInfo from "./program" -> struct EnumInfo
 import FunctionSig from "./program" -> struct FunctionSig
 import ImportBinding from "./program" -> struct ImportBinding
 import ParallelCall from "./program" -> struct ParallelCall
+import SpreadCopy from "./program" -> struct SpreadCopy
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import StructInfo from "./program" -> struct StructInfo
 import StructRegistry from "./program" -> struct StructRegistry
@@ -304,6 +305,7 @@ struct Compilation (class) size=208 align=8 exported
   method rejectSymbolClashes -> @Compilation.rejectSymbolClashes
   method reportForeignMismatch -> @Compilation.reportForeignMismatch
   method rejectWideSpreads -> @Compilation.rejectWideSpreads
+  method reportWideSpread -> @Compilation.reportWideSpread
   method rejectForeignShadows -> @Compilation.rejectForeignShadows
   method reportForeignShadow -> @Compilation.reportForeignShadow
   method rejectCLibrarySymbols -> @Compilation.rejectCLibrarySymbols
@@ -1685,9 +1687,9 @@ function Compilation.reportForeignMismatch(this: Compilation, unit: ModuleUnit, 
   callee +5:109 signatureText -> @signatureText
 function Compilation.rejectWideSpreads(this: Compilation): void -> @Compilation.rejectWideSpreads [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via DiagnosticSink.report
-  calls: CheckedProgram.struct DiagnosticSink.report StringSet.add StringSet.constructor StringSet.has TypeTable.nameOf TypeTable.typeName implementsDeclaration nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
-  pointer this: size=208 writesThrough=false captured=false
+  sharedWrite: via Compilation.reportWideSpread
+  calls: CheckedProgram.struct Compilation.reportWideSpread StringSet.add StringSet.constructor StringSet.has TypeTable.nameOf implementsDeclaration nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
+  pointer this: size=208 writesThrough=false captured=false passedTo=Compilation.reportWideSpread#0
   stackSites=2 stackLocals=2
   local +0:11 classes: StructInfo[] (const)
   local +1:16 unit: ModuleUnit (const)
@@ -1704,11 +1706,19 @@ function Compilation.rejectWideSpreads(this: Compilation): void -> @Compilation.
   callee +21:13 StringSet.has -> @StringSet.has
   local +24:20 cls: StructInfo (const)
   callee +25:58 implementsDeclaration -> @implementsDeclaration
-  local +26:19 extra: string (const)
-  callee +27:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +31:30 TypeTable.typeName -> @TypeTable.typeName
-  callee +31:75 TypeTable.typeName -> @TypeTable.typeName
-  callee +36:13 StringSet.add -> @StringSet.add
+  callee +26:13 Compilation.reportWideSpread -> @Compilation.reportWideSpread
+  callee +27:13 StringSet.add -> @StringSet.add
+function Compilation.reportWideSpread(this: Compilation, copy: SpreadCopy, cls: StructInfo, extra: string): void -> @Compilation.reportWideSpread [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via DiagnosticSink.report
+  calls: DiagnosticSink.report TypeTable.typeName nish_str_concat
+  pointer this: size=208 writesThrough=false captured=false
+  pointer copy: size=32 writesThrough=false captured=false
+  pointer cls: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:5 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +4:22 TypeTable.typeName -> @TypeTable.typeName
+  callee +4:67 TypeTable.typeName -> @TypeTable.typeName
 function Compilation.rejectForeignShadows(this: Compilation): void -> @Compilation.rejectForeignShadows [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.reportForeignShadow
