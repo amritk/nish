@@ -142,11 +142,13 @@ struct HttpHandler (class) size=264 align=8 exported
   field sent: i64 index=33 offset=248 initialized
   field outputSize: i32 index=34 offset=256 initialized
   field draining: boolean index=35 offset=260 initialized
-  field jsonBegun: boolean index=36 offset=261 initialized
+  field deferring: boolean index=36 offset=261 initialized
+  field jsonBegun: boolean index=37 offset=262 initialized
   constructor -> @nish.HttpHandler.constructor
   method watch -> @nish.HttpHandler.watch
   method fired -> @nish.HttpHandler.fired
   method wait -> @nish.HttpHandler.wait
+  method deferSends -> @nish.HttpHandler.deferSends
   method drain -> @nish.HttpHandler.drain
   method acceptAll -> @nish.HttpHandler.acceptAll
   method flush -> @nish.HttpHandler.flush
@@ -370,6 +372,11 @@ function HttpHandler.wait(this: HttpHandler, timeoutMs: i32): i32 -> @nish.HttpH
   callee +41:9 Http1Server.expire -> @nish.Http1Server.expire
   callee +42:7 HttpHandler.sweep -> @nish.HttpHandler.sweep
   callee +46:7 HttpHandler.expireBodies -> @nish.HttpHandler.expireBodies
+function HttpHandler.deferSends(this: HttpHandler): void -> @nish.HttpHandler.deferSends [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer this: size=264 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function HttpHandler.drain(this: HttpHandler): void -> @nish.HttpHandler.drain [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -436,8 +443,8 @@ function HttpHandler.owable(this: HttpHandler, slot: i32, conn: Http1Connection)
   pointer conn: size=192 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0 nish.HttpHandler.roomy#1
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
-  callee +3:7 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
-  callee +4:7 HttpHandler.roomy -> @nish.HttpHandler.roomy
+  callee +4:7 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  callee +6:7 HttpHandler.roomy -> @nish.HttpHandler.roomy
 function HttpHandler.settle(this: HttpHandler, slot: i32, conn: Http1Connection): void -> @nish.HttpHandler.settle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -447,16 +454,16 @@ function HttpHandler.settle(this: HttpHandler, slot: i32, conn: Http1Connection)
   pointer conn: size=192 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0 nish.Http1Connection.wantsWrite#0 nish.HttpHandler.roomy#1
   stackSites=0 stackLocals=0
   callee -1:9 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
-  local +2:11 wants: i32 (const)
-  callee +2:24 Http1Server.flush -> @nish.Http1Server.flush
+  local +2:9 wants: i32 (let)
+  callee +2:22 Http1Server.flush -> @nish.Http1Server.flush
   callee +4:7 HttpHandler.closeSlot -> @nish.HttpHandler.closeSlot
-  callee +7:56 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
-  callee +8:7 HttpHandler.closeSlot -> @nish.HttpHandler.closeSlot
-  callee +11:9 Http1Server.rearm -> @nish.Http1Server.rearm
-  callee +12:29 Http1Server.fd -> @nish.Http1Server.fd
-  local +14:11 at: i32 (const)
-  callee +15:66 HttpHandler.roomy -> @nish.HttpHandler.roomy
-  callee +16:7 HttpHandler.enqueue -> @nish.HttpHandler.enqueue
+  callee +13:56 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  callee +14:7 HttpHandler.closeSlot -> @nish.HttpHandler.closeSlot
+  callee +17:9 Http1Server.rearm -> @nish.Http1Server.rearm
+  callee +18:29 Http1Server.fd -> @nish.Http1Server.fd
+  local +20:11 at: i32 (const)
+  callee +21:66 HttpHandler.roomy -> @nish.HttpHandler.roomy
+  callee +22:7 HttpHandler.enqueue -> @nish.HttpHandler.enqueue
 function HttpHandler.roomy(this: HttpHandler, conn: Http1Connection): boolean -> @nish.HttpHandler.roomy [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
