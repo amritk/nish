@@ -216,7 +216,11 @@ a forwarder would read too.
 
 A client's first Initial carries a DCID it chose at random, at least 8 bytes
 (RFC 9000 §7.2). The program reads its first byte. If the byte is below N, it
-names that worker. If not, the byte modulo N does. Either way the choice is
+names that worker. If not, the byte modulo N does. When N does not divide
+256, that spread is uneven: the low residues get one more of the 256 byte
+values than the high ones (with N = 3, worker 0 gets 86/256 of new
+connections and workers 1 and 2 get 85/256). This affects load only, never
+correctness. Either way the choice is
 stable: a client keeps that DCID for every retransmitted Initial and for its
 0-RTT packets until it sees the server's SCID. Whichever
 worker receives the first Initial becomes the owner. Its reply's SCID carries
@@ -293,11 +297,23 @@ so the default Docker, containerd and Kubernetes profiles allow it.
 **Measured** here: the attach succeeds unprivileged in a container with
 `unprivileged_bpf_disabled=2`, where eBPF loads get EPERM.
 
-**GRO:** with `udpBind` flag 2 (`UDP_GRO`), the kernel coalesces datagrams of
-one flow before they are queued. The design assumes that the reuseport
-selection runs on the coalesced packet's first segment, and that one flow
-(one 4-tuple) is one connection, so coalescing never mixes two workers'
-datagrams. This is an **assumption**. The test matrix checks it (§7, row 9).
+**GRO is off on a steered socket.** With `udpBind` flag 2 (`UDP_GRO`), the
+kernel coalesces datagrams of one flow (one 4-tuple) into one buffer, and the
+reuseport selection runs once for it, on its first segment. A flow is not a
+connection: a client can run several QUIC connections over one UDP socket,
+and the server can have issued their IDs from different workers. Coalesced,
+the second connection's datagrams would reach the first one's worker, which
+by §6's rule drops them, and that connection would stall. So flag 4 refuses
+flag 2: `udpBind` answers -22 when both are set, and prefork never asks for
+GRO on a steered group. The two other ways out were rejected. Proving GRO
+safe is not possible, because the case above is legal (RFC 9000 §5.2 matches
+packets to connections by DCID, not by address). Forwarding a misrouted
+datagram to its worker brings back the channel §3 turned down, for a case
+that GRO off removes. The cost is one receive per datagram instead of one per
+coalesced batch. That is an **estimate**: it was not measured here, and a
+worker that needs the batching gets it back from more workers, which is the
+point of the design. Each datagram is then steered by its own DCID, so the
+connections that share a 4-tuple each reach their own worker (§7, row 9).
 
 ## 6. Security surface
 
@@ -337,7 +353,7 @@ UDP attach. The record carries:
 
 | # | What | Where | Platforms |
 | --- | --- | --- | --- |
-| 1 | The flag attaches the program. A datagram whose DCID byte 0 is k reaches socket k for short and long headers. Byte 0 ≥ N reaches socket byte mod N. A runt reaches socket 0. -22 for an undefined bit; -95 on Darwin | `tests/runtime-test.c` (`test_udp_steer`) | Linux; Darwin for -95 |
+| 1 | The flag attaches the program. A datagram whose DCID byte 0 is k reaches socket k for short and long headers. Byte 0 ≥ N reaches socket byte mod N. A runt reaches socket 0. -22 for an undefined bit and for flag 2 with flag 4; -95 on Darwin | `tests/runtime-test.c` (`test_udp_steer`) | Linux; Darwin for -95 |
 | 2 | Every ID a worker issues carries its k: first SCID, NEW_CONNECTION_ID, Retry SCID. With no worker index, IDs are as before | a unit case over `QuicConnection` and `QuicListener` | all |
 | 3 | A short-header packet whose byte 0 names another worker gets no stateless reset; byte 0 ≥ N still does | a unit case over `QuicListener` | all |
 | 4 | **Two workers; a client completes a request, rebinds its port mid-connection, and the next response reaches the new port from the same worker** (each response names its worker) | `tests/link/net_quic_prefork` | Linux |
@@ -345,7 +361,7 @@ UDP attach. The record carries:
 | 6 | A Retry from worker 1 brings the retried Initial back to worker 1 | `net_quic_prefork` | Linux |
 | 7 | Killing worker 1: its client gets a valid stateless reset from the restarted worker 1; worker 0's client finishes its request on the same connection | `net_quic_prefork` | Linux |
 | 8 | Index stability: with three workers, kill worker 1; packets with byte 0 = 1 reach the new worker 1, not worker 2 | `net_quic_prefork` | Linux |
-| 9 | With `UDP_GRO` on, row 4 still holds | `net_quic_prefork`, run with flag 2 | Linux |
+| 9 | **Two connections from one client UDP socket** (one 4-tuple), their IDs issued by worker 0 and worker 1, both complete requests, each served by its own worker, under a burst that would coalesce. `udpBind` with flags 2 and 4 together answers -22 | `net_quic_prefork`; the -22 in `test_udp_steer` | Linux |
 | 10 | Darwin runs QUIC with one worker and says so | `net_quic_prefork` | Darwin |
 | 11 | The flag under a wasm target is refused with NL2404 | `tests/cases/reject_net_udp_steer_wasm` | wasm32 |
 
@@ -357,7 +373,7 @@ reset.
 
 - **Runtime:** a `udpBind` flag 4 that, after the bind, attaches §3.1's
   program with `SO_ATTACH_REUSEPORT_CBPF`. It requires flag 1, answers -22
-  without it, and -95 off Linux. This is a change to `runtime/runtime-net.c`
+  without it or with flag 2 (§5), and -95 off Linux. This is a change to `runtime/runtime-net.c`
   even though classic BPF, not eBPF, was chosen. The plan listed that file as
   "only if eBPF". It is about 15 lines next to TCP flag 4. Because the flag is
   visible to users, it also needs its `docs/LANGUAGE.md` row (`:10872`), the
@@ -365,7 +381,7 @@ reset.
   the plan's file list.
 - **Prefork:** a way to make `listenPort` bind UDP. `PreforkConfig` gets a
   `listenUdp: boolean`. With it, `listen` binds N UDP sockets with flags 1
-  and 4 (and 2 from `listenFlags` for GRO), holds them, and hands socket k to
+  and 4 (never 2: GRO is off on a steered socket, §5), holds them, and hands socket k to
   worker k through `preforkListener`, as it does for TCP. When the attach
   fails, it falls back to one worker (§5). The names are a proposal; the
   stage chooses.
