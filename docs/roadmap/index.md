@@ -29,7 +29,6 @@ and where it is specified.
 6. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
 7. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
 8. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
-9. [WP44: Streaming file reads](wp44-streaming-files.md): F3, the HTTP example with flat memory.
 
 [WP34: Hosting cs: the network stack](wp34-hosting-cs.md)'s remaining waves are in the cs repository.
 
@@ -67,7 +66,6 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP38: SIMD](wp38-simd.md) | In progress | 8 of 10 |
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 12 of 27 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
-| [WP44: Streaming file reads](wp44-streaming-files.md) | In progress | 3 of 4 |
 | [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md) | In progress | 3 of 4 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | Proposed | 2 of 13 |
@@ -109,6 +107,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP40: Dependency capabilities](wp40-dependency-capabilities.md) | Landed | 1 of 1 |
 | [WP40: Buffers and handles across `declare function`](wp40-ffi-buffers-handles.md) | Landed | 1 of 1 |
 | [WP42: A multi-core server from pre-forked processes](wp42-multicore-server.md) | Landed | 1 of 1 |
+| [WP44: Streaming file reads](wp44-streaming-files.md) | Landed | 4 of 4 |
 | [WP45: Name resolution: a DNS stub resolver](wp45-name-resolution.md) | Landed | 1 of 1 |
 | [WP47: Shared work across cores: regions, atomics and rings](wp47-shared-memory.md) | Landed | 1 of 2 |
 | [WP48: Compressed 32-bit references](wp48-compressed-references.md) | Landed | 2 of 4 |
