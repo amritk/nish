@@ -558,12 +558,20 @@ const DECLARED = [
     changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "the program imports asciiLower, asciiUpper and split from nish/text, which the 0.37.0 seed's std/text.ts does not export, so only the candidate compiles it",
   },
-  // #1362: std/regex.ts makes its tables through regexZeros/regexZeroBytes.
-  {
+  // #1362: std/regex.ts makes its tables through regexZeros/regexZeroBytes,
+  // which moves regex.ll in the five corpus programs importing nish/regex.
+  ...[
+    "bench/regex/main.ts",
+    "tests/link/caps_dep_std_not_refused/main.ts",
+    "tests/link/std_json_format/main.ts",
+    "tests/link/std_regex_node/main.ts",
+    "tests/link/std_text_camel_case/main.ts",
+  ].map((program) => ({
+    program,
     file: "regex.ll",
     changelog: "regex no longer hangs under Node",
-    why: "std/regex.ts zero-fills every table it reads before writing through two new helpers, regexZeros and regexZeroBytes, so the module every importer of nish/regex writes has new functions and calls; no importer's own module moves",
-  },
+    why: "std/regex.ts zero-fills every table it reads before writing through two new helpers, regexZeros and regexZeroBytes, so the program's nish/regex module has new functions and calls; its own module does not move",
+  })),
   // Stage 5a: an --emit-dts compile is a page module, so Math.sin, cos, exp,
   // log, pow and a float % in it call std/math.ts's copies (`@nish.<name>F64`)
   // instead of an intrinsic or `frem` a page could not link.
