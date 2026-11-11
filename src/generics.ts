@@ -2080,8 +2080,7 @@ const resolveFunctionArgument = (
   }
   if (
     (inLocal !== null && ctx.table.isFnRef(ctx.table.stripNull(inLocal.type))) ||
-    written.kind === N_MEMBER ||
-    written.kind === N_INDEX
+    ((written.kind === N_MEMBER || written.kind === N_INDEX) && rootedInLocal(written, scope))
   ) {
     const type = inLocal !== null ? scope.typeOf(inLocal) : checkExpression(ctx, written, scope, -1)
     if (type === T_ERROR) {
@@ -2193,6 +2192,20 @@ const resolveFunctionArgument = (
   }
   unifyAnnotation(ctx, answerAnnotation(fnType), fn.returnType, names, bindings)
   return fn
+}
+
+/**
+ * Whether the field or element read `expr` starts from a local or `this`, so
+ * it is a place that may hold a function reference. A member of a builtin
+ * namespace or a module, such as `Math.abs`, starts from neither and is left
+ * to the refusal of a function argument that names no function (NL2339).
+ */
+const rootedInLocal = (expr: Node, scope: Scope): boolean => {
+  let root = expr
+  while (root.kind === N_MEMBER || root.kind === N_INDEX || root.kind === N_PAREN) {
+    root = root.children[0]
+  }
+  return root.kind === N_THIS || (root.kind === N_IDENT && scope.lookup(root.text) !== null)
 }
 
 /**
@@ -2323,7 +2336,14 @@ const readsOnly = (expr: Node): boolean => {
   if (kind === N_BINARY) {
     const op = expr.text
     const arithmetic =
-      op === "+" || op === "-" || op === "*" || op === "&" || op === "|" || op === "^" || op === "<<" || op === ">>"
+      op === "+" ||
+      op === "-" ||
+      op === "*" ||
+      op === "&" ||
+      op === "|" ||
+      op === "^" ||
+      op === "<<" ||
+      op === ">>"
     return arithmetic && readsOnly(expr.children[0]) && readsOnly(expr.children[1])
   }
   return false
