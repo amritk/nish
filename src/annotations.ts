@@ -24,11 +24,8 @@ import { deferInstantiation, instantiateWritten } from "./generics"
 import { REGION_SPECIFIER, SIMD_SPECIFIER, simdMaskWidth } from "./nish-modules"
 import {
   FLAG_DEFAULT,
-  FLAG_OPTIONAL,
   FLAG_READONLY,
-  FLAG_REST,
   FLAG_STATIC,
-  N_EMPTY,
   N_FIELD,
   N_IDENT,
   N_LIST,
@@ -212,17 +209,6 @@ const unwrapTypeParen = (node: Node): Node =>
 const resolveFunctionReference = (node: Node, ctx: CheckContext): i32 => {
   const params: i32[] = []
   for (const param of node.children[0].children) {
-    if (
-      (param.flags & (FLAG_OPTIONAL | FLAG_REST)) !== 0 ||
-      param.children.length < 2 ||
-      param.children[1].kind === N_EMPTY
-    ) {
-      return ctx.errorType(
-        param,
-        `\`${ctx.textOf(node)}\` has a parameter the caller may leave out: a function reference names a ` +
-          "function whose every parameter the caller passes, each with its type written"
-      )
-    }
     if (unwrapTypeParen(param.children[1]).kind === N_TYPE_FUNCTION) {
       return ctx.errorType(
         param,

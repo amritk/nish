@@ -67,7 +67,7 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
-import { checkReferenceCall } from "./fnrefs"
+import { checkReferenceCall, methodReferenceMessage } from "./fnrefs"
 import { ParentTable } from "./parents"
 import {
   channelCapacityMessage,
@@ -271,12 +271,14 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
   }
   const field = info.field(expr.text)
   if (field === null) {
-    const isMethod = info.method(expr.text) !== null || info.methodTemplate(expr.text) !== null
-    const hint = isMethod ? " (it is a method; call it)" : ""
+    if (info.method(expr.text) !== null || info.methodTemplate(expr.text) !== null) {
+      ctx.errorAtProperty(expr, methodReferenceMessage(ctx.textOf(expr)))
+      return T_ERROR
+    }
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface"
     ctx.errorAtProperty(
       expr,
-      `Unknown field \`${expr.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\`${hint}`
+      `Unknown field \`${expr.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\``
     )
     return T_ERROR
   }

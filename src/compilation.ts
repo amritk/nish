@@ -51,6 +51,7 @@
 import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
+import { refuseHostReferences } from "./fnrefs"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
 import { portabilityFindings } from "./portability"
@@ -1103,7 +1104,12 @@ export class Compilation {
    * which package the file is in.
    */
   resolveBareSpecifier(dir: string, specifier: string): ResolvedModule {
-    const failed: ResolvedModule = { path: "", name: "", packageName: "", error: "" }
+    const failed: ResolvedModule = {
+      path: "",
+      name: "",
+      packageName: "",
+      error: "",
+    }
     const parsed = parseBareSpecifier(specifier)
     if (parsed === null) {
       // Pass 1 refuses a specifier that is neither relative nor a package name,
@@ -1403,7 +1409,9 @@ export class Compilation {
     // reference gets the dispatcher of the set its callee's place can hold.
     const refModules: RefModule[] = []
     for (const unit of this.modules) {
-      refModules.push(new RefModule(unit.checker.program, unit.checker.ctx, unit.file, unit.parents, unit.nodeCount))
+      refModules.push(
+        new RefModule(unit.checker.program, unit.checker.ctx, unit.file, unit.parents, unit.nodeCount)
+      )
     }
     if (resolveReferences(this.table, refModules)) {
       let r = 0
@@ -1454,6 +1462,11 @@ export class Compilation {
       programs.push(unit.checker.program)
     }
     const mode = buildModeOf(this.opts, programs)
+    // WP51 §5.2: no function reference crosses into code this compiler did not see.
+    refuseHostReferences(contexts, mode)
+    if (this.sink.hasErrors()) {
+      return false
+    }
     // Which array fields live inside their objects (`src/inline-arrays.ts`).
     // Every body has to be checked to know, and everything after this reads
     // the layout it settles: the ranges, the attribute facts, the emitter.

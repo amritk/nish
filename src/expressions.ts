@@ -26,7 +26,6 @@ import { Edit } from "./diagnostics"
 import { isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
 import { nullableOfChecked, resolveType } from "./annotations"
 import {
-  arrowElsewhereMessage,
   captureOuter,
   noCaptureMessage,
   checkGenericCall,
@@ -126,7 +125,7 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
-import { checkReferenceCall, functionReference } from "./fnrefs"
+import { checkReferenceCall, functionReference, refuseValueArrow } from "./fnrefs"
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
@@ -779,7 +778,7 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_ARROW:
       // WP29: an arrow is legal as the argument for a function-typed
       // parameter, which `checkGenericCall` resolves without coming here.
-      refuseOnce(ctx, expr, arrowElsewhereMessage())
+      refuseValueArrow(ctx, expr, scope)
       return T_ERROR
     case N_SUPER:
       // WP25. Every spelling of `super` lands here -- `super(...)` and
@@ -992,8 +991,8 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     refuseOnce(
       ctx,
       expr,
-      `\`${expr.text}\` is a function parameter and can only be called or passed on as a function argument: a ` +
-        `function is never a value in ${LANGUAGE}, so it cannot be stored, returned, compared or put in an array`
+      `\`${expr.text}\` is a function parameter and can only be called or passed on as a function argument: it ` +
+        "names the callee each call is compiled for, not a value, so it cannot be stored, returned, compared or put in an array"
     )
     return T_ERROR
   }

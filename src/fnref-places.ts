@@ -51,7 +51,14 @@ import {
   Node,
 } from "./nodes"
 import { ParentTable } from "./parents"
-import { CheckedProgram, ConstInfo, FunctionBindings, FunctionSig, Instantiation, ROLE_FUNCTION } from "./program"
+import {
+  CheckedProgram,
+  ConstInfo,
+  FunctionBindings,
+  FunctionSig,
+  Instantiation,
+  ROLE_FUNCTION,
+} from "./program"
 import { Local, Scope, STORAGE_PARAM } from "./symbols"
 import { T_ERROR, T_I32, T_VOID, TypeTable } from "./types"
 

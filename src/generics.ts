@@ -1949,6 +1949,12 @@ const writtenNames = (fn: FunctionSig): string[] => {
 const argumentOf = (call: Node, name: string, index: i32): string => argumentWords(call, name, index, false)
 
 /** `argumentOf` at the start of a sentence. */
+/** The name a call spells its callee with, `spawn` for `s.spawn(...)`; the template's own name otherwise. */
+const calleeSpelling = (call: Node, template: TemplateInfo): string => {
+  const callee = call.children[0]
+  return callee.kind === N_MEMBER || callee.kind === N_IDENT ? callee.text : template.sourceName
+}
+
 const argumentLead = (call: Node, name: string, index: i32): string => argumentWords(call, name, index, true)
 
 const argumentWords = (call: Node, name: string, index: i32, capital: boolean): string => {
@@ -2036,12 +2042,25 @@ const resolveFunctionArgument = (
   }
   const lead = `${argumentLead(call, template.sourceName, index)} must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`
   if (written.kind !== N_IDENT) {
-    refuseOnce(ctx, arg, `${lead}; a function is never a value computed at run time`)
+    refuseOnce(
+      ctx,
+      arg,
+      `${lead}; a function parameter is bound to a callee, not a value computed at run time`
+    )
     return null
   }
   const name = written.text
-  if (scope.lookup(name) !== null) {
-    refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`)
+  const inScope = scope.lookup(name)
+  if (inScope !== null) {
+    // WP51 S1: a reference is a value, and a function parameter takes a
+    // callee; stage 2 instantiates the template over a reference's set.
+    refuseOnce(
+      ctx,
+      arg,
+      ctx.table.isFnRef(ctx.table.stripNull(inScope.type))
+        ? `\`${name}\` is a function reference: \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
+        : `${lead}; \`${name}\` is a local, and a local is never a function`
+    )
     return null
   }
   if (ctx.capturesOuter(name)) {
@@ -2439,11 +2458,12 @@ export const refuseOnce = (ctx: CheckContext, node: Node, message: string): void
   ctx.errorOnce(node, node.start, message)
 }
 
-/** The refusal for an arrow anywhere but as a function argument. */
+/**
+ * The refusal for an arrow anywhere but as a function argument: stage 1 of
+ * WP51 makes a named top-level function a reference, not an arrow.
+ */
 export const arrowElsewhereMessage = (): string =>
-  "An arrow may only be written as the argument for a function-typed parameter of a top-level function, which " +
-  `lifts it into a function of its own: a function is never a value in ${LANGUAGE}, so it cannot be stored, ` +
-  "returned or called where it stands"
+  "an arrow in value position is not yet a function reference: declare it as a top-level function and name it"
 
 /** The refusal for an arrow given to `expose` or `exposeWith` that reads a name of the function it is written in. */
 const capturedMessage = (name: string): string =>
