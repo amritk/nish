@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 2: a `using` initialiser is exactly `new C(args)`; one picked
+// WP53 H1.1, Row 2: a `using` initialiser is exactly `new C(args)`; one picked
 // by a ternary is not.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

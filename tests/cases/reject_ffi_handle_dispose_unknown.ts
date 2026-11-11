@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 35: the close is a `declare function`; a misspelt one names
+// WP53 H1.1, Row 35: the close is a `declare function`; a misspelt one names
 // nothing.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

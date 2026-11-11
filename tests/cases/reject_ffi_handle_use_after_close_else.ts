@@ -1,4 +1,4 @@
-// WP40 H1.3, §4c: a `using` in an `if` branch closes when the branch ends, so
+// WP53 H1.3, §4c: a `using` in an `if` branch closes when the branch ends, so
 // the `else` cannot read it.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

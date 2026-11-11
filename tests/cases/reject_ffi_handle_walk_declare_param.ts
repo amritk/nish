@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d calling C: a declared parameter of a handle class's type hands
+// WP53 H1.1, §4d calling C: a declared parameter of a handle class's type hands
 // the object to C.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

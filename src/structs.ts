@@ -71,7 +71,7 @@ import {
   TemplateInfo,
 } from "./program"
 import { StringSet } from "./map"
-import { isNumeric, T_BOOL, T_CPTR, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
+import { isNumeric, T_BOOL, T_CPTR, T_ERROR, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
 import {
   handleFieldMessage,
   handleHeaderMessage,
@@ -458,7 +458,7 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
 }
 
 /**
- * WP40 §4a: a class with a `CPtr` field owns the C resource it points to, and
+ * WP53 §4a: a class with a `CPtr` field owns the C resource it points to, and
  * is a handle class. Marked before any field is collected, so the field's
  * own rules (`collectField`) and every annotation naming the class know it.
  */
@@ -490,9 +490,12 @@ const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void =>
  * the emitter can write without evaluating anything.
  */
 const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 => {
+  // A function reference is a tag only a function's name gives (WP51 §2.1):
+  // a number is not one, though both are an `i32`.
+  const number = ctx.table.isFnRef(want) ? T_I32 : want
   switch (expr.kind) {
     case N_NUMBER:
-      return want
+      return number
     case N_STRING:
       return ctx.table.stripNull(want) === T_STRING ? want : T_STRING
     case N_TEMPLATE:
@@ -505,7 +508,7 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
     case N_NULL:
       return ctx.table.isNullable(want) ? want : -1
     case N_UNARY:
-      return expr.text === "-" && expr.children[0].kind === N_NUMBER ? want : -1
+      return expr.text === "-" && expr.children[0].kind === N_NUMBER ? number : -1
     default:
       return -1
   }
@@ -653,7 +656,7 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     ctx.error(decl.children[1], `${what} cannot have type void`)
     return
   }
-  // WP40 §4a D1: a handle class's one pointer, `readonly` and written only by
+  // WP53 §4a D1: a handle class's one pointer, `readonly` and written only by
   // its constructor. Any other field holding a foreign address is refused, as
   // WP27 S2 refuses it everywhere: it would sit inside a value the arena owns
   // and the escape analysis walks (`src/annotations.ts`).
@@ -728,7 +731,7 @@ const rejectMemberModifiers = (ctx: CheckContext, decl: Node, what: string): boo
 }
 
 /**
- * WP40 D5: a handle class declares exactly one `[Symbol.dispose]`, an instance
+ * WP53 D5: a handle class declares exactly one `[Symbol.dispose]`, an instance
  * method, so two of the member rules `collectMethod` applies to every other
  * method apply to it too: no second one, and no modifier. The parser refuses a
  * `?` after a computed name, so an optional one never gets here.
@@ -753,7 +756,7 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
   // emitted by the construct rather than called, so the declaration is for
   // TypeScript and Node and has no signature here.
   if (name === DISPOSE_METHOD) {
-    // WP40 §4b: a handle class's dispose names its close, and is checked once
+    // WP53 §4b: a handle class's dispose names its close, and is checked once
     // every body is (`src/handles.ts`).
     if (!owner.handle && !isThreadsSource(ctx.program)) {
       ctx.error(decl.children[0], disposeElsewhereMessage(spelled(ctx, owner)))

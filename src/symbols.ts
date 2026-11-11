@@ -63,6 +63,11 @@ export class Local {
   /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
   type: i32
   storage: i32
+  /**
+   * WP51: the place of a local whose type is a function reference, in the
+   * place table `src/fnref-places.ts` keeps, and -1 until that pass asks.
+   */
+  place: i32
   mutable: boolean
   /**
    * WP34 N2: a `const` whose initialiser allocated a fresh array — a literal,
@@ -93,6 +98,7 @@ export class Local {
     this.captureOf = null
     this.pathIndex = ""
     this.literalKey = ""
+    this.place = -1
   }
 }
 

@@ -1,0 +1,1 @@
+`new Array<(i32) => i32>(n)` would zero-fill with 0, which names no function

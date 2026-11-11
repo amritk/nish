@@ -49,7 +49,7 @@ browser owns.
 This note is the Nish half of that boundary. It is
 [wp34](wp34-hosting-cs.md) §8's **N8** (host imports on wasm) and the
 host-driven half of **N9**, which [wp46](wp46-long-running-memory.md) left
-open. It keeps [wp27](wp27-ffi.md) and [wp40](wp40-ffi-buffers-handles.md)'s
+open. It keeps [wp27](wp27-ffi.md) and [wp53](wp53-ffi-buffers-handles.md)'s
 rules (buffers lent for the call, write-through, typed handles), and it changes
 their spelling for the page. A C function stays a `declare function`, and a
 function the page supplies is imported from the page's own TypeScript, where
@@ -188,7 +188,7 @@ attributes #3 = { "wasm-import-module"="host" "wasm-import-name"="nowMs" }
   one spelling, and a C definition can no longer silently replace an import:
   wasm-ld lets a C definition win over a declared import, which was checked.
   "The freestanding `--profile wasm` link resolves the declaration against the
-  C the link is given" (LANGUAGE.md, untested per wp40) is withdrawn. A C
+  C the link is given" (LANGUAGE.md, untested per wp53) is withdrawn. A C
   library on wasm stays a `--profile wasi` program. A host module imported in a
   native build is refused too, because there is no page there. The simulation
   that both builds compile imports no host module.
@@ -249,7 +249,7 @@ export function gpuBindTexture(slot: u32, t: GpuTexture): void { ... }
   - Storage anywhere a scalar goes, module storage (§5) included.
   - Nothing else: no arithmetic, no conversion to or from a number. A
     handle is made only by an import that returns one.
-- **Why not WP40's handle class.** A handle class owns a `CPtr`, lives only
+- **Why not WP53's handle class.** A handle class owns a `CPtr`, lives only
   in a `using`, and is closed at the end of its block. A GPU buffer lives as
   long as the module, in module storage, which a handle class can never be
   in. It is also not memory, so the module holding a stale index endangers
@@ -394,7 +394,7 @@ declare void @gpuWrite(i32, i32, i8*, i32, i32) #4
 - **The element types.** A host import takes `u8[]`, `u16[]`, `u32[]`,
   `i32[]`, `f32[]` and `f64[]` (and the `readonly` form of each), each
   followed by an element index `at` and an element count `n`, both `u32`.
-  WP40's C rule takes only `u8[]` with one `u64` byte count, because C would
+  WP53's C rule takes only `u8[]` with one `u64` byte count, because C would
   need an element size the declaration does not carry. The page does not: its
   typed array carries one. A `u64` index or count would cross as a `bigint`,
   an allocation per call, so it is refused with a message that names `u32`.
@@ -416,7 +416,7 @@ declare void @gpuWrite(i32, i32, i8*, i32, i32) #4
   `new Float32Array(n)` is a plain zero-filled `Array` in the TS reading, and
   it crosses as that array, unconverted, so a page that needs a real typed
   array in both readings lends module storage.
-- **Write-through: WP40's rule unchanged.** A `u8[]` argument may be written
+- **Write-through: WP53's rule unchanged.** A `u8[]` argument may be written
   by the host during the call, and the compiler records the call as a store.
   A `readonly` one may not. The rule is the declaration's word, as in C. The
   window is lent for the call: the page may not keep `(view, at)` and read it

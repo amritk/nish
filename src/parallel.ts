@@ -930,6 +930,13 @@ export const reduceElementMessage = (
       `the array its workers write, which a \`${spelled}\` cannot hold; declare the body to answer \`${table.typeName(table.enumBase(result))}\``
     )
   }
+  // WP51 §2.1: nor a function reference, whose zero is no function's tag.
+  if (table.isFnRef(result)) {
+    return (
+      `\`${functions[0].sourceName}\` answers the function reference \`${table.typeName(result)}\`, and ` +
+      `\`${intrinsic}\` zero-fills the array its workers write, where 0 names no function; answer an index into an array of references instead`
+    )
+  }
   const serial = serialRemedy(program, table, intrinsic, call, result)
   return role === PAR_REDUCE
     ? resultWording(table, intrinsic, functions[0], result, serial)
@@ -1539,7 +1546,7 @@ export const isThreadsLayout = (info: StructInfo): boolean => {
  * An arrow given to an ordinary function's parameter may capture none of them,
  * since its callee may hand it on to a parallel form or a `spawn`, nor a
  * foreign handle or its pointer, whose every name the handle rules keep inside
- * the `using` block that opens it (WP40 §4). The parallel forms and `spawn`
+ * the `using` block that opens it (WP53 §4). The parallel forms and `spawn`
  * meet a handle by the handle rules' own refusal, as before.
  */
 const captureObstacle = (
@@ -2950,7 +2957,7 @@ const walkScopes = (
       } else if (
         !isScopeCall(program, init, scopeType) &&
         !isLockCall(program, init) &&
-        openedHandle(program, table, init) === null // WP40 H1.2: its block closes it
+        openedHandle(program, table, init) === null // WP53 H1.2: its block closes it
       ) {
         out.push(new ScopeFinding(decl, usingNotScopeMessage()))
       }
@@ -4105,7 +4112,7 @@ const isMutexType = (program: CheckedProgram, table: TypeTable, type: i32): bool
   isThreadsClass(classLayoutOf(program, table, type), MUTEX)
 
 /** Whether `type` is a `MutexGuard<T>` from `nish/threads`. */
-const isGuardType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
+export const isGuardType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
   isThreadsClass(classLayoutOf(program, table, type), MUTEX_GUARD)
 
 // ---- WP29 P3: the channel's members, as the checker, the fixpoint and the emitter see them ----

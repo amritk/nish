@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d absence: a handle is never nullable, so comparing it with
+// WP53 H1.1, §4d absence: a handle is never nullable, so comparing it with
 // `null` is refused.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

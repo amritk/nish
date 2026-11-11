@@ -1,4 +1,4 @@
-// WP40 H1.3, §6 row 15: a callee cannot keep a lent handle past the call, so
+// WP53 H1.3, §6 row 15: a callee cannot keep a lent handle past the call, so
 // it cannot be used after the lender's `using` block closes it.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

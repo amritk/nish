@@ -557,9 +557,9 @@ const refuseHostParameter = (ctx: CheckContext, sig: FunctionSig, decl: Node, na
  * rather than a proof: C borrows a string for the length of the call and may
  * not keep it (§8b), which is what `src/escape.ts` reads a foreign argument as.
  *
- * WP40 B1.1 adds a `u8[]` or `readonly u8[]` parameter, in a run of one or more
+ * WP53 B1.1 adds a `u8[]` or `readonly u8[]` parameter, in a run of one or more
  * that a single `u64` closes: the count C may touch in every buffer of the run
- * (`docs/wp40-ffi-buffers-handles.md` §3a). `syscall` is refused by its name
+ * (`docs/wp53-ffi-buffers-handles.md` §3a). `syscall` is refused by its name
  * (§10 Q11(a)), because no fixed arity declares a variadic C function soundly.
  */
 const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {

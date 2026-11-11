@@ -1,4 +1,4 @@
-// WP40 H1.1, §4a R1/R2: the general refusal of the field allow-list. The
+// WP53 H1.1, §4a R1/R2: the general refusal of the field allow-list. The
 // pointer is read only as `this.file` in a method of its class, passed
 // straight to a `declare function` or bound once to a `const`; a read through
 // a borrowed parameter in a free function is refused by the one check.

@@ -200,7 +200,10 @@ export const isCollectionTemplate = (template: StructTemplateInfo): boolean =>
  * boolean, an enum or a class; an interface is stored inline and has no
  * identity, and an array, a nullable type and a `Result` wait for a program
  * that needs one. A value is stored as it is, so it is anything but `void` and
- * an interface, whose record would be copied in rather than shared.
+ * an interface, whose record would be copied in rather than shared. A function
+ * reference, or an array, nullable, maybe or `Result` holding one, is refused
+ * as a value until a `Map` value is a place the reference pass tracks (WP51
+ * stage 2); as a key it fails the key rule.
  */
 const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string => {
   if (args.length !== template.typeParams.length || args.length === 0) {
@@ -219,6 +222,22 @@ const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateIn
     return ""
   }
   const value = args[1]
+  // An array, a nullable, a maybe or a `Result` of references is refused with
+  // them: a value the map hands out is a place the place pass does not
+  // follow, whatever the reference sits in.
+  let held = value
+  while (
+    held >= 0 &&
+    (table.isArray(held) || table.isNullable(held) || table.isMaybe(held) || table.isResult(held))
+  ) {
+    held = table.refOf(held)
+  }
+  if (held >= 0 && table.isFnRef(held)) {
+    return (
+      `\`${shown}\` cannot hold a function reference as its value: a \`Map\` value is not yet a place whose functions ` +
+      "the compiler tracks; keep the references in an array and store the index in the map"
+    )
+  }
   if (value === T_VOID || isInterfaceType(ctx, value)) {
     return (
       `\`${table.typeName(value)}\` cannot be the value type of \`${shown}\`: a value is stored in the table as it is, ` +
@@ -1083,7 +1102,7 @@ const instantiateStructHere = (
   }
   // WP27 S2, as `instantiate` below has it for a function template: a class
   // at `CPtr` would hold a foreign address however its members spell `T`,
-  // `class Empty<T> { n: i32 = 0; }` included. WP40 §4d: and a handle class
+  // `class Empty<T> { n: i32 = 0; }` included. WP53 §4d: and a handle class
   // is never a type argument, which would name it outside a parameter.
   for (const arg of args) {
     if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
@@ -1964,6 +1983,12 @@ const writtenNames = (fn: FunctionSig): string[] => {
  */
 const argumentOf = (call: Node, name: string, index: i32): string => argumentWords(call, name, index, false)
 
+/** The name a call spells its callee with, `spawn` for `s.spawn(...)`; the template's own name otherwise. */
+const calleeSpelling = (call: Node, template: TemplateInfo): string => {
+  const callee = call.children[0]
+  return callee.kind === N_MEMBER || callee.kind === N_IDENT ? callee.text : template.sourceName
+}
+
 /** `argumentOf` at the start of a sentence. */
 const argumentLead = (call: Node, name: string, index: i32): string => argumentWords(call, name, index, true)
 
@@ -2052,12 +2077,25 @@ const resolveFunctionArgument = (
   }
   const lead = `${argumentLead(call, template.sourceName, index)} must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`
   if (written.kind !== N_IDENT) {
-    refuseOnce(ctx, arg, `${lead}; a function is never a value computed at run time`)
+    refuseOnce(
+      ctx,
+      arg,
+      `${lead}; a function parameter is bound to a callee, not a value computed at run time`
+    )
     return null
   }
   const name = written.text
-  if (scope.lookup(name) !== null) {
-    refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`)
+  const inScope = scope.lookup(name)
+  if (inScope !== null) {
+    // WP51 S1: a reference is a value, and a function parameter takes a
+    // callee; stage 2 instantiates the template over a reference's set.
+    refuseOnce(
+      ctx,
+      arg,
+      ctx.table.isFnRef(ctx.table.stripNull(inScope.type))
+        ? `\`${name}\` is a function reference: \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
+        : `${lead}; \`${name}\` is a local, and a local is never a function`
+    )
     return null
   }
   if (ctx.capturesOuter(name)) {
@@ -2455,11 +2493,12 @@ export const refuseOnce = (ctx: CheckContext, node: Node, message: string): void
   ctx.errorOnce(node, node.start, message)
 }
 
-/** The refusal for an arrow anywhere but as a function argument. */
+/**
+ * The refusal for an arrow anywhere but as a function argument: stage 1 of
+ * WP51 makes a named top-level function a reference, not an arrow.
+ */
 export const arrowElsewhereMessage = (): string =>
-  "An arrow may only be written as the argument for a function-typed parameter of a top-level function, which " +
-  `lifts it into a function of its own: a function is never a value in ${LANGUAGE}, so it cannot be stored, ` +
-  "returned or called where it stands"
+  "an arrow in value position is not yet a function reference: declare it as a top-level function and name it"
 
 /** The refusal for an arrow given to `expose` or `exposeWith` that reads a name of the function it is written in. */
 const capturedMessage = (name: string): string =>
@@ -3043,7 +3082,8 @@ const checkConstraints = (
   let i = 0
   while (i < args.length) {
     const want = constraints.at(i)
-    if (want >= 0 && !satisfiesConstraint(asker, home, args[i], want)) {
+    const arg = args[i]
+    if (want >= 0 && !satisfiesConstraint(asker, home, arg, want)) {
       const bound = home.table.typeName(want)
       const info = home.program.struct(home.table.nameOf(want))
       // A class constraint is met by the class and nothing else, because a
@@ -3056,7 +3096,7 @@ const checkConstraints = (
       asker.error(
         at,
         `\`${typeParams[i]}\` of \`${templateName}\` requires \`${typeParams[i]} extends ${bound}\`, and ` +
-          `\`${asker.table.typeName(args[i])}\` does not implement it; ${fix}`
+          `\`${asker.table.typeName(arg)}\` does not implement it; ${fix}`
       )
       return false
     }

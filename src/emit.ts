@@ -83,6 +83,7 @@ import {
   emitRangeEntry,
   isIdentifierBuiltinCall,
 } from "./emit-builtins"
+import { emitEmptyDispatcher, emitTagCheck } from "./emit-fnrefs"
 import {
   emitBreak,
   emitConditional,
@@ -348,7 +349,7 @@ export class Emitter {
   /** WP29 P3: true for a `using g = m.lock()`, whose entry is the address of its guard's lock word. */
   openScopeLocks: boolean[]
   /**
-   * WP40 H1.2: for a `using f = new File(p)`, the handle class, whose entry is
+   * WP53 H1.2: for a `using f = new File(p)`, the handle class, whose entry is
    * the object every exit closes the pointer of; `null` for the rest.
    */
   openScopeHandles: (StructInfo | null)[]
@@ -629,7 +630,9 @@ export class Emitter {
       // module whatever its declaration says. Its `Result` ABI stays the one
       // its declaration picks, and the library has no `Result` in it.
       this.fn.linkage = "internal"
-    } else if (sig.hidden) {
+    } else if (sig.hidden || sig.refHidden) {
+      // WP51 §2.3: a reference member another module's dispatcher calls is
+      // `hidden` too, but keeps its entry facts, as its body is not copied.
       this.fn.linkage = "hidden"
     } else if (privateAbi(this.opts, sig.exported)) {
       this.fn.linkage = "internal"
@@ -704,7 +707,12 @@ export class Emitter {
     const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3]
     // A concise arrow body is the one `return` it means; `nish:secret`'s
     // `wipe` has a body only the emitter can write (`src/emit-secret.ts`).
-    if (secretRoleOf(sig) === SECRET_WIPE) {
+    if (sig.dispatcher && this.opts.profile === "debug" && sig.refMembers.length > 0) {
+      emitTagCheck(this, sig) // WP51 §6
+    }
+    if (sig.dispatcher && sig.refMembers.length === 0) {
+      emitEmptyDispatcher(this) // WP51 §2.3
+    } else if (secretRoleOf(sig) === SECRET_WIPE) {
       emitWipeBody(this, sig)
     } else if (isRegionIntrinsic(this.program, sig)) {
       emitRegionBody(this, sig, regionRoleIn(this.program, sig)) // WP46
@@ -810,7 +818,7 @@ export class Emitter {
     if (capturesOf(callee).length > 0) {
       return false
     }
-    // WP29 P3, WP40 H1.2: a lock is given back and a handle closed after the
+    // WP29 P3, WP53 H1.2: a lock is given back and a handle closed after the
     // value, and a tail call would take the release ahead of itself.
     if (holdsRelease(this)) {
       return false
@@ -850,7 +858,7 @@ export class Emitter {
    */
   emitScopeExit(): void {
     emitWalkExits(this) // WP32: a `return` leaves every walk around it
-    emitHeldReleases(this) // WP29 P3, WP40 H1.2: after the value, which may read through a guard or a handle
+    emitHeldReleases(this) // WP29 P3, WP53 H1.2: after the value, which may read through a guard or a handle
     if (this.current.arenaScope) {
       this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`)
       return
@@ -1101,7 +1109,7 @@ export class Emitter {
     const params: string[] = []
     let i = 0
     while (i < sig.paramNames.length) {
-      // WP40 B1.2: C takes a buffer's bytes, not its header (`emitForeignBuffers`).
+      // WP53 B1.2: C takes a buffer's bytes, not its header (`emitForeignBuffers`).
       params.push(
         isForeignBuffer(this.table, sig.paramTypes[i]) ? "i8*" : this.llvmAbi(sig.paramTypes[i], false)
       )
@@ -1396,7 +1404,7 @@ export class Emitter {
         this.emitReturn(stmt)
         return
       case N_VAR:
-        // WP40 Q12(a): each declarator of a `using` opens before the next
+        // WP53 Q12(a): each declarator of a `using` opens before the next
         // initialiser runs, so one that leaves the function closes the ones
         // before it.
         for (const decl of stmt.children[0].children) {
@@ -1683,6 +1691,11 @@ export class Emitter {
     }
     if (constant !== null) {
       return constantText(this, constant)
+    }
+    // WP51 §2.1: a function named in a value position is its tag.
+    const named = this.program.nodeFnRefs[expr.id]
+    if (named !== null) {
+      return `${named.refTag}`
     }
     // `import { argv } from "nish:process"`: the same load as `process.argv`,
     // reached by a name instead of a dot.
