@@ -702,40 +702,86 @@ const caseEnv = (file) => {
 const selectedCases = cases.filter((name) => !only || name.includes(only))
 
 /**
- * The files the WP44 file cases open and cannot make themselves, made once
- * before any section runs, because the cases run natively here and under Node
- * in the differential section, which may be another shard: a FIFO and a
- * socket for `file_open_errors` (the language has no `mkfifo`, and a socket
- * bound by the program would not run under Node), and a sparse file of
- * 2^32 + 16 bytes for `file_size_large`, made with `fs.truncateSync`, so it
- * costs no disk. A process that exits without closing its server leaves the
- * socket file behind, which is all `fileOpen` needs.
+ * Makes, in `dir`, the files the WP44 file cases open and cannot make
+ * themselves: a FIFO and a socket for `file_open_errors` (the language has no
+ * `mkfifo`, and a socket bound by the program would not run under Node), and,
+ * with `large`, a sparse file of 2^32 + 16 bytes for `file_size_large`, made
+ * with `fs.truncateSync`, so it costs no disk. A process that exits without
+ * closing its server leaves the socket file behind, which is all `fileOpen`
+ * needs.
+ *
+ * The socket is bound by its bare name from inside `dir`: `sun_path` holds
+ * 108 bytes, and Node truncates a longer absolute path without an error, so a
+ * checkout under a deep directory would bind a stray socket elsewhere and
+ * leave none here.
+ *
+ * Answers whether both were made, and, if not, what the attempts reported.
  */
-const prepareFileCases = () => {
-  fs.mkdirSync(buildDir, { recursive: true })
-  const fifo = path.join(buildDir, "file_open_errors.fifo")
-  const sock = path.join(buildDir, "file_open_errors.sock")
+const makeFileFixtures = (dir, { large }) => {
+  fs.mkdirSync(dir, { recursive: true })
+  const fifo = path.join(dir, "file_open_errors.fifo")
+  const sock = path.join(dir, "file_open_errors.sock")
   for (const file of [fifo, sock]) {
     fs.rmSync(file, { force: true })
   }
   // Through `sh`, which is the binary knip sees, so `mkfifo` needs no entry of its own in knip.json.
-  const made = spawnSync("sh", ["-c", 'mkfifo "$0"', fifo], { encoding: "utf8" })
+  const made = spawnSync("sh", ["-c", "mkfifo file_open_errors.fifo"], { cwd: dir, encoding: "utf8" })
   const bound = spawnSync(
     "node",
-    ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => process.exit(0))`],
-    { encoding: "utf8", timeout: 10000 }
+    ["-e", 'require("net").createServer().listen("file_open_errors.sock", () => process.exit(0))'],
+    { cwd: dir, encoding: "utf8", timeout: 10000 }
   )
-  const large = path.join(buildDir, "file_size_large.bin")
-  fs.closeSync(fs.openSync(large, "w"))
-  fs.truncateSync(large, 2 ** 32 + 16)
+  if (large) {
+    const big = path.join(dir, "file_size_large.bin")
+    fs.closeSync(fs.openSync(big, "w"))
+    fs.truncateSync(big, 2 ** 32 + 16)
+  }
+  const kind = (file, test) => fs.existsSync(file) && test(fs.lstatSync(file))
+  const hasFifo = kind(fifo, (st) => st.isFIFO())
+  const hasSock = kind(sock, (st) => st.isSocket())
+  const missing = (has, file, result) =>
+    `${has ? "made" : `missing ${file} (${Buffer.byteLength(file)} bytes)`}; ` +
+    `exit ${result.status ?? result.signal ?? result.error?.message}${result.stderr ? `: ${result.stderr.trim()}` : ""}`
+  return {
+    ok: hasFifo && hasSock,
+    detail: `mkfifo: ${missing(hasFifo, fifo, made)}\nsocket bind: ${missing(hasSock, sock, bound)}`,
+  }
+}
+
+/**
+ * The fixtures, made once in `build/test` before any section runs, because
+ * the cases run natively here and under Node in the differential section,
+ * which may be another shard.
+ */
+const prepareFileCases = () => {
+  const made = makeFileFixtures(buildDir, { large: true })
   // Without them file_open_errors would print other errnos and fail with a
   // diff that does not say why, so a fixture that could not be made is named.
-  const kind = (file, test) => fs.existsSync(file) && test(fs.lstatSync(file))
-  check(
-    "file fixtures: the FIFO and the socket file_open_errors opens were made",
-    kind(fifo, (st) => st.isFIFO()) && kind(sock, (st) => st.isSocket()),
-    `mkfifo: ${made.status} ${made.stderr}\nsocket: ${bound.status} ${bound.stderr}`
-  )
+  check("file fixtures: the FIFO and the socket file_open_errors opens were made", made.ok, made.detail)
+}
+
+/**
+ * The fixtures are made under a directory whose absolute socket path is longer
+ * than `sun_path` (#1405): an absolute bind there is truncated to a stray
+ * socket outside the directory, and only a relative bind leaves one in it.
+ */
+const checkFileFixturesLongPath = () => {
+  const deep = path.join(buildDir, `file-fixtures-long-path-${"d".repeat(Math.max(1, 120 - buildDir.length))}`)
+  // Where a truncated absolute bind would land, removed so a regression leaves nothing behind.
+  const stray = Buffer.from(path.join(deep, "file_open_errors.sock")).subarray(0, 108).toString()
+  try {
+    const made = makeFileFixtures(deep, { large: false })
+    check(
+      `file fixtures: made under a ${Buffer.byteLength(deep)}-byte directory, past sun_path's 108`,
+      made.ok,
+      made.detail
+    )
+  } finally {
+    fs.rmSync(deep, { recursive: true, force: true })
+    if (stray.startsWith(buildDir + path.sep)) {
+      fs.rmSync(stray, { force: true })
+    }
+  }
 }
 // Only when a file case can run: no filter, a filter naming one, the guard of
 // the file-window wasi section below (which builds the fixture cases whatever
@@ -751,6 +797,7 @@ if (
   selectedCases.some((name) => fileFixtureCases.includes(name))
 ) {
   prepareFileCases()
+  checkFileFixturesLongPath()
 }
 
 /**
