@@ -510,6 +510,28 @@ int32_t nish_spawn_with_fds(const nish_array *argv, const nish_array *fds) {
 #endif
 }
 
+#define NISH_PIPED_CAP (16u << 20)
+#ifndef __wasi__
+static int nish_pipe(int *p) {
+#ifdef __linux__
+  if (pipe2(p, O_CLOEXEC)) return -1;
+#else
+  if (pipe(p)) return -1;
+#endif
+  for (int k = 0; k < 2; k++) {
+#ifdef __linux__
+    if (p[k] > 2) continue;
+#endif
+    int moved = fcntl(p[k], F_DUPFD_CLOEXEC, 3);
+    close(p[k]);
+    p[k] = moved;
+    if (moved < 0) return -1;
+  }
+  return 0;
+}
+
+#endif
+
 /* `spawnPiped(argv, stdin, stdout, stderr)`: run the child as `nish_spawn`
    does, with `stdin`'s bytes on its standard input and its standard output
    and error appended to `stdout` and `stderr`, and answer its status. -1 is
@@ -542,28 +564,6 @@ int32_t nish_spawn_with_fds(const nish_array *argv, const nish_array *fds) {
    appends to it without feeding the output back in, and the pointer at each
    write, because that array moves when it grows and its stdin bytes stay
    its first `n`. */
-#define NISH_PIPED_CAP (16u << 20)
-#ifndef __wasi__
-static int nish_pipe(int *p) {
-#ifdef __linux__
-  if (pipe2(p, O_CLOEXEC)) return -1;
-#else
-  if (pipe(p)) return -1;
-#endif
-  for (int k = 0; k < 2; k++) {
-#ifdef __linux__
-    if (p[k] > 2) continue;
-#endif
-    int moved = fcntl(p[k], F_DUPFD_CLOEXEC, 3);
-    close(p[k]);
-    p[k] = moved;
-    if (moved < 0) return -1;
-  }
-  return 0;
-}
-
-#endif
-
 /* `spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)`: the same run,
    killed when `timeout_ms` milliseconds have passed since it started, and a
    negative `timeout_ms` is no deadline, as `pollWait`'s is. The answers are
@@ -708,6 +708,7 @@ done:
 #endif
 }
 
+/* `spawnPiped` is `spawnPipedWithin` with no deadline. */
 int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err) {
   return nish_spawn_piped_within(argv, in, out, err, -1);
 }

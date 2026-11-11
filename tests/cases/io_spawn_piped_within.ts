@@ -20,8 +20,9 @@ export const main = (): number => {
   console.log(`sleep: ${slept} ${prompt(start)}`);
 
   // What it printed before the deadline is kept, each stream in its array.
+  // The deadline is 2 seconds so a loaded machine still runs both printfs.
   start = monotonicNanos();
-  const partial = spawnPipedWithin(["sh", "-c", "printf out; printf err >&2; exec sleep 1000"], none, out, err, 300);
+  const partial = spawnPipedWithin(["sh", "-c", "printf out; printf err >&2; exec sleep 1000"], none, out, err, 2000);
   console.log(
     `partial: ${partial} ${String.fromBytes(out, 0, out.length)} ${String.fromBytes(err, 0, err.length)} ${prompt(start)}`,
   );

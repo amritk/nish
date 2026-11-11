@@ -181,7 +181,7 @@ entry:
   %49 = load %struct.nish_array*, %struct.nish_array** %none.addr, align 8
   %50 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %51 = load %struct.nish_array*, %struct.nish_array** %err.addr, align 8
-  %52 = call i32 @nish_spawn_piped_within(%struct.nish_array* %40, %struct.nish_array* %49, %struct.nish_array* %50, %struct.nish_array* %51, i32 300)
+  %52 = call i32 @nish_spawn_piped_within(%struct.nish_array* %40, %struct.nish_array* %49, %struct.nish_array* %50, %struct.nish_array* %51, i32 2000)
   store i32 %52, i32* %partial.addr, align 4
   %53 = load i32, i32* %partial.addr, align 4
   %54 = call i8* @nish_str_from_i32(i32 %53)
