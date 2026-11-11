@@ -1100,7 +1100,9 @@ export async function main(): Promise<i32> {
   `pgAsyncClaim`.
 - **Waiting for a seat.** When every connection has `depth` in flight,
   `pgAsyncSeat` waits on the pool's wake, which an answered statement rings,
-  and answers -2 after `claimWaitMs`; -1 when none is connected.
+  and answers -2 after `claimWaitMs`; -1 when none is connected. Waiting
+  tasks are seated in the order they began to wait, so a task that keeps
+  asking cannot take every seat that frees.
 
 ## What it does not do
 

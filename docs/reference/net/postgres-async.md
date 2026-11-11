@@ -609,7 +609,9 @@ other `await` between: `pgAsyncSend` writes the statement, `pgAsyncTurn`
 waits for its answer, `pgAsyncAnswer` builds it and `pgAsyncDone` spends
 the ticket. Until `pgAsyncTurn` no other seat on the connection is taken,
 so the statements go out in the order of their seats. While no connection has room it waits until a seat
-or a connection frees and wakes it, for at most `pool.claimWaitMs` in all.
+or a connection frees and wakes it, for at most `pool.claimWaitMs` in all;
+waiting tasks are seated in the order they began to wait, and a task that
+has not waited is seated only while none waits.
 It writes only numbers into the pool, so a spawned task may call it.
 
 ```ts
@@ -766,7 +768,7 @@ class PgAsyncPool
 
 | Member | |
 | --- | --- |
-| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. It opens a socket pair per slot and one more, the wakes a waiting task waits on; `close()` closes them. |
+| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. It opens a socket pair per slot, one for the pool and one per queue lane, the wakes a waiting task waits on; `close()` closes them. |
 | `readonly claimed: u8[]` | Each slot's state: 0 free, 1 claimed by a ticket. |
 | `readonly claims: i32[]` | Each slot's claim count, the high part of its current ticket. |
 | `claimWaitMs: i32` | The most milliseconds `pgAsyncClaim` or `pgAsyncSeat` waits for a free connection before it answers `PG_CARRIER_FULL`. |
@@ -789,9 +791,12 @@ class PgAsyncPool
 | `readonly prepared: u8[]` | Per slot and statement (`slot * PG_ASYNC_MAX_STATEMENTS + statement`): 1 once a Parse for it was sent on that connection. |
 | `readonly seatClaims: i32[]` | Per seat: its claim count, the high part of its current ticket. |
 | `readonly seated: i32[]` | Per slot: the seats in use. |
+| `readonly seatGone: u8[]` | Per queue number, modulo its length: 1 when its task stopped waiting before its turn. |
+| `seatHead: i32` | The queue number of the task `pgAsyncSeat` seats next. Tasks waiting for a seat take one in turn, in the order they began to wait, and a task that has not waited takes none while any is queued. |
 | `readonly seatParse: u8[]` | Per seat: 1 when its write carries the statement's Parse. |
 | `readonly seatSeq: i32[]` | Per seat: its statement's sequence number on the connection. |
 | `readonly seatStatement: i32[]` | Per seat: its statement. |
+| `seatTail: i32` | The queue number the next task to wait for a seat takes. |
 | `readonly seatUsed: u8[]` | Per seat (`slot * PG_ASYNC_MAX_DEPTH + k`): 1 while a ticket holds it. |
 | `readonly seatWaiting: u8[]` | Per seat: 1 while its task waits for its answer's turn. |
 | `readonly served: i32[]` | Per slot: the sequence number whose answer is read next. |
@@ -801,7 +806,9 @@ class PgAsyncPool
 | `waits: i32` | How many times `pgAsyncClaim` or `pgAsyncSeat` waited because no live connection had room. |
 | `readonly wakeBytes: u8[]` | The bytes a wake is rung with and read back into, so neither allocates. |
 | `readonly wakePending: u8[]` | Per wake: 1 while a byte is written and not yet read. |
-| `readonly wakes: i32[]` | Per slot, then one for the pool: a socket pair whose read end a waiting task waits on, or -1. |
+| `readonly wakeRings: i32[]` | Per wake: how many bytes were written to it, wrapping; a waiter that sees it move was rung. |
+| `readonly wakes: i32[]` | Per slot, then one for the pool, then one per queue lane: a socket pair whose read end a waiting task waits on, or -1. |
+| `readonly wakeUnseen: i32[]` | Per wake: the tasks waiting when its byte was written that have not yet woken; it is read back at 0. |
 | `readonly writing: u8[]` | Per slot: 1 while a seated statement has not yet been written whole. |
 | `close(): void` | Ends every connection: a Terminate is offered to each socket, which is then closed, claimed or not, and closes the wakes. Call it once the tasks that hold tickets are done; a ticket used afterwards panics. |
 | `live(): i32` | The number of slots connected now, claimed or not. |

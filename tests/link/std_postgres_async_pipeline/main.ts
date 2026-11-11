@@ -18,6 +18,13 @@
 //      echo after it.
 //   4. The wake: with `depth` 1 and the seat held by `wait`, a second seat
 //      waits once and is woken by the first's answer, not by a clock.
+//   4b. No barging: with `depth` 1 and the seat held by `wait`, a task
+//      parks for a seat; the holder, done, asks for another at once, before
+//      the parked task has run, and queues behind it rather than take the
+//      seat back, so the parked task is answered first.
+//   4c. A crowd: with `depth` 1 and the seat held, 150 tasks queue for it,
+//      more than the runtime reports ready in one turn; each is woken in
+//      its turn, and all 150 are answered, none timed out.
 //   5. A bounded wait: the same with `claimWaitMs` at 30 answers -2 after one
 //      wait.
 //   6. Cancelled with its answer unread: the task's answer fails with
@@ -81,6 +88,47 @@ async function pipe(pool: PgAsyncPool, board: Board, handles: Handles, statement
   console.log(describe(label, r))
   if (label === "gate") {
     console.log(`sent before the gate was answered: ${board.sent}`)
+  }
+  board.done += 1
+}
+
+/** Runs `first`, then at once seats `then` and runs it, printing each answer and counting each done. */
+async function again(pool: PgAsyncPool, board: Board, first: i32, then: i32): Promise<void> {
+  let statement: i32 = first
+  for (let i: i32 = 0; i < 2; i++) {
+    const ticket: i32 = await pgAsyncSeat(pool, statement)
+    const sent: i32 = await pgAsyncSend(pool, ticket, new PgAsyncParams())
+    const turn: i32 = await pgAsyncTurn(pool, ticket, sent)
+    const r = await pgAsyncAnswer(pool, ticket, turn)
+    pgAsyncDone(pool, ticket, turn, r.reusable)
+    console.log(describe(i === 0 ? "holder" : "holder again", r))
+    board.done += 1
+    statement = then
+  }
+}
+
+/** What the crowd's tasks were answered. */
+class Tally {
+  ok: i32 = 0
+  failed: i32 = 0
+}
+
+/** Seats `statement`, sends it, and counts its answer in `tally` and itself done. */
+async function crowd(pool: PgAsyncPool, board: Board, tally: Tally, statement: i32): Promise<void> {
+  const ticket: i32 = await pgAsyncSeat(pool, statement)
+  if (ticket < 0) {
+    tally.failed += 1
+    board.done += 1
+    return
+  }
+  const sent: i32 = await pgAsyncSend(pool, ticket, new PgAsyncParams())
+  const turn: i32 = await pgAsyncTurn(pool, ticket, sent)
+  const r = await pgAsyncAnswer(pool, ticket, turn)
+  pgAsyncDone(pool, ticket, turn, r.reusable)
+  if (r.ok()) {
+    tally.ok += 1
+  } else {
+    tally.failed += 1
   }
   board.done += 1
 }
@@ -166,6 +214,29 @@ export async function main(): Promise<i32> {
   console.log(`waits for the held seat: ${pool.waits - before}`)
   board.open = 0
 
+  // 4b. No barging.
+  spawn(again(pool, board, wait, quick))
+  await sleep(5)
+  spawn(pipe(pool, board, handles, quick, "", "parked"))
+  await sleep(20)
+  board.open = 1
+  await until(board, 20)
+  board.open = 0
+
+  // 4c. A crowd.
+  const tally = new Tally()
+  pool.claimWaitMs = 2000
+  spawn(pipe(pool, board, handles, wait, "", "crowd holder"))
+  await sleep(5)
+  for (let i: i32 = 0; i < 150; i++) {
+    spawn(crowd(pool, board, tally, quick))
+  }
+  await sleep(20)
+  board.open = 1
+  await until(board, 171)
+  board.open = 0
+  console.log(`a crowd of 150 behind the held seat: ${tally.ok} answered, ${tally.failed} failed`)
+
   // 5. A bounded wait.
   pool.claimWaitMs = 30
   before = pool.waits
@@ -174,7 +245,7 @@ export async function main(): Promise<i32> {
   const late: i32 = await pgAsyncSeat(pool, quick)
   console.log(`a seat with the one seat held: ${late} after ${pool.waits - before} wait`)
   board.open = 1
-  await until(board, 18)
+  await until(board, 172)
   board.open = 0
   pool.claimWaitMs = 5000
   pool.depth = 8
@@ -186,7 +257,7 @@ export async function main(): Promise<i32> {
   spawn(pipe(pool, board, handles, quick, "", "behind the cancelled"))
   await sleep(5)
   cancel(held)
-  await until(board, 20)
+  await until(board, 174)
   board.open = 1
   console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
   board.open = 0
@@ -199,7 +270,7 @@ export async function main(): Promise<i32> {
   spawn(pipe(pool, board, handles, gate, "", "gate"))
   spawn(pipe(pool, board, handles, die, "", "die"))
   spawn(pipe(pool, board, handles, quick, "", "behind the die"))
-  await until(board, 23)
+  await until(board, 177)
   console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
 
   // 8. Hostile mid-pipeline.
@@ -211,7 +282,7 @@ export async function main(): Promise<i32> {
   spawn(pipe(pool, board, handles, gate, "", "gate"))
   spawn(pipe(pool, board, handles, big, "", "big"))
   spawn(pipe(pool, board, handles, quick, "", "behind the big"))
-  await until(board, 26)
+  await until(board, 180)
   console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
   pool.close()
   return 0

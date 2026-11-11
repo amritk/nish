@@ -225,6 +225,13 @@ const PG_ASYNC_SEAT_WRAP: i32 = 1048576
 const PG_ASYNC_SEATS: i32 = 1024
 // A connection's statement sequence numbers wrap below this.
 const PG_ASYNC_SEQ_WRAP: i32 = 16777216
+// The most tasks `pgAsyncSeat` queues in the order they began to wait; more
+// wait unqueued, behind them all. Queue numbers wrap below the wrap.
+const PG_ASYNC_QUEUE: i32 = 16384
+const PG_ASYNC_QUEUE_WRAP: i32 = 1073741824
+// The wakes the queue's tasks wait on, a task on the one its number picks, so
+// the queue's head moving wakes it and few others.
+const PG_ASYNC_LANES: i32 = 128
 // What a query reads first; it grows by doubling up to one `maxMessage`.
 const PG_ASYNC_INPUT_SIZE: i32 = 8192
 // ReadyForQuery's transaction status for "idle", outside any transaction.
@@ -283,6 +290,16 @@ export class PgAsyncPool {
   connectWaitMs: i32 = 10000
   /** How many connections `pgAsyncConnect` made, in all. */
   connects: i32 = 0
+  /**
+   * The queue number of the task `pgAsyncSeat` seats next. Tasks waiting for
+   * a seat take one in turn, in the order they began to wait, and a task
+   * that has not waited takes none while any is queued.
+   */
+  seatHead: i32 = 0
+  /** The queue number the next task to wait for a seat takes. */
+  seatTail: i32 = 0
+  /** Per queue number, modulo its length: 1 when its task stopped waiting before its turn. */
+  readonly seatGone: u8[]
   /** Each statement `pgAsyncPrepare` registered: its SQL as UTF-8. */
   readonly statements: u8[][]
   /** Per slot and statement (`slot * PG_ASYNC_MAX_STATEMENTS + statement`): 1 once a Parse for it was sent on that connection. */
@@ -319,7 +336,10 @@ export class PgAsyncPool {
   readonly seatWaiting: u8[]
   /** Per seat: its claim count, the high part of its current ticket. */
   readonly seatClaims: i32[]
-  /** Per slot, then one for the pool: a socket pair whose read end a waiting task waits on, or -1. */
+  /**
+   * Per slot, then one for the pool, then one per queue lane: a socket pair
+   * whose read end a waiting task waits on, or -1.
+   */
   readonly wakes: i32[]
   /** Per wake: 1 while a byte is written and not yet read. */
   readonly wakePending: u8[]
@@ -327,11 +347,15 @@ export class PgAsyncPool {
   readonly wakeBytes: u8[]
   /** Per wake: the tasks waiting on it. */
   readonly waiters: i32[]
+  /** Per wake: how many bytes were written to it, wrapping; a waiter that sees it move was rung. */
+  readonly wakeRings: i32[]
+  /** Per wake: the tasks waiting when its byte was written that have not yet woken; it is read back at 0. */
+  readonly wakeUnseen: i32[]
 
   /**
    * A pool of `size` slots, none connected yet. It opens a socket pair per
-   * slot and one more, the wakes a waiting task waits on; `close()` closes
-   * them.
+   * slot, one for the pool and one per queue lane, the wakes a waiting task
+   * waits on; `close()` closes them.
    * @param size The number of connections, 1 to `PG_ASYNC_MAX_SIZE`; any
    *   other panics.
    */
@@ -361,17 +385,21 @@ export class PgAsyncPool {
     this.seatParse = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
     this.seatWaiting = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
     this.seatClaims = new Array<i32>(size * PG_ASYNC_MAX_DEPTH)
-    this.wakes = new Array<i32>((size + 1) * 2)
-    this.wakePending = new Array<u8>(size + 1)
+    const wakes: i32 = size + 1 + PG_ASYNC_LANES
+    this.wakes = new Array<i32>(wakes * 2)
+    this.wakePending = new Array<u8>(wakes)
     this.wakeBytes = new Array<u8>(8)
-    this.waiters = new Array<i32>(size + 1)
+    this.waiters = new Array<i32>(wakes)
+    this.wakeRings = new Array<i32>(wakes)
+    this.wakeUnseen = new Array<i32>(wakes)
+    this.seatGone = new Array<u8>(PG_ASYNC_QUEUE)
     for (let s: i32 = 0; s < size; s++) {
       this.fds[s] = -1
       this.doomAt[s] = -1
       this.inputs.push(new Array<u8>(PG_ASYNC_INPUT_SIZE))
     }
     const pair: i32[] = [-1, -1]
-    for (let w: i32 = 0; w <= size; w++) {
+    for (let w: i32 = 0; w < wakes; w++) {
       // Without a pair (out of descriptors) a waiter sleeps 1 ms and looks again.
       if (unixSocketPair(NET_UNIX_STREAM, pair) < 0) {
         pair[0] = -1
@@ -420,7 +448,7 @@ export class PgAsyncPool {
       }
       pgAsyncForget(this, s)
     }
-    for (let w: i32 = 0; w < (this.size + 1) * 2; w++) {
+    for (let w: i32 = 0; w < toI32(this.wakes.length); w++) {
       if (this.wakes[w] >= 0) {
         netClose(this.wakes[w])
         this.wakes[w] = -1
@@ -778,6 +806,9 @@ const pgAsyncSince = (began: i64): i32 => {
 /**
  * Wakes the tasks waiting on wake `w` (a slot, or `pool.size` for the pool):
  * one byte on its socket pair, unless one is already there or none waits.
+ * The byte stays until every task then waiting has woken: the runtime reports
+ * at most 64 ready sockets a turn, and a byte read back by the first of
+ * many would leave the rest waiting until their time ran out.
  */
 const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
   const fd: i32 = pool.wakes[w * 2 + 1]
@@ -785,14 +816,24 @@ const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
     pool.wakeBytes[0] = 1
     if (netWrite(fd, pool.wakeBytes, 0, 1) === 1) {
       pool.wakePending[w] = 1
+      pool.wakeUnseen[w] = pool.waiters[w]
+      pool.wakeRings[w] = (pool.wakeRings[w] + 1) % PG_ASYNC_QUEUE_WRAP
     }
   }
 }
 
-/** Reads wake `w`'s byte back, so its waiters wait again. */
+/** Wakes the tasks waiting for a slot or seat: those outside the queue, and the queue's head. */
+const pgAsyncWakePool = (pool: PgAsyncPool): void => {
+  pgAsyncSignal(pool, pool.size)
+  if (pool.seatHead !== pool.seatTail) {
+    pgAsyncSignal(pool, pool.size + 1 + (pool.seatHead % PG_ASYNC_LANES))
+  }
+}
+
+/** Reads wake `w`'s byte back once every task it was written for has woken, so its waiters wait again. */
 const pgAsyncDrain = (pool: PgAsyncPool, w: i32): void => {
   const fd: i32 = pool.wakes[w * 2]
-  if (toI32(pool.wakePending[w]) === 1 && fd >= 0) {
+  if (toI32(pool.wakePending[w]) === 1 && pool.wakeUnseen[w] <= 0 && fd >= 0) {
     netRead(fd, pool.wakeBytes, 0, 8)
     pool.wakePending[w] = 0
   }
@@ -804,6 +845,7 @@ const pgAsyncDrain = (pool: PgAsyncPool, w: i32): void => {
  */
 const pgAsyncPark = async (pool: PgAsyncPool, w: i32, ms: i32): Promise<void> => {
   const fd: i32 = pool.wakes[w * 2]
+  const rings: i32 = pool.wakeRings[w]
   pool.waiters[w] += 1
   if (fd < 0) {
     await sleep(1)
@@ -811,6 +853,10 @@ const pgAsyncPark = async (pool: PgAsyncPool, w: i32, ms: i32): Promise<void> =>
     await readableWithin(fd, ms)
   }
   pool.waiters[w] -= 1
+  if (pool.wakeRings[w] !== rings) {
+    // Waiting when the byte was written: one fewer it waits for.
+    pool.wakeUnseen[w] -= 1
+  }
 }
 
 /**
@@ -845,7 +891,7 @@ export const pgAsyncClaim = async (pool: PgAsyncPool): Promise<i32> => {
         pool.claims[s] = (pool.claims[s] + 1) % PG_ASYNC_CLAIM_WRAP
         if (waited) {
           // Another waiter may find room this one did not take.
-          pgAsyncSignal(pool, pool.size)
+          pgAsyncWakePool(pool)
         }
         return pool.claims[s] * PG_ASYNC_MAX_SIZE + s
       }
@@ -884,7 +930,7 @@ export const pgAsyncRelease = (pool: PgAsyncPool, ticket: i32, reusable: boolean
   }
   pool.claimed[slot] = 0
   pool.claims[slot] = (pool.claims[slot] + 1) % PG_ASYNC_CLAIM_WRAP
-  pgAsyncSignal(pool, pool.size)
+  pgAsyncWakePool(pool)
 }
 
 /**
@@ -907,6 +953,28 @@ export const pgAsyncPrepare = (pool: PgAsyncPool, sql: string): i32 => {
 }
 
 /**
+ * Takes queue number `n` out of the seat queue: at its head, moves the head
+ * past it and past every number whose task left already, and wakes the
+ * waiters so the new head looks for a seat; otherwise marks it gone. -1 is
+ * no number.
+ */
+const pgAsyncUnqueue = (pool: PgAsyncPool, n: i32): void => {
+  if (n < 0) {
+    return
+  }
+  if (n !== pool.seatHead) {
+    pool.seatGone[n % PG_ASYNC_QUEUE] = 1
+    return
+  }
+  pool.seatHead = (pool.seatHead + 1) % PG_ASYNC_QUEUE_WRAP
+  while (pool.seatHead !== pool.seatTail && toI32(pool.seatGone[pool.seatHead % PG_ASYNC_QUEUE]) !== 0) {
+    pool.seatGone[pool.seatHead % PG_ASYNC_QUEUE] = 0
+    pool.seatHead = (pool.seatHead + 1) % PG_ASYNC_QUEUE_WRAP
+  }
+  pgAsyncWakePool(pool)
+}
+
+/**
  * Takes a seat for one statement on a shared connection: the live one with
  * the fewest statements in flight, below `pool.depth`, that no task claimed
  * whole and no task is writing to. The seat fixes the statement's place in
@@ -915,7 +983,9 @@ export const pgAsyncPrepare = (pool: PgAsyncPool, sql: string): i32 => {
  * waits for its answer, `pgAsyncAnswer` builds it and `pgAsyncDone` spends
  * the ticket. Until `pgAsyncTurn` no other seat on the connection is taken,
  * so the statements go out in the order of their seats. While no connection has room it waits until a seat
- * or a connection frees and wakes it, for at most `pool.claimWaitMs` in all.
+ * or a connection frees and wakes it, for at most `pool.claimWaitMs` in all;
+ * waiting tasks are seated in the order they began to wait, and a task that
+ * has not waited is seated only while none waits.
  * It writes only numbers into the pool, so a spawned task may call it.
  * @param pool The pool.
  * @param statement A number `pgAsyncPrepare` answered; any other panics, as
@@ -934,9 +1004,11 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
     panic("nish/net/postgres-async: a PgAsyncPool depth out of range")
   }
   const began: i64 = monotonicNanos()
-  let waited: boolean = false
+  // This task's queue number once it waits, or -1.
+  let queued: i32 = -1
   while (true) {
     if (cancelled()) {
+      pgAsyncUnqueue(pool, queued)
       return PG_ASYNC_CANCELLED
     }
     let live: boolean = false
@@ -958,7 +1030,10 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
         best = s
       }
     }
-    if (best >= 0) {
+    // First come, first seated: under load a task that lost the seat it was
+    // woken for to another would wait on until `claimWaitMs` failed it.
+    const turn: boolean = queued >= 0 ? queued === pool.seatHead : pool.seatHead === pool.seatTail
+    if (best >= 0 && turn) {
       for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
         const seat: i32 = best * PG_ASYNC_MAX_DEPTH + k
         if (toI32(pool.seatUsed[seat]) !== 0) {
@@ -975,23 +1050,31 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
         pool.seated[best] += 1
         pool.writing[best] = 1
         pool.seatClaims[seat] = (pool.seatClaims[seat] + 1) % PG_ASYNC_SEAT_WRAP
-        if (waited) {
-          pgAsyncSignal(pool, pool.size)
-        }
+        // The next in the queue may find a seat this one did not take.
+        pgAsyncUnqueue(pool, queued)
         return pool.seatClaims[seat] * PG_ASYNC_SEATS + seat
       }
     }
     if (!live) {
+      pgAsyncUnqueue(pool, queued)
       return PG_POOL_NONE
     }
     const left: i32 = pool.claimWaitMs - pgAsyncSince(began)
     if (left <= 0) {
+      pgAsyncUnqueue(pool, queued)
       return PG_CARRIER_FULL
     }
+    if (
+      queued < 0 &&
+      (pool.seatTail - pool.seatHead + PG_ASYNC_QUEUE_WRAP) % PG_ASYNC_QUEUE_WRAP < PG_ASYNC_QUEUE
+    ) {
+      queued = pool.seatTail
+      pool.seatTail = (pool.seatTail + 1) % PG_ASYNC_QUEUE_WRAP
+    }
+    const w: i32 = queued >= 0 ? pool.size + 1 + (queued % PG_ASYNC_LANES) : pool.size
     pool.waits += 1
-    waited = true
-    await pgAsyncPark(pool, pool.size, left)
-    pgAsyncDrain(pool, pool.size)
+    await pgAsyncPark(pool, w, left)
+    pgAsyncDrain(pool, w)
   }
 }
 
@@ -1113,7 +1196,7 @@ const pgAsyncFree = (pool: PgAsyncPool, seat: i32): void => {
     }
     pgAsyncForget(pool, s)
   }
-  pgAsyncSignal(pool, pool.size)
+  pgAsyncWakePool(pool)
 }
 
 /**
@@ -1175,7 +1258,7 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
     return sent
   }
   pool.writing[s] = 0
-  pgAsyncSignal(pool, pool.size)
+  pgAsyncWakePool(pool)
   if (sent < 0) {
     pgAsyncDoom(pool, s, seq)
     return sent <= PG_ASYNC_BROKEN ? sent : PG_ASYNC_BROKEN

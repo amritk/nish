@@ -24,6 +24,11 @@ live: 1, dropped: 0
 wait: ok=true failure=0 socket=0 rows=1 reusable=true first=w
 quick: ok=true failure=0 socket=0 rows=1 reusable=true first=q
 waits for the held seat: 1
+holder: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+parked: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+holder again: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+crowd holder: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+a crowd of 150 behind the held seat: 150 answered, 0 failed
 a seat with the one seat held: -2 after 1 wait
 wait: ok=true failure=0 socket=0 rows=1 reusable=true first=w
 cancelled: ok=false failure=9 socket=-3 rows=0 reusable=false first=

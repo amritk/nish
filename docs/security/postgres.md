@@ -13,7 +13,7 @@ connection targets (`pgTarget`, `pgTargetUrl`), the last to change it, and
 in `std/net/postgres-carrier.ts` at the commit that adds `PgCarrier`, which
 also adds `PgBatcher.shed`; those in `std/net/postgres-async.ts` are at the
 commit that pipelines the async pool's statements across tasks and bounds its
-connect, the last to change it (PG-39, PG-40).
+connect, the last to change it (PG-39, PG-40, PG-42).
 
 **Result.** Every message is framed once, by its length, and a length under 4
 or over `maxMessage` fails the connection before its body is read; every
@@ -157,13 +157,14 @@ PG-18 to PG-20 are the shapes a URL can take, checked as the parser was
 written; PG-21 and PG-22 are accepted. PG-23 to PG-27 are the carrier's
 (`std/net/postgres-carrier.ts`): PG-23 and PG-24 were found as it was written
 and fixed before it merged, PG-25 holds, and PG-26 and PG-27 are accepted.
-PG-28 to PG-41 are the async pool's (`std/net/postgres-async.ts`): PG-28 to
+PG-28 to PG-42 are the async pool's (`std/net/postgres-async.ts`): PG-28 to
 PG-31 hold, PG-32 was found as it was written and fixed before it merged,
 PG-33 and PG-34 are accepted, PG-35 and PG-36 were found by its first
 review and fixed before it merged, PG-37, from the cancellation stage of
 WP49, is accepted, and PG-38, found when a serve handler first ran the pool
 against a live server, is fixed. PG-39 to PG-41 come with the pool's
-pipelining (WP49 stage 6): PG-39 holds, PG-40 is fixed and PG-41 is accepted.
+pipelining (WP49 stage 6): PG-39 holds, PG-40 and PG-42 are fixed and PG-41
+is accepted.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -208,7 +209,7 @@ pipelining (WP49 stage 6): PG-39 holds, PG-40 is fixed and PG-41 is accepted.
 | PG-39 | High if it failed | `pgAsyncSeat`, `pgAsyncSend`, `pgAsyncTurn`, `pgAsyncAnswer`, `pgAsyncDone`, `pgAsyncScan`, `pgAsyncDoom` | Statements from many tasks share a connection: each answer must reach the task that sent its statement, in order, however the batch fails, and a connection whose order is lost must not be read on. | **Holds.** A seat fixes a statement's place in its connection's order and no other seat is taken until it is sent; answers are read in that order. A statement the server refuses fails alone; one with a NUL is never sent and hands its place back; a connection lost, sent a frame past a cap, or left out of step by a cancelled task fails every statement in flight on it with `PG_ERR_CLOSED` and is closed. "sent before the gate was answered: 6" with "echo 0 … first=e0" to "echo 4 … first=e4"; "badparse first: … error=42601", "badparse behind: … error=26000", "echo nul: ok=false failure=8", "echo behind: ok=true … first=z", "live: 1, dropped: 0"; "cancelled: ok=false failure=9 socket=-3", "behind the cancelled: ok=false failure=9 socket=0 … reusable=false", "live: 0, dropped: 1"; "die" and "behind the die" both failure=9; "big: ok=false failure=2", "behind the big: ok=false failure=9" (`link/std_postgres_async_pipeline`). |
 | PG-40 | Low | `pgAsyncConnect`, `pgAsyncStartup`, `pgAsyncWaitUntil` | A server that accepts a connection and never answers its startup held `pgAsyncConnect`, and so its caller, for good: a program that redials the pool while it serves stopped redialling. | **Fixed** in the WP49 stage 6, part 5 change: each connection has `connectWaitMs` (10000 by default) to connect and finish its startup, and is closed past it, its slot left empty. Before, `pgAsyncStartup` awaited the socket with no deadline (read in the parent commit; the test needs `connectWaitMs`, so it cannot run there), and `pgAsyncConnect` against a listener that never answers did not return; after, "a server that never answers its startup: 0 live, 0 made" in 50 ms (`link/std_postgres_async`). |
 | PG-41 | Low | `bench/techempower/async-db-main.ts`, `tfbKeepPool` | The async database entry keeps the role's password, as a `Secret`, for the life of the process, so that it can dial again a connection the pool closed. | **Accepted.** A pool that redials needs the password; it stays in one `Secret`, is passed to `pgAsyncConnect` by reference, and `main` wipes it once serving ends, or at once when the first connect fails. A program that would rather not hold it connects once and does not call `tfbKeepPool`. Read in the source; `link/tfb_async_db` runs the redial ("tfbKeepPool dials it again"), not the wipe. |
-
+| PG-42 | Medium | `pgAsyncSeat`, `pgAsyncSignal`, `pgAsyncPark`, `pgAsyncDrain` | Under load the pool turned tasks away that a free seat could have served. A task done with a seat could take the next one before the tasks waiting were woken, so a waiter could lose every race until `claimWaitMs` ran out; and the pool's wake was one byte that the first task woken read back, while the runtime reports at most 64 ready sockets a turn, so with more than 64 tasks waiting the rest never saw it and waited out `claimWaitMs`. Any client able to hold a few hundred requests open could have every one answered 503 after 5 s (p99 about 5 s at 256 connections in the TechEmpower `/db` test). | **Fixed** in the WP49 stage 6, part 5 change: tasks waiting for a seat queue in the order they began to wait, up to 16384, and a task is seated only in its turn; each waits on one of 128 lane wakes its queue number picks, which rings when it reaches the queue's head; and a wake's byte is read back only once every task waiting when it was written has woken. Before, "holder again: … first=q" was answered before "parked: … first=q", and with the wake fix alone taken out, "a crowd of 150 behind the held seat: 1 answered, 149 failed"; after, "parked" is answered before "holder again", and "a crowd of 150 behind the held seat: 150 answered, 0 failed" (`link/std_postgres_async_pipeline`). |
 `keys`, the 64 bytes `pgScramKeys` answers, the proof taken from it and the
 server signature kept for the final message are none of them secret (the
 proof is sent on the wire), but each is wiped once used, and on `fail()`, so
@@ -408,7 +409,8 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
 - **A claim or a seat waits at most `claimWaitMs` (PG-31).** When every
   connection is held (or every seat, `depth` a connection), `pgAsyncClaim`
   and `pgAsyncSeat` wait on the pool's wake, which a release or a done rings,
-  and answer -2 once `claimWaitMs` (5000 by default) has passed.
+  and answer -2 once `claimWaitMs` (5000 by default) has passed. Tasks
+  waiting for a seat are seated in the order they began to wait (PG-42).
 - **A pipelined connection is only as fast as its slowest statement
   (PG-39).** Statements seated on one connection are answered in the order
   they were sent, so a slow one delays up to `depth` - 1 behind it, and a
@@ -756,7 +758,9 @@ gives up after `claimWaitMs` (PG-31), and a connect that gives up after
 statements from six tasks in flight on one connection and checks each answer
 reaches its task in order, through a refused Parse, a NUL, a row past the
 input buffer, a cancelled task, a lost connection and a frame past
-`maxMessage` (PG-39), and that a waiting seat is woken, not polled (PG-31).
+`maxMessage` (PG-39), that a waiting seat is woken, not polled (PG-31), and
+that tasks waiting for a seat are seated in their order, 150 of them at once
+(PG-42).
 Three panic tests give a ticket back
 twice, give one back after `close()` (PG-30), and set a cap out of range
 (PG-36).
@@ -771,7 +775,7 @@ The async pool's tests:
 - `tests/link/std_postgres_async` (PG-28 to PG-32, PG-35, PG-36, PG-40)
 - `tests/link/std_postgres_async_flat` (PG-34)
 - `tests/link/std_postgres_async_cancel` (PG-33, PG-37)
-- `tests/link/std_postgres_async_pipeline` (PG-31, PG-39)
+- `tests/link/std_postgres_async_pipeline` (PG-31, PG-39, PG-42)
 - `tests/link/tfb_async_db` (PG-41)
 - `tests/postgres/live` `servepool` (PG-38)
 - `tests/link/std_postgres_async_double_release_panic`,
