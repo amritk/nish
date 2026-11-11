@@ -561,7 +561,7 @@ const DECLARED = [
   // #1362: std/regex.ts makes its tables through regexZeros/regexZeroBytes.
   {
     file: "regex.ll",
-    changelog: "nish/regex no longer hangs under Node",
+    changelog: "regex no longer hangs under Node",
     why: "std/regex.ts zero-fills every table it reads before writing through two new helpers, regexZeros and regexZeroBytes, so the module every importer of nish/regex writes has new functions and calls; no importer's own module moves",
   },
   // Stage 5a: an --emit-dts compile is a page module, so Math.sin, cos, exp,
