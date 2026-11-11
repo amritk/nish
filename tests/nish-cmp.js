@@ -1666,6 +1666,12 @@ const DECLARED = [
     changelog: PIPELINED_WRITE,
     why: "the program reads ServeStats.sends, which the 0.38.0 seed does not have, so only the candidate compiles it (WP49 stage 6, part 3)",
   },
+  {
+    program: "tests/link/net_serve_queued_wait/main.ts",
+    file: "exit",
+    changelog: PIPELINED_WRITE,
+    why: "the program calls HttpHandler.deferSends, which the 0.38.0 seed does not have, so only the candidate compiles it (WP49 stage 6, part 3)",
+  },
 ]
 
 /**

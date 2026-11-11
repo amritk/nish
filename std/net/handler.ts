@@ -659,8 +659,10 @@ export class HttpHandler {
         timeout = rest
       }
     }
-    if (this.queueCount > 0) {
-      // A send `flush` made let a parked request in: it is ready now.
+    if (this.deferring && this.queueCount > 0) {
+      // A send `flush` made let a parked request in: it is ready now. Only
+      // owed sends can do that; without `deferSends` a request left queued
+      // is the program's to take, and the turn blocks as it always has.
       timeout = 0
     }
     const n: i32 = pollWait(this.loop, this.readyFds, timeout)
