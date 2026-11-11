@@ -10562,9 +10562,10 @@ if (dealtHere("sqliteLink")) {
 // follow the file. It serves (a) a file one window long and (b) one 1,024
 // windows long (64 MiB), each from a fresh process, since VmHWM only rises,
 // to a reader that stalls 250 ms after its first MiB and 5 ms after each MiB
-// after it, so the kernel's socket buffers fill and the server answers
-// H1_AGAIN and a partial take; the body must hash to the file's, and (b)'s
-// VmHWM must stay within `FILE_SERVER_HWM_BAND` of (a)'s.
+// after it, so the kernel's socket buffers can fill and the server meet
+// H1_AGAIN and partial takes (the check does not count them: it holds the
+// memory and the bytes, whatever path they took); the body must hash to the
+// file's, and (b)'s VmHWM must stay within `FILE_SERVER_HWM_BAND` of (a)'s.
 //
 // The band. Ten runs of each file (Linux x64, `--profile speed`) read VmHWM at
 // 1,888 to 1,896 kB for both: no difference between the files beyond a spread

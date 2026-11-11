@@ -520,6 +520,11 @@ const pump = (conn: Http1Connection, file: i32, size: i64, window: u8[], at: i64
 }
 ```
 
+This `pump` moves the body only, and answers `-1` alike when the body is sent
+and when it aborted, since either way the connection owes nothing more. The
+example also keeps a position for a response head that found no room in the
+output and retries `respond` at the next `H1_WRITE`.
+
 `respond` takes the body's length as an `i32`, so one response carries at most
 2^31 - 1 bytes; refuse a larger file before you listen. A read that comes back
 short of the length you announced means the file changed under you, and

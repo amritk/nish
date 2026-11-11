@@ -127,6 +127,8 @@ const serve = (served: Served, listener: i32): i32 => {
   const ready: i32[] = new Array<i32>(128)
   pollAdd(loop, listener, H1_WANT_READ, LISTENER)
   while (true) {
+    // No timeout and no idle close: a client that stops reading keeps its
+    // slot, one of 64, until it goes away. A real server would time it out.
     const n: i32 = pollWait(loop, ready, -1)
     for (let k: i32 = 0; k < n; k++) {
       const slot: i32 = ready[2 * k]
@@ -140,7 +142,12 @@ const serve = (served: Served, listener: i32): i32 => {
           next = server.accept()
         }
       } else if (server.holds(slot)) {
-        let wants: i32 = (ready[2 * k + 1] & 5) !== 0 ? server.readable(slot) : server.writable(slot)
+        // Only the I/O matters here; `flush` below answers what to wait for next.
+        if ((ready[2 * k + 1] & 5) !== 0) {
+          server.readable(slot)
+        } else {
+          server.writable(slot)
+        }
         let pos: i64 = IDLE
         if (slot >= 0 && slot < toI32(at.length)) {
           pos = at[slot]
@@ -157,7 +164,7 @@ const serve = (served: Served, listener: i32): i32 => {
         if (slot >= 0 && slot < toI32(at.length)) {
           at[slot] = pos
         }
-        wants = server.flush(slot)
+        const wants: i32 = server.flush(slot)
         if ((wants & H1_DONE) !== 0) {
           server.close(slot)
         } else if (server.rearm(slot, wants)) {
