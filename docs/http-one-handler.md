@@ -45,9 +45,10 @@ the carriers already export:
 - `Http2Connection`: `feed`, `inputTail`, `received`, `endInput`, `next`,
   `respond`, `writeData`, `reset`, `consume`, `restart` and `rest`, plus
   `Http2Pools`.
-- `Http2TlsServer`: `accept`, `next`, `connection` and `flush`.
-- `Http3Server`: `receive`, `ready`, `connection` and `flush`, with
-  `Http3Connection`'s `respond`, `writeData` and `reset`.
+- `Http2TlsServer`: `accept`, `signP256`, `next`, `connection`, `flush` and
+  `close`.
+- `Http3Server`: `receive`, `ready`, `connection`, `flush` and `timeout`,
+  with `Http3Connection`'s `respond`, `writeData` and `reset`.
 
 `http1-server.ts`, `handler.ts` and `serve.ts` belong to in-flight runs
 (wp34-finish edits all three), and G7 edits none of them. The four places
@@ -253,9 +254,13 @@ The request is whole, and queued, at these points:
 
 Body chunks (`H1_BODY`, `H2_DATA` and `H3_DATA`) are appended to `r.body` up
 to `maxBody`. Past that, the request is answered 413 and the rest of the
-body is not read. The stream is then reset with NO_ERROR on h2 (RFC 9113
-§8.1) and stopped with H3_NO_ERROR on h3 (RFC 9114 §4.1), which both allow
-after a complete response. Request trailers
+body is not read. On h2 the stream is then reset with NO_ERROR, which RFC
+9113 §8.1 allows after a complete response. On h3 the rest of the body is
+read and discarded, not stored, until `H3_END`: `Http3Connection.reset`
+cannot touch a stream whose response is finished, and its `stopStream`
+serves WebTransport streams only. QUIC flow control still bounds what the
+peer sends. Sending STOP_SENDING on a finished request is a possible later
+change to `http3.ts`, by its owner; G7 does not need it. Request trailers
 (`H2_TRAILERS`, `H3_TRAILERS`) are read and dropped.
 
 ### 3.2 Response side: at most one copy out
@@ -332,9 +337,10 @@ drives `Http2TlsServer` directly, as it is not today.
 
 ## 4. h2c: prior knowledge only
 
-`std/net/http2-cleartext.ts` exports `Http2CleartextServer`. It has the same
-method names as `Http2TlsServer` (`accept`, `next`, `connection`, `flush`,
-`close`, `expire`, `fd`), with a TCP socket in place of the TLS server.
+`std/net/http2-cleartext.ts` exports `Http2CleartextServer`. It has
+`Http2TlsServer`'s method names (`accept`, `next`, `connection`, `flush`,
+`close`, `fd`), with a TCP socket in place of the TLS server, plus
+`expire(now)` for the preface deadline.
 
 - **Prior knowledge only.** The client starts with the HTTP/2 connection
   preface (RFC 9113 §3.3).
