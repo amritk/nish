@@ -250,6 +250,76 @@ int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
   return r < 0 ? r : (int32_t)bytes->len;
 }
 
+/* ---- Streaming reads (WP44, docs/wp44-streaming-files.md): `fileOpen`,
+   `fileReadAt`, `fileSize` and `fileClose`. A program reads a regular file a
+   window at a time into a `u8[]` it owns, so nothing here allocates and the
+   arena follows the window, not the file. Every failure is a negated errno in
+   Linux's numbering whatever the platform, through `nish_fs_err`, so Darwin's
+   and WASI's numbers (WASI's `ENOENT` is 44) come out as Linux's and the Node
+   shim, which maps `err.code` by the same names, answers the same bytes. */
+
+/* The errno set of docs/wp44-streaming-files.md §3, by name; any other code,
+   WASI's `ENOTCAPABLE` among them (§9 Q7), is -5, as the shim collapses it. */
+static int32_t nish_fs_err(int e) {
+  switch (e) {
+  case ENOENT: return -2;
+  case ENXIO: return -6;
+  case EBADF: return -9;
+  case EACCES: return -13;
+  case ENOTDIR: return -20;
+  case EISDIR: return -21;
+  case EINVAL: return -22;
+  case ENFILE: return -23;
+  case EMFILE: return -24;
+  case ESPIPE: return -29;
+  case ENAMETOOLONG: return -36;
+  case ELOOP: return -40;
+  default: return -5;
+  }
+}
+
+/* `fileOpen(path)`: a descriptor for a regular file, or the errno. A path
+   holding a NUL reaches `open` as "" through `nish_cpath`, so it answers -2 as
+   a missing file does (RT-3). `O_CLOEXEC` keeps it out of a spawned child
+   (RT-12); `O_NONBLOCK` only stops a FIFO with no writer from hanging the open,
+   and changes nothing for the regular file that is all this hands out: a
+   directory is closed again and answers -21, anything else -22 (§9 Q6).
+   `fstat` on the descriptor, so the answer is about the file opened. */
+int32_t nish_file_open(const nish_str *path) {
+  int fd = open(nish_cpath(path), O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+  if (fd < 0) return nish_fs_err(errno);
+  struct stat st;
+  int32_t r = fstat(fd, &st) != 0 ? nish_fs_err(errno) : S_ISREG(st.st_mode) ? 0 : S_ISDIR(st.st_mode) ? -21 : -22;
+  if (r == 0) return fd;
+  close(fd);
+  return r;
+}
+
+/* `fileReadAt(fd, buf, off, len, pos)`: `pread` into `buf[off, off + len)`,
+   which the compiled call has range-checked as `netRead`'s. A `pos` below 0 or
+   a `pos + len` past 2^63 - 1 is -22 before the kernel is asked, as Linux
+   would answer the second and Node could not be trusted to answer the first;
+   `len` 0 is 0. An `EINTR` before a byte moves is retried (RT-13), and the
+   count may still be short of `len` before the end. */
+int32_t nish_file_read_at(int32_t fd, nish_array *buf, int64_t off, int64_t len, int64_t pos) {
+  if (pos < 0 || len > INT64_MAX - pos) return -22;
+  if (len == 0) return 0;
+  ssize_t n;
+  while ((n = pread(fd, buf->data + off, (size_t)len, (off_t)pos)) < 0 && errno == EINTR) {
+  }
+  return n < 0 ? nish_fs_err(errno) : (int32_t)n;
+}
+
+/* `fileSize(fd)`: `fstat`'s size now, which a later read may find changed. */
+int64_t nish_file_size(int32_t fd) {
+  struct stat st;
+  return fstat(fd, &st) == 0 ? (int64_t)st.st_size : nish_fs_err(errno);
+}
+
+/* `fileClose(fd)`: never retried on `EINTR`, because Linux has released the
+   number by then and a retry could close a descriptor opened since. */
+int32_t nish_file_close(int32_t fd) { return close(fd) == 0 ? 0 : nish_fs_err(errno); }
+
 /* ---- Files and directories with an explicit mode (docs/security/runtime.md,
    RT-24 to RT-26): `writeFileSyncMode`, `createFileExclusiveSync` and
    `mkdirSyncMode`. Each answers a value and never exits, as the writers just

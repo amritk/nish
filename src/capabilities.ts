@@ -299,7 +299,13 @@ export const builtinCapability = (name: string): i32 => {
     name === "realpathSync" ||
     name === "isDirectorySync" ||
     name === "lstatOwnerModeSync" ||
-    name === "isExecutableSync"
+    name === "isExecutableSync" ||
+    // WP44 Q8: `fileSize` and `fileClose` too, so a program denied `fs.read`
+    // holds no descriptor and closes none.
+    name === "fileOpen" ||
+    name === "fileReadAt" ||
+    name === "fileSize" ||
+    name === "fileClose"
   ) {
     return CAP_FS_READ
   }

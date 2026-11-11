@@ -274,7 +274,7 @@ export const isBuiltinSpecifier = (specifier: string): boolean =>
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
   if (specifier === `${BUILTIN_SCHEME}fs`) {
-    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync, writeFileSyncMode, createFileExclusiveSync, mkdirSyncMode"
+    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync, writeFileSyncMode, createFileExclusiveSync, mkdirSyncMode, fileOpen, fileReadAt, fileSize, fileClose"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, setCpuAffinity, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
@@ -405,6 +405,8 @@ export const NET_WORDS: i32 = 109
  * range-checks in the IR and hands to the runtime widened to an `i64`.
  */
 export const NET_RANGE: i32 = 110
+/** `l`: an `i64` passed as it is, `fileReadAt`'s position. */
+export const NET_WIDE: i32 = 108
 
 /** Whether a letter is an array the call writes the elements of: `w` and `m`. */
 export const isNetWrittenLetter = (letter: i32): boolean => letter === NET_WRITTEN || letter === NET_WORDS
@@ -415,14 +417,17 @@ export const isNetBufferLetter = (letter: i32): boolean => isNetWrittenLetter(le
 /**
  * The buffer letters of a call that takes a range-checked `(buf, off, len)`
  * triple: a `nish:net` signature, `readStdin`'s, which is `netRead`'s
- * without the descriptor, and `writeBytes`'s, which is `netWrite`'s to stdout.
+ * without the descriptor, `writeBytes`'s, which is `netWrite`'s to stdout,
+ * and `fileReadAt`'s, which is `netRead`'s with an `i64` position after it.
  * One string, so the emitter's range check, the written-argument rule and the
- * panic set read `readStdin` and `writeBytes` as they read `netRead` and
- * `netWrite`.
+ * panic set read the three as they read `netRead` and `netWrite`.
  */
 export const bufferSignature = (name: string): string => {
   if (name === "readStdin") {
     return "wnn"
+  }
+  if (name === "fileReadAt") {
+    return "iwnnl"
   }
   return name === "writeBytes" ? "rnn" : netSignature(name)
 }
@@ -523,6 +528,14 @@ export const isTermExport = (name: string): boolean =>
   name === "setRawMode" ||
   name === "setTerminalRestore"
 
+/**
+ * WP44: the four builtins that read a regular file a window at a time
+ * (docs/LANGUAGE.md, "File I/O"). `nish:fs` exports them, and they are `fs.read`,
+ * not `net`, so they stay out of `isNetExport`.
+ */
+export const isFileStreamExport = (name: string): boolean =>
+  name === "fileOpen" || name === "fileReadAt" || name === "fileSize" || name === "fileClose"
+
 /** The builtin `specifier` exports under `name`, or null when it exports no such name. */
 export const nishExport = (specifier: string, name: string): BuiltinExport | null => {
   if (specifier === `${BUILTIN_SCHEME}fs`) {
@@ -542,7 +555,8 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "writeFileBytesSync" ||
       name === "writeFileSyncMode" ||
       name === "createFileExclusiveSync" ||
-      name === "mkdirSyncMode"
+      name === "mkdirSyncMode" ||
+      isFileStreamExport(name)
     ) {
       return new BuiltinExport("", name, false)
     }
