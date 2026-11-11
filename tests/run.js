@@ -3432,6 +3432,121 @@ if (!only || "net_loop".includes(only)) {
   )
 }
 
+// ---- WP51 function references under the debug profile --------------------------
+//
+// The golden loop links the speed profile. Each `fnref_*` case links here under
+// `--profile debug` too, whose dispatchers check the tag on entry, and must
+// print its `.out` all the same. `fnref_debug_check` then has a tag outside
+// its place's set forged into its debug IR: `g` can hold only `twice`, and the
+// forged call hands `g`'s dispatcher `dec`'s tag, a tag of the right signature
+// that the place pass proves `g` never holds. The debug binary must panic with
+// the set message; the speed IR, its golden, has no check to reach.
+if (selects("fnref", "fnref_debug_check")) {
+  const fnrefDir = path.join(buildDir, "fnref-debug")
+  fs.mkdirSync(fnrefDir, { recursive: true })
+  const cases = fs
+    .readdirSync(casesDir)
+    .filter((f) => /^fnref_.*\.ts$/.test(f))
+    .map((f) => f.slice(0, -3))
+  for (const name of cases) {
+    const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
+    const exe = path.join(fnrefDir, name)
+    const linked = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--link", exe, "--profile", "debug"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran = linked.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : linked
+    check(`${name}: --profile debug prints its .out`, ran.status === 0 && ran.stdout === want, shown(ran))
+  }
+
+  const ll = path.join(fnrefDir, "fnref_debug_check.ll")
+  const emitted = spawnSync(
+    NISH,
+    [path.join(casesDir, "fnref_debug_check.ts"), "--profile", "debug", "-o", ll],
+    { cwd: root, encoding: "utf8" }
+  )
+  const ir = emitted.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+  const tags = /define internal [^@]*@\$ref\.0\.fr1\.i32\.i32\.0\([^]*?switch i32 %\$t, label %ref\.outside \[ i32 (\d+), label %ref\.inside i32 (\d+),/.exec(ir)
+  const single = /call i32 @(\$ref\.0\.fr1\.i32\.i32\.1)\(i32 (%\d+), i32 3\)/.exec(ir)
+  check(
+    "fnref_debug_check: the debug dispatchers check their tags, by a switch and by a compare",
+    tags !== null && single !== null && ir.includes("icmp eq i32 %$t,"),
+    emitted.stderr + ir.split("\n").filter((l) => l.includes("$ref")).join("\n")
+  )
+  if (tags !== null && single !== null) {
+    // `dec`'s tag, the second member of the array's set, handed to `g`'s dispatcher.
+    const forged = ir.replace(single[0], `call i32 @${single[1]}(i32 ${tags[2]}, i32 3)`)
+    const forgedLl = path.join(fnrefDir, "fnref_debug_forged.ll")
+    fs.writeFileSync(forgedLl, forged)
+    const exe = path.join(fnrefDir, "fnref_debug_forged")
+    const built = spawnSync(
+      "bash",
+      [path.join(root, "scripts", "build.sh"), forgedLl, path.join(root, "runtime", "runtime.c"), "-o", exe, "--profile", "debug"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran = built.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : built
+    check(
+      "fnref_debug_check: a forged tag outside the place's set panics under --profile debug",
+      built.status === 0 &&
+        ran.status !== 0 &&
+        ran.stderr.includes("function reference holds a function outside its place's set"),
+      shown(ran)
+    )
+  }
+  // §4.4: no reference call leaks. Each program runs at 1000x and 10000x its
+  // loop length (`new P(i % 8)` keeps its sums in range) for its peak resident
+  // set. `fnref_place_set` and the half of `fnref_escape_join` that calls
+  // through the set that keeps nothing must peak alike; the half that calls
+  // `slot.use`, whose set keeps `p`, grows the arena as a direct call of
+  // `keepIt` does, so it is pinned to that direct call instead. The tolerance
+  // is under one arena chunk (128 KB), the smallest step a leak can take.
+  const rssExe = path.join(fnrefDir, "rss")
+  const rssBuilt = spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+  const peakOf = (label, source) => {
+    const ts = path.join(fnrefDir, `${label}.ts`)
+    const exe = path.join(fnrefDir, label)
+    fs.writeFileSync(ts, source)
+    const linked = spawnSync(NISH, [ts, "--link", exe], { cwd: root, encoding: "utf8" })
+    const r = linked.status === 0 ? spawnSync(rssExe, [exe], { encoding: "utf8" }) : linked
+    return { kb: r.status === 0 ? Number(r.stdout.trim()) : -1, detail: shown(r) }
+  }
+  const scaled = (name, bound, times, edit = (t) => t) =>
+    edit(fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8"))
+      .replace(`while (i < ${bound})`, `while (i < ${bound * times})`)
+      .replaceAll("new P(i)", "new P(i % 8)")
+  const flat = (label, few, many) =>
+    check(
+      label,
+      rssBuilt.status === 0 && few.kb > 0 && many.kb > 0 && Math.abs(many.kb - few.kb) < 128,
+      `peak ${few.kb} KB and ${many.kb} KB\n${rssBuilt.stderr}${few.detail}\n${many.detail}`
+    )
+  flat(
+    "fnref_place_set: 10x the loop peaks where 1x does",
+    peakOf("place_set_1x", scaled("fnref_place_set", 9, 1000)),
+    peakOf("place_set_10x", scaled("fnref_place_set", 9, 10000))
+  )
+  const keepless = (t) => t.replace(/\n\s*sum = sum \+ slot\.use\(new P\(i\), k\)/, "")
+  flat(
+    "fnref_escape_join: 10x the loop through the set that keeps nothing peaks where 1x does",
+    peakOf("escape_join_1x", scaled("fnref_escape_join", 4, 1000, keepless)),
+    peakOf("escape_join_10x", scaled("fnref_escape_join", 4, 10000, keepless))
+  )
+  const direct = (t) => t.replace("slot.use(new P(i), k)", "keepIt(new P(i), k)")
+  flat(
+    "fnref_escape_join: at 10x, the call through the keeping set peaks where a direct call of `keepIt` does",
+    peakOf("escape_join_direct", scaled("fnref_escape_join", 4, 10000, direct)),
+    peakOf("escape_join_10x_keep", scaled("fnref_escape_join", 4, 10000))
+  )
+
+  const speedLl = path.join(casesDir, "fnref_debug_check.ll")
+  const speed = fs.existsSync(speedLl) ? fs.readFileSync(speedLl, "utf8") : "ref.outside: no golden"
+  check(
+    "fnref_debug_check: the speed golden checks no tag",
+    !speed.includes("ref.outside") && !speed.includes("outside its place's set"),
+    speed.split("\n").filter((l) => l.includes("$ref")).join("\n")
+  )
+}
+
 // ---- The link profile of a `tests/link` program (WP5) -------------------------
 //
 // A program links under `--profile debug` unless it is on `SPEED_LINK` or its args
