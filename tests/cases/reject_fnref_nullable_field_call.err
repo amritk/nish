@@ -1,1 +1,1 @@
-`s.op` may be `null`: a nullable function reference is called only after a test such as `s.op !== null` proves it holds a function
+`s.op` may be `null`: a nullable function reference is called only after a test such as `const h = s.op; if (h !== null)` proves it holds a function
