@@ -159,6 +159,7 @@ cases/caps_process_nice added after R6: no rewriter to freeze it with
 cases/caps_process_spawn added after R6: no rewriter to freeze it with
 cases/caps_process_spawn_fds added after R6: no rewriter to freeze it with
 cases/caps_process_spawn_piped added after R6: no rewriter to freeze it with
+cases/caps_process_spawn_piped_within added after R6: no rewriter to freeze it with
 cases/caps_process_wait added after R6: no rewriter to freeze it with
 cases/caps_pure added after R6: no rewriter to freeze it with
 cases/caps_signal added after R6: no rewriter to freeze it with
@@ -237,6 +238,7 @@ cases/io_create_exclusive added after R6: no rewriter to freeze it with
 cases/io_mkdir_mode added after R6: no rewriter to freeze it with
 cases/io_rename added after R6: no rewriter to freeze it with
 cases/io_spawn_piped added after R6: no rewriter to freeze it with
+cases/io_spawn_piped_within added after R6: no rewriter to freeze it with
 cases/io_unlink added after R6: no rewriter to freeze it with
 cases/io_write_bytes added after R6: no rewriter to freeze it with
 cases/io_write_file_bytes added after R6: no rewriter to freeze it with

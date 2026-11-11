@@ -28769,6 +28769,48 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end builtin-spawn-piped -->
 
+### A captured run with a deadline: `spawnPipedWithin`
+
+`spawnPipedWithin` is the same run with a deadline: the call is
+`spawnPiped`'s with one more `i32`, the milliseconds, and its `declare`
+carries the same marks for the same reasons. A run still going when the
+deadline passes answers -3: the runtime kills the child's pid with `SIGKILL`,
+reaps it, and keeps the bytes it read in `stdout` and `stderr`. The deadline
+bounds the whole run, the final wait for the child included, so a child that
+closes its output and keeps running is -3 too; a negative one is no deadline
+([LANGUAGE.md](LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory)).
+
+<!-- cookbook:begin builtin-spawn-piped-within -->
+```ts
+// `spawnPipedWithin` is `spawnPiped` with a fifth argument, the deadline in
+// milliseconds, passed through as an `i32`. A run still going at the deadline
+// answers -3, its child killed and reaped and the bytes read so far kept.
+export const start = (argv: string[], stdin: readonly u8[], out: u8[], err: u8[]): i32 =>
+  spawnPipedWithin(argv, stdin, out, err, 5000)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef i32 @nish_spawn_piped_within(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #0
+
+define noundef i32 @start(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %argv, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %stdin, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %out, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %err) #0 {
+entry:
+  %0 = call i32 @nish_spawn_piped_within(%struct.nish_array* %argv, %struct.nish_array* %stdin, %struct.nish_array* %out, %struct.nish_array* %err, i32 5000)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-spawn-piped-within -->
+
 ### `nish:process`: `spawnWithFds`
 
 `spawn` with descriptors handed on: one call into `runtime/runtime-os.c`,
@@ -30270,6 +30312,7 @@ declare noundef i32 @nish_spawn(%struct.nish_array* noundef nonnull align 8) #3
 declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8) #2
 declare noundef i32 @nish_spawn_piped(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #3
+declare noundef i32 @nish_spawn_piped_within(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #3
 declare noundef i32 @nish_spawn_with_fds(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly) #2
 declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #3
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef) #3

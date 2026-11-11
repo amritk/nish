@@ -327,7 +327,9 @@ function spawnPiped(argv, input) {
  * `spawnPipedWithin(argv, stdin, timeoutMs)`'s run: `spawnPiped`'s, with
  * Node's `timeout` set when `timeoutMs` is not negative. Node kills the child
  * with `SIGKILL` when it passes and reports `ETIMEDOUT`, which is -3 here as
- * in the runtime, with the bytes Node read before the kill kept.
+ * in the runtime, with the bytes Node read before the kill kept. Node reads a
+ * `timeout` of 0 as none, so a deadline of zero is passed as 1 ms: already
+ * past for any child that has to start a program.
  */
 function spawnPipedWithin(argv, input, timeoutMs) {
   if (argv.length === 0) return [-1, [], []];
@@ -339,7 +341,7 @@ function spawnPipedWithin(argv, input, timeoutMs) {
       input: Uint8Array.from(input),
       maxBuffer: PIPED_CAP,
       killSignal: "SIGKILL",
-      ...(timeoutMs >= 0 ? { timeout: timeoutMs } : {}),
+      ...(timeoutMs >= 0 ? { timeout: Math.max(timeoutMs, 1) } : {}),
     });
   } catch {
     return [-1, [], []];
