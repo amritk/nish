@@ -3704,7 +3704,8 @@ export const main = (): void => {
   a template string or any other use is
   `` `f` is a function reference: it can be called, compared, stored and passed, nothing else ``
   (NL2737, `reject_fnref_print`, and as `JSON.stringify`'s argument,
-  `reject_fnref_stringify`); `jsonEncode` refuses a type that holds one
+  `reject_fnref_stringify`; a field, an element or a nullable reference
+  alike, `reject_fnref_stringify_place`); `jsonEncode` refuses a type that holds one
   (`` `jsonEncode` cannot handle `Stage.op`, which is `(i32) => i32` ``,
   `reject_fnref_json`); `<` and the other orderings take numbers only (`reject_fnref_order`,
   `reject_fnref_order_gt`), as `+` and the other arithmetic does
