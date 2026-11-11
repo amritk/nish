@@ -2497,6 +2497,27 @@ const callsLeaveMemory = (
   return false
 }
 
+/**
+ * A call or `new` under `node` into a function this analysis has no facts
+ * for, which `PassWalk.visitCallee` refuses without counting it as
+ * allocating. An arrow's body is another function's.
+ */
+const callsUnseen = (program: CheckedProgram, table: TypeTable, facts: FactsTable, node: Node): boolean => {
+  if (node.kind === N_ARROW) {
+    return false
+  }
+  const callee = calleeAt(program, table, node)
+  if (callee !== null && facts.get(callee.name) === null) {
+    return true
+  }
+  for (const child of node.children) {
+    if (callsUnseen(program, table, facts, child)) {
+      return true
+    }
+  }
+  return false
+}
+
 // ---- `using a = arena()` ------------------------------------------------------------------
 //
 // A block that declares `using a = arena()` takes the mark at the declaration
@@ -2981,7 +3002,6 @@ const noScopeReason = (unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts):
 /** What `calleeWhere` looks for. */
 const CALLEE_ESCAPES: i32 = 0
 const CALLEE_GARBAGE: i32 = 1
-const CALLEE_LEAKS: i32 = 2
 
 /** A callee's allocations are garbage once its result is: it leaves memory behind and lets none of it escape. */
 const leavesGarbage = (g: FunctionFacts): boolean => g.netAllocates && g.contained
@@ -2993,9 +3013,7 @@ const calleeWhere = (facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
     const g = facts.get(f.callees.at(c))
     if (
       g !== null &&
-      ((mode === CALLEE_ESCAPES && g.allocEscapes) ||
-        (mode === CALLEE_GARBAGE && leavesGarbage(g)) ||
-        (mode === CALLEE_LEAKS && g.allocLeaks))
+      ((mode === CALLEE_ESCAPES && g.allocEscapes) || (mode === CALLEE_GARBAGE && leavesGarbage(g)))
     ) {
       return g
     }
@@ -3006,26 +3024,53 @@ const calleeWhere = (facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
 
 /**
  * Where `f`'s `allocLeaks` comes from, when a callee's: `allocLeaks` flows up
- * the call graph, so the chain of callees that have it is followed down to
- * one none of whose callees does, whose leak is its own. Null when no callee
- * of `f` but `f` itself leaks.
+ * the call graph, so its callees are searched, depth first, for one none of
+ * whose own callees has it, whose leak is its own. A search that only loops
+ * back through a recursion names the first callee that has it. Null when no
+ * callee of `f` but `f` itself leaks.
  */
 const leakRoot = (facts: FactsTable, f: FunctionFacts): FunctionFacts | null => {
-  const first = calleeWhere(facts, f, CALLEE_LEAKS)
-  if (first === null || first === f) {
-    return null
+  const seen: FunctionFacts[] = [f]
+  const root = ownLeak(facts, f, seen)
+  if (root === null) {
+    return seen.length > 1 ? seen[1] : null
   }
-  let at: FunctionFacts = first
-  let steps = 0
-  while (steps < 64) {
-    const next = calleeWhere(facts, at, CALLEE_LEAKS)
-    if (next === null || next === at || next === f) {
-      return at
+  return root === f ? null : root
+}
+
+/**
+ * The first function down `f`'s calls with `allocLeaks` none of whose other
+ * callees has it: `f` itself when none does. Null when every callee that has
+ * it is in `seen`, the functions already searched, or leads only back there.
+ */
+const ownLeak = (facts: FactsTable, f: FunctionFacts, seen: FunctionFacts[]): FunctionFacts | null => {
+  let leaksBelow = false
+  let c = 0
+  while (c < f.callees.size()) {
+    const g = facts.get(f.callees.at(c))
+    if (g !== null && g !== f && g.allocLeaks) {
+      leaksBelow = true
+      if (!holdsFacts(seen, g)) {
+        seen.push(g)
+        const found = ownLeak(facts, g, seen)
+        if (found !== null) {
+          return found
+        }
+      }
     }
-    at = next
-    steps = steps + 1
+    c = c + 1
   }
-  return at
+  return leaksBelow ? null : f
+}
+
+/** Whether `list` holds `f`. */
+const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
+  for (const g of list) {
+    if (g === f) {
+      return true
+    }
+  }
+  return false
 }
 
 // ---- `--explain-memory` -------------------------------------------------------------------
@@ -3249,9 +3294,7 @@ const keptReason = (
   if (noElision) {
     return NO_ELISION_REASON
   }
-  if (f.managesArena) {
-    return `it ${ARENA_MARK_REASON}`
-  }
+  // `Arena.mark` refuses a pass its scope, not the function (`LOOP_CONTROL`).
   const reason = noScopeReason(unit, facts, f)
   if (reason.length > 0) {
     return reason
@@ -3266,7 +3309,11 @@ const keptReason = (
   const line = program.source.lineOf(kept.start)
   // What a callee leaves behind is the caller's to release, and with no
   // scope of its own this function releases none of it.
-  const callee = calleeAt(program, table, kept)
+  // A `new` of the function's own whose constructor leaves nothing is the
+  // allocation kept, not a call to blame.
+  const callee: FunctionSig | null = leavesMemory(program, table, facts, kept)
+    ? calleeAt(program, table, kept)
+    : null
   if (callee !== null) {
     const what = facts.get(callee.name) === null ? ", which this analysis cannot see into," : ""
     return `\`${callee.sourceName}\`${what} called on line ${line}, leaves memory behind that no scope of this function takes back`
@@ -3274,8 +3321,8 @@ const keptReason = (
   const root: FunctionFacts | null = f.allocLeaks ? leakRoot(facts, f) : null
   if (root !== null) {
     return (
-      `it calls into \`${root.sourceName}\`, which lets what it allocated outlive the call, so this analysis does ` +
-      `not prove dead what line ${line} allocates either`
+      `it calls into \`${root.sourceName}\`, which holds an allocation this analysis does not prove dead, and ` +
+      `that doubt passes to every caller, so it does not prove dead what line ${line} allocates either`
     )
   }
   if (f.allocLeaks) {
@@ -3329,7 +3376,7 @@ const explainLoops = (
     const unwalked = noElision || scope.why === LOOP_CONTROL
     const allocates =
       scope.allocates ||
-      scope.why === LOOP_UNSEEN ||
+      (!scope.scoped && callsUnseen(unit.program, table, facts, scope.body)) ||
       (unwalked && passCallsAllocate(unit, table, f, facts, scope.body))
     if (allocates || conditionKeeps || updateKeeps) {
       out.loops = out.loops + 1

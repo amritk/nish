@@ -12717,13 +12717,15 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   generic function, or one that takes a function parameter, is explained once
   per instantiation, under its instantiated name (`` `each<twice>` ``), after
   the functions declared outright (`tests/cases/explain_memory_calls`).
-- **A callee the analysis cannot see counts as allocating.** A loop that
-  calls one is listed with the refusal that names it, since nothing proves
-  its passes leave no memory behind.
+- **A callee the analysis cannot see counts as allocating.** In a function
+  that allocates, a loop with no scope that calls one is listed, since nothing
+  proves its passes leave no memory behind. A function that allocates nothing
+  the analysis can see is not examined.
 - **A callee's leak is its caller's.** A function whose kept allocation is a
-  call names that callee; one that keeps memory because a function down its
-  calls lets an allocation outlive the call names that function, the one
-  whose own leak it is.
+  call names that callee. One that keeps memory because a function down its
+  calls holds an allocation the analysis does not prove dead names that
+  function, the one the doubt starts in, even when that function's own scope
+  gives its memory back: the doubt passes up every call.
 - **A function is judged by what it still holds when it returns.** One with
   no scope of its own keeps nothing when every allocation it leaves is inside
   a scoped pass or a `using a = arena()` block, so it is counted and not

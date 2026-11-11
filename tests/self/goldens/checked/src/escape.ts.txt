@@ -104,7 +104,6 @@ const BLOCK_ELEMENT: i32 = 9
 const BLOCK_SPAWN: i32 = 10
 const CALLEE_ESCAPES: i32 = 0
 const CALLEE_GARBAGE: i32 = 1
-const CALLEE_LEAKS: i32 = 2
 const NO_ELISION_REASON: string = "`--no-elision` takes no automatic scope"
 const ARENA_MARK_REASON: string = "calls `Arena.mark` itself, and no automatic scope moves the position it reads"
 struct EscapeResult (class) size=104 align=8 exported
@@ -1406,6 +1405,19 @@ function callsLeaveMemory(program: CheckedProgram, table: TypeTable, facts: Fact
   callee +0:7 leavesMemory -> @leavesMemory
   local +3:14 child: Node (const)
   callee +4:9 callsLeaveMemory -> @callsLeaveMemory
+function callsUnseen(program: CheckedProgram, table: TypeTable, facts: FactsTable, node: Node): boolean -> @callsUnseen
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FactsTable.get calleeAt callsUnseen
+  pointer program: size=704 writesThrough=false captured=false passedTo=calleeAt#0 callsUnseen#0
+  pointer table: size=96 writesThrough=false captured=false passedTo=calleeAt#1 callsUnseen#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 callsUnseen#2
+  pointer node: size=40 writesThrough=false captured=false passedTo=calleeAt#2
+  stackSites=0 stackLocals=0
+  local +0:9 callee: FunctionSig | null (const)
+  callee +0:18 calleeAt -> @calleeAt
+  callee +1:26 FactsTable.get -> @FactsTable.get
+  local +4:14 child: Node (const)
+  callee +5:9 callsUnseen -> @callsUnseen
 function isArenaUsing(program: CheckedProgram, stmt: Node): boolean -> @isArenaUsing [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isArenaCall nish_panic_index unwrapParens
@@ -1641,19 +1653,42 @@ function calleeWhere(facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
   local +2:11 g: FunctionFacts | null (const)
   callee +2:15 FactsTable.get -> @FactsTable.get
   callee +2:25 StringSet.at -> @StringSet.at
-  callee +6:37 leavesGarbage -> @leavesGarbage
+  callee +5:83 leavesGarbage -> @leavesGarbage
 function leakRoot(facts: FactsTable, f: FunctionFacts): FunctionFacts | null -> @leakRoot
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: calleeWhere
-  pointer facts: size=24 writesThrough=false captured=false passedTo=calleeWhere#0 calleeWhere#0
-  pointer f: size=416 writesThrough=false captured=false passedTo=calleeWhere#1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ownLeak
+  escaping: f
+  calls: ownLeak
+  pointer facts: size=24 writesThrough=false captured=false passedTo=ownLeak#0
+  pointer f: size=416 writesThrough=true captured=true passedTo=ownLeak#1
+  stackSites=1 stackLocals=1
+  local +0:9 seen: FunctionFacts[] (const)
+  local +1:9 root: FunctionFacts | null (const)
+  callee +1:16 ownLeak -> @ownLeak
+function ownLeak(facts: FactsTable, f: FunctionFacts, seen: FunctionFacts[]): FunctionFacts | null -> @ownLeak
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: f
+  calls: FactsTable.get StringSet.at StringSet.size holdsFacts nish_array_grow ownLeak
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 ownLeak#0
+  pointer f: size=416 writesThrough=true captured=true
+  pointer seen: size=0 writesThrough=true captured=false passedTo=holdsFacts#0 ownLeak#2
   stackSites=0 stackLocals=0
-  local +0:9 first: FunctionFacts | null (const)
-  callee +0:17 calleeWhere -> @calleeWhere
-  local +4:7 at: FunctionFacts (let)
-  local +5:7 steps: i32 (let)
-  local +7:11 next: FunctionFacts | null (const)
-  callee +7:18 calleeWhere -> @calleeWhere
+  local -7:7 leaksBelow: boolean (let)
+  local -6:7 c: i32 (let)
+  callee -5:14 StringSet.size -> @StringSet.size
+  local -4:11 g: FunctionFacts | null (const)
+  callee -4:15 FactsTable.get -> @FactsTable.get
+  callee -4:25 StringSet.at -> @StringSet.at
+  callee -1:12 holdsFacts -> @holdsFacts
+  local +1:15 found: FunctionFacts | null (const)
+  callee +1:23 ownLeak -> @ownLeak
+function holdsFacts(list: FunctionFacts[], f: FunctionFacts): boolean -> @holdsFacts
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer list: size=0 writesThrough=false captured=false
+  pointer f: size=416 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 g: FunctionFacts (const)
 function MemoryReport.constructor(this: MemoryReport): void -> @MemoryReport.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=24 writesThrough=true captured=false
@@ -1688,7 +1723,7 @@ function explainFunction(unit: AnalysisUnit, table: TypeTable, facts: FactsTable
   pointer table: size=96 writesThrough=false captured=false passedTo=keptAllocation#1 keptReason#1 explainLoops#1
   pointer facts: size=24 writesThrough=false captured=false passedTo=keptAllocation#2 keptReason#2 explainLoops#2
   pointer sig: size=176 writesThrough=false captured=false
-  pointer f: size=416 writesThrough=false captured=false passedTo=keptAllocation#3 keptReason#3 explainLoops#3
+  pointer f: size=416 writesThrough=true captured=true passedTo=keptAllocation#3 keptReason#3 explainLoops#3
   pointer body: size=40 writesThrough=true captured=true passedTo=keptAllocation#4 explainLoops#6
   pointer out: size=24 writesThrough=true captured=false passedTo=explainLoops#9
   stackSites=0 stackLocals=0
@@ -1759,33 +1794,35 @@ function firstLeavingCall(program: CheckedProgram, table: TypeTable, facts: Fact
   local +7:11 hit: Node | null (const)
   callee +7:17 firstLeavingCall -> @firstLeavingCall
 function keptReason(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f: FunctionFacts, noElision: boolean, kept: Node): string -> @keptReason
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: FactsTable.get SourceFile.lineOf calleeAt leakRoot nish_panic_index nish_str_concat nish_str_from_i32 noScopeReason
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via leakRoot
+  calls: FactsTable.get SourceFile.lineOf calleeAt leakRoot leavesMemory nish_panic_index nish_str_concat nish_str_from_i32 noScopeReason
   pointer unit: size=16 writesThrough=false captured=false passedTo=noScopeReason#0
-  pointer table: size=96 writesThrough=false captured=false passedTo=calleeAt#1
-  pointer facts: size=24 writesThrough=false captured=false passedTo=noScopeReason#1 FactsTable.get#0 leakRoot#0
-  pointer f: size=416 writesThrough=false captured=false passedTo=noScopeReason#2 leakRoot#1
-  pointer kept: size=40 writesThrough=false captured=false passedTo=calleeAt#2
+  pointer table: size=96 writesThrough=false captured=false passedTo=leavesMemory#1 calleeAt#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=noScopeReason#1 leavesMemory#2 FactsTable.get#0 leakRoot#0
+  pointer f: size=416 writesThrough=true captured=true passedTo=noScopeReason#2 leakRoot#1
+  pointer kept: size=40 writesThrough=false captured=false passedTo=leavesMemory#3 calleeAt#2
   stackSites=0 stackLocals=0
   local +0:9 reason: string (const)
   callee +0:18 noScopeReason -> @noScopeReason
   local +10:9 program: CheckedProgram (const)
   local +11:9 line: i32 (const)
   callee +11:16 SourceFile.lineOf -> @SourceFile.lineOf
-  local +14:9 callee: FunctionSig | null (const)
-  callee +14:18 calleeAt -> @calleeAt
-  local +16:11 what: string (const)
-  callee +16:18 FactsTable.get -> @FactsTable.get
-  local +19:9 root: FunctionFacts | null (const)
-  callee +19:53 leakRoot -> @leakRoot
+  local +16:9 callee: FunctionSig | null (const)
+  callee +16:38 leavesMemory -> @leavesMemory
+  callee +17:7 calleeAt -> @calleeAt
+  local +20:11 what: string (const)
+  callee +20:18 FactsTable.get -> @FactsTable.get
+  local +23:9 root: FunctionFacts | null (const)
+  callee +23:53 leakRoot -> @leakRoot
 function explainLoops(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f: FunctionFacts, noElision: boolean, isMain: boolean, node: Node, pass: LoopScope | null, block: Node | null, out: MemoryReport): void -> @explainLoops
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: block isMain noElision pass
-  calls: ArenaFinding.constructor bracketsItself explainLoops headNote isArenaUsing isLoopKind keptUntil loopCondition loopKeptReason loopScopeOf loopUpdate nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat passCallsAllocate
+  calls: ArenaFinding.constructor bracketsItself callsUnseen explainLoops headNote isArenaUsing isLoopKind keptUntil loopCondition loopKeptReason loopScopeOf loopUpdate nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat passCallsAllocate
   pointer unit: size=16 writesThrough=false captured=false passedTo=passCallsAllocate#0 passCallsAllocate#0 passCallsAllocate#0 bracketsItself#0 keptUntil#0 loopKeptReason#0 explainLoops#0
-  pointer table: size=96 writesThrough=false captured=false passedTo=passCallsAllocate#1 passCallsAllocate#1 passCallsAllocate#1 bracketsItself#1 explainLoops#1
-  pointer facts: size=24 writesThrough=false captured=false passedTo=passCallsAllocate#3 passCallsAllocate#3 passCallsAllocate#3 bracketsItself#3 explainLoops#2
+  pointer table: size=96 writesThrough=false captured=false passedTo=passCallsAllocate#1 passCallsAllocate#1 callsUnseen#1 passCallsAllocate#1 bracketsItself#1 explainLoops#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=passCallsAllocate#3 passCallsAllocate#3 callsUnseen#2 passCallsAllocate#3 bracketsItself#3 explainLoops#2
   pointer f: size=416 writesThrough=false captured=false passedTo=loopScopeOf#0 passCallsAllocate#2 passCallsAllocate#2 passCallsAllocate#2 bracketsItself#2 keptUntil#1 explainLoops#3
   pointer node: size=40 writesThrough=true captured=true passedTo=isLoopKind#0 loopScopeOf#1 loopCondition#0 loopUpdate#0 ArenaFinding.constructor#1
   pointer pass: size=40 writesThrough=true captured=true passedTo=keptUntil#3
@@ -1809,6 +1846,7 @@ function explainLoops(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f
   callee -12:44 passCallsAllocate -> @passCallsAllocate
   local -6:11 unwalked: boolean (const)
   local -5:11 allocates: boolean (const)
+  callee -3:25 callsUnseen -> @callsUnseen
   callee -2:20 passCallsAllocate -> @passCallsAllocate
   local +1:13 bodyKeeps: boolean (const)
   callee +1:56 bracketsItself -> @bracketsItself

@@ -4,6 +4,9 @@ entry: tests/cases/explain_memory_calls.ts
 struct Leaky (class) size=4 align=4
   field w: i32 index=0 offset=0
   constructor -> @Leaky.constructor
+struct Point (class) size=4 align=4
+  field x: i32 index=0 offset=0
+  constructor -> @Point.constructor
 function Leaky.constructor(this: Leaky, k: i32): void -> @Leaky.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: k
@@ -75,10 +78,43 @@ function count(s: string): i32 -> @count
   stackSites=1 stackLocals=0
   local +0:7 n: i32 (let)
   local +1:14 ch: string (const)
+function Point.constructor(this: Point, x: i32): void -> @Point.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: x
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function moved(): i32 -> @moved
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: Point.constructor nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local +0:7 p: Point (let)
+  callee +0:11 new Point -> @Point.constructor
+  callee +1:7 new Point -> @Point.constructor
+function recur(k: i32): i32 -> @recur
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: k
+  calls: leaker nish_arena_mark nish_arena_release nish_panic_overflow nish_str_concat nish_str_from_i32 recur
+  stackSites=0 stackLocals=0
+  local +0:9 v: string (const)
+  callee +2:12 recur -> @recur
+  callee +4:21 leaker -> @leaker
+function viaRecur(k: i32): i32 -> @viaRecur
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: nish_panic_overflow nish_str_concat nish_str_from_i32 recur
+  stackSites=0 stackLocals=0
+  local +0:9 w: string (const)
+  callee +1:21 recur -> @recur
+function marked(k: i32): i32 -> @marked
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local +0:9 m: i64 (const)
+  local +1:7 s: string (let)
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Leaky.constructor both bracketed count each$fn.5.twice nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 outer plain scopedOnly
+  calls: Leaky.constructor both bracketed count each$fn.5.twice marked moved nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 outer plain scopedOnly viaRecur
   stackSites=1 stackLocals=0
   local +0:7 k: i32 (let)
   callee +1:10 new Leaky -> @Leaky.constructor
@@ -89,6 +125,9 @@ function main(): void -> @nish_main [exported entry]
   callee +4:85 both -> @both
   callee +4:95 outer -> @outer
   callee +4:107 count -> @count
+  callee +4:121 moved -> @moved
+  callee +4:132 viaRecur -> @viaRecur
+  callee +4:147 marked -> @marked
 function lastOf<fixed>(n: i32, g: void): i32 -> @lastOf$fn.5.fixed [instance]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: fixed
