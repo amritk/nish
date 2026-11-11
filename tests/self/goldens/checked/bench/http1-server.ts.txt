@@ -5485,19 +5485,19 @@ function HttpHandler.wait(this: HttpHandler, timeoutMs: i32): i32 -> @nish.HttpH
   local -1:14 id: i32 (let)
   local +8:9 timeout: i32 (let)
   local +11:13 rest: i32 (const)
-  local +20:11 n: i32 (const)
-  local +21:11 now: i64 (const)
-  local +23:14 k: i32 (let)
-  local +24:13 token: i32 (const)
-  callee +26:9 HttpHandler.acceptAll -> @nish.HttpHandler.acceptAll
-  local +28:15 id: i32 (const)
-  callee +32:32 Http1Server.holds -> @nish.Http1Server.holds
-  callee +34:11 Http1Server.readable -> @nish.Http1Server.readable
-  callee +36:11 Http1Server.writable -> @nish.Http1Server.writable
-  callee +38:9 HttpHandler.drive -> @nish.HttpHandler.drive
-  callee +41:9 Http1Server.expire -> @nish.Http1Server.expire
-  callee +42:7 HttpHandler.sweep -> @nish.HttpHandler.sweep
-  callee +46:7 HttpHandler.expireBodies -> @nish.HttpHandler.expireBodies
+  local +22:11 n: i32 (const)
+  local +23:11 now: i64 (const)
+  local +25:14 k: i32 (let)
+  local +26:13 token: i32 (const)
+  callee +28:9 HttpHandler.acceptAll -> @nish.HttpHandler.acceptAll
+  local +30:15 id: i32 (const)
+  callee +34:32 Http1Server.holds -> @nish.Http1Server.holds
+  callee +36:11 Http1Server.readable -> @nish.Http1Server.readable
+  callee +38:11 Http1Server.writable -> @nish.Http1Server.writable
+  callee +40:9 HttpHandler.drive -> @nish.HttpHandler.drive
+  callee +43:9 Http1Server.expire -> @nish.Http1Server.expire
+  callee +44:7 HttpHandler.sweep -> @nish.HttpHandler.sweep
+  callee +48:7 HttpHandler.expireBodies -> @nish.HttpHandler.expireBodies
 function HttpHandler.deferSends(this: HttpHandler): void -> @nish.HttpHandler.deferSends [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
