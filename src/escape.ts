@@ -120,6 +120,16 @@ export const FLOW_LEAKS: i32 = 2
 const worse = (a: i32, b: i32): i32 => (a >= b ? a : b)
 
 /**
+ * A `spawnPiped` call with its four arguments, or a `spawnPipedWithin` call
+ * with its five: one whose `stdout` and `stderr` the runtime grows. A call
+ * with the wrong count was refused by the checker and grows nothing here.
+ */
+const isSpawnPipedArity = (name: string, call: Node): boolean => {
+  const count = call.children[1].children.length
+  return (name === "spawnPiped" && count === 4) || (name === "spawnPipedWithin" && count === 5)
+}
+
+/**
  * Whether an identifier builtin answers fresh arena memory, which is what makes
  * a call of one an allocation site of the function around it.
  *
@@ -148,16 +158,6 @@ const isAllocatingBuiltin = (name: string): boolean =>
   name === "waitPid" ||
   name === "terminalSize" ||
   name === "readCString"
-
-/**
- * A `spawnPiped` call with its four arguments, or a `spawnPipedWithin` call
- * with its five: one whose `stdout` and `stderr` the runtime grows. A call
- * with the wrong count was refused by the checker and grows nothing here.
- */
-const isSpawnPipedArity = (name: string, call: Node): boolean => {
-  const count = call.children[1].children.length
-  return (name === "spawnPiped" && count === 4) || (name === "spawnPipedWithin" && count === 5)
-}
 
 /**
  * Whether the builtin `name` answers an array whose elements were allocated by

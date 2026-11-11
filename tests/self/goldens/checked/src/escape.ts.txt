@@ -243,16 +243,16 @@ function worse(a: i32, b: i32): i32 -> @worse
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   stackSites=0 stackLocals=0
-function isAllocatingBuiltin(name: string): boolean -> @isAllocatingBuiltin
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_eq
-  stackSites=0 stackLocals=0
 function isSpawnPipedArity(name: string, call: Node): boolean -> @isSpawnPipedArity
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 count: i32 (const)
+function isAllocatingBuiltin(name: string): boolean -> @isAllocatingBuiltin
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
 function answersFreshElements(name: string): boolean -> @answersFreshElements
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
