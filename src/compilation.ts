@@ -466,6 +466,11 @@ export class Compilation {
   dumpOnly: boolean
   /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
   hostRefused: boolean
+  /**
+   * The check got as far as the whole-program facts, so `explainMemoryText`
+   * can read them even when a later refusal (`--deny-retention`) fails it.
+   */
+  factsSettled: boolean
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[]
   /**
@@ -516,11 +521,6 @@ export class Compilation {
    */
   capabilityLockPath: string
   capabilityLockText: string
-  /**
-   * The check got as far as the whole-program facts, so `explainMemoryText`
-   * can read them even when a later refusal (`--deny-retention`) fails it.
-   */
-  factsSettled: boolean
 
   constructor(opts: Options) {
     this.opts = opts

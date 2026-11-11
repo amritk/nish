@@ -431,7 +431,7 @@ function guardLoader(needsRuntime: boolean): string[] -> @guardLoader
 function loaderGuarded(compilation: Compilation): boolean -> @loaderGuarded [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Compilation.guardsPanics
-  pointer compilation: size=216 writesThrough=false captured=false passedTo=Compilation.guardsPanics#0
+  pointer compilation: size=208 writesThrough=false captured=false passedTo=Compilation.guardsPanics#0
   stackSites=0 stackLocals=0
   callee +0:69 Compilation.guardsPanics -> @Compilation.guardsPanics
 function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], dtsFile: string): string -> @generateWasmLoader [exported]
@@ -439,7 +439,7 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
   sharedWrite: via wasmBridged
   escaping: dtsFile
   calls: banner basename guardLoader hostFunctions hostImportsOf layoutLoader loaderGuarded nish_alloc_struct nish_array_grow nish_str_concat panicLoader pushAll refused returnsText storageLayouts structsHoldingVectors tsSignatureLine wasmBridged wasmRangeHelper wasmResultHelpers wasmWrapper
-  pointer compilation: size=216 writesThrough=false captured=false passedTo=structsHoldingVectors#0 storageLayouts#0 banner#0 hostFunctions#0 loaderGuarded#0
+  pointer compilation: size=208 writesThrough=false captured=false passedTo=structsHoldingVectors#0 storageLayouts#0 banner#0 hostFunctions#0 loaderGuarded#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=wasmBridged#1
   stackSites=1 stackLocals=1
   local +0:9 table: TypeTable (const)
@@ -485,7 +485,7 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
 function hostFunctions(compilation: Compilation): FunctionSig[] -> @hostFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn nish_array_grow
-  pointer compilation: size=216 writesThrough=false captured=false
+  pointer compilation: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: FunctionSig[] (const)
   local +1:14 unit: ModuleUnit (const)
@@ -496,7 +496,7 @@ function hostSpecifiers(compilation: Compilation, dtsFile: string): string[] -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: dtsFile
   calls: dirname nish_array_grow nish_str_at nish_str_concat nish_str_new relativePath resolvePath
-  pointer compilation: size=216 writesThrough=false captured=false
+  pointer compilation: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
   local +1:9 from: string (const)
@@ -622,7 +622,7 @@ function storageLayouts(compilation: Compilation): StorageLayout[] -> @storageLa
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via storageView
   calls: StorageField.constructor StorageLayout.constructor StringSet.add StringSet.constructor StringSet.has elementStride inlineElementStruct nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow storageView unwrapParens
-  pointer compilation: size=216 writesThrough=false captured=false
+  pointer compilation: size=208 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 table: TypeTable (const)
   local +1:9 out: StorageLayout[] (const)
