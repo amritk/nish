@@ -739,14 +739,8 @@ const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1792
  * and taking a task off the ready queue when it finishes queued (ASYNC-18). Measured
  * **3,797 bytes** against 2,627 on 2026-11-09 with clang 18.1.3 on linux-x64; the next
  * 256-byte boundary.
- *
- * Raised to 4,608 by keeping a waited epoll, eventfd or timerfd duplicate registered
- * between waits (ASYNC-20): the kept table, its `EPOLL_CTL_MOD` re-arm and the
- * `kcmp(KCMP_FILE)` check that the number still names the same file. Measured
- * **4,422 bytes** against 3,797 on 2026-11-11 with clang 18.1.3 on linux-x64; the next
- * 256-byte boundary.
  */
-const RUNTIME_ASYNC_TEXT_BUDGET = 4608
+const RUNTIME_ASYNC_TEXT_BUDGET = 3840
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`

@@ -37,7 +37,7 @@
  * **The task reads its own copy.** The task copies the request's head and
  * body out of the server's slot into its own memory before `handle` runs,
  * and when `handle` answers it writes the status, the content type and the
- * body back into the slot's fixed buffers, element by element, and wakes the
+ * body back into the slot's fixed buffers, in bulk, and wakes the
  * loop. The loop then sends the answer and frees the slot. Nothing the task
  * allocated outlives it, and the loop's arena does not grow per request once
  * its slots are warm: `tests/link/net_serve_pipelined_flat` pins
@@ -370,8 +370,9 @@ class ServeState {
   typeLengths: i32[]
   /** Per slot: the index in `typeBytes` of the type its task answered, or -1 when the task copied it into `types`. */
   typeIndex: i32[]
-  /** Each content type the server has sent, as bytes for the head and, beside it, as the text a task compares. */
+  /** Each content type the server has sent, as the bytes the loop writes into a head. */
   typeBytes: u8[][]
+  /** The same content types as text, in `typeBytes`'s order: what a task compares its answer's type with. */
   typeTexts: string[]
   /** One byte, written to the wake socket. */
   one: u8[]
@@ -381,9 +382,11 @@ class ServeState {
   /** The fields of an answer with a content type: `ServeLimits.server`'s, then `content-type`, whose value is set per answer. */
   typedNames: u8[][]
   typedValues: u8[][]
-  /** How many of `free`, `finished` and `running` are in use. */
+  /** How many of `free`'s entries are free slots. */
   freeCount: i32 = 0
+  /** How many of `finished`'s entries are answered slots the loop has not yet looked at. */
   finishedCount: i32 = 0
+  /** How many of `running`'s entries are slots whose task is running. */
   runningCount: i32 = 0
   /** `ServeLimits.deadline`, which each task arms on itself as it starts. */
   deadline: i32 = 0
@@ -593,12 +596,13 @@ const serveTask = async (
   // one into the other.
   const src: HttpRequest = st.reqs[k]
   const r: HttpRequest = new HttpRequest(-1)
-  // The parser appends fields in wire order, each after the one before, so
-  // the last field's value end is where the kept head ends.
+  // The kept head ends at the furthest of the target and every field span.
   const spanCount: i32 = 4 * src.headerCount
   let end: i32 = src.targetEnd
-  if (spanCount > 0 && spanCount <= toI32(src.spans.length) && src.spans[spanCount - 1] > end) {
-    end = src.spans[spanCount - 1]
+  for (let i: i32 = 0; i < spanCount && i < toI32(src.spans.length); i++) {
+    if (src.spans[i] > end) {
+      end = src.spans[i]
+    }
   }
   const head: u8[] = new Array<u8>(end)
   copyBytes(head, 0, src.head, 0, end)
@@ -628,7 +632,9 @@ const serveTask = async (
   const res: Response = await handle(new Request(r))
   st.status[k] = res.status
   const out: u8[] = st.bodies[k]
-  if (res.length > toI32(out.length)) {
+  // A length the body cannot hold, negative or past either array, is the
+  // handler's mistake: the loop answers 500 for it, as for an over-long body.
+  if (res.length < 0 || res.length > toI32(out.length) || res.length > toI32(res.body.length)) {
     st.lengths[k] = -1
   } else {
     out.set(res.length === toI32(res.body.length) ? res.body : res.body.slice(0, res.length))
