@@ -373,10 +373,17 @@ export const JSON_DECODE_MISSING: i32 = -24
  * together (docs/security/json.md, JSON-13).
  */
 export const JSON_DECODE_MAP_LIMIT: i32 = -25
+/**
+ * A tagged union's object whose tag is missing, not a string, or none of the
+ * union's variants' wire tags, or a variant's object whose tag is not that
+ * variant's own; `errorAt` is the tag's value, or the object's `{` when the
+ * tag is missing.
+ */
+export const JSON_DECODE_TAG: i32 = -26
 
 /** What a program running under Node is told, where the compiler would have written the code. */
 const JSON_TYPED_ERASED: string =
-  "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
+  "nish/json-typed: jsonDecode, jsonDecodeUnion and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
 
 /**
  * A JSON number kept as the text it was written in, so that no digit is lost:
@@ -537,6 +544,8 @@ export class JsonDecoder {
    * ended, or a value `takeNull` found was not `null`.
    */
   private held: boolean = false
+  /** The `{` of the union object `unionTag` read ahead in, or `-1` when its tag was the first key. */
+  private unionStart: i32 = -1
 
   /**
    * A decoder over `src[off, off + len)`, with no error and no map key taken.
@@ -565,6 +574,7 @@ export class JsonDecoder {
     this.errorAt = -1
     this.held = false
     this.mapKeys = 0
+    this.unionStart = -1
   }
 
   /**
@@ -769,6 +779,106 @@ export class JsonDecoder {
     const k: i32 = this.tok.skipValue()
     if (k < 0) {
       this.fail(k, this.tok.errorAt)
+    }
+  }
+
+  /**
+   * Opens a tagged union's object and reads ahead to its tag, the key `key`,
+   * stepping over the values of the keys before it, and leaves the tag's
+   * string as the current token for `keyLength`, `keyByte` and `keyIs`.
+   * When the tag was not the first key, `enterUnion` goes back to the
+   * object's first key. A missing tag, or one that is not a string, is
+   * `JSON_DECODE_TAG`; any other value than an object is `JSON_DECODE_TYPE`.
+   *
+   * @param key The tag's key on the wire.
+   * @returns `true` at the tag's string; `false` after any error.
+   *
+   * @internal Called by name by the decoder the compiler writes for a union,
+   *   src/emit-json.ts.
+   */
+  unionTag(key: string): boolean {
+    if (!this.beginObject()) {
+      return false
+    }
+    const tok: JsonTokenizer = this.tok
+    const start: i32 = tok.tokStart
+    let first: boolean = true
+    while (this.nextField()) {
+      if (tok.keyEquals(key)) {
+        const k: i32 = tok.next()
+        if (k < 0) {
+          this.fail(k, tok.errorAt)
+          return false
+        }
+        if (k !== JSON_TOK_STRING) {
+          this.fail(JSON_DECODE_TAG, tok.tokStart)
+          return false
+        }
+        this.unionStart = first ? -1 : start
+        return true
+      }
+      first = false
+      const k: i32 = tok.skipValue()
+      if (k < 0) {
+        this.fail(k, tok.errorAt)
+        return false
+      }
+    }
+    this.fail(JSON_DECODE_TAG, start)
+    return false
+  }
+
+  /**
+   * Records `JSON_DECODE_TAG` at the current string, a tag no variant of the
+   * union gives.
+   *
+   * @internal Called by name by the decoder the compiler writes for a union,
+   *   src/emit-json.ts.
+   */
+  unknownTag(): void {
+    this.fail(JSON_DECODE_TAG, this.tok.tokStart)
+  }
+
+  /**
+   * Readies the object `unionTag` read the tag of for its variant's fields:
+   * when the tag was the first key, the next key is the one after it; when it
+   * was not, the object starts over from its first key, and the tag is read
+   * again as a field.
+   *
+   * @returns `true` when the tag is already read; `false` when it is still to come.
+   *
+   * @internal Called by name by the decoder the compiler writes for a union,
+   *   src/emit-json.ts.
+   */
+  enterUnion(): boolean {
+    const start: i32 = this.unionStart
+    if (start < 0) {
+      return true
+    }
+    this.unionStart = -1
+    this.tok.rewindObject(start)
+    return false
+  }
+
+  /**
+   * Reads a variant's tag field: its value must be the string `name`, and
+   * anything else is `JSON_DECODE_TAG` at the value.
+   *
+   * @param name The variant's tag on the wire.
+   *
+   * @internal Called by name by the decoder the compiler writes for
+   *   `jsonDecode`, src/emit-json.ts.
+   */
+  tagValue(name: string): void {
+    const k: i32 = this.take()
+    if (k === JSON_TOK_STRING) {
+      if (!this.tok.keyEquals(name)) {
+        this.fail(JSON_DECODE_TAG, this.tok.tokStart)
+      }
+      return
+    }
+    if (k >= 0) {
+      this.fail(JSON_DECODE_TAG, this.tok.tokStart)
     }
   }
 
@@ -1436,6 +1546,27 @@ export class JsonDecoder {
  *   `JSON_DECODE_*` or the tokenizer's `JSON_TOK_ERR_*`.
  */
 export const jsonDecode = <T>(_d: JsonDecoder, _out: T): i32 => {
+  panic(JSON_TYPED_ERASED)
+}
+
+/**
+ * Decodes the JSON text `d` reads into a tagged union, `T`: the object's tag
+ * picks the variant. When it is `prev`'s, `prev` is decoded into and
+ * returned, its fields, nested objects and arrays reused; otherwise a new
+ * object of that variant is made with its constructor of no parameters and
+ * returned. The tag may be any key of the object; it is cheapest first. The
+ * compiler writes the code from the union's variants at every call, and `T`
+ * is never written at the call; under Node this body ends the program with a
+ * panic, because the types are erased.
+ *
+ * @param _d The decoder over the input; its `failed` and `errorAt` say what
+ *   went wrong, and `reset` starts it over.
+ * @param _prev The value the union holds now, reused when the tag names its variant.
+ * @returns The decoded value; on any failure `prev`, perhaps partly
+ *   overwritten, with `d.failed` set to the first error's code, such as
+ *   `JSON_DECODE_TAG`.
+ */
+export const jsonDecodeUnion = <T>(_d: JsonDecoder, _prev: T): T => {
   panic(JSON_TYPED_ERASED)
 }
 

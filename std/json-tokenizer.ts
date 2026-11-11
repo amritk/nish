@@ -1473,6 +1473,24 @@ export class JsonTokenizer {
   }
 
   /**
+   * Goes back to just after the `{` at `start`, the opener of the innermost
+   * open object, so that the next `next()` answers that object's first key
+   * again. The decoder of a tagged union reads ahead to the tag and then
+   * decodes the object from its start; the bytes between are read twice.
+   * Call it only while that object is still the innermost one open, and
+   * before any error: the depth stack is as it was when the `{` was read.
+   *
+   * @param start - the byte offset of the object's `{`, its `tokStart`.
+   */
+  rewindObject(start: i32): void {
+    this.kind = JSON_TOK_OBJECT_BEGIN
+    this.tokStart = start
+    this.tokEnd = start + 1
+    this.pos = start + 1
+    this.want = JSON_TOK_WANT_KEY_OR_CLOSE
+  }
+
+  /**
    * Steps over the value the current token starts, so that the next `next()`
    * answers what follows it. After a key, that is the key's value; after an
    * opener, everything up to and including its closer; after a scalar or a
