@@ -13430,7 +13430,7 @@ export const main = (): i32 => {
 `n` is u32, which is never below 0, so `n < 0` is always false; compare a signed value, or against a bound other than 0
 ```
 
-## NL2718
+## NL2719
 
 The message of an error contains:
 
@@ -13438,10 +13438,10 @@ The message of an error contains:
 …` is generic: a function reference names one non-generic top-level function
 ```
 
-[`nl2718_fnref_generic.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2718_fnref_generic.ts):
+[`nl2719_fnref_generic.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2719_fnref_generic.ts):
 
 ```ts
-// NL2718: a generic function named as a value. A reference names one body,
+// NL2719: a generic function named as a value. A reference names one body,
 // and a generic function has one per instantiation.
 const id = <T>(x: T): T => x;
 
@@ -13455,7 +13455,7 @@ export const main = (): i32 => {
 `id` is generic: a function reference names one non-generic top-level function
 ```
 
-## NL2719
+## NL2720
 
 The message of an error contains:
 
@@ -13463,10 +13463,10 @@ The message of an error contains:
 …` takes a function parameter, so it has no single body to refer to
 ```
 
-[`nl2719_fnref_template.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2719_fnref_template.ts):
+[`nl2720_fnref_template.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2720_fnref_template.ts):
 
 ```ts
-// NL2719: a function that takes a function parameter, named as a value. It is
+// NL2720: a function that takes a function parameter, named as a value. It is
 // a template compiled once per callee, so there is no single body to tag.
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
 
@@ -13480,7 +13480,7 @@ export const main = (): i32 => {
 `apply` takes a function parameter, so it has no single body to refer to
 ```
 
-## NL2720
+## NL2721
 
 The message of an error contains:
 
@@ -13488,10 +13488,10 @@ The message of an error contains:
 …` is async: a function reference cannot hold it, because its call is a promise
 ```
 
-[`nl2720_fnref_async.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2720_fnref_async.ts):
+[`nl2721_fnref_async.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2721_fnref_async.ts):
 
 ```ts
-// NL2720: an async function named as a value.
+// NL2721: an async function named as a value.
 const later = async (x: i32): Promise<i32> => x;
 
 export const main = (): i32 => {
@@ -13504,7 +13504,7 @@ export const main = (): i32 => {
 `later` is async: a function reference cannot hold it, because its call is a promise
 ```
 
-## NL2721
+## NL2722
 
 The message of an error contains:
 
@@ -13512,10 +13512,10 @@ The message of an error contains:
 …` is declared in C: a function reference names a function this program defines
 ```
 
-[`nl2721_fnref_foreign.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2721_fnref_foreign.ts):
+[`nl2722_fnref_foreign.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2722_fnref_foreign.ts):
 
 ```ts
-// NL2721: a `declare function` named as a value: its body is C's.
+// NL2722: a `declare function` named as a value: its body is C's.
 declare function abs(x: i32): i32;
 
 export const main = (): i32 => {
@@ -13528,7 +13528,7 @@ export const main = (): i32 => {
 `abs` is declared in C: a function reference names a function this program defines
 ```
 
-## NL2722
+## NL2723
 
 The message of an error contains:
 
@@ -13536,10 +13536,10 @@ The message of an error contains:
 …: a function reference names a function whose every parameter the caller passes
 ```
 
-[`nl2722_fnref_rest.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2722_fnref_rest.ts):
+[`nl2723_fnref_rest.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2723_fnref_rest.ts):
 
 ```ts
-// NL2722: a function with a rest parameter named as a value. A call through
+// NL2723: a function with a rest parameter named as a value. A call through
 // a reference passes every parameter, so the function must take exactly those.
 const sum = (...xs: i32[]): i32 => xs.length;
 
@@ -13553,7 +13553,7 @@ export const main = (): i32 => {
 `sum` has a rest parameter: a function reference names a function whose every parameter the caller passes
 ```
 
-## NL2723
+## NL2724
 
 The message of an error contains:
 
@@ -13561,10 +13561,10 @@ The message of an error contains:
 …>(n)` would zero-fill with 0, which names no function; build it with `[]` and `push` instead
 ```
 
-[`nl2723_fnref_zero_fill.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2723_fnref_zero_fill.ts):
+[`nl2724_fnref_zero_fill.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2724_fnref_zero_fill.ts):
 
 ```ts
-// NL2723: an array of references zero-filled by its constructor. The tags
+// NL2724: an array of references zero-filled by its constructor. The tags
 // start at 1, so 0 names no function.
 export const main = (): i32 => {
   const fs = new Array<(x: i32) => i32>(4);
@@ -13576,7 +13576,7 @@ export const main = (): i32 => {
 `new Array<(i32) => i32>(n)` would zero-fill with 0, which names no function; build it with `[]` and `push` instead
 ```
 
-## NL2724
+## NL2725
 
 The message of an error contains:
 
@@ -13584,10 +13584,10 @@ The message of an error contains:
 …`: a function reference names a top-level function and carries no environment
 ```
 
-[`nl2724_fnref_capturing_arrow.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2724_fnref_capturing_arrow.ts):
+[`nl2725_fnref_capturing_arrow.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2725_fnref_capturing_arrow.ts):
 
 ```ts
-// NL2724: an arrow in a value position that reads a local of the function
+// NL2725: an arrow in a value position that reads a local of the function
 // around it. A reference is a tag, so it has nowhere to keep `n`.
 export const main = (): i32 => {
   const n = 3;
@@ -13600,7 +13600,7 @@ export const main = (): i32 => {
 this arrow captures `n`: a function reference names a top-level function and carries no environment
 ```
 
-## NL2725
+## NL2726
 
 The message of an error contains:
 
@@ -13608,10 +13608,10 @@ The message of an error contains:
 …` is a method: a function reference names a top-level function, and a method needs its receiver
 ```
 
-[`nl2725_fnref_method.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2725_fnref_method.ts):
+[`nl2726_fnref_method.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2726_fnref_method.ts):
 
 ```ts
-// NL2725: a method named as a value. A reference names a top-level function,
+// NL2726: a method named as a value. A reference names a top-level function,
 // and a method needs the receiver it was named through.
 class Counter {
   n: i32 = 0;
@@ -13632,7 +13632,7 @@ export const main = (): i32 => {
 `c.bump` is a method: a function reference names a top-level function, and a method needs its receiver
 ```
 
-## NL2726
+## NL2727
 
 The message of an error contains:
 
@@ -13640,10 +13640,10 @@ The message of an error contains:
 … holds a function reference that code outside this program can reach: a reference is a tag this program's dispatcher reads, not an address, and a host could hand back one no dispatcher knows
 ```
 
-[`nl2726_fnref_host_return.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2726_fnref_host_return.ts):
+[`nl2727_fnref_host_return.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2727_fnref_host_return.ts):
 
 ```ts
-// NL2726: an exported function returns a reference. Code outside the program
+// NL2727: an exported function returns a reference. Code outside the program
 // could keep the tag and hand back one no dispatcher's set holds.
 const double = (x: i32): i32 => x * 2;
 
@@ -13656,7 +13656,7 @@ export const main = (): i32 => pick()(2);
 The return type of `pick` holds a function reference that code outside this program can reach: a reference is a tag this program's dispatcher reads, not an address, and a host could hand back one no dispatcher knows
 ```
 
-## NL2727
+## NL2728
 
 The message of an error contains:
 
@@ -13664,10 +13664,10 @@ The message of an error contains:
 …` takes a top-level function or an arrow named at the call
 ```
 
-[`nl2727_fnref_to_function_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2727_fnref_to_function_parameter.ts):
+[`nl2728_fnref_to_function_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2728_fnref_to_function_parameter.ts):
 
 ```ts
-// NL2727: a reference passed where a function parameter is. The parameter
+// NL2728: a reference passed where a function parameter is. The parameter
 // names the callee a call is compiled for, and a reference is known only at
 // run time; passing one is the next stage of function references.
 const double = (x: i32): i32 => x * 2;
@@ -13684,7 +13684,7 @@ export const main = (): i32 => {
 `h` is a function reference: `apply` takes a top-level function or an arrow named at the call
 ```
 
-## NL2728
+## NL2729
 
 The message of an error contains:
 
@@ -13692,10 +13692,10 @@ The message of an error contains:
 …` takes a function parameter, so no function it could name has a single body to refer to
 ```
 
-[`nl2728_fnref_type_function_param.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2728_fnref_type_function_param.ts):
+[`nl2729_fnref_type_function_param.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2729_fnref_type_function_param.ts):
 
 ```ts
-// NL2728: a function type that takes a function, as a reference's type. Every
+// NL2729: a function type that takes a function, as a reference's type. Every
 // function it could name is a template, with no single body to tag.
 export const main = (): i32 => {
   const fs: ((g: (x: i32) => i32) => i32)[] = [];
@@ -13707,7 +13707,7 @@ export const main = (): i32 => {
 `(g: (x: i32) => i32) => i32` takes a function parameter, so no function it could name has a single body to refer to
 ```
 
-## NL2729
+## NL2730
 
 The message of an error contains:
 
@@ -13715,10 +13715,10 @@ The message of an error contains:
 …`, which does not, so every call here would allocate `…
 ```
 
-[`nl2729_fnref_escape_join.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2729_fnref_escape_join.ts):
+[`nl2730_fnref_escape_join.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2730_fnref_escape_join.ts):
 
 ```ts
-// NL2729: a call through a reference that can reach a function keeping its
+// NL2730: a call through a reference that can reach a function keeping its
 // argument and one that does not. The dispatcher's facts are its arms' join,
 // so every call would lose the argument's stack place.
 class Point {
@@ -13754,10 +13754,10 @@ export const main = (): i32 => {
 ```
 
 ```text
-this call through `h` can reach `u3`, which keeps `p`, and `u0`, which does not, so every call here would allocate `p` in the arena; `u3` reaches `h` through `h = u3` (nl2729_fnref_escape_join.ts:30): call `u3` directly, or store it where `h` does not read
+this call through `h` can reach `u3`, which keeps `p`, and `u0`, which does not, so every call here would allocate `p` in the arena; `u3` reaches `h` through `h = u3` (nl2730_fnref_escape_join.ts:30): call `u3` directly, or store it where `h` does not read
 ```
 
-## NL2730
+## NL2731
 
 The message of an error contains:
 

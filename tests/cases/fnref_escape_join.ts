@@ -2,7 +2,7 @@
 // place's members all leave `p` alone, so its dispatcher is `readonly
 // nocapture` in `p` like each of them and `p` stays on the stack; the field
 // `Slot.use`'s members both store `p`, so a direct call of either costs the
-// same and the set is admitted. A set mixing the two is NL2729. Every array of
+// same and the set is admitted. A set mixing the two is NL2730. Every array of
 // one element type shares its place, so the second set is in a field.
 class P {
   x: i32 = 0

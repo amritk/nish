@@ -1,0 +1,1 @@
+this call through `h` can reach `u3`, which keeps `p`, and `u0`, which does not, so every call here would allocate `p` in the arena; `u3` reaches `h` through `h = u3` (nl2730_fnref_escape_join.ts:30): call `u3` directly, or store it where `h` does not read

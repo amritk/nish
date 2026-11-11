@@ -1,4 +1,4 @@
-// NL2725: a method named as a value. A reference names a top-level function,
+// NL2726: a method named as a value. A reference names a top-level function,
 // and a method needs the receiver it was named through.
 class Counter {
   n: i32 = 0;

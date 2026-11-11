@@ -85,7 +85,7 @@ initialised where it is declared, and an array of them is built from `[]` or
 a literal and `push`. `new Array<Op>(n)`, which would fill the array with
 zeros, is refused:
 
-```ts nish:err NL2723
+```ts nish:err NL2724
 type Op = (x: i32) => i32;
 
 export const main = (): i32 => {
@@ -100,16 +100,16 @@ A reference names a function declared at the top level of a module, with
 `const f = (...) => ...` or `function f(...)`. These cannot be referenced,
 and naming one where a value is expected is an error:
 
-- a **generic** function (`NL2718`), an **`async`** function (`NL2720`), a
-  function declared in C (`NL2721`), a function with a **rest parameter**
-  (`NL2722`), and a function that takes a function parameter (`NL2719`);
-- a **method**, `c.step`, which needs its object (`NL2725`);
+- a **generic** function (`NL2719`), an **`async`** function (`NL2721`), a
+  function declared in C (`NL2722`), a function with a **rest parameter**
+  (`NL2723`), and a function that takes a function parameter (`NL2720`);
+- a **method**, `c.step`, which needs its object (`NL2726`);
 - an **arrow written inside a function**. One that reads a variable of the
   function around it would need to carry that variable with it, which a
-  reference cannot (`NL2724`); one that reads nothing is refused too
+  reference cannot (`NL2725`); one that reads nothing is refused too
   (`NL2336`): declare it at the top level and name it.
 
-```ts nish:err NL2724
+```ts nish:err NL2725
 export const main = (): i32 => {
   const k = 3;
   const addK = (x: i32): i32 => x + k;
@@ -127,7 +127,7 @@ A reference is called, compared, stored and passed, and nothing else. In
 particular it cannot be printed or put in a template string, because a
 native program has no source text to show for it:
 
-```ts nish:err NL2730
+```ts nish:err NL2731
 type Op = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
@@ -146,9 +146,9 @@ those.
 A reference is not a function argument either. A parameter whose function
 type is written out in the parameter list, as in `apply` below, is filled in
 when the call is compiled, so it takes a function's name or an arrow, never
-a variable holding one (`NL2727`):
+a variable holding one (`NL2728`):
 
-```ts nish:err NL2727
+```ts nish:err NL2728
 type F = (x: i32) => i32;
 
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
@@ -177,5 +177,5 @@ the reference holds one of those functions, and panics if it does not.
 A reference stays inside your program. A library built with `-o` cannot
 export a function whose parameter or return type holds one, or whose
 classes have a field of one, because code outside the program could hand back a value
-that names no function (`NL2726`). A program built from several modules
+that names no function (`NL2727`). A program built from several modules
 together with `--link` may pass references between them.

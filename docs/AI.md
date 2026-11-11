@@ -914,7 +914,7 @@ export const main = (): i32 => {
   method or constructor parameter an inline function type is refused; type it
   through an alias and it is an ordinary [function reference](#function-references)
   parameter. A variable holding a reference is not a function argument
-  (NL2727): type the parameter through an alias to take one.
+  (NL2728): type the parameter through an alias to take one.
 
 ```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
@@ -957,19 +957,19 @@ export const main = (): i32 => {
 ```
 
 - **Only a top-level function with no captures.** An arrow inside a function
-  is refused (NL2724 when it captures, NL2336 when it does not); so are a
-  generic (NL2718), `async` (NL2720), `declare` (NL2721) or rest-parameter
-  (NL2722) function, one with a function parameter (NL2719), and a method
-  (NL2725).
-- **No empty value.** `new Array<Op>(n)` (NL2723) and `Op | null` are
+  is refused (NL2725 when it captures, NL2336 when it does not); so are a
+  generic (NL2719), `async` (NL2721), `declare` (NL2722) or rest-parameter
+  (NL2723) function, one with a function parameter (NL2720), and a method
+  (NL2726).
+- **No empty value.** `new Array<Op>(n)` (NL2724) and `Op | null` are
   refused; a module `const` cannot hold one either.
 - **Called, compared, stored, passed — nothing else.** Not printed or
-  interpolated (NL2730), ordered, joined or encoded as JSON.
+  interpolated (NL2731), ordered, joined or encoded as JSON.
 - **Not a function argument**: a variable holding a reference cannot fill an
-  inline function-typed parameter (NL2727); type that parameter through the
+  inline function-typed parameter (NL2728); type that parameter through the
   alias.
 - **It stays in the program**: a `-o` library cannot export it in a
-  signature or an exported class's field (NL2726); `--link` can.
+  signature or an exported class's field (NL2727); `--link` can.
 
 ### Async functions
 

@@ -1,6 +1,6 @@
 // WP51 §2.2, §4.1 case B: one set holds a member that keeps `p` and members
 // that do not, so the dispatcher's join would allocate every `p` in the
-// arena, the members that leave it alone included: NL2729.
+// arena, the members that leave it alone included: NL2730.
 class P {
   x: i32 = 0
   constructor(x: i32) {
