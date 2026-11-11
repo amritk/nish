@@ -528,8 +528,6 @@ cases/region_child_local_map added after R6: no rewriter to freeze it with
 cases/region_child_map added after R6: no rewriter to freeze it with
 cases/region_child_plain added after R6: no rewriter to freeze it with
 cases/region_copied_churn added after R6: no rewriter to freeze it with
-cases/reject_union_map_get_or_insert added after R6: no rewriter to freeze it with
-cases/reject_union_map_reserve added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with

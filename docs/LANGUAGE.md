@@ -12801,7 +12801,10 @@ export const main = (): i32 => {
   `json_reject_union_same_tag`); a `tag` that is not a string literal is
   NL2722 (`json_reject_union_tag_literal`), one on a class with no field whose
   type is one enum member is NL2724 (`json_reject_union_tag_no_field`), and
-  `tag: ""` is the same as no `tag`: the variant writes its member's name. A variant
+  `tag: ""` is the same as no `tag`: the variant writes its member's name. A
+  `tag` on a class that has such a field but that no union holds is not
+  refused and does nothing: the class compiles while no JSON call reaches it,
+  and one that does refuses the field (below). A variant
   that is not a class, an interface, is NL2486
   (`json_reject_union_interface`), the code of any typed JSON type that is not
   a declared class. A field typed with an enum member that no

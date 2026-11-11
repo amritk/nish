@@ -88,7 +88,8 @@ export const JSON_FIELD_TAG: i32 = 10
  * the value type of a `Map` field, which has no field of its own.
  */
 export class JsonField {
-  // Declared widest first, so no byte of a value is padding.
+  // Declared widest first, so no padding falls between two fields; only the
+  // tail after `nullable` pads the object to its pointers' alignment.
   /** The field, or `null` for a `Map`'s value. */
   field: FieldInfo | null
   /** The class of an object or of an array's element; `null` otherwise. */

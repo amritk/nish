@@ -2748,7 +2748,9 @@ argument): it answers `prev` refilled when the tag matches, else a new variant,
 and `prev` on failure (only at the top: a nested union slot may hold the new
 variant, half read, so check `d.failed`); a bad tag is `JSON_DECODE_TAG`.
 `tag: ""` is the same as no `tag`. Every variant writes its
-tag under one key (NL2721) as a different string (NL2720).
+tag under one key (NL2721) as a different string (NL2720). A `tag` on a class
+no union holds does nothing, and a JSON call on that class refuses its
+enum-member field.
 
 ```ts nish:ok
 import { JsonWriter } from "nish/json";
