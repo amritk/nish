@@ -1103,26 +1103,149 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 — `npm test` holds every golden in `tests/cases/` and `tests/link/` to that
 (`tests/panics-oracle.js`). The kinds:
 
-| kind | what fails | what proves it away |
-| --- | --- | --- |
-| `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](expressions.md#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
-| `pop` | `a.pop()` on an empty array | a dominating `if (a.length > 0)`, the length fact the bounds proof already keeps (`tests/cases/panics_pop`) |
-| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site; an array's `xs.slice` is not a `slice` site but a `call` reaching `std/array.ts`'s `panic` ([Callback methods and `slice`](builtins.md#callback-methods-and-slice)) (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`, `net_write2_bounds`) |
-| `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | a divisor that is not 0, and not -1 unless the dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor whose declared range leaves those values out, or a guard on a local divisor — `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned one. A float division is not a site (`tests/cases/panics_divide`) |
-| `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). A `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not a site |
-| `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](https://github.com/amritk/nish/blob/main/docs/wp31-ranged-integers.md) §8 ([Types](types.md)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
-| `array-length` | `new Array<T>(n)` whose length type could make a bad header or a negative byte count (an `i64`, a float, an `i32` or a ranged integer, a `u32` under `--number-mode i32`) | a narrower unsigned length or a literal up to 2^31 - 1, which is not checked and not a site (`tests/cases/panics_array_length`) |
-| `panic` | `panic(message)` | nothing: a path the program never takes is still a site (`tests/cases/panics_panic`) |
-| `expect` | `r.expect(message)` on an `Err` | nothing; `unwrapOr` and `orReturn` are not sites (`tests/cases/panics_expect`) |
-| `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |
-| `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
-| `ffi-nul` | a `string` argument to a [`declare function`](declarations.md#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
-| `ffi-null` | a `string` result of a [`declare function`](declarations.md#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
-| `ffi-length` | a call to a [`declare function`](declarations.md#a-u8-parameter-a-buffer-and-its-count) whose count is larger than a `u8[]` buffer of its run: `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``, compared unsigned, so a count that wrapped below zero fails too | a count of `toU64(b.length)` where `b` is that buffer itself, a `const` local or a parameter named alone, and no later argument may resize an array (`tests/cases/ffi_buffer_count_proved`, `ffi_buffer_late_load`); every other count is checked (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`, `panics_ffi_length_shrink`). |
-| `region` | a call to `nish:region`'s `region`, `regionWith`, `enter`, `enterWith` or `free`: a handle that is 0, freed, another thread's or entered already, a `free` of an entered region, or more live regions than the table holds | nothing: the handle is a number the checker does not follow, so every call checks it (`tests/cases/reject_deny_panics_region`) |
-| `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
-| `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour; `readCString`, whose pointer nothing proves is live and NUL-terminated | nothing, and nothing needs to: the call is the author's word that the index is in range, or that the pointer is, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
-| `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
+**`index`**: `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside
+`[0, length)`; and the second check of a compound store `a[i] += f()` whose
+right side may resize the array
+
+- *What proves it away:* the bounds proof of [Element
+  access](expressions.md#element-access): a dominating guard, a loop bounded by the length,
+  or every call site proving the argument (`tests/cases/panics_index`);
+  nothing removes the second check of a compound store, which is made after
+  the call however the first was proved (`tests/cases/panics_index_recheck`)
+
+**`pop`**: `a.pop()` on an empty array
+
+- *What proves it away:* a dominating `if (a.length > 0)`, the length fact the
+  bounds proof already keeps (`tests/cases/panics_pop`)
+
+**`slice`**: `s.slice(a, b)`, `dst.set(src, at)`,
+`String.fromBytes(bytes, start, end)` and the buffer range of `netRead`,
+`netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the
+range outside the receiver
+
+- *What proves it away:* nothing yet: `substring` clamps instead, and is not a
+  site; an array's `xs.slice` is not a `slice` site but a `call` reaching
+  `std/array.ts`'s `panic` ([Callback methods and
+  `slice`](builtins.md#callback-methods-and-slice)) (`tests/cases/panics_slice`,
+  `str_from_bytes_oob`, `reject_deny_panics_from_bytes`,
+  `io_write_bytes_bounds`, `net_write2_bounds`)
+
+**`divide`**: integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1`
+when signed
+
+- *What proves it away:* a divisor that is not 0, and not -1 unless the
+  dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded
+  module constant), a ranged or unsigned divisor whose declared range leaves
+  those values out, or a guard on a local divisor —
+  `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned
+  one. A float division is not a site (`tests/cases/panics_divide`)
+
+**`overflow`**: a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or
+`op=` whose result does not fit: `attempt to add with overflow` and its
+siblings
+
+- *What proves it away:* the overflow proof of [Semantics
+  decisions](#semantics-decisions): an operation the bounds walk proves fits
+  is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other
+  one is checked (`tests/cases/panics_overflow`). A `nish:unsafe`
+  `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not
+  a site
+
+**`range`**: a value entering `integer<Lo, Hi>`, the store of `+=` or `++`
+into a ranged place, and an exported function's check of a ranged parameter on
+entry
+
+- *What proves it away:* the range proof of
+  [wp31-ranged-integers.md](https://github.com/amritk/nish/blob/main/docs/wp31-ranged-integers.md) §8 ([Types](types.md)): a
+  dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving
+  the argument (`tests/cases/panics_range`)
+
+**`array-length`**: `new Array<T>(n)` whose length type could make a bad
+header or a negative byte count (an `i64`, a float, an `i32` or a ranged
+integer, a `u32` under `--number-mode i32`)
+
+- *What proves it away:* a narrower unsigned length or a literal up to 2^31 -
+  1, which is not checked and not a site (`tests/cases/panics_array_length`)
+
+**`panic`**: `panic(message)`
+
+- *What proves it away:* nothing: a path the program never takes is still a
+  site (`tests/cases/panics_panic`)
+
+**`expect`**: `r.expect(message)` on an `Err`
+
+- *What proves it away:* nothing; `unwrapOr` and `orReturn` are not sites
+  (`tests/cases/panics_expect`)
+
+**`io-exit`**: `readFileSync`, `writeFileSync`, `appendFileSync` and
+`crypto.getRandomValues`, which exit inside the runtime on failure
+
+- *What proves it away:* nothing; `readFileSyncOrNull` is the twin that
+  answers `null` instead (`tests/cases/panics_io_exit`)
+
+**`parallel-length`**: a `parallelMapInto` call whose `dst` is shorter than
+its `src`
+
+- *What proves it away:* nothing yet: the check is `std/threads.ts`'s own
+  (`tests/link/panics_parallel_length`)
+
+**`ffi-nul`**: a `string` argument to a [`declare function`](declarations.md#calling-c) that
+holds a NUL byte, which C would read as the end of the string:
+`` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string ``
+
+- *What proves it away:* a literal with no NUL in it, which is not checked and
+  not a site; every other string is checked, and `string | null` checks only
+  the string (`tests/cases/panics_ffi_nul`)
+
+**`ffi-null`**: a `string` result of a [`declare function`](declarations.md#calling-c) that
+is `NULL`:
+`` `name` returned NULL for a `string` result; declare it `string | null` ``
+
+- *What proves it away:* nothing: a result declared `string | null` reads
+  `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`)
+
+**`ffi-length`**: a call to a
+[`declare function`](declarations.md#a-u8-parameter-a-buffer-and-its-count) whose count is
+larger than a `u8[]` buffer of its run:
+`` `name`: argument N (count) counts more bytes than argument M (buf) holds ``,
+compared unsigned, so a count that wrapped below zero fails too
+
+- *What proves it away:* a count of `toU64(b.length)` where `b` is that buffer
+  itself, a `const` local or a parameter named alone, and no later argument
+  may resize an array (`tests/cases/ffi_buffer_count_proved`,
+  `ffi_buffer_late_load`); every other count is checked
+  (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`,
+  `panics_ffi_length_shrink`).
+
+**`region`**: a call to `nish:region`'s `region`, `regionWith`, `enter`,
+`enterWith` or `free`: a handle that is 0, freed, another thread's or entered
+already, a `free` of an entered region, or more live regions than the table
+holds
+
+- *What proves it away:* nothing: the handle is a number the checker does not
+  follow, so every call checks it (`tests/cases/reject_deny_panics_region`)
+
+**`call`**: a call into a function that has a site that can panic, directly or
+through further calls
+
+- *What proves it away:* the callee having none (`tests/cases/panics_call`)
+
+**`unchecked`**: `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no
+check at all, so nothing panics, but an index out of range is undefined
+behaviour; `readCString`, whose pointer nothing proves is live and
+NUL-terminated
+
+- *What proves it away:* nothing, and nothing needs to: the call is the
+  author's word that the index is in range, or that the pointer is, not a
+  proof, and the `nish:unsafe` import its module must write is the opt-in to
+  that word, so it is listed with `"allowed": true` and, like `oom`, never
+  makes a function one that may panic (`tests/cases/deny_panics_unsafe`)
+
+**`oom`**: an arena allocation: the out-of-memory exit
+
+- *What proves it away:* nothing, and nothing needs to: it is listed with
+  `"allowed": true` and never makes a function one that may panic
+  (`tests/cases/panics_oom`)
 
 - **A `call` names its callee and the kind it reaches** (`"via"`), and is
   decided over the whole program, the standard library and dependencies
@@ -1172,7 +1295,7 @@ lists there, by their path relative to that file:
 ```
 
 Both together put the union in scope; with neither, nothing changes. In a
-module of the scope, every site of the table above that is not proven is an
+module of the scope, every site of a kind above that is not proven is an
 error, NL2457, which names the kind and, where a proof the checker makes would
 remove the check, the guard that gives it — the same sentence the performance
 warnings use for an index (NL9007) and a range entry (NL9013), so one way of

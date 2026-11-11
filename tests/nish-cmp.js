@@ -543,6 +543,12 @@ const mssUnset = (why, moved) =>
 const SPAWN_PIPED_WITHIN = "spawnPipedWithin, a captured run with a deadline"
 
 const DECLARED = [
+  // The hygiene rules found a dead local in std/compress/deflate.ts.
+  {
+    file: "deflate.ll",
+    changelog: "Refuse the mistakes every type accepts",
+    why: "the hygiene rules found a local in std/compress/deflate.ts's Huffman length limiter that nothing read, and deleting it renumbers that function's allocas, so the module every importer of nish/compress writes moves; no importer's own module does",
+  },
   // std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd.
   {
     file: "text.ll",

@@ -14,7 +14,8 @@ export function main(): number {
   const big: i64 = 9007199254740992;
   console.log(big & 4294967295);
   console.log(big | 255);
-  console.log(big ^ big);
+  const twin: i64 = 9007199254740992;
+  console.log(big ^ twin);
   console.log(~big);
   console.log(~neg);
   let acc: i64 = 1;

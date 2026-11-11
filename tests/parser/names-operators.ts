@@ -96,7 +96,7 @@ export const test = (): i32 => {
   n = await
   +yield
   n = delete
-  ;[delete, typeof][0]
+  ;[delete, typeof].push(0)
   n = n + in + instanceof + as + satisfies + yield + await
   return n
 }

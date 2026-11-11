@@ -18,6 +18,7 @@ entry:
   %arr.hdr.1 = alloca %struct.nish_array, align 8
   %arr.data.1 = alloca [2 x i32], align 8
   %m.addr = alloca i32, align 4
+  %copy.addr = alloca i32, align 4
   %at.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
   %forof.idx = alloca i64, align 8
@@ -181,78 +182,80 @@ ovf.ok.3:
 
 while.end.1:
   %86 = load i32, i32* %total.addr, align 4
+  store i32 %86, i32* %copy.addr, align 4
   %87 = load i32, i32* %total.addr, align 4
-  %88 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %86, i32 %87)
-  %89 = extractvalue { i32, i1 } %88, 0
-  %90 = extractvalue { i32, i1 } %88, 1
-  br i1 %90, label %ovf.fail, label %ovf.ok.4
+  %88 = load i32, i32* %copy.addr, align 4
+  %89 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %87, i32 %88)
+  %90 = extractvalue { i32, i1 } %89, 0
+  %91 = extractvalue { i32, i1 } %89, 1
+  br i1 %91, label %ovf.fail, label %ovf.ok.4
 
 ovf.ok.4:
-  store i32 %89, i32* %at.addr, align 4
-  %91 = load i32, i32* %total.addr, align 4
-  %92 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %93 = load i32, i32* %at.addr, align 4
-  %94 = sext i32 %93 to i64
-  %95 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %92, i64 0, i32 0
-  %96 = load i64, i64* %95, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %97 = icmp ult i64 %94, %96
-  br i1 %97, label %bounds.ok, label %bounds.fail
+  store i32 %90, i32* %at.addr, align 4
+  %92 = load i32, i32* %total.addr, align 4
+  %93 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %94 = load i32, i32* %at.addr, align 4
+  %95 = sext i32 %94 to i64
+  %96 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %93, i64 0, i32 0
+  %97 = load i64, i64* %96, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %98 = icmp ult i64 %95, %97
+  br i1 %98, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %94, i64 %96)
+  call void @nish_panic_index(i64 %95, i64 %97)
   unreachable
 
 bounds.ok:
-  %98 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %92, i64 0, i32 2
-  %99 = load i8*, i8** %98, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %100 = bitcast i8* %99 to i32*
-  %101 = getelementptr inbounds i32, i32* %100, i64 %94
-  %102 = load i32, i32* %101, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %103 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %91, i32 %102)
-  %104 = extractvalue { i32, i1 } %103, 0
-  %105 = extractvalue { i32, i1 } %103, 1
-  br i1 %105, label %ovf.fail, label %ovf.ok.5
+  %99 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %93, i64 0, i32 2
+  %100 = load i8*, i8** %99, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %101 = bitcast i8* %100 to i32*
+  %102 = getelementptr inbounds i32, i32* %101, i64 %95
+  %103 = load i32, i32* %102, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %104 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %92, i32 %103)
+  %105 = extractvalue { i32, i1 } %104, 0
+  %106 = extractvalue { i32, i1 } %104, 1
+  br i1 %106, label %ovf.fail, label %ovf.ok.5
 
 ovf.ok.5:
-  store i32 %104, i32* %total.addr, align 4
-  %106 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  store i32 %105, i32* %total.addr, align 4
+  %107 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   store i64 0, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.cond:
-  %107 = load i64, i64* %forof.idx, align 8
-  %108 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %106, i64 0, i32 0
-  %109 = load i64, i64* %108, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %110 = icmp ult i64 %107, %109
-  br i1 %110, label %forof.body, label %forof.end
+  %108 = load i64, i64* %forof.idx, align 8
+  %109 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %107, i64 0, i32 0
+  %110 = load i64, i64* %109, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %111 = icmp ult i64 %108, %110
+  br i1 %111, label %forof.body, label %forof.end
 
 forof.body:
-  %111 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %106, i64 0, i32 2
-  %112 = load i8*, i8** %111, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %113 = bitcast i8* %112 to i32*
-  %114 = getelementptr inbounds i32, i32* %113, i64 %107
-  %115 = load i32, i32* %114, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  store i32 %115, i32* %x.addr, align 4
-  %116 = load i32, i32* %total.addr, align 4
-  %117 = load i32, i32* %x.addr, align 4
-  %118 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %116, i32 %117)
-  %119 = extractvalue { i32, i1 } %118, 0
-  %120 = extractvalue { i32, i1 } %118, 1
-  br i1 %120, label %ovf.fail, label %ovf.ok.6
+  %112 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %107, i64 0, i32 2
+  %113 = load i8*, i8** %112, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %114 = bitcast i8* %113 to i32*
+  %115 = getelementptr inbounds i32, i32* %114, i64 %108
+  %116 = load i32, i32* %115, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %116, i32* %x.addr, align 4
+  %117 = load i32, i32* %total.addr, align 4
+  %118 = load i32, i32* %x.addr, align 4
+  %119 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %117, i32 %118)
+  %120 = extractvalue { i32, i1 } %119, 0
+  %121 = extractvalue { i32, i1 } %119, 1
+  br i1 %121, label %ovf.fail, label %ovf.ok.6
 
 ovf.ok.6:
-  store i32 %119, i32* %total.addr, align 4
+  store i32 %120, i32* %total.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %121 = load i64, i64* %forof.idx, align 8
-  %122 = add i64 %121, 1
-  store i64 %122, i64* %forof.idx, align 8
+  %122 = load i64, i64* %forof.idx, align 8
+  %123 = add i64 %122, 1
+  store i64 %123, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %123 = load i32, i32* %total.addr, align 4
-  ret i32 %123
+  %124 = load i32, i32* %total.addr, align 4
+  ret i32 %124
 
 ovf.fail:
   %ovf.op = phi i32 [ 0, %for.body ], [ 0, %while.body ], [ 0, %if.then ], [ 0, %while.body.1 ], [ 1, %while.end.1 ], [ 0, %bounds.ok ], [ 0, %forof.body ]

@@ -621,8 +621,8 @@ function Bag<f64>.total(this: Bag<f64>): f64 -> @Bag$f64.total [method instance]
   local +0:9 t: f64 (let)
   local +1:16 v: f64 (const)
   callee +1:21 Map<f64, f64>.walkOpen -> @nish.Map$f64$f64.walkOpen
-  local +4:16 k: f64 (const)
-  callee +4:22 Map<f64, f64>.walkOpen -> @nish.Map$f64$f64.walkOpen
+  local +4:16 _k: f64 (const)
+  callee +4:23 Map<f64, f64>.walkOpen -> @nish.Map$f64$f64.walkOpen
 function count<string>(s: Set<string>): f64 -> @count$str [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Set$str.walkOpen
@@ -630,7 +630,7 @@ function count<string>(s: Set<string>): f64 -> @count$str [instance]
   pointer s: size=48 writesThrough=true captured=false passedTo=nish.Set$str.walkOpen#0
   stackSites=0 stackLocals=0
   local +0:7 n: f64 (let)
-  local +1:14 x: string (const)
+  local +1:14 _x: string (const)
 function count<f64>(s: Set<f64>): f64 -> @count$f64 [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Set$f64.walkOpen
@@ -638,4 +638,4 @@ function count<f64>(s: Set<f64>): f64 -> @count$f64 [instance]
   pointer s: size=48 writesThrough=true captured=false passedTo=nish.Set$f64.walkOpen#0
   stackSites=0 stackLocals=0
   local +0:7 n: f64 (let)
-  local +1:14 x: f64 (const)
+  local +1:14 _x: f64 (const)

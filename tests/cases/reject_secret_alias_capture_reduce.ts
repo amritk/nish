@@ -8,5 +8,5 @@ export const main = (): i32 => {
   const sum = parallelReduce(xs, (acc: i32, i: i32): i32 => acc + toI32(raw[i]), 0);
   const key: Secret<u8[]> = secret(raw);
   wipe(key);
-  return 0;
+  return sum > 0 ? 0 : 1;
 };

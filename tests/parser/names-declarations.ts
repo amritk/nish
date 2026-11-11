@@ -118,7 +118,7 @@ export const test = (): i32 => {
   n = declare
   +global
   n = module
-  ;[async, module][0]
+  ;[async, module].push(0)
   n = n + async + namespace + module + declare + global + type
   return n
 }

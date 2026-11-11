@@ -8,3 +8,4 @@ function test(): i32 -> @test [exported]
   stackSites=0 stackLocals=0
   local +0:9 big: u32 (const)
   local +1:9 small: u32 (const)
+  local +2:9 again: u32 (const)

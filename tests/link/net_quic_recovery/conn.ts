@@ -224,11 +224,11 @@ const rcPacketThreshold = (t: Suite): void => {
 const rcTimeThreshold = (t: Suite): void => {
   const conn: QuicConnection = qcServer(qcDefaultConfig());
   const c: QcClient = rcOpened(conn);
-  const a: i64 = rcWrite(conn, c, "early");
+  rcWrite(conn, c, "early");
   const b: i64 = rcWrite(conn, c, "later");
   c.now = c.now + n64(40);
   qcExchange(conn, c, qcShort(c, rcAck(b, b, n64(0))));
-  // latest_rtt 40 ms, so the loss delay is 9/8 × 40 = 45 ms from when `a` was sent.
+  // latest_rtt 40 ms, so the loss delay is 9/8 × 40 = 45 ms from when the earlier packet was sent.
   t.eqI64("an ACK of the later packet alone sets a loss timer 45 ms after the earlier was sent", conn.deadline(), QC_T0 + n64(45));
   t.eqStr("RTT: latest 40, smoothed 40, rttvar 20", `${conn.recovery.latestRtt} ${conn.recovery.smoothedRtt} ${conn.recovery.rttVar}`, "40 40 20");
   conn.handleTimer(QC_T0 + n64(45));

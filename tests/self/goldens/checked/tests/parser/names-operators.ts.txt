@@ -24,8 +24,8 @@ function offset(in: i32, instanceof: i32): i32 -> @offset
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
 function test(): i32 -> @test [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 offset scale
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 offset scale
   stackSites=5 stackLocals=3
   local +0:7 typeof: i32 (let)
   local +1:7 delete: i32 (let)

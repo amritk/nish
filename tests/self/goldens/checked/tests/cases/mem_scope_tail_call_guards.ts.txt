@@ -16,7 +16,7 @@ function watch(n: i32, acc: i32): i32 -> @watch
   calls: nish_arena_mark nish_arena_release nish_arena_used nish_panic_overflow nish_str_concat nish_str_from_i32 watch
   stackSites=0 stackLocals=0
   local +0:9 label: string (const)
-  local +1:9 bump: i64 (const)
+  local +1:9 _bump: i64 (const)
   callee +2:10 watch -> @watch
 function after(n: i32): i32 -> @after
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
