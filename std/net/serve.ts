@@ -731,6 +731,10 @@ export const serveOn = async (
         spawn(serveTask(handle, st, k))
       }
     }
+    // The turn's answers go out together, before the arena is read, so a
+    // close the send causes is counted in the turn that caused it.
+    h.flush()
+    stats.sends = h.sends()
     stats.slots = toI32(st.busy.length)
     if (stats.warmAfter > 0 && stats.usedWarm === 0 && stats.answered >= stats.warmAfter) {
       stats.usedWarm = Arena.used()
@@ -749,8 +753,6 @@ export const serveOn = async (
     if (draining && h.connections() === 0 && !serveAnyBusy(st)) {
       break
     }
-    h.flush()
-    stats.sends = h.sends()
     if (h.ready()) {
       // A send let a parked request in: take it before parking.
       continue

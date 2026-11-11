@@ -807,14 +807,21 @@ export class HttpHandler {
   }
 
   /**
-   * Whether `slot`'s send can wait for `flush`: its output is still roomy, so
-   * more answers fit behind it, and no request on it is parked waiting for
-   * the room a send makes. `flush` runs before every poll, so a send put off
-   * here goes out before the handler waits.
+   * Whether `slot`'s send can wait for `flush`: it has output to send, the
+   * output is still roomy, so more answers fit behind it, and no request on
+   * it is parked waiting for the room a send makes. A connection with nothing
+   * to send is settled at once, so a hang-up closes in the pass that reads it.
+   * `flush` runs before every poll, so a send put off here goes out before
+   * the handler waits.
    */
   private owable(slot: i32, conn: Http1Connection): boolean {
     const at: i32 = this.current[slot]
-    return !this.draining && this.roomy(conn) && (at < 0 || this.requests[at].state !== HANDLER_PARKED)
+    return (
+      !this.draining &&
+      conn.wantsWrite() &&
+      this.roomy(conn) &&
+      (at < 0 || this.requests[at].state !== HANDLER_PARKED)
+    )
   }
 
   /** Sends what `slot` holds and re-arms it, or closes it once it is over; enqueues a parked request once there is room. */
