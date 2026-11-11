@@ -1219,6 +1219,20 @@ const DECLARED = [
     changelog: "Add parent/child regions",
     why: "the program imports child or childWith from nish:region, which the 0.38.0 seed does not have, so only the candidate compiles it",
   })),
+  ...[
+    "tests/cases/fnref_array.ts",
+    "tests/cases/fnref_capture.ts",
+    "tests/cases/fnref_debug_check.ts",
+    "tests/cases/fnref_empty_set.ts",
+    "tests/cases/fnref_eq.ts",
+    "tests/cases/fnref_generic.ts",
+    "tests/cases/fnref_place_set.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "references to capture-free top-level functions",
+    why: "the 0.38.0 seed refuses a function type outside a parameter, so only the candidate compiles the program (WP51 stage 1)",
+  })),
   {
     program: "tests/cases/obj_spread_class.ts",
     file: "exit",
