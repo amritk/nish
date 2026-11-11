@@ -1,0 +1,1 @@
+`ops[next(b)]` calls or assigns as it is read, and it would be read at each call `twice` makes
