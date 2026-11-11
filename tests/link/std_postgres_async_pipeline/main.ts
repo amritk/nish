@@ -68,6 +68,12 @@
 //      its waiters again (pgAsyncSignal); without that, a seat that waited
 //      again after the first ring sees the byte read back before it is
 //      polled, and is still waiting at the 3 s watchdog.
+//  13. Seats freed together, taken together: eight seats are held, the
+//      first by `wait`, and eight tasks queue for them. Once `wait` is
+//      answered the eight held seats free within a turn or two of the loop,
+//      and the queued tasks are seated over at most five turns, as many at
+//      once as there are seats free, rather than one a turn, each woken by
+//      the one seated ahead of it (nine turns).
 import { cancel, sleep, spawn, taskId } from "nish:async"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
@@ -217,6 +223,41 @@ async function crowd(pool: PgAsyncPool, board: Board, tally: Tally, statement: i
   } else {
     tally.failed += 1
   }
+  board.done += 1
+}
+
+/** The loop turns `tick` has counted, and the turn each of section 13's queued tasks was seated in. */
+class Turns {
+  n: i32 = 0
+  stop: boolean = false
+  seated: i32 = 0
+  seatedAt: i32[]
+  constructor() {
+    this.seatedAt = [0, 0, 0, 0, 0, 0, 0, 0]
+  }
+}
+
+/** Counts loop turns in `turns.n` until `turns.stop`: a zero sleep fires once a turn. */
+async function tick(turns: Turns): Promise<void> {
+  while (!turns.stop) {
+    await sleep(0)
+    turns.n += 1
+  }
+}
+
+/** Seats `statement`, notes the loop turn it was seated in, runs it, and counts itself done. */
+async function seatTogether(pool: PgAsyncPool, board: Board, turns: Turns, statement: i32): Promise<void> {
+  const ticket: i32 = await pgAsyncSeat(pool, statement)
+  turns.seatedAt[turns.seated] = turns.n
+  turns.seated += 1
+  if (ticket < 0) {
+    board.done += 1
+    return
+  }
+  const sent: i32 = await pgAsyncSend(pool, ticket, new PgAsyncParams())
+  const turn: i32 = await pgAsyncTurn(pool, ticket, sent)
+  const r = await pgAsyncAnswer(pool, ticket, turn)
+  pgAsyncDone(pool, ticket, turn, r.reusable)
   board.done += 1
 }
 
@@ -516,6 +557,33 @@ export async function main(): Promise<i32> {
   // Seven waiters, each woken once or twice: a spinning one waits thousands of times.
   const shown: string = spun <= 64 ? "at most 64" : `${spun}`
   console.log(`waits while the turn's answer was held: ${shown}`)
+
+  // 13. Seats freed together, taken together.
+  const turns = new Turns()
+  spawn(pipe(pool, board, handles, wait, "", "held"))
+  for (let i: i32 = 0; i < 7; i++) {
+    spawn(pipe(pool, board, handles, quick, "", "held"))
+  }
+  await sleep(5)
+  for (let i: i32 = 0; i < 8; i++) {
+    spawn(seatTogether(pool, board, turns, quick))
+  }
+  await sleep(20)
+  spawn(tick(turns))
+  await sleep(1)
+  board.open = 1
+  await until(board, 223)
+  turns.stop = true
+  board.open = 0
+  let first: i32 = turns.seatedAt[0]
+  let last: i32 = first
+  for (let i: i32 = 1; i < turns.seated; i++) {
+    first = turns.seatedAt[i] < first ? turns.seatedAt[i] : first
+    last = turns.seatedAt[i] > last ? turns.seatedAt[i] : last
+  }
+  // Seated together, the eight span four turns; one a turn, they span nine.
+  const span: string = last - first < 5 ? "at most 5" : `${last - first + 1}`
+  console.log(`eight seats freed together: ${turns.seated} seated, over ${span} loop turns`)
 
   pool.close()
   return 0
