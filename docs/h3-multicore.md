@@ -68,8 +68,8 @@ k = worker index, 0 <= k < N; the rest is unchanged
   connection IDs and are left as they are.
 - **N is at most 255.** In practice prefork caps it lower: 64 workers, or 63
   with `listenPort` (`prefork.ts:917`). k is a plain byte, not a field of
-  log2 N bits. The steering program then needs no knowledge of N (§3.1), and
-  changing N needs no new program.
+  log2 N bits. The steering program takes byte 0 modulo N (§3.1), so a
+  server ID, below N, names its worker exactly.
 - **Uniqueness and the reset token are unchanged.** The 7 remaining bytes are
   random or HMAC output, so IDs within one worker collide as rarely as 56-bit
   random values do. IDs in different workers cannot collide because byte 0
@@ -110,25 +110,33 @@ about the client.
 Classic BPF in a reuseport group sees the datagram from the start of the UDP
 payload (**measured**: offset 0 is QUIC byte 0). A long-header packet carries
 the DCID length at byte 5 and the DCID from byte 6. A short-header packet
-carries the DCID from byte 1. The program is five instructions:
+carries the DCID from byte 1. The program is seven instructions, with N
+written in when the supervisor attaches it:
 
 ```
     ldb [0]          ; first byte
     jset #0x80, long ; header form bit
     ldb [1]          ; short header: DCID byte 0
-    ret a
+    ja done
 long:
     ldb [6]          ; long header: DCID byte 0
+done:
+    mod #N           ; any byte names a worker
     ret a
 ```
 
-The kernel uses the return value as an index into the group. A value of N or
-more is not a drop: the kernel falls back to its 4-tuple hash. **Measured**
-with a 4-socket group: 64 of 64 in-range datagrams went to the named socket,
-32 of 32 out-of-range ones were spread by the hash, and none were dropped. A
-load past the end of a short datagram makes classic BPF return 0, so a runt
-goes to index 0 (§6). The program belongs to the group, not the socket: one
-attach on any member steers them all.
+The kernel uses the return value as an index into the group. **Measured** with
+a 4-socket group and the program without its `mod`: 64 of 64 in-range
+datagrams went to the named socket. A value of N or more was not dropped: the
+kernel fell back to its 4-tuple hash for all 32 such datagrams. The `mod`
+keeps every value below N, so the hash is never used and a packet's worker
+depends on its DCID alone, never on the client's address. That matters for a
+client that rebinds before it has the server's ID (§4.1). The `mod`'s cost
+was not measured; it is one ALU instruction (**estimate**: below the noise
+band, like the rest of the program). A load past the end of a short datagram
+makes classic BPF return 0, so a runt goes to index 0 (§6). The program
+belongs to the group, not the socket: one attach on any member steers them
+all.
 
 The same mechanism already exists for TCP. `tcpListenFlags` flag 4 attaches a
 two-instruction program, `ld [SKF_AD_OFF+SKF_AD_CPU]; ret a`, through
@@ -151,7 +159,7 @@ worker that exits closes only its own copy.
 | Per-packet cost | inside the noise (**measured**, below) | of the same order as cBPF (**estimate**: one map lookup more) | about 2 µs CPU for each forwarded datagram, sender and receiver together (**measured**), on top of the ~1.1 µs receive it repeats |
 | Which packets pay | none | none | every packet of a connection whose 4-tuple changed, for the rest of its life, plus Initials the hash put on another worker if the client's DCID byte disagreed |
 | Kernel | Linux 4.5 and later (`SO_ATTACH_REUSEPORT_CBPF`) | Linux 4.19 and later for `SK_REUSEPORT`; 5.8 and later for `CAP_BPF` | any |
-| Capability | none: a `setsockopt` on a socket the process owns | `CAP_BPF` (or `CAP_SYS_ADMIN`) to load. Most distributions set `kernel.unprivileged_bpf_disabled` to 2. Docker's default profile grants neither and its seccomp filter refuses `bpf()`. **Measured** here (`unprivileged_bpf_disabled=2`): both `SK_REUSEPORT` and `SOCKET_FILTER` loads gave EPERM without capabilities and succeeded as root | none |
+| Capability | none: a `setsockopt` on a socket the process owns | `CAP_BPF` (or `CAP_SYS_ADMIN`) to load an `SK_REUSEPORT` program whatever `kernel.unprivileged_bpf_disabled` says; the sysctl only governs socket filters. Docker's default profile grants neither capability, and its seccomp filter refuses `bpf()` without them. **Measured** here (`unprivileged_bpf_disabled=2`): both `SK_REUSEPORT` and `SOCKET_FILTER` loads gave EPERM without capabilities and succeeded as root | none |
 | Code | about 15 lines of C beside TCP flag 4 | a program and a map built by hand as bytecode, or a dependency on libbpf; the verifier's errors to report; the map kept up to date by the supervisor | a header parse in the worker, a channel per pair or one through the supervisor, the address and meta (GRO segment size, ECN; `nish_udp_recv_from`) carried across |
 | macOS | none: Darwin does not spread a reuseport group at all (§5) | none | possible, but Darwin hands every datagram to one socket, so every packet would be forwarded |
 | Failure modes | attach refused (seccomp, gVisor, a kernel without it): the supervisor knows at bind time and falls back (§5). Index moves if the supervisor stops holding a socket (§3.1) | load refused for lack of a capability, which is the common case in containers. A map out of date sends a packet to the wrong worker, or with no socket at k, drops it | the target dead or its channel full: the packet is dropped. Service channels make prefork restart the whole group together (`prefork.ts:38-50`), so one worker's crash costs every connection |
@@ -208,19 +216,19 @@ a forwarder would read too.
 
 A client's first Initial carries a DCID it chose at random, at least 8 bytes
 (RFC 9000 §7.2). The program reads its first byte. If the byte is below N, it
-names a worker. If not, the kernel hashes the 4-tuple. Either way the choice
-is stable: a client keeps that DCID and its 4-tuple for every retransmitted
-Initial and for its 0-RTT packets until it sees the server's SCID. Whichever
+names that worker. If not, the byte modulo N does. Either way the choice is
+stable: a client keeps that DCID for every retransmitted Initial and for its
+0-RTT packets until it sees the server's SCID. Whichever
 worker receives the first Initial becomes the owner. Its reply's SCID carries
 its own k, and every later packet from the client is steered to it by byte 0.
 
-A client that rebinds while its DCID is still the random one, before it has
-read the server's SCID, may be hashed to another worker.
-That worker has no slot for it. Since the packet is an Initial or Handshake
-packet, not a short header, `QuicListener` answers it as a new connection
-attempt or drops it, never with a reset. RFC 9000 §9 forbids migration before
-the handshake is confirmed, so this costs the client a retried handshake, not
-a broken connection. A client that coalesces packets in one datagram is
+A client whose NAT rebinds while its DCID is still the random one, before it
+has read the server's SCID, still reaches the same worker, because the
+address plays no part. Had out-of-range bytes fallen back to the hash, such a
+client could land on another worker. That worker would take its retransmitted
+full-sized Initial as a new connection (`QuicListener.handleWindow`,
+`quic-listener.ts:563-565`) and hold a slot for a handshake the client then
+discards (RFC 9000 §7.2). A client that coalesces packets in one datagram is
 steered by the first packet's header, as `Http3Server` routes them today.
 
 ### 4.2 Retry
@@ -235,7 +243,7 @@ fixed destination keeps the test deterministic.
 
 ### 4.3 Version Negotiation
 
-Stateless, on whichever worker the first byte or the hash picks. Nothing
+Stateless, on whichever worker the DCID's first byte picks. Nothing
 changes.
 
 ### 4.4 A worker that dies
@@ -329,11 +337,11 @@ UDP attach. The record carries:
 
 | # | What | Where | Platforms |
 | --- | --- | --- | --- |
-| 1 | The flag attaches the program. A datagram whose DCID byte 0 is k reaches socket k for short and long headers. Byte 0 ≥ N is hashed, not dropped. A runt reaches socket 0. -22 for an undefined bit; -95 on Darwin | `tests/runtime-test.c` (`test_udp_steer`) | Linux; Darwin for -95 |
+| 1 | The flag attaches the program. A datagram whose DCID byte 0 is k reaches socket k for short and long headers. Byte 0 ≥ N reaches socket byte mod N. A runt reaches socket 0. -22 for an undefined bit; -95 on Darwin | `tests/runtime-test.c` (`test_udp_steer`) | Linux; Darwin for -95 |
 | 2 | Every ID a worker issues carries its k: first SCID, NEW_CONNECTION_ID, Retry SCID. With no worker index, IDs are as before | a unit case over `QuicConnection` and `QuicListener` | all |
 | 3 | A short-header packet whose byte 0 names another worker gets no stateless reset; byte 0 ≥ N still does | a unit case over `QuicListener` | all |
 | 4 | **Two workers; a client completes a request, rebinds its port mid-connection, and the next response reaches the new port from the same worker** (each response names its worker) | `tests/link/net_quic_prefork` | Linux |
-| 5 | Initials whose first DCID byte is below N and above it both complete a handshake | `net_quic_prefork` | Linux |
+| 5 | Initials whose first DCID byte is below N and above it both complete a handshake, and one whose client rebinds between two Initials still completes on one worker | `net_quic_prefork` | Linux |
 | 6 | A Retry from worker 1 brings the retried Initial back to worker 1 | `net_quic_prefork` | Linux |
 | 7 | Killing worker 1: its client gets a valid stateless reset from the restarted worker 1; worker 0's client finishes its request on the same connection | `net_quic_prefork` | Linux |
 | 8 | Index stability: with three workers, kill worker 1; packets with byte 0 = 1 reach the new worker 1, not worker 2 | `net_quic_prefork` | Linux |
@@ -362,8 +370,8 @@ reset.
   fails, it falls back to one worker (§5). The names are a proposal; the
   stage chooses.
 - **QUIC:** a worker index in `QuicServerConfig` (default -1: none). With it,
-  `begin`, `deriveConnectionId`'s connection-ID uses and the Retry SCID write
-  k into byte 0. `QuicListener` applies §6's reset rule. `Http3Server` passes
+  `begin`, the NEW_CONNECTION_ID path through `deriveConnectionId`
+  (`quic.ts:3363`) and the Retry SCID write k into byte 0. `QuicListener` applies §6's reset rule. `Http3Server` passes
   the index through and does not change its routing: the slot index already
   keys on all 8 bytes. `quic-conn-cid.ts`'s table holds the IDs and does not
   care what byte 0 is.
