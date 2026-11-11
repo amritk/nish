@@ -486,7 +486,7 @@ number then, as stage 2 renumbered §2.1's.
 | outer memory that is not a number, `boolean`, `enum` or string literal stored into heap memory, by a field or element store, a constructor argument or a literal: the walk would copy it into the heap, so a write through the outer copy would no longer reach the heap's, and a pass scope could release it first. A string literal lies outside every chunk and the walk leaves it where it is | **NL2781** (proposed) |
 | `enter`'s or `enterWith`'s `f` answers anything but a number, `boolean`, `enum` or a handle: what it answered would be moved by the next evacuation | **NL2782** (proposed) |
 | `heap`'s or `heapWith`'s `f` answers anything but memory it allocated, directly or through a callee that answers fresh memory: `heapWith(g, (a) => a)` would make outer memory the root | **NL2783** (proposed) |
-| a root type the walk has no layout for: one that reaches, at any depth, a function value, a `CPtr` or other `declare function` handle, a `Region`, a `Heap`, a `scope()`, a lock, a channel or a `nish/threads` value. Each is a thing the walk cannot copy by its bytes, or one whose copy would be a second owner | **NL2784** (proposed) |
+| a root type the walk has no layout for: one that reaches, at any depth, a function value, a `CPtr` from a `declare function`, a `scope()`, a lock, a channel or another `nish/threads` value. Each is a thing the walk cannot copy by its bytes, or one whose copy would be a second owner. A `Region` or `Heap` handle is a number and is copied as one | **NL2784** (proposed) |
 | `evacuate(h)` inside an `enter` of `h`, directly or through a callee: the locals of `f` point into the chunks it would free. The runtime's entered check backs this for a handle the checker cannot follow | **NL2785** (proposed) |
 | a value whose type holds a `Heap` at any depth crossing to another thread: a task's argument or answer, a parallel body's capture, element or result, a value sent on a channel | **NL2786** (proposed) |
 | `new Heap`: a heap is made only by `heap` or `heapWith`, as `new Region` is NL2618 | **NL2787** (proposed) |
@@ -782,8 +782,8 @@ codes are proposals.
 
 | Route | Code |
 | --- | --- |
-| `using a = arena()`, `Arena.mark` or `Arena.used`, and `nish:region`'s `region`, `regionWith`, `free` and their kin: each frees or measures memory by position, not by count, and a release would free objects whose counts are not zero | **NL2791** (proposed) |
-| counted memory passed to a `declare function`, or stored into memory a `CPtr` names: C may keep the pointer, and keeping it retains nothing. A string is copied for the call, as it is today | **NL2792** (proposed) |
+| `using a = arena()`, `Arena.mark` or `Arena.used`, and `nish:region`'s `region`, `regionWith`, `free` and their kin: each frees or measures memory by position, not by count, and a release would free objects whose counts are not zero | **NL2790** (proposed) |
+| counted memory passed to a `declare function`, or stored into memory a `CPtr` names: C may keep the pointer, and keeping it retains nothing. A string is copied for the call, as it is today | **NL2791** (proposed) |
 
 What it does not refuse, and why:
 
@@ -803,7 +803,7 @@ What it does not refuse, and why:
 **The three shapes.** None needs a rule. `new` answers a value with a count of
 1, owned by the expression. `this` leaving a constructor is a store like any
 other and retains. `using` keeps `scope()` and `lock()`, and `arena()` in any
-declarator is NL2791: `using s = scope(), a = arena()` and
+declarator is NL2790: `using s = scope(), a = arena()` and
 `using a = arena(), s = scope()` each get a negative test.
 
 **Runtime and ABI.** A header word on each allocation, which changes
@@ -837,7 +837,7 @@ calls gain retains. `giveSecret`'s zeroing stays as it is.
 | Time a request, 100,000 live, vs today | 0.97x (`rs`) | 0.93x (`s`) | 0.84x (`c`), 0.95x atomic (`ca`) | 0.89x (`g`) |
 | Pause | none | 20.0 ms a flip at 100,000 live | none | none (a long chain of releases at once) |
 | New API | `nish:region` | `nish:evacuate` | `nish:rc` | none |
-| Rules (codes) | NL2609–NL2618, shipped | NL2780–NL2787, with NL2612 and NL2615–NL2617 widened | NL2788–NL2789, with NL2609–NL2617 widened | NL2791–NL2792 |
+| Rules (codes) | NL2609–NL2618, shipped | NL2780–NL2787, with NL2612 and NL2615–NL2617 widened | NL2788–NL2789, with NL2609–NL2612 and NL2614–NL2617 widened | NL2790–NL2791 |
 | Across threads | refused (NL2613) | refused (NL2786) | `AtomicRc` only (NL2788) | atomic counts for what crosses |
 | Programs that do not use it | `.ll` unchanged | `.ll` unchanged | `.ll` unchanged | every golden with a pointer store moves |
 | Runtime needs | a slot table, a chunk size | a slot table and type layouts at runtime | a slot table and a count | a header word on every allocation |
