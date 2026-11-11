@@ -205,7 +205,7 @@ write the arena retention report
 
 <scalar-field name="--explain-memory">
 
-say which loops and functions keep their memory, and why
+why loops and functions keep their memory
 
 </scalar-field>
 

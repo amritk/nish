@@ -35,10 +35,24 @@ function twice(x: i32): i32 -> @twice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
+function fixed(x: i32): string -> @fixed
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function label(x: i32): string -> @label
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function both(): i32 -> @both
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: lastOf$fn.5.fixed lastOf$fn.5.label nish_panic_overflow nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local +0:9 head: string (const)
+  callee +0:19 lastOf<fixed> -> @lastOf$fn.5.fixed
+  callee +1:24 lastOf<label> -> @lastOf$fn.5.label
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Leaky.constructor bracketed each$fn.5.twice nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 plain scopedOnly
+  calls: Leaky.constructor both bracketed each$fn.5.twice nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 plain scopedOnly
   stackSites=1 stackLocals=0
   local +0:7 k: i32 (let)
   callee +1:10 new Leaky -> @Leaky.constructor
@@ -46,6 +60,21 @@ function main(): void -> @nish_main [exported entry]
   callee +4:36 bracketed -> @bracketed
   callee +4:51 scopedOnly -> @scopedOnly
   callee +4:68 plain -> @plain
+  callee +4:85 both -> @both
+function lastOf<fixed>(n: i32, g: void): i32 -> @lastOf$fn.5.fixed [instance]
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: fixed
+  stackSites=0 stackLocals=0
+  local +0:7 last: string (let)
+  local +1:12 i: i32 (let)
+  callee +2:12 fixed -> @fixed
+function lastOf<label>(n: i32, g: void): i32 -> @lastOf$fn.5.label [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: label nish_arena_mark nish_arena_release
+  stackSites=0 stackLocals=0
+  local +0:7 last: string (let)
+  local +1:12 i: i32 (let)
+  callee +2:12 label -> @label
 function each<twice>(n: i32, g: void): i32 -> @each$fn.5.twice [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow nish_str_from_i32 twice

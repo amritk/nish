@@ -19818,6 +19818,7 @@ if (dealtHere("cliChecks")) {
       "--deny-panics",
       "--deny-retention",
       "--emit-arena",
+      "--explain-memory",
       "--target",
       "--cpu",
       "--profile",

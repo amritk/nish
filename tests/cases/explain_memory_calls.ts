@@ -1,9 +1,11 @@
 // --explain-memory on calls the pass walk charges and the report must too: a
 // `new` whose constructor keeps what it allocates, run by a loop condition; a
-// function that takes a function parameter, explained through its first
-// instantiation; a function bracketed by its own `using a = arena()` and one
-// whose every allocation is in a scoped pass, which keep nothing past the
-// call; and a function line that names the line of what it keeps.
+// function that takes a function parameter, explained once per instantiation
+// under its instantiated name, where only the instantiation that allocates is
+// listed; a caller of a function that keeps memory, which names it; a function
+// bracketed by its own `using a = arena()` and one whose every allocation is
+// in a scoped pass, which keep nothing past the call; and a function line that
+// names the line of what it keeps.
 class Leaky {
   w: i32;
   constructor(k: i32) {
@@ -48,10 +50,26 @@ const plain = (n: i32): i32 => {
 
 const twice = (x: i32): i32 => x * 2;
 
+const fixed = (x: i32): string => "a";
+const label = (x: i32): string => `n${x}`;
+
+const lastOf = (n: i32, g: (x: i32) => string): i32 => {
+  let last = "";
+  for (let i = 0; i < n; i++) {
+    last = g(i);
+  }
+  return last.length;
+};
+
+const both = (): i32 => {
+  const head = `${lastOf(3, fixed)}`;
+  return head.length + lastOf(3, label);
+};
+
 export const main = (): void => {
   let k = 0;
   while (new Leaky(k).w < 3) {
     k = k + 1;
   }
-  console.log(`${each(3, twice)} ${bracketed()} ${scopedOnly(3)} ${plain(3)} ${k}`);
+  console.log(`${each(3, twice)} ${bracketed()} ${scopedOnly(3)} ${plain(3)} ${k} ${both()}`);
 };

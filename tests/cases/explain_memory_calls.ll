@@ -6,19 +6,22 @@
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"b\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"x\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"y\00" }, align 8
-@.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"n\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
-declare extern_weak void @nish_panic_overflow(i32 noundef) #2
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
-declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
 
 define internal void @Leaky.constructor(%struct.Leaky* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %k) #0 {
 entry:
@@ -201,6 +204,42 @@ ovf.fail:
   unreachable
 }
 
+define internal noundef nonnull align 8 i8* @fixed(i32 noundef %x) #2 {
+entry:
+  ret i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*)
+}
+
+define internal noundef nonnull align 8 i8* @label(i32 noundef %x) #0 {
+entry:
+  %0 = call i8* @nish_str_from_i32(i32 %x)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*), i8* %0)
+  ret i8* %1
+}
+
+define internal noundef i32 @both() #0 {
+entry:
+  %head.addr = alloca i8*, align 8
+  %0 = call i32 @lastOf$fn.5.fixed(i32 3)
+  %1 = call i8* @nish_str_from_i32(i32 %0)
+  store i8* %1, i8** %head.addr, align 8
+  %2 = load i8*, i8** %head.addr, align 8
+  %3 = bitcast i8* %2 to i64*
+  %4 = load i64, i64* %3, align 8
+  %5 = trunc i64 %4 to i32
+  %6 = call i32 @lastOf$fn.5.label(i32 3)
+  %7 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %5, i32 %6)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %8
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
 define void @nish_main() #0 {
 entry:
   %k.addr = alloca i32, align 4
@@ -231,29 +270,103 @@ ovf.ok:
 while.end:
   %8 = call i32 @each$fn.5.twice(i32 3)
   %9 = call i8* @nish_str_from_i32(i32 %8)
-  %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
   %11 = call i32 @bracketed()
   %12 = call i8* @nish_str_from_i32(i32 %11)
   %13 = call i8* @nish_str_concat(i8* %10, i8* %12)
-  %14 = call i8* @nish_str_concat(i8* %13, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %14 = call i8* @nish_str_concat(i8* %13, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
   %15 = call i32 @scopedOnly(i32 3)
   %16 = call i8* @nish_str_from_i32(i32 %15)
   %17 = call i8* @nish_str_concat(i8* %14, i8* %16)
-  %18 = call i8* @nish_str_concat(i8* %17, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %18 = call i8* @nish_str_concat(i8* %17, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
   %19 = call i32 @plain(i32 3)
   %20 = call i8* @nish_str_from_i32(i32 %19)
   %21 = call i8* @nish_str_concat(i8* %18, i8* %20)
-  %22 = call i8* @nish_str_concat(i8* %21, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %22 = call i8* @nish_str_concat(i8* %21, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
   %23 = load i32, i32* %k.addr, align 4
   %24 = call i8* @nish_str_from_i32(i32 %23)
   %25 = call i8* @nish_str_concat(i8* %22, i8* %24)
-  call void @nish_print(i8* %25)
+  %26 = call i8* @nish_str_concat(i8* %25, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %27 = call i32 @both()
+  %28 = call i8* @nish_str_from_i32(i32 %27)
+  %29 = call i8* @nish_str_concat(i8* %26, i8* %28)
+  call void @nish_print(i8* %29)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
   unreachable
+}
+
+define internal noundef i32 @lastOf$fn.5.fixed(i32 noundef %n) #3 {
+entry:
+  %last.addr = alloca i8*, align 8
+  %i.addr = alloca i32, align 4
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*), i8** %last.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %n
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = load i32, i32* %i.addr, align 4
+  %3 = call i8* @fixed(i32 %2)
+  store i8* %3, i8** %last.addr, align 8
+  br label %for.inc
+
+for.inc:
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = add nsw i32 %4, 1
+  store i32 %5, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %6 = load i8*, i8** %last.addr, align 8
+  %7 = bitcast i8* %6 to i64*
+  %8 = load i64, i64* %7, align 8
+  %9 = trunc i64 %8 to i32
+  ret i32 %9
+}
+
+define internal noundef i32 @lastOf$fn.5.label(i32 noundef %n) #0 {
+entry:
+  %last.addr = alloca i8*, align 8
+  %i.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*), i8** %last.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %n
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = load i32, i32* %i.addr, align 4
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i8* @label(i32 %2)
+  %5 = call i8* @nish_arena_keep(i64 %3, i8* %4)
+  store i8* %5, i8** %last.addr, align 8
+  br label %for.inc
+
+for.inc:
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = add nsw i32 %6, 1
+  store i32 %7, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %8 = load i8*, i8** %last.addr, align 8
+  %9 = bitcast i8* %8 to i64*
+  %10 = load i64, i64* %9, align 8
+  %11 = trunc i64 %10 to i32
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %11
 }
 
 define internal noundef i32 @each$fn.5.twice(i32 noundef %n) #0 {
@@ -326,8 +439,9 @@ entry:
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
-attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!18, !19, !20, !21, !22}
 !0 = !{!"nish TBAA"}

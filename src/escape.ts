@@ -2338,6 +2338,10 @@ const loopBody = (loop: Node): Node => {
 
 const within = (outer: Node, node: Node): boolean => node.start >= outer.start && node.end <= outer.end
 
+/** A `for`, `for...of`, `while` or `do...while`: a statement that can have a pass scope. */
+const isLoopKind = (node: Node): boolean =>
+  node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
+
 /**
  * Decide the per-pass scope of every loop in `sig`, into `f.loopScopes`, once
  * the fixpoint and the function scopes are settled. See the header above.
@@ -2867,7 +2871,7 @@ const findArenaLoops = (
       )
     }
   }
-  const isLoop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
+  const isLoop = isLoopKind(node)
   const scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
   // What a block allocates after its `using a = arena()` is released when the
   // block ends, on every pass that runs it (`arenaBlockFindings` proved it).
@@ -2990,6 +2994,19 @@ const calleeWhere = (facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
   return null
 }
 
+/** The first callee that lets an allocation outlive its call other than through its result. */
+const calleeLeaking = (facts: FactsTable, f: FunctionFacts): FunctionFacts | null => {
+  let c = 0
+  while (c < f.callees.size()) {
+    const g = facts.get(f.callees.at(c))
+    if (g !== null && g.allocLeaks) {
+      return g
+    }
+    c = c + 1
+  }
+  return null
+}
+
 // ---- `--explain-memory` -------------------------------------------------------------------
 //
 // The arena-loop warning above speaks only where it can name a callee whose
@@ -3034,10 +3051,10 @@ const ARENA_MARK_REASON: string =
 /**
  * The `--explain-memory` lines of one module, in the order the program lists
  * its functions (declared ones, then instantiations) and, in each function,
- * the function's own line first and then its loops in source order. A generic function, or one that takes a function parameter, has no
- * signature but its instantiations: the first of each declaration is
- * explained, with its own side tables installed, and the others are not, so
- * a template instantiated twice is explained once.
+ * the function's own line first and then its loops in source order. A
+ * generic function, or one that takes a function parameter, has no signature
+ * but its instantiations, and one of them can keep what another lets go, so
+ * each is explained under its own name, with its own side tables installed.
  */
 export const explainMemory = (
   unit: AnalysisUnit,
@@ -3047,7 +3064,6 @@ export const explainMemory = (
   out: MemoryReport
 ): void => {
   const program = unit.program
-  const explained: Node[] = []
   for (const sig of program.functions) {
     const f = facts.get(sig.name)
     const body = sig.body()
@@ -3056,10 +3072,6 @@ export const explainMemory = (
     }
     const instance = sig.instance
     if (instance !== null) {
-      if (holdsNode(explained, sig.decl)) {
-        continue
-      }
-      explained.push(sig.decl)
       program.enterInstance(instance)
     }
     explainFunction(unit, table, facts, noElision, sig, f, body, out)
@@ -3067,16 +3079,6 @@ export const explainMemory = (
       program.leaveInstance()
     }
   }
-}
-
-/** Whether `nodes` holds `node`. */
-const holdsNode = (nodes: Node[], node: Node): boolean => {
-  for (const n of nodes) {
-    if (n === node) {
-      return true
-    }
-  }
-  return false
 }
 
 /** The `--explain-memory` lines of one function: its own, then its loops'. */
@@ -3102,7 +3104,7 @@ const explainFunction = (
     if (kept !== null) {
       out.functionsKept = out.functionsKept + 1
       const until = isMain ? "for the rest of the run" : "until the memory of its caller is released"
-      const reason = keptReason(unit, facts, f, noElision, kept)
+      const reason = keptReason(unit, table, facts, f, noElision, kept)
       out.notes.push(
         new ArenaFinding(sig.decl, `\`${f.sourceName}\` keeps what it allocates ${until}, because ${reason}`)
       )
@@ -3159,7 +3161,7 @@ const collectReleased = (
   if (node.kind === N_ARROW) {
     return
   }
-  const isLoop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
+  const isLoop = isLoopKind(node)
   const scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
   for (const child of node.children) {
     if (scope !== null && scope.scoped && child === scope.body) {
@@ -3178,7 +3180,7 @@ const collectReleased = (
 /** Whether `node` lies in one of the ranges `collectReleased` found. */
 const inReleased = (node: Node, starts: i32[], ends: i32[]): boolean => {
   let i = 0
-  while (i < starts.length) {
+  while (i < starts.length && i < ends.length) {
     if (node.start >= starts[i] && node.end <= ends[i]) {
       return true
     }
@@ -3217,6 +3219,7 @@ const firstLeavingCall = (
  */
 const keptReason = (
   unit: AnalysisUnit,
+  table: TypeTable,
   facts: FactsTable,
   f: FunctionFacts,
   noElision: boolean,
@@ -3238,7 +3241,37 @@ const keptReason = (
   if (f.fillsParam >= 0 && f.fillsParam < f.paramNames.length) {
     return `it fills \`${f.paramNames[f.fillsParam]}\` with what it allocated, and that memory is its caller's`
   }
-  const line = unit.program.source.lineOf(kept.start)
+  const program = unit.program
+  const line = program.source.lineOf(kept.start)
+  // A function takes a scope only for an allocation of its own; what a callee
+  // leaves behind is then nobody's here to release.
+  if (!f.directArena) {
+    let callee: FunctionSig | null = null
+    if (kept.kind === N_CALL) {
+      callee = program.nodeCallees[kept.id]
+    } else if (kept.kind === N_NEW) {
+      callee = constructorOf(program, table, intrinsicType(program, kept))
+    }
+    const what = callee === null ? "a callee" : `\`${callee.sourceName}\``
+    return (
+      `it allocates only through its callees, and ${what}, called on line ${line}, leaves memory behind that ` +
+      "no scope of this function takes back"
+    )
+  }
+  // `allocLeaks` flows up the call graph, so a callee's leak is this one's.
+  const leaky = calleeLeaking(facts, f)
+  if (f.allocLeaks && leaky !== null) {
+    return (
+      `\`${leaky.sourceName}\`, which it calls, lets what it allocated outlive the call, so this analysis does not ` +
+      `prove dead what line ${line} allocates either`
+    )
+  }
+  if (f.allocLeaks) {
+    return (
+      "an allocation it makes is held in a local assigned more than once or in an array of its own, which this " +
+      `analysis does not prove dead when it returns; the first it keeps is on line ${line}`
+    )
+  }
   return `what line ${line} allocates is held where this analysis cannot prove it dead when the function returns`
 }
 
@@ -3264,20 +3297,11 @@ const explainLoops = (
   if (node.kind === N_ARROW) {
     return
   }
-  const isLoop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
-  let scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
-  // A loop the scope decision never reached has no pass scope, and what its
-  // passes allocate is read off the facts instead, so a statement position
-  // `collectLoopScopes` does not walk shows up here rather than as a gap.
-  let unreached = false
-  if (isLoop && scope === null) {
-    const fresh = new LoopScope(node, loopBody(node))
-    fresh.allocates = passCallsAllocate(unit, table, f, facts, fresh.body)
-    scope = fresh
-    unreached = true
-  }
+  const isLoop = isLoopKind(node)
+  const scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
   let inner = pass
   let lateCondition: Node | null = null
+  let until = ""
   if (scope !== null) {
     // The condition and the update run outside the bracket the body takes,
     // so what they allocate stays whether or not the body is scoped.
@@ -3288,22 +3312,22 @@ const explainLoops = (
     // The pass decision read `netAllocates` with every scope in place, and
     // walked no pass it refused for `Arena.mark`; `--no-elision` took the
     // scopes away, so a call into a function a scope had emptied allocates again.
+    // A callee this analysis cannot see may allocate: the pass is listed
+    // with that reason rather than counted as allocating nothing.
     const unwalked = noElision || scope.why === LOOP_CONTROL
-    const allocates = scope.allocates || (unwalked && passCallsAllocate(unit, table, f, facts, scope.body))
+    const allocates =
+      scope.allocates ||
+      scope.why === LOOP_UNSEEN ||
+      (unwalked && passCallsAllocate(unit, table, f, facts, scope.body))
     if (allocates || conditionKeeps || updateKeeps) {
       out.loops = out.loops + 1
       const bodyKeeps = allocates && !scope.scoped && !bracketsItself(unit, table, f, facts, scope.body)
       if (bodyKeeps || conditionKeeps || updateKeeps) {
         out.loopsKept = out.loopsKept + 1
       }
-      const until = keptUntil(unit, f, isMain, pass, block)
+      until = keptUntil(unit, f, isMain, pass, block)
       if (bodyKeeps) {
-        let reason = ""
-        if (unreached) {
-          reason = unreachedReason(noElision)
-        } else {
-          reason = loopKeptReason(unit, scope, noElision)
-        }
+        const reason = loopKeptReason(unit, scope, noElision)
         out.notes.push(
           new ArenaFinding(node, `this loop keeps what each pass allocates ${until}, because ${reason}`)
         )
@@ -3335,7 +3359,7 @@ const explainLoops = (
     explainLoops(unit, table, facts, f, noElision, isMain, child, childPass, held, out)
   }
   if (lateCondition !== null) {
-    out.notes.push(headNote(lateCondition, "condition", keptUntil(unit, f, isMain, pass, block)))
+    out.notes.push(headNote(lateCondition, "condition", until))
   }
 }
 
@@ -3345,14 +3369,6 @@ const headNote = (head: Node, part: string, until: string): ArenaFinding =>
     head,
     `this loop's ${part} allocates on every pass, outside the scope a pass takes, and keeps it ${until}`
   )
-
-/** Why a loop the scope decision never reached keeps what a pass allocated. */
-const unreachedReason = (noElision: boolean): string => {
-  if (noElision) {
-    return NO_ELISION_REASON
-  }
-  return "the compiler takes no automatic scope for the passes of a loop in this position"
-}
 
 /** The node of `loop` that is tested before or after every pass, or null for a `for...of`. */
 const loopCondition = (loop: Node): Node | null => {

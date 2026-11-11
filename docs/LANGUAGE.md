@@ -12714,9 +12714,14 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   `tests/run.js` does with a case's `<name>.memory`
   (`tests/cases/explain_memory`).
 - **The program's own modules only**, as `--deny-retention` judges them. A
-  generic function, or one that takes a function parameter, is explained once,
-  through its first instantiation (`` `each<twice>` ``), after the functions
-  declared outright (`tests/cases/explain_memory_calls`).
+  generic function, or one that takes a function parameter, is explained once
+  per instantiation, under its instantiated name (`` `each<twice>` ``), after
+  the functions declared outright (`tests/cases/explain_memory_calls`).
+- **A callee the analysis cannot see counts as allocating.** A loop that
+  calls one is listed with the refusal that names it, since nothing proves
+  its passes leave no memory behind.
+- **A callee's leak is its caller's.** A function that calls one that keeps
+  what it allocated names that callee as its reason.
 - **A function is judged by what it still holds when it returns.** One with
   no scope of its own keeps nothing when every allocation it leaves is inside
   a scoped pass or a `using a = arena()` block, so it is counted and not
