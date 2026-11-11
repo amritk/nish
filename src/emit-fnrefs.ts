@@ -7,7 +7,7 @@ import { emitPanicTail } from "./emit-builtins"
 import { FunctionSig } from "./program"
 
 /** The message a debug build panics with when a tag is outside its dispatcher's set. */
-export const outsideSetMessage: string = "function reference holds a function outside its place's set"
+const outsideSetMessage: string = "function reference holds a function outside its place's set"
 
 /**
  * The debug profile's check on a dispatcher's entry: the tag `%$t` is one of

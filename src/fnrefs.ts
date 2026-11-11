@@ -19,15 +19,15 @@ import { N_ARROW, N_CLASS, N_CONSTRUCTOR, N_FIELD, N_IDENT, N_PARAM, N_THIS, N_V
 import { StringSet } from "./map"
 
 /** The refusal for a generic function named in a value position. */
-export const genericReferenceMessage = (name: string): string =>
+const genericReferenceMessage = (name: string): string =>
   `\`${name}\` is generic: a function reference names one non-generic top-level function`
 
 /** The refusal for a function that takes a function parameter, named in a value position. */
-export const templateReferenceMessage = (name: string): string =>
+const templateReferenceMessage = (name: string): string =>
   `\`${name}\` takes a function parameter, so it has no single body to refer to`
 
 /** The refusal for an `async` function named in a value position. */
-export const asyncReferenceMessage = (name: string): string =>
+const asyncReferenceMessage = (name: string): string =>
   `\`${name}\` is async: a function reference cannot hold it, because its call is a promise`
 
 /** The refusal for printing a reference or reading a property of one: Node prints the function, native holds a tag. */
@@ -35,11 +35,11 @@ export const opaqueReferenceMessage = (shown: string): string =>
   `\`${shown}\` is a function reference: it can be called, compared, stored and passed, nothing else`
 
 /** The refusal for a `declare function` named in a value position. */
-export const foreignReferenceMessage = (name: string): string =>
+const foreignReferenceMessage = (name: string): string =>
   `\`${name}\` is declared in C: a function reference names a function this program defines`
 
 /** The refusal for a function with a rest or defaulted parameter named in a value position. */
-export const partialReferenceMessage = (name: string, rest: boolean): string =>
+const partialReferenceMessage = (name: string, rest: boolean): string =>
   `\`${name}\` has ${rest ? "a rest parameter" : "a parameter with a default"}: a function reference names a ` +
   "function whose every parameter the caller passes"
 
@@ -48,7 +48,7 @@ export const zeroFilledReferenceMessage = (spelled: string): string =>
   `\`new Array<${spelled}>(n)\` would zero-fill with 0, which names no function; build it with \`[]\` and \`push\` instead`
 
 /** The refusal for an arrow in a value position that reads a name of the function it is written in. */
-export const capturingArrowMessage = (name: string): string =>
+const capturingArrowMessage = (name: string): string =>
   `this arrow captures \`${name}\`: a function reference names a top-level function and carries no environment`
 
 /** The refusal for a method named as a value. */
@@ -130,7 +130,7 @@ export const functionReference = (ctx: CheckContext, expr: Node): i32 => {
 }
 
 /** The reference type of `sig`'s signature. */
-export const referenceTypeOf = (ctx: CheckContext, sig: FunctionSig): i32 => {
+const referenceTypeOf = (ctx: CheckContext, sig: FunctionSig): i32 => {
   const params: i32[] = []
   let i = 0
   while (i < sig.writtenArity()) {
@@ -209,7 +209,7 @@ export const outerReference = (ctx: CheckContext, name: string): boolean => {
 }
 
 /** The refusal for a function reference that code outside the program could hold or hand in (§5.2). */
-export const hostReferenceMessage = (what: string): string =>
+const hostReferenceMessage = (what: string): string =>
   `${what} holds a function reference that code outside this program can reach: a reference is a tag this ` +
   "program's dispatcher reads, not an address, and a host could hand back one no dispatcher knows"
 
