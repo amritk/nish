@@ -544,6 +544,8 @@ export class HttpHandler {
   private outputSize: i32 = 0
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
   private draining: boolean = false
+  /** Set by `deferSends`: a send may wait for `flush`. Off, every answer is sent as it ends. */
+  private deferring: boolean = false
   /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
   private jsonBegun: boolean = false
 
@@ -693,6 +695,17 @@ export class HttpHandler {
   }
 
   /**
+   * Lets the handler put a connection's send off until `flush`, so the
+   * answers to a pipelined burst go out in one write. Off by default, so an
+   * answer is sent as it ends. A program that turns it on calls `flush` (or
+   * `wait`, which flushes) after each turn of answers, before it blocks;
+   * `nish/net/serve` does.
+   */
+  deferSends(): void {
+    this.deferring = true
+  }
+
+  /**
    * Begins a graceful stop: the handler accepts no more connections, closes
    * each idle one now, and closes each other one once the request on it is
    * answered and sent, so `connections()` falls to 0 as the program answers
@@ -807,7 +820,7 @@ export class HttpHandler {
   }
 
   /**
-   * Whether `slot`'s send can wait for `flush`: it has output to send, the
+   * Whether `slot`'s send can wait for `flush`: `deferSends` turned that on, it has output to send, the
    * output is still roomy, so more answers fit behind it, and no request on
    * it is parked waiting for the room a send makes. A connection with nothing
    * to send is settled at once, so a hang-up closes in the pass that reads it.
@@ -820,6 +833,7 @@ export class HttpHandler {
   private owable(slot: i32, conn: Http1Connection): boolean {
     const at: i32 = this.current[slot]
     return (
+      this.deferring &&
       !this.draining &&
       conn.wantsWrite() &&
       !conn.writeHeld &&
@@ -1296,9 +1310,9 @@ export class HttpHandler {
   /**
    * Ends `r`'s response. `r` is the handler's again: it goes back once the
    * carrier has taken every byte, and the connection's next request is read.
-   * Answers `HANDLER_SENT` or `HANDLER_DROPPED`. The send may be put off so a
-   * pipelined burst goes out in one write: call `wait` or `flush` after
-   * answering, or it waits for the next of them.
+   * Answers `HANDLER_SENT` or `HANDLER_DROPPED`. After `deferSends` the send
+   * may be put off so a pipelined burst goes out in one write: call `wait` or
+   * `flush` after answering, or it waits for the next of them.
    * @param r a request whose response `start` began; the handler's again after this call
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */

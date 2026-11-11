@@ -667,6 +667,7 @@ export const serveOn = async (
   hl.http.headTimeout = limits.headTimeout
   hl.http.idleTimeout = limits.idleTimeout
   const h: HttpHandler = new HttpHandler(hl, listener, router)
+  h.deferSends()
   const st: ServeState = new ServeState()
   st.deadline = limits.deadline
   serveFields(st, limits.server)
