@@ -25,7 +25,7 @@ entry:
   ret i32 %0
 }
 
-define internal noundef align 8 i32 @pick(i32 noundef %k) #0 {
+define internal noundef i32 @pick(i32 noundef %k) #0 {
 entry:
   %0 = icmp eq i32 %k, 0
   br i1 %0, label %if.then, label %if.end
@@ -48,7 +48,7 @@ cond.end:
   ret i32 %2
 }
 
-define internal noundef i32 @run(i32 noundef align 8 %h, i32 noundef %x) #0 {
+define internal noundef i32 @run(i32 noundef %h, i32 noundef %x) #0 {
 entry:
   %0 = icmp eq i32 %h, 0
   br i1 %0, label %if.then, label %if.end
