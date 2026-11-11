@@ -476,6 +476,66 @@ workers with a service worker (the most descriptors one child is handed), a
 `channelKind` that is neither kind, or seqpacket channels off Linux stop the
 program with a panic.
 
+## Serving a file
+
+A file bigger than you want in memory goes out the way it is read: a window
+at a time. Open it once with `fileOpen`, answer with `fileSize` as the
+length, and move each window from `fileReadAt` into the response with
+`Http1Connection.write`. Each connection keeps only an `i64`, how far into the
+file it has got, and every connection shares one window, so a server that
+sends a 1 GiB file holds what it holds for a 64 KiB one.
+
+The output is the bound. `write` takes as much of the window as there is room
+for and answers how much, or `H1_AGAIN` when there is none; stop there, keep
+the position, and go on from it when `next(slot)` answers `H1_WRITE`, which
+it does once half the output is free. A window taken in part is read again
+from the new position:
+
+```ts
+const pump = (conn: Http1Connection, file: i32, size: i64, window: u8[], at: i64): i64 => {
+  let pos: i64 = at
+  while (pos < size) {
+    const left: i64 = size - pos
+    const want: i32 = left < toI64(window.length) ? toI32(left) : toI32(window.length)
+    const n: i32 = fileReadAt(file, window, toI32(0), want, pos)
+    if (n <= 0) {
+      conn.abort() // the file shrank or failed: the length can no longer be met
+      return toI64(-1)
+    }
+    const took: i32 = conn.write(window, toI32(0), n)
+    if (took === H1_AGAIN) {
+      return pos // the output is full: wait for H1_WRITE
+    }
+    if (took < 0) {
+      conn.abort()
+      return toI64(-1)
+    }
+    pos = pos + toI64(took)
+    if (took < n) {
+      return pos
+    }
+  }
+  conn.end()
+  return toI64(-1) // done
+}
+```
+
+This `pump` moves the body only, and answers `-1` alike when the body is sent
+and when it aborted, since either way the connection owes nothing more. The
+example also keeps a position for a response head that found no room in the
+output and retries `respond` at the next `H1_WRITE`.
+
+`respond` takes the body's length as an `i32`, so one response carries at most
+2^31 - 1 bytes; refuse a larger file before you listen. A read that comes back
+short of the length you announced means the file changed under you, and
+`abort()` closes the connection rather than leave the client waiting for bytes
+that will not come. A `HEAD` request (`conn.parser.methodIs("HEAD")`) needs
+the head and no reads at all.
+[`examples/file-server.ts`](https://github.com/amritk/nish/blob/main/examples/file-server.ts)
+is the whole server: `file-server big.mp4 8080`, then
+`curl -s http://127.0.0.1:8080/ | cmp - big.mp4`. Serving a 64 MiB file to a
+slow reader, its peak memory is the same as serving a 64 KiB one.
+
 ## Names: `nish/net/dns`
 
 A socket call takes an address. `nish/net/dns` turns a name into addresses

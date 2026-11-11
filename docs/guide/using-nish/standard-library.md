@@ -61,8 +61,26 @@ if (status !== 0) {
 }
 ```
 
-It is `process.spawn` in the capability report, and refused when compiling for
-WebAssembly. See
+`spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)` is the same run
+with a deadline, for a child that may never answer. When `timeoutMs`
+milliseconds pass before the child exits it answers -3, kills the child, and
+keeps what the child printed so far in `stdout` and `stderr`. A negative
+`timeoutMs` means no deadline. Only the child itself is killed: a process it
+started that still holds its output keeps the run going until the deadline,
+so a child that leaves one behind answers -3 even when it exited 0.
+
+```ts
+const out: u8[] = []
+const err: u8[] = []
+const none: u8[] = []
+const status = spawnPipedWithin(["git", "ls-remote", "origin"], none, out, err, 10000)
+if (status === -3) {
+  console.log("git ls-remote took longer than 10 seconds")
+}
+```
+
+Both are `process.spawn` in the capability report, and refused when compiling
+for WebAssembly. See
 [Directories and subprocesses](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#directories-and-subprocesses).
 
 `spawnWithFds(argv, fds)` starts a child as `spawn` does and hands it the
@@ -106,6 +124,45 @@ native string built by `String.fromBytes` carries any bytes, and `write` and
 decodes UTF-8 and an invalid sequence becomes U+FFFD, so `writeBytes` and
 `writeFileBytesSync` are the route that is exact everywhere.
 
+A file too big to hold whole is read a window at a time. `fileOpen(path)`
+answers an `i32` descriptor for a regular file, or a negative errno (`-2`
+missing, `-21` a directory); `fileReadAt(fd, buf, off, len, pos)` reads at
+most `len` bytes from byte `pos` (an `i64`) into `buf` at `off` and answers
+the count, `0` at the end; `fileClose(fd)` gives the descriptor back, once.
+The buffer is yours, so memory stays the size of the window:
+
+```ts
+export function main(): number {
+  const fd = fileOpen("big.log");
+  if (fd < 0) {
+    console.log(`open failed: ${fd}`);
+    return 1;
+  }
+  const buf: u8[] = new Array<u8>(65536);
+  let pos: i64 = toI64(0);
+  while (true) {
+    const n = fileReadAt(fd, buf, 0, buf.length, pos);
+    if (n < 0) {
+      console.log(`read failed: ${n}`);
+      break;
+    }
+    if (n === 0) {
+      break;
+    }
+    pos = pos + toI64(n);
+  }
+  fileClose(fd);
+  console.log(`read ${pos} bytes`);
+  return 0;
+}
+```
+
+A read may come back short, so loop on the count rather than on
+`fileSize(fd)`. [Serving a file](networking.md#serving-a-file) sends one over
+HTTP this way. All four need `fs.read`, work natively, under Node and under
+`--profile wasi`, and are refused on freestanding `wasm32` (NL2718); see
+[File I/O](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-file-a-window-at-a-time).
+
 Writing a secret to disk, a key or a token, takes three things
 `writeFileSync` does not give. `writeFileSyncMode(path, data, 0o600)` leaves
 the file at exactly the mode you name, set before the first byte is written,
@@ -130,7 +187,7 @@ shown).
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
-| [`nish/text`](#nishtext) | `split`, `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `asciiUpper`, `asciiLower`, `padStart`, `padEnd`, `firstDifference`, `codePointLength`, `indexOfAny` |
+| [`nish/text`](#nishtext) | `split`, `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `asciiUpper`, `asciiLower`, `padStart`, `padEnd`, `firstDifference`, `codePointLength`, `indexOfAny`, `splitLimit`, `toFixed` |
 | [`nish/regex`](#nishregex) | `regexCompile`: JavaScript-syntax regular expressions, matched in time linear in the input |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
@@ -230,6 +287,41 @@ separator that never occurs gives `[text]`. An empty separator panics
 (`split: an empty separator`) rather than splitting into units, which are
 bytes in a compiled program and UTF-16 units under Node. The answers are the
 same both ways for any text and any non-empty separator.
+
+`splitLimit(text, sep, limit)` is JavaScript's `text.split(sep, limit)`: it
+keeps the first `limit` pieces and drops the rest, so
+`splitLimit("a,b,c", ",", 2)` is `["a", "b"]` and a limit of 0 gives `[]`. A
+negative limit keeps every piece, as JavaScript's does, so
+`splitLimit(text, sep, -1)` is `split(text, sep)`. An empty separator panics
+here too (`splitLimit: an empty separator`).
+
+`toFixed(x, digits)` is JavaScript's `x.toFixed(digits)`, which Nish cannot
+write as a method: `x` with `digits` digits after the point, rounded on the
+exact value the `f64` holds. That is why `toFixed(1.005, 2)` is `"1.00"`:
+1.005 is stored a little below itself. A tie rounds away from zero, so
+`toFixed(2.5, 0)` is `"3"` and `toFixed(-2.5, 0)` is `"-3"`.
+
+```ts nish:ok
+import { toFixed } from "nish/text";
+
+export const main = (): i32 => {
+  const price: f64 = 19.999;
+  console.log(`total: ${toFixed(price * 3, 2)}`);
+  console.log(toFixed(-0.0001, 2));
+  return 0;
+};
+```
+
+```console
+$ nish run fixed.ts
+total: 60.00
+-0.00
+```
+
+`digits` is 0 to 100, and any other count panics
+(`toFixed: digits must be 0 to 100`). `NaN`, the infinities and a number of
+magnitude `1e21` or more print as a template hole prints them, as JavaScript
+does. The answers are the same compiled and under Node.
 
 `asciiUpper(text)` and `asciiLower(text)` change the letters `a` to `z` and
 `A` to `Z` and nothing else, so every other byte, the bytes of `é` and `ß`

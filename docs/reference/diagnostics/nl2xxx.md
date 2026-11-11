@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 722 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 723 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -13428,6 +13428,14 @@ export const main = (): i32 => {
 
 ```text
 `n` is u32, which is never below 0, so `n < 0` is always false; compare a signed value, or against a bound other than 0
+```
+
+## NL2718
+
+The message of an error contains:
+
+```text
+` reads a file, and a freestanding wasm32 build has no file system to read (build with `--profile wasi`)
 ```
 
 ## NL2719

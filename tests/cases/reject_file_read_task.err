@@ -1,0 +1,2 @@
+reject_file_read_task.ts:19:5
+`fileReadAt` writes memory a task of `s` may read, before the scope joins

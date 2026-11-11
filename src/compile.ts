@@ -81,7 +81,12 @@ import { codeFor, TOOLCHAIN } from "./codes"
 import { Diagnostic, formatList } from "./diagnostics"
 import { EmittedProgram, emitTypeScript } from "./emit-ts"
 import { fixProgram, loadRoots } from "./fix"
-import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
+import {
+  internalErrorFor,
+  simulatedInternalError,
+  simulatedStatelessInstance,
+  simulatedUnlabelledBuiltin,
+} from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
 import { WATCH_SUPERVISOR_SOURCE, watchState } from "./watch"
 import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
@@ -607,6 +612,7 @@ export const main = (): number => {
   }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()
+  opts.statelessInstance = simulatedStatelessInstance()
   // `nish run [flags] <file.ts> [args ...]`: the flags before the file are the
   // compiler's and everything after it is the program's, so a script is run by
   // the same line a shebang writes. The debug recipe is the default because a

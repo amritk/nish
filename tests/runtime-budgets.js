@@ -176,8 +176,30 @@ const RUNTIME_TEXT_UNIT_BUDGET = 1787
  * case, docs/security/runtime.md RT-40) and `nish_spawn_start` 365 to 380 for the base its
  * `dup2` actions count from. It is `spawn` with descriptors handed on, so it belongs beside
  * `nish_spawn_start`, which it reuses. The budget is the next 256-byte boundary, leaving 138.
+ *
+ * **Raised to 5,376 for `spawnPipedWithin`**, measured **5,225 bytes** on 2026-11-11 with
+ * clang 18.1.3 on linux-x64, from 4,858 on `main`: under `-ffunction-sections`, the
+ * capture loop moved into `nish_spawn_piped_within` at 1,444 (1,089 as
+ * `nish_spawn_piped`), the deadline read on the monotonic clock, the `poll` wait it
+ * bounds, the SIGKILL and the `WNOHANG` reap with its doubling nap that keep the final
+ * wait inside the deadline (docs/security/runtime.md RT-49), and `nish_spawn_piped` is a
+ * 9-byte call with no deadline. One loop serves both, so `spawnPiped` costs nothing
+ * twice. The budget is the next 256-byte boundary, leaving 151.
+ *
+ * **Raised to 5,888 for WP44's streaming reads** (`fileOpen`, `fileReadAt`, `fileSize`,
+ * `fileClose`, docs/wp44-streaming-files.md), measured **5,705 bytes** on 2026-11-11 with
+ * clang 18.1.3 on linux-x64, from 5,225 with `spawnPipedWithin` in: under
+ * `-ffunction-sections`, `nish_file_open` 169 (the empty-or-NUL path refusal, the `fstat`
+ * regular-file test and the close of what it refuses), `nish_file_read_at` 115 (the `pos` refusal and the `EINTR` retry),
+ * `nish_file_size` 50, `nish_file_close` 27 (each before the refusal of a negative descriptor,
+ * -9 before the call, which WASI would otherwise answer -22, which added 26 across the three) and `nish_fs_err` 96, the errno table by name
+ * that gives Darwin and WASI Linux's numbers (its 76-byte jump table is `.rodata`). They
+ * are file reads beside `nish_read_file_or_null`, and §7 links them into a WASI build
+ * through this file, so they are here rather than in a unit of their own. The budget is the
+ * next 256-byte boundary, leaving 183. The 480 bytes are the same before and after
+ * `spawnPipedWithin` (5,338 from 4,858 without it).
  */
-const RUNTIME_OS_TEXT_BUDGET = 4864
+const RUNTIME_OS_TEXT_BUDGET = 5888
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.
@@ -989,6 +1011,16 @@ export const WASM_HOST_SIZE_BUDGETS = [
  * on linux-x64 and no wasm-opt; the `wasm-size` block of tests/run.js holds
  * every build to them. A change that moves one is a change to every plain program's
  * bytes: it updates the digest here and says why in its commit.
+ *
+ * WP44 stage "files" moved the `--profile wasm` digest of arrays.ts and label.ts
+ * (105 bytes raw each; `--profile wasm-host`, the `.d.ts` and the loader are
+ * unchanged). runtime-wasm.c defines nish_file_open, nish_file_read_at,
+ * nish_file_size and nish_file_close, each answering -38, so a program that calls
+ * them still links on freestanding wasm (docs/wp44-streaming-files.md §9 Q7). That profile
+ * links with `--export-all`, which exports every defined symbol whatever its
+ * visibility, and an exported symbol survives `--gc-sections`, so the four stubs
+ * are in every module that links runtime-wasm.c. Keeping them out of a program
+ * that never calls them is a change to scripts/build.sh's link line.
  */
 export const WASM_PLAIN_DIGESTS = [
   {
@@ -1002,7 +1034,7 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/arrays.ts",
     dts: "e01467ab59357645168a86b4defe2aa137a0c2395e1b211993379957899154b7",
     loader: "894b7789a0be7f7fb39bdcd252d58dd321e6912cb425db7e459f0cbc11c2500a",
-    wasm: "04188e4288db9a287591844b1d1d8f8fc20f0c406f91625d15ac7189c2902d24",
+    wasm: "96d30c5e34923c2c601a84c2840b24900592957e2c5936d97b40502b574f9576",
     host: "93a7dc1238aa9f6548de14593dd1fe0f99b6b732a5e2ec5b31543799ab5dd548",
   },
   {
@@ -1018,7 +1050,7 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/label.ts",
     dts: "2908a99c7f6fbfdb2f974459751e1ef424fc31651f3d90905199af43572f7458",
     loader: "8c8c983e487e7fce8d39053ce902bf0ad83851e4263f5f177de7438bb25c755b",
-    wasm: "b0154ccf6e275cc7beb7dac812784c47bcf5ee2d54aaa82d3fc9b3142e7c3578",
+    wasm: "217f03032659ab60e8b67dfaaa0e14625a2f67cedbac18acb3b6178f9c149692",
     host: "ef8d59319dfcc282e9db6017e616dc07c6c65c913f388d00bdc9e0fe83a0b65f",
   },
 ]

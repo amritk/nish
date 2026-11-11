@@ -117,7 +117,7 @@ local name:
 | Module | What it has |
 | --- | --- |
 | `nish:fs` | reading and writing files and directories: `readFileSync`, `writeFileSync`, `writeFileBytesSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode`, `renameSync`, `unlinkSync`, `readdirSync`, … |
-| `nish:process` | `exit`, `argv`, `getenv`, `spawnSync`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `platform`, `arch`, … |
+| `nish:process` | `exit`, `argv`, `getenv`, `spawnSync`, `spawnPiped`, `spawnPipedWithin`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `platform`, `arch`, … |
 | `nish:io` | `write` and `writeError` (stdout and stderr without a newline), `writeBytes` (bytes from a `u8[]` to stdout, as they are), `panic` |
 | `nish:net` | TCP, UDP and Unix-domain sockets, descriptor passing and peer credentials, and a readiness loop ([Networking](../using-nish/networking.md), [Unix sockets](../using-nish/unix-sockets.md)) |
 | `nish:secret` | the `Secret<T>` wrapper for keys and other secret values |

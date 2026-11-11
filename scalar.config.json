@@ -1326,8 +1326,8 @@
                   "/wp42-multicore-server": { "type": "page", "title": "WP42: A multi-core server from pre-forked processes", "filepath": "docs/roadmap/wp42-multicore-server.md" },
                   "/wp45-name-resolution": { "type": "page", "title": "WP45: Name resolution: a DNS stub resolver", "filepath": "docs/roadmap/wp45-name-resolution.md" },
                   "/wp47-shared-memory": { "type": "page", "title": "WP47: Shared work across cores: regions, atomics and rings", "filepath": "docs/roadmap/wp47-shared-memory.md" },
-                  "/wp48-run-rebuilds": { "type": "page", "title": "WP48: Fast rebuilds for nish run", "filepath": "docs/roadmap/wp48-run-rebuilds.md" },
                   "/wp50-wasm-host": { "type": "page", "title": "WP50: A WebAssembly module a TypeScript page drives", "filepath": "docs/roadmap/wp50-wasm-host.md" },
+                  "/wp52-run-rebuilds": { "type": "page", "title": "WP52: Fast rebuilds for nish run", "filepath": "docs/roadmap/wp52-run-rebuilds.md" },
                   "/wp24-async": { "type": "page", "title": "WP24: async/await", "filepath": "docs/roadmap/wp24-async.md" },
                   "/wp41-mul-wide": { "type": "page", "title": "WP41: A wide multiply", "filepath": "docs/roadmap/wp41-mul-wide.md" }
                 }
@@ -1339,17 +1339,24 @@
     }
   },
   "assetsDir": "docs/site",
+  "agentSkills": [{ "filepath": "skills/writing-nish/SKILL.md" }],
   "siteConfig": {
     "isPrivate": true,
     "theme": "docs/site/theme.css",
     "logo": { "lightMode": "docs/site/logo-light.png", "darkMode": "docs/site/logo-dark.png" },
+    "rss": {
+      "path": "/reference/changelog",
+      "title": "Nish changelog",
+      "description": "Every Nish release: what changed in the compiler, the runtime and the standard library."
+    },
     "head": {
       "scripts": [{ "path": "docs/site/site.js", "defer": true }],
       "links": [
         { "rel": "icon", "type": "image/x-icon", "href": "/favicon.ico" },
         { "rel": "icon", "type": "image/svg+xml", "href": "/mark.svg" },
         { "rel": "icon", "type": "image/png", "href": "/favicon-32.png" },
-        { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" }
+        { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" },
+        { "rel": "alternate", "type": "application/rss+xml", "title": "Nish changelog", "href": "/reference/changelog/rss.xml" }
       ]
     }
   }

@@ -196,6 +196,13 @@ const USE_ESCAPE: i32 = 1
 const USE_ARGUMENT: i32 = 2 [exported]
 const USE_READ: i32 = 3 [exported]
 const USE_WRITE: i32 = 4 [exported]
+const STANCE_WRITES_NONE: i32 = 0
+const STANCE_WRITES_SLOTS: i32 = 1
+const STANCE_WRITES_REACH: i32 = 2
+const STANCE_WRITES_DEEP: i32 = 3
+const STANCE_KEEPS_NONE: i32 = 0
+const STANCE_KEEPS_JOINED: i32 = 1
+const STANCE_KEEPS_PAST: i32 = 2
 const PAST_NONE: i32 = 0
 const PAST_BELOW: i32 = 1
 const PAST_ELSEWHERE: i32 = 2
@@ -301,79 +308,80 @@ struct FunctionFacts (class) size=416 align=8 exported
   field loopsBounded: boolean index=2 offset=2
   field hasTrap: boolean index=3 offset=3
   field resizesArray: boolean index=4 offset=4
-  field sharedWrite: boolean index=5 offset=5
-  field atomic: boolean index=6 offset=6
-  field writesPastParams: boolean index=7 offset=7
-  field writesElsewhere: boolean index=8 offset=8
-  field writesOutput: boolean index=9 offset=9
-  field argEdges: ArgEdge[] index=10 offset=16
-  field wholeReaches: ArgEdge[] index=11 offset=24
-  field memWrites: MemPath[] index=12 offset=32
-  field ownSlotWrites: MemPath[] index=13 offset=40
-  field ownSlotSites: Node[] index=14 offset=48
-  field ownLocals: Local[] index=15 offset=56
-  field localPaths: LocalPath[] index=16 offset=64
-  field dirt: DirtMark[] index=17 offset=72
-  field paramStores: ParamStore[] index=18 offset=80
-  field keepsUnknown: boolean index=19 offset=88
-  field wholeCallees: StringSet index=20 offset=96
-  field routed: boolean index=21 offset=104
-  field privateArrays: PrivateArray[] index=22 offset=112
-  field writeSite: Node | null index=23 offset=120
-  field writeVia: string index=24 offset=128
-  field worldVia: string index=25 offset=136
-  field effect: i32 index=26 offset=144
-  field willReturn: boolean index=27 offset=148
-  field callsNoReturn: boolean index=28 offset=149
-  field escaping: StringSet index=29 offset=152
-  field callees: StringSet index=30 offset=160
-  field paramNames: string[] index=31 offset=168
-  field pointerParams: PointerParamFacts[] index=32 offset=176
-  field freshThis: boolean index=33 offset=184
-  field returnDeref: i32 index=34 offset=188
-  field returnAlign: i32 index=35 offset=192
-  field stackSites: boolean[] index=36 offset=200
-  field stackLocals: Local[] index=37 offset=208
-  field stackParams: StringSet index=38 offset=216
-  field arenaScope: boolean index=39 offset=224
-  field allocates: boolean index=40 offset=225
-  field directArena: boolean index=41 offset=226
-  field allocLeaks: boolean index=42 offset=227
-  field leaksItself: boolean index=43 offset=228
-  field allocEscapes: boolean index=44 offset=229
-  field returnsAllocation: boolean index=45 offset=230
-  field returnsFreshElements: boolean index=46 offset=231
-  field fillsParam: i32 index=47 offset=232
-  field readsArenaState: boolean index=48 offset=236
-  field opensArena: boolean index=49 offset=237
-  field usesRegion: boolean index=50 offset=238
-  field feedsTasks: boolean index=51 offset=239
-  field callSites: CallSite[] index=52 offset=240
-  field escapingNodes: Node[] index=53 offset=248
-  field carriedStores: Node[] index=54 offset=256
-  field carriers: Local[] index=55 offset=264
-  field arenaNodes: Node[] index=56 offset=272
-  field arenaFlows: i32[] index=57 offset=280
-  field loopScopes: LoopScope[] index=58 offset=288
-  field contained: boolean index=59 offset=296
-  field escapeSite: Node | null index=60 offset=304
-  field returnsScalar: boolean index=61 offset=312
-  field sourceName: string index=62 offset=320
-  field allocatesItself: boolean index=63 offset=328
-  field managesArena: boolean index=64 offset=329
-  field netAllocates: boolean index=65 offset=330
-  field hoistedHeaders: HoistedHeader[] index=66 offset=336
-  field hoistedScopeStarts: i32[] index=67 offset=344
-  field panicSites: PanicSite[] index=68 offset=352
-  field cycleOrder: i32 index=69 offset=360
-  field cycleLow: i32 index=70 offset=364
-  field onCycleStack: boolean index=71 offset=368
-  field caps: i32 index=72 offset=372
-  field capVia: string[] index=73 offset=376
-  field capSite: Node | null[] index=74 offset=384
-  field capDist: i32[] index=75 offset=392
-  field capCallees: string[] index=76 offset=400
-  field capSites: Node[] index=77 offset=408
+  field stanceStated: boolean index=5 offset=5
+  field sharedWrite: boolean index=6 offset=6
+  field atomic: boolean index=7 offset=7
+  field writesPastParams: boolean index=8 offset=8
+  field writesElsewhere: boolean index=9 offset=9
+  field writesOutput: boolean index=10 offset=10
+  field argEdges: ArgEdge[] index=11 offset=16
+  field wholeReaches: ArgEdge[] index=12 offset=24
+  field memWrites: MemPath[] index=13 offset=32
+  field ownSlotWrites: MemPath[] index=14 offset=40
+  field ownSlotSites: Node[] index=15 offset=48
+  field ownLocals: Local[] index=16 offset=56
+  field localPaths: LocalPath[] index=17 offset=64
+  field dirt: DirtMark[] index=18 offset=72
+  field paramStores: ParamStore[] index=19 offset=80
+  field keepsUnknown: boolean index=20 offset=88
+  field wholeCallees: StringSet index=21 offset=96
+  field routed: boolean index=22 offset=104
+  field privateArrays: PrivateArray[] index=23 offset=112
+  field writeSite: Node | null index=24 offset=120
+  field writeVia: string index=25 offset=128
+  field worldVia: string index=26 offset=136
+  field effect: i32 index=27 offset=144
+  field willReturn: boolean index=28 offset=148
+  field callsNoReturn: boolean index=29 offset=149
+  field escaping: StringSet index=30 offset=152
+  field callees: StringSet index=31 offset=160
+  field paramNames: string[] index=32 offset=168
+  field pointerParams: PointerParamFacts[] index=33 offset=176
+  field freshThis: boolean index=34 offset=184
+  field returnDeref: i32 index=35 offset=188
+  field returnAlign: i32 index=36 offset=192
+  field stackSites: boolean[] index=37 offset=200
+  field stackLocals: Local[] index=38 offset=208
+  field stackParams: StringSet index=39 offset=216
+  field arenaScope: boolean index=40 offset=224
+  field allocates: boolean index=41 offset=225
+  field directArena: boolean index=42 offset=226
+  field allocLeaks: boolean index=43 offset=227
+  field leaksItself: boolean index=44 offset=228
+  field allocEscapes: boolean index=45 offset=229
+  field returnsAllocation: boolean index=46 offset=230
+  field returnsFreshElements: boolean index=47 offset=231
+  field fillsParam: i32 index=48 offset=232
+  field readsArenaState: boolean index=49 offset=236
+  field opensArena: boolean index=50 offset=237
+  field usesRegion: boolean index=51 offset=238
+  field feedsTasks: boolean index=52 offset=239
+  field callSites: CallSite[] index=53 offset=240
+  field escapingNodes: Node[] index=54 offset=248
+  field carriedStores: Node[] index=55 offset=256
+  field carriers: Local[] index=56 offset=264
+  field arenaNodes: Node[] index=57 offset=272
+  field arenaFlows: i32[] index=58 offset=280
+  field loopScopes: LoopScope[] index=59 offset=288
+  field contained: boolean index=60 offset=296
+  field escapeSite: Node | null index=61 offset=304
+  field returnsScalar: boolean index=62 offset=312
+  field sourceName: string index=63 offset=320
+  field allocatesItself: boolean index=64 offset=328
+  field managesArena: boolean index=65 offset=329
+  field netAllocates: boolean index=66 offset=330
+  field hoistedHeaders: HoistedHeader[] index=67 offset=336
+  field hoistedScopeStarts: i32[] index=68 offset=344
+  field panicSites: PanicSite[] index=69 offset=352
+  field cycleOrder: i32 index=70 offset=360
+  field cycleLow: i32 index=71 offset=364
+  field onCycleStack: boolean index=72 offset=368
+  field caps: i32 index=73 offset=372
+  field capVia: string[] index=74 offset=376
+  field capSite: Node | null[] index=75 offset=384
+  field capDist: i32[] index=76 offset=392
+  field capCallees: string[] index=77 offset=400
+  field capSites: Node[] index=78 offset=408
   constructor -> @FunctionFacts.constructor
   method offerCapability -> @FunctionFacts.offerCapability
   method pointerParam -> @FunctionFacts.pointerParam
@@ -479,6 +487,16 @@ struct FactCollector (class) size=72 align=8
   method noteBuiltinSite -> @FactCollector.noteBuiltinSite
   method noteWrittenArguments -> @FactCollector.noteWrittenArguments
   method collectIdentifierBuiltinFacts -> @FactCollector.collectIdentifierBuiltinFacts
+struct ParamStance (class) size=12 align=4
+  field writes: i32 index=0 offset=0
+  field keeps: i32 index=1 offset=4
+  field pollutes: boolean index=2 offset=8
+  constructor -> @ParamStance.constructor
+struct BodilessStance (class) size=24 align=8
+  field first: ParamStance index=0 offset=0
+  field rest: ParamStance index=1 offset=8
+  field grows: boolean index=2 offset=16
+  constructor -> @BodilessStance.constructor
 struct EscapeSet (class) size=16 align=8
   field index: StringMap index=0 offset=0
   field list: EscapeResult[] index=1 offset=8
@@ -1148,7 +1166,7 @@ function FactCollector.constructor(this: FactCollector, unit: AnalysisUnit, tabl
   pointer this: size=72 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=true captured=true
   pointer table: size=112 writesThrough=true captured=true
-  pointer opts: size=208 writesThrough=true captured=true
+  pointer opts: size=216 writesThrough=true captured=true
   pointer sig: size=200 writesThrough=true captured=true
   pointer facts: size=416 writesThrough=true captured=true
   pointer known: size=24 writesThrough=true captured=true
@@ -2376,13 +2394,30 @@ function initialisesFields(sig: FunctionSig): boolean -> @initialisesFields
   local +0:9 owner: StructInfo | null (const)
   local +4:14 field: FieldInfo (const)
 function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: FunctionSig, memory: EscapeResult | null, nodeCount: i32, known: FactsTable | null): FunctionFacts -> @collectFacts
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=416
+  sharedWrite: via collectStatedFacts
+  escaping: nodeCount
+  calls: assumeUnknownStance collectStatedFacts needsStance nish_str_eq
+  pointer unit: size=16 writesThrough=true captured=true passedTo=collectStatedFacts#0
+  pointer table: size=112 writesThrough=true captured=true passedTo=collectStatedFacts#1
+  pointer opts: size=216 writesThrough=true captured=true passedTo=collectStatedFacts#2
+  pointer sig: size=200 writesThrough=true captured=true passedTo=collectStatedFacts#3 needsStance#1
+  pointer memory: size=104 writesThrough=false captured=false passedTo=collectStatedFacts#4
+  pointer known: size=24 writesThrough=true captured=true passedTo=collectStatedFacts#6
+  stackSites=0 stackLocals=0
+  local +0:9 facts: FunctionFacts (const)
+  callee +0:17 collectStatedFacts -> @collectStatedFacts
+  local +4:9 forgotten: boolean (const)
+  callee +5:45 needsStance -> @needsStance
+  callee +6:5 assumeUnknownStance -> @assumeUnknownStance
+function collectStatedFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: FunctionSig, memory: EscapeResult | null, nodeCount: i32, known: FactsTable | null): FunctionFacts -> @collectStatedFacts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=416
   sharedWrite: +0:7
   escaping: nodeCount
-  calls: FactCollector.addCallees FactCollector.addUserCallee FactCollector.constructor FactCollector.findPrivateArrays FactCollector.noteSite FactCollector.visit FunctionFacts.constructor FunctionFacts.pointerParam FunctionSig.body FunctionSig.foreign FunctionSig.suspends Options.recordsPanics PanicSite.constructor PointerParamFacts.constructor StringSet.has TypeTable.isRanged TypeTable.isReadonlyArray TypeTable.stripNull checksRangesInPrologue initialisesFields isAtomicMethod isChannelSend isLockMethod isMapRoute isPointerParam isRegionEntry isRegionIntrinsic isScalarArgument isShmSource isShmWindowIntrinsic isSpawnEntry jsonRouteOf lentBuffer markAtomic markChannelSend markJsonRoute markLock markMapRoute markParallelEntry markRegionIntrinsic markShmWindow markWipe maxEffect nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq panicTailCallees pointerAlign rootsHoldNoPointer routeCalleesOf secretRoleOf structSize
+  calls: FactCollector.addCallees FactCollector.addUserCallee FactCollector.constructor FactCollector.findPrivateArrays FactCollector.noteSite FactCollector.visit FunctionFacts.constructor FunctionFacts.pointerParam FunctionSig.body FunctionSig.foreign FunctionSig.suspends Options.recordsPanics PanicSite.constructor PointerParamFacts.constructor StringSet.has TypeTable.isRanged TypeTable.isReadonlyArray TypeTable.stripNull applyStance checksRangesInPrologue initialisesFields isAtomicMethod isChannelSend isLockMethod isMapRoute isPointerParam isRegionEntry isRegionIntrinsic isScalarArgument isShmSource isShmWindowIntrinsic isSpawnEntry jsonRouteOf lentBuffer markAtomic markChannelSend markJsonRoute markLock markMapRoute markParallelEntry markRegionIntrinsic markShmWindow markWipe maxEffect nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq panicTailCallees pointerAlign rootsHoldNoPointer routeCalleesOf secretRoleOf structSize
   pointer unit: size=16 writesThrough=true captured=true passedTo=FactCollector.constructor#1
   pointer table: size=112 writesThrough=true captured=true passedTo=structSize#1 pointerAlign#1 rootsHoldNoPointer#1 isScalarArgument#0 isPointerParam#0 structSize#1 TypeTable.stripNull#0 pointerAlign#1 markJsonRoute#1 isPointerParam#0 lentBuffer#0 TypeTable.isReadonlyArray#0 TypeTable.stripNull#0 FactCollector.constructor#2 checksRangesInPrologue#0 TypeTable.isRanged#0 markMapRoute#0 routeCalleesOf#0
-  pointer opts: size=208 writesThrough=true captured=true passedTo=Options.recordsPanics#0 FactCollector.constructor#3 checksRangesInPrologue#1
+  pointer opts: size=216 writesThrough=true captured=true passedTo=Options.recordsPanics#0 FactCollector.constructor#3 checksRangesInPrologue#1
   pointer sig: size=200 writesThrough=true captured=true passedTo=isChannelSend#0 jsonRouteOf#0 rootsHoldNoPointer#2 jsonRouteOf#0 markJsonRoute#2 isChannelSend#0 isAtomicMethod#0 isRegionIntrinsic#1 isShmWindowIntrinsic#1 FunctionSig.foreign#0 lentBuffer#1 FactCollector.constructor#4 FunctionSig.body#0 initialisesFields#0 checksRangesInPrologue#2 isRegionEntry#0 isSpawnEntry#0 isMapRoute#0 markMapRoute#1 routeCalleesOf#1 secretRoleOf#0 isLockMethod#0 FunctionSig.suspends#0
   pointer memory: size=104 writesThrough=false captured=false
   pointer known: size=24 writesThrough=true captured=true passedTo=FactCollector.constructor#6
@@ -2405,17 +2440,22 @@ function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: 
   callee -119:38 TypeTable.stripNull -> @TypeTable.stripNull
   callee -118:11 pointerAlign -> @pointerAlign
   callee -110:7 jsonRouteOf -> @jsonRouteOf
-  callee -109:5 markJsonRoute -> @markJsonRoute
+  callee -109:5 applyStance -> @applyStance
+  callee -109:24 markJsonRoute -> @markJsonRoute
   callee -104:7 isChannelSend -> @isChannelSend
-  callee -103:5 markChannelSend -> @markChannelSend
+  callee -103:5 applyStance -> @applyStance
+  callee -103:24 markChannelSend -> @markChannelSend
   callee -98:7 isAtomicMethod -> @isAtomicMethod
-  callee -97:5 markAtomic -> @markAtomic
+  callee -97:5 applyStance -> @applyStance
+  callee -97:24 markAtomic -> @markAtomic
   callee -92:7 isRegionIntrinsic -> @isRegionIntrinsic
-  callee -91:5 markRegionIntrinsic -> @markRegionIntrinsic
+  callee -91:5 applyStance -> @applyStance
+  callee -91:24 markRegionIntrinsic -> @markRegionIntrinsic
   callee -90:9 Options.recordsPanics -> @Options.recordsPanics
   callee -89:29 new PanicSite -> @PanicSite.constructor
   callee -83:7 isShmWindowIntrinsic -> @isShmWindowIntrinsic
-  callee -82:5 markShmWindow -> @markShmWindow
+  callee -82:5 applyStance -> @applyStance
+  callee -82:24 markShmWindow -> @markShmWindow
   callee -64:7 FunctionSig.foreign -> @FunctionSig.foreign
   local -63:9 at: i32 (let)
   local -62:9 p: i32 (let)
@@ -2444,38 +2484,113 @@ function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: 
   callee +23:11 TypeTable.isRanged -> @TypeTable.isRanged
   callee +24:9 FactCollector.noteSite -> @FactCollector.noteSite
   callee +34:7 isRegionEntry -> @isRegionEntry
-  callee +35:5 markParallelEntry -> @markParallelEntry
+  callee +35:5 applyStance -> @applyStance
+  callee +35:24 markParallelEntry -> @markParallelEntry
   callee +37:7 isSpawnEntry -> @isSpawnEntry
-  callee +38:5 markParallelEntry -> @markParallelEntry
+  callee +38:5 applyStance -> @applyStance
+  callee +38:24 markParallelEntry -> @markParallelEntry
   callee +40:7 isMapRoute -> @isMapRoute
-  callee +41:5 markMapRoute -> @markMapRoute
+  callee +41:5 applyStance -> @applyStance
+  callee +41:24 markMapRoute -> @markMapRoute
   local +45:18 callee: FunctionSig (const)
   callee +45:28 routeCalleesOf -> @routeCalleesOf
   callee +46:9 FactCollector.addUserCallee -> @FactCollector.addUserCallee
   callee +50:7 secretRoleOf -> @secretRoleOf
-  callee +51:5 markWipe -> @markWipe
+  callee +51:5 applyStance -> @applyStance
+  callee +51:24 markWipe -> @markWipe
   callee +53:7 isLockMethod -> @isLockMethod
-  callee +54:5 markLock -> @markLock
+  callee +54:5 applyStance -> @applyStance
+  callee +54:24 markLock -> @markLock
   callee +57:27 StringSet.has -> @StringSet.has
   callee +57:67 StringSet.has -> @StringSet.has
   callee +58:24 StringSet.has -> @StringSet.has
   callee +61:20 maxEffect -> @maxEffect
   callee +70:7 FunctionSig.suspends -> @FunctionSig.suspends
-function markParallelEntry(facts: FunctionFacts, runtime: string, joined: boolean): void -> @markParallelEntry
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function ParamStance.constructor(this: ParamStance, writes: i32, keeps: i32, pollutes: boolean): void -> @ParamStance.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: keeps pollutes writes
+  pointer this: size=12 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function BodilessStance.constructor(this: BodilessStance, first: ParamStance, rest: ParamStance, grows: boolean): void -> @BodilessStance.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: first grows rest
+  pointer this: size=24 writesThrough=true captured=false
+  pointer first: size=12 writesThrough=true captured=true
+  pointer rest: size=12 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function statesNothing(): ParamStance -> @statesNothing
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=12
+  calls: ParamStance.constructor nish_alloc_struct
+  stackSites=0 stackLocals=0
+  callee +0:42 new ParamStance -> @ParamStance.constructor
+function applyParamStance(pp: PointerParamFacts, stance: ParamStance): void -> @applyParamStance
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
+  calls: internalError nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_from_i32
+  pointer pp: size=56 writesThrough=true captured=false
+  pointer stance: size=12 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee -4:7 internalError -> @internalError
+function applyStance(facts: FunctionFacts, stance: BodilessStance): void -> @applyStance
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: applyParamStance
+  pointer facts: size=416 writesThrough=true captured=false
+  pointer stance: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +1:7 i: i32 (let)
+  callee +3:5 applyParamStance -> @applyParamStance
+function needsStance(program: CheckedProgram, sig: FunctionSig): boolean -> @needsStance
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isAtomicMethod isChannelSend isLockMethod isMapRoute isRegionEntry isRegionIntrinsic isShmWindowIntrinsic isSpawnEntry jsonRouteOf secretRoleOf
+  pointer program: size=800 writesThrough=false captured=false passedTo=isRegionIntrinsic#0 isShmWindowIntrinsic#0
+  pointer sig: size=200 writesThrough=false captured=false passedTo=jsonRouteOf#0 isChannelSend#0 isAtomicMethod#0 isRegionIntrinsic#1 isShmWindowIntrinsic#1 isRegionEntry#0 isSpawnEntry#0 isMapRoute#0 secretRoleOf#0 isLockMethod#0
+  stackSites=0 stackLocals=0
+  callee +0:3 jsonRouteOf -> @jsonRouteOf
+  callee +1:3 isChannelSend -> @isChannelSend
+  callee +2:3 isAtomicMethod -> @isAtomicMethod
+  callee +3:3 isRegionIntrinsic -> @isRegionIntrinsic
+  callee +4:3 isShmWindowIntrinsic -> @isShmWindowIntrinsic
+  callee +5:3 isRegionEntry -> @isRegionEntry
+  callee +6:3 isSpawnEntry -> @isSpawnEntry
+  callee +7:3 isMapRoute -> @isMapRoute
+  callee +8:3 secretRoleOf -> @secretRoleOf
+  callee +9:3 isLockMethod -> @isLockMethod
+function assumeUnknownStance(facts: FunctionFacts): void -> @assumeUnknownStance
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: BodilessStance.constructor ParamStance.constructor applyStance nish_alloc_struct nish_str_concat
+  pointer facts: size=416 writesThrough=true captured=false passedTo=applyStance#0
+  stackSites=1 stackLocals=0
+  local -2:9 unknown: ParamStance (const)
+  callee -2:19 new ParamStance -> @ParamStance.constructor
+  callee -1:3 applyStance -> @applyStance
+  callee -1:22 new BodilessStance -> @BodilessStance.constructor
+function markParallelEntry(facts: FunctionFacts, runtime: string, joined: boolean): BodilessStance -> @markParallelEntry
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
+  sharedWrite: via handsParamsTo
+  escaping: runtime
+  calls: BodilessStance.constructor ParamStance.constructor handsParamsTo nish_alloc_struct
+  pointer facts: size=416 writesThrough=false captured=false passedTo=handsParamsTo#0
+  stackSites=0 stackLocals=0
+  callee +0:3 handsParamsTo -> @handsParamsTo
+  local +1:9 each: ParamStance (const)
+  callee +1:16 new ParamStance -> @ParamStance.constructor
+  callee +2:10 new BodilessStance -> @BodilessStance.constructor
+function handsParamsTo(facts: FunctionFacts, runtime: string): void -> @handsParamsTo
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringSet.add
   escaping: runtime
   calls: StringSet.add
   pointer facts: size=416 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee -5:3 StringSet.add -> @StringSet.add
-  local -4:14 name: string (const)
-  callee -3:5 StringSet.add -> @StringSet.add
-  local -1:14 pp: PointerParamFacts (const)
-function markMapRoute(table: TypeTable, sig: FunctionSig, facts: FunctionFacts): void -> @markMapRoute
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  callee +0:3 StringSet.add -> @StringSet.add
+  local +1:14 name: string (const)
+  callee +2:5 StringSet.add -> @StringSet.add
+function markMapRoute(table: TypeTable, sig: FunctionSig, facts: FunctionFacts): BodilessStance -> @markMapRoute
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
-  calls: FunctionFacts.pointerParam StringSet.add nish_array_grow routeCalleesOf
+  calls: BodilessStance.constructor FunctionFacts.pointerParam StringSet.add nish_alloc_struct nish_array_grow routeCalleesOf statesNothing
   pointer table: size=112 writesThrough=false captured=false passedTo=routeCalleesOf#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=routeCalleesOf#1
   pointer facts: size=416 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0
@@ -2487,53 +2602,74 @@ function markMapRoute(table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
   local +3:14 callee: FunctionSig (const)
   callee +4:5 StringSet.add -> @StringSet.add
   callee +6:5 StringSet.add -> @StringSet.add
-function markWipe(facts: FunctionFacts): void -> @markWipe
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  callee +12:10 new BodilessStance -> @BodilessStance.constructor
+  callee +12:29 statesNothing -> @statesNothing
+  callee +12:46 statesNothing -> @statesNothing
+function markWipe(facts: FunctionFacts): BodilessStance -> @markWipe
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
-  calls: StringSet.add
+  calls: BodilessStance.constructor ParamStance.constructor StringSet.add nish_alloc_struct statesNothing
   pointer facts: size=416 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +3:3 StringSet.add -> @StringSet.add
-  local +6:11 pp: PointerParamFacts (const)
-function markLock(facts: FunctionFacts): void -> @markLock
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  callee +5:10 new BodilessStance -> @BodilessStance.constructor
+  callee +6:5 new ParamStance -> @ParamStance.constructor
+  callee +7:5 statesNothing -> @statesNothing
+function markLock(facts: FunctionFacts): BodilessStance -> @markLock
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
-  calls: StringSet.add
+  calls: BodilessStance.constructor StringSet.add nish_alloc_struct statesNothing
   pointer facts: size=416 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +2:3 StringSet.add -> @StringSet.add
-function markChannelSend(facts: FunctionFacts): void -> @markChannelSend
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  callee +3:10 new BodilessStance -> @BodilessStance.constructor
+  callee +3:29 statesNothing -> @statesNothing
+  callee +3:46 statesNothing -> @statesNothing
+function markChannelSend(facts: FunctionFacts): BodilessStance -> @markChannelSend
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
-  calls: StringSet.add
+  calls: BodilessStance.constructor ParamStance.constructor StringSet.add nish_alloc_struct statesNothing
   pointer facts: size=416 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +5:3 StringSet.add -> @StringSet.add
-function markAtomic(facts: FunctionFacts): void -> @markAtomic
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee +6:10 new BodilessStance -> @BodilessStance.constructor
+  callee +7:5 new ParamStance -> @ParamStance.constructor
+  callee +8:5 statesNothing -> @statesNothing
+function markAtomic(facts: FunctionFacts): BodilessStance -> @markAtomic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
+  calls: BodilessStance.constructor ParamStance.constructor nish_alloc_struct statesNothing
   pointer facts: size=416 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function markRegionIntrinsic(facts: FunctionFacts): void -> @markRegionIntrinsic
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  callee +5:10 new BodilessStance -> @BodilessStance.constructor
+  callee +6:5 new ParamStance -> @ParamStance.constructor
+  callee +7:5 statesNothing -> @statesNothing
+function markRegionIntrinsic(facts: FunctionFacts): BodilessStance -> @markRegionIntrinsic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
+  calls: BodilessStance.constructor ParamStance.constructor nish_alloc_struct
   pointer facts: size=416 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +7:14 pp: PointerParamFacts (const)
-function markShmWindow(facts: FunctionFacts): void -> @markShmWindow
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  local +7:9 each: ParamStance (const)
+  callee +7:16 new ParamStance -> @ParamStance.constructor
+  callee +8:10 new BodilessStance -> @BodilessStance.constructor
+function markShmWindow(facts: FunctionFacts): BodilessStance -> @markShmWindow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
+  calls: BodilessStance.constructor ParamStance.constructor nish_alloc_struct
   pointer facts: size=416 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +7:14 pp: PointerParamFacts (const)
-function markJsonRoute(program: CheckedProgram, table: TypeTable, sig: FunctionSig, facts: FunctionFacts): void -> @markJsonRoute
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  local +6:9 each: ParamStance (const)
+  callee +6:16 new ParamStance -> @ParamStance.constructor
+  callee +7:10 new BodilessStance -> @BodilessStance.constructor
+function markJsonRoute(program: CheckedProgram, table: TypeTable, sig: FunctionSig, facts: FunctionFacts): BodilessStance -> @markJsonRoute
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
-  calls: FunctionFacts.pointerParam StringSet.add jsonRouteCallees jsonRouteOf markParallelEntry nish_array_grow
+  calls: BodilessStance.constructor FunctionFacts.pointerParam ParamStance.constructor StringSet.add handsParamsTo jsonRouteCallees jsonRouteOf nish_alloc_struct nish_array_grow statesNothing
   pointer program: size=800 writesThrough=false captured=false passedTo=jsonRouteCallees#0
   pointer table: size=112 writesThrough=false captured=false passedTo=jsonRouteCallees#1
   pointer sig: size=200 writesThrough=false captured=false passedTo=jsonRouteCallees#2 jsonRouteOf#0
-  pointer facts: size=416 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0 markParallelEntry#0
+  pointer facts: size=416 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0 handsParamsTo#0
   stackSites=0 stackLocals=0
   local +4:9 receiver: PointerParamFacts | null (const)
   callee +5:33 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
@@ -2541,9 +2677,14 @@ function markJsonRoute(program: CheckedProgram, table: TypeTable, sig: FunctionS
   callee +6:24 jsonRouteCallees -> @jsonRouteCallees
   callee +7:5 StringSet.add -> @StringSet.add
   callee +13:7 jsonRouteOf -> @jsonRouteOf
-  callee +22:5 StringSet.add -> @StringSet.add
-  callee +23:5 markParallelEntry -> @markParallelEntry
-  local +27:16 pp: PointerParamFacts (const)
+  callee +14:12 new BodilessStance -> @BodilessStance.constructor
+  callee +14:31 statesNothing -> @statesNothing
+  callee +14:48 statesNothing -> @statesNothing
+  callee +23:3 StringSet.add -> @StringSet.add
+  callee +24:3 handsParamsTo -> @handsParamsTo
+  local +28:9 each: ParamStance (const)
+  callee +28:16 new ParamStance -> @ParamStance.constructor
+  callee +29:10 new BodilessStance -> @BodilessStance.constructor
 function analyzeInstanceEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, known: FactsTable, opts: Options): EscapeResult -> @analyzeInstanceEscapes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=104
   sharedWrite: via CheckedProgram.enterInstance
@@ -2552,7 +2693,7 @@ function analyzeInstanceEscapes(unit: AnalysisUnit, table: TypeTable, sig: Funct
   pointer table: size=112 writesThrough=true captured=true passedTo=analyzeEscapes#1
   pointer sig: size=200 writesThrough=true captured=true passedTo=analyzeEscapes#2
   pointer known: size=24 writesThrough=true captured=true passedTo=analyzeEscapes#3
-  pointer opts: size=208 writesThrough=true captured=true passedTo=analyzeEscapes#4
+  pointer opts: size=216 writesThrough=true captured=true passedTo=analyzeEscapes#4
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   callee +2:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
@@ -2604,7 +2745,7 @@ function analyzeFunctions(units: AnalysisUnit[], table: TypeTable, opts: Options
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance EscapeSet.constructor EscapeSet.get EscapeSet.set FactsTable.get FunctionFacts.scopesAnyPass FunctionSig.definedIn StringSet.add StringSet.size analyzeInstanceEscapes callsAnyCallee callsAnyOf checkPropagate checkingPropagate collectRound decideLoopScopes markFreshElements nish_array_grow propagate propagateCapabilities scopeParallelBodies settleCalleeScopes someCalleeNetAllocates
   pointer units: size=0 writesThrough=false captured=false passedTo=collectRound#0 collectRound#0 collectRound#0 collectRound#0 scopeParallelBodies#0
   pointer table: size=112 writesThrough=true captured=true passedTo=collectRound#1 collectRound#1 analyzeInstanceEscapes#1 analyzeInstanceEscapes#1 collectRound#1 collectRound#1 decideLoopScopes#1
-  pointer opts: size=208 writesThrough=true captured=true passedTo=collectRound#2 collectRound#2 analyzeInstanceEscapes#4 analyzeInstanceEscapes#4 collectRound#2 collectRound#2
+  pointer opts: size=216 writesThrough=true captured=true passedTo=collectRound#2 collectRound#2 analyzeInstanceEscapes#4 analyzeInstanceEscapes#4 collectRound#2 collectRound#2
   pointer runtime: size=16 writesThrough=false captured=false passedTo=propagate#1 checkPropagate#2 propagate#1 checkPropagate#2
   stackSites=3 stackLocals=3
   local -44:9 first: FactsTable (const)
@@ -2748,7 +2889,7 @@ function collectRound(units: AnalysisUnit[], table: TypeTable, opts: Options, es
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance EscapeSet.get FactsTable.constructor FactsTable.set FunctionSig.definedIn collectFacts nish_alloc_struct
   pointer units: size=0 writesThrough=false captured=false
   pointer table: size=112 writesThrough=true captured=true passedTo=collectFacts#1
-  pointer opts: size=208 writesThrough=true captured=true passedTo=collectFacts#2
+  pointer opts: size=216 writesThrough=true captured=true passedTo=collectFacts#2
   pointer escapes: size=16 writesThrough=false captured=false passedTo=EscapeSet.get#0
   pointer known: size=24 writesThrough=true captured=true passedTo=collectFacts#6
   stackSites=0 stackLocals=0
@@ -3530,7 +3671,8 @@ function isResizeCall(program: CheckedProgram, table: TypeTable, node: Node): bo
   stackSites=0 stackLocals=0
   local +0:9 method: string (const)
   callee +0:18 arrayMethodName -> @arrayMethodName
-  callee +8:5 builtinNameOf -> @builtinNameOf
+  local +7:9 name: string (const)
+  callee +7:16 builtinNameOf -> @builtinNameOf
 function bodyDisturbs(body: Node, names: string[]): boolean -> @bodyDisturbs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: bodyDisturbs isAssignmentOperator nish_panic_index nish_str_eq

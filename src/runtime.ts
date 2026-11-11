@@ -706,6 +706,16 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // The same run with a deadline in milliseconds, a negative one none: the
+    // same answers for the same reasons, and `nish_spawn_piped` is this with -1.
+    this.add(
+      new RuntimeFunction(
+        "nish_spawn_piped_within",
+        `declare noundef i32 @nish_spawn_piped_within(%struct.nish_array* noundef nonnull align 8, ${NET_BUFFER} readonly, ${NET_BUFFER}, ${NET_BUFFER}, i32 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // `nish_spawn_child` with descriptors handed to the child. The vector is
     // captured as there; the descriptor array is only read and kept by nothing.
     this.add(
@@ -786,6 +796,26 @@ export class RuntimeTable {
         `declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(${STR_NOCAP})`,
         EFFECT_WRITE
       )
+    )
+    // WP44, runtime/runtime-os.c: a regular file a window at a time. Each is a
+    // write, as every file builtin is: the descriptor table and the file are
+    // kernel state, so two `fileReadAt`s never fold into one. None is
+    // `willreturn`, for `nish_read_file_bytes`'s reason: a file on a network or
+    // FUSE file system can block as long as it likes, and so can its `close`.
+    // The window is `nocapture`, written and never kept; nothing allocates.
+    this.add(
+      mayNotReturn("nish_file_open", `declare noundef i32 @nish_file_open(${STR_NOCAP})`, EFFECT_WRITE)
+    )
+    this.add(
+      mayNotReturn(
+        "nish_file_read_at",
+        `declare noundef i32 @nish_file_read_at(i32 noundef, ${NET_BUFFER}, i64 noundef, i64 noundef, i64 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(mayNotReturn("nish_file_size", "declare noundef i64 @nish_file_size(i32 noundef)", EFFECT_WRITE))
+    this.add(
+      mayNotReturn("nish_file_close", "declare noundef i32 @nish_file_close(i32 noundef)", EFFECT_WRITE)
     )
     // WP34 N3, runtime/runtime-host.c. The wall clock is `nish_monotonic_nanos`'s
     // case exactly: not memory, so not `readnone`, or two reads around a

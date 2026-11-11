@@ -21,6 +21,7 @@ import {
   signalFd,
   spawn,
   spawnPiped,
+  spawnPipedWithin,
   spawnSync,
   spawnSyncTo,
   spawnWithFds,
@@ -116,6 +117,12 @@ Start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does (the same vecto
 <scalar-card title="spawn​Piped" icon="phosphor/regular/function" href="#spawnpiped">
 
 The same run as `spawnSync`, with every stream a pipe: the child reads `stdin`'s bytes and then end of file, and whatever it writes to its stdout and stderr is appended to `stdout` and `stderr`, which keep what they held.
+
+</scalar-card>
+
+<scalar-card title="spawn​Piped​Within" icon="phosphor/regular/function" href="#spawnpipedwithin">
+
+`spawnPiped` with a deadline: the same captured run, killed with `SIGKILL` and reaped once `timeoutMs` milliseconds have passed since it started, and a negative `timeoutMs` is no deadline, so `-1` makes it `spawnPiped`.
 
 </scalar-card>
 
@@ -499,6 +506,65 @@ The status or `128 + n` as `spawnSync` answers; `-1` for an empty
   a WASI build; `-2` when a stream passes 16 MiB (`NISH_PIPED_CAP`), which
   kills the child with `SIGKILL` and leaves that array holding the first
   16 MiB.
+
+</scalar-field>
+
+### spawnPipedWithin
+
+`spawnPiped` with a deadline: the same captured run, killed with `SIGKILL`
+and reaped once `timeoutMs` milliseconds have passed since it started, and
+a negative `timeoutMs` is no deadline, so `-1` makes it `spawnPiped`. The
+deadline covers the whole run, the wait for the child's exit included, on
+the monotonic clock. Only the child's pid is killed, never a grandchild,
+and a grandchild that keeps an output pipe open makes the run wait for it
+until the deadline.
+
+```ts
+function spawnPipedWithin(
+  argv: string[],
+  stdin: readonly u8[],
+  stdout: u8[],
+  stderr: u8[],
+  timeoutMs: i32,
+): i32
+```
+
+<scalar-field name="argv" type="string[]" required>
+
+The program and its arguments.
+
+</scalar-field>
+
+<scalar-field name="stdin" type="readonly u8[]" required>
+
+The bytes the child reads.
+
+</scalar-field>
+
+<scalar-field name="stdout" type="u8[]" required>
+
+Grows by the child's stdout, the bytes read before a kill
+  included; neither `readonly` nor a typed array.
+
+</scalar-field>
+
+<scalar-field name="stderr" type="u8[]" required>
+
+Grows by the child's stderr, under the same rule.
+
+</scalar-field>
+
+<scalar-field name="timeoutMs" type="i32" required>
+
+The milliseconds the run may take; negative for none.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+`spawnPiped`'s answer (the status or `128 + n`, `-1`, or `-2` for
+  a stream past 16 MiB), or `-3` when the deadline passed and the child was
+  killed.
 
 </scalar-field>
 

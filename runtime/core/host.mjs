@@ -137,6 +137,30 @@ export function readFileBytesSync(path) {
   return host.call("readFileBytesSync", [path]);
 }
 
+export function fileOpen(path) {
+  return host.call("fileOpen", [path]);
+}
+
+/**
+ * `fileReadAt(fd, buf, off, len, pos)`: the window checked as the compiled
+ * call checks it, `0 <= off <= off + len <= buf.length`, through the slice
+ * panic, then the host's positional read.
+ */
+export function fileReadAt(fd, buf, off, len, pos) {
+  const from = toIndex(off);
+  const to = from + toIndex(len);
+  if (!(from >= 0 && from <= to && to <= buf.length)) panicSlice(from, to, buf.length);
+  return host.call("fileReadAt", [fd, buf, from, to - from, BigInt(pos)]);
+}
+
+export function fileSize(fd) {
+  return host.call("fileSize", [fd]);
+}
+
+export function fileClose(fd) {
+  return host.call("fileClose", [fd]);
+}
+
 export function writeFileSync(path, data) {
   return host.call("writeFileSync", [path, data]);
 }
@@ -212,6 +236,17 @@ export function spawnSyncTo(argv, out, err) {
  */
 export function spawnPiped(argv, input, out, err) {
   const [status, outBytes, errBytes] = host.call("spawnPiped", [argv, input]);
+  for (const b of outBytes) out.push(b);
+  for (const b of errBytes) err.push(b);
+  return status;
+}
+
+/**
+ * `spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)`: `spawnPiped`
+ * with a deadline the host enforces, and -3 when it passed.
+ */
+export function spawnPipedWithin(argv, input, out, err, timeoutMs) {
+  const [status, outBytes, errBytes] = host.call("spawnPipedWithin", [argv, input, timeoutMs]);
   for (const b of outBytes) out.push(b);
   for (const b of errBytes) err.push(b);
   return status;

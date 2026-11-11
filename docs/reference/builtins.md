@@ -78,6 +78,30 @@ Reinterpret the 64 bits of an `f64`, never convert the value: `toI64(1.5)` is `1
 
 </scalar-card>
 
+<scalar-card title="file​Close" icon="phosphor/regular/function" href="#fileclose">
+
+Close a descriptor `fileOpen` gave.
+
+</scalar-card>
+
+<scalar-card title="file​Open" icon="phosphor/regular/function" href="#fileopen">
+
+Open a regular file to read a window at a time (WP44): read-only, close-on-exec and non-blocking, so a FIFO or a device never waits.
+
+</scalar-card>
+
+<scalar-card title="file​Read​At" icon="phosphor/regular/function" href="#filereadat">
+
+Read up to `len` bytes from byte `pos` of the file into `buf[off .. off + len)`, without moving any shared offset (`pread`).
+
+</scalar-card>
+
+<scalar-card title="file​Size" icon="phosphor/regular/function" href="#filesize">
+
+The file's size in bytes now, from `fstat`: a file may grow or shrink between this and a read, which then answers what is there.
+
+</scalar-card>
+
 <scalar-card title="getenv" icon="phosphor/regular/function" href="#getenv">
 
 One environment variable, as the call runs.
@@ -363,6 +387,12 @@ Start `argv[0]` through `PATH` exactly as `spawnSync` does — the same vector, 
 <scalar-card title="spawn​Piped" icon="phosphor/regular/function" href="#spawnpiped">
 
 The same run with all three streams on pipes, all in memory: the child reads `stdin`'s bytes and then end of file, and whatever it prints is appended to `stdout` and `stderr`, which keep what they held.
+
+</scalar-card>
+
+<scalar-card title="spawn​Piped​Within" icon="phosphor/regular/function" href="#spawnpipedwithin">
+
+`spawnPiped` with a deadline: the same captured run, killed once `timeoutMs` milliseconds have passed since it started.
 
 </scalar-card>
 
@@ -1147,6 +1177,134 @@ the float whose bits are read.
 <scalar-field name="returns" type="i64">
 
 the same 64 bits as an `i64`.
+
+</scalar-field>
+
+### fileClose
+
+Close a descriptor `fileOpen` gave. A second close answers `-9`, unless the
+number has been handed out again since, so close once. Capability: fs.read.
+
+```ts
+function fileClose(fd: i32): i32
+```
+
+<scalar-field name="fd" type="i32" required>
+
+a descriptor from `fileOpen`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+`0`, or a negative errno (`-9` EBADF).
+
+</scalar-field>
+
+### fileOpen
+
+Open a regular file to read a window at a time (WP44): read-only,
+close-on-exec and non-blocking, so a FIFO or a device never waits. A
+directory is refused with `-21` and any other kind that is not a regular
+file with `-22`, the descriptor closed again first. Pair it with `fileClose`
+in a `try`/`finally`. A freestanding `wasm32` build refuses the call (NL2718);
+`--profile wasi` reads through WASI. Capability: fs.read.
+
+```ts
+function fileOpen(path: string): i32
+```
+
+<scalar-field name="path" type="string" required>
+
+the file to open; a NUL in it is refused as a missing path is.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+a descriptor (`>= 0`), or the negated Linux errno: `-2` ENOENT,
+  `-13` EACCES, `-20` ENOTDIR, `-21` EISDIR, `-22` EINVAL for a FIFO or
+  device, `-6` ENXIO for a socket, `-23` ENFILE, `-24` EMFILE, `-36`
+  ENAMETOOLONG, `-40` ELOOP; anything else is `-5` EIO.
+
+</scalar-field>
+
+### fileReadAt
+
+Read up to `len` bytes from byte `pos` of the file into `buf[off .. off +
+len)`, without moving any shared offset (`pread`). The window is checked as
+`buf.slice` checks it and panics the same way when it falls outside `buf`.
+The array is never grown: memory follows the window. Capability: fs.read.
+
+```ts
+function fileReadAt(
+  fd: i32,
+  buf: u8[],
+  off: i32,
+  len: i32,
+  pos: i64,
+): i32
+```
+
+<scalar-field name="fd" type="i32" required>
+
+a descriptor from `fileOpen`.
+
+</scalar-field>
+
+<scalar-field name="buf" type="u8[]" required>
+
+the array the bytes land in; its length is unchanged.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+where in `buf` the first byte lands.
+
+</scalar-field>
+
+<scalar-field name="len" type="i32" required>
+
+the most bytes to read.
+
+</scalar-field>
+
+<scalar-field name="pos" type="i64" required>
+
+the file offset to read from, an `i64`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the bytes read, `0` at end of file (and for a `len` of `0`, even on
+  a closed or negative descriptor), or a negative errno: `-22`
+  EINVAL for a negative `pos` or one where `pos + len` overflows, `-9` EBADF
+  for a closed or negative descriptor, `-21` EISDIR, `-29` ESPIPE; anything
+  else is `-5` EIO.
+
+</scalar-field>
+
+### fileSize
+
+The file's size in bytes now, from `fstat`: a file may grow or shrink between
+this and a read, which then answers what is there. Capability: fs.read.
+
+```ts
+function fileSize(fd: i32): i64
+```
+
+<scalar-field name="fd" type="i32" required>
+
+a descriptor from `fileOpen`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i64">
+
+the size, an `i64` past 2^31 when the file is, or a negative errno
+  (`-9` EBADF for a closed descriptor).
 
 </scalar-field>
 
@@ -2897,6 +3055,73 @@ receives what the child prints on stderr.
 the status as `spawnSync` answers it (the exit code, `128 + n`, and
   `-1` for an empty vector, a child that cannot be started, a pipe or `poll`
   that fails, and a WASI build), or `-2` when a stream passed 16 MiB.
+
+</scalar-field>
+
+### spawnPipedWithin
+
+`spawnPiped` with a deadline: the same captured run, killed once `timeoutMs`
+milliseconds have passed since it started. A negative `timeoutMs` is no
+deadline, as `pollWait`'s is, so `spawnPipedWithin(argv, stdin, stdout,
+stderr, -1)` is `spawnPiped(argv, stdin, stdout, stderr)`. When the deadline
+passes the child is killed with `SIGKILL` and reaped, the answer is `-3`, and
+`stdout` and `stderr` keep every byte read before the kill.
+
+The deadline covers the whole run, the wait for the child's exit included,
+and is measured on the monotonic clock. Only the child's own pid is killed:
+a grandchild it started is not, and one that keeps an output pipe open makes
+the run wait for it, so a child that exited 0 can still answer `-3`. The
+rest is `spawnPiped`'s: the same environment, descriptors, SIGPIPE handling
+and 16 MiB cap, `readonly` and typed-array spellings refused for the two
+output arrays, refused by a `wasm32` build (NL2404). Capability:
+process.spawn.
+
+```ts
+function spawnPipedWithin(
+  argv: string[],
+  stdin: readonly u8[],
+  stdout: u8[],
+  stderr: u8[],
+  timeoutMs: i32,
+): i32
+```
+
+<scalar-field name="argv" type="string[]" required>
+
+the program and its arguments.
+
+</scalar-field>
+
+<scalar-field name="stdin" type="readonly u8[]" required>
+
+the bytes the child reads.
+
+</scalar-field>
+
+<scalar-field name="stdout" type="u8[]" required>
+
+receives what the child prints on stdout.
+
+</scalar-field>
+
+<scalar-field name="stderr" type="u8[]" required>
+
+receives what the child prints on stderr.
+
+</scalar-field>
+
+<scalar-field name="timeoutMs" type="i32" required>
+
+the milliseconds the run may take, or a negative number for
+  no deadline.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the status as `spawnPiped` answers it (the exit code, `128 + n`,
+  `-1` for a child that cannot be started or a WASI build, `-2` when a stream
+  passed 16 MiB), or `-3` when the deadline passed and the child was killed.
 
 </scalar-field>
 

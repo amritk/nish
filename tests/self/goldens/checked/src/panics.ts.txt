@@ -84,10 +84,10 @@ function builtinPanicKind(name: string): i32 -> @builtinPanicKind [exported]
   escaping: name
   calls: isNetExport isSimdAccess isTermExport netRangeBuffer nish_str_eq
   stackSites=0 stackLocals=0
-  callee +0:8 isNetExport -> @isNetExport
-  callee +0:29 isTermExport -> @isTermExport
-  callee +0:77 netRangeBuffer -> @netRangeBuffer
-  callee +5:7 isSimdAccess -> @isSimdAccess
+  callee +0:6 isNetExport -> @isNetExport
+  callee +0:27 isTermExport -> @isTermExport
+  callee +1:5 netRangeBuffer -> @netRangeBuffer
+  callee +7:7 isSimdAccess -> @isSimdAccess
 function sortByPosition(sites: PanicSite[]): void -> @sortByPosition
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

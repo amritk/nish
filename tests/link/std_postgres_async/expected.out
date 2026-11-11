@@ -45,5 +45,7 @@ fat: ok=false failure=2 socket=0 rows=3 tag=SELECT 5 reusable=true first=300 byt
 manyc: ok=false failure=2 socket=0 rows=0 tag=UPDATE 1 reusable=true
 manye: ok=false failure=2 socket=0 rows=0 tag= reusable=true
 live after the hostile frames: 1, dropped 15
-a claim with every connection held: -2 after 6 sleeps
+a claim with every connection held: -2 after 1 wait
 statements seen: 41
+connections made: 16
+a server that never answers its startup: 0 live, 0 made

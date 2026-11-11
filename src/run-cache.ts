@@ -3,7 +3,7 @@
 //
 // A run compiles every time — the front end is the only thing that can tell an
 // edited import or a changed `nish/` module from an unchanged one, though for a
-// forty-module server it is most of a hit's second (docs/wp48-run-rebuilds.md)
+// forty-module server it is most of a hit's second (docs/wp52-run-rebuilds.md)
 // — and links only when the result is new. So the cache
 // is keyed on what the link consumes rather than on the source files: the IR
 // of every module, the link recipe, and the runtime the recipe compiles in.

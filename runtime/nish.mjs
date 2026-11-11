@@ -89,6 +89,12 @@ provide("panic", shim.panic);
 provide("readFileSync", shim.readFileSync);
 provide("readFileSyncOrNull", shim.readFileSyncOrNull);
 provide("readFileBytesSync", shim.readFileBytesSync);
+// WP44: a regular file read a window at a time; the errors are Linux's
+// negated errno on every platform, as `runtime-os.c` answers them.
+provide("fileOpen", shim.fileOpen);
+provide("fileReadAt", shim.fileReadAt);
+provide("fileSize", shim.fileSize);
+provide("fileClose", shim.fileClose);
 provide("writeFileSync", shim.writeFileSync);
 provide("appendFileSync", shim.appendFileSync);
 provide("writeFileBytesSync", shim.writeFileBytesSync);
@@ -104,6 +110,7 @@ provide("realpathSync", shim.realpathSync);
 provide("spawnSync", shim.spawnSync);
 provide("spawnSyncTo", shim.spawnSyncTo);
 provide("spawnPiped", shim.spawnPiped);
+provide("spawnPipedWithin", shim.spawnPipedWithin);
 // WP34 N12. `spawn`, `spawnWithFds` and `waitPid` throw, naming themselves: a
 // child is reaped by Node's event loop. `kill`, `availableParallelism` and
 // `totalMemory` answer.

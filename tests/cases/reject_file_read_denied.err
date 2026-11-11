@@ -1,0 +1,2 @@
+reject_file_read_denied.ts:4:14
+error: `main` reaches `fs.read`, which the capability policy does not grant (`--deny fs.read`); the chain that reaches it: reject_file_read_denied.ts:4:14 calls fileOpen

@@ -924,6 +924,56 @@ declare function readFileSyncOrNull(path: string): string | null;
  */
 declare function readFileBytesSync(path: string): u8[] | null;
 /**
+ * Open a regular file to read a window at a time (WP44): read-only,
+ * close-on-exec and non-blocking, so a FIFO or a device never waits. A
+ * directory is refused with `-21` and any other kind that is not a regular
+ * file with `-22`, the descriptor closed again first. Pair it with `fileClose`
+ * in a `try`/`finally`. A freestanding `wasm32` build refuses the call (NL2718);
+ * `--profile wasi` reads through WASI. Capability: fs.read.
+ *
+ * @param path the file to open; a NUL in it is refused as a missing path is.
+ * @returns a descriptor (`>= 0`), or the negated Linux errno: `-2` ENOENT,
+ *   `-13` EACCES, `-20` ENOTDIR, `-21` EISDIR, `-22` EINVAL for a FIFO or
+ *   device, `-6` ENXIO for a socket, `-23` ENFILE, `-24` EMFILE, `-36`
+ *   ENAMETOOLONG, `-40` ELOOP; anything else is `-5` EIO.
+ */
+declare function fileOpen(path: string): i32;
+/**
+ * Read up to `len` bytes from byte `pos` of the file into `buf[off .. off +
+ * len)`, without moving any shared offset (`pread`). The window is checked as
+ * `buf.slice` checks it and panics the same way when it falls outside `buf`.
+ * The array is never grown: memory follows the window. Capability: fs.read.
+ *
+ * @param fd a descriptor from `fileOpen`.
+ * @param buf the array the bytes land in; its length is unchanged.
+ * @param off where in `buf` the first byte lands.
+ * @param len the most bytes to read.
+ * @param pos the file offset to read from, an `i64`.
+ * @returns the bytes read, `0` at end of file (and for a `len` of `0`, even on
+ *   a closed or negative descriptor), or a negative errno: `-22`
+ *   EINVAL for a negative `pos` or one where `pos + len` overflows, `-9` EBADF
+ *   for a closed or negative descriptor, `-21` EISDIR, `-29` ESPIPE; anything
+ *   else is `-5` EIO.
+ */
+declare function fileReadAt(fd: i32, buf: u8[], off: i32, len: i32, pos: i64): i32;
+/**
+ * The file's size in bytes now, from `fstat`: a file may grow or shrink between
+ * this and a read, which then answers what is there. Capability: fs.read.
+ *
+ * @param fd a descriptor from `fileOpen`.
+ * @returns the size, an `i64` past 2^31 when the file is, or a negative errno
+ *   (`-9` EBADF for a closed descriptor).
+ */
+declare function fileSize(fd: i32): i64;
+/**
+ * Close a descriptor `fileOpen` gave. A second close answers `-9`, unless the
+ * number has been handed out again since, so close once. Capability: fs.read.
+ *
+ * @param fd a descriptor from `fileOpen`.
+ * @returns `0`, or a negative errno (`-9` EBADF).
+ */
+declare function fileClose(fd: i32): i32;
+/**
  * The file's contents replaced by `data`, created at 0644 when missing;
  * statement position. A symbolic link as the last component of the path is
  * refused rather than followed, natively and under Node alike (a Node
@@ -1158,6 +1208,40 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  *   that fails, and a WASI build), or `-2` when a stream passed 16 MiB.
  */
 declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
+/**
+ * `spawnPiped` with a deadline: the same captured run, killed once `timeoutMs`
+ * milliseconds have passed since it started. A negative `timeoutMs` is no
+ * deadline, as `pollWait`'s is, so `spawnPipedWithin(argv, stdin, stdout,
+ * stderr, -1)` is `spawnPiped(argv, stdin, stdout, stderr)`. When the deadline
+ * passes the child is killed with `SIGKILL` and reaped, the answer is `-3`, and
+ * `stdout` and `stderr` keep every byte read before the kill.
+ *
+ * The deadline covers the whole run, the wait for the child's exit included,
+ * and is measured on the monotonic clock. Only the child's own pid is killed:
+ * a grandchild it started is not, and one that keeps an output pipe open makes
+ * the run wait for it, so a child that exited 0 can still answer `-3`. The
+ * rest is `spawnPiped`'s: the same environment, descriptors, SIGPIPE handling
+ * and 16 MiB cap, `readonly` and typed-array spellings refused for the two
+ * output arrays, refused by a `wasm32` build (NL2404). Capability:
+ * process.spawn.
+ *
+ * @param argv the program and its arguments.
+ * @param stdin the bytes the child reads.
+ * @param stdout receives what the child prints on stdout.
+ * @param stderr receives what the child prints on stderr.
+ * @param timeoutMs the milliseconds the run may take, or a negative number for
+ *   no deadline.
+ * @returns the status as `spawnPiped` answers it (the exit code, `128 + n`,
+ *   `-1` for a child that cannot be started or a WASI build, `-2` when a stream
+ *   passed 16 MiB), or `-3` when the deadline passed and the child was killed.
+ */
+declare function spawnPipedWithin(
+  argv: string[],
+  stdin: readonly u8[],
+  stdout: u8[],
+  stderr: u8[],
+  timeoutMs: i32
+): i32;
 /**
  * `spawn` with the child holding `fds[i]` as descriptor `3 + i`, close-on-exec
  * cleared there. Its streams 0 to 2 are this process's, and no other descriptor
@@ -2334,6 +2418,48 @@ declare module "nish:fs" {
    */
   export function readFileBytesSync(path: string): u8[] | null;
   /**
+   * Open a regular file to read a window at a time: read-only, close-on-exec
+   * and non-blocking. A directory is `-21`, any other kind that is not a
+   * regular file `-22`. Close it with `fileClose` in a `finally`.
+   *
+   * @param path The file to open.
+   * @returns A descriptor (`>= 0`), or the negated Linux errno: `-2` ENOENT,
+   *   `-13` EACCES, `-20` ENOTDIR, `-21` EISDIR, `-22` for a FIFO or device,
+   *   `-6` ENXIO for a socket, `-23` ENFILE, `-24` EMFILE, `-36` ENAMETOOLONG,
+   *   `-40` ELOOP; anything else is `-5` EIO.
+   */
+  export function fileOpen(path: string): i32;
+  /**
+   * Read up to `len` bytes from file offset `pos` into `buf[off .. off + len)`
+   * (`pread`). The window panics as `buf.slice` does when it falls outside
+   * `buf`; the array is never grown.
+   *
+   * @param fd A descriptor from `fileOpen`.
+   * @param buf The array the bytes land in.
+   * @param off Where in `buf` the first byte lands.
+   * @param len The most bytes to read.
+   * @param pos The file offset, an `i64`.
+   * @returns The bytes read, `0` at end of file (and for a `len` of `0`, even
+   *   on a closed or negative descriptor), or a negative errno: `-22`
+   *   for a negative or overflowing `pos`, `-9` for a closed or negative
+   *   descriptor, `-21` EISDIR, `-29` ESPIPE; anything else is `-5` EIO.
+   */
+  export function fileReadAt(fd: i32, buf: u8[], off: i32, len: i32, pos: i64): i32;
+  /**
+   * The file's size in bytes now, from `fstat`.
+   *
+   * @param fd A descriptor from `fileOpen`.
+   * @returns The size, or a negative errno.
+   */
+  export function fileSize(fd: i32): i64;
+  /**
+   * Close a descriptor `fileOpen` gave; close it once.
+   *
+   * @param fd A descriptor from `fileOpen`.
+   * @returns `0`, or a negative errno (`-9` EBADF).
+   */
+  export function fileClose(fd: i32): i32;
+  /**
    * Create or truncate the file at mode `0644` and write `data`; a statement,
    * not a value. A symbolic link as the last component of `path` is refused
    * with `nish: cannot write <path>`, where Node follows it.
@@ -2620,6 +2746,32 @@ declare module "nish:process" {
    *   16 MiB.
    */
   export function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
+  /**
+   * `spawnPiped` with a deadline: the same captured run, killed with `SIGKILL`
+   * and reaped once `timeoutMs` milliseconds have passed since it started, and
+   * a negative `timeoutMs` is no deadline, so `-1` makes it `spawnPiped`. The
+   * deadline covers the whole run, the wait for the child's exit included, on
+   * the monotonic clock. Only the child's pid is killed, never a grandchild,
+   * and a grandchild that keeps an output pipe open makes the run wait for it
+   * until the deadline.
+   *
+   * @param argv The program and its arguments.
+   * @param stdin The bytes the child reads.
+   * @param stdout Grows by the child's stdout, the bytes read before a kill
+   *   included; neither `readonly` nor a typed array.
+   * @param stderr Grows by the child's stderr, under the same rule.
+   * @param timeoutMs The milliseconds the run may take; negative for none.
+   * @returns `spawnPiped`'s answer (the status or `128 + n`, `-1`, or `-2` for
+   *   a stream past 16 MiB), or `-3` when the deadline passed and the child was
+   *   killed.
+   */
+  export function spawnPipedWithin(
+    argv: string[],
+    stdin: readonly u8[],
+    stdout: u8[],
+    stderr: u8[],
+    timeoutMs: i32
+  ): i32;
   /**
    * Start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does (the same
    * vector, environment, streams and working directory), without waiting. The

@@ -18,18 +18,17 @@ kept here, and a pull request that lands a stage ticks its box.
 
 ## Up next
 
-In order, as of 2026-11-10. Each package's page says what its next stage is
+In order, as of 2026-11-11. Each package's page says what its next stage is
 and where it is specified.
 
 1. [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): meet stage 6's gate.
 2. [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): G1's interop, G2's open timeouts, then G7's one handler.
 3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
 4. [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md): stage 3, the soak.
-5. [WP32: `Map` and `Set`](wp32-map.md): a `Map` read in a parallel body.
-6. [WP21: Packages](wp21-packages.md): S3's two diagnostics.
-7. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
-8. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
-9. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
+5. [WP21: Packages](wp21-packages.md): S3's two diagnostics.
+6. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
+7. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
+8. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
 
 [WP34: Hosting cs: the network stack](wp34-hosting-cs.md)'s remaining waves are in the cs repository.
 
@@ -39,8 +38,6 @@ and where it is specified.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
 - [WP27: Calling C](wp27-ffi.md): whether S4 (C structs) and S5 (`errno`) happen at all.
 - [WP28: Compatibility mode](wp28-compatibility-mode.md): whether to accept compatibility mode, and its open questions.
-- [WP44: Streaming file reads](wp44-streaming-files.md): its nine questions.
-- [WP48: Compressed 32-bit references](wp48-compressed-references.md): the recommendation to build neither design.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
 
 ## Picking up a work package
@@ -62,7 +59,6 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP21: Packages](wp21-packages.md) | In progress | 3 of 7 |
 | [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 3 of 5 |
 | [WP27: Calling C](wp27-ffi.md) | In progress | 3 of 5 |
-| [WP32: `Map` and `Set`](wp32-map.md) | In progress | 1 of 2 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 6 of 9 |
 | [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 9 of 18 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 3 of 8 |
@@ -73,8 +69,6 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 2 of 4 |
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | Proposed | 2 of 13 |
-| [WP44: Streaming file reads](wp44-streaming-files.md) | Proposed | 0 of 4 |
-| [WP48: Compressed 32-bit references](wp48-compressed-references.md) | Proposed | 1 of 4 |
 
 ## Landed
 
@@ -106,15 +100,18 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP29: The thread surface](wp29-thread-surface.md) | Landed | 5 of 8 |
 | [WP30: Bytes across the interop boundary](wp30-bytes-interop.md) | Landed | 1 of 3 |
 | [WP31: Ranged integers](wp31-ranged-integers.md) | Landed | 1 of 4 |
+| [WP32: `Map` and `Set`](wp32-map.md) | Landed | 2 of 2 |
 | [WP35: The capability report](wp35-capabilities.md) | Landed | 1 of 1 |
 | [WP36: The capability policy](wp36-capability-policy.md) | Landed | 1 of 1 |
 | [WP40: Dependency capabilities](wp40-dependency-capabilities.md) | Landed | 1 of 1 |
 | [WP40: Buffers and handles across `declare function`](wp40-ffi-buffers-handles.md) | Landed | 1 of 1 |
 | [WP42: A multi-core server from pre-forked processes](wp42-multicore-server.md) | Landed | 1 of 1 |
+| [WP44: Streaming file reads](wp44-streaming-files.md) | Landed | 4 of 4 |
 | [WP45: Name resolution: a DNS stub resolver](wp45-name-resolution.md) | Landed | 1 of 1 |
 | [WP47: Shared work across cores: regions, atomics and rings](wp47-shared-memory.md) | Landed | 1 of 2 |
-| [WP48: Fast rebuilds for `nish run`](wp48-run-rebuilds.md) | Landed | 1 of 2 |
+| [WP48: Compressed 32-bit references](wp48-compressed-references.md) | Landed | 2 of 4 |
 | [WP50: A WebAssembly module a TypeScript page drives](wp50-wasm-host.md) | Landed | 6 of 6 |
+| [WP52: Fast rebuilds for `nish run`](wp52-run-rebuilds.md) | Landed | 1 of 2 |
 | [WP24: `async`/`await`](wp24-async.md) | Superseded | 3 of 4 |
 | [WP41: A wide multiply](wp41-mul-wide.md) | Declined | 1 of 1 |
 

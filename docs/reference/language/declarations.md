@@ -2233,8 +2233,8 @@ async function run(): Promise<void> {
   other (`reject_async_spawn_store_string_callee`,
   `reject_async_spawn_store_string_method`,
   `reject_async_spawn_store_copied`), and growing a shared array, `Map` or
-  `Set` — `push`, `set`, `add`, `spawnPiped` appending to its output
-  arrays, on the argument or on what a method answers out of it — is NL2615
+  `Set` — `push`, `set`, `add`, `spawnPiped` or `spawnPipedWithin`
+  appending to its output arrays, on the argument or on what a method answers out of it — is NL2615
   (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
   `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`), and so
   is a builtin with no body of its own that does either, `reserve` on a
@@ -2616,8 +2616,10 @@ from the whole-program facts, and each rule is reported there:
   (`tests/link/par_panic_once`, `thread_panic_once`). Output is a write —
   `console.error` and `process.exit` as much as `console.log`
   (`reject_par_console_error`, `reject_par_process_exit`). Reading a shared
-  `Map` or `Set` that an element reaches, with `get`, `has` or `size`, is a
-  read (`tests/link/par_map_table_reads`). Handing a helper a number, a
+  `Map` or `Set` that an element or a capture reaches, with `get`, `has` or
+  `size`, is a read (`tests/link/par_map_table_reads`); `set`, `delete`,
+  `clear` and iterating one, whose walk counts itself on the table, are writes
+  (`tests/cases/reject_par_map_set`, `_delete`, `_clear`, `_values`). Handing a helper a number, a
   `boolean`, an enum or a `string` — a `string` element of the caller's array
   included, `verify(hashes[k])` — gives it no slot to store into, so it is a
   read (`tests/link/thread_bcrypt_batch`, whose task verifies against the
@@ -2777,7 +2779,14 @@ from the whole-program facts, and each rule is reported there:
   elements and `| null`, is
   `` `(r) => ...` can reach a `f64[]` through `r.cells`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads, so `dst` may not be reachable from an element of `src` ``
   (`tests/cases/reject_par_reaches_dst`). It is judged by type, so such an
-  array is refused whether or not it is `dst` at run time. A reduce writes no
+  array is refused whether or not it is `dst` at run time. A global `Map` or
+  `Set` reaches only what it stores: its own arrays are private to it, so a
+  `Map<string, i32>` beside a `dst: i32[]` is not refused
+  (`tests/link/par_map_read_into`, `par_map_read_into_keys`,
+  `par_map_read_capture`), while a `Map<string, i32[]>` is, through
+  `x.index.get(k)` (`tests/cases/reject_par_map_value_dst`). A program's own
+  class named `Map` is walked like any class
+  (`tests/cases/reject_par_map_user_class`). A reduce writes no
   array of its caller's and has no such rule.
 
 ### A data-parallel arrow reads its function's `const` locals
@@ -4251,6 +4260,44 @@ export const main = (): i32 => {
 On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
 with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
+
+## Fixed digits and a split limit: `toFixed` and `splitLimit` in `nish/text`
+
+Nish has no methods on a number and no optional parameters, so JavaScript's
+`x.toFixed(n)` and `text.split(sep, limit)` are two functions of `nish/text`.
+Each is the method it stands for, read as TypeScript: under Node the module
+runs as written and answers what the method answers, and natively it answers
+the same bytes (`tests/link/std_text_to_fixed`, `tests/link/std_text_split_limit`,
+whose every line `tests/run.js` also holds to Node's own method).
+
+```typescript
+import { splitLimit, toFixed } from "nish/text";
+
+export const main = (): i32 => {
+  console.log(toFixed(1.005, 2));                     // 1.00: 1.005 is stored a little below
+  console.log(toFixed(2.5, 0));                       // 3: a tie goes away from zero
+  console.log(splitLimit("a,b,c", ",", 2).join("|")); // a|b: the rest is dropped
+  return 0;
+};
+```
+
+- **`toFixed(x, digits)` rounds the exact binary value**, as ECMA-262 does:
+  `1.005` is stored as 1.00499999999999989…, so it gives `"1.00"`, while
+  `8.345` is stored a little above and gives `"8.35"`; an exact tie rounds
+  away from zero, so `toFixed(-2.5, 0)` is `"-3"`. `digits` is 0 to 100, and
+  any other count panics (`toFixed: digits must be 0 to 100`) where JavaScript
+  throws a `RangeError`. `NaN`, the infinities and any `x` of magnitude 1e21 or
+  more answer `${x}`, as JavaScript does; `-0` gives `"0.00"`, and a negative
+  `x` that rounds to zero keeps its sign (`toFixed(-0.0001, 2)` is `"-0.00"`).
+  It is written in Nish over an array of decimal digits, so it is exact for
+  every `f64`, the subnormals included, and it needs no runtime C.
+- **`splitLimit(text, sep, limit)` keeps the first `limit` pieces** of
+  `split(text, sep)` and drops the rest, rather than joining them into the
+  last; a limit of 0 gives `[]`. A negative limit keeps every piece, because
+  JavaScript reads the limit through `ToUint32` and -1 becomes 4294967295;
+  that makes `splitLimit(text, sep, -1)` the same as `split(text, sep)`. An
+  empty separator panics (`splitLimit: an empty separator`) whatever the
+  limit, as `split`'s does, even where JavaScript would answer `[]`.
 
 ## Byte runs: `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` in `nish/bytes`
 

@@ -367,9 +367,11 @@ messages are exact for the cases cited; other entries quote the checker
   `` `readdirSync` expects exactly 1 argument, got 2 ``;
   `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``;
   `` `spawnPiped` expects exactly 4 arguments, got 3 ``;
+  `` `spawnPipedWithin` expects exactly 5 arguments, got 4 ``;
   `` `monotonicNanos` expects exactly 0 arguments, got 1 ``
   (`reject_readdir_arity`, `reject_spawn_to_arity`,
-  `reject_spawn_piped_arity`, `reject_monotonic_arity`)
+  `reject_spawn_piped_arity`, `reject_spawn_piped_within_arity`,
+  `reject_monotonic_arity`)
 - **array errors**: see [Arrays](expressions.md#array-literals), [Element
   access](expressions.md#element-access), [`for...of`](statements.md#for-const-x-of-a) (`reject_arr_*`)
 - **element reference held across a `push` or `pop`**:

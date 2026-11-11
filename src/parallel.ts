@@ -988,6 +988,20 @@ const reachingPath = (
     // cannot see is refused rather than trusted.
     return root
   }
+  // WP32: a global `Map` or `Set` reaches only what it stores. Its `slots`,
+  // `entryHashes`, `entryKeys` and `entryValues` are private to
+  // `std/collections.ts`, so no program holds one and none can be `dst`; an
+  // array stored as a key or a value can be (docs/wp32-map.md §9.3). A
+  // program's own class named `Map` is walked field by field below.
+  const instance = info.instance
+  if (instance !== null && isCollectionStruct(info)) {
+    const args = instance.typeArgs
+    const key = reachingPath(table, program, args[0], element, `${root}.keys()[i]`, seen)
+    if (key.length > 0 || args.length < 2) {
+      return key
+    }
+    return reachingPath(table, program, args[1], element, `${root}.get(k)`, seen)
+  }
   for (const field of info.fields) {
     const path = reachingPath(table, program, field.type, element, `${root}.${field.name}`, seen)
     if (path.length > 0) {

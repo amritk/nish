@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "entry": "caps_file_read.ts",
+  "deterministic": false,
+  "capabilities": ["fs.read"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["fs.read"],
+      "modules": [
+        {
+          "path": "caps_file_read.ts",
+          "capabilities": ["fs.read"],
+          "functions": [
+            {
+              "name": "closeFile",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "closeFile", "at": "caps_file_read.ts:12:44", "calls": "fileClose" }
+                ]
+              },
+              "panics": []
+            },
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "main", "at": "caps_file_read.ts:15:14", "calls": "openFile" },
+                  { "function": "openFile", "at": "caps_file_read.ts:6:48", "calls": "fileOpen" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "caps_file_read.ts:18:13", "callee": "readWindow", "via": "slice" },
+                { "kind": "oom", "at": "caps_file_read.ts:19:15", "allowed": true },
+                { "kind": "index", "at": "caps_file_read.ts:19:23", "proven": false }
+              ]
+            },
+            {
+              "name": "openFile",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "openFile", "at": "caps_file_read.ts:6:48", "calls": "fileOpen" }
+                ]
+              },
+              "panics": []
+            },
+            {
+              "name": "readWindow",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "readWindow", "at": "caps_file_read.ts:8:67", "calls": "fileReadAt" }
+                ]
+              },
+              "panics": [
+                { "kind": "slice", "at": "caps_file_read.ts:8:67", "proven": false }
+              ]
+            },
+            {
+              "name": "sizeOf",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "sizeOf", "at": "caps_file_read.ts:10:41", "calls": "fileSize" }
+                ]
+              },
+              "panics": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
