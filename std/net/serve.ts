@@ -350,6 +350,17 @@ class ServeState {
   tasks: i64[]
   /** Whether a slot's task was cancelled, so it is cancelled once. */
   cancelled: boolean[]
+  /** The free slots, `free[0 .. freeCount)`, the last freed on top. */
+  free: i32[]
+  freeCount: i32 = 0
+  /** The slots whose task has answered since the loop last looked, `finished[0 .. finishedCount)`, in the order they answered. */
+  finished: i32[]
+  finishedCount: i32 = 0
+  /** The slots whose task the loop has started and not yet seen answer, `running[0 .. runningCount)`: the ones a hang-up can cancel. */
+  running: i32[]
+  runningCount: i32 = 0
+  /** Whether a slot is in `running`, so a slot answered and reused within a turn is listed once. */
+  listed: boolean[]
   /** `ServeLimits.deadline`, which each task arms on itself as it starts. */
   deadline: i32 = 0
   /** Set when the server begins to stop: each task still running, and each that starts later, is cancelled. */
@@ -394,6 +405,10 @@ class ServeState {
     this.done = []
     this.tasks = []
     this.cancelled = []
+    this.free = []
+    this.finished = []
+    this.running = []
+    this.listed = []
     this.status = []
     this.lengths = []
     this.bodies = []
@@ -430,14 +445,13 @@ const serveFields = (st: ServeState, server: string): void => {
   st.typedValues.push(type)
 }
 
-/** The lowest free slot, making one when every slot is busy and `inFlight` allows; -1 when none. */
+/** The last freed slot, making one when every slot is busy and `inFlight` allows; -1 when none. */
 const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
-  const n: i32 = toI32(st.busy.length)
-  for (let k: i32 = 0; k < n; k++) {
-    if (!st.busy[k]) {
-      return k
-    }
+  if (st.freeCount > 0) {
+    st.freeCount -= 1
+    return st.free[st.freeCount]
   }
+  const n: i32 = toI32(st.busy.length)
   if (n >= limits.inFlight) {
     return -1
   }
@@ -452,6 +466,10 @@ const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
   st.types.push(new Array<u8>(SERVE_TYPE_BYTES))
   st.typeLengths.push(toI32(0))
   st.typeIndex.push(toI32(-1))
+  st.free.push(toI32(0))
+  st.finished.push(toI32(0))
+  st.running.push(toI32(0))
+  st.listed.push(false)
   return n
 }
 
@@ -574,18 +592,23 @@ const serveTask = async (
   // one into the other.
   const src: HttpRequest = st.reqs[k]
   const r: HttpRequest = new HttpRequest(-1)
+  // The parser appends fields in wire order, each after the one before, so
+  // the last field's value end is where the kept head ends.
+  const spanCount: i32 = 4 * src.headerCount
   let end: i32 = src.targetEnd
-  for (let i: i32 = 0; i < 4 * src.headerCount; i++) {
-    if (src.spans[i] > end) {
-      end = src.spans[i]
-    }
+  if (spanCount > 0 && spanCount <= toI32(src.spans.length) && src.spans[spanCount - 1] > end) {
+    end = src.spans[spanCount - 1]
   }
   const head: u8[] = new Array<u8>(end)
   copyBytes(head, 0, src.head, 0, end)
-  const spans: i32[] = new Array<i32>(4 * src.headerCount)
-  spans.set(src.spans.slice(0, 4 * src.headerCount))
+  const spans: i32[] = new Array<i32>(spanCount)
+  for (let i: i32 = 0; i < toI32(spans.length) && i < toI32(src.spans.length); i++) {
+    spans[i] = src.spans[i]
+  }
   const params: i32[] = new Array<i32>(2 * src.paramCount)
-  params.set(src.params.slice(0, 2 * src.paramCount))
+  for (let i: i32 = 0; i < toI32(params.length) && i < toI32(src.params.length); i++) {
+    params[i] = src.params[i]
+  }
   const body: u8[] = new Array<u8>(src.bodyLength)
   copyBytes(body, 0, src.body, 0, src.bodyLength)
   r.head = head
@@ -632,6 +655,8 @@ const serveTask = async (
     st.typeLengths[k] = n
   }
   st.done[k] = true
+  st.finished[st.finishedCount] = k
+  st.finishedCount += 1
   st.fresh = true
   if (!st.awake && !st.signalled) {
     st.signalled = true
@@ -711,21 +736,21 @@ export const serveOn = async (
     while (moved || st.fresh) {
       moved = false
       st.fresh = false
-      for (let k: i32 = 0; k < toI32(st.busy.length); k++) {
-        if (st.busy[k] && st.done[k]) {
-          serveAnswer(h, st, k, stats)
-          st.busy[k] = false
-          st.done[k] = false
-          st.cancelled[k] = false
-          st.tasks[k] = 0
-          stats.answered += 1
-          moved = true
-        } else if (st.busy[k] && (st.stopping || h.hungUp(st.reqs[k]))) {
-          // Its client hung up, or the server is stopping: nobody waits for
-          // this answer, so the task is told to stop waiting too.
-          serveCancel(st, k)
-        }
+      // A task appends its slot as it answers; none runs while the loop
+      // does, so the list is read whole and emptied.
+      for (let i: i32 = 0; i < st.finishedCount && i < toI32(st.finished.length); i++) {
+        const k: i32 = st.finished[i]
+        serveAnswer(h, st, k, stats)
+        st.busy[k] = false
+        st.done[k] = false
+        st.cancelled[k] = false
+        st.tasks[k] = 0
+        st.free[st.freeCount] = k
+        st.freeCount += 1
+        stats.answered += 1
+        moved = true
       }
+      st.finishedCount = 0
       while (h.ready()) {
         const r: HttpRequest = h.take()
         const k: i32 = serveFreeSlot(st, limits)
@@ -741,9 +766,31 @@ export const serveOn = async (
         st.done[k] = false
         st.cancelled[k] = false
         st.tasks[k] = 0
+        if (!st.listed[k]) {
+          st.listed[k] = true
+          st.running[st.runningCount] = k
+          st.runningCount += 1
+        }
         spawn(serveTask(handle, st, k))
       }
     }
+    // A task still running whose client hung up, or any once the server is
+    // stopping: nobody waits for its answer, so it is told to stop waiting
+    // too. The answered ones leave the list here.
+    let kept: i32 = 0
+    for (let i: i32 = 0; i < st.runningCount && i < toI32(st.running.length); i++) {
+      const k: i32 = st.running[i]
+      if (st.busy[k] && !st.done[k]) {
+        if (st.stopping || h.hungUp(st.reqs[k])) {
+          serveCancel(st, k)
+        }
+        st.running[kept] = k
+        kept += 1
+      } else {
+        st.listed[k] = false
+      }
+    }
+    st.runningCount = kept
     // The turn's answers go out together, before the arena is read, so a
     // close the send causes is counted in the turn that caused it.
     h.flush()
