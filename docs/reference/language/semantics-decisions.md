@@ -1361,16 +1361,17 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   scoped loop around it, at the end of the `using a = arena()` block around it,
   when the function returns, or, in a function with no scope, when its caller's
   memory is (in `main`, never: "for the rest of the run"). The reason is the
-  first refusal the analysis met, the one NL9011 names. A loop whose body
-  declares `using a = arena()` before anything it allocates is the program's
-  own bracket and is not listed. A condition or `for` update that allocates is
+  first refusal the analysis met, the one NL9011 names. A loop whose every
+  allocation goes back with a `using a = arena()` block or a scoped loop
+  inside its body keeps nothing past the pass and is not listed. A condition or `for` update that allocates is
   listed on its own line — both, when both do — because it runs outside the
   bracket a pass takes whether or not the body has one; a `do...while`
   condition's line follows the lines of the loops in its body.
 - **A function** is listed when it answers a number, a `boolean`, an enum or
   nothing, leaves memory behind, and has no scope of its own. A function that
-  answers memory (a string, an array, an object) is not: what it allocates goes
-  to its caller with the result, and whether the caller gives it back is the
+  answers memory (a string, an array, an object) is not, nor is a constructor,
+  which answers the object it builds: what it allocates goes to its caller with
+  the result, and whether the caller gives it back is the
   caller's line.
 - **The summary** counts the loops whose passes allocate and the functions that
   answer no memory and allocate, and how many of each keep it. A budget in CI
@@ -1386,10 +1387,12 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   proves its passes leave no memory behind. A function that allocates nothing
   the analysis can see is not examined.
 - **A callee's leak is its caller's.** A function whose kept allocation is a
-  call names that callee. One that keeps memory because a function down its
-  calls holds an allocation the analysis does not prove dead names that
-  function, the one the doubt starts in, even when that function's own scope
-  gives its memory back: the doubt passes up every call.
+  call names that callee. One whose own allocation is held where the analysis
+  does not prove it dead names that first, whatever its callees do. One that
+  keeps memory only because a function down its calls holds an allocation the
+  analysis does not prove dead names that function, the one the doubt starts
+  in, even when that function's own scope gives its memory back: the doubt
+  passes up every call.
 - **A function is judged by what it still holds when it returns.** One with
   no scope of its own keeps nothing when every allocation it leaves is inside
   a scoped pass or a `using a = arena()` block, so it is counted and not

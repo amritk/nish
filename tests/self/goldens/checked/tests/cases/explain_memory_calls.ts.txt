@@ -7,6 +7,9 @@ struct Leaky (class) size=4 align=4
 struct Point (class) size=4 align=4
   field x: i32 index=0 offset=0
   constructor -> @Point.constructor
+struct Named (class) size=8 align=8
+  field label: string index=0 offset=0
+  constructor -> @Named.constructor
 function Leaky.constructor(this: Leaky, k: i32): void -> @Leaky.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: k
@@ -111,11 +114,33 @@ function marked(k: i32): i32 -> @marked
   stackSites=0 stackLocals=0
   local +0:9 m: i64 (const)
   local +1:7 s: string (let)
+function own(k: i32): i32 -> @own
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: middle nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local +0:7 t: string (let)
+  callee +2:10 middle -> @middle
+function markedLoop(n: i32): i32 -> @markedLoop
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_arena_release
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local +0:9 m: i64 (const)
+  local +1:7 total: i32 (let)
+  local +2:12 i: i32 (let)
+  local +4:13 a: i64 (const)
+  local +5:13 s: string (const)
+function Named.constructor(this: Named, k: i32): void -> @Named.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Leaky.constructor both bracketed count each$fn.5.twice marked moved nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 outer plain scopedOnly viaRecur
-  stackSites=1 stackLocals=0
+  calls: Leaky.constructor Named.constructor both bracketed count each$fn.5.twice marked markedLoop moved nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 outer own plain scopedOnly viaRecur
+  stackSites=2 stackLocals=0
   local +0:7 k: i32 (let)
   callee +1:10 new Leaky -> @Leaky.constructor
   callee +4:18 each<twice> -> @each$fn.5.twice
@@ -128,6 +153,9 @@ function main(): void -> @nish_main [exported entry]
   callee +4:121 moved -> @moved
   callee +4:132 viaRecur -> @viaRecur
   callee +4:147 marked -> @marked
+  callee +4:160 own -> @own
+  callee +4:170 markedLoop -> @markedLoop
+  callee +4:187 new Named -> @Named.constructor
 function lastOf<fixed>(n: i32, g: void): i32 -> @lastOf$fn.5.fixed [instance]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: fixed

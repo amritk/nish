@@ -1,5 +1,6 @@
 %struct.Leaky = type { i32 }
 %struct.Point = type { i32 }
+%struct.Named = type { i8* }
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
@@ -531,10 +532,132 @@ ovf.fail:
   unreachable
 }
 
+define internal noundef i32 @own(i32 noundef %k) #0 {
+entry:
+  %t.addr = alloca i8*, align 8
+  %0 = call i8* @nish_str_from_i32(i32 %k)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i8* %0)
+  store i8* %1, i8** %t.addr, align 8
+  %2 = call i8* @nish_str_from_i32(i32 %k)
+  %3 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*), i8* %2)
+  store i8* %3, i8** %t.addr, align 8
+  %4 = call i32 @middle(i32 %k)
+  %5 = load i8*, i8** %t.addr, align 8
+  %6 = bitcast i8* %5 to i64*
+  %7 = load i64, i64* %6, align 8
+  %8 = trunc i64 %7 to i32
+  %9 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 %8)
+  %10 = extractvalue { i32, i1 } %9, 0
+  %11 = extractvalue { i32, i1 } %9, 1
+  br i1 %11, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %10
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define internal noundef i32 @markedLoop(i32 noundef %n) #0 {
+entry:
+  %m.addr = alloca i64, align 8
+  %total.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %a.addr = alloca i64, align 8
+  %s.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i64 @nish_arena_mark()
+  store i64 %0, i64* %m.addr, align 8
+  store i32 0, i32* %total.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %1 = load i32, i32* %i.addr, align 4
+  %2 = icmp slt i32 %1, %n
+  br i1 %2, label %for.body, label %for.end
+
+for.body:
+  %3 = load i32, i32* %i.addr, align 4
+  %4 = icmp sgt i32 %3, 0
+  br i1 %4, label %if.then, label %if.end
+
+if.then:
+  %5 = call i64 @nish_arena_mark()
+  store i64 %5, i64* %a.addr, align 8
+  %6 = load i64, i64* %a.addr, align 8
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = call i8* @nish_str_from_i32(i32 %7)
+  %9 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* %8)
+  store i8* %9, i8** %s.addr, align 8
+  %10 = load i32, i32* %total.addr, align 4
+  %11 = load i8*, i8** %s.addr, align 8
+  %12 = bitcast i8* %11 to i64*
+  %13 = load i64, i64* %12, align 8
+  %14 = trunc i64 %13 to i32
+  %15 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %14)
+  %16 = extractvalue { i32, i1 } %15, 0
+  %17 = extractvalue { i32, i1 } %15, 1
+  br i1 %17, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %16, i32* %total.addr, align 4
+  call void @nish_arena_release(i64 %6)
+  br label %if.end
+
+if.end:
+  br label %for.inc
+
+for.inc:
+  %18 = load i32, i32* %i.addr, align 4
+  %19 = add nsw i32 %18, 1
+  store i32 %19, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %20 = load i32, i32* %total.addr, align 4
+  %21 = call i64 @nish_arena_mark()
+  %22 = load i64, i64* %m.addr, align 8
+  %23 = icmp slt i64 %21, %22
+  br i1 %23, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %24 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  %25 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %20, i32 %24)
+  %26 = extractvalue { i32, i1 } %25, 0
+  %27 = extractvalue { i32, i1 } %25, 1
+  br i1 %27, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %26
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define internal void @Named.constructor(%struct.Named* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %k) #0 {
+entry:
+  %0 = call i8* @nish_str_from_i32(i32 %k)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*), i8* %0)
+  %2 = getelementptr inbounds %struct.Named, %struct.Named* %this, i32 0, i32 0
+  store i8* %1, i8** %2, align 8, !tbaa !22
+  ret void
+}
+
 define void @nish_main() #0 {
 entry:
   %k.addr = alloca i32, align 4
   %Leaky.obj = alloca %struct.Leaky, align 8
+  %Named.obj = alloca %struct.Named, align 8
   %arena.mark = call i64 @nish_arena_mark()
   store i32 0, i32* %k.addr, align 4
   br label %while.cond
@@ -601,7 +724,20 @@ while.end:
   %47 = call i32 @marked(i32 1)
   %48 = call i8* @nish_str_from_i32(i32 %47)
   %49 = call i8* @nish_str_concat(i8* %46, i8* %48)
-  call void @nish_print(i8* %49)
+  %50 = call i8* @nish_str_concat(i8* %49, i8* bitcast ({ i64, [2 x i8] }* @.str.10 to i8*))
+  %51 = call i32 @own(i32 1)
+  %52 = call i8* @nish_str_from_i32(i32 %51)
+  %53 = call i8* @nish_str_concat(i8* %50, i8* %52)
+  %54 = call i8* @nish_str_concat(i8* %53, i8* bitcast ({ i64, [2 x i8] }* @.str.10 to i8*))
+  %55 = call i32 @markedLoop(i32 3)
+  %56 = call i8* @nish_str_from_i32(i32 %55)
+  %57 = call i8* @nish_str_concat(i8* %54, i8* %56)
+  %58 = call i8* @nish_str_concat(i8* %57, i8* bitcast ({ i64, [2 x i8] }* @.str.10 to i8*))
+  call void @Named.constructor(%struct.Named* %Named.obj, i32 4)
+  %59 = getelementptr inbounds %struct.Named, %struct.Named* %Named.obj, i32 0, i32 0
+  %60 = load i8*, i8** %59, align 8, !tbaa !22
+  %61 = call i8* @nish_str_concat(i8* %58, i8* %60)
+  call void @nish_print(i8* %61)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 
@@ -756,7 +892,7 @@ attributes #4 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="
 attributes #5 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!20, !21, !22, !23, !24}
+!llvm.module.flags = !{!23, !24, !25, !26, !27}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -777,8 +913,11 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !17 = !{!16, !16, i64 0}
 !18 = !{!"Point", !2, i64 0}
 !19 = !{!18, !2, i64 0}
-!20 = !{i32 8, !"cf-protection-branch", i32 1}
-!21 = !{i32 8, !"cf-protection-return", i32 1}
-!22 = !{i32 8, !"branch-target-enforcement", i32 1}
-!23 = !{i32 8, !"sign-return-address", i32 1}
-!24 = !{i32 4, !"probe-stack", !"inline-asm"}
+!20 = !{!"ptr", !1, i64 0}
+!21 = !{!"Named", !20, i64 0}
+!22 = !{!21, !20, i64 0}
+!23 = !{i32 8, !"cf-protection-branch", i32 1}
+!24 = !{i32 8, !"cf-protection-return", i32 1}
+!25 = !{i32 8, !"branch-target-enforcement", i32 1}
+!26 = !{i32 8, !"sign-return-address", i32 1}
+!27 = !{i32 4, !"probe-stack", !"inline-asm"}
