@@ -812,7 +812,7 @@ export class Checker {
       this.ctx.error(nameNode, `\`${name}\` is already declared in this module`)
       return
     }
-    // WP40 §4a H: a class owning a C pointer is a handle class, and a handle
+    // WP53 §4a H: a class owning a C pointer is a handle class, and a handle
     // class has no type parameters.
     if (kind === STRUCT_CLASS) {
       for (const member of stmt.children[3].children) {

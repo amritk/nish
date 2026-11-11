@@ -1,4 +1,4 @@
-// WP40 B1.2: a buffer's data pointer and length are loaded after the last
+// WP53 B1.2: a buffer's data pointer and length are loaded after the last
 // argument is evaluated, so C sees the array as it is at the call. `grow`
 // pushes before the call is made, and `write` sees the grown bytes. A later
 // argument that cannot resize leaves the count proven (`noResize`); one that

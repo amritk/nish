@@ -1,4 +1,4 @@
-// WP40 B1.2: a buffer-taking `declare function` lowers everywhere but in an
+// WP53 B1.2: a buffer-taking `declare function` lowers everywhere but in an
 // arrow a scope spawns. A C body is unseen, so a call to any foreign function
 // may write memory its caller can see, and a spawned task may not.
 import { scope } from "nish/threads";

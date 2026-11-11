@@ -1,1 +1,1 @@
-An arrow may only be written as the argument for a function-typed parameter of a top-level function
+an arrow in value position is not yet a function reference: declare it as a top-level function and name it

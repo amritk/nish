@@ -1,4 +1,4 @@
-// WP40 H1.2's wasm checks (docs/wp40-ffi-buffers-handles.md): the close a
+// WP53 H1.2's wasm checks (docs/wp53-ffi-buffers-handles.md): the close a
 // `using` of a handle class emits, on a `--target wasm32-wasi` build and on the
 // `--profile wasi` route, and the refusal of its `declare function` in a
 // freestanding `--target wasm32` build (NL2666). They live beside `tests/run.js`, which
@@ -13,7 +13,7 @@ import { spawnSync } from "node:child_process"
  * matched against a group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiHandleChecks = ({ only, has, check, skip, shown, nish, root, buildDir, wasiSysroot }) => {
-  // WP40 H1.2 on wasm. A `--target wasm32-wasi` build of ffi_handle_file
+  // WP53 H1.2 on wasm. A `--target wasm32-wasi` build of ffi_handle_file
   // assembles, and llc gives its `counted_fclose` the handle's pointer as an
   // i32; a freestanding `--target wasm32` build links no C and refuses its
   // `declare function`s (WP50 S2). The `--profile wasi` route

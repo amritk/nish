@@ -1,1 +1,1 @@
-`(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function
+Field `run` of class `Handler` is (i32) => i32 but its initializer is i32

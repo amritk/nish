@@ -1,4 +1,4 @@
-// WP40 H1.3: a loop body's `using` binding is not in scope before it is
+// WP53 H1.3: a loop body's `using` binding is not in scope before it is
 // declared or after the block that holds it; this pins source order, not the
 // point where the handle closes.
 declare function fopen(path: string, mode: string): CPtr | null

@@ -1,4 +1,4 @@
-// WP40 H1.3, §6 row 15: an assignment expression cannot keep a lent handle in a
+// WP53 H1.3, §6 row 15: an assignment expression cannot keep a lent handle in a
 // module binding: the only module bindings are constants, and the constant
 // rule refuses the assignment before the handle rules.
 declare function fopen(path: string, mode: string): CPtr | null

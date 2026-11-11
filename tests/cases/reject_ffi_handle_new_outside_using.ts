@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 1: a handle-class `new` is legal only as a `using`
+// WP53 H1.1, Row 1: a handle-class `new` is legal only as a `using`
 // initialiser; bound to a `const` it is refused.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

@@ -1,4 +1,4 @@
-// WP40 H1.2: a handle opened in an arena's block closes before the arena is
+// WP53 H1.2: a handle opened in an arena's block closes before the arena is
 // released, so a dispose that read memory the block allocated would find it
 // still there. Here the handle is the second declarator, beside the arena in
 // one `using`, and the third opens in a block inside the arena's: both orders

@@ -1,4 +1,4 @@
-// WP40 H1.3, §6 row 15: a Map cannot keep a lent handle past the call.
+// WP53 H1.3, §6 row 15: a Map cannot keep a lent handle past the call.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

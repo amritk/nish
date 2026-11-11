@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 34: the pointer field has no initialiser, so the constructor's
+// WP53 H1.1, Row 34: the pointer field has no initialiser, so the constructor's
 // one write is its first value.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

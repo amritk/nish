@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d member access: `f.m` without a call is a method value.
+// WP53 H1.1, §4d member access: `f.m` without a call is a method value.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

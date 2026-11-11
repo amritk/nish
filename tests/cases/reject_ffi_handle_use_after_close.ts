@@ -1,4 +1,4 @@
-// WP40 H1.3, §4c: a `using` binding's scope ends where its close is emitted,
+// WP53 H1.3, §4c: a `using` binding's scope ends where its close is emitted,
 // so naming the handle after its block names nothing.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

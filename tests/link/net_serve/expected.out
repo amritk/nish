@@ -8,6 +8,7 @@ post: 201 [text/plain; charset=utf-8] POST /echo tag=seven body=ping
 response cap: 500 [application/problem+json] {"type":"about:blank","title":"Internal Server Error","status":500}
 bad status: 500 [application/problem+json] {"type":"about:blank","title":"Internal Server Error","status":500}
 bad type: 500 [application/problem+json] {"type":"about:blank","title":"Internal Server Error","status":500}
+negative length: 500 [application/problem+json] {"type":"about:blank","title":"Internal Server Error","status":500}
 204 with a body: 204 [text/plain; charset=utf-8]
 no content type: 200 [] xxx
 in flight: 503 [application/problem+json] {"type":"about:blank","title":"Service Unavailable","status":503}
@@ -17,4 +18,4 @@ after a hang-up: 200 [text/plain; charset=utf-8] hello
 pipelined 1: 200 [text/plain; charset=utf-8] slept 60
 pipelined 2: 200 [text/plain; charset=utf-8] slept 1
 after drain: closed
-serve: 0, answered 16, busy 1, failed 3, slots 1
+serve: 0, answered 17, busy 1, failed 4, slots 1
