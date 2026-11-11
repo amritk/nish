@@ -254,7 +254,7 @@ function Checker.constructor(this: Checker, table: TypeTable, source: SourceFile
   calls: CheckContext.constructor CheckedProgram.constructor nish_alloc_struct
   pointer this: size=24 writesThrough=true captured=false
   pointer table: size=112 writesThrough=true captured=true passedTo=CheckContext.constructor#1
-  pointer source: size=32 writesThrough=true captured=true passedTo=CheckedProgram.constructor#1
+  pointer source: size=48 writesThrough=true captured=true passedTo=CheckedProgram.constructor#1
   pointer file: size=40 writesThrough=true captured=true passedTo=CheckedProgram.constructor#2
   pointer sink: size=48 writesThrough=true captured=true passedTo=CheckContext.constructor#3
   stackSites=0 stackLocals=0

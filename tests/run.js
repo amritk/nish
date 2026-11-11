@@ -15538,6 +15538,31 @@ if (dealtHere("runtimeChecks")) {
     }
   }
 
+  // WP21 S3: a builtin with no runtime on freestanding wasm32 is refused by
+  // what the program reaches, not at every call. `nish/cli` calls `getenv` in
+  // functions a program that only styles text never reaches, so importing it
+  // for `Style` compiles for wasm32 (the reached case is
+  // tests/link/package_wasm_hostless and tests/link/wasm_hostless_own).
+  if (!only || "wasm-hostless".includes(only)) {
+    const hostlessDir = path.join(buildDir, "wasm-hostless")
+    fs.rmSync(hostlessDir, { recursive: true, force: true })
+    fs.mkdirSync(hostlessDir, { recursive: true })
+    const entry = path.join(hostlessDir, "main.ts")
+    fs.writeFileSync(
+      entry,
+      'import { Style } from "nish/cli";\n\nexport const headingLength = (): i32 => new Style(true, true).heading("hi").length;\n'
+    )
+    const r = spawnSync(NISH, [entry, "-o", path.join(hostlessDir, "out") + path.sep, "--target", "wasm32"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "wasm hostless: a wasm32 program that imports nish/cli and never reaches its `getenv` is not refused",
+      r.status === 0,
+      r.stderr
+    )
+  }
+
   // ---- #643: a function named `memory` in a wasm module -----------------------------
   // wasm-ld exports a wasm module's linear memory as `memory`, so a function of that
   // name makes a module Node refuses to compile. The compiler refuses one (NL3038) when

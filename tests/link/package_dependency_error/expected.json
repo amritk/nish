@@ -1,0 +1,1 @@
+{"file":"tests/link/package_dependency_error/node_modules/pkg_broken/src/index.ts","line":2,"column":39,"endLine":2,"endColumn":49,"severity":"error","code":"NL2236","message":"Return type mismatch: function returns i32 but expression is string","package":"pkg_broken"}
