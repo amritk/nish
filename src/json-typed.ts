@@ -483,7 +483,7 @@ const jsonHasTag = (table: TypeTable, info: StructInfo): boolean => {
 /** `tag: "wire"`: the string a union's variant writes its tag as, in place of its enum member's name. */
 const jsonReadTag = (ctx: CheckContext, info: StructInfo, value: Node): void => {
   if (!jsonIsStringLiteral(value)) {
-    // The words after the class's name are NL2721's.
+    // The words after the class's name are NL2722's.
     ctx.error(
       value,
       `\`${info.name}.${JSON_OPTIONS}\`'s \`tag\` is not a string literal: ` +
@@ -502,7 +502,7 @@ const jsonReadTag = (ctx: CheckContext, info: StructInfo, value: Node): void => 
     return
   }
   if (!jsonHasTag(ctx.table, info)) {
-    // The words after the class's name are NL2723's.
+    // The words after the class's name are NL2724's.
     ctx.error(
       value,
       `\`${info.name}.${JSON_OPTIONS}\` gives a \`tag\`, and \`${info.name}\` has no field whose type is one enum member: ` +
@@ -1066,7 +1066,7 @@ const jsonUnionRefusal = (program: CheckedProgram, table: TypeTable, union: i32)
     }
     const wire = jsonWireTag(table, info, field)
     if (tags.has(wire)) {
-      // The words after the tag are NL2719's in `src/codes.ts`.
+      // The words after the tag are NL2720's in `src/codes.ts`.
       return (
         `\`${variants[tags.get(wire, 0)].name}\` and \`${info.name}\` both write their tag in \`${table.typeName(union)}\` as \`${jsonQuote(wire)}\`: ` +
         "a decoder picks a union's variant by the string its tag is written as, so each variant of a union writes a different one"
@@ -1077,7 +1077,7 @@ const jsonUnionRefusal = (program: CheckedProgram, table: TypeTable, union: i32)
       firstOwner = info.name
       firstKey = field.wireName
     } else if (field.wireName !== firstKey) {
-      // The words after the keys are NL2720's in `src/codes.ts`.
+      // The words after the keys are NL2721's in `src/codes.ts`.
       return (
         `\`${firstOwner}\` writes its tag \`${field.name}\` under the key \`${jsonQuote(firstKey)}\` and \`${info.name}\` under \`${jsonQuote(field.wireName)}\`: ` +
         "a decoder finds a union's tag before it knows which variant the object is, so every variant of a union writes its tag under the same key"
@@ -1104,7 +1104,7 @@ export const jsonRefusal = (
   const base = table.stripNull(type)
   const union = table.isUnion(base)
   if (role === JSON_DECODE && union) {
-    // The words after the type are NL2718's in `src/codes.ts`.
+    // The words after the type are NL2719's in `src/codes.ts`.
     return (
       `\`${name}\`'s value is \`${table.typeName(type)}\`, a tagged union: ` +
       "`jsonDecode` decodes into the object it is given, and which variant a document holds is known only once its tag is read, " +
@@ -1112,7 +1112,7 @@ export const jsonRefusal = (
     )
   }
   if (role === JSON_DECODE_UNION && !union) {
-    // The words after the type are NL2722's in `src/codes.ts`.
+    // The words after the type are NL2723's in `src/codes.ts`.
     return (
       `\`${name}\`'s value is \`${table.typeName(type)}\`, which is not a tagged union: ` +
       "`jsonDecodeUnion` picks a variant by the object's tag and answers it, so its value is a union of classes; " +

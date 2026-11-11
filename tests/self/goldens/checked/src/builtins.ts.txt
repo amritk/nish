@@ -9,6 +9,7 @@ import checkExpression from "./expressions" -> function @checkExpression
 import literalOperand from "./expressions" -> function @literalOperand
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import checkIndexArgument from "./members" -> function @checkIndexArgument
+import isFileStreamExport from "./nish-modules" -> function @isFileStreamExport
 import isNetBufferLetter from "./nish-modules" -> function @isNetBufferLetter
 import isNetExport from "./nish-modules" -> function @isNetExport
 import isNetWrittenLetter from "./nish-modules" -> function @isNetWrittenLetter
@@ -89,6 +90,14 @@ function refuseOnFreestandingWasm(ctx: CheckContext, call: Node, name: string): 
   pointer call: size=40 writesThrough=false captured=false passedTo=refuseWhen#2
   stackSites=0 stackLocals=0
   callee +0:3 refuseWhen -> @refuseWhen
+function refuseFileOnFreestandingWasm(ctx: CheckContext, call: Node, name: string): boolean -> @refuseFileOnFreestandingWasm
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error nish_str_concat
+  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  stackSites=0 stackLocals=0
+  callee +0:3 CheckContext.error -> @CheckContext.error
 function conversionTarget(name: string): i32 -> @conversionTarget
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -99,9 +108,9 @@ function isBuiltinFunction(name: string): boolean -> @isBuiltinFunction [exporte
   calls: conversionTarget isNetExport isTermExport isUnsafeExport nish_str_eq
   stackSites=0 stackLocals=0
   callee +0:7 conversionTarget -> @conversionTarget
-  callee +55:5 isTermExport -> @isTermExport
-  callee +56:5 isNetExport -> @isNetExport
-  callee +57:5 isUnsafeExport -> @isUnsafeExport
+  callee +59:5 isTermExport -> @isTermExport
+  callee +60:5 isNetExport -> @isNetExport
+  callee +61:5 isUnsafeExport -> @isUnsafeExport
 function isStringifiable(type: i32): boolean -> @isStringifiable
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -508,10 +517,10 @@ function checkBuiltinFunctionNamed(ctx: CheckContext, call: Node, scope: Scope, 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkSimdCall
   escaping: name
-  calls: CheckContext.error CheckContext.errorType CheckContext.numberType CheckedProgram.noteUnsafeCall TypeTable.arrayOf TypeTable.nullableOf TypeTable.typeName bindRouted checkArgumentType checkBuffer checkBuiltinArity checkConstantTime checkExpression checkNet checkReadCString checkSimdCall checkUncheckedAccess checkWrapping conversionTarget isNetExport isNumeric isSimdExport isStringifiable isUnsafeExport nish_panic_index nish_str_concat nish_str_eq refuseOnFreestandingWasm refuseOnWasm requireStatementPosition
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=checkSimdCall#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 bindRouted#0 checkBuiltinArity#0 checkArgumentType#0 bindRouted#0 checkConstantTime#0 checkReadCString#0 checkUncheckedAccess#0 checkWrapping#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 bindRouted#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 bindRouted#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 checkBuffer#0 requireStatementPosition#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuffer#0 checkBuffer#0 checkBuffer#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuffer#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuffer#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuffer#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuffer#0 checkArgumentType#0 checkArgumentType#0 checkNet#0 CheckContext.errorType#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=checkSimdCall#1 checkBuiltinArity#1 checkBuiltinArity#1 bindRouted#1 checkBuiltinArity#1 bindRouted#1 checkConstantTime#1 CheckedProgram.noteUnsafeCall#1 checkReadCString#1 checkUncheckedAccess#1 checkWrapping#1 checkBuiltinArity#1 bindRouted#1 checkBuiltinArity#1 bindRouted#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkNet#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkSimdCall#2 checkExpression#2 checkArgumentType#2 checkArgumentType#2 checkConstantTime#2 checkReadCString#2 checkUncheckedAccess#2 checkWrapping#2 checkExpression#2 checkExpression#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkBuffer#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkNet#2
+  calls: CheckContext.error CheckContext.errorType CheckContext.numberType CheckedProgram.noteUnsafeCall TypeTable.arrayOf TypeTable.nullableOf TypeTable.typeName bindRouted checkArgumentType checkBuffer checkBuiltinArity checkConstantTime checkExpression checkNet checkReadCString checkSimdCall checkUncheckedAccess checkWrapping conversionTarget isFileStreamExport isNetExport isNumeric isSimdExport isStringifiable isUnsafeExport nish_panic_index nish_str_concat nish_str_eq refuseFileOnFreestandingWasm refuseOnFreestandingWasm refuseOnWasm requireStatementPosition
+  pointer ctx: size=320 writesThrough=true captured=true passedTo=checkSimdCall#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 bindRouted#0 checkBuiltinArity#0 checkArgumentType#0 bindRouted#0 checkConstantTime#0 checkReadCString#0 checkUncheckedAccess#0 checkWrapping#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 bindRouted#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 bindRouted#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 checkBuffer#0 requireStatementPosition#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuffer#0 checkBuffer#0 checkBuffer#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuffer#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuffer#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseFileOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuffer#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkBuffer#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkArgumentType#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnFreestandingWasm#0 checkBuffer#0 checkArgumentType#0 checkArgumentType#0 checkNet#0 CheckContext.errorType#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=checkSimdCall#1 checkBuiltinArity#1 checkBuiltinArity#1 bindRouted#1 checkBuiltinArity#1 bindRouted#1 checkConstantTime#1 CheckedProgram.noteUnsafeCall#1 checkReadCString#1 checkUncheckedAccess#1 checkWrapping#1 checkBuiltinArity#1 bindRouted#1 checkBuiltinArity#1 bindRouted#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseFileOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkBuiltinArity#1 refuseOnFreestandingWasm#1 checkNet#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkSimdCall#2 checkExpression#2 checkArgumentType#2 checkArgumentType#2 checkConstantTime#2 checkReadCString#2 checkUncheckedAccess#2 checkWrapping#2 checkExpression#2 checkExpression#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkBuffer#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkArgumentType#2 checkNet#2
   stackSites=0 stackLocals=0
   local +0:9 args: Node (const)
   callee +1:7 isSimdExport -> @isSimdExport
@@ -646,46 +655,56 @@ function checkBuiltinFunctionNamed(ctx: CheckContext, call: Node, scope: Scope, 
   callee +362:7 checkBuffer -> @checkBuffer
   callee +363:7 checkArgumentType -> @checkArgumentType
   callee +364:7 checkArgumentType -> @checkArgumentType
-  callee +371:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +371:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
-  callee +372:7 checkArgumentType -> @checkArgumentType
-  callee +378:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +379:7 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
-  callee +381:12 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee +384:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +384:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
-  callee +385:7 checkArgumentType -> @checkArgumentType
-  callee +390:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +390:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
-  callee +391:7 checkArgumentType -> @checkArgumentType
-  callee +403:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +403:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
-  callee +404:7 checkArgumentType -> @checkArgumentType
-  callee +405:7 checkArgumentType -> @checkArgumentType
-  callee +410:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +410:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
-  callee +411:7 checkArgumentType -> @checkArgumentType
-  callee +416:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +416:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
-  callee +417:7 checkArgumentType -> @checkArgumentType
-  callee +418:7 checkBuffer -> @checkBuffer
-  callee +425:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +425:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +372:7 isFileStreamExport -> @isFileStreamExport
+  local +373:11 arity: i32 (const)
+  callee +374:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +374:61 refuseFileOnFreestandingWasm -> @refuseFileOnFreestandingWasm
+  callee +376:9 checkArgumentType -> @checkArgumentType
+  callee +378:9 checkArgumentType -> @checkArgumentType
+  callee +381:9 checkBuffer -> @checkBuffer
+  callee +382:9 checkArgumentType -> @checkArgumentType
+  callee +383:9 checkArgumentType -> @checkArgumentType
+  callee +384:9 checkArgumentType -> @checkArgumentType
+  callee +392:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +392:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +393:7 checkArgumentType -> @checkArgumentType
+  callee +399:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +400:7 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +402:12 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee +405:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +405:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +406:7 checkArgumentType -> @checkArgumentType
+  callee +411:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +411:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +412:7 checkArgumentType -> @checkArgumentType
+  callee +424:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +424:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +425:7 checkArgumentType -> @checkArgumentType
   callee +426:7 checkArgumentType -> @checkArgumentType
-  callee +427:7 checkArgumentType -> @checkArgumentType
-  callee +428:7 checkArgumentType -> @checkArgumentType
-  callee +433:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +433:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
-  callee +434:7 checkArgumentType -> @checkArgumentType
-  callee +435:7 checkArgumentType -> @checkArgumentType
-  callee +440:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +440:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
-  callee +441:7 checkBuffer -> @checkBuffer
-  callee +442:7 checkArgumentType -> @checkArgumentType
-  callee +443:7 checkArgumentType -> @checkArgumentType
-  callee +447:7 isNetExport -> @isNetExport
-  callee +448:12 checkNet -> @checkNet
-  callee +450:10 CheckContext.errorType -> @CheckContext.errorType
+  callee +431:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +431:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +432:7 checkArgumentType -> @checkArgumentType
+  callee +437:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +437:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +438:7 checkArgumentType -> @checkArgumentType
+  callee +439:7 checkBuffer -> @checkBuffer
+  callee +446:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +446:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +447:7 checkArgumentType -> @checkArgumentType
+  callee +448:7 checkArgumentType -> @checkArgumentType
+  callee +449:7 checkArgumentType -> @checkArgumentType
+  callee +454:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +454:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +455:7 checkArgumentType -> @checkArgumentType
+  callee +456:7 checkArgumentType -> @checkArgumentType
+  callee +461:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +461:57 refuseOnFreestandingWasm -> @refuseOnFreestandingWasm
+  callee +462:7 checkBuffer -> @checkBuffer
+  callee +463:7 checkArgumentType -> @checkArgumentType
+  callee +464:7 checkArgumentType -> @checkArgumentType
+  callee +468:7 isNetExport -> @isNetExport
+  callee +469:12 checkNet -> @checkNet
+  callee +471:10 CheckContext.errorType -> @CheckContext.errorType
 function checkNet(ctx: CheckContext, call: Node, scope: Scope, name: string): i32 -> @checkNet
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity

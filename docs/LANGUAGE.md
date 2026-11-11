@@ -9578,6 +9578,10 @@ Reference: [`nish:fs`](reference/nish-fs.md).
 | `writeFileSyncMode` | `string, string, i32` | `i32` | write |
 | `createFileExclusiveSync` | `string, string, i32` | `i32` | write |
 | `mkdirSyncMode` | `string, i32` | `i32` | write |
+| `fileOpen` | `string` | `i32` | write |
+| `fileReadAt` | `i32, u8[], i32, i32, i64` | `i32` | write |
+| `fileSize` | `i32` | `i64` | write |
+| `fileClose` | `i32` | `i32` | write |
 
 **`readFileSync(path: string): string`** reads the whole file as one arena
 string. A failure prints `nish: cannot read <path>` to stderr and exits 1.
@@ -9681,6 +9685,76 @@ panic.
 - *Tests:* `io_mkdir_mode`, `caps_fs_mode`, `fs_mode`;
   `reject_mkdir_mode_arity`, `reject_mkdir_mode_type`,
   `reject_mkdir_mode_mode_type`, `reject_mkdir_mode_wasm`.
+
+#### A file a window at a time
+
+`readFileBytesSync` answers the whole file; these four read it **a window at
+a time** into a `u8[]` the program owns, so memory follows the window rather
+than the file, and a file past 2^31 − 1 bytes is readable (WP44,
+[wp44-streaming-files.md](wp44-streaming-files.md)). No call allocates. Every
+answer that is not a count is the **negated Linux errno, on every platform**,
+WASI and Node included: `-2` not found, `-6` a Unix-domain socket (`ENXIO`),
+`-9` a bad descriptor, `-13` permission denied, `-20` a component is not a
+directory, `-21` a directory, `-22` not a regular file or a refused position,
+`-23`/`-24` descriptors exhausted, `-29` not seekable, `-36` name too long,
+`-40` too many symbolic links, and `-5` for any other failure, WASI's
+`ENOTCAPABLE` among them. They are exported by `nish:fs` and global.
+
+**`fileOpen(path: string): i32`** opens a **regular file** for reading and
+answers its descriptor (`>= 0`), or a negative errno. It opens with
+`O_CLOEXEC`, so a spawned child does not inherit it, and `O_NONBLOCK`, so a
+FIFO with no writer cannot hang it. Anything that is not a regular file is
+closed again and refused: a directory is `-21`, a FIFO or a device `-22`, and
+a Unix-domain socket `-6`, as `open(2)` answers for one. An empty path, or one
+holding a NUL, is `-2` before the file system is asked. Symbolic links are
+followed.
+
+- *Tests:* `file_read_at`, `file_open_errors`.
+
+**`fileReadAt(fd: i32, buf: u8[], off: i32, len: i32, pos: i64): i32`** reads
+at most `len` bytes of the file from byte `pos` into `buf[off, off + len)`,
+with `pread(2)`: there is no cursor, so one descriptor serves any number of
+readers. It answers the count, `0` at or past the end of the file, or a
+negative errno. **A short read is allowed** before the end: loop until `0`, or
+until the size planned for is read. `len` of `0` answers `0`. A `pos` below
+`0`, or a `pos + len` past 2^63 − 1, is `-22` before the kernel is asked. The
+window is [checked](#bounds) as `netRead`'s is, and `buf` is written, so a
+`readonly u8[]` is refused (`` Cannot `fileReadAt` through readonly u8[] ``)
+and another element type is NL2402, as `netRead`'s are.
+
+- *Tests:* `file_read_at`, `file_read_at_eof`, `file_read_at_pos`,
+  `file_read_at_bounds`, `file_size_large`, `mem_file_stream_flat`;
+  `reject_file_read_readonly`, `reject_file_read_element`.
+
+**`fileSize(fd: i32): i64`** answers the file's size in bytes now, or a
+negative errno. **The size can change**: a file may shrink or grow between
+`fileSize` and the reads, so a reader that gets `0` before the size it planned
+for has a file that shrank, and a server that has sent `Content-Length` must
+close the connection there.
+
+- *Tests:* `file_read_at`, `file_size_large`.
+
+**`fileClose(fd: i32): i32`** closes the descriptor and answers `0` or a
+negative errno; either way the descriptor is gone. It is never retried. A
+call on a closed descriptor is `-9`, as is one on a negative descriptor
+(under Node too, where `fs` would throw a range error), but nothing checks a use after close: the
+number may already name another file the program opened since (recorded
+open, [docs/security/runtime.md](security/runtime.md), RT-50).
+
+- *Tests:* `file_read_at_pos`.
+
+All four are **`fs.read`** ([capabilities](#capabilities); `caps_file_read`,
+`reject_file_read_denied`) and `write` effects, so none may be called in a
+`scope()` task or a parallel body (`reject_file_fd_type` for the descriptor's
+`i32`, `reject_file_read_task`). Under Node they read through `fs.openSync`,
+`fs.readSync`, `fs.fstatSync` and `fs.closeSync`, with the size a `bigint`.
+Under `--profile wasi` they read through WASI's `path_open`, `fd_pread` and
+`fd_filestat_get`, from the directories the host preopens. **A freestanding
+`wasm32` build has no file system to read**, and a call is refused at check
+time: `` `fileOpen` reads a file, and a freestanding wasm32 build has no file
+system to read (build with `--profile wasi`) `` (NL2718;
+`reject_file_open_wasm`). The `--profile wasm` runtime defines the four
+answering `-38` (`ENOSYS`), so a link that names them never fails.
 
 The ones that answer an `i32` answer the platform's errno values,
 untranslated, and the same numbers under Node; the ones shown here are
@@ -10863,10 +10937,10 @@ mac. CI does not run them on a mac yet.
 
 #### Bounds
 
-`netRead`, `netWrite`, `netWrite2` (each of its two ranges), `udpSendTo` and `udpRecvFrom` check `0 <= off <= off +
+`netRead`, `netWrite`, `netWrite2` (each of its two ranges), `udpSendTo`, `udpRecvFrom` and `fileReadAt` check `0 <= off <= off +
 len <= buf.length` **in the compiled code**, before the call, the way `dst.set(src, at)` checks the range it
 writes, and a range outside it panics with the same words, `slice out of range:
-[4, 9) of length 8`, exit 1 (`net_tcp_bounds`, `net_udp_bounds`, `net_write2_bounds`). A negative
+[4, 9) of length 8`, exit 1 (`net_tcp_bounds`, `net_udp_bounds`, `net_write2_bounds`, `file_read_at_bounds`). A negative
 `off` or `len` fails it. A `peer`, `out`, `to` or `from`
 array shorter than 18 bytes, or a `meta` shorter than 2, is not a panic but
 `-22`, from the runtime, because the length is the argument's
@@ -12723,10 +12797,10 @@ export const main = (): i32 => {
   A variant's `tag` option replaces its member's name on the wire, and
   `rename` renames the tag key as it renames any field. Every variant writes
   its tag under one key and as a different string, or the union is refused
-  where a call reaches it (NL2720, `json_reject_union_tag_key`; NL2719,
+  where a call reaches it (NL2721, `json_reject_union_tag_key`; NL2720,
   `json_reject_union_same_tag`); a `tag` that is not a string literal is
-  NL2721 (`json_reject_union_tag_literal`), one on a class with no field whose
-  type is one enum member is NL2723 (`json_reject_union_tag_no_field`), and
+  NL2722 (`json_reject_union_tag_literal`), one on a class with no field whose
+  type is one enum member is NL2724 (`json_reject_union_tag_no_field`), and
   `tag: ""` is the same as no `tag`: the variant writes its member's name. A variant
   that is not a class, an interface, is NL2486
   (`json_reject_union_interface`), the code of any typed JSON type that is not
@@ -12742,8 +12816,8 @@ export const main = (): i32 => {
   decoded up to it, as any failed decode leaves what it read. Its type argument is inferred
   from `prev` and never written; `jsonDecode` with a union is
   `` `jsonDecode`'s value is `A | B`, a tagged union: … ``
-  (NL2718, `json_reject_union_decode`), and `jsonDecodeUnion` with a class is
-  NL2722 (`json_reject_union_not_union`). A union field decodes into the
+  (NL2719, `json_reject_union_decode`), and `jsonDecodeUnion` with a class is
+  NL2723 (`json_reject_union_not_union`). A union field decodes into the
   object it holds the same way, and an array's element past its end is made
   fresh. The tag may come anywhere in the object: when it is the first key
   the variant is known at once, and otherwise the decoder reads ahead to it,
@@ -12819,7 +12893,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `env` | `getenv`, `geteuid` (`caps_env`) |
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
 | `ffi` | any call to a `declare function` (`caps_ffi`) |
-| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
+| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync`, `fileOpen`, `fileReadAt`, `fileSize`, `fileClose` (`caps_fs_read`, `caps_file_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`), `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` (`caps_fs_mode`) |
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawnPipedWithin` (`caps_process_spawn_piped_within`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |

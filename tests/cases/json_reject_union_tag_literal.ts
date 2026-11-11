@@ -1,4 +1,4 @@
-// NL2721: a variant's `tag` is written on the wire as a string, read from the
+// NL2722: a variant's `tag` is written on the wire as a string, read from the
 // class's text.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";

@@ -924,6 +924,56 @@ declare function readFileSyncOrNull(path: string): string | null;
  */
 declare function readFileBytesSync(path: string): u8[] | null;
 /**
+ * Open a regular file to read a window at a time (WP44): read-only,
+ * close-on-exec and non-blocking, so a FIFO or a device never waits. A
+ * directory is refused with `-21` and any other kind that is not a regular
+ * file with `-22`, the descriptor closed again first. Pair it with `fileClose`
+ * in a `try`/`finally`. A freestanding `wasm32` build refuses the call (NL2718);
+ * `--profile wasi` reads through WASI. Capability: fs.read.
+ *
+ * @param path the file to open; a NUL in it is refused as a missing path is.
+ * @returns a descriptor (`>= 0`), or the negated Linux errno: `-2` ENOENT,
+ *   `-13` EACCES, `-20` ENOTDIR, `-21` EISDIR, `-22` EINVAL for a FIFO or
+ *   device, `-6` ENXIO for a socket, `-23` ENFILE, `-24` EMFILE, `-36`
+ *   ENAMETOOLONG, `-40` ELOOP; anything else is `-5` EIO.
+ */
+declare function fileOpen(path: string): i32;
+/**
+ * Read up to `len` bytes from byte `pos` of the file into `buf[off .. off +
+ * len)`, without moving any shared offset (`pread`). The window is checked as
+ * `buf.slice` checks it and panics the same way when it falls outside `buf`.
+ * The array is never grown: memory follows the window. Capability: fs.read.
+ *
+ * @param fd a descriptor from `fileOpen`.
+ * @param buf the array the bytes land in; its length is unchanged.
+ * @param off where in `buf` the first byte lands.
+ * @param len the most bytes to read.
+ * @param pos the file offset to read from, an `i64`.
+ * @returns the bytes read, `0` at end of file (and for a `len` of `0`, even on
+ *   a closed or negative descriptor), or a negative errno: `-22`
+ *   EINVAL for a negative `pos` or one where `pos + len` overflows, `-9` EBADF
+ *   for a closed or negative descriptor, `-21` EISDIR, `-29` ESPIPE; anything
+ *   else is `-5` EIO.
+ */
+declare function fileReadAt(fd: i32, buf: u8[], off: i32, len: i32, pos: i64): i32;
+/**
+ * The file's size in bytes now, from `fstat`: a file may grow or shrink between
+ * this and a read, which then answers what is there. Capability: fs.read.
+ *
+ * @param fd a descriptor from `fileOpen`.
+ * @returns the size, an `i64` past 2^31 when the file is, or a negative errno
+ *   (`-9` EBADF for a closed descriptor).
+ */
+declare function fileSize(fd: i32): i64;
+/**
+ * Close a descriptor `fileOpen` gave. A second close answers `-9`, unless the
+ * number has been handed out again since, so close once. Capability: fs.read.
+ *
+ * @param fd a descriptor from `fileOpen`.
+ * @returns `0`, or a negative errno (`-9` EBADF).
+ */
+declare function fileClose(fd: i32): i32;
+/**
  * The file's contents replaced by `data`, created at 0644 when missing;
  * statement position. A symbolic link as the last component of the path is
  * refused rather than followed, natively and under Node alike (a Node
@@ -2367,6 +2417,48 @@ declare module "nish:fs" {
    *   answers `null` for.
    */
   export function readFileBytesSync(path: string): u8[] | null;
+  /**
+   * Open a regular file to read a window at a time: read-only, close-on-exec
+   * and non-blocking. A directory is `-21`, any other kind that is not a
+   * regular file `-22`. Close it with `fileClose` in a `finally`.
+   *
+   * @param path The file to open.
+   * @returns A descriptor (`>= 0`), or the negated Linux errno: `-2` ENOENT,
+   *   `-13` EACCES, `-20` ENOTDIR, `-21` EISDIR, `-22` for a FIFO or device,
+   *   `-6` ENXIO for a socket, `-23` ENFILE, `-24` EMFILE, `-36` ENAMETOOLONG,
+   *   `-40` ELOOP; anything else is `-5` EIO.
+   */
+  export function fileOpen(path: string): i32;
+  /**
+   * Read up to `len` bytes from file offset `pos` into `buf[off .. off + len)`
+   * (`pread`). The window panics as `buf.slice` does when it falls outside
+   * `buf`; the array is never grown.
+   *
+   * @param fd A descriptor from `fileOpen`.
+   * @param buf The array the bytes land in.
+   * @param off Where in `buf` the first byte lands.
+   * @param len The most bytes to read.
+   * @param pos The file offset, an `i64`.
+   * @returns The bytes read, `0` at end of file (and for a `len` of `0`, even
+   *   on a closed or negative descriptor), or a negative errno: `-22`
+   *   for a negative or overflowing `pos`, `-9` for a closed or negative
+   *   descriptor, `-21` EISDIR, `-29` ESPIPE; anything else is `-5` EIO.
+   */
+  export function fileReadAt(fd: i32, buf: u8[], off: i32, len: i32, pos: i64): i32;
+  /**
+   * The file's size in bytes now, from `fstat`.
+   *
+   * @param fd A descriptor from `fileOpen`.
+   * @returns The size, or a negative errno.
+   */
+  export function fileSize(fd: i32): i64;
+  /**
+   * Close a descriptor `fileOpen` gave; close it once.
+   *
+   * @param fd A descriptor from `fileOpen`.
+   * @returns `0`, or a negative errno (`-9` EBADF).
+   */
+  export function fileClose(fd: i32): i32;
   /**
    * Create or truncate the file at mode `0644` and write `data`; a statement,
    * not a value. A symbolic link as the last component of `path` is refused

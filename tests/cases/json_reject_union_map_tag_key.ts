@@ -1,4 +1,4 @@
-// NL2720 reached only through a `Map` of a `Map` whose value is an array of
+// NL2721 reached only through a `Map` of a `Map` whose value is an array of
 // the union: its variants write their tag under different keys.
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode } from "nish/json-typed";

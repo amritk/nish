@@ -1,4 +1,4 @@
-// NL2723: `tag` names the string a variant writes its tag as, and a class with
+// NL2724: `tag` names the string a variant writes its tag as, and a class with
 // no tag field is no variant.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";

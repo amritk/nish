@@ -217,9 +217,13 @@ export const builtinPanicKind = (name: string): i32 => {
   if (name === "uncheckedGet" || name === "uncheckedSet" || name === "readCString") {
     return PANIC_UNCHECKED
   }
-  // `netRead` and its siblings, `readStdin` and `writeBytes` check the range of
-  // their buffer the way `dst.set(src, at)` does, through the slice panic (`emitNetCall`).
-  if ((isNetExport(name) || isTermExport(name) || name === "writeBytes") && netRangeBuffer(name) >= 0) {
+  // `netRead` and its siblings, `readStdin`, `writeBytes` and `fileReadAt` check
+  // the range of their buffer the way `dst.set(src, at)` does, through the
+  // slice panic (`emitNetCall`).
+  if (
+    (isNetExport(name) || isTermExport(name) || name === "writeBytes" || name === "fileReadAt") &&
+    netRangeBuffer(name) >= 0
+  ) {
     return PANIC_SLICE
   }
   // `nish:simd`'s load and store check their whole vector against the length

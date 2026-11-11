@@ -213,8 +213,8 @@
  *             field it records, records two fields, is recorded by a presence
  *             field of its own or is renamed or made optional; a field
  *             recorded twice
- *     NL2721  a `tag` that is not a string literal
- *     NL2723  a `tag` on a class with no field whose type is one enum member
+ *     NL2722  a `tag` that is not a string literal
+ *     NL2724  a `tag` on a class with no field whose type is one enum member
  *
  * A spread in the literal is refused (NL2711), a computed key as it is
  * anywhere (NL1041), a subclass by `extends`, and a second `static readonly
@@ -283,8 +283,8 @@
  *     jsonEncode(w, e);
  *
  * The tag's key is the tag field's name, or its `rename`, and every variant
- * gives the same one (NL2720). Its value is the enum member's name, or the
- * variant's `tag` option, and no two variants write the same one (NL2719). The
+ * gives the same one (NL2721). Its value is the enum member's name, or the
+ * variant's `tag` option, and no two variants write the same one (NL2720). The
  * tag may be any key of the object: when it is the first, the variant is picked
  * at once; when it is not, the keys before it are stepped over, checked but not
  * kept, and the object is read again from its first key once the variant is
@@ -297,8 +297,8 @@
  * class that is, so a union is decoded with `jsonDecodeUnion(d, prev)`, which
  * answers the object it decoded into: `prev` when the tag names `prev`'s
  * variant, a new one made by `new V()` when it does not or `prev` is `null`,
- * and `prev` when the decode fails (NL2718 refuses `jsonDecode` of a union;
- * NL2722 refuses `jsonDecodeUnion` of anything else). A union field, a union
+ * and `prev` when the decode fails (NL2719 refuses `jsonDecode` of a union;
+ * NL2723 refuses `jsonDecodeUnion` of anything else). A union field, a union
  * array's element and a `| null` union field follow the same rule. Encoding
  * writes the tag first, then the variant's fields. A variant decoded alone,
  * by `jsonDecode`, reads its tag like any field and fails with

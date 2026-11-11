@@ -1,0 +1,2 @@
+reject_file_read_readonly.ts:3:68
+error: Cannot `fileReadAt` through readonly u8[] (declare it u8[] to write through it)

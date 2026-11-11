@@ -1,4 +1,4 @@
-// NL2719 reached only through a `Map` whose value is the union with `| null`.
+// NL2720 reached only through a `Map` whose value is the union with `| null`.
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode } from "nish/json-typed";
 

@@ -1,4 +1,4 @@
-// NL2718: `jsonDecode` decodes into the object it is given, and a union's
+// NL2719: `jsonDecode` decodes into the object it is given, and a union's
 // variant is known only once its tag is read.
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode } from "nish/json-typed";

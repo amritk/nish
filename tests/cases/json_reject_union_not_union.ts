@@ -1,4 +1,4 @@
-// NL2722: `jsonDecodeUnion` picks a variant by its tag, so its value is a
+// NL2723: `jsonDecodeUnion` picks a variant by its tag, so its value is a
 // union; a class is decoded into with `jsonDecode`.
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecodeUnion } from "nish/json-typed";

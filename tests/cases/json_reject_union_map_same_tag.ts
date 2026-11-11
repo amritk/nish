@@ -1,4 +1,4 @@
-// NL2719 reached only through a `Map`'s value: two variants of the union a
+// NL2720 reached only through a `Map`'s value: two variants of the union a
 // map holds write their tag as the same string.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";

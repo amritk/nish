@@ -1,5 +1,5 @@
-// NL2719: two variants of one union write their tag as the same string, so a
-// decoder could not tell them apart.
+// NL2721: the variants of one union write their tag under different keys, so a
+// decoder could not find the tag before it knows the variant.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 
@@ -11,7 +11,7 @@ class A {
   readonly kind: Kind.A = Kind.A;
 }
 class B {
-  static readonly json = { tag: "A" };
+  static readonly json = { rename: { kind: "type" } };
   readonly kind: Kind.B = Kind.B;
 }
 type AB = A | B;

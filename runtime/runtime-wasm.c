@@ -182,6 +182,21 @@ void nish_exit(int32_t code) { (void)code; __builtin_trap(); }
  * link; the loader throws a RangeError before the call reaches it. */
 void nish_panic(const void *s) { (void)s; __builtin_trap(); }
 #endif
+/* ---- Streaming reads (WP44 §9 Q7): the checker refuses `fileOpen`,
+ * `fileReadAt`, `fileSize` and `fileClose` on a freestanding wasm32 target
+ * (NL2718), but `--profile wasm` links IR compiled for the host, which no
+ * check sees. There is no file system to read, so each answers -38 (`ENOSYS`)
+ * and the link never fails on their names. The path is `const void *`, as
+ * `nish_panic`'s string is: this file has no `nish_str`, and the ABI is the
+ * same pointer. tests/run.js's wasm profile section links all four. */
+int32_t nish_file_open(const void *path) { (void)path; return -38; }
+int32_t nish_file_read_at(int32_t fd, nish_array *buf, int64_t off, int64_t len, int64_t pos) {
+  (void)fd; (void)buf; (void)off; (void)len; (void)pos;
+  return -38;
+}
+int64_t nish_file_size(int32_t fd) { (void)fd; return -38; }
+int32_t nish_file_close(int32_t fd) { (void)fd; return -38; }
+
 /* Output has nowhere to go either. */
 void nish_write(const void *s, int32_t fd, _Bool newline) { (void)s; (void)fd; (void)newline; }
 

@@ -1,5 +1,5 @@
-// NL2721: a variant's `tag` is written on the wire as a string, read from the
-// class's text.
+// NL2720: two variants of one union write their tag as the same string, so a
+// decoder could not tell them apart.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 
@@ -8,10 +8,10 @@ enum Kind {
   B,
 }
 class A {
-  static readonly json = { tag: 1 };
   readonly kind: Kind.A = Kind.A;
 }
 class B {
+  static readonly json = { tag: "A" };
   readonly kind: Kind.B = Kind.B;
 }
 type AB = A | B;

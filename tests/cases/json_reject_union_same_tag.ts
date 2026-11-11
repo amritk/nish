@@ -1,4 +1,4 @@
-// NL2719: two variants of one union write their tag as the same string, so a
+// NL2720: two variants of one union write their tag as the same string, so a
 // decoder could not tell them apart.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";

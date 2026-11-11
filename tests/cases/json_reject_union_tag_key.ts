@@ -1,4 +1,4 @@
-// NL2720: the variants of one union write their tag under different keys, so a
+// NL2721: the variants of one union write their tag under different keys, so a
 // decoder could not find the tag before it knows the variant.
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
