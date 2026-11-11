@@ -21671,8 +21671,12 @@ if (dealtHere("releaseChecks")) {
   // program to show.
   if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(only)) {
     const guideDir = path.join(root, "docs", "guide")
+    // The writing-nish agent skill is AI.md's short form, published to agents by the
+    // docs site (`agentSkills` in scalar.config.json), so its examples are held to
+    // the same markers.
     const docPages = [
       path.join(root, "docs", "AI.md"),
+      path.join(root, "skills", "writing-nish", "SKILL.md"),
       ...fs
         .readdirSync(guideDir, { recursive: true })
         .filter((f) => f.endsWith(".md"))
@@ -27752,6 +27756,10 @@ const runFixtureUnderNode = (entry, encoding) =>
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
 // `thread_scope_task_map_reads` has two tasks read one `Map` and one `Set`,
 // and `par_map_table_reads` has a parallel map's body read them.
+// `par_map_read_into` and `par_map_read_into_keys` read a `Map` and a `Set`
+// through the element while `dst` shares their value or key type, and
+// `par_map_read_capture` reads a captured `Map` beside a `dst` parameter:
+// a table's own arrays are private to it, so neither is `dst`.
 // `thread_task_own_writes` has tasks write only what they made: a holder poked
 // through a method, a `Map` and a `Set`, an object's array fields, an array
 // handed back by a helper returning its argument, and an array under a second
@@ -27861,6 +27869,9 @@ for (const name of [
   "thread_scope_region_param_lookup",
   "thread_scope_task_map_reads",
   "par_map_table_reads",
+  "par_map_read_into",
+  "par_map_read_into_keys",
+  "par_map_read_capture",
   "thread_task_own_writes",
   "par_map_captured_strings",
   "thread_scope_libc_named_tasks",

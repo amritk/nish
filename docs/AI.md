@@ -7,6 +7,10 @@ Nish and get it accepted on the first try**. It is a digest, not the authority:
 This page exists because LANGUAGE.md is 2,300 lines written to be *read*, and
 what an author needs is the rules in one pass with the traps first.
 
+> Its short form, published to agents by the docs site, is the
+> [`writing-nish` skill](../skills/writing-nish/SKILL.md): a change here to the
+> loop, the unlearn table or the checklist below moves it too.
+
 > Working **on the compiler** rather than **in the language**? That is a
 > different document: [`AGENTS.md`](../AGENTS.md) and [`.claude/`](../.claude/).
 
@@ -1025,6 +1029,9 @@ export const main = (): i32 => {
   `boolean` or an enum**: map strings to numbers first.
 - **`dst` may not be reachable from an element of `src`**: mapping `Row[]` into
   `f64[]` is refused when `Row` holds an `f64[]`, because it could be `dst`.
+  A `Map` or `Set` in `Row` reaches only its keys and values, so `f` may
+  `get`, `has` and `size` a `Map<string, i32>` (but not `set`, `delete`,
+  `clear` or iterate it); a `Map<string, f64[]>` is refused.
 - **A reduce's `f` is associative and `identity` is its identity** — `0` for
   `+`, `1` for `*`. The array is folded in fixed blocks and the blocks combined
   in order, so `-` or a wrong identity is refused when `f` is an arrow of one

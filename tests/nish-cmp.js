@@ -536,6 +536,11 @@ const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
   )
+const POOL_PIPELINE = "async Postgres pool pipelines queries across tasks"
+const poolPipeline = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: POOL_PIPELINE, why }))
+  )
 const MSS_UNSET = "explicitly set enc.mss wins over the socket MSS"
 const mssUnset = (why, moved) =>
   moved.map((program) => ({ program, file: "http-compress.ll", changelog: MSS_UNSET, why }))
@@ -1215,6 +1220,18 @@ const DECLARED = [
     changelog: "nish.host",
     why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
   },
+  // A Map or Set read in a parallel map: the 0.38.0 seed walks a table's
+  // private arrays and refuses a body that reaches one beside a `dst`.
+  ...[
+    "tests/link/par_map_read_capture/main.ts",
+    "tests/link/par_map_read_into/main.ts",
+    "tests/link/par_map_read_into_keys/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "Read a Map or Set reached through a parallelMapInto element",
+    why: "the 0.38.0 seed counts a Map's private entry arrays as reaching `dst` and refuses the program, so only the candidate compiles it",
+  })),
   // Parent/child regions: the 0.38.0 seed's nish:region has no child or
   // childWith, so only the candidate compiles these programs.
   ...[
@@ -1614,6 +1631,36 @@ const DECLARED = [
     "tests/link/tfb_db/main.ts",
     "tests/link/tfb_entry/main.ts",
   ]),
+  ...poolPipeline(
+    "the pool's slots gain a send queue, a parse cache and abandoned-seat state, so every program that links `std/net/postgres-async.ts` lays out and walks the pool differently (WP49 stage 6, part 5)",
+    {
+      "tests/link/net_serve_pg/main.ts": ["main.h", "main.ll", "postgres-async.ll", "serve.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": [
+        "main.h",
+        "main.ll",
+        "postgres-async.ll",
+      ],
+      "tests/link/std_postgres_async_flat/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
+        "main.h",
+        "main.ll",
+        "postgres-async.ll",
+      ],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+    }
+  ),
+  ...poolPipeline(
+    "the program calls the pipelined API (`pgAsyncPrepare`, `pgAsyncSeat`, `pgAsyncAnswer`) the 0.38.0 seed's std does not export, so only the candidate compiles it (WP49 stage 6, part 5)",
+    {
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["exit"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["exit"],
+    }
+  ),
   // WP49 stage 6, part 3: `HttpHandler` holds owed sends (`flush`, `sends`),
   // so every program that reaches std/net/handler.ts lays it out again.
   ...pipelinedWrite(
