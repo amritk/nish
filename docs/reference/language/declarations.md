@@ -1943,7 +1943,11 @@ export const main = (): i32 => {
   top-level function, an arrow, or a local, field or element that holds a
   [function reference](#function-references) (`tests/cases/fnref_arg`), and
   an arrow passed there may call a reference it captures, narrowed first if
-  it is nullable (`fnref_arg_capture`); any
+  it is nullable (`fnref_arg_capture`). The arrow reads a field or element
+  argument at each call it makes, so an argument that calls or assigns as it
+  is read, `ops[next(b)]`, is refused
+  `` `ops[next(b)]` calls or assigns as it is read, and it would be read at each call `twice` makes ``
+  (NL2734, `reject_fnref_arg_effect`); any
   other value is refused and named by its type,
   `` `n` is `i32`, which is not a function `` (`reject_fnarg_not_name`). The
   builtins that check the body they are handed — `parallelMap`,
@@ -2057,7 +2061,8 @@ export const main = (): void => {
   passes an arrow that calls the reference, so the callee is instantiated for
   the call and calls through the dispatcher of the argument's place. A `Map`
   may hold an array of references or a nullable of either as its value
-  (`fnref_map_array`, `fnref_map_nullable`); its key may not be a reference,
+  (`fnref_map_array`, `fnref_map_nullable`); `??` on a nullable reference
+  tests it against `null`, tag 0 (`fnref_nullable_coalesce`); a `Map` key may not be a reference,
   `` `(i32) => i32` cannot be the key type of `Map<(i32) => i32, i32>` ``
   (`reject_fnref_map_key`). A reference has no zero value: a local is initialised
   where it is declared (`reject_fnarg_local`), and
