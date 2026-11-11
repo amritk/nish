@@ -339,25 +339,83 @@ nowhere. What remains, per test, and what is known of its cause:
 - **`plaintext`: 32–38% at 256 to 4,096 connections, 71% at 16,384.** The
   send gap is gone: async now makes about one `sendto` per pipelined burst, as
   the explicit loop does (18,943 for 301,616 requests, against 20,440 for
-  326,288). The rest is CPU per request in user space, which was not profiled.
-  The 16,384 cell also had wrk read errors in every async round, cause not
-  looked into.
+  326,288). The rest is CPU per request in user space. The 16,384 cell also
+  had wrk read errors in every async round, cause not looked into.
 - **`json`: 2.5–17.1%, outside at every concurrency.** About 0.07 more system
-  calls a request than the explicit entry, so the cause is most likely CPU per
-  request in user space, still not profiled. It is open.
+  calls a request than the explicit entry, so the cause is CPU per request in
+  user space; the profile below ranks it.
 - **`db`: 74–79% at 64 and 256 connections.** The 16-connection band is
   bimodal (the explicit builds landed at about 23–30k or 72–75k, the async
   entry at 28k), so that cell is not judged. The async entry falls as connections rise (27.8k → 21.6k
   from 16 to 256) where the explicit entry climbs (72.5k → 105.0k). The
   seated pool takes at most 8 statements per connection, each with its own
-  Sync. Whether that depth, the per-statement Sync or the task turns limit it
-  was not traced; the cause is open. `fortune` falls the same way
-  (32.1k → 17.2k), the regression #1379 had recorded at 64 connections and
-  more, cause open.
+  Sync; the profile below ranks what each statement costs at 64 connections.
+  `fortune` falls the same way (32.1k → 17.2k), the regression #1379 had
+  recorded at 64 connections and more, cause open.
 
-The next steps are a user-space profile of one async request on `plaintext`
-and `json` against the explicit one, and a trace of the seated pool under
-`db` at 64 and 256 connections.
+**The profile (2026-11-11).** `bench/techempower/profile.sh` measured one
+request of each entry on `main` at `0e338d83`
+([BENCHMARKS.md](BENCHMARKS.md#techempower-where-the-async-entrys-time-goes-a-profile-wp49-stage-6),
+which has the tables, the top frames and the method). Instructions per
+request (Ir) are from callgrind and the top user-space frames from
+`perf record -e cpu-clock:u`; system calls per request are from `strace -c`.
+
+| test | Ir per request, explicit → async | system calls per request | CPU µs per request |
+| --- | --- | --- | --- |
+| `plaintext` (256, 16 pipelined) | 5,419 → 11,662 (+6,243) | 0.132 → 0.137 | 0.93 → 1.58 |
+| `json` (64) | 6,614 → 13,153 (+6,539) | 2.037 → 2.116 | 7.37 → 8.13 |
+| `db` (64) | 11,017 → 37,229 (+26,212) | 2.100 → 24.008 | 9.96 → 39.70 |
+
+The HTTP codec (`http1Next`, `http1TakeLine`, `http1WriteResponseHead`) costs
+the same on both sides. The causes, ranked by the Ir per request each
+accounts for (self Ir, netted against the explicit side; plaintext's figure,
+then json's):
+
+- **`plaintext` and `json`, for fix-serve.** Net of the explicit loop's own
+  dispatch (`TfbServer.resume`, `nish_main`: 655 and 919), the five account for
+  about 6,000 of 6,243 and 6,270 of 6,539.
+  1. `serveTask` (`std/net/serve.ts`) copies the request into a new
+     `HttpRequest` and the answer back into its slot a byte at a time: 3,158
+     and 3,428. On `plaintext`, about 1,880 of it is the head copy, 220 the scan
+     for the head's end, 225 the spans, 190 the body copied back and 160 the
+     content type copied a character at a time.
+  2. The `HttpHandler` layer (`std/net/handler.ts`: `drive`, `start`, `write`,
+     `end`, `enqueue`, `settle`, `flush`, and the `Http1Server` calls they
+     make): 1,313 and 1,596.
+  3. `serveOn`'s pass over every slot after each turn, with `serveFreeSlot`'s
+     scan and `serveType`'s byte compare (`std/net/serve.ts`): 690 and 896.
+  4. The task per request and its memory (`nish_async_spawn`,
+     `nish_async_done`, `malloc`/`free`, `nish_arena_release`): 707 and 704.
+  5. `Router.match` and `Router.walk` (`std/net/router.ts`), which the explicit
+     entry does not run, comparing the path a byte at a time: 789 and 562.
+- **`db`, for fix-pool** (3 and 4 are `serve`'s and go with fix-serve).
+  Net of the explicit carrier's 1,300, the five account for about 20,200 of
+  26,212, and cause 2 for most of the kernel time.
+  1. `pgAsyncRead` (`std/net/postgres-async.ts`) zero-fills a fresh 8 KiB
+     buffer (`PG_ASYNC_INPUT_SIZE`) per answer: `memset` is 8,360 Ir a request,
+     22% of the async total. The answer is then copied twice a byte at a time,
+     into `carried` in `pgAsyncAnswer` and into that buffer, about 1,400.
+     About 9,800 in all.
+  2. Two waits per statement: `pgAsyncPark` on the pool's wake pair (1.04 a
+     request) and `pgAsyncTurn` on the Postgres socket (0.99), with `serveOn`'s
+     own (0.71). These account for most of the 22 extra system calls a
+     request: 6 `epoll_ctl`, 3 `fcntl`, 3 `close`, 2 `epoll_wait`, 3 more
+     `sendto` and 4.9 more `recvfrom`, 1.9 of which answer `EAGAIN`. That is
+     kernel time, most of 39.7 µs against 9.96, not Ir. What one wait costs was
+     settled in #1374; the number of waits a statement takes is the pool's.
+  3. `serveOn` scans every slot on every pass, and more slots are busy while
+     tasks wait on Postgres: 5,690 self against 690 on `plaintext`. The
+     `busy`/`done` and `busy`/`hungUp` checks, the loop, and the `hungUp` call
+     into `HttpHandler` and `Http1Server` come to about 4,100.
+  4. `serveTask`'s copies, as on `plaintext`: 3,988.
+  5. The seat bookkeeping (`pgAsyncSkippable`, 4 calls a request, each a loop
+     over `PG_ASYNC_MAX_DEPTH`; `pgAsyncSeat`, `pgAsyncSend`, `pgAsyncReady`,
+     `pgAsyncTurn`, `pgAsyncScan`, `pgAsyncSignal`, `pgAsyncPark`): about 3,600,
+     against the explicit carrier's 1,300 (`PgCarrier.next`,
+     `PgCarrier.dispatch`, `TfbDb.turn`), so about 2,300 net.
+
+So the next steps are fix-serve, for causes 1–5 of `plaintext` and `json`
+and 3–4 of `db`, and fix-pool, for causes 1, 2 and 5 of `db`.
 
 ## 7. A non-blocking call from a handler today, without `async`
 

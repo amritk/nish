@@ -1099,6 +1099,309 @@ taskset -c 1-3 wrk -t 3 -c 64 -d 3s -H "Host: tfb-server" http://127.0.0.1:<port
 - **`updates`** is inside the band at every concurrency. Its 20 updates per request are sent as one statement by both entries, which suggests Postgres's write path, not the pool, sets the rate there; that is inferred from the figures, not traced.
 
 
+## TechEmpower: where the async entry's time goes, a profile (WP49 stage 6)
+
+[The re-measurement](#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6) left `plaintext`, `json` and `db` outside the gate, and their system calls do not explain it. This profile asks where each request's time goes in user space, on the async entry against the explicit one, so that the next fixes have a target. It measures; it fixes nothing. `bash bench/techempower/profile.sh` reproduces it, and `--help` says the method.
+
+| | |
+| --- | --- |
+| Date | 2026-11-11 |
+| Sources | `main` at `0e338d83`. Each table's header names the branch commit the script ran at, which adds only `profile.sh`. |
+| Build | `build/nish <entry> --link --profile speed -g`. The `-g` keeps the symbols; its text differs from the build without it by about 1% (72,687 against 73,535 bytes for the explicit plaintext entry, 137,260 against 137,996 for the async one) |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores (a cloud VM, no hardware performance counters) |
+| Load | `/plaintext` at 256 connections, 16 pipelined (`pipeline.lua`); `/json` at 64; `/db` at 64 against `run.sh`'s throwaway Postgres (port 15433), one worker and 4 Postgres connections on both sides |
+| Pinning | server on CPU 0; wrk on CPUs 1–3, or 2–3 with Postgres on CPU 1 for `/db` |
+
+Each figure comes from one tool, run in its own phase so that no tool's overhead lands in another's figure. The phases alternate between the two entries.
+
+- **Instructions per request (Ir):** callgrind (valgrind 3.22). The server starts with `--instr-atstart=no`; `callgrind_control -i on` and `-i off` bracket a 10 s wrk window, and Ir per request is the window's program total divided by wrk's responses. Requests in flight at the window's edges are counted on the wrong side, so a figure can be off by at most the in-flight requests over the responses: 4,096 (256 × 16) on `/plaintext`, about 3.5% of the async window; 64 on `/json` and `/db`, under 0.4%. `callgrind_annotate --auto=no` lists the frames, and the script sums a function's lines across the files it was inlined from.
+- **Top user-space frames:** `perf record -e cpu-clock:u -F 2999 -g` (perf 6.8.12) over a 5 s wrk window. `cpu-clock:u` is a software event, since the VM exposes no hardware counters. The share is of user-space samples only.
+- **System calls per request:** `strace -c -f -p` over a 5 s wrk window.
+- **req/s and CPU per request:** wrk and the server's `utime + stime` in `/proc/<pid>/stat`, over the perf window. Both are under perf, so they are not the gate's figures.
+
+| test | Ir per request, explicit → async | system calls per request | CPU µs per request | req/s under perf |
+| --- | --- | --- | --- | --- |
+| `/plaintext` (256, 16 pipelined) | 5,419 → 11,662 (+6,243, ×2.15) | 0.132 → 0.137 | 0.93 → 1.58 | 1,056k → 629k |
+| `/json` (64) | 6,614 → 13,153 (+6,539, ×1.99) | 2.037 → 2.116 | 7.37 → 8.13 | 135k → 122k |
+| `/db` (64) | 11,017 → 37,229 (+26,212, ×3.38) | 2.100 → 24.008 | 9.96 → 39.70 | 81.3k → 24.5k |
+
+All six perf runs were clean (no wrk socket errors, no non-2xx answers). The codec's frames (`http1Next`, `http1TakeLine`, `http1WriteResponseHead`) cost the same on both sides of every test. The difference is in the layer the async entry puts between the codec and the handler, and on `/db` in the pool. The causes below are ranked by the Ir per request each accounts for, from the frames' self Ir (callgrind), with the source line where the count is a line's. [WP49 §6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#6-tfb-what-the-top-takes) carries the same ranking as the plan for the fixes.
+
+**`/plaintext` and `/json`** (fix-serve). The same functions make the gap on both. They are ranked by the two tests' Ir summed, and each function's self Ir per request is netted against the explicit side's (plaintext first, then json):
+
+1. **`serveTask` copies each request in and each answer out, byte by byte** (`std/net/serve.ts`), with `HttpRequest.constructor`: 3,158 and 3,428. Of plaintext's: the head copy (`head[i] = src.head[i]` and its loop) about 1,880, the scan for the head's end about 220, the spans about 225, and the new arrays and their zeroing about 170. Then the answer is copied back into the slot (`out[i] = res.body[i]`), about 190, and its content type a character at a time (`type[i] = toU8(res.type.charCodeAt(i))`), about 160.
+2. **The `HttpHandler` layer** (`std/net/handler.ts`): `drive`, `start`, `write`, `end`, `enqueue`, `settle` and `flush`, and the `Http1Server`/`Http1Connection` calls they make, 1,313 and 1,596.
+3. **`serveOn`'s scans** (`std/net/serve.ts`): 690 and 896, mostly the pass over every slot after each turn (`serveFreeSlot`'s scan about 160, then the `busy`/`done` checks) and `serveType`'s byte compare of the content-type cache, about 70.
+4. **The task per request and its memory**: `nish_async_spawn`, `nish_async_done`, `malloc`/`free`/`_int_free` and `nish_arena_release`, 707 and 704.
+5. **`Router.match` and `Router.walk`** (`std/net/router.ts`), which the explicit entry does not run: 789 and 562. `routerSameBytes` compares the path a byte at a time.
+
+Against these, the explicit loop's own dispatch (`TfbServer.resume` and `nish_main`, 655 and 919) has no async counterpart. Net of it, the five account for about 6,000 of plaintext's 6,243 and 6,270 of json's 6,539. On `/plaintext` the user-space path is most of a request, so the async entry's CPU per request is 1.7 times the explicit one's. On `/json` the kernel's share of a request (one receive and one send each) is large, so twice the instructions show as 10% more CPU, within the 2.5–17.1% of json's gap in the gate.
+
+**`/db`** (fix-pool; causes 3 and 4 are `serve`'s and go with fix-serve):
+
+1. **`pgAsyncRead` zero-fills a fresh 8 KiB buffer per answer** (`std/net/postgres-async.ts`, `new Array<u8>(… PG_ASYNC_INPUT_SIZE)`): `__memset_avx2_unaligned_erms` is 8,360 Ir a request, 22% of the async total, 8,211 of it called from `pgAsyncAnswer`. The answer is then copied twice, a byte at a time: into `carried` in `pgAsyncAnswer` and into that buffer in `pgAsyncRead`, about 1,400. About 9,800 in all.
+2. **Two waits per statement, and the system calls they cost.** Each request waits about 2.7 times in `nish_async_wait_fd`: once in `pgAsyncPark` on the pool's wake socket pair for its turn (1.04 a request), once in `pgAsyncTurn` on the Postgres socket (0.99), and `serveOn`'s own wait (0.71). That is where most of the 22 extra system calls a request go: 6.0 `epoll_ctl`, 3.0 `fcntl`, 3.0 `close`, 2.0 `epoll_wait`, 3.0 more `sendto` and 4.9 more `recvfrom`, 1.9 of which answer `EAGAIN`, against the explicit entry's one `sendto` and one `recvfrom`. The Ir is small; the cost is kernel time, most of the 39.7 µs against 9.96. What one wait costs was settled in #1374. What is open here is the number of waits the pool takes per statement.
+3. **`serveOn` scans every slot on each pass** (`std/net/serve.ts`), for fix-serve: 5,690 self here against 690 on `/plaintext`, because a request's task stays in flight across its Postgres round trip, so more slots are busy. The `busy && done` check costs about 980, the `busy && hungUp` check about 870, and the loop 640. The `hungUp` call into `HttpHandler.hungUp` and `Http1Server.holds` costs about 1,600. Together, about 4,100.
+4. **`serveTask`'s copies**, as on `/plaintext`: 3,988 self.
+5. **The seat bookkeeping**: `pgAsyncSkippable` (4 calls a request, each a loop over `PG_ASYNC_MAX_DEPTH`), `pgAsyncSeat`, `pgAsyncSend`, `pgAsyncReady`, `pgAsyncTurn`, `pgAsyncScan`, `pgAsyncSignal` and `pgAsyncPark`, about 3,600 self, against about 1,300 for the explicit carrier's `PgCarrier.next`, `PgCarrier.dispatch` and `TfbDb.turn`. So about 2,300 net.
+
+Net of the explicit carrier's 1,300, these five account for about 20,200 of the 26,212.
+
+
+<details><summary><code>/plaintext, 256 connections, 16 pipelined</code>: the table and the top 12 frames of each side, as <code>profile.sh</code> wrote them</summary>
+
+
+Intel(R) Xeon(R) Processor @ 2.10GHz, 4 CPUs, 2026-11-11, b26ed0b4; perf version 6.8.12, valgrind-3.22.0, wrk debian/4.1.0-4build2; phases of 5 s (perf, strace) and 10 s (callgrind)
+
+| | explicit | async |
+| --- | ---: | ---: |
+| Ir per request (callgrind) | 5419 | 11662 |
+| responses in the callgrind window | 204800 | 115552 |
+| system calls per request (strace -c) | 0.132 | 0.137 |
+| req/s under perf | 1056265.24 | 628843.11 |
+| server CPU µs per request, user + system (/proc) | 0.93 | 1.58 |
+| wrk errors in the perf run | clean | clean |
+
+explicit, top 12 frames by self Ir per request (callgrind):
+
+```text
+    2180.6  nish.http1Next
+     900.5  nish.http1WriteResponseHead
+     669.7  nish.http1TakeLine
+     331.9  TfbServer.resume
+     323.4  nish_main
+     252.7  nish.http1HeadAppend
+     153.0  __memcpy_avx_unaligned_erms
+     145.4  nish.http1PutBytes
+      77.2  nish.http1PutStatusLine
+      76.2  nish.http1PutCrlf
+      54.2  nish.http1PutDecimal
+      50.1  nish.Http1Connection.bodyRoom
+```
+
+explicit, top 12 user-space frames by self samples (perf, cpu-clock:u):
+
+```text
+    37.28%  entry          [.] nish.http1Next
+    14.68%  entry          [.] nish.http1WriteResponseHead
+    10.23%  entry          [.] nish.http1TakeLine
+     8.07%  entry          [.] nish_main
+     6.38%  entry          [.] TfbServer.resume
+     4.91%  libc.so.6      [.] __memmove_avx512_unaligned_erms
+     2.60%  entry          [.] nish.http1HeadAppend
+     1.95%  entry          [.] nish.http1PutBytes
+     1.86%  entry          [.] nish.http1PutStatusLine
+     1.45%  entry          [.] nish.Http1Connection.bodyRoom
+     1.14%  [vdso]         [.] __vdso_clock_gettime
+     1.07%  libc.so.6      [.] __send
+```
+
+async, top 12 frames by self Ir per request (callgrind):
+
+```text
+    3065.9  nish.serveTask$fn.9.tfbHandle.resume
+    2187.2  nish.http1Next
+     891.9  nish.http1WriteResponseHead
+     690.2  nish.serveOn$fn.9.tfbHandle.resume
+     671.5  nish.http1TakeLine
+     653.2  nish.HttpHandler.drive
+     443.2  nish.Router.match
+     296.1  nish.Router.walk
+     253.8  nish.http1HeadAppend
+     244.6  nish.HttpHandler.start
+     196.9  __memcpy_avx_unaligned_erms
+     182.3  nish_async_done
+```
+
+async, top 12 user-space frames by self samples (perf, cpu-clock:u):
+
+```text
+    19.72%  async          [.] nish.serveTask$fn.9.tfbHandle.resume
+    17.83%  async          [.] nish.http1Next
+     7.33%  async          [.] nish.serveOn$fn.9.tfbHandle.resume
+     7.32%  async          [.] nish.HttpHandler.drive
+     6.61%  async          [.] nish.http1WriteResponseHead
+     4.91%  async          [.] nish.http1TakeLine
+     3.64%  [vdso]         [.] __vdso_clock_gettime
+     3.00%  async          [.] nish.Router.match
+     3.00%  async          [.] nish.Router.walk
+     2.89%  libc.so.6      [.] __memmove_avx512_unaligned_erms
+     2.64%  async          [.] nish.HttpHandler.start
+     1.57%  async          [.] nish.http1HeadAppend
+```
+
+</details>
+
+
+<details><summary><code>/json, 64 connections</code>: the table and the top 12 frames of each side, as <code>profile.sh</code> wrote them</summary>
+
+
+Intel(R) Xeon(R) Processor @ 2.10GHz, 4 CPUs, 2026-11-11, ddd1240c; perf version 6.8.12, valgrind-3.22.0, wrk debian/4.1.0-4build2; phases of 5 s (perf, strace) and 10 s (callgrind)
+
+| | explicit | async |
+| --- | ---: | ---: |
+| Ir per request (callgrind) | 6614 | 13153 |
+| responses in the callgrind window | 121576 | 88648 |
+| system calls per request (strace -c) | 2.037 | 2.116 |
+| req/s under perf | 134652.32 | 122067.63 |
+| server CPU µs per request, user + system (/proc) | 7.37 | 8.13 |
+| wrk errors in the perf run | clean | clean |
+
+explicit, top 12 frames by self Ir per request (callgrind):
+
+```text
+    2228.2  nish.http1Next
+     817.4  nish.http1WriteResponseHead
+     711.1  nish.http1TakeLine
+     585.7  nish_main
+     434.2  nish.jsonWriterPutString
+     333.2  TfbServer.resume
+     252.1  nish.http1HeadAppend
+     161.1  __memcpy_avx_unaligned_erms
+     145.1  nish.http1PutBytes
+     136.1  nish.Http1Server.send
+     100.1  nish.Http1Connection.inputRoom
+      84.0  nish.Http1Connection.feed
+```
+
+explicit, top 12 user-space frames by self samples (perf, cpu-clock:u):
+
+```text
+    21.21%  entry          [.] nish.http1Next
+    11.03%  entry          [.] nish_main
+     8.76%  [vdso]         [.] __vdso_clock_gettime
+     7.94%  entry          [.] nish.http1WriteResponseHead
+     7.86%  libc.so.6      [.] __send
+     6.41%  entry          [.] nish.http1TakeLine
+     5.74%  libc.so.6      [.] __memmove_avx512_unaligned_erms
+     4.25%  libc.so.6      [.] __libc_recv
+     3.73%  entry          [.] nish.Http1Server.send
+     3.65%  entry          [.] TfbServer.resume
+     3.39%  entry          [.] nish.jsonWriterPutString
+     2.80%  entry          [.] nish.Http1Connection.inputRoom
+```
+
+async, top 12 frames by self Ir per request (callgrind):
+
+```text
+    3337.1  nish.serveTask$fn.9.tfbHandle.resume
+    2225.4  nish.http1Next
+     896.3  nish.serveOn$fn.9.tfbHandle.resume
+     803.5  nish.http1WriteResponseHead
+     702.0  nish.http1TakeLine
+     682.5  nish.HttpHandler.drive
+     434.3  nish.jsonWriterPutString
+     335.2  nish.Router.match
+     252.2  nish.http1HeadAppend
+     243.2  nish.HttpHandler.start
+     191.1  __memcpy_avx_unaligned_erms
+     181.1  nish_async_done
+```
+
+async, top 12 user-space frames by self samples (perf, cpu-clock:u):
+
+```text
+    16.13%  async          [.] nish.serveTask$fn.9.tfbHandle.resume
+    13.91%  async          [.] nish.http1Next
+     7.45%  async          [.] nish.serveOn$fn.9.tfbHandle.resume
+     7.28%  [vdso]         [.] __vdso_clock_gettime
+     5.57%  async          [.] nish.HttpHandler.drive
+     4.44%  libc.so.6      [.] __send
+     3.83%  async          [.] nish.http1WriteResponseHead
+     3.47%  async          [.] nish.Http1Server.send
+     3.47%  async          [.] nish.http1TakeLine
+     2.75%  libc.so.6      [.] __libc_recv
+     2.53%  libc.so.6      [.] __memmove_avx512_unaligned_erms
+     2.24%  async          [.] nish.HttpHandler.start
+```
+
+</details>
+
+
+<details><summary><code>/db, 64 connections, one worker and 4 Postgres connections</code>: the table and the top 12 frames of each side, as <code>profile.sh</code> wrote them</summary>
+
+
+Intel(R) Xeon(R) Processor @ 2.10GHz, 4 CPUs, 2026-11-11, ddd1240c; perf version 6.8.12, valgrind-3.22.0, wrk debian/4.1.0-4build2; phases of 5 s (perf, strace) and 10 s (callgrind)
+
+| | explicit | async |
+| --- | ---: | ---: |
+| Ir per request (callgrind) | 11017 | 37229 |
+| responses in the callgrind window | 83376 | 18521 |
+| system calls per request (strace -c) | 2.100 | 24.008 |
+| req/s under perf | 81323.52 | 24502.56 |
+| server CPU µs per request, user + system (/proc) | 9.96 | 39.70 |
+| wrk errors in the perf run | clean | clean |
+
+explicit, top 12 frames by self Ir per request (callgrind):
+
+```text
+    2228.7  nish.http1Next
+     803.6  nish.http1WriteResponseHead
+     709.5  nish.http1TakeLine
+     626.2  nish.PgCarrier.next
+     588.5  nish.HttpHandler.drive
+     455.0  TfbDb.turn
+     353.3  nish.JsonWriter.i64
+     326.2  nish.jsonWriterPutString
+     293.2  nish.Router.match
+     275.4  nish.PgText.int
+     252.2  nish.http1HeadAppend
+     230.2  nish.HttpHandler.start
+```
+
+explicit, top 12 user-space frames by self samples (perf, cpu-clock:u):
+
+```text
+    12.61%  db-entry       [.] nish.http1Next
+    10.38%  db-entry       [.] TfbDb.turn
+     7.90%  db-entry       [.] nish.PgCarrier.next
+     6.55%  [vdso]         [.] __vdso_clock_gettime
+     5.05%  db-entry       [.] nish.HttpHandler.drive
+     4.81%  db-entry       [.] nish.http1WriteResponseHead
+     4.44%  libc.so.6      [.] __send
+     3.70%  db-entry       [.] nish.HttpHandler.start
+     3.31%  db-entry       [.] nish.http1TakeLine
+     3.18%  libc.so.6      [.] __memmove_avx512_unaligned_erms
+     2.45%  db-entry       [.] nish.Http1Server.send
+     2.42%  libc.so.6      [.] __libc_recv
+```
+
+async, top 12 frames by self Ir per request (callgrind):
+
+```text
+    8360.0  __memset_avx2_unaligned_erms
+    5690.8  nish.serveOn$fn.17.tfbServeDb$arrow0.resume
+    3987.8  nish.serveTask$fn.17.tfbServeDb$arrow0.resume
+    2395.7  nish.pgAsyncAnswer.resume
+    2231.5  nish.http1Next
+     924.6  nish.pgAsyncSkippable
+     805.0  nish.http1WriteResponseHead
+     739.5  nish.pgAsyncSeat.resume
+     703.3  nish.http1TakeLine
+     670.1  nish.HttpHandler.drive
+     472.1  nish.pgAsyncSend.resume
+     377.1  nish.pgAsyncReady
+```
+
+async, top 12 user-space frames by self samples (perf, cpu-clock:u):
+
+```text
+    10.14%  async-db       [.] nish.serveTask$fn.17.tfbServeDb$arrow0.resume
+    10.11%  async-db       [.] nish.serveOn$fn.17.tfbServeDb$arrow0.resume
+     6.53%  libc.so.6      [.] epoll_ctl
+     5.72%  async-db       [.] nish.pgAsyncAnswer.resume
+     3.81%  libc.so.6      [.] __libc_recv
+     3.73%  libc.so.6      [.] __send
+     3.64%  async-db       [.] nish.http1Next
+     3.38%  [vdso]         [.] __vdso_clock_gettime
+     3.35%  libc.so.6      [.] __fcntl64_nocancel_adjusted
+     3.29%  libc.so.6      [.] __close
+     2.66%  async-db       [.] nish.pgAsyncSkippable
+     2.28%  async-db       [.] nish.pgAsyncPark.resume
+```
+
+</details>
+
 <!-- syscall-cost:begin -->
 ## Syscall cost
 
