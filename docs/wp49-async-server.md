@@ -2,16 +2,18 @@
 
 **Status: D1 accepted; stages 1 to 5 built (stage 5 in parts 1 to 8, part 8
 #1343), stage 6 measured, gate not met: re-measured on 2026-11-11 after the
-`serve` and pool fixes (#1378, #1379), and still outside the band (§6, §10).** The language half — `async`, `await`, `Promise<T>`, `spawn`,
+`serve` and pool fixes (#1378, #1379), and still outside the band (§6,
+§10).** The language half — `async`, `await`, `Promise<T>`, `spawn`,
 `awaitAll` and the frame lowering — compiles, and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
 tasks that share their spawner's objects (parts 3 and 8), `serve` (part 4), the
 async Postgres pool (part 5), async `fetch` over TLS (part 6) and
 cancellation (part 7). D1's condition does not hold yet: the async TFB entries
 are still outside the explicit ones' noise band on `plaintext`, `json` and `db`
-([BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6)). The anchors below
-are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
-note beyond what it states is a proposal and is not compiled by `npm test`. This note reopens
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6)).
+The anchors below are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays
+normative; the API in this note beyond what it states is a proposal and is not
+compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
 the owner's (§9). The owner accepted D1 on 2026-11-01, on one condition: an
 `await` never blocks the process, and `async` costs the server nothing it
@@ -327,7 +329,7 @@ gives, per test of the gate, the async entry against the explicit one:
 | --- | --- | --- | --- | --- |
 | `plaintext` | −33.3, −32.0, −38.3, −70.9%* at 256, 1,024, 4,096, 16,384 | 0.1–8.3% | outside at all four | −86.6 to −89.7% |
 | `json` | −2.5, −4.1, −6.2, −7.4, −6.3, −17.1% at 16 to 512 | 0.5–2.5% | outside at all six | −7.3 to −12.4%, and −1.5% at 256 on a 10.2% band |
-| `db` | −61.7, −74.2, −79.4% at 16, 64, 256 | 3.1–5.7% (58.3% at 16, bimodal) | outside at all three | −42.1 to −90.5% |
+| `db` | −74.2, −79.4% at 64, 256 (−61.7% at 16, not judged) | 3.1, 5.7% (58.3% at 16, bimodal) | outside at 64 and 256 | −90.0, −90.5% at 64, 256 |
 
 So **stage 6 is measured and its gate is not met, and D1's condition does not
 hold yet.** Outside the gate, `updates` is now inside at all three
@@ -343,7 +345,9 @@ nowhere. What remains, per test, and what is known of its cause:
 - **`json`: 2.5–17.1%, outside at every concurrency.** About 0.07 more system
   calls a request than the explicit entry, so the cause is most likely CPU per
   request in user space, still not profiled. It is open.
-- **`db`: 62–79%.** The async entry falls as connections rise (27.8k → 21.6k
+- **`db`: 74–79% at 64 and 256 connections.** The 16-connection band is
+  bimodal (the explicit builds landed at about 23–30k or 72–75k, the async
+  entry at 28k), so that cell is not judged. The async entry falls as connections rise (27.8k → 21.6k
   from 16 to 256) where the explicit entry climbs (72.5k → 105.0k). The
   seated pool takes at most 8 statements per connection, each with its own
   Sync. Whether that depth, the per-statement Sync or the task turns limit it

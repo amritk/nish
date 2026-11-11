@@ -868,7 +868,7 @@ taskset -c 1-3 wrk -t 3 -c 64 -d 3s -H "Host: tfb-server" http://127.0.0.1:<port
 
 ## TechEmpower: the async entry re-measured after the serve and pool fixes (WP49 stage 6)
 
-The same gate as [the first measurement](#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6), which stays above as the before, run again on `main` once `serve` answered a pipelined burst in one write (#1378) and the async Postgres pool pipelined queries across tasks (#1379). The method, the pinning, the `*` rule and the caveats are the first measurement's: one 4-core VM shared by wrk, Postgres and the server, so a relative A/B and not a TechEmpower rank ([D6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#9-decisions-for-the-owner)). The cells are req/s, median (minimum) of 3 interleaved rounds of 10 s, and the band is the gap between each pair of identical builds' medians in this run. Peak RSS is the server's `VmHWM`, the largest over every round and concurrency of the test.
+The same gate as [the first measurement](#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6), which stays above as the before, run again on `main` once `serve` answered a pipelined burst in one write (#1378) and the async Postgres pool pipelined queries across tasks (#1379). The method, the pinning, the `*` rule and the caveats are the first measurement's: one 4-core VM shared by wrk, Postgres and the server, so a relative A/B and not a TechEmpower rank ([D6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#9-decisions-for-the-owner)). The cells are req/s, median (minimum) of 3 interleaved rounds of 10 s, and the band is the gap between each pair of identical builds' medians in this run. `run.sh`'s inside rule is one-sided: a delta `d` is inside when `d >= −band`, so an async median above the entry's counts as inside whatever the band. That is how `/updates` is inside at 256 connections (+4.8% against a 2.5% band) and `/queries` at 16 (+3.0% against 3.0%): not slower by more than the noise, rather than level within it. One caveat of the first measurement no longer holds: the explicit entry no longer makes more `/updates` than the async one (the async entry is level or above it), so it no longer adds more of `world`'s dead tuples. Peak RSS is the server's `VmHWM`, the largest over every round and concurrency of the test.
 
 | | |
 | --- | --- |
@@ -885,7 +885,7 @@ The same gate as [the first measurement](#techempower-the-async-entry-against-th
 
 - **`plaintext`**: 32–38% below the explicit entry at 256, 1,024 and 4,096 connections (it was 87–90%), and 70.9% below at 16,384, a `*` cell.
 - **`json`**: 2.5–17.1% below at every concurrency, against bands of 0.5–2.5%. The first run's one `inside` cell, at 256 connections, is now outside at −6.3% against a 0.5% band.
-- **`db`**: 62–79% below at every concurrency (it was 42–91%).
+- **`db`**: 74.2% and 79.4% below at 64 and 256 connections (it was 90.0% and 90.5%). The 16-connection cell cannot be judged: its band is not a usable one (below), so the verdict rests on 64 and 256.
 
 Of the database tests outside the gate, `/updates` is inside at all three concurrencies, `/queries` and `/cached-queries` are inside at 16 and 16–64 connections, and `/fortunes` is outside everywhere.
 
@@ -901,7 +901,7 @@ Of the database tests outside the gate, `/updates` is inside at all three concur
 | `/json` | 128 | 2.2% | −7.4% | outside | −12.4% |
 | `/json` | 256 | 0.5% | −6.3% | outside | −1.5% (see its note) |
 | `/json` | 512 | 2.5% | −17.1% | outside | −11.7% |
-| `/db` | 16 | 58.3% (see below) | −61.7% | outside | −42.1% |
+| `/db` | 16 | 58.3% (see below) | −61.7% | not judged (`run.sh`: outside) | −42.1% |
 | `/db` | 64 | 3.1% | −74.2% | outside | −90.0% |
 | `/db` | 256 | 5.7% | −79.4% | outside | −90.5%* |
 | `/queries?queries=20` | 16 | 3.0% | +3.0% | inside | −65.3% |
@@ -917,7 +917,7 @@ Of the database tests outside the gate, `/updates` is inside at all three concur
 | `/cached-queries?count=100` | 64 | 2.5% | +1.1% | inside | −5.8% |
 | `/cached-queries?count=100` | 256 | 0.4% | −1.5% | outside | +0.0% |
 
-The `/db` band at 16 connections is not a usable one. Both explicit builds came out in one of two modes, about 23–30k or 72–75k req/s, from round to round (`db-entry` 28,234, 72,518 and 75,337; `db-entry-copy` 74,689, 30,208 and 22,957), so the band measures which mode each median landed in. The async entry gave 27.7–28.5k in every round, the low mode. The verdict `run.sh` prints is kept: outside, and by more than the band. The cause of the two modes was not looked into. `/cached-queries` at 16 connections has a 9.3% band from the same kind of spread, so its `inside` is a weak one.
+The `/db` band at 16 connections is not a usable one. Both explicit builds came out in one of two modes, about 23–30k or 72–75k req/s, from round to round (`db-entry` 28,234, 72,518 and 75,337; `db-entry-copy` 74,689, 30,208 and 22,957), so the band measures which mode each median landed in. The async entry gave 27.7–28.5k in every round, the low mode, so against a single mode it could be level or 62% below. `run.sh` prints outside; this record does not judge the cell, and the `db` verdict rests on 64 and 256 connections. The cause of the two modes was not looked into. `/cached-queries` at 16 connections has a 9.3% band from the same kind of spread, so its `inside` is a weak one.
 
 ### /plaintext, req/s, median (min) of 3 rounds of 10 s, re-measured
 
@@ -1001,7 +1001,7 @@ async-db vs db-entry (median delta, inside or outside the band; * had failures, 
 - /plaintext c=16384 round 2: async had 0 Non-2xx responses and socket errors c/r/w/t 0/2683/0/0
 - /plaintext c=16384 round 3: async had 0 Non-2xx responses and socket errors c/r/w/t 0/2491/0/0
 
-No database cell has a `*` this time; the first run had eleven, all the async entry's waits for a connection.
+No database cell has a `*` this time; the first run had five, all the async entry's, from ten rounds with non-2xx answers while it waited for a connection.
 
 **Memory.** The async entry's peak RSS is above the explicit entry's on `plaintext` (95.8 against 91.2 MiB, at 16,384 connections) and on `json` (7.6 against 3.1 MiB). On the database tests it is below (18.3–29.5 against 65.3–66.1 MiB), because the explicit entry reserves its carrier's query room up front. Against the first run, the async entry's peak rose on every test (`plaintext` 91.5 → 95.8, `json` 3.3 → 7.6, database 12.1–20.8 → 18.3–29.5 MiB).
 
