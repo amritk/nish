@@ -1338,6 +1338,16 @@ const DECLARED = [
     changelog: "references to capture-free top-level functions",
     why: "the 0.38.0 seed refuses a function type outside a parameter, so only the candidate compiles the program (WP51 stage 1)",
   })),
+  ...[
+    "tests/cases/fnref_map.ts",
+    "tests/cases/fnref_map_array.ts",
+    "tests/cases/fnref_map_nullable.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "function references as arguments, `| null` and `Map` values",
+    why: "the 0.38.0 seed refuses a function type outside a parameter, and a Map value is one, so only the candidate compiles the program (WP51 stage 2)",
+  })),
   {
     program: "tests/cases/obj_spread_class.ts",
     file: "exit",
