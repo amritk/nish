@@ -12,7 +12,23 @@
 FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55 AS build
 # apt has no network timeout of its own: the workflows' APT_OPTS, here as well.
 ARG APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
-RUN apt-get $APT_OPTS update \
+# The image names one host per source, archive.ubuntu.com and
+# security.ubuntu.com, and on 2026-11-11 (run 43058056453 on PR #1413, and
+# 43049778231) neither resolved inside the build: `apt-get update` only warned, and `install` failed on
+# "Unable to locate package". So both sources go through the mirror list
+# .github/apt-mirror.sh gives amd64 runners, which apt works through in order,
+# and an index that could not be fetched from any of them fails `update`
+# (Error-Mode=any), naming the cause. Over http://: ca-certificates is not
+# installed yet, and apt checks every index against the archive's signature
+# whichever way it came.
+RUN printf '%s\tpriority:%s\n' \
+      http://mirrors.edge.kernel.org/ubuntu/ 1 \
+      http://archive.ubuntu.com/ubuntu/ 2 \
+      http://security.ubuntu.com/ubuntu/ 3 > /etc/apt/apt-mirrors.txt \
+ && sed -i -E 's#https?://(archive|security)\.ubuntu\.com/ubuntu/?#mirror+file:/etc/apt/apt-mirrors.txt#g' \
+      /etc/apt/sources.list.d/ubuntu.sources \
+ && grep -q 'mirror+file:' /etc/apt/sources.list.d/ubuntu.sources \
+ && apt-get $APT_OPTS -o APT::Update::Error-Mode=any update \
  && apt-get $APT_OPTS install -y --no-install-recommends ca-certificates curl clang-18 lld-18 llvm-18 \
  && rm -rf /var/lib/apt/lists/* \
  && for tool in clang llc llvm-as opt ld.lld wasm-ld lld; do ln -s "/usr/bin/$tool-18" "/usr/local/bin/$tool"; done

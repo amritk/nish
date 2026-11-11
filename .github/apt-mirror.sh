@@ -13,9 +13,20 @@
 #   2. archive.ubuntu.com, Canonical's own archive;
 #   3. security.ubuntu.com, which serves the -security suites.
 #
-# The list only covers amd64: arm64 packages come from ports.ubuntu.com, which
-# has no Azure copy and no CDN mirror, so on arm64 only an Azure host (if an
-# image ever names one) is rewritten to the Canonical one.
+# arm64 packages come from Ubuntu's ports archive, which no Azure host or
+# kernel.org copy carries. Its own host, ports.ubuntu.com, was the arm64
+# runners' only source until it stopped resolving on PR #1413 (run
+# 43058055859) and three aarch64 jobs died at `apt-get update`. On arm64 every
+# ports source is pointed at a list of its own:
+#
+#   1. ports.ubuntu.com, Canonical's own, first: it is never behind, and it
+#      is what arm64 jobs have always fetched from, so the others take
+#      traffic only when it fails;
+#   2. (WIP: to be chosen from the probe's results)
+#
+# A mirror that lags behind the index apt fetched first is no harm: apt asks
+# for each index file by its hash (by-hash), which a lagging mirror does not
+# have, so it moves on to the next entry rather than read a stale file.
 #
 # Every step tolerates a pattern that matches nothing. The inline version this
 # replaces piped `grep -rlZ azure... | xargs sed` under `pipefail`, and on an
@@ -41,12 +52,39 @@ if [ "$arch" = amd64 ]; then
       "${sources[@]}"
   fi
 else
+  printf '%s\tpriority:%s\n' \
+    http://ports.ubuntu.com/ubuntu-ports/ 1 \
+    https://mirrors.ocf.berkeley.edu/ubuntu-ports/ 2 \
+    https://mirror.kumi.systems/ubuntu-ports/ 3 |
+    sudo tee "$list" > /dev/null
   if [ "${#sources[@]}" -gt 0 ]; then
-    sudo sed -i -E 's#azure\.(archive|ports)\.ubuntu\.com#\1.ubuntu.com#g' "${sources[@]}"
+    sudo sed -i -E \
+      -e 's#https?://(azure\.)?ports\.ubuntu\.com/ubuntu-ports/?#mirror+file:/etc/apt/apt-mirrors.txt#g' \
+      -e 's#azure\.archive\.ubuntu\.com#archive.ubuntu.com#g' \
+      "${sources[@]}"
   fi
-  if [ -f "$list" ]; then
-    sudo sed -i -E 's#azure\.(archive|ports)\.ubuntu\.com#\1.ubuntu.com#g' "$list"
-  fi
+  # PROBE (temporary): which ports mirrors serve noble's suites for arm64.
+  for m in http://ports.ubuntu.com/ubuntu-ports/ \
+    https://ports.ubuntu.com/ubuntu-ports/ \
+    https://mirrors.ocf.berkeley.edu/ubuntu-ports/ \
+    https://mirror.kumi.systems/ubuntu-ports/ \
+    https://ftp.tu-chemnitz.de/pub/linux/ubuntu-ports/ \
+    https://mirrors.mit.edu/ubuntu-ports/ \
+    https://mirrors.edge.kernel.org/ubuntu-ports/ \
+    https://ftp.halifax.rwth-aachen.de/ubuntu-ports/ \
+    https://mirror.leaseweb.com/ubuntu-ports/ \
+    https://mirrors.dotsrc.org/ubuntu-ports/ \
+    https://ftp.uni-stuttgart.de/ubuntu-ports/; do
+    (
+      for suite in noble noble-updates noble-security; do
+        for path in "dists/$suite/InRelease" "dists/$suite/main/binary-arm64/"; do
+          code="$(curl -sS -o /dev/null -I -m 5 -w '%{http_code}' "$m$path" 2>&1 || true)"
+          echo "apt-probe: $code $m$path"
+        done
+      done
+    ) &
+  done
+  wait
 fi
 
 # What apt will fetch from, so a slow install's log names the mirror.

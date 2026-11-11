@@ -1,17 +1,35 @@
 # Installs Ubuntu packages through the Actions cache. Every Ubuntu install in
-# CI goes through here, so every one gets the same three defences.
+# CI goes through here, so every one gets the same defences.
 #
 # - The mirror: .github/apt-mirror.sh points apt away from the Azure mirror,
 #   which has served libllvm18 at about 100 KB/s (#963), never idle long enough
 #   for `APT_OPTS`'s thirty seconds, so the calling step's limit fired before
 #   any test ran. apt fetches from a mirror list of our own instead and moves
-#   to the next entry when one fails.
-# - The cache: the .debs are kept in the Actions cache, keyed by runner image,
-#   architecture and package list, so a job normally downloads nothing. apt
-#   checks every cached .deb against the hash in the signed index before it
-#   installs it, so a stale or altered one is fetched again, never installed.
-# - The bound: on a miss each download attempt is cut at a minute and retried,
-#   since apt has no deadline of its own for a transfer that trickles.
+#   to the next entry when one fails. On arm64 that list holds ports mirrors
+#   besides ports.ubuntu.com, which stopped resolving on PR #1413 (run
+#   43058055859) while it was the arm64 runners' only host.
+# - The cache: the .debs and apt's index (/var/lib/apt/lists) are kept in the
+#   Actions cache, keyed by runner image, architecture and package list, so a
+#   job normally downloads nothing. apt checks every cached .deb against the
+#   hash its index gives before it installs it, so a stale or altered one is
+#   fetched again, never installed.
+# - Offline: when the exact key is restored with its index, the index goes
+#   back in place, `apt-get update` is skipped and apt installs with
+#   `--no-download`, so the step touches no network at all; on #1413 even a
+#   full hit died at `apt-get update`. If that install fails (the index names
+#   a .deb the cache lacks, or apt-mirror.sh now writes other sources than the
+#   index was fetched under), the step takes the network path instead. A
+#   restored index is not checked against its signature again: what apt trusts
+#   is what `apt-get update` verified in the run that saved the entry. That
+#   rests on the cache's write scope: a run writes only to its own ref's
+#   scope, so a pull request's entries are read only by that pull request's
+#   runs, and the entries every branch reads are written only by runs on main.
+#   Whoever could plant an index there already runs code in that ref's CI.
+# - The bound: on the network path each download attempt is cut at a minute
+#   and retried, since apt has no deadline of its own for a transfer that
+#   trickles.
+#
+# The step prints the path it took in one line starting `apt: `.
 #
 # The save is a step of its own rather than actions/cache's post step, which
 # saves only when the whole job passes. Jobs that race to save one key lose
@@ -42,7 +60,9 @@ runs:
       id: cache
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: ${{ runner.temp }}/apt-archives
+        path: |
+          ${{ runner.temp }}/apt-archives
+          ${{ runner.temp }}/apt-lists
         key: ${{ steps.key.outputs.key }}
         restore-keys: ${{ steps.key.outputs.prefix }}
 
@@ -50,36 +70,67 @@ runs:
       shell: bash
       env:
         PKGS: ${{ inputs.packages }}
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
       run: |
         archives="$RUNNER_TEMP/apt-archives"
-        mkdir -p "$archives/partial"
+        lists="$RUNNER_TEMP/apt-lists"
+        mkdir -p "$archives/partial" "$lists"
         # `_apt` cannot reach a directory under the runner's home, so apt would
         # download as root anyway, with a warning; say so up front.
         apt_cache="-o Dir::Cache::Archives=$archives -o APT::Sandbox::User=root"
+        # apt's index, less its lock and half-fetched files.
+        index() { sudo find /var/lib/apt/lists -mindepth 1 -maxdepth 1 ! -name lock ! -name partial "$@"; }
+        # Before the index goes back: its files are named after the sources.
         bash "$GITHUB_ACTION_PATH/../../apt-mirror.sh"
-        sudo apt-get $APT_OPTS update
-        for attempt in 1 2 3; do
-          if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
-            --download-only $PKGS; then
-            break
+        installed=
+        if [ "$CACHE_HIT" = true ] && [ -n "$(find "$lists" -name '*InRelease' -print -quit)" ]; then
+          echo "apt: full cache hit, installing offline; apt-get update skipped"
+          index -exec rm -rf {} +
+          sudo cp -R "$lists/." /var/lib/apt/lists/
+          if sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
+            --no-download $PKGS; then
+            installed=1
+          else
+            echo "::warning::apt: the offline install failed; updating from the network instead"
           fi
-          if [ "$attempt" = 3 ]; then
-            echo "::error::apt could not download the packages in three one-minute attempts"
-            exit 1
-          fi
-          echo "::warning::apt download attempt $attempt stalled or failed; retrying"
-        done
-        sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $apt_cache install -y --no-install-recommends $PKGS
+        else
+          case "$CACHE_HIT" in
+            true) why="exact key restored without an index" ;;
+            false) why="partial cache hit (an older image's key)" ;;
+            *) why="cache miss" ;;
+          esac
+          echo "apt: $why, updating from the network"
+        fi
+        if [ -z "$installed" ]; then
+          sudo apt-get $APT_OPTS update
+          for attempt in 1 2 3; do
+            if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
+              --download-only $PKGS; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::apt could not download the packages in three one-minute attempts"
+              exit 1
+            fi
+            echo "::warning::apt download attempt $attempt stalled or failed; retrying"
+          done
+          sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $apt_cache install -y --no-install-recommends $PKGS
+        fi
         # Drop .debs the mirror no longer offers (left over from an older
-        # image's cache) and hand the directory back to the runner user, so
-        # the save step can read apt's root-owned files.
+        # image's cache), keep the index the install used next to them, and
+        # hand both back to the runner user, so the save step can read apt's
+        # root-owned files.
         sudo apt-get $apt_cache autoclean
-        sudo rm -rf "$archives/partial" "$archives/lock"
-        sudo chown -R "$(id -u):$(id -g)" "$archives"
+        sudo rm -rf "$archives/partial" "$archives/lock" "$lists"
+        mkdir -p "$lists"
+        index -exec cp -R -t "$lists" {} +
+        sudo chown -R "$(id -u):$(id -g)" "$archives" "$lists"
 
     - name: Save apt packages
       if: steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: ${{ runner.temp }}/apt-archives
+        path: |
+          ${{ runner.temp }}/apt-archives
+          ${{ runner.temp }}/apt-lists
         key: ${{ steps.key.outputs.key }}
