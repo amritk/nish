@@ -564,14 +564,32 @@ static int nish_pipe(int *p) {
 
 #endif
 
-int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err) {
+/* `spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)`: the same run,
+   killed when `timeout_ms` milliseconds have passed since it started, and a
+   negative `timeout_ms` is no deadline, as `pollWait`'s is. The answers are
+   `spawnPiped`'s, plus -3 for a run the deadline ended: the child is killed
+   with SIGKILL and reaped, and the arrays keep the bytes read before the kill.
+
+   The deadline is CLOCK_MONOTONIC's, so a wall clock set back cannot stretch
+   it. Each `poll` waits the milliseconds left, rounded up, and an EINTR goes
+   round the loop to recompute them. A child that closes both outputs and then
+   hangs leaves the loop with no stream to wait on, so with a deadline the
+   final wait is a `WNOHANG` poll with a backoff of 1 ms doubling to 64 ms, up
+   to the deadline. Only the child's pid is killed, never a group: a grandchild
+   that holds a pipe open keeps the loop waiting until the deadline, and is not
+   killed with the child (docs/security/runtime.md, RT-49). */
+int32_t nish_spawn_piped_within(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err,
+                                int32_t timeout_ms) {
 #ifdef __wasi__
   (void)argv;
   (void)in;
   (void)out;
   (void)err;
+  (void)timeout_ms;
   return -1;
 #else
+  int timed = timeout_ms >= 0;
+  int64_t deadline = timed ? nish_monotonic_nanos() + (int64_t)timeout_ms * 1000000 : 0;
   uint64_t n = in->len, sent = 0, got[3] = { 0, 0, 0 };
   int p[6] = { -1, -1, -1, -1, -1, -1 };
   int32_t rc = -1;
@@ -604,7 +622,16 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
   }
   nish_array *to[3] = { 0, out, err };
   while (!rc && (f[0].fd >= 0 || f[1].fd >= 0 || f[2].fd >= 0)) {
-    if (poll(f, 3, -1) < 0) {
+    int wait = -1;
+    if (timed) {
+      int64_t left = deadline - nish_monotonic_nanos();
+      if (left <= 0) {
+        rc = -3;
+        break;
+      }
+      wait = (int)((left + 999999) / 1000000);
+    }
+    if (poll(f, 3, wait) < 0) {
       if (errno != EINTR) rc = -1;
       continue;
     }
@@ -648,8 +675,26 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
   if (rc) kill(pid, SIGKILL);
   for (int k = 0; k < 3; k++)
     if (f[k].fd >= 0) close(f[k].fd);
-  int status;
-  while (waitpid(pid, &status, 0) < 0) {
+  int status = 0, reaped = 0;
+  for (long nap = 1000000; timed && !rc && !reaped;) {
+    pid_t w = waitpid(pid, &status, WNOHANG);
+    if (w == pid) {
+      reaped = 1;
+    } else if (w < 0 && errno != EINTR) {
+      rc = -1;
+    } else {
+      int64_t left = deadline - nish_monotonic_nanos();
+      if (left <= 0) {
+        rc = -3;
+        kill(pid, SIGKILL);
+      } else {
+        struct timespec ts = { 0, left < nap ? (long)left : nap };
+        nanosleep(&ts, 0);
+        if (nap < 64000000) nap *= 2;
+      }
+    }
+  }
+  while (!reaped && waitpid(pid, &status, 0) < 0) {
     if (errno != EINTR) {
       rc = -1;
       break;
@@ -661,6 +706,10 @@ done:
     if (p[k] >= 0) close(p[k]);
   return rc;
 #endif
+}
+
+int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err) {
+  return nish_spawn_piped_within(argv, in, out, err, -1);
 }
 
 /* `kill(pid, sig)`: 0, or a negative errno. Only the four signals a program

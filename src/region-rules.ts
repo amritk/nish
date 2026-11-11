@@ -234,7 +234,7 @@ const handsRegionMessage = (
   which: string
 ): string => regionToOuterMessage(who, handsText(program, arg, callee, which), freed)
 
-/** The first argument `spawnPiped` appends to, its `stdout`; `stderr` follows. */
+/** The first argument `spawnPiped` and `spawnPipedWithin` append to, their `stdout`; `stderr` follows. */
 const SPAWN_PIPED_FIRST_GROWN: i32 = 2
 
 /** `growthMessage` for `arg` handed to `callee`, which may grow it. */
@@ -1087,10 +1087,15 @@ class RegionWalk {
     if (receiver === null && isResizeCall(this.program, this.table, node)) {
       // `spawnPiped(argv, stdin, stdout, stderr)` appends to its last two
       // arguments as `push` does: one outside the region is grown inside it.
+      // `spawnPipedWithin`'s fifth, the deadline, is a number and grows nothing.
       const args = node.children[1].children
       let grown = -1
       for (let i = 0; i < args.length && grown < 0; i++) {
-        if (i >= SPAWN_PIPED_FIRST_GROWN && mayBeOuter(this.origin(args[i]))) {
+        if (
+          i >= SPAWN_PIPED_FIRST_GROWN &&
+          i <= SPAWN_PIPED_FIRST_GROWN + 1 &&
+          mayBeOuter(this.origin(args[i]))
+        ) {
           grown = i
         }
       }
