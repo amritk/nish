@@ -488,6 +488,10 @@ export class HttpHandler {
   private slotGen: i32[]
   private current: i32[]
   private open: boolean[]
+  /** Whether a slot is in `owed`: an answer's send was put off for the request queued behind it. */
+  private owing: boolean[]
+  /** The slots whose send `flush` still owes, `owedCount` of them. */
+  private owed: i32[]
   /** `pollWait`'s output. */
   private readyFds: i32[]
   /** Per watched id: whether its descriptor was ready in the last `wait`. */
@@ -535,9 +539,13 @@ export class HttpHandler {
   loop: i32 = 0
   private queueStart: i32 = 0
   private queueCount: i32 = 0
+  private owedCount: i32 = 0
+  private sent: i64 = 0
   private outputSize: i32 = 0
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
   private draining: boolean = false
+  /** Set by `deferSends`: a send may wait for `flush`. Off, every answer is sent as it ends. */
+  private deferring: boolean = false
   /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
   private jsonBegun: boolean = false
 
@@ -570,6 +578,8 @@ export class HttpHandler {
     this.slotGen = new Array<i32>(limits.slots)
     this.current = new Array<i32>(limits.slots)
     this.open = new Array<boolean>(limits.slots)
+    this.owing = new Array<boolean>(limits.slots)
+    this.owed = new Array<i32>(limits.slots)
     for (let s: i32 = 0; s < limits.slots; s++) {
       this.current[s] = -1
     }
@@ -631,6 +641,7 @@ export class HttpHandler {
    * @returns how many whole requests are queued for `take` after this turn
    */
   wait(timeoutMs: i32): i32 {
+    this.flush()
     for (let id: i32 = 0; id < HANDLER_MAX_WATCHED; id++) {
       this.watchedFired[id] = false
     }
@@ -647,6 +658,12 @@ export class HttpHandler {
       if (timeout < 0 || rest < timeout) {
         timeout = rest
       }
+    }
+    if (this.deferring && this.queueCount > 0) {
+      // A send `flush` made let a parked request in: it is ready now. Only
+      // owed sends can do that; without `deferSends` a request left queued
+      // is the program's to take, and the turn blocks as it always has.
+      timeout = 0
     }
     const n: i32 = pollWait(this.loop, this.readyFds, timeout)
     const now: i64 = monotonicNanos()
@@ -677,6 +694,17 @@ export class HttpHandler {
       this.expireBodies(now)
     }
     return this.queueCount
+  }
+
+  /**
+   * Lets the handler put a connection's send off until `flush`, so the
+   * answers to a pipelined burst go out in one write. Off by default, so an
+   * answer is sent as it ends. A program that turns it on calls `flush` (or
+   * `wait`, which flushes) after each turn of answers, before it blocks;
+   * `nish/net/serve` does.
+   */
+  deferSends(): void {
+    this.deferring = true
   }
 
   /**
@@ -733,8 +761,35 @@ export class HttpHandler {
   }
 
   /**
+   * Sends every answer whose send was put off, so the connection's answers to
+   * a pipelined burst go out in one write. `wait` calls it before it blocks; a
+   * program that blocks elsewhere, as `nish/net/serve` does, calls it first.
+   */
+  flush(): void {
+    const n: i32 = this.owedCount
+    this.owedCount = 0
+    for (let k: i32 = 0; k < n; k++) {
+      const slot: i32 = this.owed[k]
+      this.owing[slot] = false
+      if (this.open[slot] && this.server.holds(slot)) {
+        this.settle(slot, this.server.connection(slot))
+      }
+    }
+  }
+
+  /**
+   * How many times the handler handed a connection's waiting output to its
+   * socket: one per connection per pass, however many answers it holds.
+   * @returns the count of sends since the handler was made, each one write or a few for a partial one
+   */
+  sends(): i64 {
+    return this.sent
+  }
+
+  /**
    * Takes `slot`'s events until it needs the socket again, then sends what it
-   * holds and re-arms it, or closes it once it is over.
+   * holds and re-arms it, or closes it once it is over. While `owable` allows,
+   * the send waits for `flush`, so the answers behind this one go out with it.
    */
   private drive(slot: i32): void {
     const conn: Http1Connection = this.server.connection(slot)
@@ -755,11 +810,55 @@ export class HttpHandler {
       // The carrier has written its refusal and ends the connection; a
       // request it was reading is nobody's.
       this.releaseReading(slot)
+    } else if (this.owable(slot, conn)) {
+      if (!this.owing[slot]) {
+        this.owing[slot] = true
+        this.owed[this.owedCount] = slot
+        this.owedCount += 1
+      }
+      return
     }
-    const wants: i32 = this.server.flush(slot)
+    this.settle(slot, conn)
+  }
+
+  /**
+   * Whether `slot`'s send can wait for `flush`: `deferSends` turned that on, it has output to send, the
+   * output is still roomy, so more answers fit behind it, and no request on
+   * it is parked waiting for the room a send makes. A connection with nothing
+   * to send is settled at once, so a hang-up closes in the pass that reads it.
+   * Nor does a held write wait: its `H1_WRITE` comes only from `next`, so a
+   * send put off until the peer has read would empty the output, arm the slot
+   * for reading alone, and leave the rest of the response unsent.
+   * `flush` runs before every poll, so a send put off here goes out before
+   * the handler waits.
+   */
+  private owable(slot: i32, conn: Http1Connection): boolean {
+    const at: i32 = this.current[slot]
+    return (
+      this.deferring &&
+      !this.draining &&
+      conn.wantsWrite() &&
+      !conn.writeHeld &&
+      this.roomy(conn) &&
+      (at < 0 || this.requests[at].state !== HANDLER_PARKED)
+    )
+  }
+
+  /** Sends what `slot` holds and re-arms it, or closes it once it is over; enqueues a parked request once there is room. */
+  private settle(slot: i32, conn: Http1Connection): void {
+    if (conn.wantsWrite()) {
+      this.sent += 1
+    }
+    let wants: i32 = this.server.flush(slot)
     if ((wants & H1_DONE) !== 0) {
       this.closeSlot(slot)
       return
+    }
+    if (conn.writeHeld) {
+      // A held write's `H1_WRITE` comes only from `next`, which `drive` runs
+      // on a writable socket. A send that emptied the output, as one `flush`
+      // makes after the peer has read, would otherwise arm nothing for it.
+      wants = wants | H1_WANT_WRITE
     }
     if (this.draining && this.current[slot] === -1 && !conn.wantsWrite()) {
       this.closeSlot(slot)
@@ -1213,7 +1312,9 @@ export class HttpHandler {
   /**
    * Ends `r`'s response. `r` is the handler's again: it goes back once the
    * carrier has taken every byte, and the connection's next request is read.
-   * Answers `HANDLER_SENT` or `HANDLER_DROPPED`.
+   * Answers `HANDLER_SENT` or `HANDLER_DROPPED`. After `deferSends` the send
+   * may be put off so a pipelined burst goes out in one write: call `wait` or
+   * `flush` after answering, or it waits for the next of them.
    * @param r a request whose response `start` began; the handler's again after this call
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */

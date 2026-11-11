@@ -1,0 +1,4 @@
+plain: a queued request, wait(300) blocked its timeout: true
+plain: still queued: true
+plain: answered: true
+deferring: a queued request, wait(300) returned at once: true
