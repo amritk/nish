@@ -753,7 +753,7 @@ export class HttpHandler {
   flush(): void {
     const n: i32 = this.owedCount
     this.owedCount = 0
-    for (let k: i32 = 0; k < n && k < toI32(this.owed.length); k++) {
+    for (let k: i32 = 0; k < n; k++) {
       const slot: i32 = this.owed[k]
       this.owing[slot] = false
       if (this.open[slot] && this.server.holds(slot)) {
