@@ -10240,7 +10240,7 @@ const open = (b: Box<Shape>): Kind => b.value.kind;
 ```
 
 ```text
-`Box<Circle | Square>` cannot take a union as a type argument: in this version a union is the type of a local, a parameter, a field, a return value or an array element, and not of a generic's, a `Map`'s, a `Set`'s or a `Result`'s type argument
+`Box<Circle | Square>` cannot take a union as a type argument: in this version a union is the type of a local, a parameter, a field, a return value, an array element or a `Map`'s value, and not of a generic's, a `Set`'s or a `Result`'s type argument
 ```
 
 ## NL2534

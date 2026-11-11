@@ -74,8 +74,8 @@ still works, and so does `Shape | null`.
 
 ## Where a union goes
 
-A union is the type of a local, a parameter, a field, a return value or an
-array element, and `Shape | null` of any of those. An alias may name another
+A union is the type of a local, a parameter, a field, a return value, an
+array element or a `Map`'s value, and `Shape | null` of any of those. An alias may name another
 union: with `type Round = Circle | Square`, `type Shape = Round | Tri` holds
 all three. A variant converts into it wherever one is expected: a
 `new Circle()` passed to a `Shape` parameter, returned from a function that
@@ -88,9 +88,11 @@ holds one is refused. So is a field that holds one, in any class or interface
 of the program, exported or not: a header lays out every class, a private one
 too.
 
-A union is not a type argument, so `Box<Shape>`, `Map<string, Shape>`,
-`Set<Shape>` and `Result<Shape, string>` are refused, and so is a call to a
-generic function that would bind its type parameter to a union:
+`Map<string, Shape>` holds its values as they are, as an array does, and its
+`get` answers `Shape | undefined`. Otherwise a union is not a type argument,
+so `Box<Shape>`, `Set<Shape>`, a `Map` keyed by a union and
+`Result<Shape, string>` are refused, and so is a call to a generic function
+that would bind its type parameter to a union:
 
 ```ts nish:err NL2533
 enum Kind {

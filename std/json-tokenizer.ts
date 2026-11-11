@@ -1481,6 +1481,8 @@ export class JsonTokenizer {
    * before any error: the depth stack is as it was when the `{` was read.
    *
    * @param start - the byte offset of the object's `{`, its `tokStart`.
+   *
+   * @internal Called by `JsonDecoder.enterUnion`, std/json-typed.ts.
    */
   rewindObject(start: i32): void {
     this.kind = JSON_TOK_OBJECT_BEGIN

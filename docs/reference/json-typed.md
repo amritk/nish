@@ -518,9 +518,9 @@ tag may be any key of the object: when it is the first, the variant is picked
 at once; when it is not, the keys before it are stepped over, checked but not
 kept, and the object is read again from its first key once the variant is
 known. A nested union does the same inside the bytes its parent read ahead
-over only when it is decoded, so each byte of the input is read at most once
-per level of nesting above it: at most `maxDepth` times
-(docs/security/json.md, JSON-17).
+over only when it is decoded, so each byte of the input is read again at
+most once per level of nesting above it: at most `maxDepth` times
+(docs/security/json.md, JSON-17), counted in `JsonDecoder.unionReread`.
 
 `jsonDecode` decodes into the object it is given and cannot change which
 class that is, so a union is decoded with `jsonDecodeUnion(d, prev)`, which
@@ -532,8 +532,13 @@ array's element and a `| null` union field follow the same rule. Encoding
 writes the tag first, then the variant's fields. A variant decoded alone,
 by `jsonDecode`, reads its tag like any field and fails with
 `JSON_DECODE_TAG` when it is not its own. The code is written once per
-union, so a recursive union is one function that calls itself. A union may
-not be a `Map`'s type argument, so no map holds one.
+union, so a recursive union is one function that calls itself, and a
+`Map<string, Expr>` decodes and encodes each value through it.
+
+A failed decode answers `prev` at the top only. A union field, element or
+map value below it whose tag named another variant already holds the new
+variant when the failure comes, decoded up to it, as any failed `jsonDecode`
+leaves what it read: check `d.failed` before using the object.
 
 <scalar-detail title="Errors are sticky codes">
 
@@ -1138,6 +1143,7 @@ class JsonDecoder
 | `ignoreUnknown: boolean` | Step over a key that names no field instead of failing with `JSON_DECODE_UNKNOWN`. |
 | `mapKeys: i32` | The keys the maps of this decoding have taken so far; `reset` clears it. |
 | `maxMapKeys: i32` | The most keys every `Map` field of one decoding may take together, 4,096 unless set; past it, `JSON_DECODE_MAP_LIMIT`. At `0` or below, no map may take a key, so a map's only accepted value is `{}`. |
+| `unionReread: i32` | The bytes this decoding has read twice: for each tagged union whose tag was not its first key, those from its `{` to the end of its tag, which the decoder read ahead over and then reads again as the variant's fields. A byte is read again once for each union object it is inside, so this is at most `maxDepth` times the input's length (docs/security/json.md, JSON-17); `reset` clears it. |
 | `beginArray(): boolean` | Takes the next value as the opening of an array. |
 | `beginObject(): boolean` | Takes the next value as the opening of an object. |
 | `boolean(): boolean` | The next value as a `boolean`. |

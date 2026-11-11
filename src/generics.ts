@@ -1071,7 +1071,7 @@ const instantiateStructHere = (
       return null
     }
   }
-  if (holdsAnyUnion(ctx.table, args)) {
+  if (holdsAnyUnion(ctx.table, unionCheckedArguments(template, args))) {
     site.asker.error(at, unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, args)))
     return null
   }
@@ -1611,7 +1611,13 @@ export const checkGenericCall = (
   }
   // Typed JSON's routes take a union too: their calls are written from the
   // variants' fields (`src/emit-json.ts`), and no body of theirs is instantiated.
-  if (jsonRouteRole(template) === JSON_NONE && holdsAnyUnion(ctx.table, tuple)) {
+  // So do `std/collections.ts`'s own helpers, which the global `Map` calls on
+  // its values' array and which only move elements, as an array of a union may.
+  if (
+    jsonRouteRole(template) === JSON_NONE &&
+    !(template.owner === null && template.home.program.isCollections()) &&
+    holdsAnyUnion(ctx.table, tuple)
+  ) {
     return ctx.errorType(
       expr,
       unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, tuple))
@@ -1766,6 +1772,14 @@ export const refuseNestedFunctionTypes = (ctx: CheckContext, decl: Node): boolea
 }
 
 /** Whether a type argument holds a union, which is not a type argument (docs/LANGUAGE.md, Discriminated unions). */
+/**
+ * The type arguments a union may not be: all of them, but for the global
+ * `Map`'s value, which the map stores as it is, the way an array stores an
+ * element of a union.
+ */
+const unionCheckedArguments = (template: StructTemplateInfo, args: i32[]): i32[] =>
+  isCollectionTemplate(template) && template.sourceName === "Map" && args.length === 2 ? [args[0]] : args
+
 const holdsAnyUnion = (table: TypeTable, types: i32[]): boolean => {
   for (const type of types) {
     if (table.holdsUnion(type)) {

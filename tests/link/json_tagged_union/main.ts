@@ -2,7 +2,8 @@
 // tag, wherever the tag sits in the object, reusing `prev` when the tag
 // matches; `jsonEncode` writes the tag first. `Expr` is recursive, so its
 // decoder and its encoder are one function each (`expected.ir`). `events.ts`
-// renames the tag key and overrides a tag's value.
+// renames the tag key and overrides a tag's value. Each line that ends in
+// `true`/`false` after the encoding says whether it is the input again.
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode, jsonDecodeUnion, jsonEncode } from "nish/json-typed";
@@ -49,6 +50,14 @@ class Env {
   }
 }
 
+// A union as a `Map`'s value: each value goes through the union's one decoder.
+class Scope {
+  vars: Map<string, Expr>;
+  constructor() {
+    this.vars = new Map<string, Expr>();
+  }
+}
+
 const zero = (): Expr => new Num();
 
 const bytes = (text: string): u8[] => {
@@ -71,7 +80,7 @@ const run = (label: string, text: string, prev: Expr): Expr => {
   const got = jsonDecodeUnion(d, prev);
   const w = new JsonWriter(new Array<u8>(512), 0);
   jsonEncode(w, got);
-  console.log(`${label} ${d.failed} ${d.errorAt} ${got === prev} ${w.text()}`);
+  console.log(`${label} ${d.failed} ${d.errorAt} ${got === prev} ${w.text()} ${w.text() === text}`);
   return got;
 };
 
@@ -99,8 +108,18 @@ const chain = (levels: i32): string => {
   return parts.join("");
 };
 
+// Prints the bytes the decoding read twice, and that they are within
+// `maxDepth` times the input (docs/security/json.md, JSON-17). A decoder that
+// looked for each object's tag from the start of the input again would read
+// quadratically many, and the exact counts in `expected.out` would move.
+const reread = (label: string, d: JsonDecoder, text: string, depth: i32): void => {
+  const bound = depth * toI32(text.length);
+  console.log(`${label} reread ${d.unionReread} of ${text.length} ${d.unionReread <= bound}`);
+};
+
 const deep = (levels: i32, depth: i32): void => {
-  const d = decoder(chain(levels), depth);
+  const text = chain(levels);
+  const d = decoder(text, depth);
   const got = jsonDecodeUnion(d, zero());
   let n: i32 = 0;
   let at: Expr = got;
@@ -109,6 +128,22 @@ const deep = (levels: i32, depth: i32): void => {
     at = at.arg;
   }
   console.log(`deep ${levels} ${d.failed} ${d.errorAt} ${n}`);
+  reread("deep", d, text, depth);
+};
+
+// One `Add` of `count` numbers, every tag written last, so the `Add` reads
+// ahead over all of them once and each number over its own value.
+const wide = (count: i32): void => {
+  const parts: string[] = [];
+  for (let i: i32 = 0; i < count; i += 1) {
+    parts.push(`{"value":${i},"kind":"Num"}`);
+  }
+  const text = `{"args":[${parts.join(",")}],"note":null,"kind":"Add"}`;
+  const d = decoder(text, 128);
+  const got = jsonDecodeUnion(d, zero());
+  const size = got.kind === Kind.Add ? got.args.length : 0;
+  console.log(`wide ${count} ${d.failed} ${size}`);
+  reread("wide", d, text, 128);
 };
 
 export const main = (): i32 => {
@@ -126,6 +161,32 @@ export const main = (): i32 => {
   run("number", `{"kind":1}`, n);
   run("array", `[1]`, n);
   run("member", `{"kind":"Add","args":[{"kind":"Neg"}]}`, n);
+  // A variant's own field missing, after the tag and before it: the union
+  // path reports it as `jsonDecode` does, at the variant's closing `}`.
+  run("absent", `{"kind":"Add","args":[]}`, n);
+  run("absent last", `{"args":[],"kind":"Add"}`, n);
+  run("absent num", `{"kind":"Num"}`, n);
+  // A tree written tag first all the way down reads nothing twice.
+  const tree = `{"kind":"negate","arg":{"kind":"Add","args":[{"kind":"Num","value":1},{"kind":"negate","arg":{"kind":"Num","value":2}}],"note":{"kind":"Num","value":3}}}`;
+  const dt = decoder(tree, 128);
+  const t = jsonDecodeUnion(dt, n);
+  const wt = new JsonWriter(new Array<u8>(256), 0);
+  jsonEncode(wt, t);
+  console.log(`tree ${dt.failed} ${wt.text() === tree}`);
+  reread("tree", dt, tree, 128);
+  // An element whose old variant is not the input's is replaced in its array;
+  // one whose variant matches is decoded into.
+  const swap = run(
+    "swap",
+    `{"kind":"Add","args":[{"kind":"Num","value":1},{"kind":"negate","arg":{"kind":"Num","value":2}}],"note":null}`,
+    n,
+  );
+  if (swap.kind === Kind.Add) {
+    const first = swap.args[0];
+    const second = swap.args[1];
+    run("swapped", `{"kind":"Add","args":[{"kind":"negate","arg":{"kind":"Num","value":3}},{"kind":"negate","arg":{"kind":"Num","value":4}}],"note":null}`, swap);
+    console.log(`kept ${swap.args[0] === first} ${swap.args[1] === second}`);
+  }
   alone(`{"kind":"Num","value":7}`);
   alone(`{"value":7}`);
   alone(`{"kind":"Add","value":7}`);
@@ -144,6 +205,17 @@ export const main = (): i32 => {
 
   deep(15, 16);
   deep(16, 16);
+  wide(20);
+
+  const vars = `{"vars":{"x":{"kind":"Num","value":1},"y":{"kind":"negate","arg":{"kind":"Num","value":2}}}}`;
+  const dv = decoder(vars, 128);
+  const scope = new Scope();
+  const vcode = jsonDecode(dv, scope);
+  const wv = new JsonWriter(new Array<u8>(256), 0);
+  jsonEncode(wv, scope);
+  console.log(`map ${vcode} ${scope.vars.size} ${wv.text()} ${wv.text() === vars}`);
+  const dbad = decoder(`{"vars":{"x":{"kind":"Nope"}}}`, 128);
+  console.log(`map bad ${jsonDecode(dbad, new Scope())} ${dbad.errorAt}`);
 
   event(`{"path":"/a","type":"open"}`);
   event(`{"type":"Close"}`);

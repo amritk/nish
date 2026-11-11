@@ -657,10 +657,10 @@ function instantiateStruct(ctx: CheckContext, template: StructTemplateInfo, args
 function instantiateStructHere(ctx: CheckContext, template: StructTemplateInfo, args: i32[], at: Node, site: RequestSite): StructInfo | null -> @instantiateStructHere
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CheckContext.error CheckedProgram.addStruct CheckedProgram.addStructInstance CheckedProgram.isCollections CheckedProgram.structInstance StringMap.constructor StringMap.set StructInfo.constructor StructInstantiation.constructor TypeTable.markSecret adoptArgumentLayouts checkStructConstraints collectInstanceMembers collectionArgumentRefusal expandingStructAncestor holdsAnyUnion instanceDisplayName instanceStructType instanceSymbol isCollectionTemplate isSecretPayload isSecretTemplate nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nonTerminatingStructMessage rejectForeignPointer rejectHandleArgument rejectStoredMask secretArgumentRefusal secretShapeMessage unionArgumentMessage
+  calls: CheckContext.error CheckedProgram.addStruct CheckedProgram.addStructInstance CheckedProgram.isCollections CheckedProgram.structInstance StringMap.constructor StringMap.set StructInfo.constructor StructInstantiation.constructor TypeTable.markSecret adoptArgumentLayouts checkStructConstraints collectInstanceMembers collectionArgumentRefusal expandingStructAncestor holdsAnyUnion instanceDisplayName instanceStructType instanceSymbol isCollectionTemplate isSecretPayload isSecretTemplate nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nonTerminatingStructMessage rejectForeignPointer rejectHandleArgument rejectStoredMask secretArgumentRefusal secretShapeMessage unionArgumentMessage unionCheckedArguments
   pointer ctx: size=320 writesThrough=true captured=true passedTo=adoptArgumentLayouts#0 checkStructConstraints#0 expandingStructAncestor#0 collectInstanceMembers#0
-  pointer template: size=64 writesThrough=true captured=true passedTo=isCollectionTemplate#0 collectionArgumentRefusal#1 isSecretTemplate#0 checkStructConstraints#1 expandingStructAncestor#2 nonTerminatingStructMessage#1 StructInstantiation.constructor#1 isSecretTemplate#0
-  pointer args: size=0 writesThrough=true captured=true passedTo=collectionArgumentRefusal#2 secretArgumentRefusal#2 holdsAnyUnion#1 instanceDisplayName#2 adoptArgumentLayouts#1 checkStructConstraints#2 instanceSymbol#2 expandingStructAncestor#3 nonTerminatingStructMessage#3 instanceStructType#2 StructInstantiation.constructor#2
+  pointer template: size=64 writesThrough=true captured=true passedTo=isCollectionTemplate#0 collectionArgumentRefusal#1 isSecretTemplate#0 unionCheckedArguments#0 checkStructConstraints#1 expandingStructAncestor#2 nonTerminatingStructMessage#1 StructInstantiation.constructor#1 isSecretTemplate#0
+  pointer args: size=0 writesThrough=true captured=true passedTo=collectionArgumentRefusal#2 secretArgumentRefusal#2 unionCheckedArguments#1 instanceDisplayName#2 adoptArgumentLayouts#1 checkStructConstraints#2 instanceSymbol#2 expandingStructAncestor#3 nonTerminatingStructMessage#3 instanceStructType#2 StructInstantiation.constructor#2
   pointer at: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 checkStructConstraints#3 rejectForeignPointer#3 rejectStoredMask#3 rejectHandleArgument#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   pointer site: size=24 writesThrough=false captured=false passedTo=adoptArgumentLayouts#2
   stackSites=0 stackLocals=0
@@ -677,6 +677,7 @@ function instantiateStructHere(ctx: CheckContext, template: StructTemplateInfo, 
   callee -56:21 secretArgumentRefusal -> @secretArgumentRefusal
   callee -54:7 CheckContext.error -> @CheckContext.error
   callee -50:7 holdsAnyUnion -> @holdsAnyUnion
+  callee -50:32 unionCheckedArguments -> @unionCheckedArguments
   callee -49:5 CheckContext.error -> @CheckContext.error
   callee -49:26 unionArgumentMessage -> @unionArgumentMessage
   callee -49:47 instanceDisplayName -> @instanceDisplayName
@@ -836,7 +837,7 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: expr
-  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName argumentLead checkExpression enterMember fitTemplateArguments holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isGatheredRest isParallelEntry isRunnerRole isSpawnTemplate jsonRefusal jsonRouteOf jsonRouteRole matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry recordRegionCall reduceElementMessage refuseUnawaitedCall regionRoleOf resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
+  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isCollections CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName argumentLead checkExpression enterMember fitTemplateArguments holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isGatheredRest isParallelEntry isRunnerRole isSpawnTemplate jsonRefusal jsonRouteOf jsonRouteRole matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry recordRegionCall reduceElementMessage refuseUnawaitedCall regionRoleOf resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
   pointer ctx: size=320 writesThrough=true captured=true passedTo=refuseUnawaitedCall#0 fitTemplateArguments#0 checkExpression#0 unifyAnnotation#0 checkExpression#0 unifyAnnotation#0 resolveFunctionArgument#0 CheckContext.errorType#0 matchFunctionArguments#0 CheckContext.errorType#0 CheckContext.errorType#0 secretArgumentShapeMessage#0 CheckContext.errorType#0 instantiate#0 CheckContext.errorType#0 noteJsonRoute#0 recordRangeEntry#0 recordMemberEntry#0 enterMember#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=refuseUnawaitedCall#1 fitTemplateArguments#1 resolveFunctionArgument#1 matchFunctionArguments#1 reduceElementMessage#5 CheckContext.errorType#1 CheckContext.errorType#1 instantiate#4 argumentLead#0 recordParallelCall#1 recordExposeCall#1 recordRegionCall#1
   pointer template: size=64 writesThrough=true captured=true passedTo=isSpawnTemplate#0 typeParamSet#0 resolveInTemplate#0 resolveFunctionArgument#2 matchFunctionArguments#2 reduceElementMessage#2 jsonRouteRole#0 secretArgumentShapeMessage#1 instantiate#1
@@ -901,46 +902,47 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   local +91:9 refused: string (const)
   callee +91:19 reduceElementMessage -> @reduceElementMessage
   callee +93:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +97:7 jsonRouteRole -> @jsonRouteRole
-  callee +97:48 holdsAnyUnion -> @holdsAnyUnion
-  callee +98:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +100:7 unionArgumentMessage -> @unionArgumentMessage
-  callee +100:28 instanceDisplayName -> @instanceDisplayName
-  local +105:9 secretRefusal: string (const)
-  callee +105:25 secretArgumentShapeMessage -> @secretArgumentShapeMessage
-  callee +107:12 CheckContext.errorType -> @CheckContext.errorType
-  local +109:9 sig: FunctionSig | null (const)
-  callee +109:15 instantiate -> @instantiate
-  local +115:9 route: i32 (const)
-  callee +115:17 jsonRouteOf -> @jsonRouteOf
-  local +117:11 refusal: string (const)
-  callee +117:21 jsonRefusal -> @jsonRefusal
-  callee +119:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +121:5 noteJsonRoute -> @noteJsonRoute
-  local +124:9 offset: i32 (const)
-  local +127:7 bad: i32 (let)
-  callee +131:8 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  callee +133:8 recordRangeEntry -> @recordRangeEntry
-  callee +134:8 recordMemberEntry -> @recordMemberEntry
-  callee +135:8 TypeTable.assignable -> @TypeTable.assignable
-  local +142:11 param: i32 (const)
-  callee +143:9 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  callee +144:7 enterMember -> @enterMember
-  local +147:11 want: string (const)
-  callee +147:18 TypeTable.typeName -> @TypeTable.typeName
-  callee +148:5 CheckContext.error -> @CheckContext.error
-  callee +150:10 argumentLead -> @argumentLead
-  callee +150:76 TypeTable.typeName -> @TypeTable.typeName
-  local +160:9 caller: FunctionSig | null (const)
-  callee +161:27 isParallelEntry -> @isParallelEntry
-  callee +162:5 recordParallelCall -> @recordParallelCall
-  local +165:9 role: i32 (const)
-  callee +165:16 secretRoleOf -> @secretRoleOf
-  callee +167:5 recordExposeCall -> @recordExposeCall
-  local +170:9 regionRole: i32 (const)
-  callee +170:22 regionRoleOf -> @regionRoleOf
-  callee +171:7 isRunnerRole -> @isRunnerRole
-  callee +172:5 recordRegionCall -> @recordRegionCall
+  callee +100:5 jsonRouteRole -> @jsonRouteRole
+  callee +101:34 CheckedProgram.isCollections -> @CheckedProgram.isCollections
+  callee +102:5 holdsAnyUnion -> @holdsAnyUnion
+  callee +104:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +106:7 unionArgumentMessage -> @unionArgumentMessage
+  callee +106:28 instanceDisplayName -> @instanceDisplayName
+  local +111:9 secretRefusal: string (const)
+  callee +111:25 secretArgumentShapeMessage -> @secretArgumentShapeMessage
+  callee +113:12 CheckContext.errorType -> @CheckContext.errorType
+  local +115:9 sig: FunctionSig | null (const)
+  callee +115:15 instantiate -> @instantiate
+  local +121:9 route: i32 (const)
+  callee +121:17 jsonRouteOf -> @jsonRouteOf
+  local +123:11 refusal: string (const)
+  callee +123:21 jsonRefusal -> @jsonRefusal
+  callee +125:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +127:5 noteJsonRoute -> @noteJsonRoute
+  local +130:9 offset: i32 (const)
+  local +133:7 bad: i32 (let)
+  callee +137:8 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee +139:8 recordRangeEntry -> @recordRangeEntry
+  callee +140:8 recordMemberEntry -> @recordMemberEntry
+  callee +141:8 TypeTable.assignable -> @TypeTable.assignable
+  local +148:11 param: i32 (const)
+  callee +149:9 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee +150:7 enterMember -> @enterMember
+  local +153:11 want: string (const)
+  callee +153:18 TypeTable.typeName -> @TypeTable.typeName
+  callee +154:5 CheckContext.error -> @CheckContext.error
+  callee +156:10 argumentLead -> @argumentLead
+  callee +156:76 TypeTable.typeName -> @TypeTable.typeName
+  local +166:9 caller: FunctionSig | null (const)
+  callee +167:27 isParallelEntry -> @isParallelEntry
+  callee +168:5 recordParallelCall -> @recordParallelCall
+  local +171:9 role: i32 (const)
+  callee +171:16 secretRoleOf -> @secretRoleOf
+  callee +173:5 recordExposeCall -> @recordExposeCall
+  local +176:9 regionRole: i32 (const)
+  callee +176:22 regionRoleOf -> @regionRoleOf
+  callee +177:7 isRunnerRole -> @isRunnerRole
+  callee +178:5 recordRegionCall -> @recordRegionCall
 function unwrapTypeParens(node: Node): Node -> @unwrapTypeParens
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: node
@@ -987,6 +989,14 @@ function refuseNestedFunctionTypes(ctx: CheckContext, decl: Node): boolean -> @r
   callee +6:40 unwrapTypeParens -> @unwrapTypeParens
   callee +7:9 CheckContext.error -> @CheckContext.error
   callee +7:38 functionTypeHereMessage -> @functionTypeHereMessage
+function unionCheckedArguments(template: StructTemplateInfo, args: i32[]): i32[] -> @unionCheckedArguments
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: args
+  calls: isCollectionTemplate nish_str_eq
+  pointer template: size=64 writesThrough=false captured=false passedTo=isCollectionTemplate#0
+  pointer args: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  callee +0:3 isCollectionTemplate -> @isCollectionTemplate
 function holdsAnyUnion(table: TypeTable, types: i32[]): boolean -> @holdsAnyUnion
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.holdsUnion

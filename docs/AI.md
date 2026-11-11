@@ -2057,8 +2057,8 @@ export const main = (): i32 => {
   anywhere or the whole type, which accepts a few comparisons `tsc` refuses
   (TS2367; LANGUAGE.md, "Accepted here, refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,
-  `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
-  union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
+  `Result<Shape, E>`, a generic call binding `T` to a union: NL2533; a
+  `Map`'s value is the one that may be a union), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
   is not `Shape[]`), and inferred unions (an unannotated ternary or array of
   two variants).
 - **Declare what you store.** A store of a value that is only some of the

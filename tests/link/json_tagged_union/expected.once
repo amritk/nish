@@ -1,0 +1,16 @@
+define internal %union.tagged* @.json.decode.union.union.Num.Neg.Add(%struct.JsonDecoder* %r, %union.tagged* %v)
+define internal void @.json.encode.union.union.Num.Neg.Add(%struct.JsonWriter* %r, %union.tagged* %v)
+define internal %struct.nish_array* @.json.decode.array.union.Num.Neg.Add(%struct.JsonDecoder* %r, %struct.nish_array* %v)
+define internal void @.json.encode.array.union.Num.Neg.Add(%struct.JsonWriter* %r, %struct.nish_array* %v)
+define internal %union.tagged* @.json.decode.union.union.Open.Close(%struct.JsonDecoder* %r, %union.tagged* %v)
+define internal void @.json.encode.union.union.Open.Close(%struct.JsonWriter* %r, %union.tagged* %v)
+@.json.decode.in.Neg.kind :: call %union.tagged* @.json.decode.union.union.Num.Neg.Add(%struct.JsonDecoder* %r, %union.tagged* %
+@.json.decode.in.Add.kind :: call %struct.nish_array* @.json.decode.array.union.Num.Neg.Add(%struct.JsonDecoder* %r, %struct.nish_array* %
+@.json.decode.in.Add.kind :: call %union.tagged* @.json.decode.union.union.Num.Neg.Add(%struct.JsonDecoder* %r, %union.tagged* %
+@.json.decode.array.union.Num.Neg.Add :: call %union.tagged* @.json.decode.union.union.Num.Neg.Add(%struct.JsonDecoder* %r, %union.tagged* %
+@.json.decode.map.Map$str$un3.$Num.$Neg.$Add :: call %union.tagged* @.json.decode.union.union.Num.Neg.Add(%struct.JsonDecoder* %r, %union.tagged* %
+@.json.encode.Neg :: call void @.json.encode.union.union.Num.Neg.Add(%struct.JsonWriter* %r, %union.tagged* %
+@.json.encode.Add :: call void @.json.encode.array.union.Num.Neg.Add(%struct.JsonWriter* %r, %struct.nish_array* %
+@.json.encode.Add :: call void @.json.encode.union.union.Num.Neg.Add(%struct.JsonWriter* %r, %union.tagged* %
+@.json.encode.array.union.Num.Neg.Add :: call void @.json.encode.union.union.Num.Neg.Add(%struct.JsonWriter* %r, %union.tagged* %
+@.json.encode.map.Map$str$un3.$Num.$Neg.$Add :: call void @.json.encode.union.union.Num.Neg.Add(%struct.JsonWriter* %r, %union.tagged* %

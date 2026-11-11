@@ -1,19 +1,33 @@
-first 0 -1 true {"kind":"Num","value":3}
-last 0 -1 true {"kind":"Num","value":4}
-add 0 -1 false {"kind":"Add","args":[{"kind":"Num","value":1},{"kind":"negate","arg":{"kind":"Num","value":2}}],"note":null}
-reuse 0 -1 true {"kind":"Add","args":[{"kind":"Num","value":5}],"note":{"kind":"Num","value":6}}
-unknown -26 8 true {"kind":"Num","value":4}
-missing -26 0 true {"kind":"Num","value":4}
-number -26 8 true {"kind":"Num","value":4}
-array -20 0 true {"kind":"Num","value":4}
-member -26 30 true {"kind":"Num","value":4}
+first 0 -1 true {"kind":"Num","value":3} true
+last 0 -1 true {"kind":"Num","value":4} false
+add 0 -1 false {"kind":"Add","args":[{"kind":"Num","value":1},{"kind":"negate","arg":{"kind":"Num","value":2}}],"note":null} false
+reuse 0 -1 true {"kind":"Add","args":[{"kind":"Num","value":5}],"note":{"kind":"Num","value":6}} true
+unknown -26 8 true {"kind":"Num","value":4} false
+missing -26 0 true {"kind":"Num","value":4} false
+number -26 8 true {"kind":"Num","value":4} false
+array -20 0 true {"kind":"Num","value":4} false
+member -26 30 true {"kind":"Num","value":4} false
+absent -24 23 true {"kind":"Num","value":4} false
+absent last -24 23 true {"kind":"Num","value":4} false
+absent num -24 13 true {"kind":"Num","value":4} false
+tree 0 true
+tree reread 0 of 153 true
+swap 0 -1 false {"kind":"Add","args":[{"kind":"Num","value":1},{"kind":"negate","arg":{"kind":"Num","value":2}}],"note":null} true
+swapped 0 -1 true {"kind":"Add","args":[{"kind":"negate","arg":{"kind":"Num","value":3}},{"kind":"negate","arg":{"kind":"Num","value":4}}],"note":null} true
+kept false true
 alone 0 -1 {"kind":"Num","value":7}
 alone -24 10 {"kind":"Num","value":7}
 alone -26 8 {"kind":"Num","value":0}
 env 0 -1 {"list":[{"kind":"Num","value":9}],"maybe":{"kind":"Num","value":3}}
 null 0 false
 deep 15 0 -1 15
+deep reread 3248 of 384 true
 deep 16 -9 112 0
+deep reread 0 of 408 true
+wide 20 0 20
+wide reread 1014 of 545 true
+map 0 2 {"vars":{"x":{"kind":"Num","value":1},"y":{"kind":"negate","arg":{"kind":"Num","value":2}}}} true
+map bad -26 21
 event 0 -1 {"type":"open","hand":"Left","path":"/a"}
 event 0 -1 {"type":"Close","code":0}
 event -26 0 {"type":"Close","code":0}

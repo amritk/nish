@@ -962,10 +962,10 @@ export const main = (): i32 => {
 
 A recursive union, such as an expression tree whose variants hold other
 expressions, works too: each union gets one decoding and one encoding
-function that every use calls. A `Map` whose values are a union is not
-possible, because a union cannot be a type argument.
+function that every use calls. A `Map<string, Expr>` field holds a union as
+its values, and each value is decoded and encoded through that same function.
 
-Both calls need the compiler: under Node, where the types are erased, they end
+All three calls need the compiler: under Node, where the types are erased, they end
 the program with an error. The rules in full are in
 [Typed JSON](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#typed-json-nishjson-typed).
 

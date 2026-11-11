@@ -1,14 +1,9 @@
-define internal %union.tagged* @.json.decode.union.union.Num.Neg.Add(%struct.JsonDecoder* %r, %union.tagged* %v) "probe-stack"="inline-asm" {
-%0 = call i1 @nish.JsonDecoder.unionTag(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.41 to i8*))
-%1 = call i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* %r)
-%10 = call %struct.Num* @.json.new.Num()
-%12 = call i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* %r)
-call void @.json.decode.in.Num.kind(%struct.JsonDecoder* %r, %struct.Num* %11, i1 %12)
+call i1 @nish.JsonDecoder.unionTag(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }*
+call i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* %r)
+call %struct.Num* @.json.new.Num()
+call i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* %r)
+call void @.json.decode.in.Num.kind(%struct.JsonDecoder* %r, %struct.Num* %
 call void @nish.JsonDecoder.unknownTag(%struct.JsonDecoder* %r)
-define internal void @.json.encode.union.union.Num.Neg.Add(%struct.JsonWriter* %r, %union.tagged* %v) "probe-stack"="inline-asm" {
-switch i32 %1, label %json.other [ i32 0, label %json.variant i32 1, label %json.variant.1 i32 2, label %json.variant.2 ]
-call void @.json.encode.Neg(%struct.JsonWriter* %r, %struct.Neg* %3)
-define internal %struct.nish_array* @.json.decode.array.union.Num.Neg.Add(%struct.JsonDecoder* %r, %struct.nish_array* %v) "probe-stack"="inline-asm" {
-define internal void @.json.encode.array.union.Num.Neg.Add(%struct.JsonWriter* %r, %struct.nish_array* %v) "probe-stack"="inline-asm" {
-define internal %union.tagged* @.json.decode.union.union.Open.Close(%struct.JsonDecoder* %r, %union.tagged* %v) "probe-stack"="inline-asm" {
-define internal void @.json.encode.union.union.Open.Close(%struct.JsonWriter* %r, %union.tagged* %v) "probe-stack"="inline-asm" {
+switch i32 %
+label %json.other [ i32 0, label %json.variant i32 1, label %json.variant.1 i32 2, label %json.variant.2 ]
+call void @.json.encode.Neg(%struct.JsonWriter* %r, %struct.Neg* %

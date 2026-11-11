@@ -592,6 +592,7 @@ cases/term_pty added after R6: no rewriter to freeze it with
 cases/term_restore added after R6: no rewriter to freeze it with
 cases/union_arena added after R6: no rewriter to freeze it with
 cases/union_forms added after R6: no rewriter to freeze it with
+cases/union_map_value added after R6: no rewriter to freeze it with
 cases/union_narrowing added after R6: no rewriter to freeze it with
 cases/union_narrowing_arms added after R6: no rewriter to freeze it with
 cases/union_narrowing_index added after R6: no rewriter to freeze it with

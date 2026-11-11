@@ -288,9 +288,9 @@
  * at once; when it is not, the keys before it are stepped over, checked but not
  * kept, and the object is read again from its first key once the variant is
  * known. A nested union does the same inside the bytes its parent read ahead
- * over only when it is decoded, so each byte of the input is read at most once
- * per level of nesting above it: at most `maxDepth` times
- * (docs/security/json.md, JSON-17).
+ * over only when it is decoded, so each byte of the input is read again at
+ * most once per level of nesting above it: at most `maxDepth` times
+ * (docs/security/json.md, JSON-17), counted in `JsonDecoder.unionReread`.
  *
  * `jsonDecode` decodes into the object it is given and cannot change which
  * class that is, so a union is decoded with `jsonDecodeUnion(d, prev)`, which
@@ -302,8 +302,13 @@
  * writes the tag first, then the variant's fields. A variant decoded alone,
  * by `jsonDecode`, reads its tag like any field and fails with
  * `JSON_DECODE_TAG` when it is not its own. The code is written once per
- * union, so a recursive union is one function that calls itself. A union may
- * not be a `Map`'s type argument, so no map holds one.
+ * union, so a recursive union is one function that calls itself, and a
+ * `Map<string, Expr>` decodes and encodes each value through it.
+ *
+ * A failed decode answers `prev` at the top only. A union field, element or
+ * map value below it whose tag named another variant already holds the new
+ * variant when the failure comes, decoded up to it, as any failed `jsonDecode`
+ * leaves what it read: check `d.failed` before using the object.
  *
  * **Errors are sticky codes**, as the tokenizer's and the writer's are. The
  * first error sets `failed` to a negative code — a `JSON_DECODE_*` code here,
@@ -600,6 +605,15 @@ export class JsonDecoder {
   private held: boolean = false
   /** The `{` of the union object `unionTag` read ahead in, or `-1` when its tag was the first key. */
   private unionStart: i32 = -1
+  /**
+   * The bytes this decoding has read twice: for each tagged union whose tag
+   * was not its first key, those from its `{` to the end of its tag, which
+   * the decoder read ahead over and then reads again as the variant's
+   * fields. A byte is read again once for each union object it is inside,
+   * so this is at most `maxDepth` times the input's length
+   * (docs/security/json.md, JSON-17); `reset` clears it.
+   */
+  unionReread: i32 = 0
 
   /**
    * A decoder over `src[off, off + len)`, with no error and no map key taken.
@@ -629,6 +643,7 @@ export class JsonDecoder {
     this.held = false
     this.mapKeys = 0
     this.unionStart = -1
+    this.unionReread = 0
   }
 
   /**
@@ -890,6 +905,7 @@ export class JsonDecoder {
    *   src/emit-json.ts.
    */
   unknownTag(): void {
+    this.unionStart = -1
     this.fail(JSON_DECODE_TAG, this.tok.tokStart)
   }
 
@@ -910,6 +926,7 @@ export class JsonDecoder {
       return true
     }
     this.unionStart = -1
+    this.unionReread += this.tok.tokEnd - start
     this.tok.rewindObject(start)
     return false
   }

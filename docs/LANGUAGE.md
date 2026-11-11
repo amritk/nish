@@ -1112,12 +1112,14 @@ boundary, so no other `i32` reaches it.
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
   narrows nothing, and is accepted. A test of the tag does narrow (above).
-- **No union type arguments.** `Box<Shape>`, a generic function or method
-  whose type parameter would bind to a union, `Map<K, Shape>` and
+- **No union type arguments, but a `Map`'s value.** `Box<Shape>`, a generic
+  function or method whose type parameter would bind to a union, and
   `Result<Shape, E>` / `Result<T, Shape>` are NL2533
   (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
-  `reject_union_generic_method`, `reject_union_map_value`,
-  `reject_union_result_ok`, `reject_union_result_err`). A union is not a
+  `reject_union_generic_method`, `reject_union_result_ok`,
+  `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
+  its value as it is, the way an array stores an element of a union, and
+  `get` gives `Shape | undefined` (`union_map_value`). A union is not a
   `Map` or `Set` key, which is the key rule's refusal
   (`reject_union_map_key`, `reject_union_set`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary
@@ -12682,8 +12684,9 @@ export const main = (): i32 => {
   `json_reject_union_same_tag`); a `tag` that is not a string literal is
   NL2721 (`json_reject_union_tag_literal`), one on a class that tags no
   union's variant is NL2723 (`json_reject_union_tag_no_field`), and a variant
-  that is not a class, an interface, is NL2486's kin
-  (`json_reject_union_interface`). A field typed with an enum member that no
+  that is not a class, an interface, is NL2486
+  (`json_reject_union_interface`), the code of any typed JSON type that is not
+  a declared class. A field typed with an enum member that no
   union tags a variant with is no tag, and is refused as any other field type
   is (`json_reject_enum_member`). `jsonDecode` decodes into the object it is
   given and a union's variant is known only from the input, so a union is
@@ -12705,8 +12708,9 @@ export const main = (): i32 => {
   its own is `JSON_DECODE_TAG`. Each union gets one decoding and one
   encoding function, `.json.decode.union.<U>` and `.json.encode.union.<U>`,
   which every place it appears calls, so a recursive union such as `Expr`
-  above recurses through them (`tests/link/json_tagged_union`). A `Map` of a
-  union is not one the language declares: a union is no type argument.
+  above recurses through them (`tests/link/json_tagged_union`). A
+  `Map<string, Expr>` field decodes each value through that same function
+  and encodes it through the other.
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps
