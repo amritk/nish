@@ -52,23 +52,23 @@ const JSON_FIELD_UNION: i32 = 8 [exported]
 const JSON_FIELD_UNION_ARRAY: i32 = 9 [exported]
 const JSON_FIELD_TAG: i32 = 10 [exported]
 const JSON_OPTIONS: string = "json" [exported]
-struct JsonField (class) size=72 align=8 exported
+struct JsonField (class) size=64 align=8 exported
   field field: FieldInfo | null index=0 offset=0
-  field type: i32 index=1 offset=8
-  field kind: i32 index=2 offset=12
-  field nullable: boolean index=3 offset=16
-  field scalar: i32 index=4 offset=20
-  field cls: StructInfo | null index=5 offset=24
-  field enumType: i32 index=6 offset=32
-  field map: StructInfo | null index=7 offset=40
-  field value: JsonField | null index=8 offset=48
+  field cls: StructInfo | null index=1 offset=8
+  field map: StructInfo | null index=2 offset=16
+  field value: JsonField | null index=3 offset=24
+  field variants: StructInfo[] index=4 offset=32
+  field type: i32 index=5 offset=40
+  field kind: i32 index=6 offset=44
+  field scalar: i32 index=7 offset=48
+  field enumType: i32 index=8 offset=52
   field union: i32 index=9 offset=56
-  field variants: StructInfo[] index=10 offset=64
+  field nullable: boolean index=10 offset=60
   constructor -> @JsonField.constructor
 function JsonField.constructor(this: JsonField, field: FieldInfo | null, type: i32, kind: i32, nullable: boolean): void -> @JsonField.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: field kind nullable type
-  pointer this: size=72 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   pointer field: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function noteJsonOptions(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @noteJsonOptions [exported]
@@ -471,7 +471,7 @@ function jsonValuesOf(f: JsonField, out: JsonField[]): void -> @jsonValuesOf
   sharedWrite: +0:5
   escaping: f
   calls: nish_array_grow
-  pointer f: size=72 writesThrough=true captured=true
+  pointer f: size=64 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:7 at: JsonField | null (let)
@@ -517,7 +517,7 @@ function jsonValues(program: CheckedProgram, table: TypeTable, roots: StructInfo
   callee +12:9 jsonValuesOf -> @jsonValuesOf
 function jsonMakes(f: JsonField): boolean -> @jsonMakes
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer f: size=72 writesThrough=false captured=false
+  pointer f: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function jsonMadeClasses(program: CheckedProgram, table: TypeTable, roots: StructInfo[], union: boolean): StructInfo[] -> @jsonMadeClasses
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -555,19 +555,24 @@ function jsonMaps(program: CheckedProgram, table: TypeTable, roots: StructInfo[]
   local +3:11 map: StructInfo | null (const)
   callee +4:39 jsonMakes -> @jsonMakes
   callee +4:56 StringSet.add -> @StringSet.add
-function jsonUnionIn(table: TypeTable, type: i32): i32 -> @jsonUnionIn
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+function jsonUnionIn(program: CheckedProgram, table: TypeTable, type: i32): i32 -> @jsonUnionIn
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.isArray TypeTable.isUnion TypeTable.refOf TypeTable.stripNull
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.isArray#0 TypeTable.isUnion#0 TypeTable.refOf#0 TypeTable.refOf#0
+  calls: TypeTable.isArray TypeTable.isUnion TypeTable.refOf TypeTable.stripNull jsonMapOf nish_panic_index
+  pointer program: size=728 writesThrough=false captured=false passedTo=jsonMapOf#0
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.isArray#0 TypeTable.isUnion#0 TypeTable.refOf#0 TypeTable.refOf#0 jsonMapOf#1
   stackSites=0 stackLocals=0
-  local +0:9 base: i32 (const)
-  callee +0:16 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +1:7 TypeTable.isUnion -> @TypeTable.isUnion
-  callee +4:7 TypeTable.isArray -> @TypeTable.isArray
-  callee +4:30 TypeTable.isUnion -> @TypeTable.isUnion
-  callee +4:44 TypeTable.refOf -> @TypeTable.refOf
-  callee +5:12 TypeTable.refOf -> @TypeTable.refOf
+  local +0:7 at: i32 (let)
+  local +3:11 base: i32 (const)
+  callee +3:18 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +4:9 TypeTable.isUnion -> @TypeTable.isUnion
+  callee +7:9 TypeTable.isArray -> @TypeTable.isArray
+  callee +7:32 TypeTable.isUnion -> @TypeTable.isUnion
+  callee +7:46 TypeTable.refOf -> @TypeTable.refOf
+  callee +8:14 TypeTable.refOf -> @TypeTable.refOf
+  local +10:11 map: StructInfo | null (const)
+  callee +10:17 jsonMapOf -> @jsonMapOf
+  local +11:11 instance: StructInstantiation | null (const)
 function jsonNotClassVariant(table: TypeTable, name: string, union: i32, variant: i32): string -> @jsonNotClassVariant
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: union variant
@@ -616,8 +621,8 @@ function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, ro
   sharedWrite: via jsonClasses
   escaping: name type
   calls: TypeTable.isUnion TypeTable.stripNull TypeTable.typeName jsonBadVariant jsonClasses jsonFieldOf jsonMadeClasses jsonNotClassVariant jsonRootsOf jsonUnionIn jsonUnionRefusal nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer program: size=728 writesThrough=false captured=false passedTo=jsonBadVariant#0 jsonRootsOf#0 jsonUnionRefusal#0 jsonClasses#0 jsonFieldOf#0 jsonBadVariant#0 jsonUnionRefusal#0 jsonMadeClasses#0
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonBadVariant#1 jsonNotClassVariant#0 jsonRootsOf#1 TypeTable.typeName#0 jsonUnionRefusal#1 jsonClasses#1 jsonFieldOf#1 jsonUnionIn#0 jsonBadVariant#1 jsonNotClassVariant#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonMadeClasses#1
+  pointer program: size=728 writesThrough=false captured=false passedTo=jsonBadVariant#0 jsonRootsOf#0 jsonUnionRefusal#0 jsonClasses#0 jsonFieldOf#0 jsonUnionIn#0 jsonBadVariant#0 jsonUnionRefusal#0 jsonMadeClasses#0
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonBadVariant#1 jsonNotClassVariant#0 jsonRootsOf#1 TypeTable.typeName#0 jsonUnionRefusal#1 jsonClasses#1 jsonFieldOf#1 jsonUnionIn#1 jsonBadVariant#1 jsonNotClassVariant#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonMadeClasses#1
   stackSites=1 stackLocals=1
   local +0:9 base: i32 (const)
   callee +0:16 TypeTable.stripNull -> @TypeTable.stripNull
@@ -647,18 +652,19 @@ function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, ro
   callee +54:23 jsonBadVariant -> @jsonBadVariant
   callee +56:20 jsonNotClassVariant -> @jsonNotClassVariant
   callee +62:83 TypeTable.typeName -> @TypeTable.typeName
-  local +71:15 why: string (const)
-  callee +71:21 jsonUnionRefusal -> @jsonUnionRefusal
-  local +86:16 info: StructInfo (const)
-  callee +86:24 jsonMadeClasses -> @jsonMadeClasses
-  local +87:13 ctor: FunctionSig | null (const)
+  local +71:11 v: JsonField | null (let)
+  local +74:17 why: string (const)
+  callee +74:23 jsonUnionRefusal -> @jsonUnionRefusal
+  local +91:16 info: StructInfo (const)
+  callee +91:24 jsonMadeClasses -> @jsonMadeClasses
+  local +92:13 ctor: FunctionSig | null (const)
 function jsonScalarMethod(type: i32): string -> @jsonScalarMethod [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function jsonDecodeMethod(f: JsonField): string -> @jsonDecodeMethod [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: jsonScalarMethod nish_str_concat
-  pointer f: size=72 writesThrough=false captured=false
+  pointer f: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 scalar: string (const)
   callee +0:18 jsonScalarMethod -> @jsonScalarMethod
@@ -668,20 +674,29 @@ function jsonHelperPart(type: i32): string -> @jsonHelperPart
 function jsonEncodeHelper(f: JsonField): string -> @jsonEncodeHelper [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: jsonHelperPart nish_str_concat
-  pointer f: size=72 writesThrough=false captured=false
+  pointer f: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:20 jsonHelperPart -> @jsonHelperPart
   callee +1:20 jsonHelperPart -> @jsonHelperPart
 function jsonMapMethods(role: i32): string[] -> @jsonMapMethods
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function jsonUnionMethods(): string[] -> @jsonUnionMethods
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+function jsonAddUnionMethods(names: StringSet): void -> @jsonAddUnionMethods
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringSet.add
+  calls: StringSet.add
+  pointer names: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 StringSet.add#0 StringSet.add#0 StringSet.add#0 StringSet.add#0 StringSet.add#0
   stackSites=0 stackLocals=0
+  callee +0:3 StringSet.add -> @StringSet.add
+  callee +1:3 StringSet.add -> @StringSet.add
+  callee +2:3 StringSet.add -> @StringSet.add
+  callee +3:3 StringSet.add -> @StringSet.add
+  callee +4:3 StringSet.add -> @StringSet.add
+  callee +5:3 StringSet.add -> @StringSet.add
 function jsonRouteNames(program: CheckedProgram, table: TypeTable, role: i32, roots: StructInfo[], union: boolean): StringSet -> @jsonRouteNames
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via jsonValues
-  calls: StringSet.add StringSet.constructor jsonDecodeMethod jsonEncodeHelper jsonScalarMethod jsonUnionMethods jsonValues nish_alloc_struct
+  calls: StringSet.add StringSet.constructor jsonAddUnionMethods jsonDecodeMethod jsonEncodeHelper jsonScalarMethod jsonValues nish_alloc_struct
   pointer program: size=728 writesThrough=false captured=false passedTo=jsonValues#0
   pointer table: size=96 writesThrough=false captured=false passedTo=jsonValues#1
   pointer roots: size=0 writesThrough=false captured=false passedTo=jsonValues#2
@@ -689,29 +704,26 @@ function jsonRouteNames(program: CheckedProgram, table: TypeTable, role: i32, ro
   local +0:9 names: StringSet (const)
   callee +0:17 new StringSet -> @StringSet.constructor
   local +1:9 decode: boolean (const)
-  local +3:16 name: string (const)
-  callee +3:24 jsonUnionMethods -> @jsonUnionMethods
-  callee +4:7 StringSet.add -> @StringSet.add
-  local +8:16 name: string (const)
-  callee +19:7 StringSet.add -> @StringSet.add
-  local +22:16 name: string (const)
-  callee +23:7 StringSet.add -> @StringSet.add
-  local +26:14 root: StructInfo (const)
-  callee +28:7 StringSet.add -> @StringSet.add
-  local +31:14 f: JsonField (const)
-  callee +31:19 jsonValues -> @jsonValues
-  local +32:11 cls: StructInfo | null (const)
-  callee +34:7 StringSet.add -> @StringSet.add
-  local +36:16 variant: StructInfo (const)
-  callee +38:9 StringSet.add -> @StringSet.add
-  local +41:11 isUnion: boolean (const)
-  local +42:11 holdsObject: boolean (const)
-  local +44:11 isEnum: boolean (const)
-  local +45:11 isArray: boolean (const)
-  callee +51:7 StringSet.add -> @StringSet.add
-  local +56:20 name: string (const)
-  callee +56:28 jsonUnionMethods -> @jsonUnionMethods
-  callee +57:11 StringSet.add -> @StringSet.add
+  callee +3:5 jsonAddUnionMethods -> @jsonAddUnionMethods
+  callee +7:5 StringSet.add -> @StringSet.add
+  local +10:16 name: string (const)
+  callee +21:7 StringSet.add -> @StringSet.add
+  local +24:16 name: string (const)
+  callee +25:7 StringSet.add -> @StringSet.add
+  local +28:14 root: StructInfo (const)
+  callee +30:7 StringSet.add -> @StringSet.add
+  local +33:14 f: JsonField (const)
+  callee +33:19 jsonValues -> @jsonValues
+  local +34:11 cls: StructInfo | null (const)
+  callee +36:7 StringSet.add -> @StringSet.add
+  local +38:16 variant: StructInfo (const)
+  callee +40:9 StringSet.add -> @StringSet.add
+  local +43:11 isUnion: boolean (const)
+  local +44:11 holdsObject: boolean (const)
+  local +46:11 isEnum: boolean (const)
+  local +47:11 isArray: boolean (const)
+  callee +53:7 StringSet.add -> @StringSet.add
+  callee +58:9 jsonAddUnionMethods -> @jsonAddUnionMethods
   callee +61:9 StringSet.add -> @StringSet.add
   callee +62:9 StringSet.add -> @StringSet.add
   callee +64:9 StringSet.add -> @StringSet.add
@@ -727,9 +739,9 @@ function jsonRouteNames(program: CheckedProgram, table: TypeTable, role: i32, ro
   callee +83:7 StringSet.add -> @StringSet.add
   callee +85:7 StringSet.add -> @StringSet.add
   callee +85:17 jsonScalarMethod -> @jsonScalarMethod
-  callee +88:7 StringSet.add -> @StringSet.add
-  callee +91:7 StringSet.add -> @StringSet.add
-  callee +92:7 StringSet.add -> @StringSet.add
+  callee +90:7 StringSet.add -> @StringSet.add
+  callee +93:7 StringSet.add -> @StringSet.add
+  callee +94:7 StringSet.add -> @StringSet.add
 function jsonRouteCallees(program: CheckedProgram, table: TypeTable, sig: FunctionSig): FunctionSig[] -> @jsonRouteCallees [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonRouteNames

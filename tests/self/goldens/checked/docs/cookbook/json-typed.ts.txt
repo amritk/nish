@@ -1350,7 +1350,8 @@ function JsonDecoder.enterUnion(this: JsonDecoder): boolean -> @nish.JsonDecoder
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 start: i32 (const)
-  callee +2:5 JsonTokenizer.rewindObject -> @nish.JsonTokenizer.rewindObject
+  local +3:11 span: i32 (const)
+  callee +5:5 JsonTokenizer.rewindObject -> @nish.JsonTokenizer.rewindObject
 function JsonDecoder.tagValue(this: JsonDecoder, name: string): void -> @nish.JsonDecoder.tagValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take

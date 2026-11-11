@@ -1350,7 +1350,8 @@ function JsonDecoder.enterUnion(this: JsonDecoder): boolean -> @nish.JsonDecoder
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 start: i32 (const)
-  callee +2:5 JsonTokenizer.rewindObject -> @nish.JsonTokenizer.rewindObject
+  local +3:11 span: i32 (const)
+  callee +5:5 JsonTokenizer.rewindObject -> @nish.JsonTokenizer.rewindObject
 function JsonDecoder.tagValue(this: JsonDecoder, name: string): void -> @nish.JsonDecoder.tagValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.take
@@ -1863,8 +1864,8 @@ function jsonDecodeUnion<Num | Neg>(_d: JsonDecoder, _prev: Num | Neg): Num | Ne
   stackSites=0 stackLocals=0
 function jsonEncode<Num | Neg>(_w: JsonWriter, _value: Num | Neg): void -> @nish.jsonEncode$un2.$Num.$Neg [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.f64 nish.JsonWriter.key nish.JsonWriter.string
-  pointer _w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginObject#0 nish.JsonWriter.key#0 nish.JsonWriter.endObject#0 nish.JsonWriter.string#0 nish.JsonWriter.f64#0
+  calls: nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.f64 nish.JsonWriter.key nish.JsonWriter.nullValue nish.JsonWriter.string
+  pointer _w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.JsonWriter.beginObject#0 nish.JsonWriter.key#0 nish.JsonWriter.endObject#0 nish.JsonWriter.string#0 nish.JsonWriter.f64#0
   stackSites=0 stackLocals=0
 module std/json-tokenizer.ts [package nish]
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
