@@ -174,6 +174,8 @@ export const main = (): i32 => {
 };
 ```
 
+`??` gives a function in place of `null`, as in `const f: Op = s.op ?? inc`.
+
 A call with no test before it is refused (`NL2740`):
 
 ```ts nish:err NL2740
@@ -233,6 +235,11 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+The arrow reads a field or element each time the callee calls it, so an
+argument that calls a function or assigns as it is read, such as
+`ops[next()]`, is refused (`NL2734`): read it into a `const` first and pass
+the `const`.
 
 The builtins that check the body they are handed, such as `parallelMap`, a
 scope's `spawn`, `expose` and `region`, take only a function's name or an

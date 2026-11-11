@@ -1347,6 +1347,7 @@ const DECLARED = [
     "tests/cases/fnref_map.ts",
     "tests/cases/fnref_map_array.ts",
     "tests/cases/fnref_map_nullable.ts",
+    "tests/cases/fnref_nullable_coalesce.ts",
     "tests/cases/fnref_place_set_arg.ts",
     "tests/cases/fnref_place_set_nullable.ts",
   ].map((program) => ({
