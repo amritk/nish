@@ -702,6 +702,58 @@ const caseEnv = (file) => {
 const selectedCases = cases.filter((name) => !only || name.includes(only))
 
 /**
+ * The files the WP44 file cases open and cannot make themselves, made once
+ * before any section runs, because the cases run natively here and under Node
+ * in the differential section, which may be another shard: a FIFO and a
+ * socket for `file_open_errors` (the language has no `mkfifo`, and a socket
+ * bound by the program would not run under Node), and a sparse file of
+ * 2^32 + 16 bytes for `file_size_large`, made with `fs.truncateSync`, so it
+ * costs no disk. A process that exits without closing its server leaves the
+ * socket file behind, which is all `fileOpen` needs.
+ */
+const prepareFileCases = () => {
+  fs.mkdirSync(buildDir, { recursive: true })
+  const fifo = path.join(buildDir, "file_open_errors.fifo")
+  const sock = path.join(buildDir, "file_open_errors.sock")
+  for (const file of [fifo, sock]) {
+    fs.rmSync(file, { force: true })
+  }
+  // Through `sh`, which is the binary knip sees, so `mkfifo` needs no entry of its own in knip.json.
+  const made = spawnSync("sh", ["-c", 'mkfifo "$0"', fifo], { encoding: "utf8" })
+  const bound = spawnSync(
+    "node",
+    ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => process.exit(0))`],
+    { encoding: "utf8", timeout: 10000 }
+  )
+  const large = path.join(buildDir, "file_size_large.bin")
+  fs.closeSync(fs.openSync(large, "w"))
+  fs.truncateSync(large, 2 ** 32 + 16)
+  // Without them file_open_errors would print other errnos and fail with a
+  // diff that does not say why, so a fixture that could not be made is named.
+  const kind = (file, test) => fs.existsSync(file) && test(fs.lstatSync(file))
+  check(
+    "file fixtures: the FIFO and the socket file_open_errors opens were made",
+    kind(fifo, (st) => st.isFIFO()) && kind(sock, (st) => st.isSocket()),
+    `mkfifo: ${made.status} ${made.stderr}\nsocket: ${bound.status} ${bound.stderr}`
+  )
+}
+// Only when a file case can run: no filter, a filter naming one, the guard of
+// the file-window wasi section below (which builds the fixture cases whatever
+// it matches), or a filter naming no case at all, which is another section's
+// and may run every case.
+const fileFixtureCases = ["file_open_errors", "file_size_large"]
+if (
+  !only ||
+  "file_".includes(only) ||
+  only.startsWith("file_") ||
+  "wasi".includes(only) ||
+  selectedCases.length === 0 ||
+  selectedCases.some((name) => fileFixtureCases.includes(name))
+) {
+  prepareFileCases()
+}
+
+/**
  * The lane a case's native program runs in: one program at a time, whatever
  * else section A has in flight.
  *
@@ -3080,6 +3132,106 @@ if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
     skip(
       `skipped: net_mss: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of netMss is not run`
     )
+  }
+}
+
+// ---- The file-window builtins under WASI (WP44 F2) --------------------------------
+//
+// `fileOpen`, `fileReadAt`, `fileSize` and `fileClose` are `open`, `pread`,
+// `fstat` and `close` through wasi-libc, so each case that reads a file is
+// built with `--profile wasi`, run by examples/wasi-host.mjs (which preopens
+// the repository root, where the cases' relative paths start) and held to the
+// same `.out` as its native run. `file_open_errors` is the one that showed a
+// gap: WASI resolves "" to the preopened directory, so the runtime refuses an
+// empty path, and a path holding a NUL, before it asks.
+if (!only || "file_".includes(only) || only.startsWith("file_") || "wasi".includes(only)) {
+  const fileCases = [
+    "file_read_at",
+    "file_read_at_eof",
+    "file_read_at_pos",
+    "file_open_errors",
+    "file_size_large",
+    "mem_file_stream_flat",
+  ]
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const fileDir = path.join(buildDir, "file-wasi")
+    fs.rmSync(fileDir, { recursive: true, force: true })
+    fs.mkdirSync(fileDir, { recursive: true })
+    for (const name of fileCases) {
+      const module = path.join(fileDir, `${name}.wasm`)
+      const source = path.join(casesDir, `${name}.ts`)
+      const built = spawnSync(NISH, [source, "-o", fileDir + path.sep, "--link", module, "--profile", "wasi"], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const ran =
+        built.status === 0
+          ? // A host that ignored O_NONBLOCK would block on the FIFO's open: fail, do not hang the shard.
+            spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], {
+              cwd: root,
+              encoding: "utf8",
+              timeout: 60000,
+            })
+          : built
+      const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
+      check(
+        `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints its .out`,
+        ran.status === 0 && ran.stdout.trim() === want.trim(),
+        shown(ran)
+      )
+    }
+  } else {
+    skip(
+      `skipped: file_: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the file-window cases are not run`
+    )
+  }
+}
+
+// WP44 §9 Q7: the checker refuses the four file builtins on a wasm32 target
+// (NL2718), but IR compiled for the host reaches `--profile wasm` unchecked.
+// runtime-wasm.c answers each -38 (`ENOSYS`), so such a module links, imports
+// nothing, and every call says there is no file system.
+if (!only || only.startsWith("file_") || "file_wasm_stubs".includes(only)) {
+  if (has("wasm-ld")) {
+    const stubsTs = path.join(buildDir, "file_wasm_stubs.ts")
+    const stubsLl = path.join(buildDir, "file_wasm_stubs.ll")
+    const stubsWasm = path.join(buildDir, "file_wasm_stubs.wasm")
+    fs.writeFileSync(
+      stubsTs,
+      [
+        'export function openProbe(): i32 { return fileOpen("missing"); }',
+        "export function readProbe(): i32 {",
+        "  const buf: u8[] = new Array<u8>(4);",
+        "  const pos: i64 = 0;",
+        "  return fileReadAt(3, buf, 0, 4, pos);",
+        "}",
+        "export function sizeProbe(): i64 { return fileSize(3); }",
+        "export function closeProbe(): i32 { return fileClose(3); }",
+        "",
+      ].join("\n")
+    )
+    const sc = spawnSync(NISH, [stubsTs, "-o", stubsLl], { cwd: root })
+    const sl =
+      sc.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", stubsLl, "runtime/runtime-wasm.c", "-o", stubsWasm, "--profile", "wasm"],
+            { cwd: root }
+          )
+        : sc
+    const stubsProbe = [
+      "const m = new WebAssembly.Module(require('fs').readFileSync(process.argv[1]))",
+      "const e = new WebAssembly.Instance(m, {}).exports",
+      "console.log([WebAssembly.Module.imports(m).length, e.openProbe(), e.readProbe(), e.sizeProbe(), e.closeProbe()].join(' '))",
+    ].join("\n")
+    const sr = sl.status === 0 ? spawnSync("node", ["-e", stubsProbe, stubsWasm], { cwd: root }) : null
+    check(
+      "wasm profile links host IR calling fileOpen, fileReadAt, fileSize and fileClose, and each answers -38",
+      sr !== null && String(sr.stdout).trim() === "0 -38 -38 -38 -38",
+      String(sc.stderr) + String(sl.stderr) + (sr ? String(sr.stdout) + String(sr.stderr) : "")
+    )
+  } else {
+    skip("skipped: file_wasm_stubs: no wasm-ld: the --profile wasm link of the file builtins is not checked")
   }
 }
 

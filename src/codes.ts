@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 874
+export const RULE_COUNT: i32 = 875
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -585,6 +585,8 @@ const diagnosticRules = (): string[] => [
   "NL2224",
   "Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it",
   "NL2234",
+  "` reads a file, and a freestanding wasm32 build has no file system to read (build with `--profile wasi`)",
+  "NL2718",
   "` is not a `declare function`: a handle is closed by the C function its dispose names, and nothing else",
   "NL2569",
   "` is not lowered yet: until a release emits its close, hold the `CPtr` in a local and close it yourself",

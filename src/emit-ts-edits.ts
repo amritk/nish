@@ -128,7 +128,7 @@ const AMBIENT_NAMES: string =
   " Ok Err arena readStdin waitStdin isTerminal terminalSize setRawMode" +
   " setTerminalRestore renameSync unlinkSync writeFileBytesSync writeBytes" +
   " writeFileSyncMode createFileExclusiveSync mkdirSyncMode spawnPiped" +
-  " spawnPipedWithin spawnWithFds "
+  " spawnPipedWithin spawnWithFds fileOpen fileReadAt fileSize fileClose "
 
 /**
  * The width types `nish/runtime` declares (`runtime/core.d.ts`), and the

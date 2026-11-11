@@ -2422,7 +2422,16 @@ a `\u` escape `nish/json` decodes) is one unit per byte, and counts its bytes.
 
 **Files and the system.** `readFileSync(path)` (exits 1 on failure),
 `readFileSyncOrNull(path)` (`string | null`), `readFileBytesSync(path)`
-(`u8[] | null`, the bytes as they are on disk), `writeFileSync(path, data)`,
+(`u8[] | null`, the bytes as they are on disk), and a file a window at a
+time: `fileOpen(path)` (an `i32` descriptor for a regular file, or a negative
+Linux errno: `-2` missing, `-13` denied, `-21` a directory, `-22` not a
+regular file), `fileReadAt(fd, buf, off, len, pos)` (at most `len` bytes from
+`i64` byte `pos` into `buf[off, off + len)`, a `u8[]`; the count, `0` at the
+end, short reads allowed so loop; the window panics like `netRead`'s),
+`fileSize(fd)` (an `i64`, which can change between calls), `fileClose(fd)`
+(never call it twice: the number may name another file by then); all four
+`fs.read`, refused on freestanding `wasm32` (NL2718) but not under
+`--profile wasi`; `writeFileSync(path, data)`,
 `appendFileSync(path, data)`, `writeFileBytesSync(path, bytes)` (a `u8[]` as
 it is; `i32`: the length, or a negative errno), `renameSync(from, to)` (`0` or
 a negative errno; atomic on one filesystem, `-18` across two, so write the
