@@ -811,6 +811,9 @@ export class HttpHandler {
    * output is still roomy, so more answers fit behind it, and no request on
    * it is parked waiting for the room a send makes. A connection with nothing
    * to send is settled at once, so a hang-up closes in the pass that reads it.
+   * Nor does a held write wait: its `H1_WRITE` comes only from `next`, so a
+   * send put off until the peer has read would empty the output, arm the slot
+   * for reading alone, and leave the rest of the response unsent.
    * `flush` runs before every poll, so a send put off here goes out before
    * the handler waits.
    */
@@ -819,6 +822,7 @@ export class HttpHandler {
     return (
       !this.draining &&
       conn.wantsWrite() &&
+      !conn.writeHeld &&
       this.roomy(conn) &&
       (at < 0 || this.requests[at].state !== HANDLER_PARKED)
     )
@@ -829,10 +833,16 @@ export class HttpHandler {
     if (conn.wantsWrite()) {
       this.sent += 1
     }
-    const wants: i32 = this.server.flush(slot)
+    let wants: i32 = this.server.flush(slot)
     if ((wants & H1_DONE) !== 0) {
       this.closeSlot(slot)
       return
+    }
+    if (conn.writeHeld) {
+      // A held write's `H1_WRITE` comes only from `next`, which `drive` runs
+      // on a writable socket. A send that emptied the output, as one `flush`
+      // makes after the peer has read, would otherwise arm nothing for it.
+      wants = wants | H1_WANT_WRITE
     }
     if (this.draining && this.current[slot] === -1 && !conn.wantsWrite()) {
       this.closeSlot(slot)
@@ -1286,7 +1296,9 @@ export class HttpHandler {
   /**
    * Ends `r`'s response. `r` is the handler's again: it goes back once the
    * carrier has taken every byte, and the connection's next request is read.
-   * Answers `HANDLER_SENT` or `HANDLER_DROPPED`.
+   * Answers `HANDLER_SENT` or `HANDLER_DROPPED`. The send may be put off so a
+   * pipelined burst goes out in one write: call `wait` or `flush` after
+   * answering, or it waits for the next of them.
    * @param r a request whose response `start` began; the handler's again after this call
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection closed first
    */
