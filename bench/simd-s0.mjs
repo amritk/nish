@@ -348,7 +348,9 @@ for (const name of ["nbody", "vec3", "spectral"].filter((n) => only.has(n))) {
     columns.push([level, exe])
   }
   const timed = timeAlternating(name, ...columns.map(([, exe]) => timeProcess(exe, [])))
-  columns.forEach(([column], k) => row(name, column, timed[k]))
+  for (const [k, [column]] of columns.entries()) {
+    row(name, column, timed[k])
+  }
 }
 
 // ---- bootstrap -------------------------------------------------------------------------------
