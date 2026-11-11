@@ -352,19 +352,12 @@ class ServeState {
   cancelled: boolean[]
   /** The free slots, `free[0 .. freeCount)`, the last freed on top. */
   free: i32[]
-  freeCount: i32 = 0
   /** The slots whose task has answered since the loop last looked, `finished[0 .. finishedCount)`, in the order they answered. */
   finished: i32[]
-  finishedCount: i32 = 0
   /** The slots whose task the loop has started and not yet seen answer, `running[0 .. runningCount)`: the ones a hang-up can cancel. */
   running: i32[]
-  runningCount: i32 = 0
   /** Whether a slot is in `running`, so a slot answered and reused within a turn is listed once. */
   listed: boolean[]
-  /** `ServeLimits.deadline`, which each task arms on itself as it starts. */
-  deadline: i32 = 0
-  /** Set when the server begins to stop: each task still running, and each that starts later, is cancelled. */
-  stopping: boolean = false
   /** The status each task answered, or `SERVE_REFUSE`. */
   status: i32[]
   /** The bytes each task wrote into `bodies`, or -1 when its body broke `responseBytes`. */
@@ -388,8 +381,16 @@ class ServeState {
   /** The fields of an answer with a content type: `ServeLimits.server`'s, then `content-type`, whose value is set per answer. */
   typedNames: u8[][]
   typedValues: u8[][]
+  /** How many of `free`, `finished` and `running` are in use. */
+  freeCount: i32 = 0
+  finishedCount: i32 = 0
+  runningCount: i32 = 0
+  /** `ServeLimits.deadline`, which each task arms on itself as it starts. */
+  deadline: i32 = 0
   /** The wake socket's end the tasks write to. */
   wakeFd: i32 = 0
+  /** Set when the server begins to stop: each task still running, and each that starts later, is cancelled. */
+  stopping: boolean = false
   /** Whether a byte is waiting in the wake socket. */
   signalled: boolean = false
   /** Whether the loop is running rather than parked: a task that answers now needs no wake byte, as the loop looks again before it parks. */
