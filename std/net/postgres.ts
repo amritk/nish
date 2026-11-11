@@ -124,8 +124,9 @@
  * of an exchange SCRAM began is refused.
  *
  *  Cleartext and MD5 passwords, and SASL mechanisms other than SCRAM-SHA-256,
- *  are refused: with no TLS here the first sends the password as it is, and the
- *  second is a hash any eavesdropper can replay. The password's bytes are used
+ *  are refused: the first sends the password as it is, and the second is a
+ *  hash any eavesdropper can replay, over a connection that need not be
+ *  encrypted (TLS is off unless `PgConfig.tls` asks for it). The password's bytes are used
  *  as they are, without SASLprep (RFC 4013): an ASCII password works, and a
  *  non-ASCII one works only when it is already in the form SASLprep would give
  *  (PostgreSQL itself falls back to the raw bytes when it cannot prepare one).
@@ -248,6 +249,43 @@ export const PG_ERR_ENCODING: i32 = 8
 export const PG_ERR_CLOSED: i32 = 9
 /** The server's `DateStyle` is not ISO or its `TimeZone` is not UTC, the two the decoders read: at startup, or after a `SET`. */
 export const PG_ERR_SETTING: i32 = 10
+/**
+ * TLS to the server failed, reported by the carrier (`tlsFailed()`): the
+ * server answered `N` to the SSLRequest while `PgConfig.tls` asks for TLS,
+ * its certificate was refused, or the handshake failed.
+ */
+export const PG_ERR_TLS: i32 = 11
+
+/** `PgConfig.tls`: no SSLRequest; the connection is cleartext. The default. */
+export const PG_TLS_DISABLE: i32 = 0
+/**
+ * `PgConfig.tls`: an SSLRequest first, and TLS 1.3 or nothing, the
+ * server's certificate not checked. Keeps a passive eavesdropper out; an
+ * active one who answers in the server's place is not.
+ */
+export const PG_TLS_REQUIRE: i32 = 1
+/**
+ * `PgConfig.tls`: an SSLRequest first, and TLS 1.3 or nothing, the
+ * server's chain checked against the trusted roots and its name against the
+ * host (libpq's `sslmode=verify-full`).
+ */
+export const PG_TLS_VERIFY_FULL: i32 = 2
+/** The SSLRequest's code, in place of a protocol version: 1234 in the high 16 bits, 5679 in the low. */
+export const PG_SSL_REQUEST_CODE: i32 = 80877103
+
+/**
+ * The 8-byte SSLRequest a client sends before its StartupMessage to ask for
+ * TLS: its length, 8, and `PG_SSL_REQUEST_CODE`, both big-endian. The server
+ * answers one byte, `S` to go on with a TLS handshake or `N` to refuse.
+ *
+ * @returns A new 8-byte array holding the message.
+ */
+export const pgSslRequest = (): u8[] => {
+  const out: u8[] = new Array<u8>(8)
+  setI32BE(out, 0, 8)
+  setI32BE(out, 4, PG_SSL_REQUEST_CODE)
+  return out
+}
 
 /** `PgArrayWalker.next()`: an element, at `start` for `length` bytes. */
 export const PG_ARRAY_ELEMENT: i32 = 0
@@ -349,6 +387,21 @@ export class PgConfig {
    * output cannot grow the buffer without bound.
    */
   maxOutput: i32 = 1048576
+  /**
+   * Read by the carrier only: `PG_TLS_DISABLE` (the default), `PG_TLS_REQUIRE`
+   * or `PG_TLS_VERIFY_FULL`. TLS needs a TCP target.
+   */
+  tls: i32 = PG_TLS_DISABLE
+  /**
+   * Read by the carrier only, under `PG_TLS_VERIFY_FULL`: a PEM file of the
+   * roots to trust; empty means the system's store.
+   */
+  tlsRootsPath: string = ""
+  /**
+   * Read by the carrier only: the name the server's certificate must carry,
+   * and the SNI sent; empty means the target's host.
+   */
+  tlsServerName: string = ""
 }
 
 /** A server's ErrorResponse or NoticeResponse: the fields a program acts on. */
@@ -465,7 +518,9 @@ const pgCheckConfig = (config: PgConfig): void => {
     config.maxColumns > 65535 ||
     config.minIterations < 1 ||
     config.maxIterations < config.minIterations ||
-    config.maxIterations > PG_MAX_ITERATIONS
+    config.maxIterations > PG_MAX_ITERATIONS ||
+    config.tls < PG_TLS_DISABLE ||
+    config.tls > PG_TLS_VERIFY_FULL
   ) {
     panic("nish/net/postgres: a PgConfig cap out of range")
   }
@@ -1616,6 +1671,19 @@ export class PgConnection {
   closed(): i32 {
     if (this.state !== PG_STATE_FAILED) {
       return this.fail(PG_ERR_CLOSED)
+    }
+    return PG_FAILED
+  }
+
+  /**
+   * Reports that TLS under the connection failed, or the server refused it:
+   * unless it already has, the connection fails with `PG_ERR_TLS`, which
+   * wipes the password.
+   * @returns `PG_FAILED`, as every later `next()` does.
+   */
+  tlsFailed(): i32 {
+    if (this.state !== PG_STATE_FAILED) {
+      return this.fail(PG_ERR_TLS)
     }
     return PG_FAILED
   }
@@ -3406,6 +3474,15 @@ export class PgPool {
     this.names = []
     this.sqls = []
     this.types = []
+  }
+
+  /**
+   * The settings the pool's connections are made with, as given to the constructor.
+   *
+   * @returns The pool's `PgConfig`, not a copy.
+   */
+  settings(): PgConfig {
+    return this.config
   }
 
   /**
