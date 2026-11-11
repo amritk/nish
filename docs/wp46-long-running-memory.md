@@ -539,8 +539,10 @@ program's, as for a region: wipe before `delete`. The first has to be the
 walk's: when it copies a `Secret`, it zeroes the source after the copy,
 through the same volatile store `wipe` uses. The layout table marks a
 `Secret`'s words, so the cost follows the secret bytes copied, not the heap.
-Zeroing the whole old heap instead would cost a `memset` of up to twice the
-live bytes on every flip.
+Zeroing the whole old heap instead would cost a `memset` of about three times
+the live bytes on every flip: the flip comes once the heap has bumped twice
+what the last one copied, so the old chunks hold that copy and the bumped
+bytes besides.
 
 **`nish:net` buffers.** A slot's buffers stay outside every heap, for a
 reason a region does not have. A buffer lent to a pending send, or a
@@ -577,7 +579,9 @@ region's table, whose slot gains a count. Copying a handle does not retain
 it, because the compiler cannot see a number's copies, so the count is the
 program's to keep. A release too few leaks the box; a release too many
 reaches a stale generation and panics at the next `borrow`, `retain` or
-`release`, never a use after free. `release` of a borrowed box panics.
+`release`, never a use after free. `release` of a box its own thread has entered panics. On an `AtomicRc`,
+`release` from another thread takes the box's lock first, so it waits for the
+`borrow` to leave, and the box is freed only after.
 
 ```ts
 import { Rc, borrowWith, rcWith, release } from "nish:rc"
@@ -640,7 +644,9 @@ games: Rc<Game>[]
 hasGame: boolean[]
 
 // hello(), once the grant verifies: a new box, count 1, owned by the slot;
-// `gameFromGrant` copies the reused grant's host as in §2.1
+// `gameFromGrant` copies the reused grant's host as in §2.1. hello() and
+// watch() run only on a slot release() has cleared, so `slot` holds no box
+// here and the store drops no count
 this.games[slot] = rcWith(g, gameFromGrant)
 this.hasGame[slot] = true
 
@@ -728,8 +734,8 @@ word. A store of a pointer retains the new value and releases the old one,
 and leaving a scope releases its locals. A value is freed when its count
 reaches zero, and freeing it releases what it points at. There is no API,
 and the arena no longer frees anything. The program is the one it is today
-less its `using a = arena()` blocks: `std/` has about a hundred (crypto, TLS,
-JSON), and each becomes a plain block, whose locals' releases at its end free
+less its `using a = arena()` blocks: about sixty in `std/` (crypto, TLS,
+JSON) and some forty in `src/`, and each becomes a plain block, whose locals' releases at its end free
 what it allocated and nothing a count still holds. One left behind is NL2790.
 
 ```ts
@@ -856,7 +862,7 @@ calls gain retains. `giveSecret`'s zeroing stays as it is.
 | Time a request, 100,000 live, vs today | 0.97x (`rs`) | 0.93x (`s`) | 0.84x (`c`), 0.95x atomic (`ca`) | 0.89x (`g`) |
 | Pause | none | 20.0 ms a flip at 100,000 live | none | none (a long chain of releases at once) |
 | New API | `nish:region` | `nish:evacuate` | `nish:rc` | none |
-| Rules (codes) | NL2609–NL2618, shipped | NL2780–NL2787, with NL2612, NL2615–NL2617 and NL2351's message widened | NL2788–NL2789, with NL2609–NL2612, NL2614–NL2617 and NL2351's message widened | NL2790 |
+| Rules (codes) | NL2609–NL2618, shipped; §7's stage 2 maps §2.1's NL2556–NL2561 to them | NL2780–NL2787, with NL2612, NL2615–NL2617 and NL2351's message widened | NL2788–NL2789, with NL2609–NL2612, NL2614–NL2617 and NL2351's message widened | NL2790 |
 | Across threads | refused (NL2613) | refused (NL2786) | `AtomicRc` only (NL2788) | atomic counts for what crosses |
 | Programs that do not use it | `.ll` unchanged | `.ll` unchanged | `.ll` unchanged | every golden with a pointer store moves |
 | Runtime needs | a slot table, a chunk size | a slot table and type layouts at runtime | a slot table and a count | a header word on every allocation |
