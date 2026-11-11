@@ -298,7 +298,8 @@ const quicStreamScan = (bits: u8[], from: i32, to: i32, on: boolean): i32 => {
  * The first of `count` bytes of a ring of `size` from index `slot`: they run
  * to the ring's end at most, and the rest wrap to index 0.
  */
-const quicStreamFirstRun = (size: i32, slot: i32, count: i32): i32 => (count < size - slot ? count : size - slot)
+const quicStreamFirstRun = (size: i32, slot: i32, count: i32): i32 =>
+  count < size - slot ? count : size - slot
 
 /** Sets or clears the bits of `count` ring indexes from `slot`, wrapping at `size`: at most two runs. */
 const quicStreamMarkRing = (bits: u8[], size: i32, slot: i32, count: i32, on: boolean): void => {
@@ -1534,8 +1535,8 @@ export class QuicStreams {
       // The frame's bytes from the first not yet contiguous, inside `buf`; of
       // more than a buffer, the last buffer's worth, which a byte-wise copy
       // would have left there.
-      const skipped: i64 = stream.recvContiguous - offset
-      let low: i32 = skipped > 0 ? (skipped < toI64(length) ? toI32(skipped) : length) : 0
+      const skipped: i64 = quicStreamMin(stream.recvContiguous - offset, toI64(length))
+      let low: i32 = skipped > 0 ? toI32(skipped) : 0
       if (low < -from) {
         low = -from
       }
@@ -2298,7 +2299,13 @@ export class QuicStreams {
       const low: i64 = offset < stream.sendBase ? stream.sendBase : offset
       // The bytes in flight are fewer than a buffer, so a chunk is too.
       if (low < top) {
-        quicStreamMarkRing(stream.sendAcked, size, stream.at(low), toI32(quicStreamMin(top - low, toI64(size))), true)
+        quicStreamMarkRing(
+          stream.sendAcked,
+          size,
+          stream.at(low),
+          toI32(quicStreamMin(top - low, toI64(size))),
+          true
+        )
       }
       if (stream.sendBase < stream.sendNext) {
         const slot: i32 = stream.at(stream.sendBase)
