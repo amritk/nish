@@ -17,8 +17,9 @@
  * `target("+sha2")`. A machine without them, or a process with
  * `NISH_SHA256=soft`, runs the Nish code in std/crypto/sha256.ts instead: the
  * compiler keeps that code and branches on `nish_sha256_hw` at each call. Every
- * other target, wasm32 included, compiles `nish_sha256_hw` to `return 0` and
- * the kernel to a trap nothing reaches, so a link that names it still resolves.
+ * other target, wasm32 included, and a toolchain without the intrinsic headers
+ * compile `nish_sha256_hw` to `return 0` and the kernel to a trap nothing
+ * reaches, so a link that names it still resolves.
  *
  * The kernel checks the guard `sha256Compress` runs its body under and returns
  * 0 without touching anything when it fails, so the caller runs the Nish
@@ -46,11 +47,17 @@
 
 #include "nish.h"
 
-#if defined(__x86_64__)
+#if defined(__has_include)
+#define NISH_SHA256_HAS(h) __has_include(h)
+#else
+#define NISH_SHA256_HAS(h) 0
+#endif
+
+#if defined(__x86_64__) && NISH_SHA256_HAS(<cpuid.h>) && NISH_SHA256_HAS(<immintrin.h>)
 #include <cpuid.h>
 #include <immintrin.h>
 #define NISH_SHA256_X86 1
-#elif defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#elif defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && NISH_SHA256_HAS(<arm_neon.h>)
 #include <arm_neon.h>
 #define NISH_SHA256_ARM 1
 #endif

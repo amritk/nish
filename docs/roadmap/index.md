@@ -25,11 +25,10 @@ and where it is specified.
 2. [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): G1's interop, G2's open timeouts, then G7's one handler.
 3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
 4. [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md): stage 3, the soak.
-5. [WP32: `Map` and `Set`](wp32-map.md): a `Map` read in a parallel body.
-6. [WP21: Packages](wp21-packages.md): S3's two diagnostics.
-7. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
-8. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
-9. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
+5. [WP21: Packages](wp21-packages.md): S3's two diagnostics.
+6. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
+7. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
+8. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
 
 [WP34: Hosting cs: the network stack](wp34-hosting-cs.md)'s remaining waves are in the cs repository.
 
@@ -63,7 +62,6 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP21: Packages](wp21-packages.md) | In progress | 3 of 7 |
 | [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 3 of 5 |
 | [WP27: Calling C](wp27-ffi.md) | In progress | 3 of 5 |
-| [WP32: `Map` and `Set`](wp32-map.md) | In progress | 1 of 2 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 6 of 9 |
 | [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 9 of 18 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 3 of 8 |
@@ -107,6 +105,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP29: The thread surface](wp29-thread-surface.md) | Landed | 5 of 8 |
 | [WP30: Bytes across the interop boundary](wp30-bytes-interop.md) | Landed | 1 of 3 |
 | [WP31: Ranged integers](wp31-ranged-integers.md) | Landed | 1 of 4 |
+| [WP32: `Map` and `Set`](wp32-map.md) | Landed | 2 of 2 |
 | [WP35: The capability report](wp35-capabilities.md) | Landed | 1 of 1 |
 | [WP36: The capability policy](wp36-capability-policy.md) | Landed | 1 of 1 |
 | [WP40: Dependency capabilities](wp40-dependency-capabilities.md) | Landed | 1 of 1 |

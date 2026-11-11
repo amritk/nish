@@ -4001,6 +4001,29 @@ for (const name of [
   )
 }
 
+// ---- The mistakes every type accepts wait for every other rule (src/hygiene.ts) ---------
+// `reject_hygiene_held` has a type error and an unread local. The local's
+// finding is held until everything else passes, so the count is what says the
+// type error was reported alone; a `.err` substring could not.
+for (const name of ["reject_hygiene_held"]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  const at = selectedCases.indexOf(name)
+  const r = at < 0 ? null : caseResults[at]
+  const errors =
+    r === null
+      ? []
+      : String(r.stderr)
+          .split("\n")
+          .filter((l) => /:\d+:\d+: error: /.test(l))
+  check(
+    `${name}: an unread local is not reported beside the type error that stops the program`,
+    r !== null && r.status === 1 && errors.length === 1,
+    r === null ? "(no such case)" : String(r.stderr)
+  )
+}
+
 // ---- A handle case reports exactly its own refusals (WP40 H1.1) -----------------------
 // The same blind spot for the handle pass: each `.err` line names one refusal,
 // and the count says nothing else was found, so a check that starts firing
@@ -15859,6 +15882,82 @@ if (dealtHere("simd")) {
     }
   }
 
+  // runtime/runtime-sha256.c and runtime/runtime-aes.c on a toolchain without the
+  // intrinsic headers (#1087): each selects its kernel only where `__has_include` finds
+  // every header the kernel includes, as runtime-checksum.c does, and builds its stubs
+  // otherwise, so a clang without them still links `--profile speed`. Compiled here for
+  // x86-64 and AArch64 Linux with `-nostdinc` and an include directory holding only the
+  // freestanding headers nish.h needs, each object must define the stubs' symbols and
+  // nothing else, and ask the C library for nothing. The same build with the headers
+  // visible is the control: it must hold the CPU probe (`nish_sha256_cpu`,
+  // `nish_aes_cpu`), so a guard that always fell back cannot pass.
+  if (!only || "runtime-sha256 runtime-aes hidden-headers crypto stub".includes(only)) {
+    const nm = ["llvm-nm", "llvm-nm-18"].find(has)
+    if (!HAS_CLANG || nm === undefined) {
+      skip("runtime-sha256/runtime-aes hidden headers: no clang and llvm-nm to compile the crypto kernels without their intrinsic headers")
+    } else {
+      const dir = path.join(buildDir, "crypto-hidden-headers")
+      const bare = path.join(dir, "include")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(bare, { recursive: true })
+      const resource = spawnSync("clang", ["-print-resource-dir"], { encoding: "utf8" }).stdout.trim()
+      for (const f of fs.readdirSync(path.join(resource, "include"))) {
+        if (["stdint.h", "stdbool.h", "stddef.h"].includes(f) || /^__stddef_.*\.h$/.test(f)) {
+          fs.copyFileSync(path.join(resource, "include", f), path.join(bare, f))
+        }
+      }
+      /** The defined and undefined symbols of `file` built for `triple` with `extra`. */
+      const symbols = (file, triple, extra, obj) => {
+        const cc = spawnSync(
+          "clang",
+          ["-c", "-ffreestanding", "-std=c11", "-Wall", "-Wextra", "-Werror", `--target=${triple}`, ...extra, "-Iruntime", file, "-o", obj],
+          { cwd: root, encoding: "utf8" }
+        )
+        if (cc.status !== 0) return { ok: false, cc, defined: [], undef: [] }
+        const out = spawnSync(nm, [obj], { encoding: "utf8" })
+        const syms = out.stdout
+          .split("\n")
+          .map((l) => l.trim().split(/\s+/))
+          .filter((f) => f.length >= 2)
+          .map((f) => ({ type: f[f.length - 2], name: f[f.length - 1] }))
+        return {
+          ok: out.status === 0,
+          cc,
+          defined: syms.filter((x) => x.type !== "U").map((x) => x.name).sort(),
+          undef: syms.filter((x) => x.type === "U").map((x) => x.name).sort(),
+        }
+      }
+      for (const [file, stub, probe] of [
+        ["runtime/runtime-sha256.c", ["nish_sha256_compress", "nish_sha256_hw"], "nish_sha256_cpu"],
+        [
+          "runtime/runtime-aes.c",
+          ["nish_aes_block", "nish_aes_ctr", "nish_aes_ghash", "nish_aes_hw", "nish_aes_schedule"],
+          "nish_aes_cpu",
+        ],
+      ]) {
+        const base = path.basename(file, ".c")
+        for (const triple of ["x86_64-linux-gnu", "aarch64-linux-gnu"]) {
+          const hidden = symbols(file, triple, ["-nostdinc", "-isystem", bare], path.join(dir, `${base}-${triple}-hidden.o`))
+          if (!hidden.ok && /no available targets|unknown target triple|unable to create target/i.test(hidden.cc.stderr)) {
+            skip(`runtime-sha256/runtime-aes hidden headers: this clang cannot compile for ${triple}: ${hidden.cc.stderr.trim().split("\n")[0]}`)
+            continue
+          }
+          const shown = symbols(file, triple, [], path.join(dir, `${base}-${triple}.o`))
+          check(
+            `${base}.c for ${triple} with the intrinsic headers hidden is the stub, ${stub.join(", ")} and nothing it asks for, where the same build with them selects the kernel`,
+            hidden.ok &&
+              hidden.defined.join(" ") === stub.join(" ") &&
+              hidden.undef.length === 0 &&
+              shown.ok &&
+              shown.defined.includes(probe),
+            `hidden: ${hidden.cc.stderr}defined ${hidden.defined.join(" ")}; undefined ${hidden.undef.join(" ")}\n` +
+              `shown: ${shown.cc.stderr}defined ${shown.defined.join(" ")}`
+          )
+        }
+      }
+    }
+  }
+
   // ---- WP38 S5: the AES kernels against the bitsliced walkers, end to end ---------------
   // The compiler lowers each seam of std/crypto/aes.ts to a branch on `nish_aes_hw`: the
   // runtime kernel on one arm, the walker it replaces on the other (src/kernels.ts). Two
@@ -27653,6 +27752,10 @@ const runFixtureUnderNode = (entry, encoding) =>
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
 // `thread_scope_task_map_reads` has two tasks read one `Map` and one `Set`,
 // and `par_map_table_reads` has a parallel map's body read them.
+// `par_map_read_into` and `par_map_read_into_keys` read a `Map` and a `Set`
+// through the element while `dst` shares their value or key type, and
+// `par_map_read_capture` reads a captured `Map` beside a `dst` parameter:
+// a table's own arrays are private to it, so neither is `dst`.
 // `thread_task_own_writes` has tasks write only what they made: a holder poked
 // through a method, a `Map` and a `Set`, an object's array fields, an array
 // handed back by a helper returning its argument, and an array under a second
@@ -27762,6 +27865,9 @@ for (const name of [
   "thread_scope_region_param_lookup",
   "thread_scope_task_map_reads",
   "par_map_table_reads",
+  "par_map_read_into",
+  "par_map_read_into_keys",
+  "par_map_read_capture",
   "thread_task_own_writes",
   "par_map_captured_strings",
   "thread_scope_libc_named_tasks",

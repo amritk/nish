@@ -38,7 +38,7 @@ if.end:
 define internal noundef i32 @watch(i32 noundef %n, i32 noundef %acc) #0 {
 entry:
   %label.addr = alloca i8*, align 8
-  %bump.addr = alloca i64, align 8
+  %_bump.addr = alloca i64, align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = icmp eq i32 %n, 0
   br i1 %0, label %if.then, label %if.end
@@ -52,7 +52,7 @@ if.end:
   %2 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* %1)
   store i8* %2, i8** %label.addr, align 8
   %3 = call i64 @nish_arena_used()
-  store i64 %3, i64* %bump.addr, align 8
+  store i64 %3, i64* %_bump.addr, align 8
   %4 = sub nsw i32 %n, 1
   %5 = load i8*, i8** %label.addr, align 8
   %6 = bitcast i8* %5 to i64*

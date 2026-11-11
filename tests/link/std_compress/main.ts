@@ -114,12 +114,10 @@ const text = (rng: Rng, n: i32): u8[] => {
 const json = (rng: Rng, n: i32): u8[] => {
   const parts: string[] = ["["]
   let size: i32 = 1
-  let k: i32 = 0
   while (size < n) {
     const piece: string = `{"id":${rng.nextInt(0, 999999)},"name":"user${rng.nextInt(0, 500)}","active":${rng.nextInt(0, 1) === 1 ? "true" : "false"},"score":${rng.nextInt(0, 10000)}},`
     parts.push(piece)
     size += toI32(piece.length)
-    k += 1
   }
   const all: u8[] = ascii(parts.join(""))
   return copyOf(all, n)

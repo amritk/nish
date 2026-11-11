@@ -34,7 +34,8 @@ export const test = (): number => {
 
   // Outside any loop there is one check at most, which is not a check anybody
   // is paying for, so an unproven access there is silent as well.
-  const at = total - total;
+  const copy = total;
+  const at = total - copy;
   total = total + xs[at];
 
   // `for...of` has no index to prove.

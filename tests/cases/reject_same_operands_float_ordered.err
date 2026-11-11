@@ -1,0 +1,1 @@
+Both operands of `<` are `x`, so `x < x` does not depend on its value

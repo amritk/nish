@@ -22,10 +22,10 @@ function Box<i32>.pair<string>(this: Box<i32>, other: string): i32 -> @Box$i32.p
   escaping: other
   pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 kept: string (const)
+  local +0:11 _kept: string (const)
 function Box<i32>.pair<i32>(this: Box<i32>, other: i32): i32 -> @Box$i32.pair$i32 [method instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: other
   pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:11 kept: i32 (const)
+  local +0:11 _kept: i32 (const)

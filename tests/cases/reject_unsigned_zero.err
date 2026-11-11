@@ -1,0 +1,1 @@
+`left` is u32, which is never below 0, so `left < 0` is always false

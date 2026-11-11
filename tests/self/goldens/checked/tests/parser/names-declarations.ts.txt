@@ -62,7 +62,7 @@ function offset(namespace: i32, declare: i32, global: i32): i32 -> @offset
   stackSites=0 stackLocals=0
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: Methods.async Methods.declare Methods.global Methods.keyof Methods.module$i32 Methods.namespace Methods.type made nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 offset pick scale
+  calls: Methods.async Methods.declare Methods.global Methods.keyof Methods.module$i32 Methods.namespace Methods.type made nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 offset pick scale
   stackSites=5 stackLocals=4
   local +0:7 async: i32 (let)
   local +1:7 namespace: i32 (let)

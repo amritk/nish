@@ -20,10 +20,11 @@ function main(): i32 -> @nish_main [exported entry]
   callee +5:18 divU32 -> @divU32
   callee +8:18 ltU32 -> @ltU32
   callee +9:18 ltU32 -> @ltU32
-  local +14:9 b: u8 (const)
-  local +15:9 d: u8 (const)
-  local +20:9 h: u16 (const)
-  local +25:9 q: u64 (const)
-  local +26:9 three: u64 (const)
-  local +32:7 n: u32 (let)
-  local +33:7 steps: u32 (let)
+  local +11:9 again: u32 (const)
+  local +15:9 b: u8 (const)
+  local +16:9 d: u8 (const)
+  local +21:9 h: u16 (const)
+  local +26:9 q: u64 (const)
+  local +27:9 three: u64 (const)
+  local +33:7 n: u32 (let)
+  local +34:7 steps: u32 (let)

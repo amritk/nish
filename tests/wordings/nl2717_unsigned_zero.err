@@ -1,0 +1,1 @@
+`n` is u32, which is never below 0, so `n < 0` is always false; compare a signed value, or against a bound other than 0

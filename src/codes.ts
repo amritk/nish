@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 868
+export const RULE_COUNT: i32 = 874
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -403,6 +403,8 @@ const diagnosticRules = (): string[] => [
   "NL2346",
   " cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`",
   "NL2372",
+  "` does not depend on its value; one of them is probably meant to be something else (to mean it, copy the value to a second `const` first)",
+  "NL2715",
   "`: which fields a spread copies depends on the variant it holds at run time, so narrow it to one variant first, or set the fields by name",
   "NL2704",
   " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
@@ -455,6 +457,8 @@ const diagnosticRules = (): string[] => [
   "NL2426",
   "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
   "NL2035",
+  "` is already tested by an earlier branch of this `if`, so this branch never runs; test something else, or merge the two branches",
+  "NL2716",
   "` to a key that is not valid UTF-8: the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it",
   "NL2499",
   ", and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target",
@@ -893,6 +897,8 @@ const diagnosticRules = (): string[] => [
   "NL2627",
   "memory outside a region kept by the region's memory may be released",
   "NL2610",
+  "This statement has no effect: its value is computed and thrown away",
+  "NL2713",
   " only where it is instantiated, and this program instantiates none",
   "NL4007",
   ", and a range is a promise the C side never made: declare it `i32`",
@@ -995,6 +1001,8 @@ const diagnosticRules = (): string[] => [
   "NL2378",
   ", and a declared C function takes scalars and `CPtr` only",
   "NL2322",
+  "; compare a signed value, or against a bound other than 0",
+  "NL2717",
   "A `Region` is made by `region(f)` or `regionWith(arg, f)`",
   "NL2618",
   "the command line at https://github.com/amritk/nish/issues",
@@ -1308,6 +1316,8 @@ const diagnosticRules = (): string[] => [
   "NL2228",
   " (use --number-mode f64 or toF64(x))",
   "NL2008",
+  ": use it, delete it, or rename it `_",
+  "NL2712",
   "` is already declared in this module",
   "NL2076",
   "` is set twice in the object literal",
@@ -1434,6 +1444,8 @@ const diagnosticRules = (): string[] => [
   "NL2077",
   "` must have an array type, `...",
   "NL2602",
+  "` to itself, which does nothing",
+  "NL2714",
   "` when checking a single module",
   "NL2109",
   "`, so it cannot tell them apart",

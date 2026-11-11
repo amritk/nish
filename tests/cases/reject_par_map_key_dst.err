@@ -1,0 +1,1 @@
+`(x) => ...` can reach a `i32[]` through `x.keys.keys()[i].cells`, which could be the array `parallelMapInto` is writing
