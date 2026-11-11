@@ -62,7 +62,7 @@ function PanicSite.constructor(this: PanicSite, node: Node, source: SourceFile, 
   escaping: callee fn kind node proven source
   pointer this: size=56 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
-  pointer source: size=32 writesThrough=true captured=true
+  pointer source: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function isCallSite(site: PanicSite): boolean -> @isCallSite
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false

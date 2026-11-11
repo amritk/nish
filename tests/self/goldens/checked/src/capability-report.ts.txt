@@ -156,7 +156,7 @@ function WitnessHop.constructor(this: WitnessHop, caller: string, at: string, ca
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: at caller calls site source
   pointer this: size=40 writesThrough=true captured=false
-  pointer source: size=32 writesThrough=true captured=true
+  pointer source: size=48 writesThrough=true captured=true
   pointer site: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function witnessChain(index: FunctionIndex, facts: FactsTable, sig: FunctionSig, c: i32): WitnessHop[] -> @witnessChain [exported]

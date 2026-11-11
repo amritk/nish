@@ -145,7 +145,7 @@ function Walk.constructor(this: Walk, program: CheckedProgram, table: TypeTable,
   pointer this: size=248 writesThrough=true captured=false passedTo=Walk.stub#0 Walk.stub#0 Walk.stub#0 Walk.stub#0 Walk.stub#0
   pointer program: size=728 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
-  pointer source: size=32 writesThrough=true captured=true passedTo=FunctionSig.definedIn#1
+  pointer source: size=48 writesThrough=true captured=true passedTo=FunctionSig.definedIn#1
   stackSites=1 stackLocals=1
   local +0:9 i: i32 (let)
   callee +18:20 new StringSet -> @StringSet.constructor

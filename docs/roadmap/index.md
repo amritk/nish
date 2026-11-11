@@ -26,7 +26,7 @@ and where it is specified.
 3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
 4. [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md): stage 3, the soak.
 5. [WP32: `Map` and `Set`](wp32-map.md): a `Map` read in a parallel body.
-6. [WP21: Packages](wp21-packages.md): S3's two diagnostics.
+6. [WP21: Packages](wp21-packages.md): S4, the build cache.
 7. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
 8. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
 9. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
@@ -60,7 +60,7 @@ For a contributor, or an agent asked to "pick up WP50":
 
 | Work package | State | Done |
 | --- | --- | --- |
-| [WP21: Packages](wp21-packages.md) | In progress | 3 of 7 |
+| [WP21: Packages](wp21-packages.md) | In progress | 5 of 7 |
 | [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 3 of 5 |
 | [WP27: Calling C](wp27-ffi.md) | In progress | 3 of 5 |
 | [WP32: `Map` and `Set`](wp32-map.md) | In progress | 1 of 2 |
