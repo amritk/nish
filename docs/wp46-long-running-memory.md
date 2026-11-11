@@ -404,7 +404,8 @@ replace that, and nothing in `std/net` moves to them: a slot costs no `malloc`
 and no handle check, and its cap is the configuration's. The records that are
 still open, H1-3 (58 bytes per WebSocket accept) and H2-1 (664 bytes per HPACK
 block), could later close with a region per connection, freed when the slot is
-reset.
+reset. *2026-11-08:* H2-1 closed another way, with the decoder's fields in
+storage it owns (#473); H1-3 is still open.
 
 **`scope()` and pass scopes.** A pass scope inside `f` marks and releases in
 the region (§2.1). A `scope()` inside `f` is refused (NL2559): its tasks would
@@ -639,4 +640,5 @@ column says only when the rolling freeze would allow it.
 - `Rc<T>` on top of regions, for a value with several owners.
 - Zeroing a region's chunks on `free` when its root holds a `Secret` (§3).
 - Moving `std/net`'s slot pools to regions; they stay slots (§3).
-- H1-3 and H2-1, whose fix is a region per connection once stage 2 lands.
+- H1-3, whose fix is a region per connection now that stage 2 has landed. H2-1
+  was fixed by #473 without one.
