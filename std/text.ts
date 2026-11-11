@@ -214,13 +214,52 @@ export const contains = (haystack: string, needle: string): boolean => toI32(hay
  *   Occurrences are found left to right and do not overlap.
  * @returns A fresh array of the pieces, in order; never empty.
  */
-export const split = (text: string, sep: string): string[] => {
+export const split = (text: string, sep: string): string[] => splitTextPieces(text, sep, -1, "split")
+
+/**
+ * The first `limit` pieces of `text` between the occurrences of `sep`:
+ * JavaScript's `text.split(sep, limit)` for a separator that is not empty, and
+ * `split`'s pieces otherwise. The pieces past the limit are dropped, not joined
+ * into the last one, so `splitLimit("a,b,c", ",", 2)` is `["a", "b"]`, and a
+ * limit of 0 gives `[]`.
+ *
+ * **A negative limit keeps every piece**, as it does under Node: JavaScript
+ * reads the limit with `ToUint32`, so `-1` is 4294967295, and any negative
+ * `i32` is at least 2147483648 there, more pieces than a string can split
+ * into. So `splitLimit(text, sep, -1)` is `split(text, sep)`, and the two
+ * readings agree on every `i32`. Refusing a negative limit would have been a
+ * panic where JavaScript answers.
+ *
+ * **An empty separator panics**, whatever the limit, for the reason `split`
+ * gives; JavaScript would answer `[]` for a limit of 0, and its UTF-16 units
+ * otherwise.
+ *
+ * @param text The text to split.
+ * @param sep The separator, compared byte for byte; it must not be empty.
+ *   Occurrences are found left to right and do not overlap.
+ * @param limit The most pieces kept; a negative one keeps them all.
+ * @returns A fresh array of at most `limit` pieces, in order.
+ */
+export const splitLimit = (text: string, sep: string, limit: i32): string[] =>
+  splitTextPieces(text, sep, limit, "splitLimit")
+
+/**
+ * `split` and `splitLimit`'s one walk: the pieces of `text` between the
+ * occurrences of `sep`, stopping once `limit` are taken. A negative `limit`
+ * never equals a count, so it takes them all. `caller` names the function in
+ * the panic for an empty separator. The name is long for the reason
+ * `isTextBlankByte`'s is.
+ */
+const splitTextPieces = (text: string, sep: string, limit: i32, caller: string): string[] => {
   const sepLength: i32 = toI32(sep.length)
   if (sepLength === 0) {
-    panic("split: an empty separator")
+    panic(`${caller}: an empty separator`)
   }
   const length: i32 = toI32(text.length)
   const parts: string[] = []
+  if (limit === 0) {
+    return parts
+  }
   let start: i32 = 0
   while (true) {
     // Searching from `start` rather than cutting `text` down after each match
@@ -239,8 +278,185 @@ export const split = (text: string, sep: string): string[] => {
     if (start >= 0 && start < length && at >= 0 && at < length) {
       parts.push(text.substring(start, at))
     }
+    if (toI32(parts.length) === limit) {
+      return parts
+    }
     start = at + sepLength
   }
+}
+
+/** The most digits `toFixed` takes after the point; JavaScript throws a `RangeError` past it. */
+const TO_FIXED_MAX_DIGITS: i32 = 100
+
+/** Where `toFixed` stops writing fixed notation and answers `String(x)`, as JavaScript does. */
+const TO_FIXED_LIMIT: f64 = 1e21
+
+/** 2^52 and 2^53: an `f64` from the first up to the second is an integer, and its whole significand. */
+const TWO_TO_52: f64 = 4503599627370496
+const TWO_TO_53: f64 = 9007199254740992
+
+/** The byte `0`; a decimal digit `d` is written as this plus `d`. */
+const ASCII_ZERO: i32 = 48
+
+/** The byte `.`. */
+const ASCII_DOT: i32 = 46
+
+/** The byte `-`. */
+const ASCII_MINUS: i32 = 45
+
+/**
+ * `digits`, a decimal number with its units digit first, halved in place,
+ * reading only its lowest `count` digits (the rest are zero). The answer is
+ * the bit the halving dropped, 0 or 1.
+ *
+ * It is written with `>>` and `&` rather than `/` and `%` because under Node
+ * an `i32` is a JavaScript number, and `/` there would give a fraction. The
+ * name is long for the reason `isTextBlankByte`'s is.
+ */
+const fixedDigitsHalve = (digits: i32[], count: i32): i32 => {
+  let carry: i32 = 0
+  let i: i32 = count - 1
+  while (i >= 0 && i < toI32(digits.length)) {
+    const value: i32 = carry * 10 + digits[i]
+    digits[i] = value >> 1
+    carry = value & 1
+    i -= 1
+  }
+  return carry
+}
+
+/**
+ * `digits`, a decimal number with its units digit first, doubled in place when
+ * `doubling` is set, and then with `amount`, 0 or 1, added at the units. The
+ * array grows by a digit when the answer carries out of the top. The name is
+ * long for the reason `isTextBlankByte`'s is.
+ */
+const fixedDigitsAdd = (digits: i32[], doubling: boolean, amount: i32): void => {
+  let carry: i32 = amount
+  let i: i32 = 0
+  const length: i32 = toI32(digits.length)
+  while (i < length) {
+    const value: i32 = (doubling ? digits[i] * 2 : digits[i]) + carry
+    digits[i] = value >= 10 ? value - 10 : value
+    carry = value >= 10 ? 1 : 0
+    i += 1
+  }
+  if (carry > 0) {
+    digits.push(carry)
+  }
+}
+
+/**
+ * `x` written with exactly `digits` digits after the point: JavaScript's
+ * `x.toFixed(digits)`, and the same text natively and under Node.
+ *
+ * The answer is the decimal closest to the **exact binary value** of `x`, and
+ * a tie between two takes the larger, as ECMA-262 says. That is not rounding
+ * the shortest printed decimal: `1.005` is stored as a little less than
+ * 1.005, so `toFixed(1.005, 2)` is `"1.00"`, while `2.5` is exact and a tie, so
+ * `toFixed(2.5, 0)` is `"3"` and `toFixed(-2.5, 0)` is `"-3"`. The digits are
+ * worked out in full, one decimal digit per array element, so the value is
+ * never rounded on the way; that is why this is written here and not with a
+ * multiplication by a power of ten, which rounds twice.
+ *
+ * The edges are JavaScript's. `NaN` gives `"NaN"`. `x` at or beyond 1e21 in
+ * size gives `String(x)`, the text a template hole gives, so
+ * `toFixed(1e21, 2)` is `"1e+21"`, and the infinities give `"Infinity"` and
+ * `"-Infinity"`. `-0` loses its sign, `"0.00"`, but a negative value that
+ * rounds to zero keeps it: `toFixed(-0.0001, 2)` is `"-0.00"`.
+ *
+ * **`digits` outside 0 to 100 panics**, where JavaScript throws a
+ * `RangeError`: the count is almost always a literal the caller chose, so a
+ * bad one is a mistake in the program, as `split`'s empty separator is.
+ *
+ * @param x The number to write.
+ * @param digits How many digits to write after the point, from 0 to 100; with
+ *   0 there is no point.
+ * @returns `x` in fixed notation, or `String(x)` when `x` is NaN or at least
+ *   1e21 in size.
+ */
+export const toFixed = (x: f64, digits: i32): string => {
+  if (digits < 0 || digits > TO_FIXED_MAX_DIGITS) {
+    panic("toFixed: digits must be 0 to 100")
+  }
+  if (x !== x || x >= TO_FIXED_LIMIT || x <= -TO_FIXED_LIMIT) {
+    return `${x}`
+  }
+  const negative: boolean = x < 0
+  // `x` is `m * 2^exponent` for an integer `m` below 2^53: scaling it into
+  // [2^52, 2^53) by twos is exact, a subnormal included, and says `exponent`.
+  let m: f64 = negative ? -x : x
+  let exponent: i32 = 0
+  if (m > 0) {
+    while (m < TWO_TO_52) {
+      m *= 2
+      exponent -= 1
+    }
+    while (m >= TWO_TO_53) {
+      m /= 2
+      exponent += 1
+    }
+  }
+  // The number written is `m * 10^digits * 2^exponent`, rounded to an
+  // integer, with its last `digits` digits after the point. Multiplying by
+  // `10^digits` is that many zeros under the units; `m`'s own digits are exact
+  // to take out, since every step stays an integer below 2^53.
+  const decimal: i32[] = []
+  let i: i32 = 0
+  while (i < digits) {
+    decimal.push(0)
+    i += 1
+  }
+  while (m > 0) {
+    const last: f64 = m % 10
+    decimal.push(toI32(last))
+    m = (m - last) / 10
+  }
+  while (exponent > 0) {
+    fixedDigitsAdd(decimal, true, 0)
+    exponent -= 1
+  }
+  // A negative exponent halves the number that many times. The integer part
+  // is what is left; it rounds up exactly when the last bit dropped is 1,
+  // which is a remainder of at least a half, a tie included. Once the number
+  // is zero every bit still to drop is zero too, so the walk stops there.
+  let count: i32 = toI32(decimal.length)
+  let dropped: i32 = 0
+  while (exponent < 0 && count > 0) {
+    dropped = fixedDigitsHalve(decimal, count)
+    while (count > 0 && count <= toI32(decimal.length) && decimal[count - 1] === 0) {
+      count -= 1
+    }
+    exponent += 1
+  }
+  if (exponent === 0 && dropped === 1) {
+    fixedDigitsAdd(decimal, false, 1)
+  }
+  while (toI32(decimal.length) <= digits) {
+    decimal.push(0)
+  }
+  // The text is the digits from the highest that is not zero down, but never
+  // from below the units, which is index `digits`; the halving leaves zeros
+  // above the number. The point goes before the last `digits` of them, and a
+  // minus in front of any negative `x`.
+  let at: i32 = toI32(decimal.length) - 1
+  while (at > digits && at >= 0 && at < toI32(decimal.length) && decimal[at] === 0) {
+    at -= 1
+  }
+  const bytes: u8[] = []
+  if (negative) {
+    bytes.push(toU8(ASCII_MINUS))
+  }
+  while (at >= 0 && at < toI32(decimal.length)) {
+    // Read before the pushes: a push may move an array, so it ends the proof.
+    const digit: i32 = decimal[at]
+    if (at === digits - 1) {
+      bytes.push(toU8(ASCII_DOT))
+    }
+    bytes.push(toU8(ASCII_ZERO + digit))
+    at -= 1
+  }
+  return String.fromBytes(bytes, 0, toI32(bytes.length))
 }
 
 /**

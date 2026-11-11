@@ -1624,6 +1624,9 @@ const TEXT_REFUSALS = [
   ["std_text_split_empty_separator", "split: an empty separator"],
   ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
   ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
+  ["std_text_split_limit_empty_separator", "splitLimit: an empty separator"],
+  ["std_text_to_fixed_negative_digits", "toFixed: digits must be 0 to 100"],
+  ["std_text_to_fixed_too_many_digits", "toFixed: digits must be 0 to 100"],
 ]
 
 /**
@@ -28657,6 +28660,32 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
       divergent.stdout === "built from bytes: 2\nstray continuation byte: 1\njoined halves: 1, length 2\n",
     shown(divergent)
   )
+  // `toFixed` and `splitLimit` are held to JavaScript itself: each line of
+  // expected.out names its arguments, Node answers `Number(x).toFixed(n)` and
+  // `text.split(sep, limit)` for them, and the run under the prelude prints
+  // expected.out too, so the native answers, the prelude's and Node's agree.
+  for (const name of ["std_text_to_fixed", "std_text_split_limit"]) {
+    const dir = path.join(linkDir, name)
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    check(
+      `link/${name}: under the Node prelude it exits 0 and prints expected.out`,
+      run.status === 0 && run.stdout === out,
+      `--- native (expected.out)\n${out}--- node\n${shown(run)}`
+    )
+    const wrong = []
+    for (const line of out.trimEnd().split("\n")) {
+      const fixed = /^toFixed\((.*), (-?\d+)\) = (.*)$/.exec(line)
+      const split = /^"(.*)" "(.*)" (-?\d+) -> (\d+): (.*)$/.exec(line)
+      if (fixed) {
+        if (Number(fixed[1]).toFixed(Number(fixed[2])) !== fixed[3]) wrong.push(line)
+      } else if (split) {
+        const pieces = split[1].split(split[2], Number(split[3]))
+        if (`${pieces.length}: ${pieces.join("|")}` !== `${split[4]}: ${split[5]}`) wrong.push(line)
+      }
+    }
+    check(`link/${name}: every line is JavaScript's own answer`, wrong.length === 0, wrong.join("\n"))
+  }
   // The pads count `text` in the platform's units: natively é is two bytes
   // and 😀 four, under Node one and two UTF-16 units, so each pad is a unit or
   // two longer there. expected.out holds the native answers; these are Node's.
