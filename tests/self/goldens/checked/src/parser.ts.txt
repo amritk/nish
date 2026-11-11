@@ -431,7 +431,7 @@ function Parser.constructor(this: Parser, file: SourceFile): void -> @Parser.con
   escaping: file
   calls: Lexer.constructor Parser.advance StringMap.constructor nish_alloc_struct
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.advance#0
-  pointer file: size=32 writesThrough=true captured=true
+  pointer file: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:18 new Lexer -> @Lexer.constructor
   callee +6:26 new StringMap -> @StringMap.constructor
