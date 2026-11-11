@@ -523,7 +523,7 @@ function runsAfter(earlier: Node, later: Node, loop: Node | null): boolean -> @r
   stackSites=0 stackLocals=0
   callee +0:51 isInside -> @isInside
 function copyFinding(walk: PortabilityWalk, copy: CopySite, write: Node, seenBy: i32): PortabilityFinding -> @copyFinding
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: PortabilityFinding.constructor PortabilityWalk.textOf SourceFile.lineOf nish_alloc_struct nish_str_concat nish_str_from_i32
   pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
   pointer copy: size=24 writesThrough=false captured=false
@@ -826,7 +826,7 @@ function builtinEffect(call: Node): i32 -> @builtinEffect
   local +0:9 callee: Node (const)
   local +4:9 method: string (const)
 function overwriteFinding(walk: PortabilityWalk, found: SlotOverwrite): PortabilityFinding -> @overwriteFinding
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: PortabilityFinding.constructor PortabilityWalk.textOf SourceFile.lineOf nish_alloc_struct nish_str_concat nish_str_from_i32
   pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0
   pointer found: size=24 writesThrough=false captured=false
