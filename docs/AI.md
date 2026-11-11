@@ -504,9 +504,10 @@ terminates control flow, so a non-`void` function may end with it.
 
 ## Absence: nullable types
 
-`T | null` is available for `T` a class, interface, array, or string — never a
-scalar, which has no null value. It is the same pointer with `null` as one more
-value, so nothing is boxed.
+`T | null` is available for `T` a class, interface, array, string or function
+reference — never a scalar, which has no null value. It is the same pointer
+(or, for a function reference, the same tag) with `null` as one more value, so
+nothing is boxed.
 
 ```ts nish:ok
 class Node {
@@ -918,8 +919,8 @@ export const main = (): i32 => {
 - **Only a top-level function's parameter, written inline**, is one. On a
   method or constructor parameter an inline function type is refused; type it
   through an alias and it is an ordinary [function reference](#function-references)
-  parameter. A local, field or element holding a reference is a function
-  argument too; the runners that check their body (`parallelMap`,
+  parameter. A local holding a reference is a function argument too (a field
+  or element is refused, NL2741: read it into a `const`); the runners that check their body (`parallelMap`,
   `parallelReduce`, `spawn`, `expose`, `region`, ...) refuse one (NL2734).
 
 ```ts nish:err NL2585
@@ -978,8 +979,10 @@ export const main = (): i32 => {
   every function of the type. A function-type key is refused.
 - **Called, compared, stored, passed — nothing else.** Not printed or
   interpolated (NL2737), ordered, joined or encoded as JSON.
-- **A function argument**: a local, field or element holding one fills an
-  inline function-typed parameter (`apply(ops[0], 3)`); `parallelMap`,
+- **A function argument**: a local holding one fills an inline
+  function-typed parameter (`const op = ops[0]; apply(op, 3)`); a field or
+  element passed directly is refused (NL2741), a nullable local until it is
+  narrowed (NL2742); `parallelMap`,
   `spawn`, `expose`, `region` and the other runners that check their body take
   only a named function or arrow (NL2734).
 - **It stays in the program**: a `-o` library cannot export it in a

@@ -7,7 +7,8 @@
 // a generated function whose `switch` on the tag makes the direct calls.
 //
 // A place is a local or parameter, a function's return, a field (by name and
-// reference type), or the elements of every array of one reference type. A
+// reference type), or the elements of every array, and the values of every
+// `Map`, of one reference type (`m.get(k)` reads them, `m.set` stores them). A
 // value flows into a place by a declaration, an assignment, an argument, a
 // `return`, an array or object literal or a `for...of`; a place's set is the
 // union of what flows into it, iterated until nothing moves. A value the
@@ -17,6 +18,7 @@
 import { checkSignatureBody } from "./checker"
 import { CheckContext } from "./context"
 import { referenceTypeOf } from "./fnrefs"
+import { isMapOwner } from "./generics"
 import { StringMap } from "./map"
 import {
   N_ARRAY,
@@ -162,11 +164,17 @@ class RefPass {
    * `Map<K, F | null>`'s `get` gives `(F | null) | undefined` (WP51 stage 2).
    */
   refType(node: Node): i32 {
-    let type = this.typeOf(node)
-    while (this.table.isNullable(type) || this.table.isMaybe(type)) {
-      type = this.table.refOf(type)
-    }
+    const type = this.stripType(this.typeOf(node))
     return this.table.isFnRef(type) ? type : -1
+  }
+
+  /** `type` without its `| null` or `| undefined` layers. */
+  stripType(type: i32): i32 {
+    let inner = type
+    while (this.table.isNullable(inner) || this.table.isMaybe(inner)) {
+      inner = this.table.refOf(inner)
+    }
+    return inner
   }
 
   isRef(node: Node): boolean {
@@ -371,13 +379,15 @@ class RefPass {
         const site = this.scanCall(node)
         if (!site) {
           const callee = this.callees[node.id]
-          // A call whose callee returns something else, such as the probe
-          // `Map.get` lowers to, has no return place to read: it widens.
-          if (callee !== null && !callee.dispatcher && callee.returnType === type) {
+          // A call whose callee returns something else has no return place
+          // to read: it widens. A callee returning `F | null` stores its
+          // returns under `F`, as `return` does. `Map.get` lowers to a probe,
+          // and reads the element place its values are stored in.
+          if (callee !== null && !callee.dispatcher && this.stripType(callee.returnType) === type) {
             this.storeFrom(target, this.returnPlace(callee, type), node)
             return
           }
-          if (this.arrayMethod(node, false) >= 0) {
+          if (this.arrayMethod(node, false) >= 0 || this.mapGet(node)) {
             this.storeFrom(target, this.elementPlace(type), node)
             return
           }
@@ -426,6 +436,21 @@ class RefPass {
     const reads =
       name === "pop" || name === "shift" || name === "at" || name === "find" || name === "findLast"
     return reads ? element : -1
+  }
+
+  /**
+   * Whether `call` is `m.get(k)` on a `Map`: its value is read out of the
+   * map's `entryValues`, an array of the value type, so it is the element
+   * place of that type, which every `set` stores into (WP51 stage 2).
+   */
+  mapGet(call: Node): boolean {
+    const access = call.children[0]
+    const callee = this.callees[call.id]
+    if (access.kind !== N_MEMBER || access.text !== "get" || callee === null) {
+      return false
+    }
+    const owner = callee.owner
+    return owner !== null && isMapOwner(owner)
   }
 
   /** A call: a call through a reference is recorded; arguments flow to their parameters. Whether it was one. */

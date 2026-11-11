@@ -1,5 +1,6 @@
-// WP51 stage 2: a reference argument is read at each call the arrow makes,
-// so an argument that calls a function as it is read is refused (NL2734).
+// WP51 stage 2: an element passed for a function parameter would be read
+// again at each call the callee makes, so it is refused (NL2741), here where
+// reading it also calls a function.
 type F = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;

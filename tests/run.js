@@ -3728,8 +3728,9 @@ if (selects("fnref", "fnref_debug_check")) {
     peakOf("place_set_1x", scaled("fnref_place_set", 9, 1000)),
     peakOf("place_set_10x", scaled("fnref_place_set", 9, 10000))
   )
-  // WP51 stage 2: the same loop through an argument and a nullable element.
-  for (const variant of ["arg", "nullable"]) {
+  // WP51 stage 2: the same loop through an argument, a nullable element and
+  // a `Map` value.
+  for (const variant of ["arg", "nullable", "map"]) {
     flat(
       `fnref_place_set_${variant}: 10x the loop peaks where 1x does`,
       peakOf(`place_set_${variant}_1x`, scaled(`fnref_place_set_${variant}`, 9, 1000)),
@@ -3794,6 +3795,44 @@ if (selects("fnref", "fnref_debug_check")) {
       gLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
       enumTag.test(gLl),
     gLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gLl.slice(0, 2000)
+  )
+  // A nullable reference's tag 0 is `null`: its enumeration names it, so a
+  // debugger prints `h = null` rather than `0` (review B9).
+  const gnSrc = path.join(fnrefDir, "fnref_gn.ts")
+  fs.writeFileSync(
+    gnSrc,
+    [
+      "type Op = (x: i32) => i32",
+      "const inc = (x: i32): i32 => x + 1",
+      "const twice = (x: i32): i32 => x * 2",
+      "export const main = (): number => {",
+      "  let h: Op | null = null",
+      "  if (Date.now() > 0) {",
+      "    h = inc",
+      "  }",
+      "  if (Date.now() > 1) {",
+      "    h = twice",
+      "  }",
+      "  if (h !== null) {",
+      "    console.log(`${h(3)}`)",
+      "  }",
+      "  return 0",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const gnOut = path.join(fnrefDir, "gn-ir") + path.sep
+  const gnIr = spawnSync(NISH, [gnSrc, "-g", "-o", gnOut], { cwd: root, encoding: "utf8" })
+  const gnLlPath = path.join(gnOut, "fnref_gn.ll")
+  const gnLl = gnIr.status === 0 && fs.existsSync(gnLlPath) ? fs.readFileSync(gnLlPath, "utf8") : shown(gnIr)
+  const nullableTag = /!DICompositeType\(tag: DW_TAG_enumeration_type, name: "\(i32\) => i32 \| null",[^\n]*size: 32/
+  check(
+    "fnref -g: a nullable reference's enumeration names tag 0 `null`, then its members",
+    gnLl.includes('!DIEnumerator(name: "null", value: 0)') &&
+      gnLl.includes('!DIEnumerator(name: "inc", value: 1)') &&
+      gnLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
+      nullableTag.test(gnLl),
+    gnLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gnLl.slice(0, 2000)
   )
   const dispatcherSp = gLl
     .split("\n")

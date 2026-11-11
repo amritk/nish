@@ -924,7 +924,7 @@ const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       ctx.error(part, secretTemplateMessage())
       continue
     }
-    if (ctx.table.isFnRef(hole)) {
+    if (ctx.table.isFnRef(ctx.table.stripNull(hole))) {
       refuseReferenceHole(ctx, part)
       continue
     }

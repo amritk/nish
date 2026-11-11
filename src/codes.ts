@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 898
+export const RULE_COUNT: i32 = 900
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -617,6 +617,8 @@ const diagnosticRules = (): string[] => [
   "NL2165",
   "; a `declare function` binds the C symbol of its name in every package, so rename the defined function",
   "NL3040",
+  "` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const`",
+  "NL2741",
   "` takes one `i32`: the milliseconds `sleep` waits, or the descriptor `readable` and `writable` wait on",
   "NL2672",
   "`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear",
@@ -1268,6 +1270,8 @@ const diagnosticRules = (): string[] => [
   "NL1006",
   " (object layout is fixed at compile time)",
   "NL1007",
+  "` calls it: pass it once a test such as `",
+  "NL2742",
   "` in a constant requires boolean operands",
   "NL2069",
   "` is a builtin value and cannot be called",

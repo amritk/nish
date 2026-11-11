@@ -189,8 +189,8 @@ export const main = (): i32 => run(null);
 ## In a `Map`
 
 A `Map` value can be a reference, an array of them, or a nullable of either.
-A call through what `get` returns can reach every function of that type the
-program stores anywhere, so it is a choice among all of them:
+A call through what `get` returns can reach every function of that type that
+any `Map` or array in the program holds, so it is a choice among all of them:
 
 ```ts nish:ok
 type Op = (x: i32) => i32;
@@ -211,17 +211,17 @@ export const main = (): i32 => {
 ```
 
 If one of those functions keeps an argument and another does not, a call
-through `get` is refused (NL2736): keep such functions in an array instead,
-whose elements the compiler follows one place at a time.
+through `get` is refused (NL2736): call the one that keeps it by name, or
+hold it in a variable or field of its own, which the compiler follows apart
+from the `Map`.
 
 A reference cannot be a `Map` key.
 
 ## As a function argument
 
 A parameter whose function type is written out in the parameter list, as in
-`apply` below, takes a function's name, an arrow, or a variable, field or
-array element holding a reference. The call passes an arrow that calls the
-reference:
+`apply` below, takes a function's name, an arrow, or a variable holding a
+reference. The call passes an arrow that calls the reference:
 
 ```ts nish:ok
 type F = (x: i32) => i32;
@@ -236,10 +236,11 @@ export const main = (): i32 => {
 };
 ```
 
-The arrow reads a field or element each time the callee calls it, so an
-argument that calls a function or assigns as it is read, such as
-`ops[next()]`, is refused (`NL2734`): read it into a `const` first and pass
-the `const`.
+A field or array element is refused (`NL2741`): the arrow would read it
+again each time the callee calls it, where JavaScript reads it once. Read it
+into a `const` first and pass the `const`, as in `const op = ops[0]` then
+`apply(op, 1)`. A variable that may be `null` is passed once a test such as
+`h !== null` has narrowed it (`NL2742`).
 
 The builtins that check the body they are handed, such as `parallelMap`, a
 scope's `spawn`, `expose` and `region`, take only a function's name or an

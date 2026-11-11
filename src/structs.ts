@@ -492,7 +492,7 @@ const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void =>
 const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 => {
   // A function reference is a tag only a function's name gives (WP51 §2.1):
   // a number is not one, though both are an `i32`.
-  const number = ctx.table.isFnRef(want) ? T_I32 : want
+  const number = ctx.table.isFnRef(ctx.table.stripNull(want)) ? T_I32 : want
   switch (expr.kind) {
     case N_NUMBER:
       return number

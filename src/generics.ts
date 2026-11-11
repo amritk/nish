@@ -2071,9 +2071,10 @@ const resolveFunctionArgument = (
     return liftArrowArgument(ctx, call, template, index, written, names, bindings, scope)
   }
   const lead = `${argumentLead(call, template.sourceName, index)} must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`
-  // WP51 stage 2: a reference held in a local, a field or an element is
-  // passed as the arrow that calls it, so the template is instantiated once
-  // per call over the reference's place and calls it through a dispatcher.
+  // WP51 stage 2: a reference held in a local is passed as the arrow that
+  // calls it, so the template is instantiated once per call over the
+  // reference's place and calls it through a dispatcher. A field or element
+  // is refused: it would be read again at each call.
   let inLocal: Local | null = null
   if (written.kind === N_IDENT) {
     inLocal = scope.lookup(written.text)
@@ -2086,6 +2087,17 @@ const resolveFunctionArgument = (
     if (type === T_ERROR) {
       return null
     }
+    if (inLocal === null && ctx.table.isFnRef(ctx.table.stripNull(type))) {
+      // The arrow the call is rewritten into reads the field or element at
+      // each call the callee makes, where JavaScript reads it once at the
+      // call, so a callee that stores into that place would see the change.
+      refuseOnce(
+        ctx,
+        arg,
+        `\`${ctx.source.text.slice(written.start, written.end)}\` is read again at each call \`${calleeSpelling(call, template)}\` makes, where JavaScript reads it once at the call: read it into a \`const\` first and pass the \`const\``
+      )
+      return null
+    }
     if (ctx.table.isFnRef(type)) {
       return referenceArgument(ctx, call, template, index, arg, written, type, names, bindings, scope)
     }
@@ -2094,7 +2106,7 @@ const resolveFunctionArgument = (
       refuseOnce(
         ctx,
         arg,
-        `\`${written.text}\` may be \`null\`: \`${calleeSpelling(call, template)}\` calls it, so narrow it with \`${written.text} !== null\` first`
+        `\`${written.text}\` may be \`null\`, and \`${calleeSpelling(call, template)}\` calls it: pass it once a test such as \`${written.text} !== null\` has narrowed it`
       )
       return null
     }
@@ -2209,13 +2221,11 @@ const rootedInLocal = (expr: Node, scope: Scope): boolean => {
 }
 
 /**
- * WP51 stage 2: the reference `written` (a local, field or element of
- * reference type `type`) given for the function parameter at `index`,
+ * WP51 stage 2: the reference `written` (a local of reference type `type`) given for the function parameter at `index`,
  * rewritten in the call into the arrow `($a0, ...) => written($a0, ...)` and
- * lifted as an arrow written there is. The arrow captures the locals the
- * expression reads, by value at the call, and reads the field or element
- * through them at each call it makes, so an expression that calls or assigns
- * is refused (`readsOnly`): it would run again at each. Each call through
+ * lifted as an arrow written there is. The arrow captures the local by value
+ * at the call; a field or element is refused before this, since the arrow
+ * would read it again at each call the callee makes. Each call through
  * the reference is a call through a reference, resolved over its place's set
  * like any other (`src/fnref-places.ts`). A form that runs its function away
  * from the call — on another thread, in a task, a region or over a secret —
@@ -2245,17 +2255,6 @@ const referenceArgument = (
     )
     return null
   }
-  if (!readsOnly(written)) {
-    // The arrow reads the reference each time the callee calls it, so an
-    // expression that calls a function or writes would run again at each.
-    refuseOnce(
-      ctx,
-      arg,
-      `\`${shown}\` calls or assigns as it is read, and it would be read at each call \`${calleeSpelling(call, template)}\` makes: ` +
-        `read it into a \`const\` first, since \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
-    )
-    return null
-  }
   const wanted = fnType.children[0].children
   const params = ctx.table.fnRefParamsOf(type)
   if (params.length !== wanted.length) {
@@ -2263,7 +2262,7 @@ const referenceArgument = (
       ctx,
       arg,
       `${argumentLead(call, template.sourceName, index)}: \`${shown}\` is \`${ctx.table.typeName(type)}\`, ` +
-        `and \`${param.children[0].text}\` is \`${template.home.textOf(fnType)}\``
+        `and \`${param.children[0].text}\` is \`${template.home.textOf(fnType)}\`; a function argument must have exactly its parameter's type`
     )
     return null
   }
@@ -2311,42 +2310,6 @@ const referenceArgument = (
   program.gathered = true
   program.nodeTypes[arrow.id] = T_VOID
   return liftArrowArgument(ctx, call, template, index, arrow, names, bindings, scope)
-}
-
-/**
- * Whether reading `expr` only reads: names, `this`, numbers, fields and
- * elements, with arithmetic in an index, and no call or assignment, so that
- * reading it again inside the arrow `referenceArgument` writes has no effect
- * the call site would not have had.
- */
-const readsOnly = (expr: Node): boolean => {
-  const kind = expr.kind
-  if (kind === N_IDENT || kind === N_THIS || kind === N_NUMBER) {
-    return true
-  }
-  if (kind === N_PAREN || kind === N_MEMBER) {
-    return readsOnly(expr.children[0])
-  }
-  if (kind === N_INDEX) {
-    return readsOnly(expr.children[0]) && readsOnly(expr.children[1])
-  }
-  if (kind === N_UNARY) {
-    return (expr.text === "-" || expr.text === "~") && readsOnly(expr.children[0])
-  }
-  if (kind === N_BINARY) {
-    const op = expr.text
-    const arithmetic =
-      op === "+" ||
-      op === "-" ||
-      op === "*" ||
-      op === "&" ||
-      op === "|" ||
-      op === "^" ||
-      op === "<<" ||
-      op === ">>"
-    return arithmetic && readsOnly(expr.children[0]) && readsOnly(expr.children[1])
-  }
-  return false
 }
 
 /**

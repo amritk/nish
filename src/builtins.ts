@@ -33,7 +33,7 @@ import {
   netSignature,
   unsafeModule,
 } from "./nish-modules"
-import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
+import { N_CALL, N_IDENT, N_INDEX, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { checkSimdCall } from "./simd"
 import { opaqueReferenceMessage } from "./fnrefs"
 import { routedBuiltinLocal } from "./std-modules"
@@ -508,23 +508,29 @@ const SUPPORTED_BUILTINS: string =
   "Math.hypot, Math.abs, Math.sign, Math.min, Math.max, Math.clz32, Math.imul, Math.random, process.exit, " +
   "Arena.mark, Arena.used, Date.now, crypto.getRandomValues"
 
-/** stage0's one sentence for a call whose dotted name is not a builtin. */
 /**
- * Whether `arg` is a name holding a function reference: a local of a
- * reference type, or a top-level function. `JSON.stringify` of one is refused
- * as printing a reference is, since Node would print the function's source.
+ * Whether `arg` holds a function reference, possibly `null`: a local, a field
+ * or an element of a reference type, or a top-level function. `JSON.stringify`
+ * of one is refused as printing a reference is, since Node would print the
+ * function's source. A field or element is checked for its type; any other
+ * argument is left unchecked, as the call is refused either way.
  */
 const namesReference = (ctx: CheckContext, arg: Node, scope: Scope): boolean => {
+  if (arg.kind === N_MEMBER || arg.kind === N_INDEX) {
+    const got = checkExpression(ctx, arg, scope, -1)
+    return got !== T_ERROR && ctx.table.isFnRef(ctx.table.stripNull(got))
+  }
   if (arg.kind !== N_IDENT) {
     return false
   }
   const local = scope.lookup(arg.text)
   if (local !== null) {
-    return ctx.table.isFnRef(scope.typeOf(local))
+    return ctx.table.isFnRef(ctx.table.stripNull(scope.typeOf(local)))
   }
   return ctx.signature(arg.text) !== null
 }
 
+/** stage0's one sentence for a call whose dotted name is not a builtin. */
 const unknownBuiltin = (ctx: CheckContext, at: Node, name: string): i32 =>
   ctx.errorType(at, `Unknown builtin \`${name}\` (supported: ${SUPPORTED_BUILTINS})`)
 
@@ -557,7 +563,7 @@ export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i
       args.children.length === 1 &&
       namesReference(ctx, args.children[0], scope)
     ) {
-      return ctx.errorType(args.children[0], opaqueReferenceMessage(args.children[0].text))
+      return ctx.errorType(args.children[0], opaqueReferenceMessage(ctx.textOf(args.children[0])))
     }
     // stage0 looks the whole dotted name up in one table and names the call,
     // not the receiver: the callee is what was not found.
@@ -630,7 +636,7 @@ const checkConsole = (
     return ctx.errorType(call, `\`${name}\` expects exactly 1 argument, got ${args.children.length}`)
   }
   const got = checkExpression(ctx, args.children[0], scope, -1)
-  if (got !== T_ERROR && ctx.table.isFnRef(got)) {
+  if (got !== T_ERROR && ctx.table.isFnRef(ctx.table.stripNull(got))) {
     ctx.error(args.children[0], opaqueReferenceMessage(ctx.textOf(args.children[0])))
   } else if (got !== T_ERROR && !isStringifiable(got)) {
     ctx.error(

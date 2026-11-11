@@ -1,1 +1,2 @@
-`keepIt` reaches `h` through a value whose functions this compiler cannot follow
+this call through `h` can reach `keepIt`, which keeps `p`, and `readX`, which does not
+`keepIt` reaches `h` through `hot.set(3, keepIt)`

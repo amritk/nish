@@ -1,7 +1,8 @@
-// WP51 stage 2, §4.1 through a `Map` value: `Map.get` returns no place,
-// so the call through its result dispatches over every function of the
-// type, `keepIt` included, and a call that would put each `P` in the
-// arena is refused (NL2736) rather than compiled to a leak.
+// WP51 stage 2, §4.1 case B through a `Map` value: `set` stores `keepIt`
+// among the map's values, so the call through `get`'s result dispatches
+// over a set that holds a member that keeps `p` and members that do not,
+// and a call that would put each `P` in the arena is refused (NL2736)
+// with the store that put `keepIt` there.
 class P {
   x: i32 = 0
   constructor(x: i32) {
@@ -45,6 +46,7 @@ export const main = (): void => {
   hot.set(0, readX)
   hot.set(1, readTwice)
   hot.set(2, readThrice)
+  hot.set(3, keepIt)
   const sum = run(hot, k)
   const once: Use = keepIt
   const e = keepIt(new P(5), k) + once(new P(6), k)
