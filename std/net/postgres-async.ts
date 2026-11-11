@@ -1529,7 +1529,6 @@ const pgAsyncEncode = (sql: u8[], name: i32, parse: boolean, params: PgAsyncPara
   return out
 }
 
-/** `s`'s UTF-8 bytes, or null when one is zero, which a C string in the protocol cannot hold. */
 /** A prepared statement's name, `n` and the decimal digits of `name` (at most 2), or none for a negative `name`. */
 const pgAsyncLabel = (name: i32): u8[] => {
   if (name >= 10) {
@@ -1541,6 +1540,7 @@ const pgAsyncLabel = (name: i32): u8[] => {
   return []
 }
 
+/** `s`'s UTF-8 bytes, or null when one is zero, which a C string in the protocol cannot hold. */
 const pgAsyncBytes = (s: string): u8[] | null => {
   const n: i32 = toI32(s.length)
   const b: u8[] = new Array<u8>(n)
