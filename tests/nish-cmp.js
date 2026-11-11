@@ -1210,7 +1210,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "exit",
-    changelog: "read a Map or Set reached through a parallelMapInto element",
+    changelog: "Read a Map or Set reached through a parallelMapInto element",
     why: "the 0.38.0 seed counts a Map's private entry arrays as reaching `dst` and refuses the program, so only the candidate compiles it",
   })),
   // Parent/child regions: the 0.38.0 seed's nish:region has no child or
