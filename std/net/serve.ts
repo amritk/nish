@@ -37,7 +37,7 @@
  * **The task reads its own copy.** The task copies the request's head and
  * body out of the server's slot into its own memory before `handle` runs,
  * and when `handle` answers it writes the status, the content type and the
- * body back into the slot's fixed buffers, element by element, and wakes the
+ * body back into the slot's fixed buffers, in bulk, and wakes the
  * loop. The loop then sends the answer and frees the slot. Nothing the task
  * allocated outlives it, and the loop's arena does not grow per request once
  * its slots are warm: `tests/link/net_serve_pipelined_flat` pins
@@ -69,6 +69,7 @@
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
+import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import { ROUTER_BAD_ESCAPE, Router } from "nish/net/router"
 import { cancel, cancelAfter, readable, sleep, spawn, taskId } from "nish:async"
@@ -349,10 +350,14 @@ class ServeState {
   tasks: i64[]
   /** Whether a slot's task was cancelled, so it is cancelled once. */
   cancelled: boolean[]
-  /** `ServeLimits.deadline`, which each task arms on itself as it starts. */
-  deadline: i32 = 0
-  /** Set when the server begins to stop: each task still running, and each that starts later, is cancelled. */
-  stopping: boolean = false
+  /** The free slots, `free[0 .. freeCount)`, the last freed on top. */
+  free: i32[]
+  /** The slots whose task has answered since the loop last looked, `finished[0 .. finishedCount)`, in the order they answered. */
+  finished: i32[]
+  /** The slots whose task the loop has started and not yet seen answer, `running[0 .. runningCount)`: the ones a hang-up can cancel. */
+  running: i32[]
+  /** Whether a slot is in `running`, so a slot answered and reused within a turn is listed once. */
+  listed: boolean[]
   /** The status each task answered, or `SERVE_REFUSE`. */
   status: i32[]
   /** The bytes each task wrote into `bodies`, or -1 when its body broke `responseBytes`. */
@@ -363,6 +368,12 @@ class ServeState {
   types: u8[][]
   /** The bytes each task wrote into `types`, or -1 when the type was too long. */
   typeLengths: i32[]
+  /** Per slot: the index in `typeBytes` of the type its task answered, or -1 when the task copied it into `types`. */
+  typeIndex: i32[]
+  /** Each content type the server has sent, as the bytes the loop writes into a head. */
+  typeBytes: u8[][]
+  /** The same content types as text, in `typeBytes`'s order: what a task compares its answer's type with. */
+  typeTexts: string[]
   /** One byte, written to the wake socket. */
   one: u8[]
   /** The fields of an answer with no content type: `ServeLimits.server`'s, or none. */
@@ -371,8 +382,18 @@ class ServeState {
   /** The fields of an answer with a content type: `ServeLimits.server`'s, then `content-type`, whose value is set per answer. */
   typedNames: u8[][]
   typedValues: u8[][]
+  /** How many of `free`'s entries are free slots. */
+  freeCount: i32 = 0
+  /** How many of `finished`'s entries are answered slots the loop has not yet looked at. */
+  finishedCount: i32 = 0
+  /** How many of `running`'s entries are slots whose task is running. */
+  runningCount: i32 = 0
+  /** `ServeLimits.deadline`, which each task arms on itself as it starts. */
+  deadline: i32 = 0
   /** The wake socket's end the tasks write to. */
   wakeFd: i32 = 0
+  /** Set when the server begins to stop: each task still running, and each that starts later, is cancelled. */
+  stopping: boolean = false
   /** Whether a byte is waiting in the wake socket. */
   signalled: boolean = false
   /** Whether the loop is running rather than parked: a task that answers now needs no wake byte, as the loop looks again before it parks. */
@@ -388,11 +409,18 @@ class ServeState {
     this.done = []
     this.tasks = []
     this.cancelled = []
+    this.free = []
+    this.finished = []
+    this.running = []
+    this.listed = []
     this.status = []
     this.lengths = []
     this.bodies = []
     this.types = []
     this.typeLengths = []
+    this.typeIndex = []
+    this.typeBytes = []
+    this.typeTexts = []
     this.one = [toU8(1)]
     this.plainNames = []
     this.plainValues = []
@@ -421,14 +449,13 @@ const serveFields = (st: ServeState, server: string): void => {
   st.typedValues.push(type)
 }
 
-/** The lowest free slot, making one when every slot is busy and `inFlight` allows; -1 when none. */
+/** The last freed slot, making one when every slot is busy and `inFlight` allows; -1 when none. */
 const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
-  const n: i32 = toI32(st.busy.length)
-  for (let k: i32 = 0; k < n; k++) {
-    if (!st.busy[k]) {
-      return k
-    }
+  if (st.freeCount > 0) {
+    st.freeCount -= 1
+    return st.free[st.freeCount]
   }
+  const n: i32 = toI32(st.busy.length)
   if (n >= limits.inFlight) {
     return -1
   }
@@ -442,6 +469,11 @@ const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
   st.bodies.push(new Array<u8>(limits.responseBytes))
   st.types.push(new Array<u8>(SERVE_TYPE_BYTES))
   st.typeLengths.push(toI32(0))
+  st.typeIndex.push(toI32(-1))
+  st.free.push(toI32(0))
+  st.finished.push(toI32(0))
+  st.running.push(toI32(0))
+  st.listed.push(false)
   return n
 }
 
@@ -467,7 +499,7 @@ const serveAnyBusy = (st: ServeState): boolean => {
 }
 
 /** Sends slot `k`'s answer, as its task wrote it. */
-const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], stats: ServeStats): void => {
+const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, stats: ServeStats): void => {
   const r: HttpRequest = st.reqs[k]
   const status: i32 = st.status[k]
   if (status === SERVE_REFUSE) {
@@ -488,19 +520,20 @@ const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], 
     }
     return
   }
-  const type: i32 = serveType(typeCache, st.types[k], st.typeLengths[k])
+  const type: i32 = st.typeIndex[k] >= 0 ? st.typeIndex[k] : serveType(st, st.types[k], st.typeLengths[k])
   if (type < 0) {
     stats.failed += 1
     h.problem(r, SERVE_FAILED, "Internal Server Error", "")
     return
   }
   const last: i32 = toI32(st.typedValues.length) - 1
-  st.typedValues[last] = typeCache[type]
+  st.typedValues[last] = st.typeBytes[type]
   h.sendFields(r, status, st.typedNames, st.typedValues, st.bodies[k], toI32(0), length)
 }
 
-/** The index in `cache` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full or when they hold a control byte. */
-const serveType = (cache: u8[][], type: u8[], len: i32): i32 => {
+/** The index in `st.typeBytes` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full or when they hold a control byte. */
+const serveType = (st: ServeState, type: u8[], len: i32): i32 => {
+  const cache: u8[][] = st.typeBytes
   if (len < 0 || len > toI32(type.length)) {
     return -1
   }
@@ -531,6 +564,7 @@ const serveType = (cache: u8[][], type: u8[], len: i32): i32 => {
     copy[j] = type[j]
   }
   cache.push(copy)
+  st.typeTexts.push(String.fromBytes(copy, 0, len))
   return toI32(cache.length) - 1
 }
 
@@ -562,28 +596,26 @@ const serveTask = async (
   // one into the other.
   const src: HttpRequest = st.reqs[k]
   const r: HttpRequest = new HttpRequest(-1)
+  // The kept head ends at the furthest of the target and every field span.
+  const spanCount: i32 = 4 * src.headerCount
   let end: i32 = src.targetEnd
-  for (let i: i32 = 0; i < 4 * src.headerCount; i++) {
+  for (let i: i32 = 0; i < spanCount && i < toI32(src.spans.length); i++) {
     if (src.spans[i] > end) {
       end = src.spans[i]
     }
   }
   const head: u8[] = new Array<u8>(end)
-  for (let i: i32 = 0; i < end; i++) {
-    head[i] = src.head[i]
-  }
-  const spans: i32[] = new Array<i32>(4 * src.headerCount)
-  for (let i: i32 = 0; i < 4 * src.headerCount; i++) {
+  copyBytes(head, 0, src.head, 0, end)
+  const spans: i32[] = new Array<i32>(spanCount)
+  for (let i: i32 = 0; i < toI32(spans.length) && i < toI32(src.spans.length); i++) {
     spans[i] = src.spans[i]
   }
   const params: i32[] = new Array<i32>(2 * src.paramCount)
-  for (let i: i32 = 0; i < 2 * src.paramCount; i++) {
+  for (let i: i32 = 0; i < toI32(params.length) && i < toI32(src.params.length); i++) {
     params[i] = src.params[i]
   }
   const body: u8[] = new Array<u8>(src.bodyLength)
-  for (let i: i32 = 0; i < src.bodyLength; i++) {
-    body[i] = src.body[i]
-  }
+  copyBytes(body, 0, src.body, 0, src.bodyLength)
   r.head = head
   r.spans = spans
   r.params = params
@@ -600,25 +632,38 @@ const serveTask = async (
   const res: Response = await handle(new Request(r))
   st.status[k] = res.status
   const out: u8[] = st.bodies[k]
-  if (res.length > toI32(out.length)) {
+  // A length the body cannot hold, negative or past either array, is the
+  // handler's mistake: the loop answers 500 for it, as for an over-long body.
+  if (res.length < 0 || res.length > toI32(out.length) || res.length > toI32(res.body.length)) {
     st.lengths[k] = -1
   } else {
-    for (let i: i32 = 0; i < res.length; i++) {
-      out[i] = res.body[i]
-    }
+    out.set(res.length === toI32(res.body.length) ? res.body : res.body.slice(0, res.length))
     st.lengths[k] = res.length
   }
-  const type: u8[] = st.types[k]
+  // A type the server has sent before is found by its text, with no copy;
+  // the loop copies a new one's bytes into `typeBytes` as it sends it.
   const n: i32 = toI32(res.type.length)
-  if (n > toI32(type.length)) {
+  let known: i32 = -1
+  for (let i: i32 = 0; n > 0 && known < 0 && i < toI32(st.typeTexts.length); i++) {
+    if (st.typeTexts[i] === res.type) {
+      known = i
+    }
+  }
+  st.typeIndex[k] = known
+  const type: u8[] = st.types[k]
+  if (known >= 0) {
+    st.typeLengths[k] = n
+  } else if (n > toI32(type.length)) {
     st.typeLengths[k] = -1
   } else {
-    for (let i: i32 = 0; i < n; i++) {
+    for (let i: i32 = 0; i < n && i < toI32(type.length); i++) {
       type[i] = toU8(res.type.charCodeAt(i))
     }
     st.typeLengths[k] = n
   }
   st.done[k] = true
+  st.finished[st.finishedCount] = k
+  st.finishedCount += 1
   st.fresh = true
   if (!st.awake && !st.signalled) {
     st.signalled = true
@@ -679,7 +724,6 @@ export const serveOn = async (
   st.wakeFd = fds[1]
   h.watch(fds[0], SERVE_WAKE)
   const drained: u8[] = new Array<u8>(64)
-  const typeCache: u8[][] = []
   spawn(serveTick(st))
   let draining: boolean = false
   while (true) {
@@ -699,21 +743,21 @@ export const serveOn = async (
     while (moved || st.fresh) {
       moved = false
       st.fresh = false
-      for (let k: i32 = 0; k < toI32(st.busy.length); k++) {
-        if (st.busy[k] && st.done[k]) {
-          serveAnswer(h, st, k, typeCache, stats)
-          st.busy[k] = false
-          st.done[k] = false
-          st.cancelled[k] = false
-          st.tasks[k] = 0
-          stats.answered += 1
-          moved = true
-        } else if (st.busy[k] && (st.stopping || h.hungUp(st.reqs[k]))) {
-          // Its client hung up, or the server is stopping: nobody waits for
-          // this answer, so the task is told to stop waiting too.
-          serveCancel(st, k)
-        }
+      // A task appends its slot as it answers; none runs while the loop
+      // does, so the list is read whole and emptied.
+      for (let i: i32 = 0; i < st.finishedCount && i < toI32(st.finished.length); i++) {
+        const k: i32 = st.finished[i]
+        serveAnswer(h, st, k, stats)
+        st.busy[k] = false
+        st.done[k] = false
+        st.cancelled[k] = false
+        st.tasks[k] = 0
+        st.free[st.freeCount] = k
+        st.freeCount += 1
+        stats.answered += 1
+        moved = true
       }
+      st.finishedCount = 0
       while (h.ready()) {
         const r: HttpRequest = h.take()
         const k: i32 = serveFreeSlot(st, limits)
@@ -729,9 +773,31 @@ export const serveOn = async (
         st.done[k] = false
         st.cancelled[k] = false
         st.tasks[k] = 0
+        if (!st.listed[k]) {
+          st.listed[k] = true
+          st.running[st.runningCount] = k
+          st.runningCount += 1
+        }
         spawn(serveTask(handle, st, k))
       }
     }
+    // A task still running whose client hung up, or any once the server is
+    // stopping: nobody waits for its answer, so it is told to stop waiting
+    // too. The answered ones leave the list here.
+    let kept: i32 = 0
+    for (let i: i32 = 0; i < st.runningCount && i < toI32(st.running.length); i++) {
+      const k: i32 = st.running[i]
+      if (st.busy[k] && !st.done[k]) {
+        if (st.stopping || h.hungUp(st.reqs[k])) {
+          serveCancel(st, k)
+        }
+        st.running[kept] = k
+        kept += 1
+      } else {
+        st.listed[k] = false
+      }
+    }
+    st.runningCount = kept
     // The turn's answers go out together, before the arena is read, so a
     // close the send causes is counted in the turn that caused it.
     h.flush()
