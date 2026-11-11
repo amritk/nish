@@ -1226,7 +1226,7 @@ so a reader can see each departure against it.
 
 Names of files, functions and tests are those the stages use, and RFC sections
 are RFC 8446's; the existing code it describes is as of commit b515c1b, and its
-anchors are by function name; the line numbers it once gave were taken at a commit that is not on `main`. What #652 and #665 changed when `main` was
+anchors are by function name, except those stated at 4bbb392; the line numbers it once gave were taken at a commit that is not on `main`. What #652 and #665 changed when `main` was
 merged at 4bbb392 is described as of 4bbb392, and each sentence that says so
 names it.
 
