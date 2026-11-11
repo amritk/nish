@@ -22435,13 +22435,16 @@ if (dealtHere("releaseChecks")) {
       const found = []
       const lines = text.split("\n")
       let section = 0
+      let inFence = false
       for (let i = 0; i < lines.length; i++) {
-        if (/^#{1,6} /.test(lines[i])) {
-          section++
-          continue
-        }
         const m = /^```(ts|json)\s+nish:(ok|err)(-body)?\s*(.*)$/.exec(lines[i])
         if (!m) {
+          // A `#` line inside an unmarked fence, a shell comment, is not a heading.
+          if (lines[i].startsWith("```")) {
+            inFence = !inFence
+          } else if (!inFence && /^#{1,6} /.test(lines[i])) {
+            section++
+          }
           continue
         }
         const rest = m[4].trim().split(/\s+/).filter(Boolean)
@@ -22635,7 +22638,8 @@ if (dealtHere("releaseChecks")) {
      * Writes a program's fences out and compiles its entry, the last of them. A
      * program of `file=` fences gets a directory of its own, each fence at its path;
      * `misplaced` lists the lines of the fences before the entry that carry
-     * `nish:err` or flags, which nothing would check.
+     * `nish:err` or flags, which nothing would check, or a path outside that
+     * directory, which is not written.
      */
     const compileProgram = (program, stem) => {
       const s = program.entry
@@ -22646,7 +22650,8 @@ if (dealtHere("releaseChecks")) {
         for (const f of [...program.files, s]) {
           const target = path.resolve(dir, f.file)
           if (!target.startsWith(dir + path.sep)) {
-            throw new Error(`file=${f.file} leaves the program's directory`)
+            misplaced.push(f.line)
+            continue
           }
           fs.mkdirSync(path.dirname(target), { recursive: true })
           fs.writeFileSync(target, fenceBody(f))
@@ -22706,6 +22711,12 @@ if (dealtHere("releaseChecks")) {
       )
       const headed = page.replace("```ts nish:ok file=main.ts", "## Another\n```ts nish:ok file=main.ts")
       const split = programsOf(markedSnippets(headed))
+      const shell = page.replace("```ts nish:ok file=main.ts", "```sh\n# a comment\n```\n$&")
+      check(
+        "docs: a `#` line in an unmarked fence between file= fences is not a heading",
+        programsOf(markedSnippets(shell)).length === 1,
+        "the program was split"
+      )
       check(
         "docs: a heading between file= fences starts another program",
         split.length === 2,
@@ -22738,9 +22749,9 @@ if (dealtHere("releaseChecks")) {
       for (const program of programsOf(snippets)) {
         const s = program.entry
         const { run, errors, detail, body, misplaced } = compileProgram(program, `${prefix}_${s.line}`)
-        if (program.files.length > 0) {
+        if (s.file !== null) {
           check(
-            `${rel}:${s.line}: only the last fence of a program carries nish:err or flags`,
+            `${rel}:${s.line}: its program's other files are plain nish:ok, inside its directory`,
             misplaced.length === 0,
             `line ${misplaced.join(", ")}`
           )
