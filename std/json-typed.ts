@@ -189,7 +189,8 @@
  *    `JSON_DECODE_MISSING`.
  *  - `presence`, described below. Without it nothing is recorded.
  *  - `tag`, a string literal: what a variant of a tagged union writes as its
- *    tag, described below. Without it the tag is the enum member's name.
+ *    tag, described below. Without it, or with `tag: ""`, the tag is the enum
+ *    member's name.
  *
  * Each misuse has its own diagnostic:
  *
@@ -611,7 +612,10 @@ export class JsonDecoder {
    * the decoder read ahead over and then reads again as the variant's
    * fields. A byte is read again once for each union object it is inside,
    * so this is at most `maxDepth` times the input's length
-   * (docs/security/json.md, JSON-17); `reset` clears it.
+   * (docs/security/json.md, JSON-17), and it stops at `i32`'s largest
+   * value, 2147483647, which only raised limits reach; `reset` clears it.
+   * It counts the spans `enterUnion` reads again, not the keys `unionTag`
+   * steps over to find a tag.
    */
   unionReread: i32 = 0
 
@@ -926,7 +930,10 @@ export class JsonDecoder {
       return true
     }
     this.unionStart = -1
-    this.unionReread += this.tok.tokEnd - start
+    // Held at `i32`'s largest value, where raised limits could carry a sum
+    // past it: nothing an input holds may panic.
+    const span: i32 = this.tok.tokEnd - start
+    this.unionReread = span > 2147483647 - this.unionReread ? 2147483647 : this.unionReread + span
     this.tok.rewindObject(start)
     return false
   }

@@ -932,7 +932,8 @@ export const main = (): i32 => {
 A field, an array element or a whole document can be a
 [discriminated union](../language/unions.md) of classes. On the wire it is the
 variant's object with its tag key first, and the tag's value is the name of its
-enum member; a variant's `tag` option writes another string, and `rename`
+enum member; a variant's `tag` option writes another string (`tag: ""` is
+the same as no `tag`), and `rename`
 renames the tag key. Every variant must use the same key and a different
 string, and the compiler tells you where they clash.
 
@@ -940,7 +941,9 @@ string, and the compiler tells you where they clash.
 is only known once its tag is read, so a union is decoded with
 `jsonDecodeUnion(d, prev)`. It answers the object it decoded into: `prev`
 itself when the tag matches, otherwise a new variant. On a failure it answers
-`prev`, with the code in `d.failed`. The tag may come anywhere in the object;
+`prev`, with the code in `d.failed`. That holds only at the top: a union field,
+array element or `Map` value inside the document may already hold the new
+variant, half read, so check `d.failed` before using anything it decoded. The tag may come anywhere in the object;
 when it is not the first key the decoder reads ahead to find it. A tag that is
 missing, not a string or no variant's is `JSON_DECODE_TAG`.
 

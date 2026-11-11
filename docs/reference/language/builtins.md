@@ -4752,8 +4752,9 @@ export const main = (): i32 => {
   its tag under one key and as a different string, or the union is refused
   where a call reaches it (NL2720, `json_reject_union_tag_key`; NL2719,
   `json_reject_union_same_tag`); a `tag` that is not a string literal is
-  NL2721 (`json_reject_union_tag_literal`), one on a class that tags no
-  union's variant is NL2723 (`json_reject_union_tag_no_field`), and a variant
+  NL2721 (`json_reject_union_tag_literal`), one on a class with no field whose
+  type is one enum member is NL2723 (`json_reject_union_tag_no_field`), and
+  `tag: ""` is the same as no `tag`: the variant writes its member's name. A variant
   that is not a class, an interface, is NL2486
   (`json_reject_union_interface`), the code of any typed JSON type that is not
   a declared class. A field typed with an enum member that no
@@ -4763,7 +4764,9 @@ export const main = (): i32 => {
   decoded with `jsonDecodeUnion(d, prev)`, which answers the object it decoded
   into: `prev` itself when the input's tag is `prev`'s, reused as any nested
   object is, and otherwise a new variant made with `new V()`. On a failure it
-  answers `prev`, with the code in `d.failed`. Its type argument is inferred
+  answers `prev`, with the code in `d.failed`, at the top only: a union field,
+  element or `Map` value already holds the new variant when the failure comes,
+  decoded up to it, as any failed decode leaves what it read. Its type argument is inferred
   from `prev` and never written; `jsonDecode` with a union is
   `` `jsonDecode`'s value is `A | B`, a tagged union: … ``
   (NL2718, `json_reject_union_decode`), and `jsonDecodeUnion` with a class is

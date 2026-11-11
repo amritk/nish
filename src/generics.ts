@@ -1771,7 +1771,6 @@ export const refuseNestedFunctionTypes = (ctx: CheckContext, decl: Node): boolea
   return false
 }
 
-/** Whether a type argument holds a union, which is not a type argument (docs/LANGUAGE.md, Discriminated unions). */
 /**
  * The type arguments a union may not be: all of them, but for the global
  * `Map`'s value, which the map stores as it is, the way an array stores an
@@ -1780,6 +1779,7 @@ export const refuseNestedFunctionTypes = (ctx: CheckContext, decl: Node): boolea
 const unionCheckedArguments = (template: StructTemplateInfo, args: i32[]): i32[] =>
   isCollectionTemplate(template) && template.sourceName === "Map" && args.length === 2 ? [args[0]] : args
 
+/** Whether a type argument holds a union, which is not a type argument (docs/LANGUAGE.md, Discriminated unions). */
 const holdsAnyUnion = (table: TypeTable, types: i32[]): boolean => {
   for (const type of types) {
     if (table.holdsUnion(type)) {

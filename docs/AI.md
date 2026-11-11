@@ -1986,7 +1986,8 @@ export const main = (): i32 => {
   NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2559. Any
   other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
-  (`Shape | null`). An alias may name another union, which is flattened. A
+  (`Shape | null`), and a `Map`'s value is any of those (`Map<string, Shape>`,
+  `Map<string, Shape[]>`, `Map<string, Shape | null>`). An alias may name another union, which is flattened. A
   variant, or a smaller union, converts into it wherever the union is
   expected — argument, `return`, `push`, an annotated array literal, a
   ternary arm or `??` default whose other side is the union. A class that
@@ -2059,7 +2060,8 @@ export const main = (): i32 => {
   (TS2367; LANGUAGE.md, "Accepted here, refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Result<Shape, E>`, a generic call binding `T` to a union: NL2533; a
-  `Map`'s value is the one that may be a union), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
+  built-in `Map`'s value is the one that may be a union, though `nish/map`'s
+  generic `getOrInsert`/`reserve` on such a map is NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
   is not `Shape[]`), and inferred unions (an unannotated ternary or array of
   two variants).
 - **Declare what you store.** A store of a value that is only some of the
@@ -2734,7 +2736,9 @@ a rename to a non-string (NL2496) or to a key that is not valid UTF-8
 member's name or the variant's `tag` option. Decode one with
 `const u = jsonDecodeUnion(d, prev)` (never `jsonDecode`, NL2718, and no type
 argument): it answers `prev` refilled when the tag matches, else a new variant,
-and `prev` on failure; a bad tag is `JSON_DECODE_TAG`. Every variant writes its
+and `prev` on failure (only at the top: a nested union slot may hold the new
+variant, half read, so check `d.failed`); a bad tag is `JSON_DECODE_TAG`.
+`tag: ""` is the same as no `tag`. Every variant writes its
 tag under one key (NL2720) as a different string (NL2719).
 
 ```ts nish:ok

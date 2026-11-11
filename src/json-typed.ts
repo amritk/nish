@@ -88,28 +88,29 @@ export const JSON_FIELD_TAG: i32 = 10
  * the value type of a `Map` field, which has no field of its own.
  */
 export class JsonField {
+  // Declared widest first, so no byte of a value is padding.
   /** The field, or `null` for a `Map`'s value. */
   field: FieldInfo | null
-  /** The value's type, `| null` included. */
-  type: i32
-  /** One of the `JSON_FIELD_*` kinds. */
-  kind: i32
-  /** Whether the type is `| null`. */
-  nullable: boolean
-  /** The scalar type of a scalar or of an array's element; `0` otherwise. */
-  scalar: i32
   /** The class of an object or of an array's element; `null` otherwise. */
   cls: StructInfo | null
-  /** The enum of an enum value or of an array's element; `0` otherwise. */
-  enumType: i32
   /** The `Map` instance of a map value; `null` otherwise. */
   map: StructInfo | null
   /** What a map holds; `null` for every other kind. */
   value: JsonField | null
-  /** The union of a union value or of an array's element, `| null` stripped; `-1` otherwise. */
-  union: i32
   /** The union's variants, in `TypeTable.variantsOf`'s order; empty for every other kind. */
   variants: StructInfo[]
+  /** The value's type, `| null` included. */
+  type: i32
+  /** One of the `JSON_FIELD_*` kinds. */
+  kind: i32
+  /** The scalar type of a scalar or of an array's element; `0` otherwise. */
+  scalar: i32
+  /** The enum of an enum value or of an array's element; `0` otherwise. */
+  enumType: i32
+  /** The union of a union value or of an array's element, `| null` stripped; `-1` otherwise. */
+  union: i32
+  /** Whether the type is `| null`. */
+  nullable: boolean
 
   constructor(field: FieldInfo | null, type: i32, kind: i32, nullable: boolean) {
     this.field = field
@@ -1011,18 +1012,27 @@ const jsonMaps = (
 }
 
 /**
- * The union a field of `type` holds, alone, with `| null` or as an array's
- * element, or `-1` when it holds none.
+ * The union a field of `type` holds, alone, with `| null`, as an array's
+ * element or as what a `Map` holds, any of those, or `-1` when it holds none.
  */
-const jsonUnionIn = (table: TypeTable, type: i32): i32 => {
-  const base = table.stripNull(type)
-  if (table.isUnion(base)) {
-    return base
+const jsonUnionIn = (program: CheckedProgram, table: TypeTable, type: i32): i32 => {
+  let at = type
+  // Each pass goes one `Map` deeper, and a type is finite.
+  while (true) {
+    const base = table.stripNull(at)
+    if (table.isUnion(base)) {
+      return base
+    }
+    if (table.isArray(base) && table.isUnion(table.refOf(base))) {
+      return table.refOf(base)
+    }
+    const map = jsonMapOf(program, table, base)
+    const instance: StructInstantiation | null = map === null ? null : map.instance
+    if (instance === null) {
+      return -1
+    }
+    at = instance.typeArgs[1]
   }
-  if (table.isArray(base) && table.isUnion(table.refOf(base))) {
-    return table.refOf(base)
-  }
-  return -1
 }
 
 /** NL2486's refusal of the union `union`'s variant `variant`, which is not a class, reached by the route `name`. */
@@ -1143,7 +1153,7 @@ export const jsonRefusal = (
       }
       const f = jsonFieldOf(program, table, field)
       if (f === null) {
-        const inner = jsonUnionIn(table, field.type)
+        const inner = jsonUnionIn(program, table, field.type)
         if (inner >= 0) {
           const bad = jsonBadVariant(program, table, inner)
           if (bad >= 0) {
@@ -1161,11 +1171,16 @@ export const jsonRefusal = (
           "so are a union of classes, alone, with `| null` or in an array, and a variant's tag"
         )
       }
-      if (f.union >= 0 && f.variants.length > 0) {
-        const why = jsonUnionRefusal(program, table, f.union)
-        if (why.length > 0) {
-          return why
+      // A union is checked wherever the field reaches it: in the field, or as what a `Map` holds.
+      let v: JsonField | null = f
+      while (v !== null) {
+        if (v.union >= 0 && v.variants.length > 0) {
+          const why = jsonUnionRefusal(program, table, v.union)
+          if (why.length > 0) {
+            return why
+          }
         }
+        v = v.value
       }
       if (decode && field.readonly && f.kind !== JSON_FIELD_TAG) {
         // The words after the field are NL2487's in `src/codes.ts`.
@@ -1266,15 +1281,19 @@ export const jsonEncodeHelper = (f: JsonField): string => {
 const jsonMapMethods = (role: i32): string[] =>
   role === JSON_ENCODE ? ["walkNext", "keyAt", "valueAt"] : ["clear", "has", "set"]
 
-/** The `JsonDecoder` methods the code written for a union's object calls: to find its tag, and to read on past it. */
-const jsonUnionMethods = (): string[] => [
-  "unionTag",
-  "unknownTag",
-  "enterUnion",
-  "keyLength",
-  "keyByte",
-  "keyIs",
-]
+/**
+ * Adds to `names` the `JsonDecoder` methods the code written for a union's
+ * object calls: to find its tag, and to read on past it. Added one by one, so
+ * a loop that calls it leaves nothing behind.
+ */
+const jsonAddUnionMethods = (names: StringSet): void => {
+  names.add("unionTag")
+  names.add("unknownTag")
+  names.add("enterUnion")
+  names.add("keyLength")
+  names.add("keyByte")
+  names.add("keyIs")
+}
 
 /**
  * The names of every method of the receiver and every helper the code for a
@@ -1291,9 +1310,11 @@ const jsonRouteNames = (
   const names = new StringSet()
   const decode = role !== JSON_ENCODE
   if (decode && union) {
-    for (const name of jsonUnionMethods()) {
-      names.add(name)
-    }
+    jsonAddUnionMethods(names)
+  }
+  if (!decode && union) {
+    // A union's encoding writes `null` for a tag no variant has.
+    names.add("nullValue")
   }
   if (decode) {
     for (const name of [
@@ -1344,9 +1365,7 @@ const jsonRouteNames = (
     }
     if (decode) {
       if (isUnion) {
-        for (const name of jsonUnionMethods()) {
-          names.add(name)
-        }
+        jsonAddUnionMethods(names)
       }
       if (isEnum) {
         names.add("i32")
@@ -1375,7 +1394,9 @@ const jsonRouteNames = (
     } else if (!holdsObject) {
       names.add(jsonScalarMethod(f.scalar))
     }
-    if (f.nullable && holdsObject) {
+    // A union's encoding writes `null` for a tag no variant has, so it calls
+    // `nullValue` whether or not the field is nullable.
+    if ((f.nullable && holdsObject) || isUnion) {
       names.add("nullValue")
     }
     if (isArray) {

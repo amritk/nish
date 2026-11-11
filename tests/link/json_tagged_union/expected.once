@@ -14,3 +14,6 @@ define internal void @.json.encode.union.union.Open.Close(%struct.JsonWriter* %r
 @.json.encode.Add :: call void @.json.encode.union.union.Num.Neg.Add(%struct.JsonWriter* %r, %union.tagged* %
 @.json.encode.array.union.Num.Neg.Add :: call void @.json.encode.union.union.Num.Neg.Add(%struct.JsonWriter* %r, %union.tagged* %
 @.json.encode.map.Map$str$un3.$Num.$Neg.$Add :: call void @.json.encode.union.union.Num.Neg.Add(%struct.JsonWriter* %r, %union.tagged* %
+@.json.decode.Env :: call %union.tagged* @.json.decode.union.union.Num.Neg.Add(%struct.JsonDecoder* %r, %union.tagged* %
+@.json.decode.Env :: call %struct.nish_array* @.json.decode.array.union.Num.Neg.Add(%struct.JsonDecoder* %r, %struct.nish_array* %
+@.json.decode.Scope :: call void @.json.decode.map.Map$str$un3.$Num.$Neg.$Add(%struct.JsonDecoder* %r, %struct.Map$str$un3.$Num.$Neg.$Add* %

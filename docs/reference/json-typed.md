@@ -391,7 +391,8 @@ other than being absent:
   `JSON_DECODE_MISSING`.
 - `presence`, described below. Without it nothing is recorded.
 - `tag`, a string literal: what a variant of a tagged union writes as its
-  tag, described below. Without it the tag is the enum member's name.
+  tag, described below. Without it, or with `tag: ""`, the tag is the enum
+  member's name.
 
 </scalar-detail>
 
@@ -1143,7 +1144,7 @@ class JsonDecoder
 | `ignoreUnknown: boolean` | Step over a key that names no field instead of failing with `JSON_DECODE_UNKNOWN`. |
 | `mapKeys: i32` | The keys the maps of this decoding have taken so far; `reset` clears it. |
 | `maxMapKeys: i32` | The most keys every `Map` field of one decoding may take together, 4,096 unless set; past it, `JSON_DECODE_MAP_LIMIT`. At `0` or below, no map may take a key, so a map's only accepted value is `{}`. |
-| `unionReread: i32` | The bytes this decoding has read twice: for each tagged union whose tag was not its first key, those from its `{` to the end of its tag, which the decoder read ahead over and then reads again as the variant's fields. A byte is read again once for each union object it is inside, so this is at most `maxDepth` times the input's length (docs/security/json.md, JSON-17); `reset` clears it. |
+| `unionReread: i32` | The bytes this decoding has read twice: for each tagged union whose tag was not its first key, those from its `{` to the end of its tag, which the decoder read ahead over and then reads again as the variant's fields. A byte is read again once for each union object it is inside, so this is at most `maxDepth` times the input's length (docs/security/json.md, JSON-17), and it stops at `i32`'s largest value, 2147483647, which only raised limits reach; `reset` clears it. It counts the spans `enterUnion` reads again, not the keys `unionTag` steps over to find a tag. |
 | `beginArray(): boolean` | Takes the next value as the opening of an array. |
 | `beginObject(): boolean` | Takes the next value as the opening of an object. |
 | `boolean(): boolean` | The next value as a `boolean`. |

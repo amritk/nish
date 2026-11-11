@@ -706,7 +706,9 @@ and each has its own code:
 
 **Where a union goes.** A union is the type of a local, a parameter, a
 field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
-spelled in place, `(Circle | Square)[]`), or of any of those made nullable.
+spelled in place, `(Circle | Square)[]`), or of any of those made nullable,
+and a `Map`'s value is any of those: `Map<string, Shape>`,
+`Map<string, Shape[]>`, `Map<string, Shape | null>` (`union_map_value`).
 An alias may name another union, which is flattened: with `type Round =
 Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
 of a variant, or of a union whose variants are all the wider union's,
@@ -974,7 +976,10 @@ boundary, so no other `i32` reaches it.
   `reject_union_generic_method`, `reject_union_result_ok`,
   `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
   its value as it is, the way an array stores an element of a union, and
-  `get` gives `Shape | undefined` (`union_map_value`). A union is not a
+  `get` gives `Shape | undefined` (`union_map_value`). The `Map` here is the
+  built-in one and its methods: `nish/map`'s `getOrInsert` and `reserve` are
+  generic functions, so one called on a `Map<K, Shape>` binds `V` to the union
+  and is NL2533 as any generic call is. A union is not a
   `Map` or `Set` key, which is the key rule's refusal
   (`reject_union_map_key`, `reject_union_set`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary

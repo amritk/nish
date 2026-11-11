@@ -8633,7 +8633,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`jsonEncode` cannot handle `Gauge.level`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`; a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not
+`jsonEncode` cannot handle `Gauge.level`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`; a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not; so are a union of classes, alone, with `| null` or in an array, and a variant's tag
 ```
 
 ## NL2486
@@ -8721,7 +8721,7 @@ export const main = (): i32 => jsonDecode(new JsonDecoder([], 0, 0, new JsonLimi
 ```
 
 ```text
-`jsonDecode` makes a `Line` with `new Line()`, and its constructor takes 1 parameter(s): an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none, and so is a `Map`'s value, one for each key
+`jsonDecode` makes a `Line` with `new Line()`, and its constructor takes 1 parameter(s): an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none, and so is a `Map`'s value, one for each key, and a union's variant
 ```
 
 ## NL2489

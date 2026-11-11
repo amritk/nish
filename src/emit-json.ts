@@ -1432,7 +1432,8 @@ const emitJsonDecodeUnionBody = (emitter: Emitter, part: JsonPart): void => {
     k = k + 1
     const field = jsonTagFieldOf(emitter, info, f.union)
     const member = field === null ? 0 : emitter.table.memberValue(field.type)
-    const object = jsonObjectType(info)
+    // Spelled here, not by `jsonObjectType`, so the pass leaves no callee's memory behind.
+    const object = `%struct.${info.name}*`
     fn.placeBlock(block)
     const held = fn.newBlock("json.held")
     const reuse = fn.newBlock("json.reuse")
@@ -1787,7 +1788,8 @@ const emitJsonEncodeUnionBody = (emitter: Emitter, part: JsonPart): void => {
     const info = f.variants[k]
     const block = blocks[k]
     k = k + 1
-    const object = jsonObjectType(info)
+    // Spelled here, not by `jsonObjectType`, so the pass leaves no callee's memory behind.
+    const object = `%struct.${info.name}*`
     fn.placeBlock(block)
     const value = fn.emitValue(`bitcast ${UNION_TYPE} %v to ${object}`)
     fn.emit(
