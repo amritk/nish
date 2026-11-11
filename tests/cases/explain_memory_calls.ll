@@ -7,8 +7,11 @@
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"x\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"y\00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"n\00" }, align 8
-@.str.5 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
-@.str.6 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"c\00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"o\00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"q\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @nish_free_arena() #1
@@ -240,6 +243,139 @@ ovf.fail:
   unreachable
 }
 
+define internal noundef i32 @leaker(i32 noundef %k) #0 {
+entry:
+  %s.addr = alloca i8*, align 8
+  %0 = call i8* @nish_str_from_i32(i32 %k)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i8* %0)
+  store i8* %1, i8** %s.addr, align 8
+  %2 = load i8*, i8** %s.addr, align 8
+  %3 = call i8* @nish_str_concat(i8* %2, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  store i8* %3, i8** %s.addr, align 8
+  %4 = load i8*, i8** %s.addr, align 8
+  %5 = bitcast i8* %4 to i64*
+  %6 = load i64, i64* %5, align 8
+  %7 = trunc i64 %6 to i32
+  ret i32 %7
+}
+
+define internal noundef i32 @middle(i32 noundef %k) #0 {
+entry:
+  %t.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_str_from_i32(i32 %k)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*), i8* %0)
+  store i8* %1, i8** %t.addr, align 8
+  %2 = load i8*, i8** %t.addr, align 8
+  %3 = bitcast i8* %2 to i64*
+  %4 = load i64, i64* %3, align 8
+  %5 = trunc i64 %4 to i32
+  %6 = call i32 @leaker(i32 %k)
+  %7 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %5, i32 %6)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %8
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define internal noundef i32 @outer(i32 noundef %k) #0 {
+entry:
+  %u.addr = alloca i8*, align 8
+  %0 = call i8* @nish_str_from_i32(i32 %k)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*), i8* %0)
+  store i8* %1, i8** %u.addr, align 8
+  %2 = load i8*, i8** %u.addr, align 8
+  %3 = bitcast i8* %2 to i64*
+  %4 = load i64, i64* %3, align 8
+  %5 = trunc i64 %4 to i32
+  %6 = call i32 @middle(i32 %k)
+  %7 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %5, i32 %6)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %8
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define internal noundef i32 @count(i8* noundef nonnull noalias readonly align 8 %s) #0 {
+entry:
+  %n.addr = alloca i32, align 4
+  %ch.addr = alloca i8*, align 8
+  %forof.idx = alloca i64, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [2 x i8*], align 8
+  store i32 0, i32* %n.addr, align 4
+  %0 = call i8* @nish_str_concat(i8* %s, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 2, i64* %1, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 2, i64* %2, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  %3 = bitcast [2 x i8*]* %arr.data to i8*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %3, i8** %4, align 8, !alias.scope !8, !noalias !9, !tbaa !15
+  %5 = bitcast i8* %3 to i8**
+  %6 = getelementptr inbounds i8*, i8** %5, i64 0
+  store i8* %s, i8** %6, align 8, !alias.scope !9, !noalias !8, !tbaa !17
+  %7 = getelementptr inbounds i8*, i8** %5, i64 1
+  store i8* %0, i8** %7, align 8, !alias.scope !9, !noalias !8, !tbaa !17
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %8 = load i64, i64* %forof.idx, align 8
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  %10 = load i64, i64* %9, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %11 = icmp ult i64 %8, %10
+  br i1 %11, label %forof.body, label %forof.end
+
+forof.body:
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !8, !noalias !9, !tbaa !15
+  %14 = bitcast i8* %13 to i8**
+  %15 = getelementptr inbounds i8*, i8** %14, i64 %8
+  %16 = load i8*, i8** %15, align 8, !alias.scope !9, !noalias !8, !tbaa !17
+  store i8* %16, i8** %ch.addr, align 8
+  %17 = load i32, i32* %n.addr, align 4
+  %18 = load i8*, i8** %ch.addr, align 8
+  %19 = bitcast i8* %18 to i64*
+  %20 = load i64, i64* %19, align 8
+  %21 = trunc i64 %20 to i32
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %17, i32 %21)
+  %23 = extractvalue { i32, i1 } %22, 0
+  %24 = extractvalue { i32, i1 } %22, 1
+  br i1 %24, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %23, i32* %n.addr, align 4
+  br label %forof.inc
+
+forof.inc:
+  %25 = load i64, i64* %forof.idx, align 8
+  %26 = add i64 %25, 1
+  store i64 %26, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %27 = load i32, i32* %n.addr, align 4
+  ret i32 %27
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
 define void @nish_main() #0 {
 entry:
   %k.addr = alloca i32, align 4
@@ -270,27 +406,35 @@ ovf.ok:
 while.end:
   %8 = call i32 @each$fn.5.twice(i32 3)
   %9 = call i8* @nish_str_from_i32(i32 %8)
-  %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
   %11 = call i32 @bracketed()
   %12 = call i8* @nish_str_from_i32(i32 %11)
   %13 = call i8* @nish_str_concat(i8* %10, i8* %12)
-  %14 = call i8* @nish_str_concat(i8* %13, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %14 = call i8* @nish_str_concat(i8* %13, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
   %15 = call i32 @scopedOnly(i32 3)
   %16 = call i8* @nish_str_from_i32(i32 %15)
   %17 = call i8* @nish_str_concat(i8* %14, i8* %16)
-  %18 = call i8* @nish_str_concat(i8* %17, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %18 = call i8* @nish_str_concat(i8* %17, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
   %19 = call i32 @plain(i32 3)
   %20 = call i8* @nish_str_from_i32(i32 %19)
   %21 = call i8* @nish_str_concat(i8* %18, i8* %20)
-  %22 = call i8* @nish_str_concat(i8* %21, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %22 = call i8* @nish_str_concat(i8* %21, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
   %23 = load i32, i32* %k.addr, align 4
   %24 = call i8* @nish_str_from_i32(i32 %23)
   %25 = call i8* @nish_str_concat(i8* %22, i8* %24)
-  %26 = call i8* @nish_str_concat(i8* %25, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %26 = call i8* @nish_str_concat(i8* %25, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
   %27 = call i32 @both()
   %28 = call i8* @nish_str_from_i32(i32 %27)
   %29 = call i8* @nish_str_concat(i8* %26, i8* %28)
-  call void @nish_print(i8* %29)
+  %30 = call i8* @nish_str_concat(i8* %29, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
+  %31 = call i32 @outer(i32 2)
+  %32 = call i8* @nish_str_from_i32(i32 %31)
+  %33 = call i8* @nish_str_concat(i8* %30, i8* %32)
+  %34 = call i8* @nish_str_concat(i8* %33, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
+  %35 = call i32 @count(i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
+  %36 = call i8* @nish_str_from_i32(i32 %35)
+  %37 = call i8* @nish_str_concat(i8* %34, i8* %36)
+  call void @nish_print(i8* %37)
   call void @nish_arena_release(i64 %arena.mark)
   ret void
 
@@ -303,7 +447,7 @@ define internal noundef i32 @lastOf$fn.5.fixed(i32 noundef %n) #3 {
 entry:
   %last.addr = alloca i8*, align 8
   %i.addr = alloca i32, align 4
-  store i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*), i8** %last.addr, align 8
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.9 to i8*), i8** %last.addr, align 8
   store i32 0, i32* %i.addr, align 4
   br label %for.cond
 
@@ -337,7 +481,7 @@ entry:
   %last.addr = alloca i8*, align 8
   %i.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
-  store i8* bitcast ({ i64, [1 x i8] }* @.str.6 to i8*), i8** %last.addr, align 8
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.9 to i8*), i8** %last.addr, align 8
   store i32 0, i32* %i.addr, align 4
   br label %for.cond
 

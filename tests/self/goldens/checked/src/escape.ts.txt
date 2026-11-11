@@ -104,6 +104,7 @@ const BLOCK_ELEMENT: i32 = 9
 const BLOCK_SPAWN: i32 = 10
 const CALLEE_ESCAPES: i32 = 0
 const CALLEE_GARBAGE: i32 = 1
+const CALLEE_LEAKS: i32 = 2
 const NO_ELISION_REASON: string = "`--no-elision` takes no automatic scope"
 const ARENA_MARK_REASON: string = "calls `Arena.mark` itself, and no automatic scope moves the position it reads"
 struct EscapeResult (class) size=104 align=8 exported
@@ -1299,7 +1300,7 @@ function within(outer: Node, node: Node): boolean -> @within
   pointer outer: size=40 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function isLoopKind(node: Node): boolean -> @isLoopKind
+function isLoopKind(node: Node): boolean -> @isLoopKind [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1321,14 +1322,15 @@ function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFact
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: returnsByValue
-  calls: LoopScope.constructor collectLoopScopes decidePass loopBody nish_alloc_struct nish_array_grow nish_panic_index
+  calls: LoopScope.constructor collectLoopScopes decidePass isLoopKind loopBody nish_alloc_struct nish_array_grow nish_panic_index
   pointer unit: size=16 writesThrough=true captured=true passedTo=decidePass#0 collectLoopScopes#0 collectLoopScopes#0 collectLoopScopes#0 collectLoopScopes#0
   pointer table: size=96 writesThrough=true captured=true passedTo=decidePass#1 collectLoopScopes#1 collectLoopScopes#1 collectLoopScopes#1 collectLoopScopes#1
   pointer f: size=416 writesThrough=false captured=false passedTo=decidePass#2 collectLoopScopes#2 collectLoopScopes#2 collectLoopScopes#2 collectLoopScopes#2
   pointer facts: size=24 writesThrough=true captured=true passedTo=decidePass#3 collectLoopScopes#3 collectLoopScopes#3 collectLoopScopes#3 collectLoopScopes#3
-  pointer node: size=40 writesThrough=true captured=true passedTo=LoopScope.constructor#1 loopBody#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=isLoopKind#0 LoopScope.constructor#1 loopBody#0
   stackSites=0 stackLocals=0
   local -4:9 kind: i32 (const)
+  callee -3:7 isLoopKind -> @isLoopKind
   local -2:11 scope: LoopScope (const)
   callee -2:19 new LoopScope -> @LoopScope.constructor
   callee -2:39 loopBody -> @loopBody
@@ -1374,17 +1376,25 @@ function passCallsAllocate(unit: AnalysisUnit, table: TypeTable, f: FunctionFact
   callee +5:10 callsLeaveMemory -> @callsLeaveMemory
 function leavesMemory(program: CheckedProgram, table: TypeTable, facts: FactsTable, node: Node): boolean -> @leavesMemory
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FactsTable.get constructorOf intrinsicType nish_panic_index
+  calls: FactsTable.get calleeAt
+  pointer program: size=704 writesThrough=false captured=false passedTo=calleeAt#0
+  pointer table: size=96 writesThrough=false captured=false passedTo=calleeAt#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=calleeAt#2
+  stackSites=0 stackLocals=0
+  local +0:9 callee: FunctionSig | null (const)
+  callee +0:18 calleeAt -> @calleeAt
+  local +5:9 g: FunctionFacts | null (const)
+  callee +5:13 FactsTable.get -> @FactsTable.get
+function calleeAt(program: CheckedProgram, table: TypeTable, node: Node): FunctionSig | null -> @calleeAt
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: constructorOf intrinsicType nish_panic_index
   pointer program: size=704 writesThrough=false captured=false passedTo=constructorOf#0 intrinsicType#0
   pointer table: size=96 writesThrough=false captured=false passedTo=constructorOf#1
-  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer node: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
   stackSites=0 stackLocals=0
-  local +0:7 callee: FunctionSig | null (let)
-  callee +4:14 constructorOf -> @constructorOf
-  callee +4:44 intrinsicType -> @intrinsicType
-  local +9:9 g: FunctionFacts | null (const)
-  callee +9:13 FactsTable.get -> @FactsTable.get
+  callee +0:12 constructorOf -> @constructorOf
+  callee +0:42 intrinsicType -> @intrinsicType
 function callsLeaveMemory(program: CheckedProgram, table: TypeTable, facts: FactsTable, node: Node): boolean -> @callsLeaveMemory
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: callsLeaveMemory leavesMemory
@@ -1631,18 +1641,19 @@ function calleeWhere(facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
   local +2:11 g: FunctionFacts | null (const)
   callee +2:15 FactsTable.get -> @FactsTable.get
   callee +2:25 StringSet.at -> @StringSet.at
-  callee +5:83 leavesGarbage -> @leavesGarbage
-function calleeLeaking(facts: FactsTable, f: FunctionFacts): FunctionFacts | null -> @calleeLeaking
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FactsTable.get StringSet.at StringSet.size
-  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
-  pointer f: size=416 writesThrough=false captured=false
+  callee +6:37 leavesGarbage -> @leavesGarbage
+function leakRoot(facts: FactsTable, f: FunctionFacts): FunctionFacts | null -> @leakRoot
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: calleeWhere
+  pointer facts: size=24 writesThrough=false captured=false passedTo=calleeWhere#0 calleeWhere#0
+  pointer f: size=416 writesThrough=false captured=false passedTo=calleeWhere#1
   stackSites=0 stackLocals=0
-  local +0:7 c: i32 (let)
-  callee +1:14 StringSet.size -> @StringSet.size
-  local +2:11 g: FunctionFacts | null (const)
-  callee +2:15 FactsTable.get -> @FactsTable.get
-  callee +2:25 StringSet.at -> @StringSet.at
+  local +0:9 first: FunctionFacts | null (const)
+  callee +0:17 calleeWhere -> @calleeWhere
+  local +4:7 at: FunctionFacts (let)
+  local +5:7 steps: i32 (let)
+  local +7:11 next: FunctionFacts | null (const)
+  callee +7:18 calleeWhere -> @calleeWhere
 function MemoryReport.constructor(this: MemoryReport): void -> @MemoryReport.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=24 writesThrough=true captured=false
@@ -1749,24 +1760,24 @@ function firstLeavingCall(program: CheckedProgram, table: TypeTable, facts: Fact
   callee +7:17 firstLeavingCall -> @firstLeavingCall
 function keptReason(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f: FunctionFacts, noElision: boolean, kept: Node): string -> @keptReason
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: SourceFile.lineOf calleeLeaking constructorOf intrinsicType nish_panic_index nish_str_concat nish_str_from_i32 noScopeReason
+  calls: FactsTable.get SourceFile.lineOf calleeAt leakRoot nish_panic_index nish_str_concat nish_str_from_i32 noScopeReason
   pointer unit: size=16 writesThrough=false captured=false passedTo=noScopeReason#0
-  pointer table: size=96 writesThrough=false captured=false passedTo=constructorOf#1
-  pointer facts: size=24 writesThrough=false captured=false passedTo=noScopeReason#1 calleeLeaking#0
-  pointer f: size=416 writesThrough=false captured=false passedTo=noScopeReason#2 calleeLeaking#1
-  pointer kept: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
+  pointer table: size=96 writesThrough=false captured=false passedTo=calleeAt#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=noScopeReason#1 FactsTable.get#0 leakRoot#0
+  pointer f: size=416 writesThrough=false captured=false passedTo=noScopeReason#2 leakRoot#1
+  pointer kept: size=40 writesThrough=false captured=false passedTo=calleeAt#2
   stackSites=0 stackLocals=0
   local +0:9 reason: string (const)
   callee +0:18 noScopeReason -> @noScopeReason
   local +10:9 program: CheckedProgram (const)
   local +11:9 line: i32 (const)
   callee +11:16 SourceFile.lineOf -> @SourceFile.lineOf
-  local +15:9 callee: FunctionSig | null (let)
-  callee +19:16 constructorOf -> @constructorOf
-  callee +19:46 intrinsicType -> @intrinsicType
-  local +21:11 what: string (const)
-  local +28:9 leaky: FunctionFacts | null (const)
-  callee +28:17 calleeLeaking -> @calleeLeaking
+  local +14:9 callee: FunctionSig | null (const)
+  callee +14:18 calleeAt -> @calleeAt
+  local +16:11 what: string (const)
+  callee +16:18 FactsTable.get -> @FactsTable.get
+  local +19:9 root: FunctionFacts | null (const)
+  callee +19:53 leakRoot -> @leakRoot
 function explainLoops(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f: FunctionFacts, noElision: boolean, isMain: boolean, node: Node, pass: LoopScope | null, block: Node | null, out: MemoryReport): void -> @explainLoops
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

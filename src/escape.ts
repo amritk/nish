@@ -2339,7 +2339,7 @@ const loopBody = (loop: Node): Node => {
 const within = (outer: Node, node: Node): boolean => node.start >= outer.start && node.end <= outer.end
 
 /** A `for`, `for...of`, `while` or `do...while`: a statement that can have a pass scope. */
-const isLoopKind = (node: Node): boolean =>
+export const isLoopKind = (node: Node): boolean =>
   node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
 
 /**
@@ -2375,7 +2375,7 @@ const collectLoopScopes = (
   node: Node
 ): void => {
   const kind = node.kind
-  if (kind === N_FOR || kind === N_FOR_OF || kind === N_WHILE || kind === N_DO) {
+  if (isLoopKind(node)) {
     const scope = new LoopScope(node, loopBody(node))
     decidePass(unit, table, f, facts, returnsByValue, scope)
     f.loopScopes.push(scope)
@@ -2456,17 +2456,24 @@ const passCallsAllocate = (
  * or a `new` whose constructor does, as `PassWalk.visit` charges them.
  */
 const leavesMemory = (program: CheckedProgram, table: TypeTable, facts: FactsTable, node: Node): boolean => {
-  let callee: FunctionSig | null = null
-  if (node.kind === N_CALL) {
-    callee = program.nodeCallees[node.id]
-  } else if (node.kind === N_NEW) {
-    callee = constructorOf(program, table, intrinsicType(program, node))
-  }
+  const callee = calleeAt(program, table, node)
   if (callee === null) {
     return false
   }
+  // A callee with no facts may allocate, as `PassWalk.visitCallee` refuses it.
   const g = facts.get(callee.name)
-  return g !== null && g.netAllocates
+  return g === null || g.netAllocates
+}
+
+/** The function `node` itself runs: a call's callee, or a `new`'s constructor; null for anything else. */
+const calleeAt = (program: CheckedProgram, table: TypeTable, node: Node): FunctionSig | null => {
+  if (node.kind === N_CALL) {
+    return program.nodeCallees[node.id]
+  }
+  if (node.kind === N_NEW) {
+    return constructorOf(program, table, intrinsicType(program, node))
+  }
+  return null
 }
 
 /** A call or `new` under `node` that leaves memory behind. An arrow's body is another function's. */
@@ -2974,6 +2981,7 @@ const noScopeReason = (unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts):
 /** What `calleeWhere` looks for. */
 const CALLEE_ESCAPES: i32 = 0
 const CALLEE_GARBAGE: i32 = 1
+const CALLEE_LEAKS: i32 = 2
 
 /** A callee's allocations are garbage once its result is: it leaves memory behind and lets none of it escape. */
 const leavesGarbage = (g: FunctionFacts): boolean => g.netAllocates && g.contained
@@ -2985,7 +2993,9 @@ const calleeWhere = (facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
     const g = facts.get(f.callees.at(c))
     if (
       g !== null &&
-      ((mode === CALLEE_ESCAPES && g.allocEscapes) || (mode === CALLEE_GARBAGE && leavesGarbage(g)))
+      ((mode === CALLEE_ESCAPES && g.allocEscapes) ||
+        (mode === CALLEE_GARBAGE && leavesGarbage(g)) ||
+        (mode === CALLEE_LEAKS && g.allocLeaks))
     ) {
       return g
     }
@@ -2994,17 +3004,28 @@ const calleeWhere = (facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
   return null
 }
 
-/** The first callee that lets an allocation outlive its call other than through its result. */
-const calleeLeaking = (facts: FactsTable, f: FunctionFacts): FunctionFacts | null => {
-  let c = 0
-  while (c < f.callees.size()) {
-    const g = facts.get(f.callees.at(c))
-    if (g !== null && g.allocLeaks) {
-      return g
-    }
-    c = c + 1
+/**
+ * Where `f`'s `allocLeaks` comes from, when a callee's: `allocLeaks` flows up
+ * the call graph, so the chain of callees that have it is followed down to
+ * one none of whose callees does, whose leak is its own. Null when no callee
+ * of `f` but `f` itself leaks.
+ */
+const leakRoot = (facts: FactsTable, f: FunctionFacts): FunctionFacts | null => {
+  const first = calleeWhere(facts, f, CALLEE_LEAKS)
+  if (first === null || first === f) {
+    return null
   }
-  return null
+  let at: FunctionFacts = first
+  let steps = 0
+  while (steps < 64) {
+    const next = calleeWhere(facts, at, CALLEE_LEAKS)
+    if (next === null || next === at || next === f) {
+      return at
+    }
+    at = next
+    steps = steps + 1
+  }
+  return at
 }
 
 // ---- `--explain-memory` -------------------------------------------------------------------
@@ -3022,7 +3043,7 @@ const calleeLeaking = (facts: FactsTable, f: FunctionFacts): FunctionFacts | nul
 // caller's line in the report (a scoped pass or function releases everything
 // its callees bumped, temporaries included).
 
-/** What `--explain-memory` found in one module: the lines, and the counts its summary adds up. */
+/** What `--explain-memory` found across the root package's modules: the lines, and the counts its summary adds up. */
 export class MemoryReport {
   notes: ArenaFinding[]
   /** Loops whose passes allocate, and how many of them keep what they allocated. */
@@ -3110,8 +3131,8 @@ const explainFunction = (
       )
     }
   }
-  // `f.allocates` rather than `f.loopScopes`: a loop the scope decision
-  // never reached has no entry there and is still explained.
+  // Every loop of the body has its entry in `f.loopScopes`
+  // (`collectLoopScopes` descends into each statement that can hold one).
   if (f.allocates) {
     explainLoops(unit, table, facts, f, noElision, isMain, body, null, null, out)
   }
@@ -3243,27 +3264,18 @@ const keptReason = (
   }
   const program = unit.program
   const line = program.source.lineOf(kept.start)
-  // A function takes a scope only for an allocation of its own; what a callee
-  // leaves behind is then nobody's here to release.
-  if (!f.directArena) {
-    let callee: FunctionSig | null = null
-    if (kept.kind === N_CALL) {
-      callee = program.nodeCallees[kept.id]
-    } else if (kept.kind === N_NEW) {
-      callee = constructorOf(program, table, intrinsicType(program, kept))
-    }
-    const what = callee === null ? "a callee" : `\`${callee.sourceName}\``
-    return (
-      `it allocates only through its callees, and ${what}, called on line ${line}, leaves memory behind that ` +
-      "no scope of this function takes back"
-    )
+  // What a callee leaves behind is the caller's to release, and with no
+  // scope of its own this function releases none of it.
+  const callee = calleeAt(program, table, kept)
+  if (callee !== null) {
+    const what = facts.get(callee.name) === null ? ", which this analysis cannot see into," : ""
+    return `\`${callee.sourceName}\`${what} called on line ${line}, leaves memory behind that no scope of this function takes back`
   }
-  // `allocLeaks` flows up the call graph, so a callee's leak is this one's.
-  const leaky = calleeLeaking(facts, f)
-  if (f.allocLeaks && leaky !== null) {
+  const root: FunctionFacts | null = f.allocLeaks ? leakRoot(facts, f) : null
+  if (root !== null) {
     return (
-      `\`${leaky.sourceName}\`, which it calls, lets what it allocated outlive the call, so this analysis does not ` +
-      `prove dead what line ${line} allocates either`
+      `it calls into \`${root.sourceName}\`, which lets what it allocated outlive the call, so this analysis does ` +
+      `not prove dead what line ${line} allocates either`
     )
   }
   if (f.allocLeaks) {

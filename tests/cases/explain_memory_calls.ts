@@ -2,7 +2,9 @@
 // `new` whose constructor keeps what it allocates, run by a loop condition; a
 // function that takes a function parameter, explained once per instantiation
 // under its instantiated name, where only the instantiation that allocates is
-// listed; a caller of a function that keeps memory, which names it; a function
+// listed; a caller of a function that keeps memory, which names the function
+// down its calls whose leak it is; a function that keeps an array literal of
+// its own, with no callee to blame; a function
 // bracketed by its own `using a = arena()` and one whose every allocation is
 // in a scoped pass, which keep nothing past the call; and a function line that
 // names the line of what it keeps.
@@ -66,10 +68,34 @@ const both = (): i32 => {
   return head.length + lastOf(3, label);
 };
 
+const leaker = (k: i32): i32 => {
+  let s = `a${k}`;
+  s = `${s}b`;
+  return s.length;
+};
+
+const middle = (k: i32): i32 => {
+  const t = `c${k}`;
+  return t.length + leaker(k);
+};
+
+const outer = (k: i32): i32 => {
+  const u = `o${k}`;
+  return u.length + middle(k);
+};
+
+const count = (s: string): i32 => {
+  let n = 0;
+  for (const ch of [s, `${s}x`]) {
+    n = n + ch.length;
+  }
+  return n;
+};
+
 export const main = (): void => {
   let k = 0;
   while (new Leaky(k).w < 3) {
     k = k + 1;
   }
-  console.log(`${each(3, twice)} ${bracketed()} ${scopedOnly(3)} ${plain(3)} ${k} ${both()}`);
+  console.log(`${each(3, twice)} ${bracketed()} ${scopedOnly(3)} ${plain(3)} ${k} ${both()} ${outer(2)} ${count("q")}`);
 };

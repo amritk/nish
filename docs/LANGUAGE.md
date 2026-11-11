@@ -12720,8 +12720,10 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
 - **A callee the analysis cannot see counts as allocating.** A loop that
   calls one is listed with the refusal that names it, since nothing proves
   its passes leave no memory behind.
-- **A callee's leak is its caller's.** A function that calls one that keeps
-  what it allocated names that callee as its reason.
+- **A callee's leak is its caller's.** A function whose kept allocation is a
+  call names that callee; one that keeps memory because a function down its
+  calls lets an allocation outlive the call names that function, the one
+  whose own leak it is.
 - **A function is judged by what it still holds when it returns.** One with
   no scope of its own keeps nothing when every allocation it leaves is inside
   a scoped pass or a `using a = arena()` block, so it is counted and not
