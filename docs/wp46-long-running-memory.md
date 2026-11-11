@@ -26,7 +26,7 @@ compile-time number, so its state lives in pools sized at start-up (N9 in
 sessions come and go, and each one holds what its player did. The arena never
 frees an object, so such a server grows until it is killed.
 
-This note weighs three ways out. It measures each against today's arena, and
+This note weighs four ways out. It measures each against today's arena, and
 recommends one: **regions**, a handle to an arena of its own that the program
 frees.
 
@@ -68,7 +68,7 @@ made it. Storing one into the cache from inside such a block is refused:
 `` `Cache.put` is called inside the `using arena()` block ... and stores an
 allocation into memory `` (NL2424).
 
-## 2. The three options
+## 2. The four options
 
 Each option is written below as the toy cache and as the relay's session
 code, in the API it would add. The cache is the one in §1:
@@ -315,78 +315,541 @@ Adopting a child or a parent with children panics (ASYNC-19).
 
 ### 2.2 A safe arena reset
 
-**Semantics.** `Arena.reset` is deprecated because nothing checks that the
-memory it recycles is dead (NL7001). Making it safe for a cache leaves one
-form: an *evacuation*. The cache keeps its sessions in an arena of their own,
-and when that arena has bumped twice the live bytes, plus 64 KiB so a tiny
-live set does not flip on every request, the program copies the live
-graph into a fresh arena and frees the old one.
+**Semantics.** `Arena.reset` is gone because nothing checked that the memory
+it recycled was dead (NL2244). Making a reset safe for a cache leaves one
+form: an *evacuation*. Where a region holds one session, the evacuated arena,
+a *heap* below, holds the whole cache. Its root is the table, so evicting a
+session is only a `Map.delete`, and the session's bytes stay in the heap
+until the next evacuation. That copies what the root reaches into fresh
+chunks and frees the old ones. It runs once the heap has bumped twice the
+bytes the last evacuation copied, plus 64 KiB so a tiny live set does not
+flip on every request. `nish:evacuate` would export:
+
+| Export | Meaning |
+| --- | --- |
+| `Heap<T>` | an opaque handle to a heap whose root is a `T` (a class) |
+| `heap(f)`, `heapWith(arg, f)` | a new heap, with `f()` (or `f(arg)`) run while it is the thread's arena; what `f` answers is the root |
+| `enter(h, f)`, `enterWith(h, arg, f)` | `f(root)` (or `f(root, arg)`) run while `h` is the thread's arena; answers what `f` answers |
+| `evacuate(h)` | copies what the root reaches into new chunks and frees the old ones; `h` and its copies stay valid, because the slot keeps its handle and swaps its arena |
+| `bumped(h)`, `copied(h)` | the bytes allocated since the last evacuation, and the bytes it copied (0 before the first) |
+| `free(h)` | gives the heap's chunks back to `malloc`; `h` and every copy of it are dead |
+
+The handle is the region's: an `i64` of slot and generation in a
+process-wide table, checked for thread, generation and entry on every
+`enter`, `evacuate` and `free`. `evacuate` of an entered heap panics, so a
+local of `f` never points into chunks that were freed under it.
 
 ```ts
+import { Heap, bumped, copied, enterWith, evacuate, heapWith } from "nish:evacuate"
+
+/** The heap's root: the table and the eviction ring, all inside the heap. */
+class Sessions {
+  byId: Map<i64, Session>
+  order: i64[]
+  head: i32 = 0
+  held: i32 = 0
+  constructor(live: i32) {
+    this.byId = new Map<i64, Session>()
+    this.order = new Array<i64>(live)
+  }
+}
+
+/** What a request brings in: outer memory, read inside and never kept. */
+class Ask {
+  id: i64 = 0
+  out: u8[]
+  constructor() {
+    this.out = new Array<u8>(0)
+  }
+}
+
+const table = (live: i32): Sessions => new Sessions(live)
+
+/** Runs inside the heap: makes a session, evicting the oldest when full. */
+const admit = (t: Sessions, id: i64): Session => {
+  if (t.held === t.order.length) {
+    // the oldest leaves the table; its bytes stay until the next evacuation
+    t.byId.delete(t.order[t.head])
+  } else {
+    t.held = t.held + 1
+  }
+  const s = new Session(id, payloadSize(id))
+  t.byId.set(id, s) // the root's own Map grows inside the heap: allowed
+  t.order[t.head] = id
+  t.head = (t.head + 1) % t.order.length
+  return s
+}
+
+/** Runs inside the heap: copies the payload into the caller's buffer, so only numbers leave. */
+const serve = (t: Sessions, ask: Ask): i32 => {
+  const hit = t.byId.get(ask.id)
+  const s = hit !== undefined ? hit : admit(t, ask.id)
+  s.hits = s.hits + 1
+  for (let k: i32 = 0; k < s.payload.length && k < ask.out.length; k++) {
+    ask.out[k] = s.payload[k]
+  }
+  return s.payload.length
+}
+
 class Cache {
-  live: Arena<Sessions>                 // the sessions, in an arena of their own
+  sessions: Heap<Sessions>
+  ask: Ask // one, reused: a new Ask a request would leak from the thread's arena
+  constructor(live: i32) {
+    this.sessions = heapWith(live, table)
+    this.ask = new Ask()
+  }
   get(id: i64, out: u8[]): i32 {
-    // ... as in §2.1, but allocating into this.live
-    if (this.live.since() > 2 * this.liveBytes + 65536) {
-      this.live = evacuate(this.live)   // copy what the root reaches, free the rest
+    this.ask.id = id
+    this.ask.out = out
+    const n = enterWith(this.sessions, this.ask, serve)
+    if (bumped(this.sessions) > 2 * copied(this.sessions) + 65536) {
+      evacuate(this.sessions) // copy what the root reaches, free the rest
     }
-    // ... answer as in §2.1
+    return n
   }
 }
 ```
 
-The relay would evacuate its session arena on a timer.
+The relay would keep one heap for every slot's game, rather than a region a
+slot, and evacuate it from `step`, the loop's turn, so the pause falls
+between datagrams rather than inside a handler. `hello` and `release` enter
+it; the grant is the relay's one reused `RelayGrant`, outer memory, so
+`gameFromGrant` copies the host byte by byte as in §2.1:
 
-**Checker rules.** `evacuate` is sound only if the root is the only way into
-the arena. Proving that is the region's rule from §2.1: NL2556–NL2561 again,
-plus a copy whose cost scales with the live set.
+```ts
+/** The heap's root: a game per slot, and whether the slot has one. */
+class Games {
+  games: Game[]
+  has: boolean[]
+  constructor(slots: i32) {
+    this.games = new Array<Game>(slots)
+    this.has = new Array<boolean>(slots)
+  }
+}
 
-**The three shapes** are covered exactly as for regions, because it is a
-region that is periodically copied.
+/** What `hello` brings in: the slot and the verified grant, both outer. */
+class Seat {
+  slot: i32 = 0
+  grant: RelayGrant
+  constructor(grant: RelayGrant) {
+    this.grant = grant
+  }
+}
 
-**Runtime.** A copying walk over the root's type. It needs the type's layout at
-runtime, which the compiler does not emit today. The walk is also a pause.
+const seatGame = (t: Games, s: Seat): i32 => {
+  t.games[s.slot] = gameFromGrant(s.grant) // allocates in the heap
+  t.has[s.slot] = true
+  return 0
+}
 
-### 2.3 Reference counting
+const unseatGame = (t: Games, slot: i32): i32 => {
+  t.has[slot] = false // the game's bytes go at the next evacuation
+  return 0
+}
 
-**Semantics, on every value.** Each object, array and string carries a count.
-A store of a pointer retains the new value and releases the old, and leaving
-a scope releases its locals. A value is freed when its count reaches zero.
+// new fields: the heap, made in the constructor with heapWith(slots, …),
+// and one reused Seat holding the relay's RelayGrant
+games: Heap<Games>
+seat: Seat
 
-**Semantics, opt-in `Rc<T>`.** Only boxed values are counted:
+// hello(), once the grant verifies
+this.seat.slot = slot
+enterWith(this.games, this.seat, seatGame)
+
+// release()
+enterWith(this.games, slot, unseatGame)
+
+// step(), once a turn
+if (bumped(this.games) > 2 * copied(this.games) + 65536) {
+  evacuate(this.games)
+}
+```
+
+`unseatGame` leaves `games[slot]` pointing at the old game until
+`seatGame` overwrites it, so the evacuation copies that game until then. A program that
+wants it gone sooner stores a shared empty `Game` made with the root.
+
+**Checker rules.** Inside `f` the heap is the arena, and the rule follows two
+kinds of value, as §2.1's does: heap memory (the root and whatever `f`
+allocates) and outer memory (`arg`, module state, what a callee answers from
+outside). The reasons differ from a region's. A region's memory stays where
+it is until `free`; a heap's moves at every evacuation. So a pointer into the
+heap held outside it is wrong while the heap lives, not only after it is
+freed, and a pointer out of the heap would be copied by the walk as if it
+were the heap's own. The codes are proposals in a range `src/` does not issue
+(it stops at NL2717 today); a stage that builds one takes the next free
+number then, as stage 2 renumbered §2.1's.
+
+| Route | Code |
+| --- | --- |
+| heap memory stored into outer memory, a field, an element or a module-level binding, directly or through a callee: the next evacuation moves the object and the outer pointer reads the old chunk. A number, `boolean` or `enum` is copied out and is not heap memory, so `serve`'s `ask.out[k] = s.payload[k]` is allowed | **NL2780** (proposed) |
+| outer memory that is not a number, `boolean`, `enum` or string literal stored into heap memory, by a field or element store, a constructor argument or a literal: the walk would copy it into the heap, so a write through the outer copy would no longer reach the heap's, and a pass scope could release it first. A string literal lies outside every chunk and the walk leaves it where it is | **NL2781** (proposed) |
+| `enter`'s or `enterWith`'s `f` answers anything but a number, `boolean`, `enum` or a handle: what it answered would be moved by the next evacuation | **NL2782** (proposed) |
+| `heap`'s or `heapWith`'s `f` answers anything but memory it allocated, directly or through a callee that answers fresh memory: `heapWith(g, (a) => a)` would make outer memory the root | **NL2783** (proposed) |
+| a root type the walk has no layout for: one that reaches, at any depth, a function value, a `CPtr` or other `declare function` handle, a `Region`, a `Heap`, a `scope()`, a lock, a channel or a `nish/threads` value. Each is a thing the walk cannot copy by its bytes, or one whose copy would be a second owner | **NL2784** (proposed) |
+| `evacuate(h)` inside an `enter` of `h`, directly or through a callee: the locals of `f` point into the chunks it would free. The runtime's entered check backs this for a handle the checker cannot follow | **NL2785** (proposed) |
+| a value whose type holds a `Heap` at any depth crossing to another thread: a task's argument or answer, a parallel body's capture, element or result, a value sent on a channel | **NL2786** (proposed) |
+| `new Heap`: a heap is made only by `heap` or `heapWith`, as `new Region` is NL2618 | **NL2787** (proposed) |
+| `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee | NL2612, its message widened to name the heap |
+| growth of outer storage inside `f`: a `push` onto an outer array, a `Map.set` or `Set.add` on an outer collection. Growth of the root's own collections, as `admit`'s `t.byId.set`, is heap memory growing inside the heap and is allowed | NL2615, widened |
+| a call the analysis has no facts for | NL2616, widened |
+| `Arena.mark` or `Arena.used` inside `f` | NL2617, widened |
+| any of `heap`, `heapWith`, `enter`, `enterWith`, `evacuate`, `free` in a parallel body or a task's function, directly or through a callee | NL2351, its message gaining the six names |
+
+`using a = arena()` inside `f` is allowed, as in a region: it marks and
+releases inside the heap, and nothing it allocated survives the block for
+the walk to find.
+
+**The three shapes.**
+
+- *`new`*: a constructor run inside `f` is a call and is followed like one.
+  `new Session(id, …)` in `admit` allocates in the heap; a constructor that
+  stores `this` or a field into module state is NL2780, and one that stores
+  an outer argument into a field (`new Game(g.host)`) is NL2781. `new Heap` is
+  NL2787.
+- *Every declarator of a `using`*: a heap is not disposed by a block, so
+  `using h = heap(f)` is NL2387 wherever the declarator stands:
+  `using a = arena(), h = heap(f)` and `using h = heap(f), a = arena()` each
+  get a negative test.
+- *`this` leaving a constructor*: `ask.last = this` in a constructor run
+  inside `f`, with `ask` the `arg`, is NL2780, and handing `this` to a callee
+  that stores it outside is the same code through the callee's facts.
+
+**Runtime and ABI.** The table is the region's, `runtime/runtime-region.c`,
+with a heap's slot carrying its bumped and copied counts beside the arena.
+`evacuate` is a copying walk over the root's type, Cheney's: a forwarding
+word written over each old object as it is copied, so a session reached
+twice is copied once. It needs each type's layout at runtime, which the
+compiler does not emit today: a table per class of which words are pointers
+and to what, and an array's element kind. The walk is a pause proportional
+to the live set: 20.0 ms at 100,000 live sessions (§4). The arena's own
+layout and `nish_alloc_struct` do not change.
+
+**`Secret<T>`.** A heap that holds a `Secret` loses the wipe twice over. An
+evacuation copies the key's bytes into the new chunks and frees the old
+chunks unwiped, so every flip leaves one more copy of a live key in memory
+that `malloc` hands out again, a copy the program never dropped and cannot
+reach to wipe. And a session evicted from the table holds its key until the
+next flip frees it, as a region's does until `free`. The second is the
+program's, as for a region: wipe before `delete`. The first has to be the
+walk's: when it copies a `Secret`, it zeroes the source after the copy,
+through the same volatile store `wipe` uses. The layout table marks a
+`Secret`'s words, so the cost follows the secret bytes copied, not the heap.
+Zeroing the whole old heap instead would cost a `memset` of up to twice the
+live bytes on every flip.
+
+**`nish:net` buffers.** A slot's buffers stay outside every heap, for a
+reason a region does not have. A buffer lent to a pending send, or a
+`BufferPool` buffer whose address a connection holds between turns, must
+not move; an evacuation would move it. NL2780 and NL2781 keep the two
+apart: a session reads a request by copying bytes in through `arg`, as
+`serve` copies them out, and `BufferPool.take` inside `f` would grow the
+pool's outer free list (NL2615).
+
+### 2.3 Opt-in reference counting, `Rc<T>`
+
+**Semantics.** Only boxed values are counted. A box holds the value and
+everything its constructor allocates. If the session sat in the box and its
+payload in the thread's arena, freeing the box would leak the payload. So a
+box owns an arena of its own, as a region does, and carries a count. The
+count is what a region does not have: a value with several owners is freed
+by the last one to let go, and none of them needs to know which it is.
+`nish:rc` would export:
+
+| Export | Meaning |
+| --- | --- |
+| `Rc<T>` | an opaque handle to a box whose root is a `T` (a class), counted on the thread that made it |
+| `AtomicRc<T>` | the same, with an atomic count and a lock on entry, so it may cross threads |
+| `rc(f)`, `rcWith(arg, f)`, `atomicRc(f)`, `atomicRcWith(arg, f)` | a new box with a count of 1, with `f()` (or `f(arg)`) run while it is the thread's arena; what `f` answers is the root |
+| `borrow(b, f)`, `borrowWith(b, arg, f)` | `f(root)` (or `f(root, arg)`) run while `b` is the thread's arena; answers what `f` answers. On an `AtomicRc`, it takes the box's lock first |
+| `retain(b)` | adds one to the count; an owner that keeps a copy of the handle calls it |
+| `release(b)` | takes one from the count, and at zero frees the box's chunks and bumps the handle's generation |
+
+The handle is a number, as a region's is: slot and generation in the
+region's table, whose slot gains a count. Copying a handle does not retain
+it, because the compiler cannot see a number's copies, so the count is the
+program's to keep. A release too few leaks the box; a release too many
+reaches a stale generation and panics at the next `borrow`, `retain` or
+`release`, never a use after free. `release` of a borrowed box panics.
 
 ```ts
 import { Rc, borrowWith, rcWith, release } from "nish:rc"
 
+const open = (id: i64): Session => new Session(id, payloadSize(id))
+
+/** Copies the payload into the connection's buffer: only numbers leave. */
+const serve = (s: Session, out: u8[]): i32 => {
+  s.hits = s.hits + 1
+  for (let k: i32 = 0; k < s.payload.length && k < out.length; k++) {
+    out[k] = s.payload[k]
+  }
+  return s.payload.length
+}
+
 class Cache {
   boxes: Map<i64, Rc<Session>>
-  // get() as in §2.1, with rcWith(id, open) for regionWith, release(old) for
-  // free(old), and borrowWith(box, out, serve) for enterWith
+  order: i64[]
+  head: i32 = 0
+  held: i32 = 0
+  constructor(live: i32) {
+    this.boxes = new Map<i64, Rc<Session>>()
+    this.order = new Array<i64>(live)
+  }
+  get(id: i64, out: u8[]): i32 {
+    const hit = this.boxes.get(id)
+    if (hit !== undefined) {
+      return borrowWith(hit, out, serve)
+    }
+    if (this.held === this.order.length) {
+      const old: i64 = this.order[this.head]
+      const gone = this.boxes.get(old)
+      if (gone !== undefined) {
+        this.boxes.delete(old)
+        release(gone) // the table's count was the only one: the box is freed
+      }
+    } else {
+      this.held = this.held + 1
+    }
+    const b = rcWith(id, open) // count 1, owned by the table
+    this.boxes.set(id, b)
+    this.order[this.head] = id
+    this.head = (this.head + 1) % this.order.length
+    return borrowWith(b, out, serve)
+  }
 }
 ```
 
-The relay would hold an `Rc` per slot and `release` it in `close`. The
-`Session` holds a `u8[]`. If that array came from the arena, the box would
-free the session and leak its payload, so the box has to own everything its
-constructor allocates. That makes `rcWith` the same call as `regionWith`, and
-`Rc<T>` the same thing as a region with a count.
+Every count in this cache is 1, and every `release` frees: the cache has one
+owner a session, which is §6's case against building `Rc<T>` first. The relay
+shows what the count is for only if two slots share a game. It has no such
+slots today; the sketch adds a watcher, a slot that follows a host's game,
+beside the region version's two fields:
 
-**Checker rules.** On every value: none new, but every pointer store and every
-scope exit changes code. For `Rc<T>`: NL2556–NL2561 as for regions, plus a
-code for a box handed to another thread unless its count is atomic.
+```ts
+import { Rc, rcWith, release, retain } from "nish:rc"
 
-**The three shapes.** On every value they need no rule: a constructor's stores
-retain like any other. For `Rc<T>` they are the region's.
+// new fields, sized like the relay's other per-slot arrays
+games: Rc<Game>[]
+hasGame: boolean[]
 
-**Runtime and ABI.** On every value, a header word on each allocation, which
-changes `nish_alloc_struct`, every array and string layout, and the ABI of
-every exported function that takes one. Counts shared across threads have to
-be atomic. **Cycles** are never freed: a parent and child that point at each
-other keep each other alive. The way out is a cycle collector or weak
-references, and either is a second memory model. For `Rc<T>`, the same as
-regions, plus the count.
+// hello(), once the grant verifies: a new box, count 1, owned by the slot;
+// `gameFromGrant` copies the reused grant's host as in §2.1
+this.games[slot] = rcWith(g, gameFromGrant)
+this.hasGame[slot] = true
+
+// watch(), a second slot following `host`'s game: count 2
+retain(this.games[host])
+this.games[slot] = this.games[host]
+this.hasGame[slot] = true
+
+// release(): whichever of the two lets go last frees the game
+if (this.hasGame[slot]) {
+  release(this.games[slot])
+  this.hasGame[slot] = false
+}
+```
+
+**Checker rules.** A box is a region with a count, and inside `f` the rule
+is the region's with *box memory* for region memory: the reasons are the
+same, because the box's memory stays put until the last `release` and then
+goes all at once. Where the route is the region's, the row names the code
+stage 2 shipped, its message widened to name the box. Where a box differs, the
+code is new, and as in §2.2 it is a proposal.
+
+| Route | Code |
+| --- | --- |
+| box memory stored into outer memory, a field, an element or a module-level binding: it reads freed memory after the last `release`. A number, `boolean` or `enum` is copied out, so `serve`'s `out[k] = s.payload[k]` is allowed | NL2609, widened |
+| outer memory that is not a number, `boolean`, `enum` or string literal stored into box memory, by a store, a constructor argument or a literal | NL2610, widened |
+| `borrow`'s or `borrowWith`'s `f` answers anything but a number, `boolean`, `enum` or a handle | NL2611, widened |
+| `rc`'s or `rcWith`'s `f` (and the atomic pair's) answers anything but memory it allocated: `rcWith(g, (a) => a)` | NL2614, widened |
+| `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee | NL2612, widened |
+| a value whose type holds an `Rc` at any depth crossing to another thread: a task's argument or answer, a parallel body's capture, element or result, a value sent on a channel. An `AtomicRc` may cross: its count is atomic, and its lock keeps two threads from entering the box at once. An `Rc` may not, because two threads that `retain` and `release` it without atomics lose counts, and a lost count frees a box that is still owned | **NL2788** (proposed) |
+| growth of outer storage inside `f`, as for a region | NL2615, widened |
+| a call the analysis has no facts for | NL2616, widened |
+| `Arena.mark` or `Arena.used` inside `f` | NL2617, widened |
+| `rc`, `rcWith`, `borrow`, `borrowWith`, `retain` or `release` on an `Rc` in a parallel body or a task's function, directly or through a callee; the atomic forms are allowed there | NL2351, its message gaining the names |
+| `new Rc` or `new AtomicRc`: a box is made only by its four makers | **NL2789** (proposed) |
+
+The runtime backs NL2788 as it backs NL2613: an `Rc`'s slot records its
+thread, and `borrow`, `retain` and `release` on another thread panic.
+
+**The three shapes.**
+
+- *`new`*: a constructor run inside `rc`'s `f` is followed like a call; one
+  that stores `this` into module state is NL2609, and `new Game(g.host)` with
+  the grant's host is NL2610. `new Rc` is NL2789.
+- *Every declarator of a `using`*: a box's last owner is not a block, so
+  `using b = rc(f)` is NL2387 in every position, `using a = arena(), b = rc(f)`
+  and `using b = rc(f), a = arena()` alike. A block that wants one release at
+  its end writes `release` there.
+- *`this` leaving a constructor*: `h.l = this` with `h` the `arg` is NL2609,
+  and handing `this` to a callee that stores it is the same through the
+  callee's facts.
+
+**Runtime and ABI.** The region's table and swap, plus a count in each slot:
+a 32-bit field, atomic for `AtomicRc`, whose lock is the entered flag taken
+with a compare-and-swap. Prototype `c` measures a box as one `malloc` holding
+session and payload together, which a real box cannot be (§6); `ca` measures
+the atomic count. The ABI and every golden of a program that does not import
+`nish:rc` stay as they are.
+
+**`Secret<T>`.** The wipe rule says a holder wipes its key before the key is
+dropped, and a box with several owners has no owner that knows it is the
+one dropping it. So the box does it: `release` of a box whose root type
+reaches a `Secret` zeroes the box's chunks before it frees them, through the
+same volatile store `wipe` uses. Whether it does is known at compile time
+from `T`, so `release` lowers to one of two runtime entries, and a box with
+no `Secret` pays nothing. A box with one pays a `memset` of the box, which
+for a session is a few hundred bytes. A single owner may still wipe first.
+
+**`nish:net` buffers.** A box and a slot's buffers meet as a region and the
+buffers do (§3), with one thing the count adds. A slot may hold a box handle,
+a number, and two slots may share one, as the relay's watcher does. HTTP/2
+streams sharing a session are the same case. The slot's reset then releases
+its handle, not the box. The buffers stay outside every box: a slot buffer is
+reused across connections, with its bytes zeroed on give-back, and a box
+holding one would be NL2610. Data moves between them by copying, as `serve`
+copies a payload out.
+
+### 2.4 Counting every value
+
+**Semantics.** Each object, array and string carries a count in a header
+word. A store of a pointer retains the new value and releases the old one,
+and leaving a scope releases its locals. A value is freed when its count
+reaches zero, and freeing it releases what it points at. There is no API:
+the program is the program it is today, and the arena no longer frees
+anything.
+
+```ts
+class Cache {
+  byId: Map<i64, Session>
+  order: i64[]
+  head: i32 = 0
+  held: i32 = 0
+  constructor(live: i32) {
+    this.byId = new Map<i64, Session>()
+    this.order = new Array<i64>(live)
+  }
+  get(id: i64, out: u8[]): i32 {
+    const hit = this.byId.get(id) // the local retains the session
+    if (hit !== undefined) {
+      return copyOut(hit, out) // the local's release at return leaves the table's count
+    }
+    if (this.held === this.order.length) {
+      // the table's release: the count reaches zero, the session is freed,
+      // and its release of `payload` frees the payload
+      this.byId.delete(this.order[this.head])
+    } else {
+      this.held = this.held + 1
+    }
+    const s = new Session(id, payloadSize(id)) // count 1, the local's
+    this.byId.set(id, s) // count 2; the local's release at return makes it 1
+    this.order[this.head] = id
+    this.head = (this.head + 1) % this.order.length
+    return copyOut(s, out)
+  }
+}
+
+/** Copies the payload into the connection's buffer. */
+function copyOut(s: Session, out: u8[]): i32 {
+  s.hits = s.hits + 1
+  for (let k: i32 = 0; k < s.payload.length && k < out.length; k++) {
+    out[k] = s.payload[k]
+  }
+  return s.payload.length
+}
+```
+
+The relay needs only a field whose old value the next store releases:
+
+```ts
+// new field, sized like the relay's other per-slot arrays
+games: (Game | null)[]
+
+// hello(), once the grant verifies; `gameFromGrant` still copies the host,
+// not for memory now, but because the relay reuses the grant's buffer for
+// the next hello
+this.games[slot] = gameFromGrant(g) // retains the new game, releases null
+
+// release(): the last reference goes, and the game with it
+this.games[slot] = null
+```
+
+**Checker rules.** A store or a scope exit is no longer a question for the
+checker: the counts make each one safe. What it refuses is what would free
+memory past a count, or keep a pointer the counts do not see. As in §2.2 the
+codes are proposals.
+
+| Route | Code |
+| --- | --- |
+| `using a = arena()`, `Arena.mark` or `Arena.used`, and `nish:region`'s `region`, `regionWith`, `free` and their kin: each frees or measures memory by position, not by count, and a release would free objects whose counts are not zero | **NL2791** (proposed) |
+| counted memory passed to a `declare function`, or stored into memory a `CPtr` names: C may keep the pointer, and keeping it retains nothing. A string is copied for the call, as it is today | **NL2792** (proposed) |
+
+What it does not refuse, and why:
+
+- *Cycles.* A parent and child that point at each other keep each other
+  alive, and are never freed. A rule on types (a field whose type reaches its
+  own class) would refuse every linked list and every tree with a parent
+  pointer, and the leak is in only the ones that close a loop. The way out is
+  a weak reference or a cycle collector, a second memory model. Neither is
+  proposed; the leak would be recorded as the option's.
+- *Threads.* A value that crosses to another thread has its count changed by
+  two threads. The checker already sees every crossing and the type that
+  crosses (the rules behind NL2613 and NL2691). Every class those types reach
+  gets atomic counts, decided over the whole program, and the rest keep plain
+  ones. That needs no code, but it makes the count's width depend on code
+  far from the class.
+
+**The three shapes.** None needs a rule. `new` answers a value with a count of
+1, owned by the expression. `this` leaving a constructor is a store like any
+other and retains. `using` keeps `scope()` and `lock()`, and `arena()` in any
+declarator is NL2791: `using s = scope(), a = arena()` and
+`using a = arena(), s = scope()` each get a negative test.
+
+**Runtime and ABI.** A header word on each allocation, which changes
+`nish_alloc_struct`, every array and string layout, and the ABI of every
+exported function that takes one. Every store of a pointer gains a retain
+and a release, and every golden with one moves (§5). Counts shared across
+threads are atomic, at 2.09–5.74x on a pointer walk (§4). Freeing is now
+`malloc`'s `free` per object, or a size-class free list the runtime keeps.
+
+**`Secret<T>`.** A key is freed when its count reaches zero, at whichever
+store or scope exit drops the last reference, and that may be far from the
+code that knows it held a key. So the free does the wipe: a `Secret`'s
+release, at zero, zeroes its value before it frees it. The type says which
+releases those are, so no other free pays. An `expose` body's intermediates
+are counted too, and are freed, unwiped, when it returns unless the body
+wipes them, which the rule already requires.
+
+**`nish:net` buffers.** A slot buffer is counted like everything else, and
+the pool's free list holds a reference, so a buffer is never freed and the
+pool behaves as it does today. Each `take`, `give` and handling of the buffer
+adds a retain and a release to the hot path, and a buffer lent to a pending
+send has to be retained until the send completes, so the runtime's I/O
+calls gain retains. `giveSecret`'s zeroing stays as it is.
+
+### 2.5 The four side by side
+
+| | Regions (§2.1) | Safe reset (§2.2) | Opt-in `Rc<T>` (§2.3) | Counting every value (§2.4) |
+| --- | --- | --- | --- | --- |
+| What frees | `free(r)`, the owner's call | `evacuate(h)`, once the heap has bumped twice the live bytes | the last `release(b)` | the last reference's store or scope exit |
+| Memory held, 100,000 live (§4) | 33.2 MB (`rs`) | 75.0 MB (`s`) | 22.8 MB (`c`, a box that cannot own what it allocates) | 24.0 MB (`g`) |
+| Time a request, 100,000 live, vs today | 0.97x (`rs`) | 0.93x (`s`) | 0.84x (`c`), 0.95x atomic (`ca`) | 0.89x (`g`) |
+| Pause | none | 20.0 ms a flip at 100,000 live | none | none (a long chain of releases at once) |
+| New API | `nish:region` | `nish:evacuate` | `nish:rc` | none |
+| Rules (codes) | NL2609–NL2618, shipped | NL2780–NL2787, with NL2612 and NL2615–NL2617 widened | NL2788–NL2789, with NL2609–NL2617 widened | NL2791–NL2792 |
+| Across threads | refused (NL2613) | refused (NL2786) | `AtomicRc` only (NL2788) | atomic counts for what crosses |
+| Programs that do not use it | `.ll` unchanged | `.ll` unchanged | `.ll` unchanged | every golden with a pointer store moves |
+| Runtime needs | a slot table, a chunk size | a slot table and type layouts at runtime | a slot table and a count | a header word on every allocation |
+| Cycles | freed with the region | freed by the next flip | leak | leak |
+| `Secret<T>` | wipe before `free`; zero on `free` later (§3) | the walk zeroes each copied `Secret` | `release` zeroes a box whose type holds one | the free zeroes a `Secret` |
+| `nish:net` slot buffers | stay slots | stay slots: they must not move | stay slots; a slot may hold a shared handle | counted, held by the pool's free list |
 
 ## 3. Interactions
+
+This section is the regions' own. The other options meet `Secret<T>` and
+`nish:net` buffers in their own sections (§2.2–§2.4), and §2.5 sets the four
+side by side.
 
 **`Secret<T>` and `nish:secret`.** A holder dropped, or released with its
 arena, without `wipe()` leaves its key in memory (LANGUAGE.md, "What the rule
