@@ -205,8 +205,9 @@ jobs:
       # The Azure mirror sometimes served that at a trickle, never idle for
       # `APT_OPTS`'s thirty seconds, so the step's five-minute limit fired
       # before any case ran (main, and #854, in October 2026). The action
-      # fetches from other mirrors, keeps the .debs in the Actions cache keyed
-      # by runner image, and cuts a stalled download at a minute per attempt.
+      # fetches from other mirrors, keeps the .debs and apt's index in the
+      # Actions cache keyed by runner image, installs offline when both are
+      # there, and cuts a stalled download at a minute per attempt.
       #
       # The runner needs Wireshark 4.5 or later (its README). Ubuntu 24.04 ships
       # 4.2.2, whose QUIC dissector cannot follow a server's packet on a new

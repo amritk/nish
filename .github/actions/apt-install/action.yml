@@ -9,7 +9,8 @@
 #   besides ports.ubuntu.com, which stopped resolving on PR #1413 (run
 #   43058055859) while it was the arm64 runners' only host.
 # - The cache: the .debs and apt's index (/var/lib/apt/lists) are kept in the
-#   Actions cache, keyed by runner image, architecture and package list, so a
+#   Actions cache, keyed by runner image, architecture, package list and
+#   apt-mirror.sh (which names the sources the index was fetched under), so a
 #   job normally downloads nothing. apt checks every cached .deb against the
 #   hash its index gives before it installs it, so a stale or altered one is
 #   fetched again, never installed.
@@ -17,8 +18,9 @@
 #   back in place, `apt-get update` is skipped and apt installs with
 #   `--no-download`, so the step touches no network at all; on #1413 even a
 #   full hit died at `apt-get update`. If that install fails (the index names
-#   a .deb the cache lacks, or apt-mirror.sh now writes other sources than the
-#   index was fetched under), the step takes the network path instead. A
+#   a .deb the cache lacks), the step takes the network path instead; an
+#   exact hit is never saved again, so that entry stays as it is until the
+#   key moves. A
 #   restored index is not checked against its signature again: what apt trusts
 #   is what `apt-get update` verified in the run that saved the entry. That
 #   rests on the cache's write scope: a run writes only to its own ref's
@@ -51,7 +53,7 @@ runs:
       env:
         PKGS: ${{ inputs.packages }}
       run: |
-        sum="$(printf '%s' "$PKGS" | sha256sum | cut -c1-12)"
+        sum="$({ printf '%s' "$PKGS"; cat "$GITHUB_ACTION_PATH/../../apt-mirror.sh"; } | sha256sum | cut -c1-12)"
         prefix="apt-$sum-$ImageOS-$RUNNER_ARCH-"
         echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
         echo "key=$prefix$ImageVersion" >> "$GITHUB_OUTPUT"
@@ -102,9 +104,13 @@ runs:
           echo "apt: $why, updating from the network"
         fi
         if [ -z "$installed" ]; then
-          sudo apt-get $APT_OPTS update
+          # apt tries each file at each mirror `Acquire::Retries` times before
+          # the next, and by default waits between tries (1, 2, 4 s ...): with
+          # a refused first mirror that took `update` past 150 s, against 5 s
+          # without the wait (measured with noble's apt 2.8.3).
+          sudo apt-get $APT_OPTS -o Acquire::Retries::Delay=false update
           for attempt in 1 2 3; do
-            if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
+            if sudo timeout -k 5 60 apt-get $APT_OPTS -o Acquire::Retries::Delay=false $apt_cache install -y --no-install-recommends \
               --download-only $PKGS; then
               break
             fi
