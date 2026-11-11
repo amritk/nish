@@ -919,7 +919,7 @@ export const main = (): i32 => {
   method or constructor parameter an inline function type is refused; type it
   through an alias and it is an ordinary [function reference](#function-references)
   parameter. A variable holding a reference is not a function argument
-  (NL2728): type the parameter through an alias to take one.
+  (NL2734): type the parameter through an alias to take one.
 
 ```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
@@ -962,24 +962,24 @@ export const main = (): i32 => {
 ```
 
 - **Only a top-level function with no captures.** An arrow inside a function
-  is refused (NL2725 when it captures, NL2336 when it does not); so are a
-  generic (NL2719), `async` (NL2721), `declare` (NL2722) or rest-parameter
-  (NL2723) function, one with a function parameter (NL2720), and a method
-  (NL2726). A written function type has no rest, optional or defaulted
-  parameter either: `(x: i32, y?: i32) => i32` is NL2723. A guard helper,
-  a function taking a `MutexGuard`, is only ever called by name (NL2733).
-- **No empty value.** `new Array<Op>(n)` (NL2724) and `Op | null` are
+  is refused (NL2731 when it captures, NL2336 when it does not); so are a
+  generic (NL2725), `async` (NL2727), `declare` (NL2728) or rest-parameter
+  (NL2729) function, one with a function parameter (NL2726), and a method
+  (NL2732). A written function type has no rest, optional or defaulted
+  parameter either: `(x: i32, y?: i32) => i32` is NL2729. A guard helper,
+  a function taking a `MutexGuard`, is only ever called by name (NL2739).
+- **No empty value.** `new Array<Op>(n)` (NL2730) and `Op | null` are
   refused; a module `const` cannot hold one either.
-- **Not a `Map` value.** `Map<K, Op>` is refused (NL2732): keep the
+- **Not a `Map` value.** `Map<K, Op>` is refused (NL2738): keep the
   references in an array, `const ops: Op[] = [inc, dec]`, and store the index
   in the `Map`.
 - **Called, compared, stored, passed — nothing else.** Not printed or
-  interpolated (NL2731), ordered, joined or encoded as JSON.
+  interpolated (NL2737), ordered, joined or encoded as JSON.
 - **Not a function argument**: a variable holding a reference cannot fill an
-  inline function-typed parameter (NL2728); type that parameter through the
+  inline function-typed parameter (NL2734); type that parameter through the
   alias.
 - **It stays in the program**: a `-o` library cannot export it in a
-  signature or an exported class's field (NL2727); `--link` can.
+  signature or an exported class's field (NL2733); `--link` can.
 
 ### Async functions
 

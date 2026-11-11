@@ -85,7 +85,7 @@ initialised where it is declared, and an array of them is built from `[]` or
 a literal and `push`. `new Array<Op>(n)`, which would fill the array with
 zeros, is refused:
 
-```ts nish:err NL2724
+```ts nish:err NL2730
 type Op = (x: i32) => i32;
 
 export const main = (): i32 => {
@@ -100,21 +100,21 @@ A reference names a function declared at the top level of a module, with
 `const f = (...) => ...` or `function f(...)`. These cannot be referenced,
 and naming one where a value is expected is an error:
 
-- a **generic** function (`NL2719`), an **`async`** function (`NL2721`), a
-  function declared in C (`NL2722`), a function with a **rest parameter**
-  (`NL2723`), and a function that takes a function parameter (`NL2720`);
-- a function that takes a **`MutexGuard`** (`NL2733`): a guard goes only to
+- a **generic** function (`NL2725`), an **`async`** function (`NL2727`), a
+  function declared in C (`NL2728`), a function with a **rest parameter**
+  (`NL2729`), and a function that takes a function parameter (`NL2726`);
+- a function that takes a **`MutexGuard`** (`NL2739`): a guard goes only to
   a helper named at the call;
 - a **function type** with a rest, optional or defaulted parameter, such as
-  `(x: i32, y?: i32) => i32` (`NL2723`): a call through a reference passes
+  `(x: i32, y?: i32) => i32` (`NL2729`): a call through a reference passes
   every parameter;
-- a **method**, `c.step`, which needs its object (`NL2726`);
+- a **method**, `c.step`, which needs its object (`NL2732`);
 - an **arrow written inside a function**. One that reads a variable of the
   function around it would need to carry that variable with it, which a
-  reference cannot (`NL2725`); one that reads nothing is refused too
+  reference cannot (`NL2731`); one that reads nothing is refused too
   (`NL2336`): declare it at the top level and name it.
 
-```ts nish:err NL2725
+```ts nish:err NL2731
 export const main = (): i32 => {
   const k = 3;
   const addK = (x: i32): i32 => x + k;
@@ -132,7 +132,7 @@ A reference is called, compared, stored and passed, and nothing else. In
 particular it cannot be printed or put in a template string, because a
 native program has no source text to show for it:
 
-```ts nish:err NL2731
+```ts nish:err NL2737
 type Op = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
@@ -148,10 +148,10 @@ It cannot be ordered with `<`, joined, encoded as JSON, or made nullable
 (`Op | null`); store an index or an enum beside it when you need one of
 those.
 
-It cannot be a `Map` value yet either (`NL2732`). Keep the references in an
+It cannot be a `Map` value yet either (`NL2738`). Keep the references in an
 array and store each one's index in the `Map`:
 
-```ts nish:err NL2732
+```ts nish:err NL2738
 type Op = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
@@ -182,9 +182,9 @@ export const main = (): i32 => {
 A reference is not a function argument either. A parameter whose function
 type is written out in the parameter list, as in `apply` below, is filled in
 when the call is compiled, so it takes a function's name or an arrow, never
-a variable holding one (`NL2728`):
+a variable holding one (`NL2734`):
 
-```ts nish:err NL2728
+```ts nish:err NL2734
 type F = (x: i32) => i32;
 
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
@@ -213,5 +213,5 @@ the reference holds one of those functions, and panics if it does not.
 A reference stays inside your program. A library built with `-o` cannot
 export a function whose parameter or return type holds one, or whose
 classes have a field of one, because code outside the program could hand back a value
-that names no function (`NL2727`). A program built from several modules
+that names no function (`NL2733`). A program built from several modules
 together with `--link` may pass references between them.

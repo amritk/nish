@@ -63,8 +63,8 @@ messages are exact for the cases cited; other entries quote the checker
   `` `f` cannot have a function type here: ... `` (`reject_fnarg_method`,
   `reject_fnarg_nested`)
 - **a function reference to a function it cannot hold, or used other than
-  called, compared, stored or passed**: NL2719, NL2720, NL2721, NL2722,
-  NL2723, NL2724, NL2726, NL2727, NL2728, NL2729, NL2730 and NL2731
+  called, compared, stored or passed**: NL2725, NL2726, NL2727, NL2728,
+  NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736 and NL2737
   (`reject_fnref_generic`, `_async`, `_ffi`, `_rest`, `_zero_fill`, `_host`,
   `_host_field`, `_no_strict`, `_escape_join`, `_print`, `_json`,
   `reject_fnarg_alias`; [Function references](declarations.md#function-references))

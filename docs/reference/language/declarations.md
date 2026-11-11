@@ -247,7 +247,7 @@ had a default (`tests/cases/param_default`, `param_rest`, `param_method`,
   (`reject_param_function_default`, `reject_param_function_type`), and a
   function with a rest parameter is never passed for a function parameter
   (`reject_param_rest_function_value`) nor held in a function reference
-  (NL2723, `reject_fnref_rest`): called through either, Node would gather
+  (NL2729, `reject_fnref_rest`): called through either, Node would gather
   differently.
 - **No spread argument**: `total(...xs)` is
   `Spread arguments are not supported` (`reject_param_spread_call`); pass `xs`
@@ -1931,7 +1931,7 @@ export const main = (): i32 => {
   order rather than escape (`mem_join_parts_captured`). An arrow anywhere but
   as such an argument or as a top-level `const` is
   `` an arrow in value position is not yet a function reference: declare it as a top-level function and name it ``
-  (`tests/cases/reject_fnarg_arrow_value`), or NL2725 when it captures
+  (`tests/cases/reject_fnarg_arrow_value`), or NL2731 when it captures
   ([Function references](#function-references)).
 - **A function argument has exactly its parameter's type**, once the type
   parameters are bound, because the body calls it with those types and reads
@@ -1941,7 +1941,7 @@ export const main = (): i32 => {
   top-level function or an arrow — a local, a member or any other expression is
   refused (`reject_fnarg_not_name`), a function reference among them
   (`` `h` is a function reference: `apply` takes a top-level function or an arrow named at the call ``,
-  NL2728, `tests/wordings/nl2728_fnref_to_function_parameter`), a generic function names no one function
+  NL2734, `tests/wordings/nl2734_fnref_to_function_parameter`), a generic function names no one function
   and is refused with the arrow to write instead (`reject_fnarg_generic_name`),
   and an arrow takes exactly its type's parameters (`reject_fnarg_arity`). An
   unannotated arrow parameter whose type no value argument binds
@@ -2013,28 +2013,28 @@ export const main = (): void => {
   and takes no function parameter, and whose arrow, if it is one, captures
   nothing. Each other kind is refused where it is named:
   - `` `id` is generic: a function reference names one non-generic top-level function ``
-    (NL2719, `tests/cases/reject_fnref_generic`);
+    (NL2725, `tests/cases/reject_fnref_generic`);
   - `` `later` is async: a function reference cannot hold it, because its call is a promise ``
-    (NL2721, `reject_fnref_async`);
+    (NL2727, `reject_fnref_async`);
   - `` `abs` is declared in C: a function reference names a function this program defines ``
-    (NL2722, `reject_fnref_ffi`);
+    (NL2728, `reject_fnref_ffi`);
   - `` `sum` has a rest parameter: a function reference names a function whose every parameter the caller passes ``
-    (NL2723, `reject_fnref_rest`), and a written function type with a rest,
+    (NL2729, `reject_fnref_rest`), and a written function type with a rest,
     optional or defaulted parameter,
     `` `(x: i32, y?: i32) => i32` has an optional parameter: a function reference names a function whose every parameter the caller passes ``
-    (NL2723, `reject_fnref_type_optional`, `reject_fnref_type_rest`);
+    (NL2729, `reject_fnref_type_optional`, `reject_fnref_type_rest`);
   - `` `bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name ``
-    (NL2733, `tests/wordings/nl2733_fnref_guard`);
+    (NL2739, `tests/wordings/nl2739_fnref_guard`);
   - `` `apply` takes a function parameter, so it has no single body to refer to ``
-    (NL2720, `tests/wordings/nl2720_fnref_template`), and a function type
+    (NL2726, `tests/wordings/nl2726_fnref_template`), and a function type
     whose own parameter is written as a function type,
     `` `(g: (x: i32) => i32) => i32` takes a function parameter, so no function it could name has a single body to refer to ``
-    (NL2729, `tests/wordings/nl2729_fnref_type_function_param`);
+    (NL2735, `tests/wordings/nl2735_fnref_type_function_param`);
   - a method, `` `c.step` is a method: a function reference names a top-level function, and a method needs its receiver ``
-    (NL2726, `tests/cases/reject_fnarg_alias`);
+    (NL2732, `tests/cases/reject_fnarg_alias`);
   - an arrow that captures,
     `` this arrow captures `k`: a function reference names a top-level function and carries no environment ``
-    (NL2725, `reject_arrow_as_value`, `reject_fnref_capture`), and one that
+    (NL2731, `reject_arrow_as_value`, `reject_fnref_capture`), and one that
     does not but is not a top-level `const`,
     `` an arrow in value position is not yet a function reference: declare it as a top-level function and name it ``
     (NL2336, `reject_fnarg_arrow_value`).
@@ -2046,7 +2046,7 @@ export const main = (): void => {
   where it is declared (`reject_fnarg_local`), and
   `new Array<(i32) => i32>(n)` is
   `` `new Array<(i32) => i32>(n)` would zero-fill with 0, which names no function; build it with `[]` and `push` instead ``
-  (NL2724, `reject_fnref_zero_fill`). A module constant may not hold one
+  (NL2730, `reject_fnref_zero_fill`). A module constant may not hold one
   (`` Module constant `alias` must be a number, boolean, or string, not (i32) => i32; there is no top-level code to build anything else ``).
   An arrow argument may capture a `const` reference local like any other
   value (`fnref_capture`).
@@ -2055,12 +2055,12 @@ export const main = (): void => {
   name the same function (`fnref_eq`). Nothing else: printing it, putting it in
   a template string or any other use is
   `` `f` is a function reference: it can be called, compared, stored and passed, nothing else ``
-  (NL2731, `reject_fnref_print`); `jsonEncode` refuses a type that holds one
+  (NL2737, `reject_fnref_print`); `jsonEncode` refuses a type that holds one
   (`` `jsonEncode` cannot handle `Stage.op`, which is `(i32) => i32` ``,
   `reject_fnref_json`); `<` and the other orderings take numbers only; and a
   function type inside another type prints in parentheses,
   `((i32) => i32)[]` (`reject_fnref_type_name`). A reference is not passed
-  for an inline function parameter (NL2728,
+  for an inline function parameter (NL2734,
   [Function parameters](#function-parameters)).
 - **In memory a reference is an `i32` tag**, the function's position, from 1,
   among the program's functions of that signature: never an address. A call
@@ -2079,7 +2079,7 @@ export const main = (): void => {
   that mixes members that keep a pointer argument with members that do not is
   refused,
   `` this call through `h` can reach `u3`, which keeps `p`, and `u0`, which does not, so every call here would allocate `p` in the arena; ... ``
-  (NL2730, `reject_fnref_escape_join`, `fnref_escape_join`), and a set past
+  (NL2736, `reject_fnref_escape_join`, `fnref_escape_join`), and a set past
   eight members is warning NL9017, a `switch` where a direct call would not
   branch (`tests/wordings/nl9017_fnref_wide_set`). Under `--profile debug` the
   dispatcher first checks that the tag is in its set and panics with
@@ -2091,8 +2091,8 @@ export const main = (): void => {
   whose parameter or return type holds a reference, or a class an exported
   signature reaches with such a field, is
   `` Parameter `f` of `apply` holds a function reference that code outside this program can reach: a reference is a tag this program's dispatcher reads, not an address, and a host could hand back one no dispatcher knows ``
-  (NL2727, `reject_fnref_host`, `reject_fnref_host_field`,
-  `reject_fnref_no_strict`, `tests/wordings/nl2727_fnref_host_return`). A
+  (NL2733, `reject_fnref_host`, `reject_fnref_host_field`,
+  `reject_fnref_no_strict`, `tests/wordings/nl2733_fnref_host_return`). A
   closed-world `--link` build exports such a function between its own modules
   (`tests/link/fnref_cross_module`).
 
@@ -2101,8 +2101,8 @@ generic or an `async` function, a nullable reference (`F | null` is the
 nullable-scalar refusal of [Nullable types](types.md#nullable-types)), a reference as
 a `Map` value (a `Map` value is not yet a place the compiler tracks, so
 `` `Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map ``,
-NL2732, `reject_fnref_map`; keep the references in an array and the index in
-the `Map`), and a reference passed for an inline function parameter (NL2728).
+NL2738, `reject_fnref_map`; keep the references in an array and the index in
+the `Map`), and a reference passed for an inline function parameter (NL2734).
 
 ## Async functions: `async` and `await`
 
@@ -3482,7 +3482,7 @@ breaks one is refused with that rule's own code:
 
   A guard helper is named, never held: naming it as a value is
   `` `bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name ``
-  (NL2733, `reject_mutex_guard_helper_ternary_alias`,
+  (NL2739, `reject_mutex_guard_helper_ternary_alias`,
   `reject_mutex_guard_helper_nullish`), because the rules below follow the
   function a call names.
 

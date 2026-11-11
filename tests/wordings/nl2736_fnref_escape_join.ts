@@ -1,4 +1,4 @@
-// NL2730: a call through a reference that can reach a function keeping its
+// NL2736: a call through a reference that can reach a function keeping its
 // argument and one that does not. The dispatcher's facts are its arms' join,
 // so every call would lose the argument's stack place.
 class Point {

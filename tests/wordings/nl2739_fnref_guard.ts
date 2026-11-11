@@ -1,4 +1,4 @@
-// NL2733: a function that takes a `MutexGuard` named as a value.
+// NL2739: a function that takes a `MutexGuard` named as a value.
 import { MutexGuard } from "nish/threads";
 
 class Counter {

@@ -1,4 +1,4 @@
-// NL2719: a generic function named as a value. A reference names one body,
+// NL2725: a generic function named as a value. A reference names one body,
 // and a generic function has one per instantiation.
 const id = <T>(x: T): T => x;
 
