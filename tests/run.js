@@ -28641,15 +28641,14 @@ if (!only || "std_text_index_of_any".includes(only)) {
 // and are held to the same bytes. That is the whole claim `codePointLength`
 // makes: its native walk counts UTF-8 lead bytes and its Node walk counts
 // UTF-16 units less the second half of each pair, and é, €, 😀, "©®±" and a
-// lone surrogate print the same count both ways.
+// lone surrogate print the same count both ways. `std_text_camel_case`, the
+// guide's example, is held here too: its `Regex.replaceAll` on a class did not
+// finish under Node until `nish/regex` stopped reading holes as zeros (#1362).
 if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
-  // `std_text_camel_case`, the guide's example, is held natively only: under
-  // the Node prelude its `Regex.replaceAll` on a class of two members does
-  // not finish, which is `nish/regex`'s and not this module's (#1362). It
-  // rejoins this list when #1362 is fixed.
-  for (const name of ["std_text", "std_text_f64"]) {
+  for (const name of ["std_text", "std_text_f64", "std_text_camel_case"]) {
     const dir = path.join(linkDir, name)
-    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    // A timeout, so a #1362 regression fails this check instead of hanging the shard.
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
     const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
     const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
     check(
@@ -28701,6 +28700,22 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
       )
     }
   }
+}
+
+// `nish/regex` under the Node prelude (#1362). The link loop runs
+// `std_regex_node` natively against expected.out, which JavaScript's own
+// `RegExp` wrote; here the same file runs under `runtime/nish.mjs`. Each of its
+// patterns builds the lazy DFA, whose tables are read as zeros: holes there once
+// left `[-\s]+` probing a hash table forever, so a timeout is the failure.
+if (!only || "std_regex_node".includes(only) || only.startsWith("std_regex_node")) {
+  const dir = path.join(linkDir, "std_regex_node")
+  const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
+  const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+  check(
+    "link/std_regex_node: under the Node prelude a class, a set escape and an alternation finish and print expected.out",
+    run.status === 0 && run.stdout === out,
+    `--- native (expected.out)\n${out}--- node\n${shown(run)}`
+  )
 }
 
 // WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own
