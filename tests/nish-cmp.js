@@ -553,8 +553,8 @@ const mssUnset = (why, moved) =>
 const SPAWN_PIPED_WITHIN = "spawnPipedWithin, a captured run with a deadline"
 /** The changelog line of the fix that arms a held HTTP/1 write for writing. */
 const HELD_WRITE = "held HTTP/1 write keeps the write bit once a flush empties the output"
-const heldWrite = (why, programs) =>
-  programs.map((program) => ({ program, file: "http1-server.ll", changelog: HELD_WRITE, why }))
+const heldWrite = (why, moved) =>
+  moved.map((program) => ({ program, file: "http1-server.ll", changelog: HELD_WRITE, why }))
 
 const DECLARED = [
   // The hygiene rules found a dead local in std/compress/deflate.ts.
