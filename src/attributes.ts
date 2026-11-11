@@ -4429,7 +4429,11 @@ const markWipe = (facts: FunctionFacts): BodilessStance => {
   facts.sharedWrite = true
   facts.callees.add(WIPE_MEMSET)
   facts.writeVia = WIPE_MEMSET // the reason is the memset still, though `writesShared` skips it
-  return new BodilessStance(new ParamStance(STANCE_WRITES_DEEP, STANCE_KEEPS_NONE, false), statesNothing(), false)
+  return new BodilessStance(
+    new ParamStance(STANCE_WRITES_DEEP, STANCE_KEEPS_NONE, false),
+    statesNothing(),
+    false
+  )
 }
 
 /**
@@ -4470,7 +4474,11 @@ const markChannelSend = (facts: FunctionFacts): BodilessStance => {
   facts.contained = true
   facts.returnsScalar = true
   facts.callees.add("nish_channel_send")
-  return new BodilessStance(new ParamStance(STANCE_WRITES_SLOTS, STANCE_KEEPS_NONE, false), statesNothing(), false)
+  return new BodilessStance(
+    new ParamStance(STANCE_WRITES_SLOTS, STANCE_KEEPS_NONE, false),
+    statesNothing(),
+    false
+  )
 }
 
 /**
@@ -4489,7 +4497,11 @@ const markAtomic = (facts: FunctionFacts): BodilessStance => {
   facts.readsMemory = true
   facts.contained = true
   facts.returnsScalar = true
-  return new BodilessStance(new ParamStance(STANCE_WRITES_SLOTS, STANCE_KEEPS_NONE, false), statesNothing(), false)
+  return new BodilessStance(
+    new ParamStance(STANCE_WRITES_SLOTS, STANCE_KEEPS_NONE, false),
+    statesNothing(),
+    false
+  )
 }
 
 /**
