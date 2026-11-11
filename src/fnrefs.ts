@@ -163,13 +163,19 @@ export const nullableReference = (ctx: CheckContext, type: i32): boolean =>
 
 /**
  * WP51 stage 2: a call through a `F | null` is refused until a test proves it
- * holds a function, as TypeScript refuses it, because tag 0 names none.
+ * holds a function, as TypeScript refuses it, because tag 0 names none. A test
+ * narrows a local only, so a field or an element is read into a `const` first.
  */
-export const refuseNullableCall = (ctx: CheckContext, callee: Node, shown: string): i32 =>
-  ctx.errorType(
+export const refuseNullableCall = (ctx: CheckContext, callee: Node, shown: string): i32 => {
+  let test = `${shown} !== null`
+  if (callee.kind !== N_IDENT) {
+    test = `const h = ${shown}; if (h !== null)`
+  }
+  return ctx.errorType(
     callee,
-    `\`${shown}\` may be \`null\`: a nullable function reference is called only after a test such as \`${shown} !== null\` proves it holds a function`
+    `\`${shown}\` may be \`null\`: a nullable function reference is called only after a test such as \`${test}\` proves it holds a function`
   )
+}
 
 /**
  * A call through a reference of type `type`, whose callee `expr.children[0]`
