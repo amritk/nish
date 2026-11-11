@@ -281,15 +281,22 @@ const quicStreamSetBits = (bits: u8[], from: i32, to: i32, on: boolean): void =>
 const quicStreamScan = (bits: u8[], from: i32, to: i32, on: boolean): i32 => {
   const full: i32 = on ? 255 : 0
   let k: i32 = from
-  while (k < to) {
-    const at: i32 = k >> 3
-    if ((k & 7) === 0 && k + 8 <= to && at >= 0 && at < toI32(bits.length) && toI32(bits[at]) === full) {
-      k = k + 8
-    } else if (quicStreamBit(bits, k) !== on) {
+  while (k < to && (k & 7) !== 0) {
+    if (quicStreamBit(bits, k) !== on) {
       return k
-    } else {
-      k = k + 1
     }
+    k = k + 1
+  }
+  const length: i32 = toI32(bits.length) << 3
+  const whole: i32 = (to < length ? to : length) & ~7
+  while (k >= 0 && k < whole && toI32(bits[k >> 3]) === full) {
+    k = k + 8
+  }
+  while (k < to) {
+    if (quicStreamBit(bits, k) !== on) {
+      return k
+    }
+    k = k + 1
   }
   return to
 }
@@ -1551,7 +1558,7 @@ export class QuicStreams {
       }
       if (stream.recvContiguous < stream.recvHighest) {
         const pending: i64 = stream.recvHighest - stream.recvContiguous
-        const count: i32 = pending < toI64(size) ? toI32(pending) : size
+        const count: i32 = toI32(quicStreamMin(pending, toI64(size)))
         stream.recvContiguous =
           stream.recvContiguous +
           toI64(quicStreamRingRun(stream.recvHave, size, stream.at(stream.recvContiguous), count, true))
@@ -2014,7 +2021,7 @@ export class QuicStreams {
       let low: i64 = stream.resendLow < stream.sendBase ? stream.sendBase : stream.resendLow
       if (low < stream.resendHigh && stream.size > 0) {
         const span: i64 = stream.resendHigh - low
-        const count: i32 = span < toI64(stream.size) ? toI32(span) : stream.size
+        const count: i32 = toI32(quicStreamMin(span, toI64(stream.size)))
         low = low + toI64(quicStreamRingRun(stream.sendAcked, stream.size, stream.at(low), count, true))
       }
       const want: i32 = toI32(stream.resendHigh - low)
