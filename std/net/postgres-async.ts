@@ -1267,7 +1267,9 @@ export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, turn: i32): 
   const input: u8[] = pool.inputs[s]
   const from: i32 = pool.inStart[s]
   const to: i32 = pool.inAnswer[s] >= 0 ? pool.inAnswer[s] : pool.inEnd[s]
-  const carried: u8[] = new Array<u8>(from >= 0 && from <= to && to <= toI32(input.length) ? to - from : 0)
+  const carried: u8[] = new Array<u8>(
+    from >= 0 && from <= to && to <= toI32(input.length) ? to - from : toI32(0)
+  )
   for (let i: i32 = 0; i < toI32(carried.length); i++) {
     carried[i] = input[from + i]
   }
@@ -1441,12 +1443,7 @@ const pgAsyncEncode = (sql: u8[], name: i32, parse: boolean, params: PgAsyncPara
     return null
   }
   // The statement's name: none, or `n` and its decimal digits (at most 2).
-  let label: u8[] = []
-  if (name >= 10) {
-    label = [110, toU8(48 + toI32(name / 10)), toU8(48 + (name % 10))]
-  } else if (name >= 0) {
-    label = [110, toU8(48 + name)]
-  }
+  const label: u8[] = pgAsyncLabel(name)
   const named: i32 = toI32(label.length)
   const values: u8[][] = []
   // The length, "" portal, the statement's name and NUL, no parameter formats,
@@ -1468,14 +1465,14 @@ const pgAsyncEncode = (sql: u8[], name: i32, parse: boolean, params: PgAsyncPara
   // The length, the statement's name and NUL, the SQL and its NUL, no parameter types.
   const parseLength: i32 = parse ? sqlLength + named + toI32(8) : 0
   // Parse, Bind, Execute ("" portal, no row limit: 4 + 1 + 4), Sync (4).
-  const total: i32 = (parse ? 1 + parseLength : 0) + 1 + bind + 1 + 9 + 1 + 4
+  const total: i32 = (parse ? toI32(1) + parseLength : toI32(0)) + toI32(16) + bind
   const out: u8[] = new Array<u8>(total)
   let at: i32 = 0
   if (parse) {
     out[at] = 80
     setI32BE(out, at + 1, parseLength)
     at += 5
-    for (let i: i32 = 0; i < named; i++) {
+    for (let i: i32 = 0; i < toI32(label.length); i++) {
       out[at + i] = label[i]
     }
     at += named
@@ -1496,7 +1493,7 @@ const pgAsyncEncode = (sql: u8[], name: i32, parse: boolean, params: PgAsyncPara
   // The unnamed portal, the statement's name, no parameter format codes (all text).
   out[at] = 0
   at += 1
-  for (let i: i32 = 0; i < named; i++) {
+  for (let i: i32 = 0; i < toI32(label.length); i++) {
     out[at + i] = label[i]
   }
   at += named
@@ -1533,6 +1530,17 @@ const pgAsyncEncode = (sql: u8[], name: i32, parse: boolean, params: PgAsyncPara
 }
 
 /** `s`'s UTF-8 bytes, or null when one is zero, which a C string in the protocol cannot hold. */
+/** A prepared statement's name, `n` and the decimal digits of `name` (at most 2), or none for a negative `name`. */
+const pgAsyncLabel = (name: i32): u8[] => {
+  if (name >= 10) {
+    return [110, toU8(toI32(48) + toI32(name / 10)), toU8(toI32(48) + (name % 10))]
+  }
+  if (name >= 0) {
+    return [110, toU8(toI32(48) + name)]
+  }
+  return []
+}
+
 const pgAsyncBytes = (s: string): u8[] | null => {
   const n: i32 = toI32(s.length)
   const b: u8[] = new Array<u8>(n)
@@ -1703,10 +1711,10 @@ const pgAsyncRead = async (
     let want: i32 = room
     if (bounded) {
       // The rest of the frame at `start`, and the next header unless it is the ReadyForQuery.
-      want = 5 - (end - start)
+      want = toI32(5) - (end - start)
       if (end - start >= 5 && start >= 0 && start < toI32(buf.length)) {
         const length: i32 = getI32BE(buf, start + 1)
-        want = 1 + length - (end - start) + (toI32(buf[start]) === 90 ? 0 : 5)
+        want = toI32(1) + length - (end - start) + (toI32(buf[start]) === 90 ? toI32(0) : toI32(5))
       }
       if (want > room) {
         want = room
