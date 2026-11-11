@@ -1784,7 +1784,8 @@ const CTX_SLOTS: i32 = 4
 /**
  * `n` zeros. `new Array<i32>(n)` zero-fills natively and leaves holes under
  * Node, and this module reads a fresh table as zeros (the DFA's hash probe
- * stops at a 0 slot), so every table it makes comes from here (#1362).
+ * stops at a 0 slot), so every table it reads before writing comes from here
+ * (#1362).
  */
 const regexZeros = (n: i32): i32[] => {
   const a: i32[] = new Array<i32>(n)
