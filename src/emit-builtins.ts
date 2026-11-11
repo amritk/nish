@@ -844,6 +844,11 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "readCString") {
     return emitCStringCopy(emitter, emitter.emitExpression(firstArgument(expr)))
   }
+  // WP27 S5: the slot every foreign call of the program saved errno into
+  // (`Emitter.saveErrno`).
+  if (name === "cErrno") {
+    return emitter.fn.emitValue(`load i32, i32* ${emitter.errnoSlot()}${emitter.opts.optimizeAttributes ? ", align 4" : ""}`)
+  }
   if (name === "parseInt") {
     const value = emitParseCall(emitter, emitter.emitExpression(firstArgument(expr)), 2)
     return callIntrinsic(emitter, SAT_I32, "i32", `double ${value}`)
@@ -1501,6 +1506,10 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   if (name === "wrappingAdd" || name === "wrappingSub" || name === "wrappingMul") {
+    return out
+  }
+  // WP27 S5: a load of `@nish_errno_slot`; the foreign calls fill it.
+  if (name === "cErrno") {
     return out
   }
   return out

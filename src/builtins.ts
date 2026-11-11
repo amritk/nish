@@ -863,6 +863,20 @@ const checkReadCString = (ctx: CheckContext, call: Node, scope: Scope, args: Nod
   return T_STRING
 }
 
+/**
+ * `cErrno()`, from `nish:unsafe` (WP27 S5, `docs/wp27-ffi.md` §10): the errno
+ * the most recent `declare function` call on this thread left. Naming it is
+ * what makes every foreign call in the program zero errno before and save it
+ * after (`capturesErrno`); a freestanding wasm32 build has no libc and so no
+ * errno, and refuses it.
+ */
+const checkCErrno = (ctx: CheckContext, call: Node, args: Node): i32 => {
+  if (!refuseOnFreestandingWasm(ctx, call, "cErrno") && checkBuiltinArity(ctx, call, "cErrno", args, 0)) {
+    ctx.program.capturesErrno = true
+  }
+  return T_I32
+}
+
 // ---- Plain calls ----------------------------------------------------------------------
 
 /** `toI32(x)`, `parseInt(s)`, `readFileSync(p)`, `panic(m)`, ... */
@@ -929,6 +943,9 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     ctx.program.noteUnsafeCall(call, name)
     if (name === "readCString") {
       return checkReadCString(ctx, call, scope, args)
+    }
+    if (name === "cErrno") {
+      return checkCErrno(ctx, call, args)
     }
     return name === "uncheckedGet" || name === "uncheckedSet"
       ? checkUncheckedAccess(ctx, call, scope, name, args)

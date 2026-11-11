@@ -823,6 +823,19 @@ declare function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
  */
 declare function readCString(p: CPtr): string;
 
+/**
+ * `cErrno()`, from `nish:unsafe` (WP27 S5): the errno the most recent
+ * `declare function` call on this thread left, or 0 before any. Naming it
+ * anywhere in a program makes every foreign call zero errno just before it
+ * and save it just after, before the result is copied or anything allocated,
+ * so the runtime's own work after the call cannot change it. Meaningful only
+ * where the C function documents that it sets errno. Per thread; refused on a
+ * freestanding wasm32 build, which has no libc. Capability: unsafe.
+ *
+ * @returns the saved errno, an `i32`.
+ */
+declare function cErrno(): i32;
+
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 
 /**
@@ -3563,6 +3576,16 @@ declare module "nish:unsafe" {
    * @returns A copy of the bytes before the `NUL`; C keeps its buffer.
    */
   export function readCString(p: CPtr): string;
+  /**
+   * The errno the most recent `declare function` call on this thread left:
+   * a program that names `cErrno` zeroes errno just before every foreign
+   * call and saves it just after, before any result marshalling. Native and
+   * `--profile wasi` only.
+   *
+   * @returns The saved errno; 0 before any foreign call, and 0 after one that
+   *   did not set it.
+   */
+  export function cErrno(): i32;
 }
 
 /**

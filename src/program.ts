@@ -1686,6 +1686,12 @@ export class CheckedProgram {
   entryMain: FunctionSig | null
   /** Some function reads `process.argv`, so the `@main` wrapper calls `nish_argv_init`. */
   usesArgv: boolean
+  /**
+   * Some module of the program names `cErrno` (WP27 S5, `docs/wp27-ffi.md`
+   * §10), so every module's `declare function` calls zero errno before and save
+   * it after. `Compilation.analyze` spreads it to every module.
+   */
+  capturesErrno: boolean
   /** Whether `--number-mode f64` is in force, where a `.length` is an `f64`. */
   f64Mode: boolean
   /**
@@ -2018,6 +2024,7 @@ export class CheckedProgram {
       isSortModule(packageName, source.path) ||
       isArrayModule(packageName, source.path)
     this.usesArgv = false
+    this.capturesErrno = false
     this.f64Mode = false
     this.guardShadows = -1
     this.unsafeImports = []
