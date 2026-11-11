@@ -12,12 +12,12 @@ struct Local (class) size=64 align=8 exported
   field typedArray: string index=2 offset=16
   field pathIndex: string index=3 offset=24
   field literalKey: string index=4 offset=32
-  field captureOf: Local | null index=5 offset=40
-  field type: i32 index=6 offset=48
-  field storage: i32 index=7 offset=52
-  field place: i32 index=8 offset=56
-  field mutable: boolean index=9 offset=60
-  field fresh: boolean index=10 offset=61
+  field type: i32 index=5 offset=40
+  field storage: i32 index=6 offset=44
+  field place: i32 index=7 offset=48
+  field mutable: boolean index=8 offset=52
+  field fresh: boolean index=9 offset=53
+  field captureOf: Local | null index=10 offset=56
   constructor -> @Local.constructor
 struct TypeOrigin (class) size=32 align=8 exported
   field annotation: Node index=0 offset=0

@@ -197,7 +197,7 @@ function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionF
   calls: FunctionFacts.pointerParam StringSet.add StringSet.constructor TypeTable.isArray TypeTable.isReadonlyArray nish_alloc_struct nish_panic_index
   pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isArray#0 TypeTable.isReadonlyArray#0
   pointer sig: size=200 writesThrough=false captured=false
-  pointer facts: size=416 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
+  pointer facts: size=432 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   local +0:9 written: StringSet (const)
   callee +0:19 new StringSet -> @StringSet.constructor

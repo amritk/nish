@@ -201,8 +201,9 @@ export const isCollectionTemplate = (template: StructTemplateInfo): boolean =>
  * identity, and an array, a nullable type and a `Result` wait for a program
  * that needs one. A value is stored as it is, so it is anything but `void` and
  * an interface, whose record would be copied in rather than shared. A function
- * reference, or an array of them, is refused as a value until a `Map` value is a place the reference
- * pass tracks (WP51 stage 2); as a key it fails the key rule.
+ * reference, or an array, nullable, maybe or `Result` holding one, is refused
+ * as a value until a `Map` value is a place the reference pass tracks (WP51
+ * stage 2); as a key it fails the key rule.
  */
 const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string => {
   if (args.length !== template.typeParams.length || args.length === 0) {
@@ -221,10 +222,14 @@ const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateIn
     return ""
   }
   const value = args[1]
-  // An array of references is refused with them: a value the map hands out is
-  // a place the place pass does not follow, whatever the reference sits in.
+  // An array, a nullable, a maybe or a `Result` of references is refused with
+  // them: a value the map hands out is a place the place pass does not
+  // follow, whatever the reference sits in.
   let held = value
-  while (held >= 0 && table.isArray(held)) {
+  while (
+    held >= 0 &&
+    (table.isArray(held) || table.isNullable(held) || table.isMaybe(held) || table.isResult(held))
+  ) {
     held = table.refOf(held)
   }
   if (held >= 0 && table.isFnRef(held)) {
@@ -3077,8 +3082,7 @@ const checkConstraints = (
   let i = 0
   while (i < args.length) {
     const want = constraints.at(i)
-    const arg = args[i]
-    if (want >= 0 && !satisfiesConstraint(asker, home, arg, want)) {
+    if (want >= 0 && !satisfiesConstraint(asker, home, args[i], want)) {
       const bound = home.table.typeName(want)
       const info = home.program.struct(home.table.nameOf(want))
       // A class constraint is met by the class and nothing else, because a
@@ -3091,7 +3095,7 @@ const checkConstraints = (
       asker.error(
         at,
         `\`${typeParams[i]}\` of \`${templateName}\` requires \`${typeParams[i]} extends ${bound}\`, and ` +
-          `\`${asker.table.typeName(arg)}\` does not implement it; ${fix}`
+          `\`${asker.table.typeName(args[i])}\` does not implement it; ${fix}`
       )
       return false
     }

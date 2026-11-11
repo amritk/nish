@@ -977,7 +977,7 @@ function RegionWalk.judgeTaskCallee(this: RegionWalk, node: Node, f: FunctionFac
   calls: FunctionFacts.pointerParamAt RegionWalk.report handsRegionMessage mayBeOuter mayBeRegion nish_panic_index nish_panic_overflow nish_str_concat textOf
   pointer this: size=160 writesThrough=false captured=false passedTo=RegionWalk.report#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.report#1
-  pointer f: size=416 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
+  pointer f: size=432 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
   pointer handed: size=0 writesThrough=true captured=false
   pointer origins: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0

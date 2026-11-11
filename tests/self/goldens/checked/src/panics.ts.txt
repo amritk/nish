@@ -156,7 +156,7 @@ function callsMayPanic(facts: FactsTable, may: boolean[], sites: PanicSite[], f:
   pointer facts: size=24 writesThrough=false captured=false passedTo=mayPanicAt#0 mayPanicAt#0
   pointer may: size=0 writesThrough=false captured=false passedTo=mayPanicAt#1 mayPanicAt#1
   pointer sites: size=0 writesThrough=false captured=false
-  pointer f: size=416 writesThrough=false captured=false
+  pointer f: size=432 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 site: PanicSite (const)
   callee +1:9 isCallSite -> @isCallSite
@@ -181,7 +181,7 @@ function firstPanic(facts: FactsTable, may: boolean[], reach: PanicSite | null[]
   pointer may: size=0 writesThrough=false captured=false passedTo=mayPanicAt#1 mayPanicAt#1
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
   pointer sites: size=0 writesThrough=false captured=false
-  pointer f: size=416 writesThrough=false captured=false
+  pointer f: size=432 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 site: PanicSite (const)
   callee +1:9 panicsHere -> @panicsHere
@@ -223,7 +223,7 @@ function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite 
   pointer facts: size=24 writesThrough=false captured=false passedTo=reachOf#0 reachOf#0
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
   pointer sig: size=200 writesThrough=false captured=false
-  pointer f: size=416 writesThrough=false captured=false
+  pointer f: size=432 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local -9:9 sites: PanicSite[] (const)
   local -8:9 named: StringSet (const)

@@ -188,7 +188,7 @@ function isCollectionTemplate(template: StructTemplateInfo): boolean -> @isColle
   callee +0:3 CheckedProgram.isCollections -> @CheckedProgram.isCollections
 function collectionArgumentRefusal(ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string -> @collectionArgumentRefusal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.isArray TypeTable.isFnRef TypeTable.refOf TypeTable.typeName instanceDisplayName isCollectionKey isInterfaceType nish_panic_index nish_str_concat
+  calls: TypeTable.isArray TypeTable.isFnRef TypeTable.isMaybe TypeTable.isNullable TypeTable.isResult TypeTable.refOf TypeTable.typeName instanceDisplayName isCollectionKey isInterfaceType nish_panic_index nish_str_concat
   pointer ctx: size=320 writesThrough=false captured=false passedTo=isCollectionKey#0 isInterfaceType#0
   pointer template: size=64 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
@@ -200,12 +200,15 @@ function collectionArgumentRefusal(ctx: CheckContext, template: StructTemplateIn
   callee +3:27 isCollectionKey -> @isCollectionKey
   callee +5:12 TypeTable.typeName -> @TypeTable.typeName
   local +12:9 value: i32 (const)
-  local +15:7 held: i32 (let)
-  callee +16:23 TypeTable.isArray -> @TypeTable.isArray
-  callee +17:12 TypeTable.refOf -> @TypeTable.refOf
-  callee +19:20 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +25:27 isInterfaceType -> @isInterfaceType
-  callee +27:12 TypeTable.typeName -> @TypeTable.typeName
+  local +16:7 held: i32 (let)
+  callee +19:6 TypeTable.isArray -> @TypeTable.isArray
+  callee +19:29 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +19:55 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee +19:78 TypeTable.isResult -> @TypeTable.isResult
+  callee +21:12 TypeTable.refOf -> @TypeTable.refOf
+  callee +23:20 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +29:27 isInterfaceType -> @isInterfaceType
+  callee +31:12 TypeTable.typeName -> @TypeTable.typeName
 function isCollectionKey(ctx: CheckContext, type: i32): boolean -> @isCollectionKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -1702,22 +1705,21 @@ function checkConstraints(asker: CheckContext, home: CheckContext, templateName:
   pointer home: size=320 writesThrough=false captured=false passedTo=satisfiesConstraint#1
   pointer typeParams: size=0 writesThrough=false captured=false
   pointer constraints: size=16 writesThrough=false captured=false passedTo=ConstraintList.at#0
-  pointer args: size=0 writesThrough=false captured=false
+  pointer args: size=0 writesThrough=true captured=false
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 want: i32 (const)
   callee +2:18 ConstraintList.at -> @ConstraintList.at
-  local +3:11 arg: i32 (const)
-  callee +4:23 satisfiesConstraint -> @satisfiesConstraint
-  local +5:13 bound: string (const)
-  callee +5:21 TypeTable.typeName -> @TypeTable.typeName
-  local +6:13 info: StructInfo | null (const)
-  callee +6:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +6:40 TypeTable.nameOf -> @TypeTable.nameOf
-  local +10:13 fix: string (const)
-  callee +14:7 CheckContext.error -> @CheckContext.error
-  callee +17:16 TypeTable.typeName -> @TypeTable.typeName
+  callee +3:23 satisfiesConstraint -> @satisfiesConstraint
+  local +4:13 bound: string (const)
+  callee +4:21 TypeTable.typeName -> @TypeTable.typeName
+  local +5:13 info: StructInfo | null (const)
+  callee +5:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +5:40 TypeTable.nameOf -> @TypeTable.nameOf
+  local +9:13 fix: string (const)
+  callee +13:7 CheckContext.error -> @CheckContext.error
+  callee +16:16 TypeTable.typeName -> @TypeTable.typeName
 function checkStructConstraints(home: CheckContext, template: StructTemplateInfo, args: i32[], at: Node, asker: CheckContext): boolean -> @checkStructConstraints
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

@@ -148,9 +148,10 @@ It cannot be ordered with `<`, joined, encoded as JSON, or made nullable
 (`Op | null`); store an index or an enum beside it when you need one of
 those.
 
-It cannot be a `Map` value yet either (`NL2738`), nor can an array of
-references (`Map<string, Op[]>`). Keep the references in an array and store
-each one's index in the `Map`:
+It cannot be a `Map` value yet either (`NL2738`), nor can a value that holds
+one, such as an array of references (`Map<string, Op[]>`) or a nullable one
+(`Map<string, Op[] | null>`). Keep the references in an array and store each
+one's index in the `Map`:
 
 ```ts nish:err NL2738
 type Op = (x: i32) => i32;

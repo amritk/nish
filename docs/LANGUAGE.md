@@ -3691,8 +3691,10 @@ a `Map` value (a `Map` value is not yet a place the compiler tracks, so
 `` `Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map ``,
 NL2738, `reject_fnref_map`; keep the references in an array and the index in
 the `Map`), and a reference passed for an inline function parameter (NL2734).
-An array of references is refused as a `Map` value the same way
-(`Map<string, Op[]>`, `reject_fnref_map_array`).
+An array of references, or a nullable, `Maybe` or `Result` holding one, is
+refused as a `Map` value the same way (`Map<string, Op[]>`,
+`Map<string, Op[] | null>`; `reject_fnref_map_array`,
+`reject_fnref_map_nullable`).
 
 ### Async functions: `async` and `await`
 

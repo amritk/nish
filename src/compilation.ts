@@ -52,7 +52,7 @@ import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
-import { analyzeFunctions, AnalysisUnit, FactsTable, PointerParamFacts } from "./attributes"
+import { analyzeFunctions, AnalysisUnit, FactsTable, FunctionFacts, PointerParamFacts } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
@@ -2635,10 +2635,11 @@ export class Compilation {
             // The fact escape analysis reads of a callee (`calleeCaptures`):
             // a pointer's `outlives` also holds when it is passed on to a
             // function that keeps it, which `escaping` alone does not see.
+            // A member with no facts keeps, as it does there.
             const f = facts.get(member.name)
             const name = member.paramNames[i]
             const pointer: PointerParamFacts | null = f !== null ? f.pointerParam(name) : null
-            const keeps = f !== null && (pointer !== null ? pointer.outlives : f.escaping.has(name))
+            const keeps = f === null || (pointer !== null ? pointer.outlives : f.escaping.has(name))
             if (keeps && keeper < 0) {
               keeper = k
               keeperSig = member
@@ -2654,6 +2655,7 @@ export class Compilation {
               keeperSig.sourceName,
               otherSig.sourceName,
               keeperSig.paramNames[i],
+              passedOnlyTo(facts.get(keeperSig.name), keeperSig.paramNames[i]),
               via[keeper]
             )
             this.sink.report(program.source, call.start, call.end, message)
@@ -3941,6 +3943,24 @@ export class Compilation {
 }
 
 /** Whether `program` uses the global `name`: it imports it from `nish/collections`, implicitly or not (WP32). */
+/**
+ * The callee `name` escapes into when being handed to it is its only escape
+ * (`FunctionFacts.passedOn`), or "" when it is kept outright or not at all.
+ */
+const passedOnlyTo = (f: FunctionFacts | null, name: string): string => {
+  if (f === null || f.keptOutright.has(name) || f.pointerParam(name) !== null) {
+    return ""
+  }
+  let i = 0
+  while (i + 1 < f.passedOn.length) {
+    if (f.passedOn[i] === name) {
+      return f.passedOn[i + 1]
+    }
+    i = i + 2
+  }
+  return ""
+}
+
 const importsCollection = (program: CheckedProgram, name: string): boolean => {
   for (const imp of program.imports) {
     if (imp.importedName === name && imp.specifier === COLLECTIONS_SPECIFIER) {

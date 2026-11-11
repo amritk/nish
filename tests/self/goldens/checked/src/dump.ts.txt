@@ -53,7 +53,7 @@ function factsText(source: SourceFile, table: TypeTable, sig: FunctionSig, facts
   pointer source: size=32 writesThrough=false captured=false passedTo=position#0
   pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.isResult#0
   pointer sig: size=200 writesThrough=false captured=false
-  pointer facts: size=416 writesThrough=false captured=false
+  pointer facts: size=432 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=2 stackLocals=2
   local -27:7 effect: string (let)

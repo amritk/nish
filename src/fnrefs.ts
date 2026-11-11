@@ -379,11 +379,23 @@ export const escapeJoinMessage = (
   keeper: string,
   other: string,
   param: string,
+  passedTo: string,
   via: string
 ): string =>
-  `this call through \`${shown}\` can reach \`${keeper}\`, which keeps \`${param}\`, and \`${other}\`, which does ` +
-  `not, so every call here would allocate \`${param}\` in the arena; \`${keeper}\` reaches \`${shown}\` ` +
-  `${reachText(via)}: call \`${keeper}\` directly, or store it where \`${shown}\` does not read`
+  `this call through \`${shown}\` can reach \`${keeper}\`, which ${keepText(param, passedTo)}, and ` +
+  `\`${other}\`, which does not, so every call here would allocate \`${param}\` in the arena; ` +
+  `\`${keeper}\` reaches \`${shown}\` ${reachText(via)}: call \`${keeper}\` directly, or store it where ` +
+  `\`${shown}\` does not read`
+
+/**
+ * What the keeper does with `param`: keeps it, or, when its only escape is
+ * being handed to `passedTo` (a parameter of a kind escape analysis does not
+ * follow into a callee, such as a string), says so rather than claim a keep.
+ */
+const keepText = (param: string, passedTo: string): string =>
+  passedTo !== ""
+    ? `passes \`${param}\` to \`${passedTo}\`, which this compiler counts as keeping it`
+    : `keeps \`${param}\``
 
 /** The warning for a call whose set passes eight members (§2.2), naming the stores that widened it. */
 export const wideSetMessage = (shown: string, count: i32, vias: string[]): string => {

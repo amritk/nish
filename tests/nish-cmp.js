@@ -1320,6 +1320,7 @@ const DECLARED = [
   })),
   ...[
     "tests/cases/fnref_array.ts",
+    "tests/cases/fnref_array_callback.ts",
     "tests/cases/fnref_capture.ts",
     "tests/cases/fnref_capture_ctor.ts",
     "tests/cases/fnref_capture_method.ts",

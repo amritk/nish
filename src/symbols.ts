@@ -60,15 +60,6 @@ export class Local {
    * whose type is the annotation's, a `let`, a parameter.
    */
   literalKey: string
-  /**
-   * WP29: on the parameter an arrow passed to a data-parallel form gets for a
-   * name of the function it is written in, that function's local
-   * (`captureOuter` in `src/generics.ts`), and `null` everywhere else. The
-   * arrow's own analyses read the parameter; every rule about the enclosing
-   * function reads a captured name as the local itself (`sourceLocal`), because
-   * the body reads it during the call.
-   */
-  captureOf: Local | null
   /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
   type: i32
   storage: i32
@@ -86,6 +77,15 @@ export class Local {
    * may copy with `memcpy` (`disjointCopy` in `src/arrays.ts`).
    */
   fresh: boolean
+  /**
+   * WP29: on the parameter an arrow passed to a data-parallel form gets for a
+   * name of the function it is written in, that function's local
+   * (`captureOuter` in `src/generics.ts`), and `null` everywhere else. The
+   * arrow's own analyses read the parameter; every rule about the enclosing
+   * function reads a captured name as the local itself (`sourceLocal`), because
+   * the body reads it during the call.
+   */
+  captureOf: Local | null
 
   constructor(name: string, type: i32, mutable: boolean, storage: i32) {
     this.name = name
