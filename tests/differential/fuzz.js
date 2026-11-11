@@ -133,6 +133,25 @@ const buildProgram = (seed, label, opts = {}) => {
   }
 
   /**
+   * A second operand for `left` that is not the same expression, so the
+   * program never holds `a - a`, `b && b` or `v = v`, which the checker
+   * refuses (NL2714, NL2715) and a fuzzed program has no reason to write.
+   * Parentheses and spaces are ignored, which refuses a little more than the
+   * checker does; after eight draws `fallback`, which reads no variable, is
+   * taken.
+   */
+  const bare = (text) => text.replace(/[()\s]/g, "")
+  const distinct = (left, draw, fallback) => {
+    for (let tries = 0; tries < 8; tries++) {
+      const right = draw()
+      if (bare(right) !== bare(left)) {
+        return right
+      }
+    }
+    return fallback()
+  }
+
+  /**
    * Integer expression. `env` lists readable int names, `mutable` those `++` may
    * touch, `boolEnv` the boolean locals already declared, `callable` how many
    * helpers (`h0..h<callable-1>`) may be called.
@@ -147,8 +166,10 @@ const buildProgram = (seed, label, opts = {}) => {
     switch (r.int(0, 13)) {
       case 0:
         return `(${sub()} + ${sub()})`
-      case 1:
-        return `(${sub()} - ${sub()})`
+      case 1: {
+        const left = sub()
+        return `(${left} - ${distinct(left, sub, literal)})`
+      }
       case 2:
         return `(${sub()} * ${sub()})`
       case 3:
@@ -188,6 +209,19 @@ const buildProgram = (seed, label, opts = {}) => {
 
   const boolExpr = (d, env, mutable) => {
     const sub = () => intExpr(d, env, mutable)
+    const compare = (op) => {
+      const left = sub()
+      return `(${left} ${op} ${distinct(left, sub, literal)})`
+    }
+    const logical = (op) => {
+      const left = boolExpr(d - 1, env, mutable)
+      const right = distinct(
+        left,
+        () => boolExpr(d - 1, env, mutable),
+        () => r.pick(["true", "false"])
+      )
+      return `(${left} ${op} ${right})`
+    }
     if (d <= 0 || r.chance(0.15)) {
       if (boolEnv.length > 0 && r.chance(0.5)) {
         return r.pick(boolEnv)
@@ -196,21 +230,21 @@ const buildProgram = (seed, label, opts = {}) => {
     }
     switch (r.int(0, 8)) {
       case 0:
-        return `(${sub()} < ${sub()})`
+        return compare("<")
       case 1:
-        return `(${sub()} <= ${sub()})`
+        return compare("<=")
       case 2:
-        return `(${sub()} > ${sub()})`
+        return compare(">")
       case 3:
-        return `(${sub()} >= ${sub()})`
+        return compare(">=")
       case 4:
-        return `(${sub()} === ${sub()})`
+        return compare("===")
       case 5:
-        return `(${sub()} !== ${sub()})`
+        return compare("!==")
       case 6:
-        return `(${boolExpr(d - 1, env, mutable)} && ${boolExpr(d - 1, env, mutable)})`
+        return logical("&&")
       case 7:
-        return `(${boolExpr(d - 1, env, mutable)} || ${boolExpr(d - 1, env, mutable)})`
+        return logical("||")
       default:
         return `!${boolExpr(d - 1, env, mutable)}`
     }
@@ -386,10 +420,12 @@ const buildProgram = (seed, label, opts = {}) => {
   const statement = (indent, env, mutable, depth) => {
     const pad = " ".repeat(indent)
     const target = r.pick(locals)
+    /** `target = <an int expression of depth d that is not target itself>`. */
+    const store = (d) => `${pad}${target} = ${distinct(target, () => intExpr(d, env, mutable), literal)};`
     switch (r.int(0, 11)) {
       case 0:
       case 1:
-        lines.push(`${pad}${target} = ${intExpr(maxDepth, env, mutable)};`)
+        lines.push(store(maxDepth))
         break
       case 2:
         lines.push(`${pad}${target} ${r.pick(["+=", "-=", "*="])} ${intExpr(maxDepth - 1, env, mutable)};`)
@@ -397,9 +433,16 @@ const buildProgram = (seed, label, opts = {}) => {
       case 3:
         lines.push(`${pad}${target} ${r.pick(["/=", "%="])} nz(${intExpr(maxDepth - 1, env, mutable)});`)
         break
-      case 4:
-        lines.push(`${pad}${r.pick(bools)} = ${boolExpr(maxDepth - 1, env, mutable)};`)
+      case 4: {
+        const b = r.pick(bools)
+        const value = distinct(
+          b,
+          () => boolExpr(maxDepth - 1, env, mutable),
+          () => r.pick(["true", "false"])
+        )
+        lines.push(`${pad}${b} = ${value};`)
         break
+      }
       case 5:
         lines.push(`${pad}${target}${r.pick(["++", "--"])};`)
         break
@@ -422,7 +465,7 @@ const buildProgram = (seed, label, opts = {}) => {
           statement(indent + 2, env, mutable, depth - 1)
           lines.push(`${pad}}`)
         } else {
-          lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`)
+          lines.push(store(2))
         }
         break
       case 10:
@@ -435,7 +478,7 @@ const buildProgram = (seed, label, opts = {}) => {
           }
           lines.push(`${pad}}`)
         } else {
-          lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`)
+          lines.push(store(2))
         }
         break
       default:
@@ -453,7 +496,7 @@ const buildProgram = (seed, label, opts = {}) => {
           lines.push(`${pad}  ${c}--;`)
           lines.push(`${pad}}`)
         } else {
-          lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`)
+          lines.push(store(2))
         }
         break
     }
@@ -485,6 +528,17 @@ const buildProgram = (seed, label, opts = {}) => {
   }
   for (const b of bools) {
     lines.push(`  console.log(${b});`)
+  }
+  if (generics !== null) {
+    // s0 and p0 may only ever be stored into above; reading them here keeps
+    // either from being a local nothing reads (NL2712).
+    const used = [...generics.pick, ...generics.cell]
+    if (used.includes("string")) {
+      lines.push("  console.log(s0);")
+    }
+    if (used.includes("Pt")) {
+      lines.push("  console.log(p0.n);")
+    }
   }
   lines.push("  return 0;")
   lines.push("}")

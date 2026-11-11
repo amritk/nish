@@ -58,7 +58,8 @@ export const main = (): i32 => {
   h.refill(toU8(1));
   console.log(h.tag());
   console.log(borrowed(h.k));
-  console.log(h.k === h.k);
+  const same = h;
+  console.log(h.k === same.k);
   const g = new Holder(9, "b");
   const all: Holder[] = [h, g];
   const alias = all[1];

@@ -232,6 +232,7 @@ cases/fnarg_generic added after R6: no rewriter to freeze it with
 cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
 cases/fnarg_named added after R6: no rewriter to freeze it with
 cases/host_handle_native added after R6: no rewriter to freeze it with
+cases/hygiene_quiet added after R6: no rewriter to freeze it with
 cases/interop_rng_loop added after R6: no rewriter to freeze it with
 cases/io_create_exclusive added after R6: no rewriter to freeze it with
 cases/io_mkdir_mode added after R6: no rewriter to freeze it with
@@ -368,6 +369,7 @@ cases/mem_return_array_caller added after R6: no rewriter to freeze it with
 cases/mem_return_array_nested added after R6: no rewriter to freeze it with
 cases/mem_return_array_readdir added after R6: no rewriter to freeze it with
 cases/mem_return_array_scope added after R6: no rewriter to freeze it with
+cases/mem_scope_tail_call_guards stale since R6: tests/cases/mem_scope_tail_call_guards.ts changed since the rewrite was frozen (7007b3f5b1c983bb -> 44fe61e302e220dd)
 cases/mem_spawn_piped_scope added after R6: no rewriter to freeze it with
 cases/mem_terminal_size_scope added after R6: no rewriter to freeze it with
 cases/mem_using_arena added after R6: no rewriter to freeze it with
@@ -611,6 +613,7 @@ cases/wall_clock added after R6: no rewriter to freeze it with
 cases/wasm_math_std added after R6: no rewriter to freeze it with
 cases/wipe_bytes added after R6: no rewriter to freeze it with
 corpus/bit_fnv1a stale since R6: its flags moved: the store holds `--wrapping` and `corpus/bit_fnv1a.args` now says `(none)`
+corpus/bit_i64 stale since R6: tests/differential/corpus/bit_i64.ts changed since the rewrite was frozen (37bc5d4b4613df3f -> f7c5558235ba86d2)
 corpus/bool_logic stale since R6: its flags moved: the store holds `--wrapping` and `corpus/bool_logic.args` now says `(none)`
 corpus/const_module stale since R6: its flags moved: the store holds `--wrapping` and `corpus/const_module.args` now says `(none)`
 corpus/conversions_roundtrip stale since R6: its flags moved: the store holds `--wrapping` and `corpus/conversions_roundtrip.args` now says `(none)`
@@ -622,3 +625,4 @@ corpus/int_literal_edges stale since R6: its flags moved: the store holds `--wra
 corpus/int_wrap stale since R6: its flags moved: the store holds `--wrapping` and `corpus/int_wrap.args` now says `(none)`
 corpus/prng_lcg stale since R6: its flags moved: the store holds `--wrapping` and `corpus/prng_lcg.args` now says `(none)`
 corpus/recursion stale since R6: its flags moved: the store holds `--wrapping` and `corpus/recursion.args` now says `(none)`
+corpus/u_div_cmp stale since R6: tests/differential/corpus/u_div_cmp.ts changed since the rewrite was frozen (125da26cb0a04763 -> ab00fdaba5a0e935)

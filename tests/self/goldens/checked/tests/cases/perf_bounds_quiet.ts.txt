@@ -12,5 +12,6 @@ function test(): i32 -> @test [exported]
   local +10:7 j: i32 (let)
   local +22:9 fixed: i32[] (const)
   local +23:7 m: i32 (let)
-  local +31:9 at: i32 (const)
-  local +35:14 x: i32 (const)
+  local +31:9 copy: i32 (const)
+  local +32:9 at: i32 (const)
+  local +36:14 x: i32 (const)

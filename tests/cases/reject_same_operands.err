@@ -1,0 +1,1 @@
+Both operands of `===` are `a.w`, so `a.w === a.w` does not depend on its value

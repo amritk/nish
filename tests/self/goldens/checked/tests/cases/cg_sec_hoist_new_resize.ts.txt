@@ -76,9 +76,9 @@ function forOfGrows(xs: i32[]): i32 -> @forOfGrows [exported]
   calls: R.constructor
   pointer xs: size=0 writesThrough=true captured=false passedTo=R.constructor#1
   stackSites=1 stackLocals=1
-  local +0:14 x: i32 (const)
-  local +1:11 r: R (const)
-  callee +1:15 new R -> @R.constructor
+  local +0:14 _x: i32 (const)
+  local +1:11 _r: R (const)
+  callee +1:16 new R -> @R.constructor
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: compoundKeeps compoundNew forOfLoop keepsHoist nish_panic_overflow whileLoop

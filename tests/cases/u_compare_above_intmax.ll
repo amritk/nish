@@ -11,9 +11,11 @@ define noundef i32 @test() #0 {
 entry:
   %big.addr = alloca i32, align 4
   %small.addr = alloca i32, align 4
+  %again.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   store i32 4000000000, i32* %big.addr, align 4
   store i32 7, i32* %small.addr, align 4
+  store i32 4000000000, i32* %again.addr, align 4
   %0 = load i32, i32* %big.addr, align 4
   %1 = load i32, i32* %small.addr, align 4
   %2 = icmp ugt i32 %0, %1
@@ -26,7 +28,7 @@ entry:
   %9 = call i8* @nish_str_concat(i8* %4, i8* %8)
   %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
   %11 = load i32, i32* %big.addr, align 4
-  %12 = load i32, i32* %big.addr, align 4
+  %12 = load i32, i32* %again.addr, align 4
   %13 = icmp uge i32 %11, %12
   %14 = select i1 %13, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
   %15 = call i8* @nish_str_concat(i8* %10, i8* %14)

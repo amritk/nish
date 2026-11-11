@@ -11,3 +11,4 @@ function test(): i32 -> @test [exported]
   local +7:7 n: i32 (let)
   local +11:9 fits: i32 (const)
   local +15:9 shifted: i32 (const)
+  local +16:9 signBit: i32 (const)

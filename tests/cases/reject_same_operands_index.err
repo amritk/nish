@@ -1,0 +1,1 @@
+Both operands of `-` are `xs[i]`, so `xs[i] - xs[i]` does not depend on its value

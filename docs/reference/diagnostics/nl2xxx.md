@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 703 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 709 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -13283,4 +13283,157 @@ export const main = (): i32 => {
 
 ```text
 `User.json` spreads another value into the typed JSON options: typed JSON reads a class's options from its text, where a spread names nothing it can see, so write each option out by name
+```
+
+## NL2712
+
+The message of an error contains:
+
+```text
+…: use it, delete it, or rename it `_…
+```
+
+[`nl2712_unread_local.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2712_unread_local.ts):
+
+```ts
+// NL2712: a local nothing reads is a value the program forgot to use; a name
+// that starts with `_` says it is unused on purpose.
+export const main = (): i32 => {
+  const total: i32 = 2 + 3;
+  const doubled = total * 2;
+  return total;
+};
+```
+
+```text
+`doubled` is declared but never read: use it, delete it, or rename it `_doubled` if it is unused on purpose
+```
+
+## NL2713
+
+The message of an error contains:
+
+```text
+This statement has no effect: its value is computed and thrown away…
+```
+
+[`nl2713_no_effect.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2713_no_effect.ts):
+
+```ts
+// NL2713: a statement with no call, store or `await` in it computes a value
+// and throws it away.
+export const main = (): i32 => {
+  let state: i32 = 0;
+  const next: i32 = 3;
+  state === next;
+  return state;
+};
+```
+
+```text
+This statement has no effect: its value is computed and thrown away (to assign, write `=`); delete it, or use the value
+```
+
+## NL2714
+
+The message of an error contains:
+
+```text
+…` to itself, which does nothing
+```
+
+[`nl2714_self_assign.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2714_self_assign.ts):
+
+```ts
+// NL2714: a value stored into itself does nothing.
+export const main = (): i32 => {
+  let n: i32 = 4;
+  n = n;
+  return n;
+};
+```
+
+```text
+`n = n` assigns `n` to itself, which does nothing
+```
+
+## NL2715
+
+The message of an error contains:
+
+```text
+…` does not depend on its value; one of them is probably meant to be something else (to mean it, copy the value to a second `const` first)
+```
+
+[`nl2715_same_operands.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2715_same_operands.ts):
+
+```ts
+// NL2715: with the same operand on both sides, `===` is always true; the
+// other side was meant to be something else.
+export const main = (): i32 => {
+  const a: i32 = 1;
+  const b: i32 = 2;
+  if (a === a) {
+    return b;
+  }
+  return 0;
+};
+```
+
+```text
+Both operands of `===` are `a`, so `a === a` does not depend on its value; one of them is probably meant to be something else (to mean it, copy the value to a second `const` first)
+```
+
+## NL2716
+
+The message of an error contains:
+
+```text
+…` is already tested by an earlier branch of this `if`, so this branch never runs; test something else, or merge the two branches
+```
+
+[`nl2716_repeated_condition.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2716_repeated_condition.ts):
+
+```ts
+// NL2716: an `else if` that repeats an earlier condition can never run.
+const size = (n: i32): i32 => {
+  if (n > 10) {
+    return 2;
+  } else if (n > 10) {
+    return 3;
+  }
+  return 1;
+};
+
+export const main = (): i32 => size(5) - 1;
+```
+
+```text
+`n > 10` is already tested by an earlier branch of this `if`, so this branch never runs; test something else, or merge the two branches
+```
+
+## NL2717
+
+The message of an error contains:
+
+```text
+…; compare a signed value, or against a bound other than 0
+```
+
+[`nl2717_unsigned_zero.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2717_unsigned_zero.ts):
+
+```ts
+// NL2717: an unsigned value is never below zero, so this test always answers
+// the same.
+export const main = (): i32 => {
+  const n: u32 = toU32(7);
+  if (n < 0) {
+    return 1;
+  }
+  return 0;
+};
+```
+
+```text
+`n` is u32, which is never below 0, so `n < 0` is always false; compare a signed value, or against a bound other than 0
 ```

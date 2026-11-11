@@ -139,7 +139,7 @@ entry:
   %t.addr = alloca double, align 8
   %v.addr = alloca double, align 8
   %walk.idx = alloca i32, align 4
-  %k.addr = alloca double, align 8
+  %_k.addr = alloca double, align 8
   %walk.idx.1 = alloca i32, align 4
   store double 0x0000000000000000, double* %t.addr, align 8
   %0 = getelementptr inbounds %struct.Bag$f64, %struct.Bag$f64* %this, i32 0, i32 0
@@ -185,7 +185,7 @@ walk.cond.1:
 
 walk.body.1:
   %16 = call double @nish.Map$f64$f64.keyAt(%struct.Map$f64$f64* %12, i32 %14)
-  store double %16, double* %k.addr, align 8
+  store double %16, double* %_k.addr, align 8
   %17 = load double, double* %t.addr, align 8
   %18 = fadd double %17, 0x3FF0000000000000
   store double %18, double* %t.addr, align 8
@@ -206,7 +206,7 @@ walk.end.1:
 define internal noundef double @count$str(%struct.Set$str* noundef nonnull align 8 dereferenceable(48) nocapture %s) #0 {
 entry:
   %n.addr = alloca double, align 8
-  %x.addr = alloca i8*, align 8
+  %_x.addr = alloca i8*, align 8
   %walk.idx = alloca i32, align 4
   store double 0x0000000000000000, double* %n.addr, align 8
   call void @nish.Set$str.walkOpen(%struct.Set$str* %s)
@@ -221,7 +221,7 @@ walk.cond:
 
 walk.body:
   %3 = call i8* @nish.Set$str.keyAt(%struct.Set$str* %s, i32 %1)
-  store i8* %3, i8** %x.addr, align 8
+  store i8* %3, i8** %_x.addr, align 8
   %4 = load double, double* %n.addr, align 8
   %5 = fadd double %4, 0x3FF0000000000000
   store double %5, double* %n.addr, align 8
@@ -242,7 +242,7 @@ walk.end:
 define internal noundef double @count$f64(%struct.Set$f64* noundef nonnull align 8 dereferenceable(48) nocapture %s) #0 {
 entry:
   %n.addr = alloca double, align 8
-  %x.addr = alloca double, align 8
+  %_x.addr = alloca double, align 8
   %walk.idx = alloca i32, align 4
   store double 0x0000000000000000, double* %n.addr, align 8
   call void @nish.Set$f64.walkOpen(%struct.Set$f64* %s)
@@ -257,7 +257,7 @@ walk.cond:
 
 walk.body:
   %3 = call double @nish.Set$f64.keyAt(%struct.Set$f64* %s, i32 %1)
-  store double %3, double* %x.addr, align 8
+  store double %3, double* %_x.addr, align 8
   %4 = load double, double* %n.addr, align 8
   %5 = fadd double %4, 0x3FF0000000000000
   store double %5, double* %n.addr, align 8

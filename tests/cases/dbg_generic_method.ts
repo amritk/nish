@@ -11,7 +11,7 @@ class Box<T> {
   }
 
   pair<U>(other: U): T {
-    const kept: U = other;
+    const _kept: U = other;
     return this.value;
   }
 }

@@ -10,6 +10,7 @@ entry:
   %n.addr = alloca i32, align 4
   %fits.addr = alloca i32, align 4
   %shifted.addr = alloca i32, align 4
+  %signBit.addr = alloca i32, align 4
   store i32 70000, i32* %a.addr, align 4
   store i32 40000, i32* %b.addr, align 4
   %0 = load i32, i32* %a.addr, align 4
@@ -26,39 +27,41 @@ entry:
   store i32 %7, i32* %fits.addr, align 4
   %8 = shl i32 1, 31
   store i32 %8, i32* %shifted.addr, align 4
-  %9 = load i64, i64* %wide.addr, align 8
-  %10 = sdiv i64 %9, 100000000
-  %11 = trunc i64 %10 to i32
-  %12 = load i32, i32* %n.addr, align 4
-  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %11, i32 %12)
-  %14 = extractvalue { i32, i1 } %13, 0
-  %15 = extractvalue { i32, i1 } %13, 1
-  br i1 %15, label %ovf.fail, label %ovf.ok
+  %9 = shl i32 1, 31
+  store i32 %9, i32* %signBit.addr, align 4
+  %10 = load i64, i64* %wide.addr, align 8
+  %11 = sdiv i64 %10, 100000000
+  %12 = trunc i64 %11 to i32
+  %13 = load i32, i32* %n.addr, align 4
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %13)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %16 = load i32, i32* %fits.addr, align 4
-  %17 = sub nsw i32 %16, 2147483646
-  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %14, i32 %17)
-  %19 = extractvalue { i32, i1 } %18, 0
-  %20 = extractvalue { i32, i1 } %18, 1
-  br i1 %20, label %ovf.fail, label %ovf.ok.1
+  %17 = load i32, i32* %fits.addr, align 4
+  %18 = sub nsw i32 %17, 2147483646
+  %19 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 %18)
+  %20 = extractvalue { i32, i1 } %19, 0
+  %21 = extractvalue { i32, i1 } %19, 1
+  br i1 %21, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  %21 = load i32, i32* %shifted.addr, align 4
   %22 = load i32, i32* %shifted.addr, align 4
-  %23 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %21, i32 %22)
-  %24 = extractvalue { i32, i1 } %23, 0
-  %25 = extractvalue { i32, i1 } %23, 1
-  br i1 %25, label %ovf.fail, label %ovf.ok.2
+  %23 = load i32, i32* %signBit.addr, align 4
+  %24 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %22, i32 %23)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok.2
 
 ovf.ok.2:
-  %26 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %24)
-  %27 = extractvalue { i32, i1 } %26, 0
-  %28 = extractvalue { i32, i1 } %26, 1
-  br i1 %28, label %ovf.fail, label %ovf.ok.3
+  %27 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %20, i32 %25)
+  %28 = extractvalue { i32, i1 } %27, 0
+  %29 = extractvalue { i32, i1 } %27, 1
+  br i1 %29, label %ovf.fail, label %ovf.ok.3
 
 ovf.ok.3:
-  ret i32 %27
+  ret i32 %28
 
 ovf.fail:
   %ovf.op = phi i32 [ 0, %entry ], [ 0, %ovf.ok ], [ 1, %ovf.ok.1 ], [ 0, %ovf.ok.2 ]

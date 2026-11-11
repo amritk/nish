@@ -5,39 +5,139 @@
 Every Nish type maps 1:1 onto one LLVM first-class type. There is no
 boxing, no runtime type tag, no structural subtyping (except
 `implements`, below), and no implicit conversion of any kind: two values are
-compatible only when their types are identical (`src/types.ts`, where a
-type is interned and two types are the same type exactly when they are the
-same `i32`).
+compatible only when their types are identical.
 
-| Nish | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
-| --- | --- | --- | --- | --- |
-| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Two's-complement; signed overflow panics ([Semantics decisions](semantics-decisions.md)); `wrappingAdd`/`wrappingSub`/`wrappingMul` from [`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping) wrap. |
-| `number` (f64 mode), `f64` | `double` | 8 / 8 | `double` | IEEE-754; `f64` is always available, in both modes. |
-| `f32` | `float` | 4 / 4 | `float` | 32-bit IEEE-754 ([`f32`](#f32)). Half the footprint of an `f64` and twice the SIMD lane count; never the lowering of `number`, and `f32 + f64` is a type error. |
-| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; signed overflow panics (the `nish:unsafe` `wrapping*` functions wrap); literals only by context. |
-| `u8` | `i8` | 1 / 1 | `uint8_t` | [Unsigned integers](#unsigned-integers): the same LLVM type as a signed byte, with unsigned operations. Wrapping arithmetic. |
-| `u16` | `i16` | 2 / 2 | `uint16_t` | As `u8`. |
-| `u32` | `i32` | 4 / 4 | `uint32_t` | Shares `i32`'s LLVM type; `u32 + i32` is still a type error. |
-| `u64` | `i64` | 8 / 8 | `uint64_t` | Shares `i64`'s LLVM type; crosses to JavaScript as a `bigint`, like `i64`. |
-| `boolean` | `i1` | 1 / 1 | `bool` | `zeroext` at the ABI boundary. |
-| `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const nish_str *` in, `nish_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
-| `T[]`, `Array<T>` | `%struct.nish_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
-| `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const nish_array *` in | The same array, with every write refused: [Readonly arrays](builtins.md#readonly-arrays). |
-| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. A receiver spelled with one of the names has no `push` or `pop`, as in TypeScript ([Typed-array names have no `push` or `pop`](builtins.md#typed-array-names-have-no-push-or-pop)). They name the JS typed array a host passes ([wp8-interop.md](https://github.com/amritk/nish/blob/main/docs/wp8-interop.md)). An unsigned array crosses to a host as `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array` ([wp30-bytes-interop.md](https://github.com/amritk/nish/blob/main/docs/wp30-bytes-interop.md)), but those four are **not** spellings in the language: a program writes `u8[]`. |
-| `enum K` | `i32` | 4 / 4 | (not representable) | A **distinct** type, not a spelling of `i32` (`sameType` fails against every other type): [Enums](declarations.md#enums). `K.A` is the member's integer, so nothing is emitted for the declaration. |
-| `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](semantics-decisions.md#memory-model)), no header, no vtable. |
-| `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, narrowing, and a `??` default: [Nullable types](#nullable-types). |
-| `(x: T) => U`, only on a parameter of a top-level function | none: no LLVM parameter, no value | — | (not representable) | Names a callee chosen at each call and compiled into the instantiation's body as a direct call: [Function parameters](declarations.md#function-parameters). |
-| `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](result-and-error-handling.md). |
-| `A \| B`, each a tagged class or interface | `%union.tagged*` to `%union.tagged = type { i32 }`, the tag every variant begins with | 8 / 8 (pointer) | (not representable) | A variant converts by a `bitcast`; only the tag is read: [Discriminated unions](#discriminated-unions). |
-| `void` | `void` | – | `void` | Return type only. |
+Read from the top down as deep as you need: which type to write, what
+behaves differently from TypeScript, how each type sits in memory and
+crosses to C, then the exact rules.
 
-Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`),
-`src/interop-abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`, `str_literal`, `arr_literal`,
-`cls_point`; the ten-struct layout test `tests/layout/structs.ts` (offsets and
-`sizeof` cross-checked against clang, [wp2-classes.md](https://github.com/amritk/nish/blob/main/docs/wp2-classes.md#layout)).
+## Choosing a type
 
-Type rules:
+| To hold | Write |
+| --- | --- |
+| A whole number | `number`, or `i64` beyond ±2³¹ |
+| A fraction | `f64`; `f32` for half the memory or twice the SIMD lanes |
+| A byte, or bits that wrap | `u8`, `u16`, `u32`, `u64` |
+| True or false | `boolean` |
+| Text | `string` |
+| A list | `T[]`, or `readonly T[]` when nothing writes it |
+| A record | `class C`, or `interface I` |
+| One of a fixed set of names | `enum K` |
+| A value or nothing | `T \| null` |
+| One of several kinds of record | `A \| B`, a [tagged union](#discriminated-unions) |
+| A value or an error | `Result<T, E>` |
+| A function the caller picks | `(x: T) => U` on a parameter |
+| No value | `void`, as a return type |
+
+## Coming from TypeScript
+
+- **`number` is one fixed type.** It is `i32` by default and `f64` under
+  `--number-mode f64`; nothing else is ever its lowering. `f64` is available
+  in both modes.
+- **Nothing converts on its own.** Each numeric type is its own type, so
+  `u32 + i32` and `f32 + f64` are type errors. Convert with `toI32`, `toU8`,
+  `toF64` and the rest ([Type rules](#type-rules)).
+- **Signed overflow panics** ([Semantics decisions](semantics-decisions.md)),
+  in `i32` and `i64` alike; `wrappingAdd`, `wrappingSub` and `wrappingMul`
+  from [`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping)
+  wrap instead. [Unsigned integers](#unsigned-integers) always wrap. An
+  `i64` takes a literal only by context.
+- **Strings are immutable.** Sharing one is always safe, and nothing is ever
+  copied.
+- **An array has one element type**, and every index is bounds-checked.
+  `readonly T[]` refuses every write ([Readonly arrays](builtins.md#readonly-arrays)).
+  `Int32Array`, `Float32Array`, `Float64Array` and `BigInt64Array` are only
+  other names for `i32[]`, `f32[]`, `f64[]` and `i64[]` (`sameType` holds,
+  and `new Int32Array(n)` is `new Array<i32>(n)`), except that a receiver
+  spelled with one has no `push` or `pop`, as in TypeScript
+  ([Typed-array names have no `push` or `pop`](builtins.md#typed-array-names-have-no-push-or-pop)).
+- **Only a class, interface, array or string can be `null`.** A nullable
+  value allows only `=== null` / `!== null`, assignment, narrowing and a `??`
+  default ([Nullable types](#nullable-types)).
+- **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
+  against every other type ([Enums](declarations.md#enums)).
+- **A function reports failure with a `Result`**, the only way it can; the
+  payload is unreachable until the discriminant is tested
+  ([Result and error handling](result-and-error-handling.md)).
+- **A function type** is allowed only on a parameter of a top-level
+  function, and names the callee chosen at each call
+  ([Function parameters](declarations.md#function-parameters)).
+
+## In memory and in C
+
+A number, a `boolean` or an `enum` is a plain value. The C column is the
+type `--emit-header` writes; a dash means the type cannot cross to C.
+
+| Type | LLVM | Size / align | C |
+| --- | --- | --- | --- |
+| `i32`, `number` | `i32` | 4 / 4 | `int32_t` |
+| `f64`, `number` in f64 mode | `double` | 8 / 8 | `double` |
+| `f32` | `float` | 4 / 4 | `float` |
+| `i64` | `i64` | 8 / 8 | `int64_t` |
+| `u8` | `i8` | 1 / 1 | `uint8_t` |
+| `u16` | `i16` | 2 / 2 | `uint16_t` |
+| `u32` | `i32` | 4 / 4 | `uint32_t` |
+| `u64` | `i64` | 8 / 8 | `uint64_t` |
+| `boolean` | `i1` | 1 / 1 | `bool` |
+| `enum K` | `i32` | 4 / 4 | — |
+| `void` | `void` | — | `void` |
+
+- Signed integers are two's-complement, and floats IEEE-754. An unsigned
+  type shares the LLVM type of its signed twin, and its signedness lives in
+  the operations ([Unsigned integers](#unsigned-integers)). `i64` and `u64`
+  cross to JavaScript as a `bigint`.
+- A `boolean` is `zeroext` at the ABI boundary.
+- `K.A` is the member's integer, so nothing is emitted for an `enum`
+  declaration.
+
+Every other type is a pointer, 8 bytes and 8-aligned, to:
+
+- **`string`**, LLVM `i8*`: `{ i64 len, i8 data[len], i8 0 }`, 8-aligned and
+  NUL-terminated, so `data` is a C string, and `len` is the UTF-8 byte
+  length. Literals are module constants; every other string lives in the
+  arena. In C, a `const nish_str *` parameter and a `nish_str *` result.
+- **`T[]`**, LLVM `%struct.nish_array*`: a 24-byte header,
+  `{ i64 len, i64 cap, i8* data }`, where `data` holds `cap` elements of
+  `sizeof(T)`. In C, a `const nish_array *` parameter the function only
+  reads, and a `nish_array *` parameter it writes through or a `nish_array *`
+  result.
+- **`readonly T[]`**: the same array, a `const nish_array *` parameter in C.
+- **`Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array`**: the
+  arrays they name. They name the JS typed array a host passes
+  ([wp8-interop.md](https://github.com/amritk/nish/blob/main/docs/wp8-interop.md)). An unsigned array crosses to a host as
+  `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array`
+  ([wp30-bytes-interop.md](https://github.com/amritk/nish/blob/main/docs/wp30-bytes-interop.md)), but those four are
+  **not** spellings in the language: a program writes `u8[]`.
+- **`class C`, `interface I`**, LLVM `%struct.C*`:
+  `%struct.C = type { fields in declaration order }`, laid out as clang lays
+  out the same C struct, with no header and no vtable. An object is arena- or
+  stack-allocated ([Memory model](semantics-decisions.md#memory-model)). Not in C.
+- **`T | null`**: whatever `T` points to; `null` is the constant `null`. Not
+  in C.
+- **`A | B`**, LLVM `%union.tagged*`: `%union.tagged = type { i32 }`, the tag
+  every variant begins with. A variant converts by a `bitcast`, and only the
+  tag is read ([Discriminated unions](#discriminated-unions)). Not in C.
+- **`Result<T, E>`**, LLVM `%struct.nish_result.<T>.<E>*`:
+  `{ i1 ok, T value, E error }`, one struct per pair of payload types, laid
+  out as clang lays out the same C struct. It is **passed and returned** as
+  one `i64` when both payloads are scalars of at most 4 bytes, and as
+  `{ i1, i32, i32 }`, the tag and one slot per arm, between two non-exported
+  functions of one module. In C, a `nish_result_<T>_<E>_word` by value, and a
+  `struct nish_result_<T>_<E> *` otherwise.
+
+A function type, `(x: T) => U`, is no value at all: it has no LLVM type and
+no parameter, and the callee is compiled into the instantiation's body as a
+direct call. Not in C.
+
+Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`; a type is
+interned, and two types are the same type exactly when they are the same
+`i32`),
+`src/interop-abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`,
+`str_literal`, `arr_literal`, `cls_point`; the ten-struct layout test
+`tests/layout/structs.ts` (offsets and `sizeof` cross-checked against clang,
+[wp2-classes.md](https://github.com/amritk/nish/blob/main/docs/wp2-classes.md#layout)).
+
+## Type rules
 
 - **Accepted type syntax**: `number`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
   `f32`, `f64`, `boolean`,

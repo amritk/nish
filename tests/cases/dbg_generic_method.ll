@@ -42,11 +42,11 @@ entry:
 
 define internal noundef i32 @Box$i32.pair$str(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i8* noundef nonnull noalias readonly align 8 %other) #2 !dbg !39 {
 entry:
-  %kept.addr = alloca i8*, align 8
+  %_kept.addr = alloca i8*, align 8
   call void @llvm.dbg.value(metadata %struct.Box$i32* %this, metadata !41, metadata !DIExpression()), !dbg !40
   call void @llvm.dbg.value(metadata i8* %other, metadata !42, metadata !DIExpression()), !dbg !40
-  store i8* %other, i8** %kept.addr, align 8, !dbg !43
-  call void @llvm.dbg.declare(metadata i8** %kept.addr, metadata !45, metadata !DIExpression()), !dbg !43
+  store i8* %other, i8** %_kept.addr, align 8, !dbg !43
+  call void @llvm.dbg.declare(metadata i8** %_kept.addr, metadata !45, metadata !DIExpression()), !dbg !43
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0, !dbg !47
   %1 = load i32, i32* %0, align 4, !tbaa !34, !dbg !47
   ret i32 %1, !dbg !46
@@ -54,11 +54,11 @@ entry:
 
 define internal noundef i32 @Box$i32.pair$i32(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %other) #2 !dbg !50 {
 entry:
-  %kept.addr = alloca i32, align 4
+  %_kept.addr = alloca i32, align 4
   call void @llvm.dbg.value(metadata %struct.Box$i32* %this, metadata !52, metadata !DIExpression()), !dbg !51
   call void @llvm.dbg.value(metadata i32 %other, metadata !53, metadata !DIExpression()), !dbg !51
-  store i32 %other, i32* %kept.addr, align 4, !dbg !54
-  call void @llvm.dbg.declare(metadata i32* %kept.addr, metadata !56, metadata !DIExpression()), !dbg !54
+  store i32 %other, i32* %_kept.addr, align 4, !dbg !54
+  call void @llvm.dbg.declare(metadata i32* %_kept.addr, metadata !56, metadata !DIExpression()), !dbg !54
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0, !dbg !58
   %1 = load i32, i32* %0, align 4, !tbaa !34, !dbg !58
   ret i32 %1, !dbg !57
@@ -116,8 +116,8 @@ attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !41 = !DILocalVariable(name: "this", arg: 1, scope: !39, file: !1, line: 13, type: !13, flags: DIFlagArtificial | DIFlagObjectPointer)
 !42 = !DILocalVariable(name: "other", arg: 2, scope: !39, file: !1, line: 13, type: !36)
 !43 = !DILocation(line: 14, column: 5, scope: !39)
-!44 = !DILocation(line: 14, column: 21, scope: !39)
-!45 = !DILocalVariable(name: "kept", scope: !39, file: !1, line: 14, type: !36)
+!44 = !DILocation(line: 14, column: 22, scope: !39)
+!45 = !DILocalVariable(name: "_kept", scope: !39, file: !1, line: 14, type: !36)
 !46 = !DILocation(line: 15, column: 5, scope: !39)
 !47 = !DILocation(line: 15, column: 12, scope: !39)
 !48 = !{!4, !13, !4}
@@ -127,8 +127,8 @@ attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !52 = !DILocalVariable(name: "this", arg: 1, scope: !50, file: !1, line: 13, type: !13, flags: DIFlagArtificial | DIFlagObjectPointer)
 !53 = !DILocalVariable(name: "other", arg: 2, scope: !50, file: !1, line: 13, type: !4)
 !54 = !DILocation(line: 14, column: 5, scope: !50)
-!55 = !DILocation(line: 14, column: 21, scope: !50)
-!56 = !DILocalVariable(name: "kept", scope: !50, file: !1, line: 14, type: !4)
+!55 = !DILocation(line: 14, column: 22, scope: !50)
+!56 = !DILocalVariable(name: "_kept", scope: !50, file: !1, line: 14, type: !4)
 !57 = !DILocation(line: 15, column: 5, scope: !50)
 !58 = !DILocation(line: 15, column: 12, scope: !50)
 !59 = !{i32 8, !"cf-protection-branch", i32 1}

@@ -268,7 +268,9 @@ const FAMILIES = {
       helpers: ["fill"],
       lines: [
         `const a = fill(${n}, ${r.int(0, 5)});`,
-        "const n = a.length;",
+        // Read only by the one-past loop below; `_n` in the other keeps it
+        // from being a local nothing reads (NL2712).
+        `const ${past ? "n" : "_n"} = a.length;`,
         `for (let i = 0; i < ${k}; i++) {`,
         "  s += a.pop();",
         "}",
@@ -349,7 +351,7 @@ const FAMILIES = {
         helpers: ["fill", "shrink"],
         lines: [
           fill,
-          "const n = a.length;",
+          `const ${past ? "n" : "_n"} = a.length;`,
           "shrink(a);",
           `for (let i = 0; i < ${past ? "n" : "a.length"}; i++) {`,
           "  s += a[i];",

@@ -213,6 +213,59 @@ const f = (): i32 => {
 export const main = (): i32 => f();
 ```
 
+## Mistakes that type-check are refused too
+
+Some lines have nothing wrong with their types and still cannot be what you
+meant. Nish refuses them, where other compilers warn or say nothing:
+
+- a local that nothing reads, or that is only stored into, such as a counter
+  bumped with `n++` and never reported;
+- a statement that does nothing, such as `a === b;` written for `a = b;`;
+- a value assigned to itself, `p.x = p.x`;
+- the same operand on both sides of an operator, `a.w === a.w` or
+  `xs[i] - xs[i]`;
+- an `else if` that repeats an earlier condition of the same `if`, so its
+  branch can never run;
+- an unsigned value tested for its sign, `u < 0`, which is always false.
+
+```ts nish:err NL2716
+const size = (n: i32): string => {
+  if (n > 10) {
+    return "big";
+  } else if (n > 10) {
+    return "huge";
+  }
+  return "small";
+};
+export const main = (): i32 => {
+  console.log(size(500));
+  return 0;
+};
+```
+
+Each rule has a way to say you meant it. Start a name with `_` and it is
+never reported unread, which is how a loop that only counts its turns is
+written. Copy a value to a second `const` to compare it with itself. On
+`f32` and `f64`, `x !== x` stays the test for NaN:
+
+```ts nish:ok
+export const main = (): i32 => {
+  let turns = 0;
+  for (const _item of [1, 2, 3]) {
+    turns++;
+  }
+  const zero: f64 = toF64(0);
+  const nan: f64 = zero / zero;
+  console.log(`${turns} ${nan !== nan}`);
+  return 0;
+};
+```
+
+These errors are reported only once a program has no other error, so a
+mistake that stops it compiling is always listed first.
+[LANGUAGE.md](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#mistakes-every-type-accepts)
+has the exact rules.
+
 ## Checked arithmetic
 
 On `i32` and `i64`, `+`, `-`, `*`, unary `-`, `++`, `--` and the compound

@@ -4001,6 +4001,29 @@ for (const name of [
   )
 }
 
+// ---- The mistakes every type accepts wait for every other rule (src/hygiene.ts) ---------
+// `reject_hygiene_held` has a type error and an unread local. The local's
+// finding is held until everything else passes, so the count is what says the
+// type error was reported alone; a `.err` substring could not.
+for (const name of ["reject_hygiene_held"]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  const at = selectedCases.indexOf(name)
+  const r = at < 0 ? null : caseResults[at]
+  const errors =
+    r === null
+      ? []
+      : String(r.stderr)
+          .split("\n")
+          .filter((l) => /:\d+:\d+: error: /.test(l))
+  check(
+    `${name}: an unread local is not reported beside the type error that stops the program`,
+    r !== null && r.status === 1 && errors.length === 1,
+    r === null ? "(no such case)" : String(r.stderr)
+  )
+}
+
 // ---- A handle case reports exactly its own refusals (WP40 H1.1) -----------------------
 // The same blind spot for the handle pass: each `.err` line names one refusal,
 // and the count says nothing else was found, so a check that starts firing

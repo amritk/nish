@@ -4,6 +4,7 @@
 export function test(): number {
   const big: u32 = 4000000000;
   const small: u32 = 7;
-  console.log(`${big > small} ${big < small} ${big >= big} ${small <= big}`);
+  const again: u32 = 4000000000;
+  console.log(`${big > small} ${big < small} ${big >= again} ${small <= big}`);
   return 0;
 }

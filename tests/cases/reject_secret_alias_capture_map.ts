@@ -8,5 +8,5 @@ export const main = (): i32 => {
   const ys = parallelMap(xs, (i: i32): i32 => toI32(raw[i]));
   const key: Secret<u8[]> = secret(raw);
   wipe(key);
-  return 0;
+  return ys.length - 3;
 };
