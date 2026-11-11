@@ -41,6 +41,10 @@ export const partialReferenceMessage = (name: string, rest: boolean): string =>
 export const referenceUseMessage = (shown: string): string =>
   `\`${shown}\` is a function reference: it can be called, compared, stored and passed, nothing else`
 
+/** The refusal for `new Array<S>(n)` of a function type, whose zero is no function's tag. */
+export const zeroFilledReferenceMessage = (spelled: string): string =>
+  `\`new Array<${spelled}>(n)\` would zero-fill with 0, which names no function; build it with \`[]\` and \`push\` instead`
+
 /**
  * `name` in a value position, where it names a top-level function: the
  * reference type of its signature, `T_ERROR` after a refusal, or -1 when no

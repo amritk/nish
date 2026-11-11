@@ -930,6 +930,13 @@ export const reduceElementMessage = (
       `the array its workers write, which a \`${spelled}\` cannot hold; declare the body to answer \`${table.typeName(table.enumBase(result))}\``
     )
   }
+  // WP51 §2.1: nor a function reference, whose zero is no function's tag.
+  if (table.isFnRef(result)) {
+    return (
+      `\`${functions[0].sourceName}\` answers the function reference \`${table.typeName(result)}\`, and ` +
+      `\`${intrinsic}\` zero-fills the array its workers write, where 0 names no function; answer an index into an array of references instead`
+    )
+  }
   const serial = serialRemedy(program, table, intrinsic, call, result)
   return role === PAR_REDUCE
     ? resultWording(table, intrinsic, functions[0], result, serial)

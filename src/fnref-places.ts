@@ -53,7 +53,7 @@ import {
 import { ParentTable } from "./parents"
 import { CheckedProgram, ConstInfo, FunctionBindings, FunctionSig, Instantiation, ROLE_FUNCTION } from "./program"
 import { Local, Scope, STORAGE_PARAM } from "./symbols"
-import { T_I32, T_VOID, TypeTable } from "./types"
+import { T_ERROR, T_I32, T_VOID, TypeTable } from "./types"
 
 /** One module as the pass sees it: what it checked, its context, its tree and its parents. */
 export class RefModule {
@@ -134,7 +134,10 @@ class RefPass {
   }
 
   typeOf(node: Node): i32 {
-    return node.id >= 0 && node.id < this.types.length ? this.types[node.id] : -1
+    // A node the checker gave no type, such as `console` in `console.log`,
+    // reads as the error type: every table predicate answers false for it.
+    const type = node.id >= 0 && node.id < this.types.length ? this.types[node.id] : -1
+    return type < 0 ? T_ERROR : type
   }
 
   newPlace(type: i32): i32 {
