@@ -240,6 +240,8 @@ const PG_ASYNC_QUEUE_WRAP: i32 = 1073741824
 const PG_ASYNC_LANES: i32 = 128
 // What a query reads first; it grows by doubling up to one `maxMessage`.
 const PG_ASYNC_INPUT_SIZE: i32 = 8192
+// Loop turns a seat yields for its turn before it parks on its slot's wake.
+const PG_ASYNC_TURN_YIELDS: i32 = 4
 // ReadyForQuery's transaction status for "idle", outside any transaction.
 const PG_ASYNC_IDLE: i32 = 73
 const PG_ASYNC_NONCE_BYTES: i32 = 18
@@ -1533,6 +1535,7 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
   }
   pool.seatWaiting[seat] = 1
   let gaveUp: boolean = false
+  let yields: i32 = 0
   while (pool.served[s] !== seq && !pgAsyncLostSeat(pool, seat)) {
     if (cancelled()) {
       gaveUp = true
@@ -1541,6 +1544,11 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
     const ahead: i32 = pgAsyncSkippable(pool, s)
     if (ahead >= 0) {
       await pgAsyncSkip(pool, s, ahead)
+    } else if (yields < PG_ASYNC_TURN_YIELDS) {
+      // The answer ahead is usually read within a turn or two of the loop:
+      // yielding costs no system call, where parking on the wake costs six.
+      yields += 1
+      await sleep(0)
     } else {
       pool.turnWaits += 1
       await pgAsyncPark(pool, s, -1)
