@@ -121,7 +121,7 @@ and a `string` return (`reject_ffi_string_return`) until S3.2 did; a
 `string[]` is refused in either position (`reject_ffi_string_array_param`,
 `reject_ffi_string_array_return`), as is every other array, save the one
 exception: a `u8[]` or `readonly u8[]` parameter followed by its `u64` count,
-which WP40 B1.1 accepts ([wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md)
+which WP53 B1.1 accepts ([wp53-ffi-buffers-handles.md](wp53-ffi-buffers-handles.md)
 §3a). A `u8[]` return stays refused there too (`reject_ffi_buffer_return`).
 
 ## 5. What FFI costs the test strategy
@@ -171,8 +171,8 @@ struct, not a `nish_str *`.
   `_type_argument_fn`). The type-argument clause is checked where a generic
   function or class is instantiated (`reject_ffi_pointer_type_argument`), so
   `new Empty<CPtr>()` is refused for a template that never mentions `T` in a
-  member (`class Empty<T> { n: i32 = 0; }`), closed with WP40 H1.1. A class
-  with a `CPtr` field is a handle class since WP40 (§4a); the field rule
+  member (`class Empty<T> { n: i32 = 0; }`), closed with WP53 H1.1. A class
+  with a `CPtr` field is a handle class since WP53 (§4a); the field rule
   holds for an interface and for any second pointer field.
 
 The name is PascalCase where the language's own types are lower case on
@@ -504,7 +504,7 @@ Still refused, each by name, each with a `reject_*` case:
   most-asked-for shape (`read`, `write`, compression and hashing libraries)
   and is not a string, because it carries a length and may be written, so it
   was designed separately rather than folded in:
-  [wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md). Its B1.1 stage
+  [wp53-ffi-buffers-handles.md](wp53-ffi-buffers-handles.md). Its B1.1 stage
   accepts the parameter with its `u64` count in a declaration, and B1.2
   lowers a call to one, checking the count (`ffi-length`).
 - A Nish function passed as a C callback: a function pointer, and with it a

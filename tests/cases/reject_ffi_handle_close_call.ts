@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 22 (Q9 option A): only the dispose closes the pointer the
+// WP53 H1.1, Row 22 (Q9 option A): only the dispose closes the pointer the
 // object owns; a close in a method would be followed by the `using` block's.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

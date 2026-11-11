@@ -1,4 +1,4 @@
-// WP40 B1.1: a `declare function` takes a `u8[]` or a `readonly u8[]` in a
+// WP53 B1.1: a `declare function` takes a `u8[]` or a `readonly u8[]` in a
 // run that one `u64` closes, the byte count C may touch in each buffer of the
 // run. `memcpy` is one run of two buffers sharing a count, `getentropy` a
 // writable buffer, and `compare` two runs with a count each. The declarations

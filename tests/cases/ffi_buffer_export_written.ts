@@ -1,4 +1,4 @@
-// WP40 B1.2: C writes through a non-`readonly` `u8[]` it is passed, and the
+// WP53 B1.2: C writes through a non-`readonly` `u8[]` it is passed, and the
 // compiler records the write against the parameter the buffer came from. So
 // the exported `fill`'s `b` keeps no `readonly` in the IR, renders in the C
 // header as `nish_array *b` rather than `const`. `peek`, which only hands its

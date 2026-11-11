@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 12: a field whose type is a handle class would keep the handle
+// WP53 H1.1, Row 12: a field whose type is a handle class would keep the handle
 // past its close.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

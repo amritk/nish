@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 14: nullability lives in the field, not in the object, so
+// WP53 H1.1, Row 14: nullability lives in the field, not in the object, so
 // `File | null` is refused.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

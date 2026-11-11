@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d: a function type naming a handle class would let a function
+// WP53 H1.1, §4d: a function type naming a handle class would let a function
 // taking one be a value.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

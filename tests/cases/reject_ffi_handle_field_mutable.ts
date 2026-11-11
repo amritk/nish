@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 33: the pointer field is `readonly`.
+// WP53 H1.1, Row 33: the pointer field is `readonly`.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

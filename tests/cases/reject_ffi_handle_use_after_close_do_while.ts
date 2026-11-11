@@ -1,4 +1,4 @@
-// WP40 H1.3, §4c: a `do` body's `using` closes at the end of the body, just
+// WP53 H1.3, §4c: a `do` body's `using` closes at the end of the body, just
 // before its condition runs; the condition cannot read the handle.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

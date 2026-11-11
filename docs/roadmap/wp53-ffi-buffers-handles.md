@@ -1,6 +1,6 @@
-# WP40: Buffers and handles across `declare function`
+# WP53: Buffers and handles across `declare function`
 
-**State:** Landed · **Done:** 1 of 1 · **Design note:** [`docs/wp40-ffi-buffers-handles.md`](https://github.com/amritk/nish/blob/main/docs/wp40-ffi-buffers-handles.md)
+**State:** Landed · **Done:** 1 of 1 · **Design note:** [`docs/wp53-ffi-buffers-handles.md`](https://github.com/amritk/nish/blob/main/docs/wp53-ffi-buffers-handles.md)
 
 ## Stages
 

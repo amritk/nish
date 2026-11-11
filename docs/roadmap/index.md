@@ -104,7 +104,6 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP35: The capability report](wp35-capabilities.md) | Landed | 1 of 1 |
 | [WP36: The capability policy](wp36-capability-policy.md) | Landed | 1 of 1 |
 | [WP40: Dependency capabilities](wp40-dependency-capabilities.md) | Landed | 1 of 1 |
-| [WP40: Buffers and handles across `declare function`](wp40-ffi-buffers-handles.md) | Landed | 1 of 1 |
 | [WP42: A multi-core server from pre-forked processes](wp42-multicore-server.md) | Landed | 1 of 1 |
 | [WP44: Streaming file reads](wp44-streaming-files.md) | Landed | 4 of 4 |
 | [WP45: Name resolution: a DNS stub resolver](wp45-name-resolution.md) | Landed | 1 of 1 |
@@ -112,6 +111,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP48: Compressed 32-bit references](wp48-compressed-references.md) | Landed | 2 of 4 |
 | [WP50: A WebAssembly module a TypeScript page drives](wp50-wasm-host.md) | Landed | 6 of 6 |
 | [WP52: Fast rebuilds for `nish run`](wp52-run-rebuilds.md) | Landed | 1 of 2 |
+| [WP53: Buffers and handles across `declare function`](wp53-ffi-buffers-handles.md) | Landed | 1 of 1 |
 | [WP24: `async`/`await`](wp24-async.md) | Superseded | 3 of 4 |
 | [WP41: A wide multiply](wp41-mul-wide.md) | Declined | 1 of 1 |
 

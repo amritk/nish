@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 29: a handle passed to a builtin is neither a call on it nor a
+// WP53 H1.1, Row 29: a handle passed to a builtin is neither a call on it nor a
 // lend to a parameter of its type.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

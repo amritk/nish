@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d member access: `f[k]` is not a receiver.
+// WP53 H1.1, §4d member access: `f[k]` is not a receiver.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

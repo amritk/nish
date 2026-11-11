@@ -1,4 +1,4 @@
-// WP40 H1.2: the siblings of `ffi_handle_file`'s exits. Nested `using` blocks
+// WP53 H1.2: the siblings of `ffi_handle_file`'s exits. Nested `using` blocks
 // close innermost first, on falling through and on an early `return` from the
 // inner block; a `while` body closes once per iteration; a `using` in a
 // constructor closes before `new` hands the object back; and a `using` in a

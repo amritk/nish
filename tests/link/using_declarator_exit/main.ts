@@ -1,4 +1,4 @@
-// WP40 H1.2, Q12(a): each declarator of a `using` opens before the next one's
+// WP53 H1.2, Q12(a): each declarator of a `using` opens before the next one's
 // initialiser runs, so an `orReturn()` in a later initialiser leaves with the
 // earlier declarators open, and they are released on that edge. `lockFirst`
 // holds the lock when the file's path fails; the function locks the same

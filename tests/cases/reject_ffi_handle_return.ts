@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 8: a function returning a handle would hand it past the
+// WP53 H1.1, Row 8: a function returning a handle would hand it past the
 // `using` block that closes it.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

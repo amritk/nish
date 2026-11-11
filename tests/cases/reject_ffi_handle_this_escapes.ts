@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 3: `this` of a handle class is used only as a receiver or lent
+// WP53 H1.1, Row 3: `this` of a handle class is used only as a receiver or lent
 // to a parameter of its type; a `const` bound to it would be a second name for
 // the object.
 declare function fopen(path: string, mode: string): CPtr | null

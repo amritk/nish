@@ -1,4 +1,4 @@
-// WP40 H1.2: a `using` of a handle class closes it at every exit of its block,
+// WP53 H1.2: a `using` of a handle class closes it at every exit of its block,
 // once. The driver (`ffi_handle_file.c`) wraps `fopen` and `fclose` so each
 // open and close prints its file's number; a second close of one file, or a
 // file left open when the driver checks, is printed too. Each export below

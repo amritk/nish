@@ -1,4 +1,4 @@
-// WP40 B1.2: each buffer of a run is checked against the run's count. The
+// WP53 B1.2: each buffer of a run is checked against the run's count. The
 // count is `dst`'s length, proven for `dst`; `src` is the shorter array, so
 // its check fails before C copies a byte past its end.
 declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;
