@@ -5337,6 +5337,9 @@ const differsFrom = (f: FunctionFacts, g: FunctionFacts): string => {
   if (!sameParams(f, g)) {
     return "pointer parameters"
   }
+  if (f.leaksItself !== g.leaksItself) {
+    return "leaksItself"
+  }
   return ""
 }
 

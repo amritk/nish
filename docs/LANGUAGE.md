@@ -12741,11 +12741,12 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   program keeps on purpose — an array it pushes onto for its whole run — is
   listed with the line that keeps it. It does not measure memory at run time.
 - `--explain-memory` changes no byte of the IR. `nish run` accepts it. A build
-  `--deny-retention` refuses still prints the report, after the errors, since
-  it says why each refused loop keeps its memory. With `--emit-ast`, which
-  stops before the facts exist, with `--json`, whose stderr is diagnostic
-  objects only, and with `--fix`, which compiles nothing, it is a usage error
-  (exit 2).
+  refused after the analysis has run (by `--deny-retention`, or a check that
+  follows it) still prints the report after the errors, since it says why each
+  refused loop keeps its memory; one refused earlier prints none. With
+  `--emit-ast`, which stops before the facts exist, with `--json`, whose
+  stderr is diagnostic objects only, and with `--fix`, which compiles nothing,
+  it is a usage error (exit 2).
 
 ## Forbidden constructs (Phase 0 validator)
 

@@ -3067,6 +3067,35 @@ const ownLeak = (facts: FactsTable, f: FunctionFacts, seen: FunctionFacts[]): Fu
   return leaksBelow ? null : f
 }
 
+/**
+ * The first allocation `f` itself holds past its return, the one
+ * `leaksItself` stands for: a site of its own whose flow leaks, or a call
+ * to an allocating callee whose result does. `null` when none is on record.
+ */
+const ownLeakNode = (facts: FactsTable, f: FunctionFacts): Node | null => {
+  let first: Node | null = null
+  let i = 0
+  while (i < f.arenaNodes.length && i < f.arenaFlows.length) {
+    const node = f.arenaNodes[i]
+    if (f.arenaFlows[i] === FLOW_LEAKS && (first === null || node.start < first.start)) {
+      first = node
+    }
+    i = i + 1
+  }
+  for (const site of f.callSites) {
+    const g = facts.get(site.callee)
+    if (
+      site.flow === FLOW_LEAKS &&
+      g !== null &&
+      g.allocates &&
+      (first === null || site.node.start < first.start)
+    ) {
+      first = site.node
+    }
+  }
+  return first
+}
+
 /** Whether `list` holds `f`. */
 const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
   for (const g of list) {
@@ -3315,10 +3344,12 @@ const keptReason = (
   // A leak of its own is the one to fix first: a callee's would not
   // give this function its scope back while its own remains.
   if (f.leaksItself) {
+    const held = ownLeakNode(facts, f)
+    const heldLine = held === null ? line : program.source.lineOf(held.start)
     return (
       "an allocation it makes is held where this analysis does not prove it dead when it returns (a local " +
       "assigned more than once, an array of its own, or a callee that keeps its argument); the first " +
-      `allocation it holds is on line ${line}`
+      `allocation it holds is on line ${heldLine}`
     )
   }
   // What a callee leaves behind is the caller's to release, and with no

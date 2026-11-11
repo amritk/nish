@@ -1684,6 +1684,18 @@ function ownLeak(facts: FactsTable, f: FunctionFacts, seen: FunctionFacts[]): Fu
   callee -1:12 holdsFacts -> @holdsFacts
   local +1:15 found: FunctionFacts | null (const)
   callee +1:23 ownLeak -> @ownLeak
+function ownLeakNode(facts: FactsTable, f: FunctionFacts): Node | null -> @ownLeakNode
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FactsTable.get
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer f: size=416 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 first: Node | null (let)
+  local +1:7 i: i32 (let)
+  local +3:11 node: Node (const)
+  local +9:14 site: CallSite (const)
+  local +10:11 g: FunctionFacts | null (const)
+  callee +10:15 FactsTable.get -> @FactsTable.get
 function holdsFacts(list: FunctionFacts[], f: FunctionFacts): boolean -> @holdsFacts
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer list: size=0 writesThrough=false captured=false
@@ -1797,11 +1809,11 @@ function firstLeavingCall(program: CheckedProgram, table: TypeTable, facts: Fact
 function keptReason(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f: FunctionFacts, noElision: boolean, kept: Node): string -> @keptReason
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via leakRoot
-  calls: FactsTable.get SourceFile.lineOf calleeAt leakRoot leavesMemory nish_panic_index nish_str_concat nish_str_from_i32 noScopeReason
+  calls: FactsTable.get SourceFile.lineOf calleeAt leakRoot leavesMemory nish_panic_index nish_str_concat nish_str_from_i32 noScopeReason ownLeakNode
   pointer unit: size=16 writesThrough=false captured=false passedTo=noScopeReason#0
   pointer table: size=96 writesThrough=false captured=false passedTo=leavesMemory#1 calleeAt#1
-  pointer facts: size=24 writesThrough=false captured=false passedTo=noScopeReason#1 leavesMemory#2 FactsTable.get#0 leakRoot#0
-  pointer f: size=416 writesThrough=true captured=true passedTo=noScopeReason#2 leakRoot#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=noScopeReason#1 ownLeakNode#0 leavesMemory#2 FactsTable.get#0 leakRoot#0
+  pointer f: size=416 writesThrough=true captured=true passedTo=noScopeReason#2 ownLeakNode#1 leakRoot#1
   pointer kept: size=40 writesThrough=false captured=false passedTo=leavesMemory#3 calleeAt#2
   stackSites=0 stackLocals=0
   local +0:9 reason: string (const)
@@ -1809,13 +1821,17 @@ function keptReason(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f: 
   local +10:9 program: CheckedProgram (const)
   local +11:9 line: i32 (const)
   callee +11:16 SourceFile.lineOf -> @SourceFile.lineOf
-  local +25:9 callee: FunctionSig | null (const)
-  callee +25:38 leavesMemory -> @leavesMemory
-  callee +26:7 calleeAt -> @calleeAt
-  local +29:11 what: string (const)
-  callee +29:18 FactsTable.get -> @FactsTable.get
-  local +32:9 root: FunctionFacts | null (const)
-  callee +32:53 leakRoot -> @leakRoot
+  local +15:11 held: Node | null (const)
+  callee +15:18 ownLeakNode -> @ownLeakNode
+  local +16:11 heldLine: i32 (const)
+  callee +16:45 SourceFile.lineOf -> @SourceFile.lineOf
+  local +27:9 callee: FunctionSig | null (const)
+  callee +27:38 leavesMemory -> @leavesMemory
+  callee +28:7 calleeAt -> @calleeAt
+  local +31:11 what: string (const)
+  callee +31:18 FactsTable.get -> @FactsTable.get
+  local +34:9 root: FunctionFacts | null (const)
+  callee +34:53 leakRoot -> @leakRoot
 function explainLoops(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f: FunctionFacts, noElision: boolean, isMain: boolean, node: Node, pass: LoopScope | null, block: Node | null, out: MemoryReport): void -> @explainLoops
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
