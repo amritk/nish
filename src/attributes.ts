@@ -161,6 +161,7 @@ import {
   FunctionSig,
   inlineElementStruct,
   JSON_DECODE,
+  JSON_DECODE_UNION,
   JSON_NONE,
   MAP_GET_OR_INSERT,
   PAR_MAP,
@@ -4676,6 +4677,8 @@ const markShmWindow = (facts: FunctionFacts): BodilessStance => {
  *     parameter, as a parallel entry does, and that what it allocates escapes:
  *     no loop, arena scope or `using a = arena()` block around a call
  *     reclaims it (NL2424 refuses the block).
+ *   - `jsonDecodeUnion` is a decoding that answers `prev` or a variant it
+ *     made, so `prev` outlives the call and the result is an allocation.
  */
 const markJsonRoute = (
   program: CheckedProgram,
@@ -4696,7 +4699,8 @@ const markJsonRoute = (
       receiver.passedToIndices.push(0)
     }
   }
-  if (jsonRouteOf(sig) !== JSON_DECODE) {
+  const route = jsonRouteOf(sig)
+  if (route !== JSON_DECODE && route !== JSON_DECODE_UNION) {
     return new BodilessStance(statesNothing(), statesNothing(), false)
   }
   facts.effect = EFFECT_WRITE
@@ -4708,9 +4712,12 @@ const markJsonRoute = (
   facts.allocEscapes = true
   facts.callees.add("nish_array_grow")
   handsParamsTo(facts, "nish_alloc_struct")
+  // A union's decoding answers `prev`, or an object it made.
+  facts.returnsAllocation = route === JSON_DECODE_UNION
   // What it makes is stored below `out`: a region or a task that hands it
   // an object of another's is told so (`judgeCallee`), as for a body that
-  // stores a fresh allocation there. And it is kept there past the call.
+  // stores a fresh allocation there. And it is kept there past the call,
+  // which is also what a union's `prev`, answered back, needs.
   const each = new ParamStance(STANCE_WRITES_DEEP, STANCE_KEEPS_PAST, true)
   return new BodilessStance(each, each, true)
 }

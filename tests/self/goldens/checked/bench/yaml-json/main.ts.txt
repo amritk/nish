@@ -163,6 +163,7 @@ struct JsonTokenizer (class) size=96 align=8 exported
   method isIntegral -> @nish.JsonTokenizer.isIntegral
   method numberF64 -> @nish.JsonTokenizer.numberF64
   method numberSlow -> @nish.JsonTokenizer.numberSlow
+  method rewindObject -> @nish.JsonTokenizer.rewindObject
   method skipValue -> @nish.JsonTokenizer.skipValue
 function JsonLimits.constructor(this: JsonLimits): void -> @nish.JsonLimits.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -694,6 +695,13 @@ function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokeniz
   local +0:11 src: u8[] (const)
   local +1:11 start: i32 (const)
   local +2:11 end: i32 (const)
+function JsonTokenizer.rewindObject(this: JsonTokenizer, start: i32): void -> @nish.JsonTokenizer.rewindObject [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: start
+  calls: nish_panic_overflow
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function JsonTokenizer.skipValue(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.skipValue [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next

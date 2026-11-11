@@ -1,1 +1,1 @@
-`User.json` has no option `renames`: typed JSON's options are `rename` and `optional`, and `presence`
+`User.json` has no option `renames`: typed JSON's options are `rename` and `optional`, and `presence` and `tag`

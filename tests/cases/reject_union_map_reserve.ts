@@ -1,8 +1,10 @@
-// A `Map`'s value is a type argument.
+// A `Map`'s value may be a union, but nish/map's `reserve` is a generic
+// function, and a union is not a generic's type argument (NL2533).
+import { reserve } from "nish/map";
+
 enum Kind {
   Circle,
   Square,
-  Tri,
 }
 
 class Circle {
@@ -17,9 +19,8 @@ class Square {
 
 type Shape = Circle | Square;
 
-const pick = (n: i32): Shape => (n > 0 ? new Circle() : new Square());
-
 export const main = (): void => {
   const m = new Map<string, Shape>();
+  reserve(m, 4);
   console.log(m.size);
 };

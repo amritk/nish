@@ -1,0 +1,1 @@
+`A` writes its tag `kind` under the key `"kind"` and `B` under `"type"`: a decoder finds a union's tag before it knows which variant the object is, so every variant of a union writes its tag under the same key

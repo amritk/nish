@@ -1563,6 +1563,15 @@ export const emitPushValue = (emitter: Emitter, arr: string, elem: i32, value: s
 export const emitElementAt = (emitter: Emitter, arr: string, elem: i32, idx: string): string =>
   loadElement(emitter, new ArrayBase(arr, null), elem, idx)
 
+/** Write `value` into element `idx` (an i64 the caller has bounds-checked) of the array `arr`. */
+export const emitSetElementAt = (
+  emitter: Emitter,
+  arr: string,
+  elem: i32,
+  idx: string,
+  value: string
+): void => storeElement(emitter, elementPointer(emitter, new ArrayBase(arr, null), elem, idx), elem, value)
+
 /** A new empty array in the arena, as `[]` makes one. */
 export const emitEmptyArray = (emitter: Emitter): string => {
   emitter.declareType(ARRAY_TYPE)

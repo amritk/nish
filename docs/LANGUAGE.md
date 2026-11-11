@@ -801,6 +801,8 @@ type Shape = Circle | Square;
 const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
 ```
 
+Typed JSON reads and writes a union of classes by its tag ([Typed JSON](#typed-json-nishjson-typed)).
+
 **Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
 behind a pointer. Every variant begins with its `i32` tag, so a variant
 pointer is a union pointer by a `bitcast`, and reading the tag is a
@@ -849,7 +851,9 @@ and each has its own code:
 
 **Where a union goes.** A union is the type of a local, a parameter, a
 field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
-spelled in place, `(Circle | Square)[]`), or of any of those made nullable.
+spelled in place, `(Circle | Square)[]`), or of any of those made nullable,
+and a `Map`'s value is any of those: `Map<string, Shape>`,
+`Map<string, Shape[]>`, `Map<string, Shape | null>` (`union_map_value`).
 An alias may name another union, which is flattened: with `type Round =
 Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
 of a variant, or of a union whose variants are all the wider union's,
@@ -1110,12 +1114,17 @@ boundary, so no other `i32` reaches it.
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
   narrows nothing, and is accepted. A test of the tag does narrow (above).
-- **No union type arguments.** `Box<Shape>`, a generic function or method
-  whose type parameter would bind to a union, `Map<K, Shape>` and
+- **No union type arguments, but a `Map`'s value.** `Box<Shape>`, a generic
+  function or method whose type parameter would bind to a union, and
   `Result<Shape, E>` / `Result<T, Shape>` are NL2533
   (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
-  `reject_union_generic_method`, `reject_union_map_value`,
-  `reject_union_result_ok`, `reject_union_result_err`). A union is not a
+  `reject_union_generic_method`, `reject_union_result_ok`,
+  `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
+  its value as it is, the way an array stores an element of a union, and
+  `get` gives `Shape | undefined` (`union_map_value`). The `Map` here is the
+  built-in one and its methods: `nish/map`'s `getOrInsert` and `reserve` are
+  generic functions, so one called on a `Map<K, Shape>` binds `V` to the union
+  and is NL2533 as any generic call is. A union is not a
   `Map` or `Set` key, which is the key rule's refusal
   (`reject_union_map_key`, `reject_union_set`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary
@@ -2304,8 +2313,10 @@ and their `.ll` goldens are byte-identical files.
     `_field_init_level`, `_field_init_unknown`, `_field_init_i32`,
     `_field_init_dotted`).
   - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
-    it reads an enum as any of its members, which a member type cannot hold. A
-    member type crosses to C and JavaScript exactly where its enum does, which
+    it reads an enum as any of its members, which a member type cannot hold.
+    The one exception is a union's tag: a member that tags a variant of a
+    union is written as its name, the union's [typed JSON](#typed-json-nishjson-typed)
+    tag (`tests/link/json_tagged_union`). A member type crosses to C and JavaScript exactly where its enum does, which
     is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``
@@ -12550,6 +12561,7 @@ export const main = (): i32 => {
   | a declared class `C`, `C \| null` | an object, and `null` for the second | `C`'s own decoding, into the object the field holds | `C`'s own encoding |
   | `T[]`, `T[] \| null` for any of the above | an array, and `null` for the second | `d.i32Array(cur)` and its kin, or `C`'s or `E`'s decoding per element | `jsonEncodeI32Array` and its kin, or `C`'s or `E`'s encoding per element |
   | `Map<string, V>`, `Map<string, V> \| null`, for any `V` in this table, `\| null` or not, a `Map` included | an object whose keys are the map's, each value a `V`, and `null` for the second | the object's keys in order, each value decoded as a `V` and `set` | the map's entries in its order, each value encoded as a `V` |
+  | a [tagged union](#discriminated-unions) `U` of declared classes, `U \| null`, `U[]` | an object whose tag key names its variant, and `null` for the second | the tag's string, then that variant's decoding, into the object the field holds when its tag matches | the tag first, then the variant's own encoding |
   | `JsonNumber` from `nish/json-typed`, alone, `\| null`, in an array or as a `Map`'s value | any number, kept as the text it is written in | `d.number(n)`, which copies the number's bytes into `n` | `jsonEncodeNumber`, which writes them back |
 
   `` `jsonEncode` cannot handle `Sample.ratio`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null` ``
@@ -12593,6 +12605,7 @@ export const main = (): i32 => {
   | a key given twice, a field's or a `Map`'s, however it is escaped | `JSON_DECODE_DUPLICATE` (-23) | the second |
   | a field the object does not give | `JSON_DECODE_MISSING` (-24) | the object's `}` |
   | more keys, over every `Map` field of the decoding, than `d.maxMapKeys` (4,096 unless set) | `JSON_DECODE_MAP_LIMIT` (-25) | the first key past it |
+  | a union's tag missing, not a string, or a string no variant writes | `JSON_DECODE_TAG` (-26) | the tag's value, or the object's `{` when it has none |
   | text that is not JSON, or that crosses a `JsonLimits` limit | the tokenizer's `JSON_TOK_ERR_*` (-1 to -13) | the tokenizer's |
 
   Nothing an input holds panics: the recursion is the data's, so the
@@ -12756,6 +12769,71 @@ export const main = (): i32 => {
   `Map` hashes a string under a per-process random key, so a body cannot
   choose keys that collide, and this limit bounds what all the maps of one
   decoding hold together (docs/security/json.md, JSON-13).
+- **A tagged union is an object with its tag.** A field, an array's element
+  or the value of `jsonEncode` may be a [discriminated union](#discriminated-unions)
+  whose variants are all declared classes, and the union is written as the
+  variant's object with its tag key first, the tag's value the name of its
+  enum member:
+
+  ```typescript
+  enum Kind { Num, Neg }
+  class Num {
+    readonly kind: Kind.Num = Kind.Num;
+    value: f64 = 0;
+  }
+  class Neg {
+    static readonly json = { tag: "negate" };
+    readonly kind: Kind.Neg = Kind.Neg;
+    arg: Expr;
+    constructor() { this.arg = zero(); }
+  }
+  type Expr = Num | Neg;
+  const zero = (): Expr => new Num();
+
+  const e = jsonDecodeUnion(d, zero());  // {"kind":"negate","arg":{"kind":"Num","value":2}}
+  jsonEncode(w, e);                      // the same text back
+  ```
+
+  A variant's `tag` option replaces its member's name on the wire, and
+  `rename` renames the tag key as it renames any field. Every variant writes
+  its tag under one key and as a different string, or the union is refused
+  where a call reaches it (NL2721, `json_reject_union_tag_key`; NL2720,
+  `json_reject_union_same_tag`); a `tag` that is not a string literal is
+  NL2722 (`json_reject_union_tag_literal`), one on a class with no field whose
+  type is one enum member is NL2724 (`json_reject_union_tag_no_field`), and
+  `tag: ""` is the same as no `tag`: the variant writes its member's name. A
+  `tag` on a class that has such a field but that no union holds is not
+  refused and does nothing: the class compiles while no JSON call reaches it,
+  and one that does refuses the field (below). A variant
+  that is not a class, an interface, is NL2486
+  (`json_reject_union_interface`), the code of any typed JSON type that is not
+  a declared class. A field typed with an enum member that no
+  union tags a variant with is no tag, and is refused as any other field type
+  is (`json_reject_enum_member`). `jsonDecode` decodes into the object it is
+  given and a union's variant is known only from the input, so a union is
+  decoded with `jsonDecodeUnion(d, prev)`, which answers the object it decoded
+  into: `prev` itself when the input's tag is `prev`'s, reused as any nested
+  object is, and otherwise a new variant made with `new V()`. On a failure it
+  answers `prev`, with the code in `d.failed`, at the top only: a union field,
+  element or `Map` value already holds the new variant when the failure comes,
+  decoded up to it, as any failed decode leaves what it read. Its type argument is inferred
+  from `prev` and never written; `jsonDecode` with a union is
+  `` `jsonDecode`'s value is `A | B`, a tagged union: … ``
+  (NL2719, `json_reject_union_decode`), and `jsonDecodeUnion` with a class is
+  NL2723 (`json_reject_union_not_union`). A union field decodes into the
+  object it holds the same way, and an array's element past its end is made
+  fresh. The tag may come anywhere in the object: when it is the first key
+  the variant is known at once, and otherwise the decoder reads ahead to it,
+  stepping over the values before it, and rewinds, so each byte is read at
+  most `maxDepth` + 1 times (docs/security/json.md, JSON-17). A tag that is
+  missing, not a string or no variant's is `JSON_DECODE_TAG`. A variant used
+  alone, as a class, decodes and encodes its tag too, and a tag that is not
+  its own is `JSON_DECODE_TAG`. Each union gets one decoding and one
+  encoding function, `.json.decode.union.<U>` and `.json.encode.union.<U>`,
+  which every place it appears calls, so a recursive union such as `Expr`
+  above recurses through them (`tests/link/json_tagged_union`). A
+  `Map<string, Expr>` field decodes each value through that same function
+  and encodes it through the other.
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps

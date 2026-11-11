@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 710 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 716 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -8633,7 +8633,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`jsonEncode` cannot handle `Gauge.level`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`; a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not
+`jsonEncode` cannot handle `Gauge.level`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`; a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` and whose values are any of these, with `| null` or not; so are a union of classes, alone, with `| null` or in an array, and a variant's tag
 ```
 
 ## NL2486
@@ -8721,7 +8721,7 @@ export const main = (): i32 => jsonDecode(new JsonDecoder([], 0, 0, new JsonLimi
 ```
 
 ```text
-`jsonDecode` makes a `Line` with `new Line()`, and its constructor takes 1 parameter(s): an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none, and so is a `Map`'s value, one for each key
+`jsonDecode` makes a `Line` with `new Line()`, and its constructor takes 1 parameter(s): an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none, and so is a `Map`'s value, one for each key, and a union's variant
 ```
 
 ## NL2489
@@ -8883,7 +8883,7 @@ export const main = (): i32 => {
 ```
 
 ```text
-`User.json` has no option `renames`: typed JSON's options are `rename` and `optional`, and `presence`
+`User.json` has no option `renames`: typed JSON's options are `rename` and `optional`, and `presence` and `tag`
 ```
 
 ## NL2495
@@ -10240,7 +10240,7 @@ const open = (b: Box<Shape>): Kind => b.value.kind;
 ```
 
 ```text
-`Box<Circle | Square>` cannot take a union as a type argument: in this version a union is the type of a local, a parameter, a field, a return value or an array element, and not of a generic's, a `Map`'s, a `Set`'s or a `Result`'s type argument
+`Box<Circle | Square>` cannot take a union as a type argument: in this version a union is the type of a local, a parameter, a field, a return value, an array element or a `Map`'s value, and not of a generic's, a `Set`'s or a `Result`'s type argument
 ```
 
 ## NL2534
@@ -13444,4 +13444,231 @@ The message of an error contains:
 
 ```text
 ` reads a file, and a freestanding wasm32 build has no file system to read (build with `--profile wasi`)
+```
+
+## NL2719
+
+The message of an error contains:
+
+```text
+…`, a tagged union: `jsonDecode` decodes into the object it is given, and which variant a document holds is known only once its tag is read, so a union is decoded with `jsonDecodeUnion(d, prev)`, which answers the object it decoded into
+```
+
+[`nl2719_json_union_decode.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2719_json_union_decode.ts):
+
+```ts
+// NL2719: `jsonDecode` decodes into the object it is given, and a union's
+// variant is known only once its tag is read.
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDecoder, jsonDecode } from "nish/json-typed";
+
+enum Kind {
+  A,
+  B,
+}
+class A {
+  readonly kind: Kind.A = Kind.A;
+}
+class B {
+  readonly kind: Kind.B = Kind.B;
+}
+type AB = A | B;
+const make = (): AB => new A();
+
+export const main = (): i32 => {
+  const src = new Array<u8>(2);
+  const d = new JsonDecoder(src, 0, 2, new JsonLimits());
+  return jsonDecode(d, make());
+};
+```
+
+```text
+`jsonDecode`'s value is `A | B`, a tagged union: `jsonDecode` decodes into the object it is given, and which variant a document holds is known only once its tag is read, so a union is decoded with `jsonDecodeUnion(d, prev)`, which answers the object it decoded into
+```
+
+## NL2720
+
+The message of an error contains:
+
+```text
+…`: a decoder picks a union's variant by the string its tag is written as, so each variant of a union writes a different one
+```
+
+[`nl2720_json_union_same_tag.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2720_json_union_same_tag.ts):
+
+```ts
+// NL2720: two variants of one union write their tag as the same string, so a
+// decoder could not tell them apart.
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+enum Kind {
+  A,
+  B,
+}
+class A {
+  readonly kind: Kind.A = Kind.A;
+}
+class B {
+  static readonly json = { tag: "A" };
+  readonly kind: Kind.B = Kind.B;
+}
+type AB = A | B;
+const make = (): AB => new A();
+
+export const main = (): i32 => {
+  const w = new JsonWriter(new Array<u8>(16), 0);
+  jsonEncode(w, make());
+  return w.failed;
+};
+```
+
+```text
+`A` and `B` both write their tag in `A | B` as `"A"`: a decoder picks a union's variant by the string its tag is written as, so each variant of a union writes a different one
+```
+
+## NL2721
+
+The message of an error contains:
+
+```text
+…`: a decoder finds a union's tag before it knows which variant the object is, so every variant of a union writes its tag under the same key
+```
+
+[`nl2721_json_union_tag_key.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2721_json_union_tag_key.ts):
+
+```ts
+// NL2721: the variants of one union write their tag under different keys, so a
+// decoder could not find the tag before it knows the variant.
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+enum Kind {
+  A,
+  B,
+}
+class A {
+  readonly kind: Kind.A = Kind.A;
+}
+class B {
+  static readonly json = { rename: { kind: "type" } };
+  readonly kind: Kind.B = Kind.B;
+}
+type AB = A | B;
+const make = (): AB => new A();
+
+export const main = (): i32 => {
+  const w = new JsonWriter(new Array<u8>(16), 0);
+  jsonEncode(w, make());
+  return w.failed;
+};
+```
+
+```text
+`A` writes its tag `kind` under the key `"kind"` and `B` under `"type"`: a decoder finds a union's tag before it knows which variant the object is, so every variant of a union writes its tag under the same key
+```
+
+## NL2722
+
+The message of an error contains:
+
+```text
+…`'s `tag` is not a string literal: a variant's tag is written on the wire as a string, and typed JSON reads which one from the class's text
+```
+
+[`nl2722_json_union_tag_literal.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2722_json_union_tag_literal.ts):
+
+```ts
+// NL2722: a variant's `tag` is written on the wire as a string, read from the
+// class's text.
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+enum Kind {
+  A,
+  B,
+}
+class A {
+  static readonly json = { tag: 1 };
+  readonly kind: Kind.A = Kind.A;
+}
+class B {
+  readonly kind: Kind.B = Kind.B;
+}
+type AB = A | B;
+const make = (): AB => new A();
+
+export const main = (): i32 => {
+  const w = new JsonWriter(new Array<u8>(16), 0);
+  jsonEncode(w, make());
+  return w.failed;
+};
+```
+
+```text
+`A.json`'s `tag` is not a string literal: a variant's tag is written on the wire as a string, and typed JSON reads which one from the class's text
+```
+
+## NL2723
+
+The message of an error contains:
+
+```text
+…`, which is not a tagged union: `jsonDecodeUnion` picks a variant by the object's tag and answers it, so its value is a union of classes; a class is decoded into with `jsonDecode(d, out)`
+```
+
+[`nl2723_json_union_not_union.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2723_json_union_not_union.ts):
+
+```ts
+// NL2723: `jsonDecodeUnion` picks a variant by its tag, so its value is a
+// union; a class is decoded into with `jsonDecode`.
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDecoder, jsonDecodeUnion } from "nish/json-typed";
+
+class Point {
+  x: i32 = 0;
+}
+
+export const main = (): i32 => {
+  const src = new Array<u8>(2);
+  const d = new JsonDecoder(src, 0, 2, new JsonLimits());
+  const p = jsonDecodeUnion(d, new Point());
+  return p.x;
+};
+```
+
+```text
+`jsonDecodeUnion`'s value is `Point`, which is not a tagged union: `jsonDecodeUnion` picks a variant by the object's tag and answers it, so its value is a union of classes; a class is decoded into with `jsonDecode(d, out)`
+```
+
+## NL2724
+
+The message of an error contains:
+
+```text
+…` has no field whose type is one enum member: `tag` is the string a tagged union's variant writes its tag as, so only a variant gives one
+```
+
+[`nl2724_json_union_tag_no_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2724_json_union_tag_no_field.ts):
+
+```ts
+// NL2724: `tag` names the string a variant writes its tag as, and a class with
+// no tag field is no variant.
+import { JsonWriter } from "nish/json";
+import { jsonEncode } from "nish/json-typed";
+
+class Point {
+  static readonly json = { tag: "point" };
+  x: i32 = 0;
+}
+
+export const main = (): i32 => {
+  const w = new JsonWriter(new Array<u8>(16), 0);
+  jsonEncode(w, new Point());
+  return w.failed;
+};
+```
+
+```text
+`Point.json` gives a `tag`, and `Point` has no field whose type is one enum member: `tag` is the string a tagged union's variant writes its tag as, so only a variant gives one
 ```
