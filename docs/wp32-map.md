@@ -10,8 +10,8 @@ iteration (S4, [#237](https://github.com/amritk/nish/pull/237)) and
 [#228](https://github.com/amritk/nish/pull/228)) shipped in 0.11.0; fusion and
 `nish/map` (S5, [#239](https://github.com/amritk/nish/pull/239)), the −0 key
 ([#247](https://github.com/amritk/nish/pull/247)) and the measurement (S7,
-[#244](https://github.com/amritk/nish/pull/244)) in 0.12.0. Open: a `Map` read
-inside a parallel body (§9.3) is still refused. The rules are normative in
+[#244](https://github.com/amritk/nish/pull/244)) in 0.12.0; a `Map` read
+inside a parallel body (§9.3) after 0.38.0. The rules are normative in
 [LANGUAGE.md → `Map` and `Set`](LANGUAGE.md#map-and-set); the lowering is in
 [IR_COOKBOOK.md](IR_COOKBOOK.md); the timings are in
 [BENCHMARKS.md](BENCHMARKS.md#map-and-set-wp32). This note keeps the decisions,
@@ -35,7 +35,7 @@ the evidence behind each, and the trigger that would reopen §10.
 | 12 | Small choices | `size` read-only `number`; `set`/`add` return `this`; constructor arguments refused; type arguments required on `new` except from an annotation. | 7 | `size()`; a `void` `set` |
 | 13 | Interop | Opaque struct in `--emit-header`; unbridged, named, in `--emit-dts` and `--emit-napi`. | 8 | exposing the layout |
 | 14 | Fusion | Three patterns, each one probe; nothing between probe and write may call, assign or allocate. | 9.1 | fusion through a call proven pure |
-| 15 | Threads | `get`, `has` and `size` in a parallel body. **Not built.** | 9.3 | — |
+| 15 | Threads | `get`, `has` and `size` in a parallel body; a table reaches `dst` only through its keys and values. | 9.3 | iteration in a body |
 
 **The hard requirement is the layout.** Each bucket carries a fingerprint
 beside the entry index, and each entry stores its full hash, so a probe reads
@@ -413,18 +413,31 @@ are the Node meaning (`reserve` does nothing; `getOrInsert` is
 
 ### 9.3 A `Map` read inside a parallel body
 
-**Planned, not built.** A `nish/threads` body may write nothing its caller can
-see, and could reach a map only through its element. For `get`, `has` and
-`size` to be legal there, `probe` must write nothing (it does not), the `dst`
-reachability rule must see through the table's private arrays to `K` and `V`
-only, and iterating stays refused (the walk counter is a store). Today a body
-that reads `x.index.get("a")` is refused on both counts: it "can reach a `i32[]`
-through `x.index.entryValues`", and it "writes memory its caller can see
-through `Map<string, i32>.probe`" (checked with 0.15.0). `probe` writes no
-memory, as `std/collections.ts` states, so the second refusal is the effect
-analysis not yet crediting it, and the first is the reachability rule not yet
-skipping the table's own arrays. The work is those two rules, one positive
-case and a `reject_*` for a `set` in a body.
+**Built.** A `nish/threads` body may write nothing its caller can see, and
+could reach a map only through its element or a capture. For `get`, `has` and
+`size` to be legal there, `probe` must write nothing, the `dst` reachability
+rule must see through the table's private arrays to `K` and `V` only, and
+iterating stays refused (the walk counter is a store). Checked with 0.15.0, a
+body that read `x.index.get("a")` was refused on both counts. By 0.38.0 the
+effect half already held: the effect analysis credits `probe` with writing
+nothing, so `get`, `has` and `size` compiled in `parallelMap`, in a scope's
+tasks and through a capture, while `set`, `delete`, `clear` and `values()` were
+refused as writes. What was left was the reachability rule: `parallelMapInto`
+with `dst: i32[]` and an element holding a `Map<string, i32>` was refused as
+reaching "a `i32[]` through `x.index.entryValues`".
+
+The rule now asks, of a struct that is an instance of `std/collections.ts`'s
+own `Map` or `Set` (`isCollectionStruct`, never the name), only whether its key
+or value type reaches `dst`'s, with a path that names it, `x.index.keys()[i]`
+or `x.index.get(k)`. `slots`, `entryHashes`, `entryKeys` and `entryValues` are
+private to the table, so no program holds one and none can be `dst`. A
+`Map<string, i32[]>` with `dst: i32[]` is still refused, through
+`x.index.get(k)`, and a program's own class named `Map` is still walked field by
+field. The capture form, `captureReachesDstMessage`, walks the same way, so a
+captured `Map` parameter beside a `dst` parameter compiles too. Pinned by
+`tests/link/par_map_read_into`, `par_map_read_into_keys` and
+`par_map_read_capture`, and refused by the `tests/cases/reject_par_map_*`
+cases.
 
 ## 10. Is an unordered map ever needed? (S7)
 

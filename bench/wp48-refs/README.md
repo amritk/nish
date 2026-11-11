@@ -6,7 +6,9 @@ Every program builds the same AST-shaped tree (a seeded xorshift picks each
 node's kind and its 2 to 6 children, depth at most 16), then walks it two ways a
 compiler pass does: a recursive visitor from the root, and a parent-pointer
 climb from every leaf to the root. All five print the same checksum, natively
-and under Node.
+and under Node. The note's recommendation, accepted on 2026-11-11, is to
+build neither 32-bit design and to write ports in `sibling.ts`'s layout, with
+`columns.ts`'s for hot, closed tables.
 
 | program | a node is | a link is | bytes a node |
 | --- | --- | --- | ---: |

@@ -30,6 +30,15 @@
 //   fat    five rows of one 300-byte cell
 //   manyc  150 CommandCompletes `UPDATE 1` and no row
 //   manye  100 ErrorResponses of a code and a message
+//   gate   a row `g`, once `board.sent` reaches `board.want` (or after 2 s)
+//   wait   a row `w`, once `board.open` is set (or after 2 s)
+//   badparse  a Parse refused with SQLSTATE 42601, its statement not made
+//
+// A named Parse makes a statement the connection keeps, and a Bind may name
+// one with no Parse before it, as PostgreSQL's extended protocol does: a name
+// made twice is refused with 42P05, one never made with 26000. After an
+// error the backend skips to the Sync. Each answer leads with ParseComplete
+// only when its batch held a Parse.
 //
 // The board is the one object the backends share with the test's tasks; a
 // backend's task body writes its `seen` count, and its helpers only read it.
@@ -42,6 +51,13 @@ export class Board {
   seen: i32 = 0
   /** Client tasks that have finished. */
   done: i32 = 0
+  /** Statements the test's tasks have sent; `gate` waits for `want` of them. */
+  sent: i32 = 0
+  want: i32 = 0
+  /** Set to answer `wait`. */
+  open: i32 = 0
+  /** Parse messages the backends have read. */
+  parses: i32 = 0
 }
 
 /** One connection's input, task-owned. */
@@ -256,12 +272,39 @@ async function handshake(fd: i32, w: Wire, o: Out): Promise<boolean> {
   return await flush(fd, o)
 }
 
+/** Writes an ErrorResponse of SQLSTATE `code` and `message` into `o`. */
+function refuse(o: Out, code: string, message: string): void {
+  o.begin(69)
+  o.byte(83)
+  o.cstr("ERROR")
+  o.byte(67)
+  o.cstr(code)
+  o.byte(77)
+  o.cstr(message)
+  o.byte(0)
+  o.finish()
+}
+
+/** The index of `name` in `names`, or -1. */
+function find(names: string[], name: string): i32 {
+  for (let i: i32 = 0; i < toI32(names.length); i++) {
+    if (names[i] === name) {
+      return i
+    }
+  }
+  return -1
+}
+
 /**
- * Reads one Parse, Bind, Execute and Sync and answers it; 0 to go on, 1 when
- * the connection is done. It reads `board` and writes nothing into it.
+ * Reads one batch through its Sync and answers it. Answers 1 when the
+ * connection is done, else 0, plus 2 when the batch held a Parse. `names` and
+ * `texts` are the connection's statements. It reads `board` and writes
+ * nothing into it.
  */
-async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> {
+async function serveQuery(fd: i32, w: Wire, o: Out, board: Board, names: string[], texts: string[]): Promise<i32> {
   let sql: string = ""
+  let parsed: boolean = false
+  let failed: boolean = false
   const values: string[] = []
   const nulls: boolean[] = []
   while (true) {
@@ -269,13 +312,27 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> 
     if (type < 0 || type === 88) {
       return 1
     }
+    if (type === 83) {
+      break
+    }
+    if (failed) {
+      continue
+    }
     if (type === 80) {
       // Parse: the statement name, then the text.
-      let p: i32 = w.body
-      while (toI32(w.buf[p]) !== 0) {
-        p += 1
+      parsed = true
+      const name: string = w.cstr(w.body)
+      sql = w.cstr(w.body + toI32(name.length) + 1)
+      if (sql === "badparse") {
+        refuse(o, "42601", "syntax error")
+        failed = true
+      } else if (name.length > 0 && find(names, name) >= 0) {
+        refuse(o, "42P05", `prepared statement "${name}" already exists`)
+        failed = true
+      } else if (name.length > 0) {
+        names.push(name)
+        texts.push(sql)
       }
-      sql = w.cstr(p + 1)
     } else if (type === 66) {
       // Bind: portal, statement, format codes, then the values.
       let p: i32 = w.body
@@ -283,10 +340,17 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> 
         p += 1
       }
       p += 1
-      while (toI32(w.buf[p]) !== 0) {
-        p += 1
+      const name: string = w.cstr(p)
+      p += toI32(name.length) + 1
+      if (name.length > 0) {
+        const at: i32 = find(names, name)
+        if (at < 0) {
+          refuse(o, "26000", `prepared statement "${name}" does not exist`)
+          failed = true
+          continue
+        }
+        sql = texts[at]
       }
-      p += 1
       p += 2 + 2 * w.int16(p)
       const count: i32 = w.int16(p)
       p += 2
@@ -302,20 +366,34 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> 
           p += n
         }
       }
-    } else if (type === 83) {
-      break
     }
+  }
+  const flags: i32 = parsed ? 2 : 0
+  if (failed) {
+    o.ready(73)
+    const told: boolean = await flush(fd, o)
+    return (told ? 0 : 1) + flags
   }
   if (sql === "die") {
     return 1
+  }
+  if (sql === "gate" || sql === "wait") {
+    for (let t: i32 = 0; t < 2000; t++) {
+      if (sql === "gate" ? board.sent >= board.want : board.open !== 0) {
+        break
+      }
+      await sleep(1)
+    }
   }
   if (sql === "hold") {
     while (board.done < 2) {
       await sleep(1)
     }
   }
-  o.begin(49)
-  o.finish()
+  if (parsed) {
+    o.begin(49)
+    o.finish()
+  }
   o.begin(50)
   o.finish()
   let status: i32 = 73
@@ -341,15 +419,10 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> 
     }
     o.complete("SELECT 5")
   } else if (sql === "bad") {
-    o.begin(69)
-    o.byte(83)
-    o.cstr("ERROR")
-    o.byte(67)
-    o.cstr("42P01")
-    o.byte(77)
-    o.cstr("relation \"nope\" does not exist")
-    o.byte(0)
-    o.finish()
+    refuse(o, "42P01", "relation \"nope\" does not exist")
+  } else if (sql === "gate" || sql === "wait") {
+    o.row(sql === "gate" ? "g" : "w")
+    o.complete("SELECT 1")
   } else if (sql === "short") {
     o.byte(68)
     o.int32(3)
@@ -471,10 +544,10 @@ async function serveQuery(fd: i32, w: Wire, o: Out, board: Board): Promise<i32> 
     }
     const rest: boolean = await flushRange(fd, o, 3, o.n)
     o.n = 0
-    return rest ? 0 : 1
+    return (rest ? 0 : 1) + flags
   }
   const sent: boolean = await flush(fd, o)
-  return sent ? 0 : 1
+  return (sent ? 0 : 1) + flags
 }
 
 /**
@@ -489,11 +562,16 @@ export async function backend(listen: i32, board: Board): Promise<void> {
   const w = new Wire()
   const o = new Out()
   const ready: boolean = await handshake(fd, w, o)
+  const names: string[] = []
+  const texts: string[] = []
   if (ready) {
     while (true) {
-      const done: i32 = await serveQuery(fd, w, o, board)
+      const answer: i32 = await serveQuery(fd, w, o, board, names, texts)
       board.seen += 1
-      if (done !== 0) {
+      if ((answer & 2) !== 0) {
+        board.parses += 1
+      }
+      if ((answer & 1) !== 0) {
         break
       }
     }

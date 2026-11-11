@@ -1,7 +1,14 @@
 # WP48: Compressed 32-bit references — designed and measured
 
-**Status: proposed.** Nothing here is built, and nothing in the compiler, the
-runtime or `std/` changes with this note. The anchors are at `c5626cb`.
+**Status: accepted on 2026-11-11, §4 in full.** Build neither Design A nor a
+generic `Pool<T>`. The lean sibling layout is the convention for ports: a tree
+node keeps first-child and next-sibling links, not a growing `kids: Node[]`.
+A hot, closed table uses columns. Design A is revisited when a port written
+that way measures out of memory. Nothing in the compiler, the runtime or
+`std/` changes with this note; the convention is in
+[`docs/AI.md`](AI.md#a-tree-links-first-child-and-next-sibling) and the user
+guide's [Memory](guide/language/memory.md#a-tree-links-its-children-not-an-array-of-them)
+page. The measurements below are unchanged, and their anchors are at `c5626cb`.
 [LANGUAGE.md](LANGUAGE.md) stays normative. Part of #1098.
 
 A class reference in Nish is an 8-byte pointer into the arena. Two TypeScript
@@ -280,6 +287,8 @@ B costs no invariant: every handle is an `i32`, every array is an ordinary
 Nish array, and Node runs it unchanged. Its costs are the source costs of §2.
 
 ## 4. Recommendation
+
+Accepted in full on 2026-11-11.
 
 1. **Build neither A nor a generic `Pool<T>` now.** Counting the arena's
    8-byte rounding moves A's estimate from 0.6x to 0.75x of `sibling`'s

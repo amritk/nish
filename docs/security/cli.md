@@ -247,7 +247,7 @@ the runtime itself. The objects are linked, never executed by the compiler.
 
 ## The module cache (CLI-12)
 
-Added with `nish run`'s module cache ([wp48-run-rebuilds.md](https://github.com/amritk/nish/blob/main/docs/wp48-run-rebuilds.md));
+Added with `nish run`'s module cache ([wp52-run-rebuilds.md](https://github.com/amritk/nish/blob/main/docs/wp52-run-rebuilds.md));
 its anchors are function names in the commit that adds this section. A debug
 link used to compile every module of the program, unchanged or not. It now
 keeps each module's object in `$XDG_CACHE_HOME/nish/module/<sha256 of the
