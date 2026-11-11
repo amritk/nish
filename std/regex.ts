@@ -1827,7 +1827,9 @@ const regexContextMask = (bits: i32): i32[] => {
 /** Sort `a` ascending, a bottom-up merge sort. */
 const regexSortPoints = (a: i32[]): void => {
   const n: i32 = toI32(a.length)
-  const tmp: i32[] = regexZeros(n)
+  // Not `regexZeros`: a call here would cost the proof that `n` is `a`'s
+  // length, and every slot is written before it is read.
+  const tmp: i32[] = new Array<i32>(n)
   let width: i32 = 1
   while (width < n) {
     let lo: i32 = 0
@@ -3464,7 +3466,8 @@ export class Regex {
     if (units > DFA_MAX_UNITS) {
       return
     }
-    const rep: i32[] = regexZeros(units)
+    // Not `regexZeros`, for `regexSortPoints`' reason; every slot is written first.
+    const rep: i32[] = new Array<i32>(units)
     let u: i32 = 0
     while (u < 128 && u < toI32(rep.length)) {
       rep[u] = u
