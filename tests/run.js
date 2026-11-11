@@ -20454,6 +20454,70 @@ if (dealtHere("cliChecks")) {
     )
   }
 
+  // ---- #1328: every bodiless instance states its write facts ------------------------------
+  // `tests/bodiless-stance.js` reads `src/attributes.ts`: every `mark*` helper
+  // answers a stance, nothing else sets those facts, no call drops the answer,
+  // and every body the emitter writes is on `needsStance`'s list. Its
+  // self-test mutates the source once per rule and has each mutant refused.
+  // What gets past the text fails closed in the compiler: an instance on the
+  // list that stated no stance is given the unknown one, and
+  // `NISH_SIMULATE_ICE=nostance:<name>` drops `<name>`'s stated stance, so a
+  // spawned task that encodes into shared memory, accepted as stated, has to
+  // be refused without it.
+  if (!only || "bodiless".includes(only)) {
+    for (const args of [[], ["--self-test"]]) {
+      const r = spawnSync("node", [path.join(root, "tests", "bodiless-stance.js"), ...args], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `bodiless: the stance check${args.length > 0 ? " refuses each of its mutants" : " passes"} (${r.stdout.trim()})`,
+        r.status === 0,
+        r.stdout + r.stderr
+      )
+    }
+    const bodilessDir = path.join(buildDir, "bodiless")
+    fs.rmSync(bodilessDir, { recursive: true, force: true })
+    fs.mkdirSync(bodilessDir, { recursive: true })
+    const encodeTs = path.join(bodilessDir, "encode.ts")
+    fs.writeFileSync(
+      encodeTs,
+      [
+        'import { sleep, spawn } from "nish:async"',
+        'import { JsonWriter } from "nish/json"',
+        'import { jsonEncode } from "nish/json-typed"',
+        "class Tally { name: string = \"\"; hits: i32 = 0 }",
+        "async function work(tally: Tally, ms: i32): Promise<void> {",
+        "  await sleep(ms)",
+        "  const w = new JsonWriter(new Array<u8>(64), 0)",
+        "  jsonEncode(w, tally)",
+        "}",
+        "export async function main(): Promise<i32> {",
+        "  const tally = new Tally()",
+        "  spawn(work(tally, 1))",
+        "  await sleep(10)",
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const stated = spawnSync(NISH, [encodeTs, "-o", path.join(bodilessDir, "stated") + path.sep], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("bodiless: a task that encodes shared memory to JSON compiles", stated.status === 0, shown(stated))
+    const forgotten = spawnSync(NISH, [encodeTs, "-o", path.join(bodilessDir, "forgotten") + path.sep], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_SIMULATE_ICE: "nostance:jsonEncode<Tally>" },
+    })
+    check(
+      "bodiless: the same task is refused once `jsonEncode`'s stance is missing",
+      forgotten.status === 1 && forgotten.stderr.includes("hands `tally` to `jsonEncode<Tally>`, which stores into it"),
+      shown(forgotten)
+    )
+  }
+
   // ---- WP35: the capability report ---------------------------------------------------
   // The golden reports are the `caps_*` cases' `.caps.json` and the `tests/link/caps_*`
   // programs' `expected.caps.json`; what is checked here is everything around them:
@@ -21674,8 +21738,12 @@ if (dealtHere("releaseChecks")) {
   // program to show.
   if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(only)) {
     const guideDir = path.join(root, "docs", "guide")
+    // The writing-nish agent skill is AI.md's short form, published to agents by the
+    // docs site (`agentSkills` in scalar.config.json), so its examples are held to
+    // the same markers.
     const docPages = [
       path.join(root, "docs", "AI.md"),
+      path.join(root, "skills", "writing-nish", "SKILL.md"),
       ...fs
         .readdirSync(guideDir, { recursive: true })
         .filter((f) => f.endsWith(".md"))
@@ -27755,6 +27823,10 @@ const runFixtureUnderNode = (entry, encoding) =>
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
 // `thread_scope_task_map_reads` has two tasks read one `Map` and one `Set`,
 // and `par_map_table_reads` has a parallel map's body read them.
+// `par_map_read_into` and `par_map_read_into_keys` read a `Map` and a `Set`
+// through the element while `dst` shares their value or key type, and
+// `par_map_read_capture` reads a captured `Map` beside a `dst` parameter:
+// a table's own arrays are private to it, so neither is `dst`.
 // `thread_task_own_writes` has tasks write only what they made: a holder poked
 // through a method, a `Map` and a `Set`, an object's array fields, an array
 // handed back by a helper returning its argument, and an array under a second
@@ -27864,6 +27936,9 @@ for (const name of [
   "thread_scope_region_param_lookup",
   "thread_scope_task_map_reads",
   "par_map_table_reads",
+  "par_map_read_into",
+  "par_map_read_into_keys",
+  "par_map_read_capture",
   "thread_task_own_writes",
   "par_map_captured_strings",
   "thread_scope_libc_named_tasks",
@@ -28633,15 +28708,14 @@ if (!only || "std_text_index_of_any".includes(only)) {
 // and are held to the same bytes. That is the whole claim `codePointLength`
 // makes: its native walk counts UTF-8 lead bytes and its Node walk counts
 // UTF-16 units less the second half of each pair, and é, €, 😀, "©®±" and a
-// lone surrogate print the same count both ways.
+// lone surrogate print the same count both ways. `std_text_camel_case`, the
+// guide's example, is held here too: its `Regex.replaceAll` on a class did not
+// finish under Node until `nish/regex` stopped reading holes as zeros (#1362).
 if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
-  // `std_text_camel_case`, the guide's example, is held natively only: under
-  // the Node prelude its `Regex.replaceAll` on a class of two members does
-  // not finish, which is `nish/regex`'s and not this module's (#1362). It
-  // rejoins this list when #1362 is fixed.
-  for (const name of ["std_text", "std_text_f64"]) {
+  for (const name of ["std_text", "std_text_f64", "std_text_camel_case"]) {
     const dir = path.join(linkDir, name)
-    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    // A timeout, so a #1362 regression fails this check instead of hanging the shard.
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
     const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
     const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
     check(
@@ -28723,6 +28797,22 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
       )
     }
   }
+}
+
+// `nish/regex` under the Node prelude (#1362). The link loop runs
+// `std_regex_node` natively against expected.out, which JavaScript's own
+// `RegExp` wrote; here the same file runs under `runtime/nish.mjs`. Each of its
+// patterns builds the lazy DFA, whose tables are read as zeros: holes there once
+// left `[-\s]+` probing a hash table forever, so a timeout is the failure.
+if (!only || "std_regex_node".includes(only) || only.startsWith("std_regex_node")) {
+  const dir = path.join(linkDir, "std_regex_node")
+  const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
+  const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+  check(
+    "link/std_regex_node: under the Node prelude a class, a set escape and an alternation finish and print expected.out",
+    run.status === 0 && run.stdout === out,
+    `--- native (expected.out)\n${out}--- node\n${shown(run)}`
+  )
 }
 
 // WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own

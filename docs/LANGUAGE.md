@@ -3661,8 +3661,8 @@ async function run(): Promise<void> {
   other (`reject_async_spawn_store_string_callee`,
   `reject_async_spawn_store_string_method`,
   `reject_async_spawn_store_copied`), and growing a shared array, `Map` or
-  `Set` — `push`, `set`, `add`, `spawnPiped` appending to its output
-  arrays, on the argument or on what a method answers out of it — is NL2615
+  `Set` — `push`, `set`, `add`, `spawnPiped` or `spawnPipedWithin`
+  appending to its output arrays, on the argument or on what a method answers out of it — is NL2615
   (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
   `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`), and so
   is a builtin with no body of its own that does either, `reserve` on a
@@ -4044,8 +4044,10 @@ from the whole-program facts, and each rule is reported there:
   (`tests/link/par_panic_once`, `thread_panic_once`). Output is a write —
   `console.error` and `process.exit` as much as `console.log`
   (`reject_par_console_error`, `reject_par_process_exit`). Reading a shared
-  `Map` or `Set` that an element reaches, with `get`, `has` or `size`, is a
-  read (`tests/link/par_map_table_reads`). Handing a helper a number, a
+  `Map` or `Set` that an element or a capture reaches, with `get`, `has` or
+  `size`, is a read (`tests/link/par_map_table_reads`); `set`, `delete`,
+  `clear` and iterating one, whose walk counts itself on the table, are writes
+  (`tests/cases/reject_par_map_set`, `_delete`, `_clear`, `_values`). Handing a helper a number, a
   `boolean`, an enum or a `string` — a `string` element of the caller's array
   included, `verify(hashes[k])` — gives it no slot to store into, so it is a
   read (`tests/link/thread_bcrypt_batch`, whose task verifies against the
@@ -4205,7 +4207,14 @@ from the whole-program facts, and each rule is reported there:
   elements and `| null`, is
   `` `(r) => ...` can reach a `f64[]` through `r.cells`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads, so `dst` may not be reachable from an element of `src` ``
   (`tests/cases/reject_par_reaches_dst`). It is judged by type, so such an
-  array is refused whether or not it is `dst` at run time. A reduce writes no
+  array is refused whether or not it is `dst` at run time. A global `Map` or
+  `Set` reaches only what it stores: its own arrays are private to it, so a
+  `Map<string, i32>` beside a `dst: i32[]` is not refused
+  (`tests/link/par_map_read_into`, `par_map_read_into_keys`,
+  `par_map_read_capture`), while a `Map<string, i32[]>` is, through
+  `x.index.get(k)` (`tests/cases/reject_par_map_value_dst`). A program's own
+  class named `Map` is walked like any class
+  (`tests/cases/reject_par_map_user_class`). A reduce writes no
   array of its caller's and has no such rule.
 
 #### A data-parallel arrow reads its function's `const` locals
@@ -7997,7 +8006,7 @@ and `io_nish_import_global` and comparing the two bodies.
 
 **[`nish:process`](reference/nish-process.md)** exports `exit` (the global
 `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`,
-`spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`,
+`spawnPipedWithin`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`,
 `totalMemory`, `setNice`, `setIdlePriority`, `setCpuAffinity`,
 `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`,
 `platform`, `arch`.
@@ -9757,6 +9766,27 @@ spelling (`Int32Array`, ...), whose length is fixed.
   `reject_spawn_piped_typed_output`, `reject_spawn_piped_wasm`,
   `reject_using_arena_spawn_piped`.
 
+**`spawnPipedWithin(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[], timeoutMs: i32): i32`**
+is `spawnPiped`'s run with a deadline `timeoutMs` milliseconds after the
+call, on the monotonic clock; a **negative** `timeoutMs` is none, and the run
+is `spawnPiped`'s. It gives every answer `spawnPiped` gives, and **`-3`** when
+the deadline passes first: the child's pid is killed with `SIGKILL` and
+reaped, and the bytes read before then stay in `stdout` and `stderr`. The
+deadline covers the **whole** run, the wait for the child after its streams
+close included, so a child that closes its output and keeps running is `-3`
+too. Only the child's own pid is killed, never a process group: a grandchild
+still holding an output pipe keeps the run going until the deadline, which
+turns an exit 0 into `-3`, and is left running. The arguments are checked as
+`spawnPiped`'s, the fifth as an `i32`.
+
+- *Tests:* `io_spawn_piped_within`; `reject_spawn_piped_within_arity`,
+  `reject_spawn_piped_within_element_type`,
+  `reject_spawn_piped_within_timeout_type`,
+  `reject_spawn_piped_within_output`,
+  `reject_spawn_piped_within_typed_output`,
+  `reject_spawn_piped_within_wasm`,
+  `reject_using_arena_spawn_piped_within`.
+
 **`readdirSync(path: string): string[] | null`** answers the directory's
 entries, **sorted ascending by bytes**, without `.` and `..`. It answers
 `null` when the directory cannot be read at all, a *different* answer from
@@ -9820,6 +9850,20 @@ waits on another cannot deadlock it, and the 16 MiB cap is the answer to the
 reason `spawnSyncTo` gave for refusing to buffer: a child that prints more
 than memory holds is stopped, with a code no exit status can be, rather than
 followed (`docs/security/runtime.md`, RT-27 to RT-31).
+
+`spawnPipedWithin` is the same run for a child that may never answer: a
+credential helper waiting on a prompt nobody sees, or a tool hung on the
+network. It is a fifth argument on a second builtin rather than an optional
+one on `spawnPiped`, so `spawnPiped`'s IR and every program that calls it are
+unchanged; `-3` is a code of its own because a caller tells a slow child from
+a failed one (the deadline was the program's choice, so it may retry with a
+longer one). The deadline is a point in time rather than a budget per wait:
+the poll loop's waits and the final wait for the child all end at it, so the
+whole call returns within `timeoutMs` plus the time a kill and a reap take.
+It kills the pid and not a process group, because putting the child in a
+group of its own would take it out of the terminal's job control, and the
+program cannot know the child would not mind (`docs/security/runtime.md`,
+RT-49).
 
 `spawnWithFds` numbers the descriptors from 3 rather than taking a target
 for each, because 3 onward is where a child that is handed descriptors looks
@@ -12703,7 +12747,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`), `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` (`caps_fs_mode`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawnPipedWithin` (`caps_process_spawn_piped_within`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
@@ -15195,9 +15239,11 @@ messages are exact for the cases cited; other entries quote the checker
   `` `readdirSync` expects exactly 1 argument, got 2 ``;
   `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``;
   `` `spawnPiped` expects exactly 4 arguments, got 3 ``;
+  `` `spawnPipedWithin` expects exactly 5 arguments, got 4 ``;
   `` `monotonicNanos` expects exactly 0 arguments, got 1 ``
   (`reject_readdir_arity`, `reject_spawn_to_arity`,
-  `reject_spawn_piped_arity`, `reject_monotonic_arity`)
+  `reject_spawn_piped_arity`, `reject_spawn_piped_within_arity`,
+  `reject_monotonic_arity`)
 - **array errors**: see [Arrays](#array-literals), [Element
   access](#element-access), [`for...of`](#for-const-x-of-a) (`reject_arr_*`)
 - **element reference held across a `push` or `pop`**:

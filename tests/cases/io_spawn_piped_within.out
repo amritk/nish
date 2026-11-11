@@ -1,0 +1,13 @@
+sleep: -3 true
+partial: -3 out err true
+exit 0: 0
+exit 3: 3
+output: donemore 0
+flood: -2 16777216
+stdin unread: -3 true
+stdin ignored: 5
+closed streams: -3 true
+zero: -3
+grandchild: -3
+no deadline: 4 plain
+missing: -1

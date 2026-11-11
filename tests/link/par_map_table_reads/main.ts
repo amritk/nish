@@ -1,7 +1,6 @@
 // The body of a parallel map reads one `Map` and one `Set` that every element
 // shares: `get`, `has` and `size` read the tables and write nothing, so the
-// workers may look keys up at once and the answer is the loop's. The answers
-// are `f64`, so no array inside a table can be the one being written.
+// workers may look keys up at once and the answer is the loop's.
 import { parallelMapInto } from "nish/threads";
 
 class Tables {
