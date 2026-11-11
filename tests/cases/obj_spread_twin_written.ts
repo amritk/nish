@@ -1,5 +1,5 @@
-// The twin of `spread.ts`: each spread there is written out here as the fields
-// it copies, in the order the spread stores them.
+// The twin of `obj_spread_twin.ts`: each spread there is written out here as
+// the fields it copies, in the order the spread stores them.
 interface Base {
   y: i64
   name: string

@@ -33271,14 +33271,14 @@ if (!only || "differential".includes(only) || "goldens".includes(only)) {
 // ---- Object spread: a lowering, not a construct of its own ----
 // `{ ...b, x: 1 }` is stored as the fields of `b` the literal does not write over, then the
 // fields it writes, so it owes the program written out by hand the same IR. The goldens
-// cannot say so: each `obj_spread_*` golden matches only itself. `spread-twin/written.ts`
-// is `spread.ts` with every spread written out; the two must emit the same module once
+// cannot say so: each `obj_spread_*` golden matches only itself. `obj_spread_twin_written.ts`
+// is `obj_spread_twin.ts` with every spread written out; the two must emit the same module once
 // value names are set aside, a local literal must be an `alloca` in both, and the one that
 // escapes through the return must still be allocated in the arena in both -- a spread that
 // stopped being seen as a fresh literal, or one that started copying through a temporary
 // struct, moves one of those counts.
 if (!only || "spread".includes(only)) {
-  const fixtures = path.join(root, "tests", "differential", "spread-twin")
+  const fixtures = path.join(root, "tests", "cases")
   const out = path.join(buildDir, "spread-twin")
   const emit = (name) => {
     const dir = path.join(out, name)
@@ -33292,8 +33292,8 @@ if (!only || "spread".includes(only)) {
   }
   // `%5`, `%t3`, `%p.addr` and the like name a value; `%struct.*` names a type and stays.
   const unnamed = (ir) => ir.replace(/%(?!struct\.)[\w.]+/g, "%v")
-  const spread = emit("spread")
-  const written = emit("written")
+  const spread = emit("obj_spread_twin")
+  const written = emit("obj_spread_twin_written")
   check(
     "object spread: a spread literal and its written-out twin emit the same IR, value names aside",
     spread !== null && written !== null && unnamed(spread) === unnamed(written),

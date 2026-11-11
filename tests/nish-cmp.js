@@ -1227,6 +1227,12 @@ const DECLARED = [
     why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
   },
   {
+    program: "tests/cases/obj_spread_twin.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
     program: "tests/cases/obj_spread_override_type.ts",
     file: "exit",
     changelog: "object literals, lowered to field copies",

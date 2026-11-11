@@ -1,8 +1,8 @@
-// `written.ts` is this file with every object spread written out as the fields
-// it copies: `tests/run.js` holds the two to the same IR, value names aside, and
-// each field has a type of its own so a copy wired to the wrong field shows. A
-// literal that stays local is an `alloca` in both, and one that escapes is
-// allocated in the arena in both.
+// `obj_spread_twin_written.ts` is this file with every object spread written
+// out as the fields it copies: `tests/run.js` holds the two to the same IR,
+// value names aside, and each field has a type of its own so a copy wired to
+// the wrong field shows. A literal that stays local is an `alloca` in both, and
+// one that escapes is allocated in the arena in both.
 interface Base {
   y: i64
   name: string

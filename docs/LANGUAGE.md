@@ -5765,7 +5765,7 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   literal, one store per field, and is otherwise the literal written out:
   the spread and `{ x: 1, y: s.y }` emit the same IR, an `alloca` where the
   literal stays local and an arena allocation where it escapes
-  (`tests/run.js` "object spread", `tests/differential/spread-twin`). Each
+  (`tests/run.js` "object spread", `tests/cases/obj_spread_twin`). Each
   spread is evaluated once, in source order with the entries around it, and
   the entry written later wins: a field set after a spread overrides it, and
   of two spreads the later one supplies the fields both have; only the
