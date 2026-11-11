@@ -132,6 +132,104 @@ function putFileMode(path, data, flag, mode) {
   return answer;
 }
 
+/**
+ * WP44's file errors as `runtime-os.c`'s `nish_fs_err` answers them: the
+ * negated Linux errno of the set docs/wp44-streaming-files.md §3 names, by
+ * Node's code rather than the platform's number, so a macOS run answers what
+ * Linux does. Any other failure is -5 (`EIO`).
+ */
+const FILE_ERRNO = {
+  ENOENT: -2,
+  ENXIO: -6,
+  EBADF: -9,
+  EACCES: -13,
+  ENOTDIR: -20,
+  EISDIR: -21,
+  EINVAL: -22,
+  ENFILE: -23,
+  EMFILE: -24,
+  ESPIPE: -29,
+  ENAMETOOLONG: -36,
+  ELOOP: -40,
+};
+const fileErr = (e) => FILE_ERRNO[e.code] ?? -5;
+
+/**
+ * A negative descriptor is -9 (`EBADF`), as the kernel answers it natively:
+ * Node throws `ERR_OUT_OF_RANGE` for one before it asks, which `fileErr` would
+ * make -5.
+ */
+const EBADF = -9;
+
+/**
+ * `fileOpen(path)` (WP44): a descriptor on a regular file opened read-only and
+ * non-blocking, or a negative errno; a directory is -21 and any other kind -22,
+ * closed again first. A path holding a NUL is -2, as `nish_cpath` answers it.
+ */
+function fileOpen(path) {
+  if (path.includes("\0")) return -2;
+  let fd;
+  try {
+    fd = fs.openSync(path, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+  } catch (e) {
+    return fileErr(e);
+  }
+  let r;
+  try {
+    const st = fs.fstatSync(fd);
+    r = st.isFile() ? 0 : st.isDirectory() ? -21 : -22;
+  } catch (e) {
+    r = fileErr(e);
+  }
+  if (r === 0) return fd;
+  errnoOr(0, () => fs.closeSync(fd));
+  return r;
+}
+
+/** The scratch a positional read lands in before its bytes are copied to the array. */
+let fileScratch = Buffer.alloc(0);
+
+/**
+ * `fileReadAt(fd, buf, off, len, pos)` (WP44): up to `len` bytes from offset
+ * `pos` into `buf[off..]`, the count (0 at end of file) or a negative errno.
+ * The window is checked by the caller (`core/host.mjs`); `pos` is a bigint.
+ */
+function fileReadAt(fd, buf, off, len, pos) {
+  if (pos < 0n || BigInt(len) > 0x7fffffffffffffffn - pos) return -22;
+  if (len === 0) return 0;
+  if (fd < 0) return EBADF;
+  let n;
+  try {
+    if (fileScratch.length < len) fileScratch = Buffer.alloc(len);
+    n = fs.readSync(fd, fileScratch, 0, len, pos);
+  } catch (e) {
+    return fileErr(e);
+  }
+  for (let i = 0; i < n; i++) buf[off + i] = fileScratch[i];
+  return n;
+}
+
+/** `fileSize(fd)` (WP44): the size in bytes as a bigint, or a negative errno. */
+function fileSize(fd) {
+  if (fd < 0) return BigInt(EBADF);
+  try {
+    return fs.fstatSync(fd, { bigint: true }).size;
+  } catch (e) {
+    return BigInt(fileErr(e));
+  }
+}
+
+/** `fileClose(fd)` (WP44): 0, or a negative errno. */
+function fileClose(fd) {
+  if (fd < 0) return EBADF;
+  try {
+    fs.closeSync(fd);
+    return 0;
+  } catch (e) {
+    return fileErr(e);
+  }
+}
+
 /** `writeFileSyncMode(path, data, mode)`: `WRITE_FLAGS`, so a link at the path is refused. */
 const writeFileSyncMode = (path, data, mode) => putFileMode(path, data, WRITE_FLAGS, mode);
 
@@ -320,6 +418,18 @@ const PIPED_CAP = 16 * 1024 * 1024;
  * A child that exits without reading its stdin is not an error on either side.
  */
 function spawnPiped(argv, input) {
+  return spawnPipedWithin(argv, input, -1);
+}
+
+/**
+ * `spawnPipedWithin(argv, stdin, timeoutMs)`'s run: `spawnPiped`'s, with
+ * Node's `timeout` set when `timeoutMs` is not negative. Node kills the child
+ * with `SIGKILL` when it passes and reports `ETIMEDOUT`, which is -3 here as
+ * in the runtime, with the bytes Node read before the kill kept. Node reads a
+ * `timeout` of 0 as none, so a deadline of zero is passed as 1 ms: already
+ * past for any child that has to start a program.
+ */
+function spawnPipedWithin(argv, input, timeoutMs) {
   if (argv.length === 0) return [-1, [], []];
   let r;
   // Node throws, rather than reporting, for an empty command or a NUL in any
@@ -329,6 +439,7 @@ function spawnPiped(argv, input) {
       input: Uint8Array.from(input),
       maxBuffer: PIPED_CAP,
       killSignal: "SIGKILL",
+      ...(timeoutMs >= 0 ? { timeout: Math.max(timeoutMs, 1) } : {}),
     });
   } catch {
     return [-1, [], []];
@@ -338,6 +449,7 @@ function spawnPiped(argv, input) {
   const err = bytes(r.stderr);
   // `EPIPE` is the child closing its stdin unread, which Node reports with
   // the status it still waited for; the runtime ignores it the same way.
+  if (r.error !== undefined && r.error.code === "ETIMEDOUT") return [-3, out, err];
   if (r.error !== undefined && r.error.code !== "EPIPE") return [r.error.code === "ENOBUFS" ? -2 : -1, out, err];
   if (r.signal !== null && r.signal !== undefined) return [128 + (os.constants.signals[r.signal] ?? 0), out, err];
   return [r.status === null ? -1 : r.status, out, err];
@@ -463,6 +575,10 @@ const CALLS = {
   readFileSync,
   readFileSyncOrNull,
   readFileBytesSync,
+  fileOpen,
+  fileReadAt,
+  fileSize,
+  fileClose,
   writeFileSync,
   appendFileSync,
   writeFileBytesSync,
@@ -482,6 +598,7 @@ const CALLS = {
   spawnSync,
   spawnSyncTo,
   spawnPiped,
+  spawnPipedWithin,
   kill,
   availableParallelism,
   totalMemory,

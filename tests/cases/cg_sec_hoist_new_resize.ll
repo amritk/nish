@@ -505,9 +505,9 @@ ovf.fail:
 
 define noundef i32 @forOfGrows(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #0 {
 entry:
-  %x.addr = alloca i32, align 4
+  %_x.addr = alloca i32, align 4
   %forof.idx = alloca i64, align 8
-  %r.addr = alloca %struct.R*, align 8
+  %_r.addr = alloca %struct.R*, align 8
   %R.obj = alloca %struct.R, align 8
   store i64 0, i64* %forof.idx, align 8
   br label %forof.cond
@@ -525,9 +525,9 @@ forof.body:
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
   %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  store i32 %8, i32* %x.addr, align 4
+  store i32 %8, i32* %_x.addr, align 4
   call void @R.constructor(%struct.R* %R.obj, %struct.nish_array* %xs)
-  store %struct.R* %R.obj, %struct.R** %r.addr, align 8
+  store %struct.R* %R.obj, %struct.R** %_r.addr, align 8
   br label %forof.inc
 
 forof.inc:

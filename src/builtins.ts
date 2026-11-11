@@ -20,6 +20,7 @@ import { checkExpression, literalOperand } from "./expressions"
 import { internalErrorFor } from "./ice"
 import { checkIndexArgument } from "./members"
 import {
+  isFileStreamExport,
   isNetBufferLetter,
   isNetExport,
   isNetWrittenLetter,
@@ -120,6 +121,23 @@ const refuseOnWasm = (ctx: CheckContext, call: Node, name: string): boolean =>
 const refuseOnFreestandingWasm = (ctx: CheckContext, call: Node, name: string): boolean =>
   refuseWhen(ctx, ctx.wasmFreestanding, call, name)
 
+/**
+ * WP44 Q7. The four `file*` builtins read through a libc a freestanding
+ * wasm32 build does not have, while `--profile wasi` reads through wasi-libc,
+ * so the refusal is keyed on the target, with words of its own that name the
+ * build that has one. True when the call was refused.
+ */
+const refuseFileOnFreestandingWasm = (ctx: CheckContext, call: Node, name: string): boolean => {
+  if (!ctx.wasmFreestanding) {
+    return false
+  }
+  ctx.error(
+    call,
+    `\`${name}\` reads a file, and a freestanding wasm32 build has no file system to read (build with \`--profile wasi\`)`
+  )
+  return true
+}
+
 /** The type a plain-identifier builtin converts to, or -1 when the name is not one. */
 const conversionTarget = (name: string): i32 => {
   if (name === "toI32") {
@@ -189,6 +207,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "isExecutableSync" ||
     name === "spawn" ||
     name === "spawnPiped" ||
+    name === "spawnPipedWithin" ||
     name === "spawnWithFds" ||
     name === "kill" ||
     name === "waitPid" ||
@@ -204,6 +223,10 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "setNice" ||
     name === "setIdlePriority" ||
     name === "setCpuAffinity" ||
+    name === "fileOpen" ||
+    name === "fileReadAt" ||
+    name === "fileSize" ||
+    name === "fileClose" ||
     isTermExport(name) ||
     isNetExport(name) ||
     isUnsafeExport(name)
@@ -1154,12 +1177,18 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   // arrays are appended to, so they are written arrays as `push`'s receiver
   // is. The status is `i32` in either number mode, as `spawn`'s pid is. On
   // wasm there is no child to start.
-  if (name === "spawnPiped") {
-    if (checkBuiltinArity(ctx, call, name, args, 4) && !refuseOnWasm(ctx, call, name)) {
+  // `spawnPipedWithin` is the same run with a deadline, its fifth argument an
+  // `i32` of milliseconds where a negative one means none, as `pollWait`'s is.
+  if (name === "spawnPiped" || name === "spawnPipedWithin") {
+    const within = name === "spawnPipedWithin"
+    if (checkBuiltinArity(ctx, call, name, args, within ? 5 : 4) && !refuseOnWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING))
       checkBuffer(ctx, args.children[1], scope, name, T_U8, false)
       checkBuffer(ctx, args.children[2], scope, name, T_U8, true)
       checkBuffer(ctx, args.children[3], scope, name, T_U8, true)
+      if (within) {
+        checkArgumentType(ctx, args.children[4], scope, name, T_I32)
+      }
     }
     return T_I32
   }
@@ -1216,6 +1245,27 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       checkArgumentType(ctx, args.children[2], scope, name, T_I32)
     }
     return T_I32
+  }
+  // WP44: a regular file read a window at a time. `fileReadAt` is `netRead`
+  // with an `i64` position after the window, whose range is checked as
+  // `netRead`'s is; positions and sizes are `i64` in both number modes, so a
+  // file past 2^31 - 1 bytes is readable.
+  if (isFileStreamExport(name)) {
+    const arity = name === "fileReadAt" ? 5 : 1
+    if (checkBuiltinArity(ctx, call, name, args, arity) && !refuseFileOnFreestandingWasm(ctx, call, name)) {
+      if (name === "fileOpen") {
+        checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+      } else {
+        checkArgumentType(ctx, args.children[0], scope, name, T_I32)
+      }
+      if (name === "fileReadAt") {
+        checkBuffer(ctx, args.children[1], scope, name, T_U8, true)
+        checkArgumentType(ctx, args.children[2], scope, name, T_I32)
+        checkArgumentType(ctx, args.children[3], scope, name, T_I32)
+        checkArgumentType(ctx, args.children[4], scope, name, T_I64)
+      }
+    }
+    return name === "fileSize" ? T_I64 : T_I32
   }
   // The frame clock: a timeout in milliseconds, negative for none, and
   // whether stdin is readable when it ends. An `i32`, as `pollWait`'s is.
@@ -1352,11 +1402,14 @@ const checkBuffer = (
   if (got === T_ERROR) {
     return
   }
-  // `spawnPiped` appends to its two output arrays, so one spelled with a
+  // `spawnPiped` and `spawnPipedWithin` append to their two output arrays, so one spelled with a
   // typed-array name is refused as `push` refuses that receiver: the name
   // promises a length that never changes, and the TypeScript the program is
   // emitted to would throw on the append.
-  const alias = written && name === "spawnPiped" ? typedArraySpelling(ctx, arg, scope) : ""
+  const alias =
+    written && (name === "spawnPiped" || name === "spawnPipedWithin")
+      ? typedArraySpelling(ctx, arg, scope)
+      : ""
   if (typedArrayElement(alias) >= 0) {
     ctx.error(
       arg,

@@ -1,0 +1,1 @@
+`A.json`'s `tag` is not a string literal: a variant's tag is written on the wire as a string, and typed JSON reads which one from the class's text

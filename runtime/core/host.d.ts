@@ -42,6 +42,10 @@ export declare function argv(): string[];
 export declare function readFileSync(path: string): string;
 export declare function readFileSyncOrNull(path: string): string | null;
 export declare function readFileBytesSync(path: string): u8[] | null;
+export declare function fileOpen(path: string): i32;
+export declare function fileReadAt(fd: i32, buf: u8[], off: i32, len: i32, pos: i64): i32;
+export declare function fileSize(fd: i32): i64;
+export declare function fileClose(fd: i32): i32;
 export declare function writeFileSync(path: string, data: string): void;
 export declare function appendFileSync(path: string, data: string): void;
 export declare function writeFileBytesSync(path: string, bytes: readonly u8[]): i32;
@@ -60,6 +64,13 @@ export declare function getenv(name: string): string | null;
 export declare function spawnSync(argv: string[]): number;
 export declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
 export declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
+export declare function spawnPipedWithin(
+  argv: string[],
+  stdin: readonly u8[],
+  stdout: u8[],
+  stderr: u8[],
+  timeoutMs: i32
+): i32;
 export declare function kill(pid: i32, sig: i32): i32;
 export declare function availableParallelism(): i32;
 export declare function totalMemory(): i64;

@@ -536,10 +536,29 @@ const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
   )
+const TAGGED_UNIONS = "Typed JSON decodes and encodes tagged unions"
+const taggedUnions = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: TAGGED_UNIONS, why }))
+  )
+const POOL_PIPELINE = "async Postgres pool pipelines queries across tasks"
+const poolPipeline = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: POOL_PIPELINE, why }))
+  )
 const MSS_UNSET = "explicitly set enc.mss wins over the socket MSS"
 const mssUnset = (why, moved) =>
   moved.map((program) => ({ program, file: "http-compress.ll", changelog: MSS_UNSET, why }))
+/** The changelog line of the stage that adds `spawnPipedWithin`. */
+const SPAWN_PIPED_WITHIN = "spawnPipedWithin, a captured run with a deadline"
+
 const DECLARED = [
+  // The hygiene rules found a dead local in std/compress/deflate.ts.
+  {
+    file: "deflate.ll",
+    changelog: "Refuse the mistakes every type accepts",
+    why: "the hygiene rules found a local in std/compress/deflate.ts's Huffman length limiter that nothing read, and deleting it renumbers that function's allocas, so the module every importer of nish/compress writes moves; no importer's own module does",
+  },
   // std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd.
   {
     file: "text.ll",
@@ -552,6 +571,20 @@ const DECLARED = [
     changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "the program imports asciiLower, asciiUpper and split from nish/text, which the 0.37.0 seed's std/text.ts does not export, so only the candidate compiles it",
   },
+  // #1362: std/regex.ts makes its tables through regexZeros/regexZeroBytes,
+  // which moves regex.ll in the five corpus programs importing nish/regex.
+  ...[
+    "bench/regex/main.ts",
+    "tests/link/caps_dep_std_not_refused/main.ts",
+    "tests/link/std_json_format/main.ts",
+    "tests/link/std_regex_node/main.ts",
+    "tests/link/std_text_camel_case/main.ts",
+  ].map((program) => ({
+    program,
+    file: "regex.ll",
+    changelog: "regex no longer hangs under Node",
+    why: "std/regex.ts zero-fills every table it reads before writing through two new helpers, regexZeros and regexZeroBytes, so the program's nish/regex module has new functions and calls; its own module does not move",
+  })),
   // Stage 5a: an --emit-dts compile is a page module, so Math.sin, cos, exp,
   // log, pow and a float % in it call std/math.ts's copies (`@nish.<name>F64`)
   // instead of an intrinsic or `frem` a page could not link.
@@ -1154,6 +1187,66 @@ const DECLARED = [
     why: "the case is compiled with --deterministic, a flag the seed does not know",
   },
   {
+    program: "examples/file-server.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
+    program: "docs/cookbook/builtin-file-window.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
+    program: "tests/cases/caps_file_read.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
+    program: "tests/cases/file_open_errors.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
+    program: "tests/cases/file_read_at.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
+    program: "tests/cases/file_read_at_bounds.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
+    program: "tests/cases/file_read_at_eof.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
+    program: "tests/cases/file_read_at_pos.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
+    program: "tests/cases/file_size_large.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
+    program: "tests/cases/mem_file_stream_flat.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
     program: "tests/cases/host_import_string.ts",
     file: "exit",
     changelog: "Strings cross between a wasm module and its page",
@@ -1195,6 +1288,18 @@ const DECLARED = [
     changelog: "nish.host",
     why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
   },
+  // A Map or Set read in a parallel map: the 0.38.0 seed walks a table's
+  // private arrays and refuses a body that reaches one beside a `dst`.
+  ...[
+    "tests/link/par_map_read_capture/main.ts",
+    "tests/link/par_map_read_into/main.ts",
+    "tests/link/par_map_read_into_keys/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "Read a Map or Set reached through a parallelMapInto element",
+    why: "the 0.38.0 seed counts a Map's private entry arrays as reaching `dst` and refuses the program, so only the candidate compiles it",
+  })),
   // Parent/child regions: the 0.38.0 seed's nish:region has no child or
   // childWith, so only the candidate compiles these programs.
   ...[
@@ -1594,6 +1699,36 @@ const DECLARED = [
     "tests/link/tfb_db/main.ts",
     "tests/link/tfb_entry/main.ts",
   ]),
+  ...poolPipeline(
+    "the pool's slots gain a send queue, a parse cache and abandoned-seat state, so every program that links `std/net/postgres-async.ts` lays out and walks the pool differently (WP49 stage 6, part 5)",
+    {
+      "tests/link/net_serve_pg/main.ts": ["main.h", "main.ll", "postgres-async.ll", "serve.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": [
+        "main.h",
+        "main.ll",
+        "postgres-async.ll",
+      ],
+      "tests/link/std_postgres_async_flat/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
+        "main.h",
+        "main.ll",
+        "postgres-async.ll",
+      ],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+    }
+  ),
+  ...poolPipeline(
+    "the program calls the pipelined API (`pgAsyncPrepare`, `pgAsyncSeat`, `pgAsyncAnswer`) the 0.38.0 seed's std does not export, so only the candidate compiles it (WP49 stage 6, part 5)",
+    {
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["exit"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["exit"],
+    }
+  ),
   // WP49 stage 6, part 3: `HttpHandler` holds owed sends (`flush`, `sends`),
   // so every program that reaches std/net/handler.ts lays it out again.
   ...pipelinedWrite(
@@ -1671,6 +1806,104 @@ const DECLARED = [
     file: "exit",
     changelog: PIPELINED_WRITE,
     why: "the program calls HttpHandler.deferSends, which the 0.38.0 seed does not have, so only the candidate compiles it (WP49 stage 6, part 3)",
+  },
+  ...taggedUnions(
+    "JsonTokenizer gains rewindObject and JsonDecoder two trailing i32 fields (`unionStart`, where a read-ahead union object began, and `unionReread`, the bytes read again to reach a tag that is not the first key), so every program that links nish/json-tokenizer or nish/json-typed declares one more function and lays the decoder out 8 bytes wider; a program reading the tokenizer's header re-declares it",
+    {
+      "bench/http-app-carrier.ts": [
+        "http-app-carrier.h",
+        "json-tokenizer.ll",
+        "json-typed.ll",
+        "json-value.ll",
+      ],
+      "bench/http1-server.ts": ["json-tokenizer.ll", "json-typed.ll", "json-value.ll"],
+      "bench/json-compare/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
+      "bench/json-tokenizer/main.ts": ["json-tokenizer.ll", "main.ll"],
+      "bench/json-value/main.ts": ["json-tokenizer.ll", "json-value.ll", "loop.ll", "main.ll"],
+      "bench/yaml-json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
+      "docs/cookbook/json-presence.ts": [
+        "json-presence.h",
+        "json-presence.ll",
+        "json-tokenizer.ll",
+        "json-typed.ll",
+      ],
+      "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.ll", "std_json-tokenizer.ll"],
+      "docs/cookbook/json-typed.ts": [
+        "json-tokenizer.ll",
+        "json-typed.h",
+        "json-typed.ll",
+        "std_json-typed.ll",
+      ],
+      "docs/cookbook/json-value.ts": ["json-tokenizer.ll", "json-value.ll", "std_json-value.ll"],
+      "examples/merge-patch.ts": ["json-tokenizer.ll", "json-typed.ll", "merge-patch.h", "merge-patch.ll"],
+      "tests/link/json_merge_patch/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
+      "tests/link/json_presence/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
+      "tests/link/std_json_conformance/main.ts": ["conformance.ll", "json-tokenizer.ll", "rewrite.ll"],
+      "tests/link/std_json_equal/main.ts": [
+        "json-equal.ll",
+        "json-pointer.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "suite.ll",
+        "units.ll",
+      ],
+      "tests/link/std_json_number/main.ts": [
+        "json-equal.ll",
+        "json-pointer.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "suite.ll",
+      ],
+      "tests/link/std_json_pointer/main.ts": [
+        "json-equal.ll",
+        "json-pointer.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "suite.ll",
+        "units.ll",
+      ],
+      "tests/link/std_json_typed/main.ts": [
+        "checks.ll",
+        "json-tokenizer.ll",
+        "json-typed.ll",
+        "kinds.ll",
+        "main.h",
+        "main.ll",
+        "options.ll",
+        "renamed.ll",
+        "support.ll",
+        "tag.ll",
+      ],
+      "tests/link/std_json_value/main.ts": [
+        "alloc.ll",
+        "common.ll",
+        "corpus.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "units.ll",
+      ],
+      "tests/link/std_json_value_ranges/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll"],
+      "tests/link/std_json_writer/main.ts": ["common.ll", "json-tokenizer.ll", "json-typed.ll", "main.h"],
+      "tests/link/std_yaml_json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
+    }
+  ),
+  {
+    program: "tests/cases/caps_process_spawn_piped_within.ts",
+    file: "exit",
+    changelog: SPAWN_PIPED_WITHIN,
+    why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
+  },
+  {
+    program: "tests/cases/io_spawn_piped_within.ts",
+    file: "exit",
+    changelog: SPAWN_PIPED_WITHIN,
+    why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
+  },
+  {
+    program: "docs/cookbook/builtin-spawn-piped-within.ts",
+    file: "exit",
+    changelog: SPAWN_PIPED_WITHIN,
+    why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
   },
 ]
 

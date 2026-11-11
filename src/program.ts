@@ -379,6 +379,12 @@ export const JSON_NONE: i32 = 0
 export const JSON_DECODE: i32 = 1
 /** `jsonEncode<T>`: every call writes a `T` as an object, with code written from `T`'s fields. */
 export const JSON_ENCODE: i32 = 2
+/**
+ * `jsonDecodeUnion<T>`: every call decodes an object into a tagged union `T`,
+ * picking the variant by the object's tag, with code written from the
+ * variants' fields.
+ */
+export const JSON_DECODE_UNION: i32 = 3
 
 // WP32 S5: what a call is to a fused lookup (docs/wp32-map.md §9.1). The
 // checker decides (`src/fusion.ts`), and the attribute pass and the emitter
@@ -1065,6 +1071,12 @@ export class StructInfo {
    */
   jsonOptions: Node | null
   /**
+   * Typed JSON: the string a union's variant writes its tag as, from the
+   * `tag` of its `static readonly json`; `""` writes the tag's enum member's
+   * name.
+   */
+  jsonTag: string
+  /**
    * WP40 §4a. A class with one `CPtr` field is an owned foreign handle: the
    * field is the C resource it owns, its `[Symbol.dispose]` closes it, and
    * `src/handles.ts` keeps every value of the class where that close is the only
@@ -1107,6 +1119,7 @@ export class StructInfo {
     this.poisoned = false
     this.collected = false
     this.jsonOptions = null
+    this.jsonTag = ""
     this.jsonNumber = false
     this.atomic = false
     this.handle = false

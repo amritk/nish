@@ -150,39 +150,139 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
 Every Nish type maps 1:1 onto one LLVM first-class type. There is no
 boxing, no runtime type tag, no structural subtyping (except
 `implements`, below), and no implicit conversion of any kind: two values are
-compatible only when their types are identical (`src/types.ts`, where a
-type is interned and two types are the same type exactly when they are the
-same `i32`).
+compatible only when their types are identical.
 
-| Nish | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
-| --- | --- | --- | --- | --- |
-| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Two's-complement; signed overflow panics ([Semantics decisions](#semantics-decisions)); `wrappingAdd`/`wrappingSub`/`wrappingMul` from [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping) wrap. |
-| `number` (f64 mode), `f64` | `double` | 8 / 8 | `double` | IEEE-754; `f64` is always available, in both modes. |
-| `f32` | `float` | 4 / 4 | `float` | 32-bit IEEE-754 ([`f32`](#f32)). Half the footprint of an `f64` and twice the SIMD lane count; never the lowering of `number`, and `f32 + f64` is a type error. |
-| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; signed overflow panics (the `nish:unsafe` `wrapping*` functions wrap); literals only by context. |
-| `u8` | `i8` | 1 / 1 | `uint8_t` | [Unsigned integers](#unsigned-integers): the same LLVM type as a signed byte, with unsigned operations. Wrapping arithmetic. |
-| `u16` | `i16` | 2 / 2 | `uint16_t` | As `u8`. |
-| `u32` | `i32` | 4 / 4 | `uint32_t` | Shares `i32`'s LLVM type; `u32 + i32` is still a type error. |
-| `u64` | `i64` | 8 / 8 | `uint64_t` | Shares `i64`'s LLVM type; crosses to JavaScript as a `bigint`, like `i64`. |
-| `boolean` | `i1` | 1 / 1 | `bool` | `zeroext` at the ABI boundary. |
-| `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const nish_str *` in, `nish_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
-| `T[]`, `Array<T>` | `%struct.nish_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
-| `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const nish_array *` in | The same array, with every write refused: [Readonly arrays](#readonly-arrays). |
-| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. A receiver spelled with one of the names has no `push` or `pop`, as in TypeScript ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)). They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). An unsigned array crosses to a host as `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array` ([wp30-bytes-interop.md](wp30-bytes-interop.md)), but those four are **not** spellings in the language: a program writes `u8[]`. |
-| `enum K` | `i32` | 4 / 4 | (not representable) | A **distinct** type, not a spelling of `i32` (`sameType` fails against every other type): [Enums](#enums). `K.A` is the member's integer, so nothing is emitted for the declaration. |
-| `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
-| `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, narrowing, and a `??` default: [Nullable types](#nullable-types). |
-| `(x: T) => U`, only on a parameter of a top-level function | none: no LLVM parameter, no value | — | (not representable) | Names a callee chosen at each call and compiled into the instantiation's body as a direct call: [Function parameters](#function-parameters). |
-| `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
-| `A \| B`, each a tagged class or interface | `%union.tagged*` to `%union.tagged = type { i32 }`, the tag every variant begins with | 8 / 8 (pointer) | (not representable) | A variant converts by a `bitcast`; only the tag is read: [Discriminated unions](#discriminated-unions). |
-| `void` | `void` | – | `void` | Return type only. |
+Read from the top down as deep as you need: which type to write, what
+behaves differently from TypeScript, how each type sits in memory and
+crosses to C, then the exact rules.
 
-Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`),
-`src/interop-abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`, `str_literal`, `arr_literal`,
-`cls_point`; the ten-struct layout test `tests/layout/structs.ts` (offsets and
-`sizeof` cross-checked against clang, [wp2-classes.md](wp2-classes.md#layout)).
+### Choosing a type
 
-Type rules:
+| To hold | Write |
+| --- | --- |
+| A whole number | `number`, or `i64` beyond ±2³¹ |
+| A fraction | `f64`; `f32` for half the memory or twice the SIMD lanes |
+| A byte, or bits that wrap | `u8`, `u16`, `u32`, `u64` |
+| True or false | `boolean` |
+| Text | `string` |
+| A list | `T[]`, or `readonly T[]` when nothing writes it |
+| A record | `class C`, or `interface I` |
+| One of a fixed set of names | `enum K` |
+| A value or nothing | `T \| null` |
+| One of several kinds of record | `A \| B`, a [tagged union](#discriminated-unions) |
+| A value or an error | `Result<T, E>` |
+| A function the caller picks | `(x: T) => U` on a parameter |
+| No value | `void`, as a return type |
+
+### Coming from TypeScript
+
+- **`number` is one fixed type.** It is `i32` by default and `f64` under
+  `--number-mode f64`; nothing else is ever its lowering. `f64` is available
+  in both modes.
+- **Nothing converts on its own.** Each numeric type is its own type, so
+  `u32 + i32` and `f32 + f64` are type errors. Convert with `toI32`, `toU8`,
+  `toF64` and the rest ([Type rules](#type-rules)).
+- **Signed overflow panics** ([Semantics decisions](#semantics-decisions)),
+  in `i32` and `i64` alike; `wrappingAdd`, `wrappingSub` and `wrappingMul`
+  from [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)
+  wrap instead. [Unsigned integers](#unsigned-integers) always wrap. An
+  `i64` takes a literal only by context.
+- **Strings are immutable.** Sharing one is always safe, and nothing is ever
+  copied.
+- **An array has one element type**, and every index is bounds-checked.
+  `readonly T[]` refuses every write ([Readonly arrays](#readonly-arrays)).
+  `Int32Array`, `Float32Array`, `Float64Array` and `BigInt64Array` are only
+  other names for `i32[]`, `f32[]`, `f64[]` and `i64[]` (`sameType` holds,
+  and `new Int32Array(n)` is `new Array<i32>(n)`), except that a receiver
+  spelled with one has no `push` or `pop`, as in TypeScript
+  ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)).
+- **Only a class, interface, array or string can be `null`.** A nullable
+  value allows only `=== null` / `!== null`, assignment, narrowing and a `??`
+  default ([Nullable types](#nullable-types)).
+- **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
+  against every other type ([Enums](#enums)).
+- **A function reports failure with a `Result`**, the only way it can; the
+  payload is unreachable until the discriminant is tested
+  ([Result and error handling](#result-and-error-handling)).
+- **A function type** is allowed only on a parameter of a top-level
+  function, and names the callee chosen at each call
+  ([Function parameters](#function-parameters)).
+
+### In memory and in C
+
+A number, a `boolean` or an `enum` is a plain value. The C column is the
+type `--emit-header` writes; a dash means the type cannot cross to C.
+
+| Type | LLVM | Size / align | C |
+| --- | --- | --- | --- |
+| `i32`, `number` | `i32` | 4 / 4 | `int32_t` |
+| `f64`, `number` in f64 mode | `double` | 8 / 8 | `double` |
+| `f32` | `float` | 4 / 4 | `float` |
+| `i64` | `i64` | 8 / 8 | `int64_t` |
+| `u8` | `i8` | 1 / 1 | `uint8_t` |
+| `u16` | `i16` | 2 / 2 | `uint16_t` |
+| `u32` | `i32` | 4 / 4 | `uint32_t` |
+| `u64` | `i64` | 8 / 8 | `uint64_t` |
+| `boolean` | `i1` | 1 / 1 | `bool` |
+| `enum K` | `i32` | 4 / 4 | — |
+| `void` | `void` | — | `void` |
+
+- Signed integers are two's-complement, and floats IEEE-754. An unsigned
+  type shares the LLVM type of its signed twin, and its signedness lives in
+  the operations ([Unsigned integers](#unsigned-integers)). `i64` and `u64`
+  cross to JavaScript as a `bigint`.
+- A `boolean` is `zeroext` at the ABI boundary.
+- `K.A` is the member's integer, so nothing is emitted for an `enum`
+  declaration.
+
+Every other type is a pointer, 8 bytes and 8-aligned, to:
+
+- **`string`**, LLVM `i8*`: `{ i64 len, i8 data[len], i8 0 }`, 8-aligned and
+  NUL-terminated, so `data` is a C string, and `len` is the UTF-8 byte
+  length. Literals are module constants; every other string lives in the
+  arena. In C, a `const nish_str *` parameter and a `nish_str *` result.
+- **`T[]`**, LLVM `%struct.nish_array*`: a 24-byte header,
+  `{ i64 len, i64 cap, i8* data }`, where `data` holds `cap` elements of
+  `sizeof(T)`. In C, a `const nish_array *` parameter the function only
+  reads, and a `nish_array *` parameter it writes through or a `nish_array *`
+  result.
+- **`readonly T[]`**: the same array, a `const nish_array *` parameter in C.
+- **`Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array`**: the
+  arrays they name. They name the JS typed array a host passes
+  ([wp8-interop.md](wp8-interop.md)). An unsigned array crosses to a host as
+  `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array`
+  ([wp30-bytes-interop.md](wp30-bytes-interop.md)), but those four are
+  **not** spellings in the language: a program writes `u8[]`.
+- **`class C`, `interface I`**, LLVM `%struct.C*`:
+  `%struct.C = type { fields in declaration order }`, laid out as clang lays
+  out the same C struct, with no header and no vtable. An object is arena- or
+  stack-allocated ([Memory model](#memory-model)). Not in C.
+- **`T | null`**: whatever `T` points to; `null` is the constant `null`. Not
+  in C.
+- **`A | B`**, LLVM `%union.tagged*`: `%union.tagged = type { i32 }`, the tag
+  every variant begins with. A variant converts by a `bitcast`, and only the
+  tag is read ([Discriminated unions](#discriminated-unions)). Not in C.
+- **`Result<T, E>`**, LLVM `%struct.nish_result.<T>.<E>*`:
+  `{ i1 ok, T value, E error }`, one struct per pair of payload types, laid
+  out as clang lays out the same C struct. It is **passed and returned** as
+  one `i64` when both payloads are scalars of at most 4 bytes, and as
+  `{ i1, i32, i32 }`, the tag and one slot per arm, between two non-exported
+  functions of one module. In C, a `nish_result_<T>_<E>_word` by value, and a
+  `struct nish_result_<T>_<E> *` otherwise.
+
+A function type, `(x: T) => U`, is no value at all: it has no LLVM type and
+no parameter, and the callee is compiled into the instantiation's body as a
+direct call. Not in C.
+
+Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`; a type is
+interned, and two types are the same type exactly when they are the same
+`i32`),
+`src/interop-abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`,
+`str_literal`, `arr_literal`, `cls_point`; the ten-struct layout test
+`tests/layout/structs.ts` (offsets and `sizeof` cross-checked against clang,
+[wp2-classes.md](wp2-classes.md#layout)).
+
+### Type rules
 
 - **Accepted type syntax**: `number`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
   `f32`, `f64`, `boolean`,
@@ -701,6 +801,8 @@ type Shape = Circle | Square;
 const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
 ```
 
+Typed JSON reads and writes a union of classes by its tag ([Typed JSON](#typed-json-nishjson-typed)).
+
 **Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
 behind a pointer. Every variant begins with its `i32` tag, so a variant
 pointer is a union pointer by a `bitcast`, and reading the tag is a
@@ -749,7 +851,9 @@ and each has its own code:
 
 **Where a union goes.** A union is the type of a local, a parameter, a
 field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
-spelled in place, `(Circle | Square)[]`), or of any of those made nullable.
+spelled in place, `(Circle | Square)[]`), or of any of those made nullable,
+and a `Map`'s value is any of those: `Map<string, Shape>`,
+`Map<string, Shape[]>`, `Map<string, Shape | null>` (`union_map_value`).
 An alias may name another union, which is flattened: with `type Round =
 Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
 of a variant, or of a union whose variants are all the wider union's,
@@ -1010,12 +1114,17 @@ boundary, so no other `i32` reaches it.
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
   narrows nothing, and is accepted. A test of the tag does narrow (above).
-- **No union type arguments.** `Box<Shape>`, a generic function or method
-  whose type parameter would bind to a union, `Map<K, Shape>` and
+- **No union type arguments, but a `Map`'s value.** `Box<Shape>`, a generic
+  function or method whose type parameter would bind to a union, and
   `Result<Shape, E>` / `Result<T, Shape>` are NL2533
   (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
-  `reject_union_generic_method`, `reject_union_map_value`,
-  `reject_union_result_ok`, `reject_union_result_err`). A union is not a
+  `reject_union_generic_method`, `reject_union_result_ok`,
+  `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
+  its value as it is, the way an array stores an element of a union, and
+  `get` gives `Shape | undefined` (`union_map_value`). The `Map` here is the
+  built-in one and its methods: `nish/map`'s `getOrInsert` and `reserve` are
+  generic functions, so one called on a `Map<K, Shape>` binds `V` to the union
+  and is NL2533 as any generic call is. A union is not a
   `Map` or `Set` key, which is the key rule's refusal
   (`reject_union_map_key`, `reject_union_set`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary
@@ -2204,8 +2313,10 @@ and their `.ll` goldens are byte-identical files.
     `_field_init_level`, `_field_init_unknown`, `_field_init_i32`,
     `_field_init_dotted`).
   - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
-    it reads an enum as any of its members, which a member type cannot hold. A
-    member type crosses to C and JavaScript exactly where its enum does, which
+    it reads an enum as any of its members, which a member type cannot hold.
+    The one exception is a union's tag: a member that tags a variant of a
+    union is written as its name, the union's [typed JSON](#typed-json-nishjson-typed)
+    tag (`tests/link/json_tagged_union`). A member type crosses to C and JavaScript exactly where its enum does, which
     is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``
@@ -3586,8 +3697,8 @@ async function run(): Promise<void> {
   other (`reject_async_spawn_store_string_callee`,
   `reject_async_spawn_store_string_method`,
   `reject_async_spawn_store_copied`), and growing a shared array, `Map` or
-  `Set` — `push`, `set`, `add`, `spawnPiped` appending to its output
-  arrays, on the argument or on what a method answers out of it — is NL2615
+  `Set` — `push`, `set`, `add`, `spawnPiped` or `spawnPipedWithin`
+  appending to its output arrays, on the argument or on what a method answers out of it — is NL2615
   (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
   `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`), and so
   is a builtin with no body of its own that does either, `reserve` on a
@@ -3969,8 +4080,10 @@ from the whole-program facts, and each rule is reported there:
   (`tests/link/par_panic_once`, `thread_panic_once`). Output is a write —
   `console.error` and `process.exit` as much as `console.log`
   (`reject_par_console_error`, `reject_par_process_exit`). Reading a shared
-  `Map` or `Set` that an element reaches, with `get`, `has` or `size`, is a
-  read (`tests/link/par_map_table_reads`). Handing a helper a number, a
+  `Map` or `Set` that an element or a capture reaches, with `get`, `has` or
+  `size`, is a read (`tests/link/par_map_table_reads`); `set`, `delete`,
+  `clear` and iterating one, whose walk counts itself on the table, are writes
+  (`tests/cases/reject_par_map_set`, `_delete`, `_clear`, `_values`). Handing a helper a number, a
   `boolean`, an enum or a `string` — a `string` element of the caller's array
   included, `verify(hashes[k])` — gives it no slot to store into, so it is a
   read (`tests/link/thread_bcrypt_batch`, whose task verifies against the
@@ -4130,7 +4243,14 @@ from the whole-program facts, and each rule is reported there:
   elements and `| null`, is
   `` `(r) => ...` can reach a `f64[]` through `r.cells`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads, so `dst` may not be reachable from an element of `src` ``
   (`tests/cases/reject_par_reaches_dst`). It is judged by type, so such an
-  array is refused whether or not it is `dst` at run time. A reduce writes no
+  array is refused whether or not it is `dst` at run time. A global `Map` or
+  `Set` reaches only what it stores: its own arrays are private to it, so a
+  `Map<string, i32>` beside a `dst: i32[]` is not refused
+  (`tests/link/par_map_read_into`, `par_map_read_into_keys`,
+  `par_map_read_capture`), while a `Map<string, i32[]>` is, through
+  `x.index.get(k)` (`tests/cases/reject_par_map_value_dst`). A program's own
+  class named `Map` is walked like any class
+  (`tests/cases/reject_par_map_user_class`). A reduce writes no
   array of its caller's and has no such rule.
 
 #### A data-parallel arrow reads its function's `const` locals
@@ -5601,6 +5721,44 @@ On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
 with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
 
+### Fixed digits and a split limit: `toFixed` and `splitLimit` in `nish/text`
+
+Nish has no methods on a number and no optional parameters, so JavaScript's
+`x.toFixed(n)` and `text.split(sep, limit)` are two functions of `nish/text`.
+Each is the method it stands for, read as TypeScript: under Node the module
+runs as written and answers what the method answers, and natively it answers
+the same bytes (`tests/link/std_text_to_fixed`, `tests/link/std_text_split_limit`,
+whose every line `tests/run.js` also holds to Node's own method).
+
+```typescript
+import { splitLimit, toFixed } from "nish/text";
+
+export const main = (): i32 => {
+  console.log(toFixed(1.005, 2));                     // 1.00: 1.005 is stored a little below
+  console.log(toFixed(2.5, 0));                       // 3: a tie goes away from zero
+  console.log(splitLimit("a,b,c", ",", 2).join("|")); // a|b: the rest is dropped
+  return 0;
+};
+```
+
+- **`toFixed(x, digits)` rounds the exact binary value**, as ECMA-262 does:
+  `1.005` is stored as 1.00499999999999989…, so it gives `"1.00"`, while
+  `8.345` is stored a little above and gives `"8.35"`; an exact tie rounds
+  away from zero, so `toFixed(-2.5, 0)` is `"-3"`. `digits` is 0 to 100, and
+  any other count panics (`toFixed: digits must be 0 to 100`) where JavaScript
+  throws a `RangeError`. `NaN`, the infinities and any `x` of magnitude 1e21 or
+  more answer `${x}`, as JavaScript does; `-0` gives `"0.00"`, and a negative
+  `x` that rounds to zero keeps its sign (`toFixed(-0.0001, 2)` is `"-0.00"`).
+  It is written in Nish over an array of decimal digits, so it is exact for
+  every `f64`, the subnormals included, and it needs no runtime C.
+- **`splitLimit(text, sep, limit)` keeps the first `limit` pieces** of
+  `split(text, sep)` and drops the rest, rather than joining them into the
+  last; a limit of 0 gives `[]`. A negative limit keeps every piece, because
+  JavaScript reads the limit through `ToUint32` and -1 becomes 4294967295;
+  that makes `splitLimit(text, sep, -1)` the same as `split(text, sep)`. An
+  empty separator panics (`splitLimit: an empty separator`) whatever the
+  limit, as `split`'s does, even where JavaScript would answer `[]`.
+
 ### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` in `nish/bytes`
 
 The four runs answer the first index in `[from, to)` of a `u8[]` whose byte
@@ -6883,6 +7041,63 @@ loop may run zero times and does not terminate. Rules (`src/statements.ts`, `che
   (`tests/cases/reject_unreachable`, `reject_cf_unreachable_after_break`,
   `reject_exit_unreachable`; the `if` form *(CLI only)*).
 
+### Mistakes every type accepts
+
+Some lines type-check and still cannot be what their author meant. Rust
+warns about most of them and Clippy denies the rest. Here each one is an
+error, because it is a bug far more often than it is a choice. Each rule fires only
+where the answer is certain, and each has a spelling that says "on purpose".
+Rules (`src/hygiene.ts`):
+
+- **A local is read at least once** (NL2712). A `let` or `const`, a
+  `for...of` binding included, that nothing reads is
+  `` `x` is declared but never read `` (`reject_unread_local`,
+  `reject_unread_for_of`). Storing into a local is not reading it: `n++` or
+  `n += 1` on a line of its own, or as a `for` loop's step, writes `n` and
+  uses nothing, so a counter nothing reports is
+  `` `n` is assigned but its value is never read ``
+  (`reject_unread_local_written`); `const m = n++` reads it. A capture by an
+  arrow is a read. A lone name on its own line, `x;`, is not a read
+  (`reject_unread_lone_name`). A name that starts with `_` is never reported,
+  which is how a loop that only counts its turns is written:
+  `for (const _item of xs)` (`hygiene_quiet`). A `using` binding is exempt,
+  because its block's end uses it. A `Result` local has its own rule (NL2032,
+  [Result and error handling](#result-and-error-handling)).
+- **A statement has an effect** (NL2713). An expression statement with no
+  call, `new`, store, `++`, `--` or `await` anywhere in it is
+  `This statement has no effect` (`reject_no_effect_statement`,
+  `reject_no_effect_member`). `state === next;` adds
+  `` (to assign, write `=`) ``. A lone name is left to the rule above.
+- **A value is not assigned to itself** (NL2714). `x = x`, `p.x = p.x`
+  and `xs[i] = xs[i]` do nothing (`reject_self_assign`).
+- **An operator has two different operands** (NL2715). With the same
+  operand on both sides, `===` `!==` `==` `!=` `<` `<=` `>` `>=` `&&` `||` `&`
+  `|` `^` `-` `/` `%` give an answer that does not depend on it, so the
+  expression is refused (`reject_same_operands`, `reject_same_operands_index`).
+  Two operands are the same when they are the same pure expression over the
+  same variables: the same local, field path, element by the same index, or
+  the same operators over those. A literal-only expression is not refused. On
+  `f32` and `f64`, `x !== x` is the NaN test and `x - x === 0` the finite
+  test, so only `<` and `>` are refused there, which are false for every
+  value (`reject_same_operands_float_ordered`). To compare a value with
+  itself on purpose, copy it to a second `const` first (`hygiene_quiet`).
+- **An `else if` tests something new** (NL2716). A condition the same as an
+  earlier one in the same `if`/`else if` chain can never pass, because the
+  earlier branch took every case it would match (`reject_repeated_condition`).
+  A condition with a call in it can answer differently the second time, and
+  is not compared.
+- **An unsigned value is not compared with zero for its sign** (NL2717).
+  `u < 0` and `0 > u` are always false, and `u >= 0` and `0 <= u` always
+  true, for a `u8`, `u16`, `u32` or `u64` (`reject_unsigned_zero`,
+  `reject_unsigned_zero_reversed`).
+
+These findings are reported only once every other rule has passed: a program
+with any other error is told that error alone (`reject_hygiene_held`), so
+an unread local never crowds out the error that left it unread. They are held
+to the program's own package and the standard library. A dependency's
+findings are left to its author, as Cargo caps the lints of a crate it pulls
+in.
+
 ### Rejected statements
 
 `with` (`tests/cases/reject_with_statement`), `try` (`reject_try_catch`),
@@ -6937,32 +7152,239 @@ under [Semantics decisions](#semantics-decisions).
 
 ### Operators
 
-| Operator | Operand types | Result | Lowering | Test |
-| --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on a page module (above, `Math.sin`) or under [`--deterministic`](#--deterministic) a float `%` or `%=` is a call to `std/math.ts`'s `fmodF64` in place of `frem`, whose libm `fmod` that link lacks, an `f32` widened to `f64` and the exact result narrowed back; on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`, `wasm_math_rem`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
-| `+` | two `string` | `string` | `nish_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
-| unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
-| unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
-| `& \| ^` | two integers of one type | that type | `and` / `or` / `xor`, one instruction, no panic path | `bit_and_or_xor`, `bit_i64`, `bit_attributes`; `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_boolean` (`` Operator `&` is not available on boolean (use `&&`) ``) |
-| `<< >> >>>` | two integers of one type | that type | `shl`; `>>` is `ashr` (sign-filling) on a signed type and `lshr` (zero-filling) on an unsigned one, so `>>` and `>>>` are the same instruction there; `>>>` is always `lshr`. The count is masked to the operand width (31, 63, or 7/15 on the narrow unsigned widths); a constant count is masked at compile time and emits no `and` (see [Shifts](#shifts)) | `bit_shifts`, `bit_shift_const`, `bit_shift_fill`, `bit_shift_narrow`, `bit_i64`, `u_shift_logical`; `reject_u_shift_mixed`; `tests/differential/corpus/bit_shifts` |
-| unary `~` | any integer type | same | `xor x, -1` (LLVM has no `not`) | `bit_not`; `reject_bit_not` (`` Operator `~` requires an integer operand, got f64 ``) |
-| `< <= > >=` | two numbers of one type (`i32`, `i64`, the unsigned widths, `f32`, or `f64`); nothing else | `boolean` | `icmp slt ...` signed, `icmp ult ...` unsigned, `fcmp olt ...` for both float widths | `cf_if`, `f64_mode`, `u_compare_above_intmax`, `f32_arith`; booleans (`reject_bool_ordering`), strings (`reject_str_lt`, `reject_str_lt_str`), and structs (`reject_cls_ordering`) are `` Operator `<` requires two numeric operands, got boolean and boolean `` |
-| `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `nish_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null`; `a === undefined`, for a `Map.get` result only: its found bit, negated | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`, `map_get_narrow`; arrays *(CLI only)*; `reject_null_compare_two`, `reject_map_get_undefined_compare` |
-| `== !=` | – | – | forbidden | `reject_loose_equality`, `reject_loose_inequality` |
-| `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
-| `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch`, `reject_cf_ternary_void` |
-| `a ?? d` | `a` a `Map.get` result (`V \| undefined`), `d` a `V`; the level of `\|\|`, not mixed with `\|\|` or `&&` unparenthesised | `V` | `br` to `valueAt` or `d`, then `phi`; `select` for a `const` with a literal or a name as `d` | `map_get_nullish`, `map_get_narrow`, `map_get_pointer_value`; `reject_nullish`, `reject_nullish_default_type`, `reject_nullish_mixed_or` ([`Map` and `Set`](#map-and-set)) |
-| `a ?? d` | `a` a `T \| null` that is not an element read, `d` a `T` or a `T \| null`; the same precedence | `T`, or `T \| null` for a nullable `d` | `icmp ne` against `null`, then `select` for a literal or a name as `d`; otherwise `br` to `d` and `phi` | `nullish_nullable`, `nullish_nullable_field`, `nullish_nullable_default_null`, `nullish_nullable_default_context`, `nullish_nullable_escapes`; `reject_nullish_nullable`, `reject_nullish_element`, `reject_nullish_nullable_default_type` ([Nullable types](#nullable-types)) |
-| `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
-| `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const`, `reject_cf_compound_string`, `reject_cf_compound_widths` |
-| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
-| `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
-| `,` | – | – | forbidden | `reject_comma_expression` |
-| `a?.b ?? d`, `a?.m() ?? d` | `a` a `T \| null`; a chain of `?.` and `.` links, field reads, `length` and method calls, that is the left operand of `??` | the last link's type, as `a ?? d` on a `T \| null` types it | `icmp eq` against `null` at each `?.` link's receiver, then `br` to `nullish.default`; `phi` at `nullish.end` | `optional_chain_field`, `optional_chain_order`, `optional_chain_generic`, `optional_chain_bounds`; `reject_optional_chain`, `reject_optional_chain_never_null` ([Nullable types](#nullable-types)) |
-| `await f(x)` | a direct call to an `async` function, at the top of a statement in an `async` function | the call's `T` | a call when `f` awaits nothing; otherwise `f`'s frame is laid out in the caller's, `@f.resume` is called, and the caller saves its state and answers `false` while it pends | `async_await_single`, `async_await_chain`, `async_lowered`; `reject_await`, `reject_async_await_value`, `reject_async_await_nested` ([Async functions](#async-functions-async-and-await)) |
-| `== != ?.[ ?.() in instanceof typeof delete void yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain_element`, `reject_optional_call`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_yield` |
-| `** **=` | – | – | not supported: `` Unsupported binary operator `**` `` / `` Unsupported assignment operator `**=` `` | `reject_op_exponent`, `reject_op_exponent_template`, `reject_exponent_assign_local`, `reject_cls_compound_operator` |
-| `+x` | – | – | not supported | `Unsupported unary operator` *(CLI only)* |
+| Operator | Works on | Gives |
+| --- | --- | --- |
+| `+ - * / %` | two numbers of one type | that type |
+| `+` | two `string` | `string` |
+| unary `-` | any numeric type | same |
+| unary `!` | `boolean` | `boolean` |
+| `& \| ^` | two integers of one type | that type |
+| `<< >> >>>` | two integers of one type | that type |
+| unary `~` | any integer type | same |
+| `< <= > >=` | two numbers of one type | `boolean` |
+| `=== !==` | two values of one type | `boolean` |
+| `== !=` | forbidden | – |
+| `&& \|\|` | two `boolean` | `boolean` |
+| `c ? a : b` | `boolean`, two of one type | that type |
+| `a ?? d` | a `Map.get` result | `V` |
+| `a ?? d` | a `T \| null` | `T` or `T \| null` |
+| `x = e` | a mutable target | the target's type |
+| `x op= e` (`+= -= *= /= %=`) | a numeric mutable target | the target's type |
+| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | an integer mutable target | the target's type |
+| `++x --x x++ x--` | numeric mutable local | new / old value |
+| `,` | forbidden | – |
+| `a?.b ?? d`, `a?.m() ?? d` | a `T \| null` chain | the last link's type |
+| `await f(x)` | a direct `async` call | the call's `T` |
+| `== != ?.[ ?.() in instanceof typeof delete void yield` | forbidden | – |
+| `** **=` | not supported | – |
+| `+x` | not supported | – |
+
+**`+ - * / %`** take two numbers of one type (`i32`, `i64`, `u8`, `u16`,
+`u32`, `u64`, `f32`, or `f64`) and give that type. On the signed integer
+widths an overflow branches to `nish_panic_overflow`
+([Semantics decisions](#semantics-decisions)); it is plain through a
+`nish:unsafe` `wrapping*` call. An integer division is preceded by a divisor
+check that branches to `nish_panic_div`
+([Checked integer division](#checked-integer-division)).
+
+- *Lowering:* `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an
+  `f32`, `double` for an `f64`); on a page module (above, `Math.sin`) or
+  under [`--deterministic`](#--deterministic) a float `%` or `%=` is a call
+  to `std/math.ts`'s `fmodF64` in place of `frem`, whose libm `fmod` that
+  link lacks, an `f32` widened to `f64` and the exact result narrowed back;
+  on the signed integer widths `nsw` where proven to fit and otherwise
+  `llvm.s*.with.overflow` and a branch to `nish_panic_overflow`, plain
+  through a `nish:unsafe` `wrapping*` call, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type)
+  are preceded by a divisor check that branches to `nish_panic_div`.
+- *Tests:* `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`,
+  `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`,
+  `wasm_math_rem`; `reject_type_mismatch`, `reject_u_mixed_signedness`,
+  `reject_f32_mixed`
+
+**`+`** on two `string` gives a `string`.
+
+- *Lowering:* `nish_str_concat`.
+- *Tests:* `str_concat`; `reject_str_plus_number`
+  (`no implicit string conversion`)
+
+**unary `-`** takes any numeric type and gives the same type.
+
+- *Lowering:* `sub <T> 0, x` for an integer, `fneg float` / `fneg double`
+  for a float.
+- *Tests:* `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)*
+
+**unary `!`** takes a `boolean` and gives a `boolean`.
+
+- *Lowering:* `xor i1 x, true`.
+- *Tests:* `cf_logical`; `!s` on a string is
+  `` Unsupported unary operator `!` on string `` *(CLI only)*
+
+**`& | ^`** take two integers of one type and give that type.
+
+- *Lowering:* `and` / `or` / `xor`, one instruction, no panic path.
+- *Tests:* `bit_and_or_xor`, `bit_i64`, `bit_attributes`; `reject_bit_f64`,
+  `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_boolean`
+  (`` Operator `&` is not available on boolean (use `&&`) ``)
+
+**`<< >> >>>`** take two integers of one type and give that type. `>>` is
+sign-filling on a signed type and zero-filling on an unsigned one, so `>>`
+and `>>>` are the same instruction there; `>>>` is always zero-filling. The
+count is masked to the operand width (31, 63, or 7/15 on the narrow unsigned
+widths); see [Shifts](#shifts).
+
+- *Lowering:* `shl`; `>>` is `ashr` (sign-filling) on a signed type and
+  `lshr` (zero-filling) on an unsigned one; `>>>` is always `lshr`. A
+  constant count is masked at compile time and emits no `and`.
+- *Tests:* `bit_shifts`, `bit_shift_const`, `bit_shift_fill`,
+  `bit_shift_narrow`, `bit_i64`, `u_shift_logical`; `reject_u_shift_mixed`;
+  `tests/differential/corpus/bit_shifts`
+
+**unary `~`** takes any integer type and gives the same type.
+
+- *Lowering:* `xor x, -1` (LLVM has no `not`).
+- *Tests:* `bit_not`; `reject_bit_not`
+  (`` Operator `~` requires an integer operand, got f64 ``)
+
+**`< <= > >=`** take two numbers of one type (`i32`, `i64`, the unsigned
+widths, `f32`, or `f64`), and nothing else, and give a `boolean`.
+
+- *Lowering:* `icmp slt ...` signed, `icmp ult ...` unsigned, `fcmp olt ...`
+  for both float widths.
+- *Tests:* `cf_if`, `f64_mode`, `u_compare_above_intmax`, `f32_arith`;
+  booleans (`reject_bool_ordering`), strings (`reject_str_lt`,
+  `reject_str_lt_str`), and structs (`reject_cls_ordering`) are
+  `` Operator `<` requires two numeric operands, got boolean and boolean ``
+
+**`=== !==`** take any two values of the same type except `void`, and give a
+`boolean`. A `T | null` compares only against the literal `null`. Strings
+compare by content; arrays and objects by identity (the pointer). On an
+`f64`, `x !== x` is true for NaN. `a === undefined` is allowed for a
+`Map.get` result only, and tests its found bit, negated.
+
+- *Lowering:* integers and booleans: `icmp eq` / `icmp ne`; `f64`:
+  `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings:
+  `nish_str_eq` (content); arrays and objects: `icmp eq` on the pointer
+  (identity); `p === null`: `icmp eq` against `null`; `a === undefined`, for
+  a `Map.get` result only: its found bit, negated.
+- *Tests:* `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`,
+  `map_get_narrow`; arrays *(CLI only)*; `reject_null_compare_two`,
+  `reject_map_get_undefined_compare`
+
+**`== !=`** are forbidden.
+
+- *Tests:* `reject_loose_equality`, `reject_loose_inequality`
+
+**`&& ||`** take two `boolean` and give a `boolean`, short-circuit.
+
+- *Lowering:* short-circuit: `br` + `phi`.
+- *Tests:* `cf_logical`; `reject_cf_logical_numbers`
+  (`requires boolean operands`)
+
+**`c ? a : b`** takes `c: boolean`, and `a`, `b` of the same non-`void`
+type, and gives that type.
+
+- *Lowering:* `br` + `phi`.
+- *Tests:* `cf_ternary`; `reject_cf_ternary_mismatch`,
+  `reject_cf_ternary_void`
+
+**`a ?? d`** on a `Map.get` result: `a` is a `Map.get` result
+(`V | undefined`) and `d` a `V`; it gives a `V`. It sits at the level of
+`||`, and is not mixed with `||` or `&&` unparenthesised
+([`Map` and `Set`](#map-and-set)).
+
+- *Lowering:* `br` to `valueAt` or `d`, then `phi`; `select` for a `const`
+  with a literal or a name as `d`.
+- *Tests:* `map_get_nullish`, `map_get_narrow`, `map_get_pointer_value`;
+  `reject_nullish`, `reject_nullish_default_type`, `reject_nullish_mixed_or`
+
+**`a ?? d`** on a nullable: `a` is a `T | null` that is not an element
+read, and `d` a `T` or a `T | null`, with the same precedence. It gives a
+`T`, or a `T | null` for a nullable `d`
+([Nullable types](#nullable-types)).
+
+- *Lowering:* `icmp ne` against `null`, then `select` for a literal or a
+  name as `d`; otherwise `br` to `d` and `phi`.
+- *Tests:* `nullish_nullable`, `nullish_nullable_field`,
+  `nullish_nullable_default_null`, `nullish_nullable_default_context`,
+  `nullish_nullable_escapes`; `reject_nullish_nullable`,
+  `reject_nullish_element`, `reject_nullish_nullable_default_type`
+
+**`x = e`** assigns to a mutable local, field, or element; `e` is of the
+target's type, and the expression gives the target's type.
+
+- *Lowering:* `store`.
+- *Tests:* `locals`, `cls_field_write`, `arr_index_read_write`
+
+**`x op= e` (`+= -= *= /= %=`)** works on a numeric mutable local, numeric
+field, or numeric element, with `e` of the same type, and gives the target's
+type.
+
+- *Lowering:* load, op, store.
+- *Tests:* `cf_compound_assign`, `cls_compound_field`,
+  `arr_index_read_write`; `reject_cf_compound_const`,
+  `reject_cf_compound_string`, `reject_cf_compound_widths`
+
+**`x op= e` (`&= |= ^= <<= >>= >>>=`)** works on a mutable local, field, or
+element of integer type, with `e` of the same type, and gives the target's
+type. The shift forms use the same shift-count mask. The target expression
+is evaluated exactly once.
+
+- *Lowering:* load, op, store, with the same shift-count mask; a field is
+  addressed by one GEP and an element bounds-checked once, so the target
+  expression is evaluated exactly once.
+- *Tests:* `bit_compound`, `cls_field_bitwise_assign`,
+  `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`,
+  `reject_arr_element_bitwise_f64`;
+  `tests/differential/corpus/bit_compound_target`
+
+**`++x --x x++ x--`** work on a numeric mutable local only, and give the new
+/ old value.
+
+- *Lowering:* load, `add 1`, store.
+- *Tests:* `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec`
+
+**`,`** is forbidden.
+
+- *Tests:* `reject_comma_expression`
+
+**`a?.b ?? d`, `a?.m() ?? d`** take `a`, a `T | null`, and a chain of `?.`
+and `.` links, field reads, `length` and method calls, that is the left
+operand of `??`. It gives the last link's type, as `a ?? d` on a `T | null`
+types it ([Nullable types](#nullable-types)).
+
+- *Lowering:* `icmp eq` against `null` at each `?.` link's receiver, then
+  `br` to `nullish.default`; `phi` at `nullish.end`.
+- *Tests:* `optional_chain_field`, `optional_chain_order`,
+  `optional_chain_generic`, `optional_chain_bounds`;
+  `reject_optional_chain`, `reject_optional_chain_never_null`
+
+**`await f(x)`** takes a direct call to an `async` function, at the top of a
+statement in an `async` function, and gives the call's `T`
+([Async functions](#async-functions-async-and-await)).
+
+- *Lowering:* a call when `f` awaits nothing; otherwise `f`'s frame is laid
+  out in the caller's, `@f.resume` is called, and the caller saves its state
+  and answers `false` while it pends.
+- *Tests:* `async_await_single`, `async_await_chain`, `async_lowered`;
+  `reject_await`, `reject_async_await_value`, `reject_async_await_nested`
+
+**`== != ?.[ ?.() in instanceof typeof delete void yield`** are forbidden by
+the validator ([Forbidden constructs](#expressions-1)).
+
+- *Tests:* `reject_loose_equality`, `reject_optional_chain_element`,
+  `reject_optional_call`, `reject_in_operator`, `reject_instanceof`,
+  `reject_typeof_operator`, `reject_delete`, `reject_void_expression`,
+  `reject_yield`
+
+**`** **=`** are not supported: `` Unsupported binary operator `**` `` /
+`` Unsupported assignment operator `**=` ``.
+
+- *Tests:* `reject_op_exponent`, `reject_op_exponent_template`,
+  `reject_exponent_assign_local`, `reject_cls_compound_operator`
+
+**`+x`** is not supported.
+
+- *Tests:* `Unsupported unary operator` *(CLI only)*
 
 ### Checked integer division
 
@@ -7598,18 +8020,79 @@ the call checks through the same rule and emits the same IR as the global
 spelling, which `tests/run.js` pins by compiling `tests/cases/io_nish_import`
 and `io_nish_import_global` and comparing the two bodies.
 
-| Module | Exports |
+| Module | For |
 | --- | --- |
-| [`nish:fs`](reference/nish-fs.md) | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`, `mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| [`nish:process`](reference/nish-process.md) | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `setCpuAffinity`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
-| [`nish:io`](reference/nish-io.md) | `write`, `writeError`, `writeBytes`, `panic` |
-| [`nish:secret`](reference/nish-secret.md) | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| [`nish:region`](reference/nish-region.md) | `Region`, `region`, `regionWith`, `enter`, `enterWith`, `free` — source behind it too ([Regions](#regions-nishregion)) |
-| [`nish:net`](reference/nish-net.md) | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netWrite2`, `netShutdown`, `netClose`, `netMss`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`, `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`, `recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
-| [`nish:term`](reference/nish-term.md) | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
-| [`nish:unsafe`](reference/nish-unsafe.md) | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
-| [`nish:async`](reference/nish-async.md) | `spawn`, `awaitAll`, `sleep`, `readable`, `writable`, `readableWithin`, `writableWithin`, `taskId`, `cancel`, `cancelled`, `cancelAfter` — **reached only through the import** ([Async functions](#async-functions-async-and-await)) |
-| [`nish:simd`](reference/nish-simd.md) | the vector types `u8x16`, `u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors, `splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`, `replace`; the masks `mask8x16` … `mask64x2`; the lane operations `add` … `asF64x2`, among them `shl`, `shr`, `rotl` and `rotr` — **reached only through the import** ([`nish:simd`](#nishsimd-sixteen-byte-vectors), [lane operations](#nishsimd-lane-operations-and-masks)) |
+| [`nish:fs`](reference/nish-fs.md) | files and directories |
+| [`nish:process`](reference/nish-process.md) | processes, environment, clocks |
+| [`nish:io`](reference/nish-io.md) | standard output and error, panic |
+| [`nish:secret`](reference/nish-secret.md) | secrets that are wiped |
+| [`nish:region`](reference/nish-region.md) | region allocation |
+| [`nish:net`](reference/nish-net.md) | sockets and the readiness loop |
+| [`nish:term`](reference/nish-term.md) | terminal input |
+| [`nish:unsafe`](reference/nish-unsafe.md) | unchecked access, wrapping arithmetic |
+| [`nish:async`](reference/nish-async.md) | tasks: spawn, await, wait, cancel |
+| [`nish:simd`](reference/nish-simd.md) | sixteen-byte vectors |
+
+**[`nish:fs`](reference/nish-fs.md)** exports `readFileSync`,
+`readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`,
+`appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`,
+`writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`,
+`mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`,
+`statMtimeSync`.
+
+**[`nish:process`](reference/nish-process.md)** exports `exit` (the global
+`process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`,
+`spawnPipedWithin`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`,
+`totalMemory`, `setNice`, `setIdlePriority`, `setCpuAffinity`,
+`monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`,
+`platform`, `arch`.
+
+**[`nish:io`](reference/nish-io.md)** exports `write`, `writeError`,
+`writeBytes`, `panic`.
+
+**[`nish:secret`](reference/nish-secret.md)** exports `Secret`, `secret`,
+`expose`, `exposeWith`, `wipe`. It is the one module with source behind it
+([Secrets](#secrets-nishsecret)).
+
+**[`nish:region`](reference/nish-region.md)** exports `Region`, `region`,
+`regionWith`, `enter`, `enterWith`, `free`. It has source behind it too
+([Regions](#regions-nishregion)).
+
+**[`nish:net`](reference/nish-net.md)** exports `netAddress`,
+`netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`,
+`netWrite`, `netWrite2`, `netShutdown`, `netClose`, `netMss`,
+`netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`,
+`NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`,
+`connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`,
+`pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`,
+`unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`,
+`recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`,
+`NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET`. Each is a global too
+([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
+
+**[`nish:term`](reference/nish-term.md)** exports `readStdin`, `waitStdin`,
+`isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore`. Each is a
+global too ([`nish:term`](#nishterm-terminal-input)).
+
+**[`nish:unsafe`](reference/nish-unsafe.md)** exports `uncheckedGet`,
+`uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`,
+`readCString`. They are **reached only through the import**
+([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
+
+**[`nish:async`](reference/nish-async.md)** exports `spawn`, `awaitAll`,
+`sleep`, `readable`, `writable`, `readableWithin`, `writableWithin`,
+`taskId`, `cancel`, `cancelled`, `cancelAfter`.
+They are **reached only through the import**
+([Async functions](#async-functions-async-and-await)).
+
+**[`nish:simd`](reference/nish-simd.md)** exports the vector types `u8x16`,
+`u16x8`, `i32x4`, `u32x4`, `f32x4`, `f64x2` and their constructors,
+`splatU8x16` … `splatF64x2`, `loadU8x16` … `loadF64x2`, `store`, `extract`,
+`replace`; the masks `mask8x16` … `mask64x2`; the lane operations `add` …
+`asF64x2`, among them `shl`, `shr`, `rotl` and `rotr`. They are **reached
+only through the import**
+([`nish:simd`](#nishsimd-sixteen-byte-vectors),
+[lane operations](#nishsimd-lane-operations-and-masks)).
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -7653,14 +8136,61 @@ import { write } from "nish:io";
 
 The reference for each of these, with its parameters, its answer and its capability, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `console.log(x: string \| number \| i64 \| f64 \| boolean): void` | Writes `x` and a newline to stdout with one `write(2)`; statement position only; exactly one argument | write | `str_console_log`, `i64_basic`; `reject_console_log_noargs`, `reject_console_log_two_args`, `reject_console_log_as_value`; arrays and objects are rejected (`` `console.log` accepts string, number, or boolean, got i32[] `` *(CLI only)*) |
-| `console.error(x): void` | the same, on **stderr** — the stream a compiler's diagnostics belong on (WP14 B2). Identical rules and identical messages under its own name | write | `io_streams`; `reject_console_error_type` |
-| `write(s: string): void` | `s` to stdout with **no** trailing newline and no conversion (a `string` only); statement position | write | `io_streams` |
-| `writeError(s: string): void` | the same, on stderr | write | `io_streams` |
-| `writeBytes(bytes: readonly u8[], off: i32, len: i32): i32` | the bytes of `bytes[off..off+len)` to stdout as they are, answering `len` or a **negative errno** if the stream refuses them, never a panic; a pipe whose reader has gone raises SIGPIPE natively, where Node answers `-32` EPIPE. A range outside `bytes` **panics** with `slice out of range: [off, off+len) of length n` and exits 1 (a `slice` site), under Node too. No capability, as for `write`. A `wasm32` build has no stdout to reach and refuses it | write | `io_write_bytes`, `io_write_bytes_bounds`; `reject_write_bytes_arity`, `reject_write_bytes_type` (NL2268), `reject_write_bytes_wasm` |
-| `panic(message: string): void` | `message` and a newline to stderr, then exit 1 — the same ending an out-of-range index has. Statement position, and it **terminates control flow** like `process.exit`, so a non-`void` function may end with it (WP14 D1, WP16) | write | `io_streams`; `reject_panic_value` |
+| `console.log` | `string \| number \| i64 \| f64 \| boolean` | `void` | write |
+| `console.error` | as `console.log` | `void` | write |
+| `write` | `string` | `void` | write |
+| `writeError` | `string` | `void` | write |
+| `writeBytes` | `readonly u8[], i32, i32` | `i32` | write |
+| `panic` | `string` | `void` | write |
+
+**`console.log(x: string | number | i64 | f64 | boolean): void`** writes `x`
+and a newline to stdout. It is allowed in statement position only, and takes
+exactly one argument.
+
+- *Lowering:* one `write(2)`.
+- *Tests:* `str_console_log`, `i64_basic`; `reject_console_log_noargs`,
+  `reject_console_log_two_args`, `reject_console_log_as_value`; arrays and
+  objects are rejected
+  (`` `console.log` accepts string, number, or boolean, got i32[] ``
+  *(CLI only)*).
+
+**`console.error(x): void`** is the same, on **stderr**: the stream a
+compiler's diagnostics belong on (WP14 B2). It has identical rules and
+identical messages under its own name.
+
+- *Tests:* `io_streams`; `reject_console_error_type`.
+
+**`write(s: string): void`** writes `s` to stdout with **no** trailing
+newline and no conversion (a `string` only). It is allowed in statement
+position.
+
+- *Tests:* `io_streams`.
+
+**`writeError(s: string): void`** is the same, on stderr.
+
+- *Tests:* `io_streams`.
+
+**`writeBytes(bytes: readonly u8[], off: i32, len: i32): i32`** writes the
+bytes of `bytes[off..off+len)` to stdout as they are. It answers `len`, or a
+**negative errno** if the stream refuses them, never a panic. A pipe whose
+reader has gone raises SIGPIPE natively, where Node answers `-32` EPIPE. A
+range outside `bytes` **panics** with
+`slice out of range: [off, off+len) of length n` and exits 1 (a `slice`
+site), under Node too. It needs no capability, as for `write`. A `wasm32`
+build has no stdout to reach and refuses it.
+
+- *Tests:* `io_write_bytes`, `io_write_bytes_bounds`;
+  `reject_write_bytes_arity`, `reject_write_bytes_type` (NL2268),
+  `reject_write_bytes_wasm`.
+
+**`panic(message: string): void`** writes `message` and a newline to stderr,
+then exits 1: the same ending an out-of-range index has. It is allowed in
+statement position, and it **terminates control flow** like `process.exit`,
+so a non-`void` function may end with it (WP14 D1, WP16).
+
+- *Tests:* `io_streams`; `reject_panic_value`.
 
 Numbers print as JavaScript's `String(x)`: exact decimal for `i32`/`i64`,
 shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
@@ -7673,20 +8203,147 @@ Reference: [`nish:io`](reference/nish-io.md).
 
 The reference for each member of `Math`, with its parameters, its answer and its capability, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`, `ceil` and `trunc` in an x86-64 module that is not a wasm build: there they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with no `--target` that is an x86-64 host. The answers are the same bits on either path. On a page module (a wasm build with no WASI, or an `--emit-dts` compile, whose IR `--profile wasm` or `wasm-host` links with no libm), `sin`, `cos`, `exp` and `log` are calls to `std/math.ts`'s `sinF64`, `cosF64`, `expF64` and `logF64` instead, fdlibm's, copied in like `tan`, within one ulp of V8; `--profile wasi` keeps the intrinsics. Under [`--deterministic`](#--deterministic) they are those calls on every target, `--emit-ts` included | none | `math_intrinsics`, `math_rounding`, `wasm_math_exp`, `wasm_math_std`; `reject_wasm_math_f32` (`` `Math.sin` requires an f64 argument, got f32 ``); `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
-| `Math.tan(x: f64): f64` | a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the module as `internal @nish.tanF64`, so no target calls libm; exact near every multiple of π/2 and within one ulp | none | `math_tan`, `math_std_edges` |
-| `Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64` | calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in like `tan`; ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is −π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two arguments, not JavaScript's any number | none | `math_atan2`, `math_hypot`; `reject_math_atan2_f32` (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``), `reject_math_hypot_arity` (`` `Math.hypot` expects exactly 2 arguments, got 3 ``) |
-| `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C. On a page module it is a call to `std/math.ts`'s `powF64`, copied in like `tan`, which answers ECMAScript's cases itself, within one ulp of V8 | none | `math_intrinsics`, `wasm_math_std`; `tests/differential/corpus/f64_pow_spec`; `reject_wasm_math_arity` (`` `Math.pow` expects exactly 2 arguments, got 1 ``) |
-| `Math.round(x: f64): f64` | JavaScript's round-half-up (`Math.floor`'s `floor` + compare + `select`), then `llvm.copysign.f64` puts `x`'s sign back: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a value in `[-0.5, 0)` or `-0` itself -> `-0`, as in JavaScript; `NaN` -> `NaN` | none | `math_intrinsics`, `math_round_negzero`, `math_rounding` |
-| `Math.abs(x: T): T` for any numeric `T` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` / `llvm.fabs.f64`; on an unsigned type, no instruction at all (the value is its own magnitude) | none | `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned widths *(CLI only)* |
-| `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: JavaScript's answer, a NaN operand gives NaN and `-0` is below `+0` (`Math.min(0, -0)` is `-0`). A native build branches as clang compiles the C a programmer writes for it: `fcmp uno` to a quiet NaN, else `fcmp olt`/`ogt` and a `select`, and on `fcmp oeq` the operand whose sign bit is set (`min`) or clear (`max`), the three joined by a `phi`; x86 has no instruction for `llvm.minimum`, whose expansion measured 25–55% slower in `bench/math`. A wasm build keeps `llvm.minimum/maximum.<f32\|f64>`, which are wasm's `f64.min`/`f64.max`, so no libm is linked for them | none | `math_i32`, `math_intrinsics`, `math_minmax_float`, `math_minmax_nan`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
-| `Math.clz32(x: i32 \| u32): integer<0, 32>` | the leading zero bits of `x`'s 32 bits, JavaScript's answer (an `i32` and a `u32` are the bits ToUint32 gives): `llvm.ctlz.i32` with `i1 false`, so `0` answers `32`. The answer is ranged (`integer<Lo, Hi>`, see [Types](#types)), so `31 - Math.clz32(word & (0 - word))`, the index of a word's lowest set bit, needs no overflow check. Any other operand type is refused rather than converted | none | `math_clz32`; `reject_math_clz32_type` (`` `Math.clz32` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``) |
-| `Math.sign(x: T): T` for any numeric `T` | `-1`, `0` or `1` in `x`'s own type (a ranged `x` answers its base type). A float answers `llvm.copysign(1.0, x)` unless `fcmp ueq x, 0.0`, when it answers `x` itself, so `-0` and `NaN` come back as JavaScript gives them; a signed integer is `zext (x > 0) - zext (x < 0)`, an unsigned one `zext (x != 0)` | none | `math_sign`; `reject_math_sign_type` (`` `Math.sign` expects a number, got string ``) |
-| `Math.imul(a: i32 \| u32, b: i32 \| u32): i32` | the low 32 bits of the product, read signed: one wrapping `mul i32`, with no overflow check, which is JavaScript's answer for any operands an `i32` or a `u32` holds (`Math.imul(0x7fffffff, 2)` is `-2`). Any other operand type is refused rather than converted, for `Math.clz32`'s reason | none | `math_imul`; `reject_math_imul_f64` (`` `Math.imul` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``) |
-| `Math.random(): f64` | xorshift64\* in the runtime (`nish_random`), 53 random bits in `[0, 1)`, seeded from time and pid | write | `math_random` |
-| `Math.PI: f64`, `Math.E: f64` | constants, also in i32 mode | none | `math_i32`, `math_intrinsics` |
+| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log` | `f64` | `f64` | none |
+| `Math.tan` | `f64` | `f64` | none |
+| `Math.atan2`, `Math.hypot` | `f64, f64` | `f64` | none |
+| `Math.pow` | `f64, f64` | `f64` | none |
+| `Math.round` | `f64` | `f64` | none |
+| `Math.abs` | any numeric `T` | `T` | none |
+| `Math.min`, `Math.max` | `T, T` | `T` | none |
+| `Math.clz32` | `i32 \| u32` | `integer<0, 32>` | none |
+| `Math.sign` | any numeric `T` | `T` | none |
+| `Math.imul` | two of `i32 \| u32` | `i32` | none |
+| `Math.random` | nothing | `f64` | write |
+| `Math.PI`, `Math.E` | — | `f64` | none |
+
+**`Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64`** take and
+answer an `f64`. `floor`, `ceil` and `trunc` have two paths on x86-64 (see
+*Lowering*), and the answers are the same bits on either path.
+
+- *Lowering:* LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`,
+  `ceil` and `trunc` in an x86-64 module that is not a wasm build: there
+  they call the runtime's `nish_floor`, `nish_ceil` and `nish_trunc`, which
+  run SSE4.1's `roundsd` on a CPU that has it and libm's routine on one that
+  does not, chosen once before `main` (`NISH_SIMD=scalar` pins libm); with
+  no `--target` that is an x86-64 host. On a page module (a wasm build with
+  no WASI, or an `--emit-dts` compile, whose IR `--profile wasm` or
+  `wasm-host` links with no libm), `sin`, `cos`, `exp` and `log` are calls
+  to `std/math.ts`'s `sinF64`, `cosF64`, `expF64` and `logF64` instead,
+  fdlibm's, copied in like `tan`, within one ulp of V8; `--profile wasi`
+  keeps the intrinsics. Under [`--deterministic`](#--deterministic) they
+  are those calls on every target, `--emit-ts` included.
+- *Tests:* `math_intrinsics`, `math_rounding`, `wasm_math_exp`,
+  `wasm_math_std`; `reject_wasm_math_f32`
+  (`` `Math.sin` requires an f64 argument, got f32 ``); `reject_math_i32`
+  (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``).
+
+**`Math.tan(x: f64): f64`** is exact near every multiple of π/2 and within
+one ulp.
+
+- *Lowering:* a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the
+  module as `internal @nish.tanF64`, so no target calls libm.
+- *Tests:* `math_tan`, `math_std_edges`.
+
+**`Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64`**
+follow ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is
+−π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two
+arguments, not JavaScript's any number.
+
+- *Lowering:* calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in
+  like `tan`.
+- *Tests:* `math_atan2`, `math_hypot`; `reject_math_atan2_f32`
+  (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``),
+  `reject_math_hypot_arity`
+  (`` `Math.hypot` expects exactly 2 arguments, got 3 ``).
+
+**`Math.pow(x: f64, y: f64): f64`** gives ECMAScript's answer where it and
+C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`);
+`pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case
+agrees with C.
+
+- *Lowering:* `llvm.pow.f64` plus a `select` for the cases where ECMAScript
+  and C99 differ. On a page module it is a call to `std/math.ts`'s
+  `powF64`, copied in like `tan`, which answers ECMAScript's cases itself,
+  within one ulp of V8.
+- *Tests:* `math_intrinsics`, `wasm_math_std`;
+  `tests/differential/corpus/f64_pow_spec`; `reject_wasm_math_arity`
+  (`` `Math.pow` expects exactly 2 arguments, got 1 ``).
+
+**`Math.round(x: f64): f64`** is JavaScript's round-half-up, and keeps `x`'s
+sign: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a
+value in `[-0.5, 0)` or `-0` itself -> `-0`, as in JavaScript; `NaN` ->
+`NaN`.
+
+- *Lowering:* `Math.floor`'s `floor` + compare + `select`, then
+  `llvm.copysign.f64` puts `x`'s sign back.
+- *Tests:* `math_intrinsics`, `math_round_negzero`, `math_rounding`.
+
+**`Math.abs(x: T): T` for any numeric `T`** answers the magnitude, wrapping
+for `INT_MIN`. On an unsigned type the value is its own magnitude.
+
+- *Lowering:* `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` /
+  `llvm.fabs.f64`; on an unsigned type, no instruction at all.
+- *Tests:* `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned
+  widths *(CLI only)*.
+
+**`Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T`** take exactly two
+operands of one numeric type. On floats they give JavaScript's answer: a NaN
+operand gives NaN and `-0` is below `+0` (`Math.min(0, -0)` is `-0`).
+
+- *Lowering:* signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`.
+  A native float build branches as clang compiles the C a programmer writes
+  for it: `fcmp uno` to a quiet NaN, else `fcmp olt`/`ogt` and a `select`,
+  and on `fcmp oeq` the operand whose sign bit is set (`min`) or clear
+  (`max`), the three joined by a `phi`; x86 has no instruction for
+  `llvm.minimum`, whose expansion measured 25–55% slower in `bench/math`. A
+  wasm build keeps `llvm.minimum/maximum.<f32|f64>`, which are wasm's
+  `f64.min`/`f64.max`, so no libm is linked for them.
+- *Tests:* `math_i32`, `math_intrinsics`, `math_minmax_float`,
+  `math_minmax_nan`; `reject_math_min_arity`
+  (`` `Math.min` expects exactly 2 arguments, got 1 ``).
+
+**`Math.clz32(x: i32 | u32): integer<0, 32>`** answers the leading zero bits
+of `x`'s 32 bits, JavaScript's answer (an `i32` and a `u32` are the bits
+ToUint32 gives), so `0` answers `32`. The answer is ranged
+(`integer<Lo, Hi>`, see [Types](#types)), so `31 - Math.clz32(word & (0 - word))`,
+the index of a word's lowest set bit, needs no overflow check. Any other
+operand type is refused rather than converted.
+
+- *Lowering:* `llvm.ctlz.i32` with `i1 false`.
+- *Tests:* `math_clz32`; `reject_math_clz32_type`
+  (`` `Math.clz32` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``).
+
+**`Math.sign(x: T): T` for any numeric `T`** answers `-1`, `0` or `1` in
+`x`'s own type (a ranged `x` answers its base type). A float `-0` and `NaN`
+come back as JavaScript gives them.
+
+- *Lowering:* a float answers `llvm.copysign(1.0, x)` unless
+  `fcmp ueq x, 0.0`, when it answers `x` itself; a signed integer is
+  `zext (x > 0) - zext (x < 0)`, an unsigned one `zext (x != 0)`.
+- *Tests:* `math_sign`; `reject_math_sign_type`
+  (`` `Math.sign` expects a number, got string ``).
+
+**`Math.imul(a: i32 | u32, b: i32 | u32): i32`** answers the low 32 bits of
+the product, read signed, with no overflow check, which is JavaScript's
+answer for any operands an `i32` or a `u32` holds
+(`Math.imul(0x7fffffff, 2)` is `-2`). Any other operand type is refused
+rather than converted, for `Math.clz32`'s reason.
+
+- *Lowering:* one wrapping `mul i32`.
+- *Tests:* `math_imul`; `reject_math_imul_f64`
+  (`` `Math.imul` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``).
+
+**`Math.random(): f64`** answers 53 random bits in `[0, 1)`, seeded from
+time and pid.
+
+- *Lowering:* xorshift64\* in the runtime (`nish_random`).
+- *Tests:* `math_random`.
+
+**`Math.PI: f64`, `Math.E: f64`** are constants, also in i32 mode.
+
+- *Tests:* `math_i32`, `math_intrinsics`.
 
 The f64-only functions reject `i32`/`i64` arguments; `number` in i32 mode is
 an `i32`, so write `Math.sqrt(toF64(n))` or use f64 mode. A numeric literal
@@ -7696,20 +8353,128 @@ argument is typed `f64` by context (`Math.sqrt(2)` works in both modes).
 
 The reference for each conversion, with its parameter and its answer, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts), on [the globals page](reference/builtins.md) (`Number` under `NumberConstructor`); the rules are here.
 
-| Signature | Semantics | Test |
+| Function | Takes | Gives |
 | --- | --- | --- |
-| `toI32(x): i32` | narrower or equal width: `trunc` (wraps); wider signed source: `sext`, wider unsigned source: `zext`; a float source (`f32` or `f64`): saturating `llvm.fptosi.sat.i32.<f32\|f64>` (NaN -> 0, out of range clamps); `i32`: identity | `conversions`, `u_conv_roundtrip`; `reject_toi32_string` |
-| `toI64(x): i64` | signed source: `sign-extend`; unsigned source: `zext`; `f64`: saturating; `i64`: identity | `conversions`, `u_conv_widths` |
-| `toU8`, `toU16`, `toU32`, `toU64` | widening: `zext` from an unsigned source, `sext` from a signed one (so `toU64(-1: i32)` is 2^64 - 1, as `-1i32 as u64` is in Rust); narrowing: `trunc`; a float source: saturating `llvm.fptoui.sat`, whose clamp is `0 .. 2^bits-1`, so a negative value is `0` | `u_conv_widths`, `u_conv_f64`, `u_conv_roundtrip`; `reject_u_conversion_arg` |
-| any integer -> an integer of the **same width** and other signedness | **no instruction at all**: signedness is not part of the LLVM type and the bits do not move (`toU32(i)` on an `i32`, `toI64(q)` on a `u64`) | `u_conv_same_width` |
-| `toF32(x): f32` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f64`: `fptrunc` (rounds to nearest); `f32`: identity | `f32_conversions`, `f32_constant` |
-| `toF64(x): f64` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f32`: `fpext` (exact); `f64`: identity | `conversions`, `u_conv_f64`, `f32_conversions` |
-| `f64ToBits(x: f64): i64` | reinterpret the 64 bits, never convert the value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`. One `bitcast`, so a function that only reinterprets bits stays `readnone`; under [`--deterministic`](#--deterministic) a NaN gives `0x7FF8000000000000` (`quietBitsF64`) | `conv_f64_bits`; `reject_f64tobits_type`, `reject_f64tobits_arity` |
-| `f32ToBits(x: f32): i32` | the same for an `f32`'s 32 bits, signed as an `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is `-2147483648`. One `bitcast float to i32`; under Node, `runtime/nish.mjs` supplies it from a `DataView`; under [`--deterministic`](#--deterministic) a NaN gives `0x7FC00000` (`quietBitsF32`) | `f32_to_bits`; `reject_f32_to_bits_f64` (`` `f32ToBits` expects an argument of type f32, got f64 ``) |
-| `bitsToF64(b: i64): f64` | the inverse. `bitsToF64(f64ToBits(x)) === x` for every `x` except `NaN`, which is not `===` to itself | `conv_f64_bits`; `reject_bitstof64_type` |
-| `Number(x: string \| i32 \| i64 \| f64 \| boolean): f64` | a string is parsed with JavaScript's `Number(s)` rules (below); `i32`/`i64`: `sitofp`; `boolean`: `uitofp` (`true` is `1`); `f64`: identity. A numeric literal argument is typed `f64` (`Number(2.5)` works in i32 mode). Under [`--deterministic`](#--deterministic) a string goes to `std/math.ts`'s `numberExact` instead, which reads a `0x` integer the same on every target. | `parse_numbers`; `reject_number_array` (`` `Number` expects a string, number, or boolean, got i32[] ``) |
-| `parseInt(s: string): i32` | base 10 only: ASCII whitespace, an optional sign, then digits (`strtoll`); stops at the first other character. **Deviations from JavaScript:** no `NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`, `parseInt("")`); values beyond the `i32` range saturate exactly like `toI32` (`parseInt("99999999999")` is `2147483647`); a `0x` prefix is not hexadecimal (`parseInt("0x10")` is `0`). Always `i32`, also under `--number-mode f64` (use `Number` there) | `parse_numbers`; `reject_parseint_number` (`` `parseInt` expects a string, got i32 ``) |
-| `parseFloat(s: string): f64` | ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded by `strtod`; `NaN` when there is none (`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`, `"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like `strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and gives `0`). Under [`--deterministic`](#--deterministic) a string goes to `std/math.ts`'s `parseFloatExact` instead, which reads a `0x` integer the same on every target. | `parse_numbers` |
+| `toI32` | any number | `i32` |
+| `toI64` | any number | `i64` |
+| `toU8`, `toU16`, `toU32`, `toU64` | any number | that unsigned type |
+| same width, other signedness | any integer | the other integer |
+| `toF32` | any number | `f32` |
+| `toF64` | any number | `f64` |
+| `f64ToBits` | `f64` | `i64` |
+| `f32ToBits` | `f32` | `i32` |
+| `bitsToF64` | `i64` | `f64` |
+| `Number` | `string \| i32 \| i64 \| f64 \| boolean` | `f64` |
+| `parseInt` | `string` | `i32` |
+| `parseFloat` | `string` | `f64` |
+
+**`toI32(x): i32`** at narrower or equal width wraps. A float source (`f32` or `f64`) saturates: NaN -> 0, and out of range clamps.
+On an `i32` it is the identity.
+
+- *Lowering:* narrower or equal width: `trunc` (wraps); wider signed
+  source: `sext`, wider unsigned source: `zext`; a float source: saturating
+  `llvm.fptosi.sat.i32.<f32|f64>`; `i32`: identity.
+- *Tests:* `conversions`, `u_conv_roundtrip`; `reject_toi32_string`.
+
+**`toI64(x): i64`** saturates from an `f64`, and on an `i64` it is the
+identity.
+
+- *Lowering:* signed source: `sign-extend`; unsigned source: `zext`; `f64`:
+  saturating; `i64`: identity.
+- *Tests:* `conversions`, `u_conv_widths`.
+
+**`toU8`, `toU16`, `toU32`, `toU64`** widen a signed source by its sign, so
+`toU64(-1: i32)` is 2^64 - 1, as `-1i32 as u64` is in Rust. Narrowing
+truncates. A float source saturates, clamped to `0 .. 2^bits-1`, so a
+negative value is `0`.
+
+- *Lowering:* widening: `zext` from an unsigned source, `sext` from a signed
+  one; narrowing: `trunc`; a float source: saturating `llvm.fptoui.sat`,
+  whose clamp is `0 .. 2^bits-1`.
+- *Tests:* `u_conv_widths`, `u_conv_f64`, `u_conv_roundtrip`;
+  `reject_u_conversion_arg`.
+
+**any integer -> an integer of the same width and other signedness** keeps
+the bits as they are (`toU32(i)` on an `i32`, `toI64(q)` on a `u64`).
+
+- *Lowering:* **no instruction at all**: signedness is not part of the LLVM
+  type and the bits do not move.
+- *Tests:* `u_conv_same_width`.
+
+**`toF32(x): f32`** rounds an `f64` to nearest, and on an `f32` it is the
+identity.
+
+- *Lowering:* signed integers: `sitofp`; unsigned integers: `uitofp`; `f64`:
+  `fptrunc` (rounds to nearest); `f32`: identity.
+- *Tests:* `f32_conversions`, `f32_constant`.
+
+**`toF64(x): f64`** widens an `f32` exactly, and on an `f64` it is the
+identity.
+
+- *Lowering:* signed integers: `sitofp`; unsigned integers: `uitofp`; `f32`:
+  `fpext` (exact); `f64`: identity.
+- *Tests:* `conversions`, `u_conv_f64`, `f32_conversions`.
+
+**`f64ToBits(x: f64): i64`** reinterprets the 64 bits and never converts the
+value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`.
+Under [`--deterministic`](#--deterministic) a NaN gives
+`0x7FF8000000000000` (`quietBitsF64`).
+
+- *Lowering:* one `bitcast`, so a function that only reinterprets bits stays
+  `readnone`.
+- *Tests:* `conv_f64_bits`; `reject_f64tobits_type`,
+  `reject_f64tobits_arity`.
+
+**`f32ToBits(x: f32): i32`** is the same for an `f32`'s 32 bits, signed as an
+`i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is
+`-2147483648`. Under [`--deterministic`](#--deterministic) a NaN gives
+`0x7FC00000` (`quietBitsF32`).
+
+- *Lowering:* one `bitcast float to i32`; under Node, `runtime/nish.mjs`
+  supplies it from a `DataView`.
+- *Tests:* `f32_to_bits`; `reject_f32_to_bits_f64`
+  (`` `f32ToBits` expects an argument of type f32, got f64 ``).
+
+**`bitsToF64(b: i64): f64`** is the inverse. `bitsToF64(f64ToBits(x)) === x`
+for every `x` except `NaN`, which is not `===` to itself.
+
+- *Tests:* `conv_f64_bits`; `reject_bitstof64_type`.
+
+**`Number(x: string | i32 | i64 | f64 | boolean): f64`** parses a string with
+JavaScript's `Number(s)` rules (below). A `boolean` converts with `true` as
+`1`, and an `f64` is the identity. A numeric literal argument is typed `f64`
+(`Number(2.5)` works in i32 mode). Under
+[`--deterministic`](#--deterministic) a string goes to `std/math.ts`'s
+`numberExact` instead, which reads a `0x` integer the same on every target.
+
+- *Lowering:* `i32`/`i64`: `sitofp`; `boolean`: `uitofp`; `f64`: identity.
+- *Tests:* `parse_numbers`; `reject_number_array`
+  (`` `Number` expects a string, number, or boolean, got i32[] ``).
+
+**`parseInt(s: string): i32`** reads base 10 only: ASCII whitespace, an
+optional sign, then digits; it stops at the first other character.
+**Deviations from JavaScript:** no `NaN` in an `i32`, so no digits give `0`
+(`parseInt("abc")`, `parseInt("")`); values beyond the `i32` range saturate
+exactly like `toI32` (`parseInt("99999999999")` is `2147483647`); a `0x`
+prefix is not hexadecimal (`parseInt("0x10")` is `0`). It is always `i32`,
+also under `--number-mode f64` (use `Number` there).
+
+- *Lowering:* `strtoll`.
+- *Tests:* `parse_numbers`; `reject_parseint_number`
+  (`` `parseInt` expects a string, got i32 ``).
+
+**`parseFloat(s: string): f64`** reads ASCII whitespace, then the longest
+decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`,
+or `[sign] Infinity`), correctly rounded. It answers `NaN` when there is none
+(`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`,
+`"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like
+`strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and
+gives `0`). Under [`--deterministic`](#--deterministic) a string goes to
+`std/math.ts`'s `parseFloatExact` instead, which reads a `0x` integer the
+same on every target.
+
+- *Lowering:* `strtod`.
+- *Tests:* `parse_numbers`.
 
 The string parsers accept only ASCII whitespace (` \t\n\v\f\r`), not the
 Unicode spaces JavaScript also trims. `Number(s)` trims it on both sides and
@@ -7832,14 +8597,54 @@ table below spells each family with `i32x4`.
 
 Reference: [`nish:simd`](reference/nish-simd.md).
 
-| Signature | Lowering | Test |
+| Function | Takes | Gives |
 | --- | --- | --- |
-| `i32x4(a, b, c, d)`, one argument per lane | one `insertelement` per lane into `undef`, which `opt` folds to a constant vector when every lane is one | `simd_lanes`; `reject_simd_arity`, `reject_simd_lane_type` |
-| `splatI32x4(x)` | one `insertelement` into lane 0 and a `shufflevector` whose mask is `zeroinitializer` | `simd_lanes` |
-| `loadI32x4(xs, i)` | one bounds check for the whole vector, `i < len` and `i + N <= len`, branching to `nish_panic_index(i, len)`; then the element's address bitcast to `<N x T>*` and one `load` aligned to the lane | `simd_access`, `simd_access_oob`, `simd_access_oob_first`, `simd_access_oob_negative`; `reject_simd_lane_type` |
-| `store(v, xs, i)` | the same check, then one `store`; a statement | `simd_access`, `simd_store_oob`; `reject_simd_lane_type`, `reject_simd_arity` |
-| `extract(v, k)` | `extractelement` at the constant `k` | `simd_lanes`; `reject_simd_lane_index` |
-| `replace(v, k, x)` | `insertelement` at the constant `k`: a new vector, `v` unchanged | `simd_lanes`, `simd_values`; `reject_simd_lane_index` |
+| `i32x4` | one `i32` per lane | `i32x4` |
+| `splatI32x4` | one `i32` | `i32x4` |
+| `loadI32x4` | `readonly i32[], i32` | `i32x4` |
+| `store` | `i32x4, i32[], i32` | `void` |
+| `extract` | `i32x4`, constant `k` | one lane |
+| `replace` | `i32x4`, constant `k`, lane | `i32x4` |
+
+**`i32x4(a, b, c, d)`, one argument per lane** makes a vector of its
+arguments.
+
+- *Lowering:* one `insertelement` per lane into `undef`, which `opt` folds
+  to a constant vector when every lane is one.
+- *Tests:* `simd_lanes`; `reject_simd_arity`, `reject_simd_lane_type`.
+
+**`splatI32x4(x)`** makes a vector with `x` in every lane.
+
+- *Lowering:* one `insertelement` into lane 0 and a `shufflevector` whose
+  mask is `zeroinitializer`.
+- *Tests:* `simd_lanes`.
+
+**`loadI32x4(xs, i)`** reads a vector out of `xs` at `i`, after one bounds
+check for the whole vector, `i < len` and `i + N <= len`.
+
+- *Lowering:* the bounds check branches to `nish_panic_index(i, len)`; then
+  the element's address bitcast to `<N x T>*` and one `load` aligned to the
+  lane.
+- *Tests:* `simd_access`, `simd_access_oob`, `simd_access_oob_first`,
+  `simd_access_oob_negative`; `reject_simd_lane_type`.
+
+**`store(v, xs, i)`** writes `v` back into `xs` at `i` after the same check.
+It is a statement.
+
+- *Lowering:* the same check, then one `store`.
+- *Tests:* `simd_access`, `simd_store_oob`; `reject_simd_lane_type`,
+  `reject_simd_arity`.
+
+**`extract(v, k)`** takes lane `k` out of `v`; `k` is a constant.
+
+- *Lowering:* `extractelement` at the constant `k`.
+- *Tests:* `simd_lanes`; `reject_simd_lane_index`.
+
+**`replace(v, k, x)`** puts `x` in lane `k`, a constant, and answers a new
+vector: `v` is unchanged.
+
+- *Lowering:* `insertelement` at the constant `k`.
+- *Tests:* `simd_lanes`, `simd_values`; `reject_simd_lane_index`.
 
 - **The import is required.** The six types and every call are declared in
   `runtime/nish.d.ts` under `declare module "nish:simd"` only, and a module
@@ -7991,10 +8796,27 @@ it can prove is a boolean may become a `select`. These two builtins are how a
 program selects and compares on a secret without giving the optimiser that
 choice (WP34 N6).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `ctSelect(mask: T, a: T, b: T): T` | `(a & mask) \| (b & ~mask)`: `a` when `mask` is all-ones, `b` when it is zero | none | `ct_select_u32`, `ct_u64`; `reject_ct_select_i32`, `reject_ct_select_i32_literal`, `reject_ct_select_f64`, `reject_ct_select_f32`, `reject_ct_select_bool_mask`, `reject_ct_select_mixed`, `reject_ct_select_arity`, `reject_ct_select_float_mask` |
-| `ctEq(a: T, b: T): T` | all-ones of `T` when `a === b`, zero otherwise | none | `ct_eq_u32`, `ct_u64`; `reject_ct_eq_i64`, `reject_ct_eq_u8`, `reject_ct_eq_f64`, `reject_ct_eq_f32`, `reject_ct_eq_bool`, `reject_ct_eq_ranged`, `reject_ct_eq_mixed`, `reject_ct_eq_arity`, `reject_ct_eq_literals`, `reject_ct_eq_value` |
+| `ctSelect` | `T, T, T` | `T` | none |
+| `ctEq` | `T, T` | `T` | none |
+
+**`ctSelect(mask: T, a: T, b: T): T`** answers `(a & mask) | (b & ~mask)`:
+`a` when `mask` is all-ones, `b` when it is zero.
+
+- *Tests:* `ct_select_u32`, `ct_u64`; `reject_ct_select_i32`,
+  `reject_ct_select_i32_literal`, `reject_ct_select_f64`,
+  `reject_ct_select_f32`, `reject_ct_select_bool_mask`,
+  `reject_ct_select_mixed`, `reject_ct_select_arity`,
+  `reject_ct_select_float_mask`.
+
+**`ctEq(a: T, b: T): T`** answers all-ones of `T` when `a === b`, zero
+otherwise.
+
+- *Tests:* `ct_eq_u32`, `ct_u64`; `reject_ct_eq_i64`, `reject_ct_eq_u8`,
+  `reject_ct_eq_f64`, `reject_ct_eq_f32`, `reject_ct_eq_bool`,
+  `reject_ct_eq_ranged`, `reject_ct_eq_mixed`, `reject_ct_eq_arity`,
+  `reject_ct_eq_literals`, `reject_ct_eq_value`.
 
 - **`T` is `u32` or `u64`, one type for every operand.** A mask is a bit
   pattern, and the unsigned words are the only types whose all-ones is not also
@@ -8159,11 +8981,32 @@ What a driver asks before it trusts a directory or a program it found on its
 own: who owns this path, may anyone else write to it, and will the shell run
 it (#386; [security/cli.md](security/cli.md), CLI-7 and CLI-9).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `lstatOwnerModeSync(path: string): i64` | one `lstat` of `path`: the owner's uid in the high 32 bits and `st_mode` (the file type and the permission bits) in the low 32, or **-1** when the path does not resolve or holds a NUL. A symbolic link answers for **itself**, not for what it names | write | `owner_checks`; `reject_owner_arity`, `reject_owner_i32`, `reject_owner_wasm` |
-| `geteuid(): i64` | the effective user id, the one to compare an owner with | write | `owner_checks`; `reject_owner_euid_arity`, `reject_owner_euid_wasm` |
-| `isExecutableSync(path: string): boolean` | `access(path, X_OK)`: whether the real user may run `path`. `false` for a path that does not resolve or holds a NUL | write | `owner_checks`; `reject_owner_type`, `reject_owner_exec_wasm` |
+| `lstatOwnerModeSync` | `string` | `i64` | write |
+| `geteuid` | nothing | `i64` | write |
+| `isExecutableSync` | `string` | `boolean` | write |
+
+**`lstatOwnerModeSync(path: string): i64`** does one `lstat` of `path`. It
+answers the owner's uid in the high 32 bits and `st_mode` (the file type and
+the permission bits) in the low 32, or **-1** when the path does not resolve
+or holds a NUL. A symbolic link answers for **itself**, not for what it
+names.
+
+- *Tests:* `owner_checks`; `reject_owner_arity`, `reject_owner_i32`,
+  `reject_owner_wasm`.
+
+**`geteuid(): i64`** answers the effective user id, the one to compare an
+owner with.
+
+- *Tests:* `owner_checks`; `reject_owner_euid_arity`,
+  `reject_owner_euid_wasm`.
+
+**`isExecutableSync(path: string): boolean`** is `access(path, X_OK)`:
+whether the real user may run `path`. It answers `false` for a path that
+does not resolve or holds a NUL.
+
+- *Tests:* `owner_checks`; `reject_owner_type`, `reject_owner_exec_wasm`.
 
 - **The owner and the mode are one answer.** Both come out of one `lstat`, so
   they describe the same file however the path changes in between; two calls
@@ -8680,12 +9523,42 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 
 The reference for each member of `process`, with its parameters, its answer and its capability, is its doc comment in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
-| Signature | Semantics | Effect | Test |
+| Member | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `process.exit(code: i32): void` | `nish_exit` -> libc `exit(code)` (stdio buffers of linked C code are flushed; the arena is abandoned); statement position; a terminator | write, `noreturn` | `process_exit`, `reject_exit_unreachable` |
-| `process.argv: string[]` | the command line: `process.argv[0]` is the program path (C's `argv[0]`, one index earlier than Node, whose `argv[0]` is the `node` binary and `argv[1]` the script) and the rest are the arguments as UTF-8 byte strings; read-only | read | `argv_echo` (run with `argv_echo.argv`), `link/argv_import`; `reject_argv_assign`, `reject_argv_push` (`` `process.argv` is read-only ``) |
-| `process.platform: string` | the operating system the **program** is running on, spelled as Node spells it: `"linux"`, `"darwin"`, or `"unknown"` for anything this compiler has no target triple for (every WASI build included) | none | `io_host`; `reject_platform_assign` (`` Cannot assign to `process.platform` ``) |
-| `process.arch: string` | the architecture, likewise: `"x64"`, `"arm64"`, or `"unknown"` | none | `io_host`; `reject_arch_call` (`` Unknown builtin `process.arch` ``) |
+| `process.exit` | `i32` | `void` | write, `noreturn` |
+| `process.argv` | (property) | `string[]` | read |
+| `process.platform` | (property) | `string` | none |
+| `process.arch` | (property) | `string` | none |
+
+**`process.exit(code: i32): void`** ends the program with `code`. The stdio
+buffers of linked C code are flushed; the arena is abandoned. It is used in
+statement position, and it is a terminator.
+
+- *Lowering:* `nish_exit` -> libc `exit(code)`.
+- *Tests:* `process_exit`, `reject_exit_unreachable`.
+
+**`process.argv: string[]`** is the command line. `process.argv[0]` is the
+program path (C's `argv[0]`, one index earlier than Node, whose `argv[0]` is
+the `node` binary and `argv[1]` the script), and the rest are the arguments
+as UTF-8 byte strings. It is read-only.
+
+- *Tests:* `argv_echo` (run with `argv_echo.argv`), `link/argv_import`;
+  `reject_argv_assign`, `reject_argv_push`
+  (`` `process.argv` is read-only ``).
+
+**`process.platform: string`** is the operating system the **program** is
+running on, spelled as Node spells it: `"linux"`, `"darwin"`, or
+`"unknown"` for anything this compiler has no target triple for (every WASI
+build included).
+
+- *Tests:* `io_host`; `reject_platform_assign`
+  (`` Cannot assign to `process.platform` ``).
+
+**`process.arch: string`** is the architecture, likewise: `"x64"`,
+`"arm64"`, or `"unknown"`.
+
+- *Tests:* `io_host`; `reject_arch_call`
+  (`` Unknown builtin `process.arch` ``).
 
 `process.platform` and `process.arch` are what `--target host` asks the
 machine (WP14 §7a): the pair maps to `x86_64`/`aarch64` plus
@@ -8717,19 +9590,196 @@ Reference: [`nish:process`](reference/nish-process.md).
 
 Reference: [`nish:fs`](reference/nish-fs.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `readFileSync(path: string): string` | whole file as one arena string; failure prints `nish: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
-| `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits (WP14 B3): `null` for exactly the set of paths `readFileSync` prints `nish: cannot read <path>` for, a **directory** included. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
-| `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk, or `null` for exactly the paths `readFileSyncOrNull` answers `null` for; there is no exiting twin. An ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no `readFileBytesSync`, as it has no `readFileSync`. The TypeScript reading is class A (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked`, `reject_bytes_read_arity` (NL2061), `reject_bytes_read_type` (NL2268) |
-| `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position. A symbolic link as the last component of `path` is refused (`nish: cannot write <path>`), where Node follows it | write | `io_files` |
-| `appendFileSync(path: string, data: string): void` | create/append and write; statement position. A symbolic link as the last component is refused, as for `writeFileSync` | write | `io_files` |
-| `writeFileBytesSync(path: string, bytes: readonly u8[]): i32` | create/truncate (`0644`) and write the array's bytes as they are. A symbolic link as the last component is refused (`-40` ELOOP). Where `writeFileSync` exits, this **answers** `bytes.length` or a negative errno, never a panic | write | `io_write_file_bytes`, `io_write_bytes`; `reject_write_file_bytes_arity`, `reject_write_file_bytes_type` (NL2268), `reject_write_file_bytes_wasm` |
-| `renameSync(from: string, to: string): i32` | `rename(2)`: `from` replaces `to` in one step, so a reader sees the old file or the new one and never neither. `0`, or a negative errno; `-18` **EXDEV** across file systems, since nothing is copied. Never a panic | write | `io_rename`, `caps_fs_replace`; `reject_rename_arity`, `reject_rename_type`, `reject_rename_wasm` |
-| `unlinkSync(path: string): i32` | `unlink(2)`: removes the name, and a symbolic link itself rather than what it names. A **directory is refused** (`-21` EISDIR on Linux, `-1` EPERM where the kernel answers so), with no fallback to `rmdir`. `0`, or a negative errno. Never a panic | write | `io_unlink`, `caps_fs_replace`; `reject_unlink_arity`, `reject_unlink_type`, `reject_unlink_wasm` |
-| `writeFileSyncMode(path: string, data: string, mode: i32): i32` | `writeFileSync` with the file left at exactly `mode`: an `fchmod(2)` sets it **before the first byte is written**, so the umask cannot widen it and a wider existing file is narrowed before it holds the new contents. A descriptor opened before is not revoked. The file is written **in place**: a failure leaves it empty or partial, and a file this process may write but does not own is emptied before `-1` EPERM, so a secret that replaces another goes through a temporary and `renameSync`. A symbolic link as the last component is refused (`-40` ELOOP), its target untouched. A mode outside `0..0o777` is `-22` (the setuid, setgid and sticky bits are refused, not applied). The length written, or a negative errno. Never a panic | write | `io_write_file_mode`, `caps_fs_mode`, `fs_mode` (modes read back by `stat`, umask `022` and `077`); `reject_write_file_mode_arity`, `reject_write_file_mode_type`, `reject_write_file_mode_wasm` |
-| `createFileExclusiveSync(path: string, data: string, mode: i32): i32` | `O_CREAT\|O_EXCL` at exactly `mode`, set as for `writeFileSyncMode`: `-17` **EEXIST** when any name is already there, a dangling symbolic link included, which is never followed. Exactly one of any number of racing processes wins, so it is a lock file; a winner whose write fails removes the file before it answers. The length written, or a negative errno. Never a panic | write | `io_create_exclusive`, `fs_mode` (eight children race, one wins; a failed write leaves no file); `reject_create_exclusive_arity`, `reject_create_exclusive_type`, `reject_create_exclusive_mode_type`, `reject_create_exclusive_wasm` |
-| `mkdirSyncMode(path: string, mode: i32): i32` | `mkdir(2)` of one level at `mode`, with the process umask applied. An existing name is `-17` EEXIST, its mode never changed; a mode outside `0..0o777` (the sticky, setuid and setgid bits included) is `-22`. `0`, or a negative errno. Never a panic | write | `io_mkdir_mode`, `caps_fs_mode`, `fs_mode`; `reject_mkdir_mode_arity`, `reject_mkdir_mode_type`, `reject_mkdir_mode_mode_type`, `reject_mkdir_mode_wasm` |
+| `readFileSync` | `string` | `string` | write |
+| `readFileSyncOrNull` | `string` | `string \| null` | write |
+| `readFileBytesSync` | `string` | `u8[] \| null` | write |
+| `writeFileSync` | `string, string` | `void` | write |
+| `appendFileSync` | `string, string` | `void` | write |
+| `writeFileBytesSync` | `string, readonly u8[]` | `i32` | write |
+| `renameSync` | `string, string` | `i32` | write |
+| `unlinkSync` | `string` | `i32` | write |
+| `writeFileSyncMode` | `string, string, i32` | `i32` | write |
+| `createFileExclusiveSync` | `string, string, i32` | `i32` | write |
+| `mkdirSyncMode` | `string, i32` | `i32` | write |
+| `fileOpen` | `string` | `i32` | write |
+| `fileReadAt` | `i32, u8[], i32, i32, i64` | `i32` | write |
+| `fileSize` | `i32` | `i64` | write |
+| `fileClose` | `i32` | `i32` | write |
+
+**`readFileSync(path: string): string`** reads the whole file as one arena
+string. A failure prints `nish: cannot read <path>` to stderr and exits 1.
+
+- *Tests:* `io_files`; `reject_readfile_number`
+  (`` `readFileSync` expects an argument of type string, got i32 ``).
+
+**`readFileSyncOrNull(path: string): string | null`** is the same read,
+with `null` where the other exits (WP14 B3): `null` for exactly the set of
+paths `readFileSync` prints `nish: cannot read <path>` for, a **directory**
+included. The result is narrowed with `if (text !== null)` like any other
+nullable.
+
+- *Tests:* `io_streams`; `reject_readfile_or_null_unchecked`.
+
+**`readFileBytesSync(path: string): u8[] | null`** answers the file's
+**bytes**, as they are on disk, or `null` for exactly the paths
+`readFileSyncOrNull` answers `null` for; there is no exiting twin. The
+result is an ordinary arena `u8[]` with `length === capacity`, narrowed with
+`if (b !== null)`. A `wasm32` build has no `readFileBytesSync`, as it has no
+`readFileSync`. The TypeScript reading is class A (WP34 N2).
+
+- *Tests:* `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`;
+  `reject_bytes_read_unchecked`, `reject_bytes_read_arity` (NL2061),
+  `reject_bytes_read_type` (NL2268).
+
+**`writeFileSync(path: string, data: string): void`** creates or truncates
+the file (`0644`) and writes; it is used in statement position. A symbolic
+link as the last component of `path` is refused
+(`nish: cannot write <path>`), where Node follows it.
+
+- *Tests:* `io_files`.
+
+**`appendFileSync(path: string, data: string): void`** creates or appends
+and writes; it is used in statement position. A symbolic link as the last
+component is refused, as for `writeFileSync`.
+
+- *Tests:* `io_files`.
+
+**`writeFileBytesSync(path: string, bytes: readonly u8[]): i32`** creates or
+truncates the file (`0644`) and writes the array's bytes as they are. A
+symbolic link as the last component is refused (`-40` ELOOP). Where
+`writeFileSync` exits, this **answers** `bytes.length` or a negative errno,
+never a panic.
+
+- *Tests:* `io_write_file_bytes`, `io_write_bytes`;
+  `reject_write_file_bytes_arity`, `reject_write_file_bytes_type` (NL2268),
+  `reject_write_file_bytes_wasm`.
+
+**`renameSync(from: string, to: string): i32`** is `rename(2)`: `from`
+replaces `to` in one step, so a reader sees the old file or the new one and
+never neither. It answers `0`, or a negative errno; `-18` **EXDEV** across
+file systems, since nothing is copied. Never a panic.
+
+- *Tests:* `io_rename`, `caps_fs_replace`; `reject_rename_arity`,
+  `reject_rename_type`, `reject_rename_wasm`.
+
+**`unlinkSync(path: string): i32`** is `unlink(2)`: it removes the name, and
+a symbolic link itself rather than what it names. A **directory is refused**
+(`-21` EISDIR on Linux, `-1` EPERM where the kernel answers so), with no
+fallback to `rmdir`. It answers `0`, or a negative errno. Never a panic.
+
+- *Tests:* `io_unlink`, `caps_fs_replace`; `reject_unlink_arity`,
+  `reject_unlink_type`, `reject_unlink_wasm`.
+
+**`writeFileSyncMode(path: string, data: string, mode: i32): i32`** is
+`writeFileSync` with the file left at exactly `mode`. An `fchmod(2)` sets it
+**before the first byte is written**, so the umask cannot widen it and a
+wider existing file is narrowed before it holds the new contents. A
+descriptor opened before is not revoked. The file is written **in place**: a
+failure leaves it empty or partial, and a file this process may write but
+does not own is emptied before `-1` EPERM, so a secret that replaces another
+goes through a temporary and `renameSync`. A symbolic link as the last
+component is refused (`-40` ELOOP), its target untouched. A mode outside
+`0..0o777` is `-22` (the setuid, setgid and sticky bits are refused, not
+applied). It answers the length written, or a negative errno. Never a panic.
+
+- *Tests:* `io_write_file_mode`, `caps_fs_mode`, `fs_mode` (modes read back
+  by `stat`, umask `022` and `077`); `reject_write_file_mode_arity`,
+  `reject_write_file_mode_type`, `reject_write_file_mode_wasm`.
+
+**`createFileExclusiveSync(path: string, data: string, mode: i32): i32`** is
+`O_CREAT|O_EXCL` at exactly `mode`, set as for `writeFileSyncMode`. It
+answers `-17` **EEXIST** when any name is already there, a dangling symbolic
+link included, which is never followed. Exactly one of any number of racing
+processes wins, so it is a lock file; a winner whose write fails removes the
+file before it answers. It answers the length written, or a negative errno.
+Never a panic.
+
+- *Tests:* `io_create_exclusive`, `fs_mode` (eight children race, one wins;
+  a failed write leaves no file); `reject_create_exclusive_arity`,
+  `reject_create_exclusive_type`, `reject_create_exclusive_mode_type`,
+  `reject_create_exclusive_wasm`.
+
+**`mkdirSyncMode(path: string, mode: i32): i32`** is `mkdir(2)` of one level
+at `mode`, with the process umask applied. An existing name is `-17` EEXIST,
+its mode never changed; a mode outside `0..0o777` (the sticky, setuid and
+setgid bits included) is `-22`. It answers `0`, or a negative errno. Never a
+panic.
+
+- *Tests:* `io_mkdir_mode`, `caps_fs_mode`, `fs_mode`;
+  `reject_mkdir_mode_arity`, `reject_mkdir_mode_type`,
+  `reject_mkdir_mode_mode_type`, `reject_mkdir_mode_wasm`.
+
+#### A file a window at a time
+
+`readFileBytesSync` answers the whole file; these four read it **a window at
+a time** into a `u8[]` the program owns, so memory follows the window rather
+than the file, and a file past 2^31 − 1 bytes is readable (WP44,
+[wp44-streaming-files.md](wp44-streaming-files.md)). No call allocates. Every
+answer that is not a count is the **negated Linux errno, on every platform**,
+WASI and Node included: `-2` not found, `-6` a Unix-domain socket (`ENXIO`),
+`-9` a bad descriptor, `-13` permission denied, `-20` a component is not a
+directory, `-21` a directory, `-22` not a regular file or a refused position,
+`-23`/`-24` descriptors exhausted, `-29` not seekable, `-36` name too long,
+`-40` too many symbolic links, and `-5` for any other failure, WASI's
+`ENOTCAPABLE` among them. They are exported by `nish:fs` and global.
+
+**`fileOpen(path: string): i32`** opens a **regular file** for reading and
+answers its descriptor (`>= 0`), or a negative errno. It opens with
+`O_CLOEXEC`, so a spawned child does not inherit it, and `O_NONBLOCK`, so a
+FIFO with no writer cannot hang it. Anything that is not a regular file is
+closed again and refused: a directory is `-21`, a FIFO or a device `-22`, and
+a Unix-domain socket `-6`, as `open(2)` answers for one. An empty path, or one
+holding a NUL, is `-2` before the file system is asked. Symbolic links are
+followed.
+
+- *Tests:* `file_read_at`, `file_open_errors`.
+
+**`fileReadAt(fd: i32, buf: u8[], off: i32, len: i32, pos: i64): i32`** reads
+at most `len` bytes of the file from byte `pos` into `buf[off, off + len)`,
+with `pread(2)`: there is no cursor, so one descriptor serves any number of
+readers. It answers the count, `0` at or past the end of the file, or a
+negative errno. **A short read is allowed** before the end: loop until `0`, or
+until the size planned for is read. `len` of `0` answers `0`. A `pos` below
+`0`, or a `pos + len` past 2^63 − 1, is `-22` before the kernel is asked. The
+window is [checked](#bounds) as `netRead`'s is, and `buf` is written, so a
+`readonly u8[]` is refused (`` Cannot `fileReadAt` through readonly u8[] ``)
+and another element type is NL2402, as `netRead`'s are.
+
+- *Tests:* `file_read_at`, `file_read_at_eof`, `file_read_at_pos`,
+  `file_read_at_bounds`, `file_size_large`, `mem_file_stream_flat`;
+  `reject_file_read_readonly`, `reject_file_read_element`.
+
+**`fileSize(fd: i32): i64`** answers the file's size in bytes now, or a
+negative errno. **The size can change**: a file may shrink or grow between
+`fileSize` and the reads, so a reader that gets `0` before the size it planned
+for has a file that shrank, and a server that has sent `Content-Length` must
+close the connection there.
+
+- *Tests:* `file_read_at`, `file_size_large`.
+
+**`fileClose(fd: i32): i32`** closes the descriptor and answers `0` or a
+negative errno; either way the descriptor is gone. It is never retried. A
+call on a closed descriptor is `-9`, as is one on a negative descriptor
+(under Node too, where `fs` would throw a range error), but nothing checks a use after close: the
+number may already name another file the program opened since (recorded
+open, [docs/security/runtime.md](security/runtime.md), RT-50).
+
+- *Tests:* `file_read_at_pos`.
+
+All four are **`fs.read`** ([capabilities](#capabilities); `caps_file_read`,
+`reject_file_read_denied`) and `write` effects, so none may be called in a
+`scope()` task or a parallel body (`reject_file_fd_type` for the descriptor's
+`i32`, `reject_file_read_task`). Under Node they read through `fs.openSync`,
+`fs.readSync`, `fs.fstatSync` and `fs.closeSync`, with the size a `bigint`.
+Under `--profile wasi` they read through WASI's `path_open`, `fd_pread` and
+`fd_filestat_get`, from the directories the host preopens. **A freestanding
+`wasm32` build has no file system to read**, and a call is refused at check
+time: `` `fileOpen` reads a file, and a freestanding wasm32 build has no file
+system to read (build with `--profile wasi`) `` (NL2718;
+`reject_file_open_wasm`). The `--profile wasm` runtime defines the four
+answering `-38` (`ENOSYS`), so a link that names them never fails.
 
 The ones that answer an `i32` answer the platform's errno values,
 untranslated, and the same numbers under Node; the ones shown here are
@@ -8764,15 +9814,108 @@ wins, as it does for every identifier builtin.
 
 Reference: [`nish:fs`](reference/nish-fs.md), [`nish:process`](reference/nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `mkdirSync(path: string): boolean` | create **one** directory, mode `0777 & ~umask`, not recursive, exactly like Node's `fs.mkdirSync(p)` with no options. `true` when a directory exists at `path` once the call returns, whoever made it; `false` for every other outcome, a plain file at `path` included | write | `io_mkdir`; `reject_mkdir_arity`, `reject_mkdir_type` |
-| `isDirectorySync(path: string): boolean` | one `stat`: `true` when a directory exists at `path` as the call runs, `false` for everything else. It is the question `-o <dir>` asks of a path, and the `stat` half of `mkdirSync`, which calls it (WP14 §7a) | write | `io_is_directory`; `reject_is_directory_arity`, `reject_is_directory_type` |
-| `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, and wait for it: its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` for an **empty** vector, a child that cannot be started or waited for, and always on WASI, which has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
-| `spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number` | the same run, with each stream sent to a file created or truncated at `0644`; an **empty** path leaves that stream inherited, and a symbolic link as a path's last component is refused, which answers `-1`. The two paths must not name one file; capture them apart and concatenate | write | `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`, `reject_spawn_to_type` |
-| `spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32` | the same run, with every stream a pipe: the child reads `stdin` and then end of file, and its stdout and stderr are **appended** to `stdout` and `stderr`. The status, `128 + n`, or `-1` as for `spawnSync` (and for a failed pipe or `poll`); a stream past **16 MiB** (`NISH_PIPED_CAP`) kills the child with `SIGKILL` and answers `-2`. The child holds no descriptor of the program but its three streams, and the program's SIGPIPE from a child that stopped reading is absorbed. The two output arrays are grown by the runtime, so they are push receivers to the arena analysis, and `readonly` is refused for them, as is a typed-array spelling (`Int32Array`, ...), whose length is fixed | write | `io_spawn_piped`, `mem_spawn_piped_scope`; `reject_spawn_piped_arity`, `reject_spawn_piped_element_type`, `reject_spawn_piped_stdin_type`, `reject_spawn_piped_output`, `reject_spawn_piped_typed_output`, `reject_spawn_piped_wasm`, `reject_using_arena_spawn_piped` |
-| `readdirSync(path: string): string[] \| null` | the directory's entries, **sorted ascending by bytes**, without `.` and `..`. `null` when the directory cannot be read at all, a *different* answer from the empty array of an empty directory. A WASI build always answers `null`: `fd_readdir` lists a preopened directory rather than a path, which is a different contract and not a port of this one | write | `io_readdir`, `io_readdir_null`; `reject_readdir_arity`, `reject_readdir_type`, `reject_readdir_unchecked` |
-| `realpathSync(path: string): string \| null` | `path` resolved to an **absolute** path with no symbolic link, `.`, `..` or repeated separator, or `null` when it does not resolve. POSIX `realpath` needs every component but the last to exist, so "does not resolve" is one answer rather than several, and the answer the caller asked for rather than an error. Copied into the arena and narrowed with `if (p !== null)` like any other nullable (WP19 §5a item 4) | write | `io_realpath`; `reject_realpath_arity`, `reject_realpath_type` |
+| `mkdirSync` | `string` | `boolean` | write |
+| `isDirectorySync` | `string` | `boolean` | write |
+| `spawnSync` | `string[]` | `number` | write |
+| `spawnSyncTo` | `string[], string, string` | `number` | write |
+| `spawnPiped` | `string[], readonly u8[], u8[], u8[]` | `i32` | write |
+| `readdirSync` | `string` | `string[] \| null` | write |
+| `realpathSync` | `string` | `string \| null` | write |
+
+**`mkdirSync(path: string): boolean`** creates **one** directory, mode
+`0777 & ~umask`, not recursive, exactly like Node's `fs.mkdirSync(p)` with
+no options. It answers `true` when a directory exists at `path` once the
+call returns, whoever made it; `false` for every other outcome, a plain file
+at `path` included.
+
+- *Tests:* `io_mkdir`; `reject_mkdir_arity`, `reject_mkdir_type`.
+
+**`isDirectorySync(path: string): boolean`** does one `stat`: `true` when a
+directory exists at `path` as the call runs, `false` for everything else. It
+is the question `-o <dir>` asks of a path, and the `stat` half of
+`mkdirSync`, which calls it (WP14 §7a).
+
+- *Tests:* `io_is_directory`; `reject_is_directory_arity`,
+  `reject_is_directory_type`.
+
+**`spawnSync(argv: string[]): number`** runs `argv[0]`, searched on `PATH`,
+and waits for it. It answers its exit status, or `128 + n` when signal `n`
+killed it (the shell's convention). It answers `-1` for an **empty** vector,
+a child that cannot be started or waited for, and always on WASI, which has
+no processes. The child inherits this process's environment, streams and
+working directory.
+
+- *Tests:* `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type`.
+
+**`spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number`**
+is the same run, with each stream sent to a file created or truncated at
+`0644`. An **empty** path leaves that stream inherited, and a
+symbolic link as a path's last component is refused, which answers `-1`.
+The two paths must not name one file; capture them apart and concatenate.
+
+- *Tests:* `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`,
+  `reject_spawn_to_type`.
+
+**`spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32`**
+is the same run, with every stream a pipe: the child reads
+`stdin` and then end of file, and its stdout and stderr are **appended** to
+`stdout` and `stderr`. It answers the status, `128 + n`, or `-1` as for
+`spawnSync` (and for a failed pipe or `poll`). A stream past **16 MiB**
+(`NISH_PIPED_CAP`) kills the child with `SIGKILL` and answers `-2`. The
+child holds no descriptor of the program but its three streams, and the
+program's SIGPIPE from a child that stopped reading is absorbed. The two
+output arrays are grown by the runtime, so they are push receivers to the
+arena analysis, and `readonly` is refused for them, as is a typed-array
+spelling (`Int32Array`, ...), whose length is fixed.
+
+- *Tests:* `io_spawn_piped`, `mem_spawn_piped_scope`;
+  `reject_spawn_piped_arity`, `reject_spawn_piped_element_type`,
+  `reject_spawn_piped_stdin_type`, `reject_spawn_piped_output`,
+  `reject_spawn_piped_typed_output`, `reject_spawn_piped_wasm`,
+  `reject_using_arena_spawn_piped`.
+
+**`spawnPipedWithin(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[], timeoutMs: i32): i32`**
+is `spawnPiped`'s run with a deadline `timeoutMs` milliseconds after the
+call, on the monotonic clock; a **negative** `timeoutMs` is none, and the run
+is `spawnPiped`'s. It gives every answer `spawnPiped` gives, and **`-3`** when
+the deadline passes first: the child's pid is killed with `SIGKILL` and
+reaped, and the bytes read before then stay in `stdout` and `stderr`. The
+deadline covers the **whole** run, the wait for the child after its streams
+close included, so a child that closes its output and keeps running is `-3`
+too. Only the child's own pid is killed, never a process group: a grandchild
+still holding an output pipe keeps the run going until the deadline, which
+turns an exit 0 into `-3`, and is left running. The arguments are checked as
+`spawnPiped`'s, the fifth as an `i32`.
+
+- *Tests:* `io_spawn_piped_within`; `reject_spawn_piped_within_arity`,
+  `reject_spawn_piped_within_element_type`,
+  `reject_spawn_piped_within_timeout_type`,
+  `reject_spawn_piped_within_output`,
+  `reject_spawn_piped_within_typed_output`,
+  `reject_spawn_piped_within_wasm`,
+  `reject_using_arena_spawn_piped_within`.
+
+**`readdirSync(path: string): string[] | null`** answers the directory's
+entries, **sorted ascending by bytes**, without `.` and `..`. It answers
+`null` when the directory cannot be read at all, a *different* answer from
+the empty array of an empty directory. A WASI build always answers `null`:
+`fd_readdir` lists a preopened directory rather than a path, which is a
+different contract and not a port of this one.
+
+- *Tests:* `io_readdir`, `io_readdir_null`; `reject_readdir_arity`,
+  `reject_readdir_type`, `reject_readdir_unchecked`.
+
+**`realpathSync(path: string): string | null`** answers `path` resolved to
+an **absolute** path with no symbolic link, `.`, `..` or repeated
+separator, or `null` when it does not resolve. POSIX `realpath` needs every
+component but the last to exist, so "does not resolve" is one answer rather
+than several, and the answer the caller asked for rather than an error. The
+result is copied into the arena and narrowed with `if (p !== null)` like any
+other nullable (WP19 §5a item 4).
+
+- *Tests:* `io_realpath`; `reject_realpath_arity`, `reject_realpath_type`.
 
 All five answer a value where they could have exited, for the reason
 `readFileSyncOrNull` answers `null` (WP14 B3): the language has no exceptions,
@@ -8818,6 +9961,20 @@ reason `spawnSyncTo` gave for refusing to buffer: a child that prints more
 than memory holds is stopped, with a code no exit status can be, rather than
 followed (`docs/security/runtime.md`, RT-27 to RT-31).
 
+`spawnPipedWithin` is the same run for a child that may never answer: a
+credential helper waiting on a prompt nobody sees, or a tool hung on the
+network. It is a fifth argument on a second builtin rather than an optional
+one on `spawnPiped`, so `spawnPiped`'s IR and every program that calls it are
+unchanged; `-3` is a code of its own because a caller tells a slow child from
+a failed one (the deadline was the program's choice, so it may retry with a
+longer one). The deadline is a point in time rather than a budget per wait:
+the poll loop's waits and the final wait for the child all end at it, so the
+whole call returns within `timeoutMs` plus the time a kill and a reap take.
+It kills the pid and not a process group, because putting the child in a
+group of its own would take it out of the terminal's job control, and the
+program cannot know the child would not mind (`docs/security/runtime.md`,
+RT-49).
+
 `spawnWithFds` numbers the descriptors from 3 rather than taking a target
 for each, because 3 onward is where a child that is handed descriptors looks
 for them (systemd's socket activation, `LISTEN_FDS`), and a target list would
@@ -8838,9 +9995,18 @@ differ for names that are not (`docs/wp13-differential.md`).
 
 Reference: [`nish:process`](reference/nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `getenv(name: string): string \| null` | the value of environment variable `name` as the call runs, or `null` when it is **unset**; a variable set to nothing (`CC=`) answers a zero-length string. The bytes are copied into the arena, so the result outlives any later change to the environment; it is narrowed with `if (cc !== null)` like any other nullable (WP19 R1) | write | `io_getenv`; `reject_getenv_arity`, `reject_getenv_type`, `reject_getenv_unchecked` |
+| `getenv` | `string` | `string \| null` | write |
+
+**`getenv(name: string): string | null`** answers the value of environment
+variable `name` as the call runs, or `null` when it is **unset**; a variable
+set to nothing (`CC=`) answers a zero-length string. The bytes are copied
+into the arena, so the result outlives any later change to the environment.
+It is narrowed with `if (cc !== null)` like any other nullable (WP19 R1).
+
+- *Tests:* `io_getenv`; `reject_getenv_arity`, `reject_getenv_type`,
+  `reject_getenv_unchecked`.
 
 It is a **call and not `process.env.CC`**, and that is a language decision
 rather than a spelling: `process.env.NAME` is member access on a key chosen at
@@ -8875,10 +10041,23 @@ it is a byte offset.
 
 Reference: [`nish:process`](reference/nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `monotonicNanos(): i64` | `CLOCK_MONOTONIC` in nanoseconds; the origin is arbitrary, so only the **difference** between two reads means anything | write | `io_monotonic`; `reject_monotonic_arity` |
-| `wallClockNanos(): i64` | `CLOCK_REALTIME` in nanoseconds since 1970-01-01 UTC, as an `i64`. It can go backwards when the system time is set, so a duration is `monotonicNanos`'s job. Not refused on wasm, as the monotonic clock is | write | `wall_clock`; `reject_wall_clock_arity` |
+| `monotonicNanos` | nothing | `i64` | write |
+| `wallClockNanos` | nothing | `i64` | write |
+
+**`monotonicNanos(): i64`** reads `CLOCK_MONOTONIC` in nanoseconds. The
+origin is arbitrary, so only the **difference** between two reads means
+anything.
+
+- *Tests:* `io_monotonic`; `reject_monotonic_arity`.
+
+**`wallClockNanos(): i64`** reads `CLOCK_REALTIME` in nanoseconds since
+1970-01-01 UTC, as an `i64`. It can go backwards when the system time is
+set, so a duration is `monotonicNanos`'s job. It is not refused on wasm, as
+the monotonic clock is.
+
+- *Tests:* `wall_clock`; `reject_wall_clock_arity`.
 
 It is an `i64` in both number modes and not a `number`, because a `number` is an
 `i32` by default and would overflow inside a tenth of a second, and an `f64`
@@ -8906,13 +10085,78 @@ beside `runtime.c` as it does the others.
 
 Reference: [`nish:fs`](reference/nish-fs.md), [`nish:process`](reference/nish-process.md), and [the globals page](reference/builtins.md) for `Date.now` (under `DateConstructor`) and `crypto`.
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `Date.now(): f64` | the wall clock, `CLOCK_REALTIME`, in **whole milliseconds** since 1970-01-01 UTC, as JavaScript answers it: the milliseconds are counted as integers and then converted, so the value is exact and a time before 1970 floors. An `f64` in both number modes, because an `i32` of milliseconds overflowed in January 1970. It can go backwards when the clock is corrected, so an interval is `monotonicNanos`'s job, not this one's | write | `os_now`, `os_now_i32`; `reject_os_date_now_arity` |
-| `crypto.getRandomValues(bytes: u8[]): void` | every byte of `bytes` from the kernel's CSPRNG: `getrandom(2)` on Linux, looping over `EINTR` and short reads, and `getentropy(3)` in 256-byte chunks on macOS. **A `u8[]` only**, where the Web API takes any integer typed array: the byte is the unit a key or a nonce is written in, and a wider element would make the answer's byte order a fact about the machine. **A statement**, where the Web API also answers its argument, which the caller already holds. An empty array is filled with nothing. **At most 65,536 bytes a call**, the Web API's limit: more is a panic, `crypto.getRandomValues: <n> bytes asked for, and one call fills at most 65536`, exit 1. A source that fails is a panic too; nothing weaker is ever substituted | write | `os_random`, `os_random_limit`; `reject_os_random_i32`, `reject_os_random_u32`, `reject_os_random_string`, `reject_os_random_readonly`, `reject_os_random_value`, `reject_os_random_arity`, `reject_os_crypto_member`, `reject_os_crypto_value`, `reject_thread_region_random` |
-| `statMtimeSync(path: string): f64` | the modification time in milliseconds since the epoch, **with the sub-millisecond fraction** kept, computed as Node's `mtimeMs` is (seconds × 1e3 plus nanoseconds ÷ 1e6, in doubles), so the two print the same digits. **NaN** when the path cannot be stat'd, because an `f64` has no `null` ([Nullable types](#nullable-types)); test it with `m !== m`. `stat` follows a symbolic link, and a directory has a time of its own. Also exported by `nish:fs` | write | `os_mtime`, `os_mtime_import`; `reject_os_mtime_type`, `reject_os_mtime_arity`, `reject_os_mtime_nullable` |
-| `signalFd(): i32` | a descriptor that becomes readable when **SIGTERM or SIGINT** arrives: the read end of a pipe a `sigaction` handler writes one byte to per signal, so the signals' default action never runs. The handler runs in whichever thread the signal lands on, so a `scope()` task or a parallel worker running when `signalFd()` is called cannot take the signal and end the process, and nothing is blocked for a spawned child to inherit. It overrides a disposition the process started with, as `process.on("SIGTERM")` does under Node. Made **once**; `-1` when it cannot be made. Also exported by `nish:process` | write | `os_signal`, `os_signal_import`; `reject_os_signal_fd_arity` |
-| `readSignal(fd: i32): i32` | block until one of the two signals arrives and answer **15** or **2**; `-1` for an `fd` that is not `signalFd()`'s and for a read that fails. The argument is an `i32` in both number modes, and an `f64`, an `i64` or a string is refused rather than converted. Not `willreturn`. Also exported by `nish:process` | write | `os_signal`, `os_signal_import`; `reject_os_signal_f64`, `reject_os_signal_i64`, `reject_os_signal_string`, `reject_os_signal_arity` |
+| `Date.now` | nothing | `f64` | write |
+| `crypto.getRandomValues` | `u8[]` | `void` | write |
+| `statMtimeSync` | `string` | `f64` | write |
+| `signalFd` | nothing | `i32` | write |
+| `readSignal` | `i32` | `i32` | write |
+
+**`Date.now(): f64`** answers the wall clock, `CLOCK_REALTIME`, in **whole
+milliseconds** since 1970-01-01 UTC, as JavaScript answers it. The
+milliseconds are counted as integers and then converted, so the value is
+exact and a time before 1970 floors. It is an `f64` in both number modes,
+because an `i32` of milliseconds overflowed in January 1970. It can go
+backwards when the clock is corrected, so an interval is
+`monotonicNanos`'s job, not this one's.
+
+- *Tests:* `os_now`, `os_now_i32`; `reject_os_date_now_arity`.
+
+**`crypto.getRandomValues(bytes: u8[]): void`** fills every byte of `bytes`
+from the kernel's CSPRNG. It takes **a `u8[]` only**, where the Web API
+takes any integer typed array: the byte is the unit a key or a nonce is
+written in, and a wider element would make the answer's byte order a fact
+about the machine. It is **a statement**, where the Web API also answers its
+argument, which the caller already holds. An empty array is filled with
+nothing. It fills **at most 65,536 bytes a call**, the Web API's limit: more
+is a panic,
+`crypto.getRandomValues: <n> bytes asked for, and one call fills at most 65536`,
+exit 1. A source that fails is a panic too; nothing weaker is ever
+substituted.
+
+- *Lowering:* `getrandom(2)` on Linux, looping over `EINTR` and short reads,
+  and `getentropy(3)` in 256-byte chunks on macOS.
+- *Tests:* `os_random`, `os_random_limit`; `reject_os_random_i32`,
+  `reject_os_random_u32`, `reject_os_random_string`,
+  `reject_os_random_readonly`, `reject_os_random_value`,
+  `reject_os_random_arity`, `reject_os_crypto_member`,
+  `reject_os_crypto_value`, `reject_thread_region_random`.
+
+**`statMtimeSync(path: string): f64`** answers the modification time in
+milliseconds since the epoch, **with the sub-millisecond fraction** kept. It
+is computed as Node's `mtimeMs` is (seconds × 1e3 plus nanoseconds ÷ 1e6,
+in doubles), so the two print the same digits. It answers **NaN** when the
+path cannot be stat'd, because an `f64` has no `null`
+([Nullable types](#nullable-types)); test it with `m !== m`. `stat` follows a
+symbolic link, and a directory has a time of its own. Also exported by
+`nish:fs`.
+
+- *Tests:* `os_mtime`, `os_mtime_import`; `reject_os_mtime_type`,
+  `reject_os_mtime_arity`, `reject_os_mtime_nullable`.
+
+**`signalFd(): i32`** answers a descriptor that becomes readable when
+**SIGTERM or SIGINT** arrives: the read end of a pipe a `sigaction` handler
+writes one byte to per signal, so the signals' default action never runs.
+The handler runs in whichever thread the signal lands on, so a `scope()`
+task or a parallel worker running when `signalFd()` is called cannot take
+the signal and end the process, and nothing is blocked for a spawned child
+to inherit. It overrides a disposition the process started with, as
+`process.on("SIGTERM")` does under Node. It is made **once**; `-1` when it
+cannot be made. Also exported by `nish:process`.
+
+- *Tests:* `os_signal`, `os_signal_import`; `reject_os_signal_fd_arity`.
+
+**`readSignal(fd: i32): i32`** blocks until one of the two signals arrives
+and answers **15** or **2**; `-1` for an `fd` that is not `signalFd()`'s and
+for a read that fails. The argument is an `i32` in both number modes, and an
+`f64`, an `i64` or a string is refused rather than converted. Also exported
+by `nish:process`.
+
+- *Lowering:* not `willreturn`.
+- *Tests:* `os_signal`, `os_signal_import`; `reject_os_signal_f64`,
+  `reject_os_signal_i64`, `reject_os_signal_string`,
+  `reject_os_signal_arity`.
 
 **`Date` has one member.** `new Date()`, `Date()`, `Date.parse`, `Date.UTC`,
 any other member, and `Date` or `Date.now` used as a value are all refused under
@@ -8973,14 +10217,70 @@ exported by `nish:process` as well as being a global.
 
 Reference: [`nish:process`](reference/nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `spawn(argv: string[]): i32` | start `argv[0]` exactly as `spawnSync` does and answer the child's **pid** at once, **without waiting**, or a **negative errno** (-22 for an empty vector or an argument holding a NUL). **Test `pid > 0` before handing the answer on**: a failure passed to `waitPid` reads as "any child". A child never reaped stays a zombie until the program exits | write | `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm` |
-| `spawnWithFds(argv: string[], fds: readonly i32[]): i32` | `spawn`, with the child holding `fds[i]` as descriptor **`3 + i`**, close-on-exec cleared there. **No other descriptor** of this process reaches it but one opened without close-on-exec, which nothing the runtime opens is. More than **64** descriptors, or a negative one, is `-22` before anything is opened or started. The child shares each descriptor's open file, offset and status flags, and this process keeps its own. Its pid, or a negative errno | write | `spawn_fds_child`, `caps_process_spawn_fds`; `reject_spawn_fds_arity`, `reject_spawn_fds_element`, `reject_spawn_fds_argv`, `reject_spawn_fds_wasm` |
-| `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, and so is a `pid` of 0 or below, which `kill(2)` reads as more than one process. A positive pid may be any process of this user, not only a child ([RT-19](security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
-| `waitPid(pid: i32, flags: i32): i32[]` | reap a child (`pid` a child's or **-1 for any child**; flag **1 is WNOHANG**) and answer a fresh **`[pid, status]`**, the status as `spawnSync`'s; a failure puts the negative errno first. After `signalFd()` a blocking wait never sees EINTR, because that handler is installed with `SA_RESTART` and the wait restarts. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
-| `availableParallelism(): i32` | the CPUs this program may use, **at least 1**: the smallest of the CPUs online, its affinity mask or cpuset, a cgroup v2 CPU quota rounded up, and a positive `NISH_NUM_THREADS`, which can lower the count and never raise it. It needs no `--threads` | none | `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm` |
-| `totalMemory(): i64` | bytes of **physical memory** — `_SC_PHYS_PAGES` times the page size on Linux, `hw.memsize` on Darwin — or **-1** where the host does not say. The machine's, not a cgroup's limit | none | `os_memory`; `reject_os_memory_wasm` |
+| `spawn` | `string[]` | `i32` | write |
+| `spawnWithFds` | `string[], readonly i32[]` | `i32` | write |
+| `kill` | `i32, i32` | `i32` | write |
+| `waitPid` | `i32, i32` | `i32[]` | write |
+| `availableParallelism` | nothing | `i32` | none |
+| `totalMemory` | nothing | `i64` | none |
+
+**`spawn(argv: string[]): i32`** starts `argv[0]` exactly as `spawnSync`
+does and answers the child's **pid** at once, **without waiting**, or a
+**negative errno** (-22 for an empty vector or an argument holding a NUL).
+**Test `pid > 0` before handing the answer on**: a failure passed to
+`waitPid` reads as "any child". A child never reaped stays a zombie until the
+program exits.
+
+- *Tests:* `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm`.
+
+**`spawnWithFds(argv: string[], fds: readonly i32[]): i32`** is `spawn`,
+with the child holding `fds[i]` as descriptor **`3 + i`**, close-on-exec
+cleared there. **No other descriptor** of this process reaches it but one
+opened without close-on-exec, which nothing the runtime opens is. More than
+**64** descriptors, or a negative one, is `-22` before anything is opened or
+started. The child shares each descriptor's open file, offset and status
+flags, and this process keeps its own. It answers its pid, or a negative
+errno.
+
+- *Tests:* `spawn_fds_child`, `caps_process_spawn_fds`;
+  `reject_spawn_fds_arity`, `reject_spawn_fds_element`,
+  `reject_spawn_fds_argv`, `reject_spawn_fds_wasm`.
+
+**`kill(pid: i32, sig: i32): i32`** sends `sig` to `pid` and answers 0, or a
+negative errno. It takes **only 0, 2 (SIGINT), 9 (SIGKILL) and 15
+(SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig`
+is -22, and so is a `pid` of 0 or below, which `kill(2)` reads as more than
+one process. A positive pid may be any process of this user, not only a
+child ([RT-19](security/runtime.md)).
+
+- *Tests:* `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm`.
+
+**`waitPid(pid: i32, flags: i32): i32[]`** reaps a child (`pid` a child's or
+**-1 for any child**; flag **1 is WNOHANG**) and answers a fresh
+**`[pid, status]`**, the status as `spawnSync`'s; a failure puts the
+negative errno first. After `signalFd()` a blocking wait never sees EINTR,
+because that handler is installed with `SA_RESTART` and the wait restarts.
+It is an array because the language has no tuple.
+
+- *Tests:* `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`,
+  `reject_os_wait_wasm`.
+
+**`availableParallelism(): i32`** answers the CPUs this program may use,
+**at least 1**: the smallest of the CPUs online, its affinity mask or
+cpuset, a cgroup v2 CPU quota rounded up, and a positive
+`NISH_NUM_THREADS`, which can lower the count and never raise it. It needs
+no `--threads`.
+
+- *Tests:* `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm`.
+
+**`totalMemory(): i64`** answers bytes of **physical memory**, or **-1**
+where the host does not say. It is the machine's, not a cgroup's limit.
+
+- *Lowering:* `_SC_PHYS_PAGES` times the page size on Linux, `hw.memsize` on
+  Darwin.
+- *Tests:* `os_memory`; `reject_os_memory_wasm`.
 
 **Capabilities.** `spawn`, `kill` and `waitPid` carry `process.spawn`, the
 label `spawnSync` carries: each reaches other processes — `kill` any process of
@@ -9023,11 +10323,37 @@ being a global.
 
 Reference: [`nish:process`](reference/nish-process.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `setNice(n: i32): i32` | set the **nice value** with `setpriority(PRIO_PROCESS, 0, n)` and answer 0, or a negative errno. **Lower-only**, even as root: outside 0..19 is `-22` and below the current value is `-13`, both with no system call, so the priority never rises. Children started afterwards inherit it | write | `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task` |
-| `setIdlePriority(): i32` | move the program to **`SCHED_IDLE`** with `sched_setscheduler(0, SCHED_IDLE, …)` and answer 0 or a negative errno. **Linux only**: Darwin answers -95 (Linux's EOPNOTSUPP, as `nish:net` spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an idle process can **starve** on a saturated machine, so a caller keeps a normal-priority fallback for work that must finish | write | `os_nice`; `reject_os_idle_wasm` |
-| `setCpuAffinity(cpu: i32): i32` | pin the calling process to the one CPU `cpu` with `sched_setaffinity` and answer 0, or a negative errno. **Narrow-only**: a `cpu` outside the CPUs the process may already run on (`taskset`, a cgroup) is `-22` with no change. `availableParallelism()` answers 1 afterwards. **Linux only**: -95 on Darwin and under Node | write | `link/net_prefork_pin`; `reject_os_affinity_wasm`, `reject_os_affinity_task` |
+| `setNice` | `i32` | `i32` | write |
+| `setIdlePriority` | nothing | `i32` | write |
+| `setCpuAffinity` | `i32` | `i32` | write |
+
+**`setNice(n: i32): i32`** sets the **nice value** with
+`setpriority(PRIO_PROCESS, 0, n)` and answers 0, or a negative errno. It is
+**lower-only**, even as root: outside 0..19 is `-22` and below the current
+value is `-13`, both with no system call, so the priority never rises.
+Children started afterwards inherit it.
+
+- *Tests:* `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task`.
+
+**`setIdlePriority(): i32`** moves the program to **`SCHED_IDLE`** with
+`sched_setscheduler(0, SCHED_IDLE, …)` and answers 0 or a negative errno. It
+is **Linux only**: Darwin answers -95 (Linux's EOPNOTSUPP, as `nish:net`
+spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an
+idle process can **starve** on a saturated machine, so a caller keeps a
+normal-priority fallback for work that must finish.
+
+- *Tests:* `os_nice`; `reject_os_idle_wasm`.
+
+**`setCpuAffinity(cpu: i32): i32`** pins the calling process to the one CPU
+`cpu` with `sched_setaffinity` and answers 0, or a negative errno. It is
+**narrow-only**: a `cpu` outside the CPUs the process may already run on
+(`taskset`, a cgroup) is `-22` with no change. `availableParallelism()`
+answers 1 afterwards. It is **Linux only**: -95 on Darwin and under Node.
+
+- *Tests:* `link/net_prefork_pin`; `reject_os_affinity_wasm`,
+  `reject_os_affinity_task`.
 
 **Per thread.** Linux keeps both the nice value and the policy per thread: a
 call sets the calling thread's and every thread started after it. So both
@@ -9070,28 +10396,185 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 
 Reference: [`nish:net`](reference/nish-net.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host and `port` into `out`: `0`, or `-22`, leaving `out` as it was. No `nish:net` call looks a name up; [`nish/net/dns`](../std/net/dns.ts) resolves it first | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
-| `netLocalPort(fd: i32): i32` | the port the socket is bound to, the one the kernel chose for a listen on port `0` | write | `net_tcp_calls`, `net_tcp_echo` |
-| `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`; `"::"` hears both families, and on a kernel without IPv6 it is IPv4's `0.0.0.0`. `-98` when the port is in use | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
-| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags: `1` `SO_REUSEPORT`, which differs by platform as the table below shows; `2` `TCP_NODELAY`, which the runtime sets on every accepted connection, on every platform, closing one on which it cannot; `4`, with `1`, steers each connection to the listener of the CPU that received it, Linux only (`-95` elsewhere, `-22` without `1`). Any other bit is `-22` before a socket is made | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
-| `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection, non-blocking and close-on-exec, with the peer's address in `peer`; `-11` when none is waiting, and a `peer` shorter than 18 bytes is `-22` before a connection is taken. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
-| `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
-| `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be short. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
-| `netWrite2(fd: i32, a: readonly u8[], aOff: i32, aLen: i32, b: readonly u8[], bOff: i32, bLen: i32): i32` | two ranges in **one system call** (`sendmsg` with two `iovec`s), answered as `netWrite` is, `-32` and never SIGPIPE included. Both ranges are [checked](#bounds), `a`'s first. As for every call here, a `wasm32` build refuses it and Node throws | write | `tests/link/net_write2`, `net_write2_bounds`; `reject_net_write2_element`, `reject_net_write2_element_a`, `reject_net_write2_wasm` |
-| `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`) | write | `net_tcp_calls` |
-| `netClose(fd: i32): i32` | closes the descriptor, which is gone after the call whatever the answer. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
-| `netSetOption(fd: i32, option: i32, value: i32): i32` | sets one [socket option](#socket-options) from a whitelist; any other `option` is **`-22`**, so there is no way to pass a raw level and name through. `NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere** | write | `net_set_option`; `reject_net_set_option_wasm` |
-| `netMss(fd: i32): i32` | the maximum segment size a connected TCP socket sends: Linux's `TCP_INFO` `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above `0` and on Darwin; **a plain `-1`, never an errno,** for every other descriptor and every call on wasm. It never panics | write | `net_mss`; `reject_net_mss_arity`, `reject_net_mss_type`; `net_mss` in `tests/run.js` for wasm32 and WASI |
-| `unixListen(path: string, backlog: i32, flags: i32): i32` | a listening [Unix-domain](#unix-domain-sockets) stream socket at `path`, whose file only its owner may connect to (`0600`); its paths and refusals are under that heading | write | `net_unix_calls`, `net_unix_paths`, `net_unix_fds`; `reject_net_unix_arity`, `reject_net_unix_wasm` |
-| `unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32` | `unixListen`'s socket with the file's mode chosen, `0` to `0o777`, set before the listen so no connect gets in under a wider one; an abstract name is `-22` | write | `net_unix_paths`, `net_unix_calls` |
-| `unixConnect(path: string): i32` | a new socket, non-blocking and close-on-exec, connected to the listener at `path`; a full backlog is `-11` on Linux and `-111` on Darwin | write | `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type` |
-| `unixAccept(fd: i32): i32` | the next waiting connection, non-blocking and close-on-exec; no peer address is written | write | `net_unix_calls` |
-| `unixSocketPair(kind: i32, fds: i32[]): i32` | two connected sockets into `fds`, non-blocking and close-on-exec, of kind `1` (`NET_UNIX_STREAM`) or `2` (`NET_UNIX_SEQPACKET`). Kind `2` is **`-95` on Darwin** | write | `net_unix_calls`, `net_unix_fds`; `reject_net_unix_pair_element`, `reject_net_unix_pair_readonly` |
-| `sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | bytes over the Unix socket `sock` with one copy of `fd` riding on them (`SCM_RIGHTS`). A `len` of `0` is **`-22`**, a socket of another family **`-95`**, and a gone peer `-32`, never SIGPIPE. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_arity`, `reject_net_unix_scm_wasm` |
-| `recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32` | bytes from the Unix socket `sock`, with the first descriptor the message carried in `fd[0]`, or **`-1`**; every further one is closed before the answer. The one kept is close-on-exec and **not** made non-blocking. The range is [checked](#bounds) | write | `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_element`, `reject_net_unix_scm_readonly`, `reject_net_unix_scm_buf_readonly`, `reject_net_unix_scm_wasm` |
-| `peerCredentials(fd: i32, out: i32[]): i32` | the pid, uid and gid of the process at the other end of a connected Unix socket, as the kernel recorded them **when the connection was made**, not who holds the other end now. A socket with no peer is **`-107`** on every platform; on Darwin the pid is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it | write | `net_unix_scm`, `caps_net_peer`; `reject_net_unix_peer_arity`, `reject_net_unix_peer_readonly`, `reject_net_unix_peer_element`, `reject_net_unix_scm_wasm` |
+| `netAddress` | `u8[], string, i32` | `i32` | write |
+| `netLocalPort` | `i32` | `i32` | write |
+| `tcpListen` | `string, i32, i32` | `i32` | write |
+| `tcpListenFlags` | `string, i32, i32, i32` | `i32` | write |
+| `tcpAccept` | `i32, u8[]` | `i32` | write |
+| `netRead` | `i32, u8[], i32, i32` | `i32` | write |
+| `netWrite` | `i32, readonly u8[], i32, i32` | `i32` | write |
+| `netWrite2` | `i32`, two ranges | `i32` | write |
+| `netShutdown` | `i32, i32` | `i32` | write |
+| `netClose` | `i32` | `i32` | write |
+| `netSetOption` | `i32, i32, i32` | `i32` | write |
+| `netMss` | `i32` | `i32` | write |
+| `unixListen` | `string, i32, i32` | `i32` | write |
+| `unixListenMode` | `string, i32, i32, i32` | `i32` | write |
+| `unixConnect` | `string` | `i32` | write |
+| `unixAccept` | `i32` | `i32` | write |
+| `unixSocketPair` | `i32, i32[]` | `i32` | write |
+| `sendFd` | `i32, i32, readonly u8[], i32, i32` | `i32` | write |
+| `recvFd` | `i32, u8[], i32, i32, i32[]` | `i32` | write |
+| `peerCredentials` | `i32, i32[]` | `i32` | write |
+
+**`netAddress(out: u8[], host: string, port: i32): i32`** writes the
+[address form](#the-address-form) of a **numeric** host and `port` into
+`out`. It answers `0`, or `-22`, leaving `out` as it was. No `nish:net` call
+looks a name up; [`nish/net/dns`](../std/net/dns.ts) resolves it first.
+
+- *Tests:* `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export`.
+
+**`netLocalPort(fd: i32): i32`** answers the port the socket is bound to: the
+one the kernel chose for a listen on port `0`.
+
+- *Tests:* `net_tcp_calls`, `net_tcp_echo`.
+
+**`tcpListen(host: string, port: i32, backlog: i32): i32`** answers a
+listening socket on a numeric host with `SO_REUSEADDR`. `"::"` hears both
+families, and on a kernel without IPv6 it is IPv4's `0.0.0.0`. It answers
+`-98` when the port is in use.
+
+- *Tests:* `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`;
+  `reject_net_arity`, `reject_net_wasm`.
+
+**`tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32`**
+answers `tcpListen`'s socket, with flags. `1` is `SO_REUSEPORT`, which
+differs by platform as the table below shows. `2` is `TCP_NODELAY`, which the
+runtime sets on every accepted connection, on every platform, closing one on
+which it cannot. `4`, with `1`, steers each connection to the listener of the
+CPU that received it, Linux only (`-95` elsewhere, `-22` without `1`). Any
+other bit is `-22` before a socket is made.
+
+- *Tests:* `net_tcp_reuseport`, `net_tcp_nodelay`,
+  `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`;
+  `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm`.
+
+**`tcpAccept(fd: i32, peer: u8[]): i32`** answers the next waiting
+connection, non-blocking and close-on-exec, with the peer's address in
+`peer`. It answers `-11` when none is waiting, and a `peer` shorter than 18
+bytes is `-22` before a connection is taken.
+
+- *Lowering:* not `willreturn`: on a blocking socket the program inherited it
+  waits.
+- *Tests:* `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly`.
+
+**`netRead(fd: i32, buf: u8[], off: i32, len: i32): i32`** reads at most
+`len` bytes into `buf[off, off + len)`. It answers the count, `0` at the end
+of the stream, or `-11` when nothing is waiting. The range is
+[checked](#bounds).
+
+- *Tests:* `net_tcp_echo`, `net_tcp_bounds`; `reject_net_readonly`,
+  `reject_net_element`, `reject_net_import_wasm`.
+
+**`netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32`** writes
+at most `len` bytes of `buf[off, off + len)`. It answers the count, which may
+be short. A peer that has gone is **`-32`, never SIGPIPE**, so a closed
+connection cannot end the process. The range is [checked](#bounds).
+
+- *Tests:* `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element`.
+
+**`netWrite2(fd: i32, a: readonly u8[], aOff: i32, aLen: i32, b: readonly u8[], bOff: i32, bLen: i32): i32`**
+writes two ranges in **one system call**, answered as `netWrite` is, `-32`
+and never SIGPIPE included. Both ranges are [checked](#bounds), `a`'s first.
+As for every call here, a `wasm32` build refuses it and Node throws.
+
+- *Lowering:* `sendmsg` with two `iovec`s.
+- *Tests:* `tests/link/net_write2`, `net_write2_bounds`;
+  `reject_net_write2_element`, `reject_net_write2_element_a`,
+  `reject_net_write2_wasm`.
+
+**`netShutdown(fd: i32, how: i32): i32`** shuts the read side (`0`), the
+write side (`1`) or both (`2`).
+
+- *Tests:* `net_tcp_calls`.
+
+**`netClose(fd: i32): i32`** closes the descriptor, which is gone after the
+call whatever the answer.
+
+- *Lowering:* not `willreturn`, because a socket the program inherited with a
+  linger time can wait.
+- *Tests:* `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type`.
+
+**`netSetOption(fd: i32, option: i32, value: i32): i32`** sets one
+[socket option](#socket-options) from a whitelist. Any other `option` is
+**`-22`**, so there is no way to pass a raw level and name through.
+`NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere**.
+
+- *Tests:* `net_set_option`; `reject_net_set_option_wasm`.
+
+**`netMss(fd: i32): i32`** answers the maximum segment size a connected TCP
+socket sends, or **a plain `-1`, never an errno,** for every other descriptor
+and every call on wasm. It never panics.
+
+- *Lowering:* Linux's `TCP_INFO` `tcpi_snd_mss`, or `TCP_MAXSEG` where that
+  is not above `0` and on Darwin.
+- *Tests:* `net_mss`; `reject_net_mss_arity`, `reject_net_mss_type`;
+  `net_mss` in `tests/run.js` for wasm32 and WASI.
+
+**`unixListen(path: string, backlog: i32, flags: i32): i32`** answers a
+listening [Unix-domain](#unix-domain-sockets) stream socket at `path`, whose
+file only its owner may connect to (`0600`). Its paths and refusals are under
+that heading.
+
+- *Tests:* `net_unix_calls`, `net_unix_paths`, `net_unix_fds`;
+  `reject_net_unix_arity`, `reject_net_unix_wasm`.
+
+**`unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32`**
+answers `unixListen`'s socket with the file's mode chosen, `0` to `0o777`,
+set before the listen so no connect gets in under a wider one. An abstract
+name is `-22`.
+
+- *Tests:* `net_unix_paths`, `net_unix_calls`.
+
+**`unixConnect(path: string): i32`** answers a new socket, non-blocking and
+close-on-exec, connected to the listener at `path`. A full backlog is `-11`
+on Linux and `-111` on Darwin.
+
+- *Tests:* `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type`.
+
+**`unixAccept(fd: i32): i32`** answers the next waiting connection,
+non-blocking and close-on-exec; no peer address is written.
+
+- *Tests:* `net_unix_calls`.
+
+**`unixSocketPair(kind: i32, fds: i32[]): i32`** writes two connected
+sockets into `fds`, non-blocking and close-on-exec, of kind `1`
+(`NET_UNIX_STREAM`) or `2` (`NET_UNIX_SEQPACKET`). Kind `2` is **`-95` on
+Darwin**.
+
+- *Tests:* `net_unix_calls`, `net_unix_fds`; `reject_net_unix_pair_element`,
+  `reject_net_unix_pair_readonly`.
+
+**`sendFd(sock: i32, fd: i32, buf: readonly u8[], off: i32, len: i32): i32`**
+sends bytes over the Unix socket `sock` with one copy of `fd` riding on them
+(`SCM_RIGHTS`). A `len` of `0` is **`-22`**, a socket of another family
+**`-95`**, and a gone peer `-32`, never SIGPIPE. The range is
+[checked](#bounds).
+
+- *Tests:* `net_unix_scm`, `net_unix_scm_bounds`; `reject_net_unix_scm_arity`,
+  `reject_net_unix_scm_wasm`.
+
+**`recvFd(sock: i32, buf: u8[], off: i32, len: i32, fd: i32[]): i32`**
+receives bytes from the Unix socket `sock`, with the first descriptor the
+message carried in `fd[0]`, or **`-1`**; every further one is closed before
+the answer. The one kept is close-on-exec and **not** made non-blocking. The
+range is [checked](#bounds).
+
+- *Tests:* `net_unix_scm`, `net_unix_scm_bounds`;
+  `reject_net_unix_scm_element`, `reject_net_unix_scm_readonly`,
+  `reject_net_unix_scm_buf_readonly`, `reject_net_unix_scm_wasm`.
+
+**`peerCredentials(fd: i32, out: i32[]): i32`** writes the pid, uid and gid
+of the process at the other end of a connected Unix socket, as the kernel
+recorded them **when the connection was made**, not who holds the other end
+now. A socket with no peer is **`-107`** on every platform. On Darwin the pid
+is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it.
+
+- *Tests:* `net_unix_scm`, `caps_net_peer`; `reject_net_unix_peer_arity`,
+  `reject_net_unix_peer_readonly`, `reject_net_unix_peer_element`,
+  `reject_net_unix_scm_wasm`.
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -9168,10 +10651,27 @@ than counting a skip. CI's `ubuntu-latest` has IPv6 and runs it.
 
 #### The client half
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `tcpConnect(addr: readonly u8[]): i32` | a new TCP socket, non-blocking and close-on-exec, that starts connecting to the [address](#the-address-form) in `addr` and answers its descriptor **at once, while the connection is still being made**; the loop reports it writable when that has finished. Any other failure closes the socket and is answered instead of it | write | `net_tcp_connect`, `net_tcp_connect_import`; `reject_net_connect_element`, `reject_net_connect_arity` |
-| `connectResult(fd: i32): i32` | how the connection went, asked once `fd` is writable: `0`, or its failure from `SO_ERROR`, such as **`-111` for a port nobody listens on**. The kernel clears the failure as it is read | write | `net_tcp_connect`, `net_tcp_connect_import`; `reject_net_connect_wasm` |
+| `tcpConnect` | `readonly u8[]` | `i32` | write |
+| `connectResult` | `i32` | `i32` | write |
+
+**`tcpConnect(addr: readonly u8[]): i32`** makes a new TCP socket,
+non-blocking and close-on-exec, that starts connecting to the
+[address](#the-address-form) in `addr`, and answers its descriptor **at once,
+while the connection is still being made**; the loop reports it writable when
+that has finished. Any other failure closes the socket and is answered
+instead of it.
+
+- *Tests:* `net_tcp_connect`, `net_tcp_connect_import`;
+  `reject_net_connect_element`, `reject_net_connect_arity`.
+
+**`connectResult(fd: i32): i32`** answers how the connection went, asked once
+`fd` is writable: `0`, or its failure from `SO_ERROR`, such as **`-111` for a
+port nobody listens on**. The kernel clears the failure as it is read.
+
+- *Tests:* `net_tcp_connect`, `net_tcp_connect_import`;
+  `reject_net_connect_wasm`.
 
 A connection is made the way everything else here waits: in the loop. Linux
 answers `EINPROGRESS` even over loopback, so a program asks for writability and
@@ -9195,11 +10695,42 @@ if (connectResult(fd) === 0) {
 
 #### UDP
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `udpBind(host: string, port: i32, flags: i32): i32` | a datagram socket, non-blocking and close-on-exec, bound as `tcpListen`'s is, `"::"` and its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, flag `2` is `UDP_GRO`, and any other bit is `-22` | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_dual_stack`; `reject_net_udp_wasm`, `reject_net_udp_parallel` |
-| `udpSendTo(fd: i32, buf: readonly u8[], off: i32, len: i32, to: readonly u8[], segment: i32, ecn: i32): i32` | `buf[off, off + len)` to `to` in one `sendmsg`, cut by the kernel into datagrams of `segment` bytes when that is above `0` (**GSO**), with `ecn` as the IP header's two ECN bits. Not `willreturn`: on a blocking socket the program inherited it waits. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`; `reject_net_udp_send_element`, `reject_net_udp_arity`, `reject_net_udp_task` |
-| `udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32` | the next datagram into `buf[off, off + len)`, cut to `len`, in one `recvmsg`, with its sender in `from`, its **GRO** segment size in `meta[0]` and its ECN bits in `meta[1]`; `-11` when none is waiting. Not `willreturn`, as `udpSendTo`. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`; `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`, `reject_net_udp_meta_element`, `reject_net_udp_element`, `reject_net_udp_region` |
+| `udpBind` | `string, i32, i32` | `i32` | write |
+| `udpSendTo` | `i32`, a range, `to`, `segment`, `ecn` | `i32` | write |
+| `udpRecvFrom` | `i32`, a range, `from`, `meta` | `i32` | write |
+
+**`udpBind(host: string, port: i32, flags: i32): i32`** answers a datagram
+socket, non-blocking and close-on-exec, bound as `tcpListen`'s is, `"::"` and
+its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, flag `2` is
+`UDP_GRO`, and any other bit is `-22`.
+
+- *Tests:* `net_udp_calls`, `net_udp_echo`, `net_udp_offload`,
+  `net_dual_stack`; `reject_net_udp_wasm`, `reject_net_udp_parallel`.
+
+**`udpSendTo(fd: i32, buf: readonly u8[], off: i32, len: i32, to: readonly u8[], segment: i32, ecn: i32): i32`**
+sends `buf[off, off + len)` to `to`, cut by the kernel into datagrams of
+`segment` bytes when that is above `0` (**GSO**), with `ecn` as the IP
+header's two ECN bits. The range is [checked](#bounds).
+
+- *Lowering:* one `sendmsg`. Not `willreturn`: on a blocking socket the
+  program inherited it waits.
+- *Tests:* `net_udp_calls`, `net_udp_echo`, `net_udp_offload`,
+  `net_udp_bounds`; `reject_net_udp_send_element`, `reject_net_udp_arity`,
+  `reject_net_udp_task`.
+
+**`udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32`**
+receives the next datagram into `buf[off, off + len)`, cut to `len`, with its
+sender in `from`, its **GRO** segment size in `meta[0]` and its ECN bits in
+`meta[1]`. It answers `-11` when none is waiting. The range is
+[checked](#bounds).
+
+- *Lowering:* one `recvmsg`. Not `willreturn`, as `udpSendTo`.
+- *Tests:* `net_udp_calls`, `net_udp_echo`, `net_udp_offload`,
+  `net_udp_bounds`; `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`,
+  `reject_net_udp_meta_element`, `reject_net_udp_element`,
+  `reject_net_udp_region`.
 
 A datagram carries no stream, so an echo is `udpRecvFrom` and then `udpSendTo`
 back to `from`, which is already an address; the `net_` block of
@@ -9238,13 +10769,49 @@ by `tcpAccept` on a datagram socket instead, above.
 
 #### The readiness loop
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `pollCreate(): i32` | a loop: a descriptor, close-on-exec, that watches others — epoll on Linux, kqueue on Darwin | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_wasm` |
-| `pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32` | watches `fd` for `events` (`1` readable, `2` writable) and reports it under `token`, an `i32` of the program's choosing; `-17` for a descriptor the loop already watches | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`, `reject_net_poll_parallel` |
-| `pollModify(loop: i32, fd: i32, events: i32, token: i32): i32` | new events or a new token for a watched descriptor; `-2` for one the loop does not watch | write | `net_loop_calls`, `net_loop_two` |
-| `pollRemove(loop: i32, fd: i32): i32` | stops watching `fd`; `-2` for one the loop does not watch. Closing a descriptor stops the watching too | write | `net_loop_calls`, `net_loop_two` |
-| `pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32` | waits until a watched descriptor is ready or `timeoutMs` passes, **forever for a negative one**, and writes a token and events pair per ready descriptor into `ready`, **`4` added for a hang-up or an error**: the count, at most 64, or **`0` on a timeout**. Not `willreturn`, because it can wait forever | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_readonly`, `reject_net_poll_element`, `reject_net_poll_task`, `reject_net_poll_region` |
+| `pollCreate` | nothing | `i32` | write |
+| `pollAdd` | `i32, i32, i32, i32` | `i32` | write |
+| `pollModify` | `i32, i32, i32, i32` | `i32` | write |
+| `pollRemove` | `i32, i32` | `i32` | write |
+| `pollWait` | `i32, i32[], i32` | `i32` | write |
+
+**`pollCreate(): i32`** answers a loop: a descriptor, close-on-exec, that
+watches others.
+
+- *Lowering:* epoll on Linux, kqueue on Darwin.
+- *Tests:* `net_loop_calls`, `net_loop_two`; `reject_net_poll_wasm`.
+
+**`pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32`** watches `fd`
+for `events` (`1` readable, `2` writable) and reports it under `token`, an
+`i32` of the program's choosing. It answers `-17` for a descriptor the loop
+already watches.
+
+- *Tests:* `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`,
+  `reject_net_poll_parallel`.
+
+**`pollModify(loop: i32, fd: i32, events: i32, token: i32): i32`** sets new
+events or a new token for a watched descriptor. It answers `-2` for one the
+loop does not watch.
+
+- *Tests:* `net_loop_calls`, `net_loop_two`.
+
+**`pollRemove(loop: i32, fd: i32): i32`** stops watching `fd`. It answers
+`-2` for one the loop does not watch. Closing a descriptor stops the watching
+too.
+
+- *Tests:* `net_loop_calls`, `net_loop_two`.
+
+**`pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32`** waits until a
+watched descriptor is ready or `timeoutMs` passes, **forever for a negative
+one**, and writes a token and events pair per ready descriptor into `ready`,
+**`4` added for a hang-up or an error**. It answers the count, at most 64, or
+**`0` on a timeout**.
+
+- *Lowering:* not `willreturn`, because it can wait forever.
+- *Tests:* `net_loop_calls`, `net_loop_two`; `reject_net_poll_readonly`,
+  `reject_net_poll_element`, `reject_net_poll_task`, `reject_net_poll_region`.
 
 **Level-triggered.** A descriptor that is still ready when the program waits
 again is reported again, so a loop that handles one pair of several, or leaves
@@ -9395,10 +10962,10 @@ mac. CI does not run them on a mac yet.
 
 #### Bounds
 
-`netRead`, `netWrite`, `netWrite2` (each of its two ranges), `udpSendTo` and `udpRecvFrom` check `0 <= off <= off +
+`netRead`, `netWrite`, `netWrite2` (each of its two ranges), `udpSendTo`, `udpRecvFrom` and `fileReadAt` check `0 <= off <= off +
 len <= buf.length` **in the compiled code**, before the call, the way `dst.set(src, at)` checks the range it
 writes, and a range outside it panics with the same words, `slice out of range:
-[4, 9) of length 8`, exit 1 (`net_tcp_bounds`, `net_udp_bounds`, `net_write2_bounds`). A negative
+[4, 9) of length 8`, exit 1 (`net_tcp_bounds`, `net_udp_bounds`, `net_write2_bounds`, `file_read_at_bounds`). A negative
 `off` or `len` fails it. A `peer`, `out`, `to` or `from`
 array shorter than 18 bytes, or a `meta` shorter than 2, is not a panic but
 `-22`, from the runtime, because the length is the argument's
@@ -9503,14 +11070,61 @@ only, and WASI as below.
 
 Reference: [`nish:term`](reference/nish-term.md).
 
-| Signature | Semantics | Effect | Test |
+| Function | Takes | Gives | Effect |
 | --- | --- | --- | --- |
-| `readStdin(buf: u8[], off: i32, len: i32): i32` | at most `len` bytes of stdin into `buf[off, off + len)`, **without waiting**: the count, `0` at the end of the stream, or `-11` when nothing is waiting. The range is [checked](#bounds), and the buffer is a writable `u8[]` | write | `term_calls`, `term_import`; `reject_term_read_arity`, `reject_term_read_i32_buffer`, `reject_term_read_readonly` |
-| `waitStdin(timeoutMs: i32): boolean` | waits until stdin is readable, its end and an error included, or `timeoutMs` passes, for ever for a negative one; `false` when the time ran out or a signal ended the wait early, but not for a Ctrl-Z and `fg` once `setRawMode(true)` has caught SIGTSTP, after which the wait goes on for what is left. Before raw mode Linux goes on with what is left and Darwin ends the wait. Not `willreturn` | write | `term_calls`, `term_import`, `term_pty`; `reject_term_wait_string` |
-| `isTerminal(fd: i32): boolean` | whether the descriptor is a terminal (`isatty`) | write | `term_calls`, `term_pty`; `reject_term_is_terminal_arity` |
-| `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stderr when stdout is not one; **`[-25, 0]` for "not a terminal"** | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
-| `setRawMode(on: boolean): i32` | puts stdin's terminal in raw mode (`true`) or back as it was (`false`): `0`, or `-25` when stdin is not a terminal. `setRawMode(false)` is always safe | write | `term_calls`, `term_pty`; `reject_term_raw_number`, `reject_term_unknown_export` |
-| `setTerminalRestore(bytes: string): i32` | keeps a copy of `bytes` for the runtime to write to the terminal on stdout as the program ends, **replacing** what it kept before: `0`, `-25` when stdout is not a terminal and `-7` (E2BIG) past `NISH_TERM_RESTORE_MAX`, 4096 bytes, both keeping what was there. When they go out is under [Raw mode](#raw-mode) | write | `term_restore`; `reject_term_restore_arity`, `reject_term_restore_number`, `reject_term_restore_wasm` |
+| `readStdin` | `u8[], i32, i32` | `i32` | write |
+| `waitStdin` | `i32` | `boolean` | write |
+| `isTerminal` | `i32` | `boolean` | write |
+| `terminalSize` | nothing | `i32[]` | write |
+| `setRawMode` | `boolean` | `i32` | write |
+| `setTerminalRestore` | `string` | `i32` | write |
+
+**`readStdin(buf: u8[], off: i32, len: i32): i32`** reads at most `len` bytes
+of stdin into `buf[off, off + len)`, **without waiting**. It answers the
+count, `0` at the end of the stream, or `-11` when nothing is waiting. The
+range is [checked](#bounds), and the buffer is a writable `u8[]`.
+
+- *Tests:* `term_calls`, `term_import`; `reject_term_read_arity`,
+  `reject_term_read_i32_buffer`, `reject_term_read_readonly`.
+
+**`waitStdin(timeoutMs: i32): boolean`** waits until stdin is readable, its
+end and an error included, or `timeoutMs` passes, for ever for a negative
+one. It answers `false` when the time ran out or a signal ended the wait
+early, but not for a Ctrl-Z and `fg` once `setRawMode(true)` has caught
+SIGTSTP, after which the wait goes on for what is left. Before raw mode Linux
+goes on with what is left and Darwin ends the wait.
+
+- *Lowering:* not `willreturn`.
+- *Tests:* `term_calls`, `term_import`, `term_pty`; `reject_term_wait_string`.
+
+**`isTerminal(fd: i32): boolean`** answers whether the descriptor is a
+terminal.
+
+- *Lowering:* `isatty`.
+- *Tests:* `term_calls`, `term_pty`; `reject_term_is_terminal_arity`.
+
+**`terminalSize(): i32[]`** answers a fresh `[columns, rows]` of the terminal
+on stdout, or on stderr when stdout is not one; **`[-25, 0]` for "not a
+terminal"**.
+
+- *Tests:* `term_calls`, `term_pty`, `mem_terminal_size_scope`;
+  `reject_term_size_arity`.
+
+**`setRawMode(on: boolean): i32`** puts stdin's terminal in raw mode (`true`)
+or back as it was (`false`). It answers `0`, or `-25` when stdin is not a
+terminal. `setRawMode(false)` is always safe.
+
+- *Tests:* `term_calls`, `term_pty`; `reject_term_raw_number`,
+  `reject_term_unknown_export`.
+
+**`setTerminalRestore(bytes: string): i32`** keeps a copy of `bytes` for the
+runtime to write to the terminal on stdout as the program ends, **replacing**
+what it kept before. It answers `0`, `-25` when stdout is not a terminal and
+`-7` (E2BIG) past `NISH_TERM_RESTORE_MAX`, 4096 bytes, both keeping what was
+there. When they go out is under [Raw mode](#raw-mode).
+
+- *Tests:* `term_restore`; `reject_term_restore_arity`,
+  `reject_term_restore_number`, `reject_term_restore_wasm`.
 
 **Errors are numbers**, in `nish:net`'s shape: `>= 0` is success and a negative
 number the failure's errno, negated. The two a program branches on are the
@@ -9664,30 +11278,295 @@ bytes — natively and under WASI, and expect the same lines from both.
 
 The reference for each member, with its parameters and its answer, is its doc comment on `Array`, `ReadonlyArray` or `String` in [`runtime/nish.d.ts`](../runtime/nish.d.ts); the rules are here.
 
-| Member | Semantics | Test |
+| Member | On | Gives |
 | --- | --- | --- |
-| `a.length` | `number`; read-only | `arr_length`, `reject_arr_length_assign` |
-| `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `nish_array_grow`; returns the new length. An array never grows past 2^31 − 1 elements, in either number mode: the push that would fails as an allocation does, `nish: out of memory` and exit 1 (`tests/link/cg_sec_push_limit`) | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
-| `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return; behind a test that the array holds an element, such as `if (a.length > 0)`, the check is proven away (`panics_pop`). The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
-| `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
-| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
-| `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
-| `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
-| `a.sort(cmp: (a: T, b: T) => number): T[]` | sorts `a` in place, **stably**, and answers `a` itself, as `Array.prototype.sort` does: the order is element for element Node's for any consistent comparator. `cmp` answers a negative number, zero or a positive number, and only "positive or not" is read, so `-0` and `NaN` count as zero. **The comparator is required**: `a.sort()` compares as strings in JavaScript and is refused (`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2620); a second argument is refused too (`` `sort` takes one comparator ``, NL2619). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``), and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is). `a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`); `(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow. The comparator is a compile-time function argument ([Function parameters](#function-parameters)): a top-level function, or an arrow, which may read the `const` locals and parameters of the function it is written in; an arrow reading a `let` is refused (`reject_arr_sort_capture_let`). Compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs of 32 sorted by insertion, instantiated once per comparator with the comparator called directly; it is copied into the module that sorts. See [Sorting](#sorting-with-a-comparator) | `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`, `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`; `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`, `reject_arr_sort_readonly`, `reject_arr_sort_argv`, `reject_arr_sort_capture_let` |
-| `a.map(f: (x: T[, i: number]) => U): U[]` | a new array of `f(a[i])` (or `f(a[i], i)`) for each element, in order, as `Array.prototype.map` gives. The callback takes one or two parameters; a third, JavaScript's array argument, is refused (`` The callback of `map` takes 3 parameters, and Nish passes at most two … ``, NL2698), and so is a second argument to `map` itself (JavaScript's `thisArg`). It is a compile-time function argument under the comparator's rule. Compiled to `std/array.ts`'s `map` or `mapIndexed`, called directly. See [Callback methods and `slice`](#callback-methods-and-slice) | `arr_map`, `arr_map_f64`, `arr_map_template`; `reject_arr_map_third_param`, `reject_arr_map_this_arg`, `reject_arr_map_capture_let` |
-| `a.filter(pred: (x: T[, i: number]) => boolean): T[]` | a new array of the elements `pred` keeps, in order. `pred` answers `boolean` (`reject_arr_filter_not_boolean`); the callback rules are `map`'s | `arr_filter`; `reject_arr_filter_not_boolean` |
-| `a.some(pred)`, `a.every(pred)`: `boolean` | whether some (every) element satisfies `pred`, stopping at the first that decides; an empty array answers `false` (`true`) | `arr_some_every` |
-| `a.findIndex(pred): number` | the first index `pred` accepts, or `-1`. There is **no `find`**: TypeScript types its answer `T \| undefined` and Nish has no `undefined`, so `xs.find(f)` is refused and points here (`` `find` is not supported: TypeScript types its answer `T \| undefined` … ``, NL2697) | `arr_find_index`; `reject_arr_find` |
-| `a.slice(start: number = 0, end: number = a.length): T[]` | a copy of `a[start..end)`, with `s.slice`'s rule: `0 <= start <= end <= a.length`, or the program **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript counts a negative index from the end and clamps the rest. Zero to two arguments (NL2699), each a `number`, where `s.slice` takes any integer type. Works on a `readonly T[]`, and the copy is a mutable `T[]` | `arr_slice`, `arr_slice_bounds`; `reject_arr_slice_args` |
-| `s.length` | `number`, the UTF-8 byte length | `str_length` |
-| `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
-| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
-| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy` Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
-| `s.indexOf(sub: string[, from: number]): number` | the first **byte** offset at or after `from` at which `sub` occurs, or `-1`; `from` defaults to `0`. `from` is clamped into `[0, s.length]` first, as in JavaScript: a negative start searches from `0`, and a start past the end finds nothing, except that the empty needle answers the clamped start, so `s.indexOf("")` is `0`, `s.indexOf("", 3)` is `3` and `s.indexOf("", 99)` is `s.length`. A float start converts as JavaScript's `ToIntegerOrInfinity` does — a fraction truncates and `NaN` is `0` — and an unsigned one is clamped from above only, so a `u64` past 2^63 is past the end. Under Node the program is the same call to `String.prototype.indexOf`, whose answers differ only where every offset does, on text that is not ASCII (NL8001, under "Portability warnings"). One `nish_str_index_of` or `nish_str_index_of_from` call and no allocation: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c), and the clamp is a `llvm.smin` / `llvm.smax` pair in the caller, which a literal `0` does without. A loop that walks every match, `at = s.indexOf(sub, at + sub.length)`, therefore copies nothing | `str_search`, `str_index_of_from`, `str_index_of_from_port`; `reject_str_index_of_type`, `reject_str_index_of_arity`, `reject_str_index_of_from_type` |
-| `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
-| `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
-| `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
-| `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Natively the string's bytes are the array's, so `write` or `writeFileSync` sends any bytes back out unchanged ([File I/O](#file-io), `io_write_bytes`). Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](wp33-round-trip.md) §3.2); under `--emit-ts` the bytes decode as UTF-8, a sequence that is not UTF-8 to U+FFFD. Bytes that are not text go out through `writeBytes` and `writeFileBytesSync`, which agree on every host. `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
+| `length` | arrays | `number` |
+| `push(v)` | arrays | `number` |
+| `pop()` | arrays | `T` |
+| `indexOf(v)` | arrays | `number` |
+| `join(sep?)` | arrays | `string` |
+| `set(src, offset?)` | arrays | `void` |
+| `fill(value, start?, end?)` | arrays | `void` |
+| `sort(cmp)` | arrays | `T[]` |
+| `map(f)` | arrays | `U[]` |
+| `filter(pred)` | arrays | `T[]` |
+| `some(pred)`, `every(pred)` | arrays | `boolean` |
+| `findIndex(pred)` | arrays | `number` |
+| `slice(start?, end?)` | arrays | `T[]` |
+| `length` | strings | `number` |
+| `charCodeAt(i)` | strings | `number` |
+| `substring(start, end?)` | strings | `string` |
+| `slice(start, end?)` | strings | `string` |
+| `indexOf(sub, from?)` | strings | `number` |
+| `startsWith(sub)`, `endsWith(sub)` | strings | `boolean` |
+| `String.fromCharCode(c)` | strings | `string` |
+| `String.fromBytes(bytes, start, end)` | strings | `string` |
+
+**`a.length`** is a `number`; read-only.
+
+- *Tests:* `arr_length`, `reject_arr_length_assign`.
+
+**`a.push(v: T): number`** appends and returns the new length. An array
+never grows past 2^31 − 1 elements, in either number mode: the push that
+would fails as an allocation does, `nish: out of memory` and exit 1
+(`tests/link/cg_sec_push_limit`).
+
+- *Lowering:* grows capacity by doubling (4 from 0) through
+  `nish_array_grow`.
+- *Tests:* `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`).
+
+**`a.pop(): T`** removes and returns the last element. An empty array
+**panics** and exits 1 (`index out of range: 0 >= 0`) — there is no
+`undefined` to return; behind a test that the array holds an element, such
+as `if (a.length > 0)`, the check is proven away (`panics_pop`). The
+capacity is untouched, so the next `push` reuses the storage.
+
+- *Tests:* `arr_pop_index`; `reject_arr_pop_arity`.
+
+**`a.indexOf(v: T): number`** answers the first index whose element is
+`=== v`, or `-1`: strings by content, classes / interfaces / arrays by
+identity, floats with `fcmp oeq` (a `NaN` element is never found, as in
+JavaScript).
+
+- *Lowering:* a scan in the emitted code.
+- *Tests:* `arr_pop_index`; `reject_arr_index_of_type`.
+
+**`a.join(sep: string = ","): string`** is for **`string[]` only**
+(`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`). Element
+conversion would allocate per element, which is the quadratic shape `join`
+exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a
+concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as
+an allocation does, `nish: out of memory` and exit 1, before anything is
+allocated ([CG-3](security/codegen.md)).
+
+- *Lowering:* one pass summing the lengths, one allocation, one `memcpy` per
+  part.
+- *Tests:* `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem`.
+
+**`a.set(src: T[], offset: number = 0): void`** copies every element of
+`src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning.
+**Arrays of numbers only**, of any width and ranged integers included, and
+`src` has `a`'s own element type. A statement. See
+[Bulk writes](#bulk-writes-set-and-fill).
+
+- *Tests:* `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`,
+  `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`,
+  `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`,
+  `reject_bytes_set_arity`, `reject_bytes_set_readonly`,
+  `reject_bytes_set_value`.
+
+**`a.fill(value: T, start: number = 0, end: number = a.length): void`**
+stores `value` into every slot of `[start, end)`, each end relative and
+clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A
+statement. See [Bulk writes](#bulk-writes-set-and-fill).
+
+- *Tests:* `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`,
+  `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`,
+  `reject_bytes_fill_value`, `reject_bytes_fill_index`,
+  `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly`.
+
+**`a.sort(cmp: (a: T, b: T) => number): T[]`** sorts `a` in place,
+**stably**, and answers `a` itself, as `Array.prototype.sort` does: the
+order is element for element Node's for any consistent comparator. `cmp`
+answers a negative number, zero or a positive number, and only "positive or
+not" is read, so `-0` and `NaN` count as zero.
+
+**The comparator is required**: `a.sort()` compares as strings in
+JavaScript and is refused
+(`` `sort` needs a comparator: write `xs.sort((a, b) => a - b)` ``, NL2620);
+a second argument is refused too (`` `sort` takes one comparator ``,
+NL2619). A `readonly T[]` is refused (`` Cannot `sort` through readonly ``),
+and so is `process.argv` (`` `process.argv` is read-only ``, as `push` is).
+`a - b` panics on `i32` elements a full range apart (`[2147483647, -1]`);
+`(a, b) => (a > b ? 1 : a < b ? -1 : 0)` cannot overflow.
+
+The comparator is a compile-time function argument
+([Function parameters](#function-parameters)): a top-level function, or an
+arrow, which may read the `const` locals and parameters of the function it
+is written in; an arrow reading a `let` is refused
+(`reject_arr_sort_capture_let`). See [Sorting](#sorting-with-a-comparator).
+
+- *Lowering:* compiled to `std/sort.ts`'s `sortWith`, a merge sort over runs
+  of 32 sorted by insertion, instantiated once per comparator with the
+  comparator called directly; it is copied into the module that sorts.
+- *Tests:* `arr_sort_cmp`, `arr_sort_cmp_f64`, `arr_sort_cmp_record`,
+  `arr_sort_edge`, `arr_sort_capture`, `arr_sort_overflow`;
+  `reject_arr_sort_no_comparator`, `reject_arr_sort_arity`,
+  `reject_arr_sort_readonly`, `reject_arr_sort_argv`,
+  `reject_arr_sort_capture_let`.
+
+**`a.map(f: (x: T[, i: number]) => U): U[]`** answers a new array of
+`f(a[i])` (or `f(a[i], i)`) for each element, in order, as
+`Array.prototype.map` gives. The callback takes one or two parameters; a
+third, JavaScript's array argument, is refused
+(`` The callback of `map` takes 3 parameters, and Nish passes at most two … ``,
+NL2698), and so is a second argument to `map` itself (JavaScript's
+`thisArg`). It is a compile-time function argument under the comparator's
+rule. See [Callback methods and `slice`](#callback-methods-and-slice).
+
+- *Lowering:* compiled to `std/array.ts`'s `map` or `mapIndexed`, called
+  directly.
+- *Tests:* `arr_map`, `arr_map_f64`, `arr_map_template`;
+  `reject_arr_map_third_param`, `reject_arr_map_this_arg`,
+  `reject_arr_map_capture_let`.
+
+**`a.filter(pred: (x: T[, i: number]) => boolean): T[]`** answers a new
+array of the elements `pred` keeps, in order. `pred` answers `boolean`
+(`reject_arr_filter_not_boolean`); the callback rules are `map`'s.
+
+- *Tests:* `arr_filter`; `reject_arr_filter_not_boolean`.
+
+**`a.some(pred)`, `a.every(pred)`: `boolean`** answer whether some (every)
+element satisfies `pred`, stopping at the first that decides; an empty array
+answers `false` (`true`).
+
+- *Tests:* `arr_some_every`.
+
+**`a.findIndex(pred): number`** answers the first index `pred` accepts, or
+`-1`. There is **no `find`**: TypeScript types its answer `T | undefined`
+and Nish has no `undefined`, so `xs.find(f)` is refused and points here
+(`` `find` is not supported: TypeScript types its answer `T | undefined` … ``,
+NL2697).
+
+- *Tests:* `arr_find_index`; `reject_arr_find`.
+
+**`a.slice(start: number = 0, end: number = a.length): T[]`** answers a copy
+of `a[start..end)`, with `s.slice`'s rule: `0 <= start <= end <= a.length`,
+or the program **panics** with
+`slice out of range: [start, end) of length len` and exits 1, where
+JavaScript counts a negative index from the end and clamps the rest. It
+takes zero to two arguments (NL2699), each a `number`, where `s.slice` takes
+any integer type. It works on a `readonly T[]`, and the copy is a mutable
+`T[]`.
+
+- *Tests:* `arr_slice`, `arr_slice_bounds`; `reject_arr_slice_args`.
+
+**`s.length`** is a `number`, the UTF-8 byte length.
+
+- *Tests:* `str_length`.
+
+**`s.charCodeAt(i: number): number`** answers the **byte** at `i`,
+bounds-checked against `s.length` exactly as `a[i]` is — out of range
+panics and exits 1, where JavaScript answers `NaN`, which `number` cannot
+hold.
+
+- *Lowering:* no call: a `load i8`.
+- *Tests:* `str_bytes`; `reject_str_char_code_arity`.
+
+**`s.substring(start: number[, end: number]): string`** answers the bytes
+of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped
+into `[0, s.length]` and then swapped into order, as in JavaScript, so
+`s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`.
+
+- *Lowering:* one allocation and one `memcpy` (`nish_str_new`). The clamp is
+  two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a
+  bound the compiler can place in `[0, s.length]`, because a clamp cannot
+  move a value that is already inside its range: the proof is the same one
+  that removes a bounds check ([Element access](#element-access)), and a
+  literal `0` is proven for every string, since none has a negative length.
+  Each bound is proven against the facts that hold **where that
+  bound is evaluated** — the arguments run left to right and the receiver's
+  length is read before either of them, so an assignment in argument 1
+  cannot prove argument 0 and an argument that rebinds the receiver takes the
+  proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could
+  not prove keeps the clamp and is reported by the performance warning
+  below.
+- *Tests:* `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`,
+  `perf_clamp_rebind`; `reject_str_substring_arity`.
+
+**`s.slice(start: number[, end: number]): string`** answers the same bytes,
+without the clamp: `start` and `end` must satisfy
+`0 <= start <= end <= s.length` and anything else **panics** with
+`slice out of range: [start, end) of length len` and exits 1, where
+JavaScript would count a negative offset from the end and answer `""` for a
+reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an
+in-range non-negative pair gives exactly what JavaScript's
+`String.prototype.slice` gives.
+
+- *Lowering:* two `icmp ule` against a cold panic block, one allocation and
+  one `memcpy`. Measured 1.18x over `substring` on a lexer-shaped scan
+  ([wp15-performance.md](wp15-performance.md) §4).
+- *Tests:* `str_slice`, `str_slice_panic`; `reject_str_slice_arity`,
+  `reject_str_slice_type`.
+
+**`s.indexOf(sub: string[, from: number]): number`** answers the first
+**byte** offset at or after `from` at which `sub` occurs, or `-1`; `from`
+defaults to `0`.
+
+`from` is clamped into `[0, s.length]` first, as in JavaScript: a negative
+start searches from `0`, and a start past the end finds nothing, except that
+the empty needle answers the clamped start, so `s.indexOf("")` is `0`,
+`s.indexOf("", 3)` is `3` and `s.indexOf("", 99)` is `s.length`. A float
+start converts as JavaScript's `ToIntegerOrInfinity` does — a fraction
+truncates and `NaN` is `0` — and an unsigned one is clamped from above only,
+so a `u64` past 2^63 is past the end.
+
+Under Node the program is the same call to `String.prototype.indexOf`,
+whose answers differ only where every offset does, on text that is not ASCII
+(NL8001, under "Portability warnings").
+
+- *Lowering:* one `nish_str_index_of` or `nish_str_index_of_from` call and no
+  allocation: the search is the runtime's, so it is the libc's vectorised
+  one rather than a probe per offset (WP15 §7c), and the clamp is a
+  `llvm.smin` / `llvm.smax` pair in the caller, which a literal `0` does
+  without. A loop that walks every match,
+  `at = s.indexOf(sub, at + sub.length)`, therefore copies nothing.
+- *Tests:* `str_search`, `str_index_of_from`, `str_index_of_from_port`;
+  `reject_str_index_of_type`, `reject_str_index_of_arity`,
+  `reject_str_index_of_from_type`.
+
+**`s.startsWith(sub: string): boolean`** answers whether `sub`'s bytes are a
+prefix.
+
+- *Lowering:* `nish_str_at`.
+- *Tests:* `str_search`.
+
+**`s.endsWith(sub: string): boolean`** answers whether they are a suffix; a
+`sub` longer than `s` is `false`.
+
+- *Tests:* `str_search`.
+
+**`String.fromCharCode(c: number): string`** answers the one-byte string of
+`c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that
+is not valid UTF-8 on its own; nothing validates it.
+
+- *Tests:* `str_search`.
+
+**`String.fromBytes(bytes: u8[], start: number, end: number): string`**
+answers the bytes of `bytes[start..end)` as one string, where a loop of
+`String.fromCharCode` and a `join` allocates once per byte. `bytes` is a
+`u8[]` reached any way an array is (a local, a field, a call, a ternary, a
+literal), `readonly` or not, since the call only reads it; anything else,
+a wider element or a `u8[] | null` included, is
+`` `String.fromBytes` expects an argument of type u8[], got i32[] ``
+(NL2268). Both ends are required (NL2060) and are numbers (NL2058).
+
+The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once
+after all three arguments are evaluated, so an argument that grows or
+shrinks the array is checked against what it left; anything else **panics**
+with `slice out of range: [start, end) of length len` and exits 1.
+
+As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte
+character copied whole is that character, and a range that cuts one is bytes
+that are not a valid string. Natively the string's bytes are the array's, so
+`write` or `writeFileSync` sends any bytes back out unchanged
+([File I/O](#file-io), `io_write_bytes`). Under Node, where
+`String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one
+UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above
+127 does not (a C row, [wp33-round-trip.md](wp33-round-trip.md) §3.2); under
+`--emit-ts` the bytes decode as UTF-8, a sequence that is not UTF-8 to
+U+FFFD. Bytes that are not text go out through `writeBytes` and
+`writeFileBytesSync`, which agree on every host. `src/` does not call it
+until the release that ships it (the rolling freeze).
+
+- *Lowering:* one range check, one allocation and one `memcpy`
+  (`nish_str_new`).
+- *Tests:* `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`,
+  `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`;
+  `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`,
+  `reject_str_from_bytes_start`, `reject_str_from_bytes_index`,
+  `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`,
+  `reject_deny_panics_from_bytes`.
 
 Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
 and a code-point index would need a decode per access (`codePointLength` in
@@ -10707,6 +12586,7 @@ export const main = (): i32 => {
   | a declared class `C`, `C \| null` | an object, and `null` for the second | `C`'s own decoding, into the object the field holds | `C`'s own encoding |
   | `T[]`, `T[] \| null` for any of the above | an array, and `null` for the second | `d.i32Array(cur)` and its kin, or `C`'s or `E`'s decoding per element | `jsonEncodeI32Array` and its kin, or `C`'s or `E`'s encoding per element |
   | `Map<string, V>`, `Map<string, V> \| null`, for any `V` in this table, `\| null` or not, a `Map` included | an object whose keys are the map's, each value a `V`, and `null` for the second | the object's keys in order, each value decoded as a `V` and `set` | the map's entries in its order, each value encoded as a `V` |
+  | a [tagged union](#discriminated-unions) `U` of declared classes, `U \| null`, `U[]` | an object whose tag key names its variant, and `null` for the second | the tag's string, then that variant's decoding, into the object the field holds when its tag matches | the tag first, then the variant's own encoding |
   | `JsonNumber` from `nish/json-typed`, alone, `\| null`, in an array or as a `Map`'s value | any number, kept as the text it is written in | `d.number(n)`, which copies the number's bytes into `n` | `jsonEncodeNumber`, which writes them back |
 
   `` `jsonEncode` cannot handle `Sample.ratio`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null` ``
@@ -10750,6 +12630,7 @@ export const main = (): i32 => {
   | a key given twice, a field's or a `Map`'s, however it is escaped | `JSON_DECODE_DUPLICATE` (-23) | the second |
   | a field the object does not give | `JSON_DECODE_MISSING` (-24) | the object's `}` |
   | more keys, over every `Map` field of the decoding, than `d.maxMapKeys` (4,096 unless set) | `JSON_DECODE_MAP_LIMIT` (-25) | the first key past it |
+  | a union's tag missing, not a string, or a string no variant writes | `JSON_DECODE_TAG` (-26) | the tag's value, or the object's `{` when it has none |
   | text that is not JSON, or that crosses a `JsonLimits` limit | the tokenizer's `JSON_TOK_ERR_*` (-1 to -13) | the tokenizer's |
 
   Nothing an input holds panics: the recursion is the data's, so the
@@ -10913,6 +12794,71 @@ export const main = (): i32 => {
   `Map` hashes a string under a per-process random key, so a body cannot
   choose keys that collide, and this limit bounds what all the maps of one
   decoding hold together (docs/security/json.md, JSON-13).
+- **A tagged union is an object with its tag.** A field, an array's element
+  or the value of `jsonEncode` may be a [discriminated union](#discriminated-unions)
+  whose variants are all declared classes, and the union is written as the
+  variant's object with its tag key first, the tag's value the name of its
+  enum member:
+
+  ```typescript
+  enum Kind { Num, Neg }
+  class Num {
+    readonly kind: Kind.Num = Kind.Num;
+    value: f64 = 0;
+  }
+  class Neg {
+    static readonly json = { tag: "negate" };
+    readonly kind: Kind.Neg = Kind.Neg;
+    arg: Expr;
+    constructor() { this.arg = zero(); }
+  }
+  type Expr = Num | Neg;
+  const zero = (): Expr => new Num();
+
+  const e = jsonDecodeUnion(d, zero());  // {"kind":"negate","arg":{"kind":"Num","value":2}}
+  jsonEncode(w, e);                      // the same text back
+  ```
+
+  A variant's `tag` option replaces its member's name on the wire, and
+  `rename` renames the tag key as it renames any field. Every variant writes
+  its tag under one key and as a different string, or the union is refused
+  where a call reaches it (NL2721, `json_reject_union_tag_key`; NL2720,
+  `json_reject_union_same_tag`); a `tag` that is not a string literal is
+  NL2722 (`json_reject_union_tag_literal`), one on a class with no field whose
+  type is one enum member is NL2724 (`json_reject_union_tag_no_field`), and
+  `tag: ""` is the same as no `tag`: the variant writes its member's name. A
+  `tag` on a class that has such a field but that no union holds is not
+  refused and does nothing: the class compiles while no JSON call reaches it,
+  and one that does refuses the field (below). A variant
+  that is not a class, an interface, is NL2486
+  (`json_reject_union_interface`), the code of any typed JSON type that is not
+  a declared class. A field typed with an enum member that no
+  union tags a variant with is no tag, and is refused as any other field type
+  is (`json_reject_enum_member`). `jsonDecode` decodes into the object it is
+  given and a union's variant is known only from the input, so a union is
+  decoded with `jsonDecodeUnion(d, prev)`, which answers the object it decoded
+  into: `prev` itself when the input's tag is `prev`'s, reused as any nested
+  object is, and otherwise a new variant made with `new V()`. On a failure it
+  answers `prev`, with the code in `d.failed`, at the top only: a union field,
+  element or `Map` value already holds the new variant when the failure comes,
+  decoded up to it, as any failed decode leaves what it read. Its type argument is inferred
+  from `prev` and never written; `jsonDecode` with a union is
+  `` `jsonDecode`'s value is `A | B`, a tagged union: … ``
+  (NL2719, `json_reject_union_decode`), and `jsonDecodeUnion` with a class is
+  NL2723 (`json_reject_union_not_union`). A union field decodes into the
+  object it holds the same way, and an array's element past its end is made
+  fresh. The tag may come anywhere in the object: when it is the first key
+  the variant is known at once, and otherwise the decoder reads ahead to it,
+  stepping over the values before it, and rewinds, so each byte is read at
+  most `maxDepth` + 1 times (docs/security/json.md, JSON-17). A tag that is
+  missing, not a string or no variant's is `JSON_DECODE_TAG`. A variant used
+  alone, as a class, decodes and encodes its tag too, and a tag that is not
+  its own is `JSON_DECODE_TAG`. Each union gets one decoding and one
+  encoding function, `.json.decode.union.<U>` and `.json.encode.union.<U>`,
+  which every place it appears calls, so a recursive union such as `Expr`
+  above recurses through them (`tests/link/json_tagged_union`). A
+  `Map<string, Expr>` field decodes each value through that same function
+  and encodes it through the other.
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps
@@ -10975,10 +12921,10 @@ policy](#the-capability-policy); without one, the set is a report.
 | `env` | `getenv`, `geteuid` (`caps_env`) |
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
 | `ffi` | any call to a `declare function` (`caps_ffi`) |
-| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
+| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync`, `fileOpen`, `fileReadAt`, `fileSize`, `fileClose` (`caps_fs_read`, `caps_file_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`), `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` (`caps_fs_mode`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawnPipedWithin` (`caps_process_spawn_piped_within`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
@@ -12520,26 +14466,149 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 — `npm test` holds every golden in `tests/cases/` and `tests/link/` to that
 (`tests/panics-oracle.js`). The kinds:
 
-| kind | what fails | what proves it away |
-| --- | --- | --- |
-| `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
-| `pop` | `a.pop()` on an empty array | a dominating `if (a.length > 0)`, the length fact the bounds proof already keeps (`tests/cases/panics_pop`) |
-| `slice` | `s.slice(a, b)`, `dst.set(src, at)`, `String.fromBytes(bytes, start, end)` and the buffer range of `netRead`, `netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site; an array's `xs.slice` is not a `slice` site but a `call` reaching `std/array.ts`'s `panic` ([Callback methods and `slice`](#callback-methods-and-slice)) (`tests/cases/panics_slice`, `str_from_bytes_oob`, `reject_deny_panics_from_bytes`, `io_write_bytes_bounds`, `net_write2_bounds`) |
-| `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | a divisor that is not 0, and not -1 unless the dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor whose declared range leaves those values out, or a guard on a local divisor — `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned one. A float division is not a site (`tests/cases/panics_divide`) |
-| `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). A `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not a site |
-| `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
-| `array-length` | `new Array<T>(n)` whose length type could make a bad header or a negative byte count (an `i64`, a float, an `i32` or a ranged integer, a `u32` under `--number-mode i32`) | a narrower unsigned length or a literal up to 2^31 - 1, which is not checked and not a site (`tests/cases/panics_array_length`) |
-| `panic` | `panic(message)` | nothing: a path the program never takes is still a site (`tests/cases/panics_panic`) |
-| `expect` | `r.expect(message)` on an `Err` | nothing; `unwrapOr` and `orReturn` are not sites (`tests/cases/panics_expect`) |
-| `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |
-| `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
-| `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
-| `ffi-null` | a `string` result of a [`declare function`](#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
-| `ffi-length` | a call to a [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is larger than a `u8[]` buffer of its run: `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``, compared unsigned, so a count that wrapped below zero fails too | a count of `toU64(b.length)` where `b` is that buffer itself, a `const` local or a parameter named alone, and no later argument may resize an array (`tests/cases/ffi_buffer_count_proved`, `ffi_buffer_late_load`); every other count is checked (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`, `panics_ffi_length_shrink`). |
-| `region` | a call to `nish:region`'s `region`, `regionWith`, `enter`, `enterWith` or `free`: a handle that is 0, freed, another thread's or entered already, a `free` of an entered region, or more live regions than the table holds | nothing: the handle is a number the checker does not follow, so every call checks it (`tests/cases/reject_deny_panics_region`) |
-| `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
-| `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour; `readCString`, whose pointer nothing proves is live and NUL-terminated | nothing, and nothing needs to: the call is the author's word that the index is in range, or that the pointer is, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
-| `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
+**`index`**: `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside
+`[0, length)`; and the second check of a compound store `a[i] += f()` whose
+right side may resize the array
+
+- *What proves it away:* the bounds proof of [Element
+  access](#element-access): a dominating guard, a loop bounded by the length,
+  or every call site proving the argument (`tests/cases/panics_index`);
+  nothing removes the second check of a compound store, which is made after
+  the call however the first was proved (`tests/cases/panics_index_recheck`)
+
+**`pop`**: `a.pop()` on an empty array
+
+- *What proves it away:* a dominating `if (a.length > 0)`, the length fact the
+  bounds proof already keeps (`tests/cases/panics_pop`)
+
+**`slice`**: `s.slice(a, b)`, `dst.set(src, at)`,
+`String.fromBytes(bytes, start, end)` and the buffer range of `netRead`,
+`netWrite`, `netWrite2`, `writeBytes`, `udpSendTo` and `udpRecvFrom`: the
+range outside the receiver
+
+- *What proves it away:* nothing yet: `substring` clamps instead, and is not a
+  site; an array's `xs.slice` is not a `slice` site but a `call` reaching
+  `std/array.ts`'s `panic` ([Callback methods and
+  `slice`](#callback-methods-and-slice)) (`tests/cases/panics_slice`,
+  `str_from_bytes_oob`, `reject_deny_panics_from_bytes`,
+  `io_write_bytes_bounds`, `net_write2_bounds`)
+
+**`divide`**: integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1`
+when signed
+
+- *What proves it away:* a divisor that is not 0, and not -1 unless the
+  dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded
+  module constant), a ranged or unsigned divisor whose declared range leaves
+  those values out, or a guard on a local divisor —
+  `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned
+  one. A float division is not a site (`tests/cases/panics_divide`)
+
+**`overflow`**: a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or
+`op=` whose result does not fit: `attempt to add with overflow` and its
+siblings
+
+- *What proves it away:* the overflow proof of [Semantics
+  decisions](#semantics-decisions): an operation the bounds walk proves fits
+  is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other
+  one is checked (`tests/cases/panics_overflow`). A `nish:unsafe`
+  `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not
+  a site
+
+**`range`**: a value entering `integer<Lo, Hi>`, the store of `+=` or `++`
+into a ranged place, and an exported function's check of a ranged parameter on
+entry
+
+- *What proves it away:* the range proof of
+  [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a
+  dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving
+  the argument (`tests/cases/panics_range`)
+
+**`array-length`**: `new Array<T>(n)` whose length type could make a bad
+header or a negative byte count (an `i64`, a float, an `i32` or a ranged
+integer, a `u32` under `--number-mode i32`)
+
+- *What proves it away:* a narrower unsigned length or a literal up to 2^31 -
+  1, which is not checked and not a site (`tests/cases/panics_array_length`)
+
+**`panic`**: `panic(message)`
+
+- *What proves it away:* nothing: a path the program never takes is still a
+  site (`tests/cases/panics_panic`)
+
+**`expect`**: `r.expect(message)` on an `Err`
+
+- *What proves it away:* nothing; `unwrapOr` and `orReturn` are not sites
+  (`tests/cases/panics_expect`)
+
+**`io-exit`**: `readFileSync`, `writeFileSync`, `appendFileSync` and
+`crypto.getRandomValues`, which exit inside the runtime on failure
+
+- *What proves it away:* nothing; `readFileSyncOrNull` is the twin that
+  answers `null` instead (`tests/cases/panics_io_exit`)
+
+**`parallel-length`**: a `parallelMapInto` call whose `dst` is shorter than
+its `src`
+
+- *What proves it away:* nothing yet: the check is `std/threads.ts`'s own
+  (`tests/link/panics_parallel_length`)
+
+**`ffi-nul`**: a `string` argument to a [`declare function`](#calling-c) that
+holds a NUL byte, which C would read as the end of the string:
+`` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string ``
+
+- *What proves it away:* a literal with no NUL in it, which is not checked and
+  not a site; every other string is checked, and `string | null` checks only
+  the string (`tests/cases/panics_ffi_nul`)
+
+**`ffi-null`**: a `string` result of a [`declare function`](#calling-c) that
+is `NULL`:
+`` `name` returned NULL for a `string` result; declare it `string | null` ``
+
+- *What proves it away:* nothing: a result declared `string | null` reads
+  `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`)
+
+**`ffi-length`**: a call to a
+[`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is
+larger than a `u8[]` buffer of its run:
+`` `name`: argument N (count) counts more bytes than argument M (buf) holds ``,
+compared unsigned, so a count that wrapped below zero fails too
+
+- *What proves it away:* a count of `toU64(b.length)` where `b` is that buffer
+  itself, a `const` local or a parameter named alone, and no later argument
+  may resize an array (`tests/cases/ffi_buffer_count_proved`,
+  `ffi_buffer_late_load`); every other count is checked
+  (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`,
+  `panics_ffi_length_shrink`).
+
+**`region`**: a call to `nish:region`'s `region`, `regionWith`, `enter`,
+`enterWith` or `free`: a handle that is 0, freed, another thread's or entered
+already, a `free` of an entered region, or more live regions than the table
+holds
+
+- *What proves it away:* nothing: the handle is a number the checker does not
+  follow, so every call checks it (`tests/cases/reject_deny_panics_region`)
+
+**`call`**: a call into a function that has a site that can panic, directly or
+through further calls
+
+- *What proves it away:* the callee having none (`tests/cases/panics_call`)
+
+**`unchecked`**: `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no
+check at all, so nothing panics, but an index out of range is undefined
+behaviour; `readCString`, whose pointer nothing proves is live and
+NUL-terminated
+
+- *What proves it away:* nothing, and nothing needs to: the call is the
+  author's word that the index is in range, or that the pointer is, not a
+  proof, and the `nish:unsafe` import its module must write is the opt-in to
+  that word, so it is listed with `"allowed": true` and, like `oom`, never
+  makes a function one that may panic (`tests/cases/deny_panics_unsafe`)
+
+**`oom`**: an arena allocation: the out-of-memory exit
+
+- *What proves it away:* nothing, and nothing needs to: it is listed with
+  `"allowed": true` and never makes a function one that may panic
+  (`tests/cases/panics_oom`)
 
 - **A `call` names its callee and the kind it reaches** (`"via"`), and is
   decided over the whole program, the standard library and dependencies
@@ -12589,7 +14658,7 @@ lists there, by their path relative to that file:
 ```
 
 Both together put the union in scope; with neither, nothing changes. In a
-module of the scope, every site of the table above that is not proven is an
+module of the scope, every site of a kind above that is not proven is an
 error, NL2457, which names the kind and, where a proof the checker makes would
 remove the check, the guard that gives it — the same sentence the performance
 warnings use for an index (NL9007) and a range entry (NL9013), so one way of
@@ -12853,20 +14922,49 @@ fragment `tests/run.js` matches and the case that proves it.
 
 ### Declarations
 
-| Construct | Message | Test |
-| --- | --- | --- |
-| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists `` | `reject_type_alias_generic` |
-| type parameters on a constructor | `` a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`) `` (a syntax error; a *method* may declare its own, see [Generic methods](#generic-methods)) | `reject_generic_method_constructor` |
-| a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
-| type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |
-| generators (`function*`, `*m()`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator`, `reject_generator_method` |
-| an `async` method, field or constructor ([Async functions](#async-functions-async-and-await) has the rest) | `` Only a top-level function or an arrow may be `async` `` (NL1063) | `reject_async_method` |
-| `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
-| enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed`; the numeric form compiles ([Enums](#enums)) |
-| `namespace` / `module` blocks, `declare module "m"` | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace`, `reject_module_declared` |
-| `declare global` | `` `declare global` is forbidden in Nish (no global object to augment) `` | `reject_declare_global` |
-| decorators, on a class, a member or a parameter | `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) `` | `reject_decorator`, `reject_decorator_member`, `reject_decl_shapes` |
-| computed property names, in an object literal (`{ [k]: 1 }`, `{ [k]() { } }`), a class (`[k]: i32`, `[Symbol.iterator]() { }`) or an interface (`[k]: i32`) | `Computed property names are forbidden in Nish (member names are fixed at compile time)` (NL1041, Phase 0; before a method in an object literal is refused) | `reject_computed_property`, `reject_computed_method`, `reject_cls_computed_field`, `reject_cls_computed_method`, `reject_iface_computed_member` |
+- **type parameters on a type alias**:
+  `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists ``
+  (`reject_type_alias_generic`)
+- **type parameters on a constructor**:
+  `` a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`) ``
+  (a syntax error; a *method* may declare its own, see [Generic
+  methods](#generic-methods)) (`reject_generic_method_constructor`)
+- **a generic class or interface named without its type arguments**:
+  `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` ``
+  (`reject_generic_class`)
+- **type *arguments* on `new` of a class that is not generic**:
+  `` `Point` is not generic, so `new Point` takes no type arguments ``
+  (`reject_cls_new_generic`)
+- **generators (`function*`, `*m()`)**:
+  `` Generators are forbidden in Nish (no coroutine runtime) ``
+  (`reject_generator`, `reject_generator_method`)
+- **an `async` method, field or constructor ([Async
+  functions](#async-functions-async-and-await) has the rest)**:
+  `` Only a top-level function or an arrow may be `async` `` (NL1063)
+  (`reject_async_method`)
+- **`var`**: `` `var` is forbidden; use `let` or `const` ``
+  (`reject_var_keyword`, `reject_var_in_for`)
+- **enum members that are not numeric literals**:
+  `` Enum members must be numeric literals in Nish (enums lower to plain integers) ``
+  (`reject_enum_string`, `reject_enum_computed`; the numeric form compiles
+  ([Enums](#enums)))
+- **`namespace` / `module` blocks, `declare module "m"`**:
+  `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) ``
+  (`reject_namespace`, `reject_module_declared`)
+- **`declare global`**:
+  `` `declare global` is forbidden in Nish (no global object to augment) ``
+  (`reject_declare_global`)
+- **decorators, on a class, a member or a parameter**:
+  `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) ``
+  (`reject_decorator`, `reject_decorator_member`, `reject_decl_shapes`)
+- **computed property names, in an object literal (`{ [k]: 1 }`,
+  `{ [k]() { } }`), a class (`[k]: i32`, `[Symbol.iterator]() { }`) or an
+  interface (`[k]: i32`)**:
+  `Computed property names are forbidden in Nish (member names are fixed at compile time)`
+  (NL1041, Phase 0; before a method in an object literal is refused)
+  (`reject_computed_property`, `reject_computed_method`,
+  `reject_cls_computed_field`, `reject_cls_computed_method`,
+  `reject_iface_computed_member`)
 
 ### Imports
 
@@ -12878,14 +14976,22 @@ fragment `tests/run.js` matches and the case that proves it.
 
 ### Statements
 
-| Construct | Message | Test |
-| --- | --- | --- |
-| `with` | `` `with` is forbidden in Nish (no dynamic scope) `` | `reject_with_statement` |
-| `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in Nish (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
-| `throw` | `` `throw` is forbidden in Nish (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
-| `debugger` | `` `debugger` is forbidden in Nish (no debugger hook) `` | `reject_debugger` |
-| a label on another statement | `` Labeled statements are forbidden in Nish except on a loop, a block or a `switch` `` | `reject_label_if` |
-| `for...in` | `` `for...in` is forbidden in Nish (it enumerates property names, and object layout is fixed at compile time); use `for...of` `` | `reject_for_in`, `reject_map_iter_for_in` |
+- **`with`**: `` `with` is forbidden in Nish (no dynamic scope) ``
+  (`reject_with_statement`)
+- **`try` / `catch` / `finally`**:
+  `` `try`/`catch`/`finally` is forbidden in Nish (no unwinding; use `Result<T, E>`) ``
+  (`reject_try_catch`)
+- **`throw`**:
+  `` `throw` is forbidden in Nish (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process ``
+  (`reject_throw`)
+- **`debugger`**: `` `debugger` is forbidden in Nish (no debugger hook) ``
+  (`reject_debugger`)
+- **a label on another statement**:
+  `` Labeled statements are forbidden in Nish except on a loop, a block or a `switch` ``
+  (`reject_label_if`)
+- **`for...in`**:
+  `` `for...in` is forbidden in Nish (it enumerates property names, and object layout is fixed at compile time); use `for...of` ``
+  (`reject_for_in`, `reject_map_iter_for_in`)
 
 ### Expressions
 
@@ -12959,119 +15065,401 @@ TypeScript reads one; anywhere else a `/` divides.
 ## Rejected by the checker
 
 Everything the validator lets through but the checker cannot compile. The
-messages are exact for the cases cited; other rows quote the checker
+messages are exact for the cases cited; other entries quote the checker
 (`src/checker.ts` and the modules beside it) and `src/types.ts`.
 
-| Situation | Message | Test |
-| --- | --- | --- |
-| top-level statement other than function/class/interface/const/type/enum/import, outside an entry without `main` | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
-| a function naming a variable of the entry's top-level code | `` `count` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it; pass it as a parameter, or declare it as an annotated module `const` above the code `` | `reject_script_local_in_function` |
-| a declaration below top-level code that reaches it | `` `twice` is declared below the top-level code on line 5 that reaches it: under Node a top-level statement runs where it stands, before the declarations after it exist, so declare it above that line `` | `reject_script_declared_below` |
-| a variable of top-level code named like a declaration or import | `` `go` is a variable of the top-level code and also a name the module declares or imports: under Node both live in the one module scope, so rename one `` | `reject_script_name_collision` |
-| type alias cycle | `` Type alias `Feet` is defined in terms of itself `` | `reject_type_alias_cycle` |
-| a member of an unconstrained type parameter | `` Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>` `` | `reject_generic_member_unconstrained` |
-| a member the constraint does not declare | `` Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares `` | `reject_generic_member_not_in_constraint` |
-| a constraint that is not a class or interface | `` `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's `` | `reject_generic_constraint` |
-| a constraint that mentions a type parameter | `` `U extends T` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out `` | `reject_generic_constraint` |
-| a type parameter list that names one parameter twice | `` Duplicate type parameter `T` ``, on the first repeat alone | `reject_generic_duplicate_type_parameter`, `…_arrow`, `…_method`, `…_class`, `…_interface`, `…_template`, `…_triple` |
-| a type argument that does not satisfy its constraint | `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` `` | `reject_generic_unsatisfied_constraint` |
-| a function parameter used as a value | `` `f` is a function parameter and can only be called or passed on as a function argument: ... `` | `reject_fnarg_store`, `reject_fnarg_return` |
-| an arrow argument that reads a `let`, `this`, or a function parameter of its function, or assigns to a capture | `` The arrow reads `k`, a `let` of the function it is written in: ... `` / `` The arrow reads `this`: ... `` / `` The arrow assigns to `total`, which belongs to the function it is written in: ... `` | `reject_fnarg_capture_let`, `_this`, `_function_param`, `_write` |
-| an arrow inside another arrow that reads the function's locals | `` The arrow reads `k` from outside the arrow it is written in: ... `` | `reject_fnarg_capture_nested` |
-| an arrow anywhere but as a function argument | `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, ... `` | `reject_fnarg_arrow_value` |
-| a function type anywhere but on a parameter of a top-level function | `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: ... `` / `` `f` cannot have a function type here: ... `` | `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_method`, `reject_fnarg_nested` |
-| a function argument that is not a function's name or an arrow, or does not match | `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... `` / `` ...; a function argument must have exactly its parameter's type `` | `reject_fnarg_not_name`, `reject_fnarg_generic_name`, `reject_fnarg_mismatch`, `reject_fnarg_arity` |
-| an arrow argument whose types cannot be inferred | `` Cannot infer the type of `x` in the arrow passed to `run`: ... `` / `` The arrow passed to `map` needs a return type annotation: ... `` | `reject_fnarg_infer`, `reject_fnarg_block_return` |
-| a method type parameter named like one of its class's | `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name `` | `reject_generic_method_shadow` |
-| type arguments written at a method call | `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` `` | `reject_generic_method` |
-| a `Secret` where a value would leave it, or a `Secret` the function made and did not return or wipe on some path | NL2428 to NL2453 and NL2540 to NL2548, worded in [Secrets](#secrets-nishsecret) | `reject_secret_*` |
-| type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
-| enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |
-| importing an enum or a type alias its module does not export | `` `Kind` is declared in `./kinds` but not exported (add `export`) `` | `tests/link/enum_import_not_exported`, `alias_import_not_exported` |
-| a declaration named like an imported enum or alias, or a second import of its name | `` `Kind` is already declared in this module `` / `` `Kind` is already imported from `./kinds` `` | `tests/link/enum_import_clash`, `enum_import_clash_function`, `enum_import_duplicate`, `enum_import_duplicate_function`, `alias_import_clash`, `alias_import_duplicate` |
-| `const enum` | `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing `` | `reject_enum_const_enum` |
-| `declare enum` | `` `declare enum` is not supported `` | `reject_enum_declare`, `nl2286_declare_enum` |
-| enum with no members | `` Enum `Kind` must declare at least one member `` | `reject_enum_empty` |
-| two enum members of one name | `` Duplicate member `If` in enum `Kind` `` | `reject_enum_duplicate_member` |
-| enum member that is not an integer | `` Enum member `Kind.Half` must be an integer literal `` | `reject_enum_float` |
-| enum member outside `i32` | `` Enum member `Kind.Big` does not fit in i32 `` | `reject_enum_overflow` |
-| name that is not a member of the enum | `` Enum `Kind` has no member `Nope` `` | `reject_enum_unknown_member` |
-| top-level `let`, outside an entry without `main` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
-| `for await`, in any body, a template nothing instantiates included | `` `for await` is not supported `` | `nl2133_for_await`, `reject_for_await_template` |
-| `for (x of a)`, assigning rather than declaring | `` `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)` `` | `reject_arr_forof_expression`, `reject_arr_forof_expression_template`, `nl2135_for_of_without_declaration` |
-| `a ** b`, in any body, a template nothing instantiates included | `` Unsupported binary operator `**` `` | `reject_op_exponent`, `reject_op_exponent_template`, `nl2254_unsupported_binary` |
-| `x **= e`, to a local, a field or an element | `` Unsupported assignment operator `**=` `` | `reject_exponent_assign_local`, `reject_cls_compound_operator`, `nl2253_field_compound_operator` |
-| a hole in an array literal, `[1, , 2]` | `Holes in array literals are not supported` | `reject_arr_hole`, `nl2210_array_hole` |
-| a spread in an array literal, `[...a]` | `Spread in array literals is not supported` | `reject_arr_spread`, `reject_map_iter_spread`, `nl2237_array_spread` |
-| `new` of anything but a class name, `new a.B()`, `new cs[0]()` | `` `new` requires a class name `` | `reject_cls_new_not_identifier`, `reject_new_parenthesized`, `nl2144_new_non_identifier` |
-| `x as T`, `<T>x`, `x satisfies T`, to anything but `any` and `unknown` ([Phase 0's](#types-1)) | `Unsupported expression in Phase 1: AsExpression` / `TypeAssertionExpression` / `SatisfiesExpression` | `reject_as_type`, `reject_angle_assertion`, `reject_satisfies`, `nl2256_satisfies_expression` |
-| more than one of these in one declaration | the first, alone: the refusal comes before the declaration is collected | `reject_expr_sweep_together` |
-| constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
-| constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |
-| assignment to a module constant | `` Cannot assign to `LIMIT` because it is a module constant `` | `reject_const_assign`, `reject_const_incdec` |
-| missing return type, a function's or a method's, in a template nothing instantiates too | `` Function `f` needs an explicit return type annotation `` / `` Method `m` of class `Box` needs an explicit return type annotation `` | `reject_missing_return_type`, `reject_arrow_return_type`, `reject_method_return_template`, `reject_method_return_generic` |
-| a function with no body (an overload signature) | `Functions must have a body` | `nl2204_function_without_body` |
-| `export default function ()` | `Functions must be named` | `reject_fn_anonymous` |
-| a destructuring pattern, but for `const [a, b] = await awaitAll(…)` | `Destructured constants are not supported` / `Destructured parameters are not supported` / `Destructuring is not supported` (a local) | `reject_const_destructured`, `reject_param_destructured`, `reject_destructure_local` |
-| an optional parameter; a default or rest outside a function, method, constructor or `const` arrow; a spread argument | `Optional parameters are not supported` / `Optional/default parameters are not supported here` / `Rest parameters are not supported here` / `Spread arguments are not supported` | `reject_param_optional`, `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest`, `reject_param_spread_call` |
-| an arrow bound with `let`, annotated, or beside a second name | `` Function `f` must be declared `const`, not `let` `` / `` Function `f` takes its signature from the arrow; drop the annotation on `f` `` / `A function declaration binds one name` | `reject_arrow_let`, `reject_arrow_annotated`, `reject_fn_two_names` |
-| a getter or setter; a method in an interface | `` Getters and setters are not supported in class `Box` (use a method) `` / `` Interface `Shape` cannot declare methods (interfaces describe layout only) `` | `reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor` |
-| more than one function or binding form in one declaration | the first in source order, alone | `reject_fn_sweep_together` |
-| a class with no name: `export default class { }`, a class expression | `Classes must be named` (a named class expression: `Unsupported expression in Phase 1: ClassExpression`) | `reject_cls_anonymous`, `nl2018_anonymous_class` |
-| `declare class`, `declare interface`; `abstract` on a class or a member | `` `declare class` is not supported `` / `Abstract classes are not supported` | `reject_cls_declare`, `reject_generic_declare_class`, `reject_generic_abstract` |
-| a method or a constructor with no body, a constructor's return type | `` Method `m` of class `Point` must have a body `` / `` Constructor of class `Point` must have a body (no overload signatures) `` / `Constructors cannot declare a return type` | `reject_cls_method_no_body`, `reject_cls_ctor_no_body`, `reject_cls_ctor_return_type` |
-| a member named by a string or a number, a parameter property | `` Members of `Point` must have plain identifier names `` / ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it`` | `reject_cls_field_string_name`, `reject_cls_param_property` |
-| an index signature, a `static { }` block, a construct or call signature, `interface … extends` | `` Index signatures are not supported in class `Point` (object layout is fixed) `` (or `interface`) / `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` / `` Unsupported interface member in `Point`: ConstructSignature `` / ``Interface inheritance (`extends`) is not supported; list every field`` | `reject_cls_index_signature`, `reject_iface_index_signature`, `reject_cls_static_block`, `reject_iface_member_unsupported`, `reject_iface_extends` |
-| an object literal key that is not a name, a method in an object literal | `Object literal keys must be plain identifiers` / ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` | `reject_cls_literal_key`, `reject_cls_literal_member` |
-| an object literal typed as a class with methods | `` `Counter` has methods, so it is made only by `new`: ... Write `new Counter(...)` `` | `reject_class_literal_*`, `nl2556_class_literal` |
-| more than one class, interface or enum form in one declaration | the first in source order, alone; a `static` or `readonly` header before one is the member's own refusal | `reject_cls_sweep_together` |
-| a side-effect import, `import "./m"` | `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code `` | `reject_side_effect_import` |
-| `import type`, `{ type A }` | `Type-only imports are not supported` | `reject_import_type_only`, `nl2243_type_only_import` |
-| a default import: `import d from`, `import d, { a } from`, `{ default as d }` | `` Default imports are not supported; use `import { math } from "./locals"` `` | `reject_default_import` |
-| a namespace import | `` Namespace imports (`import * as math`) are not supported; import functions by name `` | `reject_namespace_import` |
-| a specifier that is not a string literal | `Import specifier must be a string literal` | `reject_import_template_specifier`, `nl2212_template_specifier` |
-| `export { a }`, `export { a } from`, `export * from`, `export * as ns from`, `export type { A }` | `` `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself `` | `reject_export_list`, `nl2128_export_list` |
-| `export default <value>`, `export =` | `` `export default` / `export =` are not supported; use a named `export function` `` | `reject_export_assignment`, `nl2129_export_default_value` |
-| `export default function f` | `` `export default` is not supported; use a named `export function` `` | `reject_export_default` |
-| `export default class C`, `export default interface I` | `` `export default` is not supported; use a named `export` `` | `reject_cls_export_default`, `reject_generic_export_default`, `nl2131_export_default_class` |
-| `export import` | `` Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration) `` (or `ImportDeclaration`) | `reject_export_import_equals`, `nl2226_export_import_equals` |
-| `import x = require("./m")`, `import x = A.B`, `export as namespace X` | `Only top-level function declarations are supported in Phase 1 (found ImportEqualsDeclaration)` (or `NamespaceExportDeclaration`) | `reject_module_sweep_together` |
-| a function or an import declared inside a body | `Unsupported statement in Phase 1: FunctionDeclaration` (or `ImportDeclaration`) | `reject_fn_nested`, `reject_fn_nested_template` |
-| the empty statement `;` in a body | `Unsupported statement in Phase 1: EmptyStatement` | `reject_stmt_empty` |
-| more than one import or export form in one module | the checker's refusals one each, since each is its own declaration; a Phase 0 one (NL1057–NL1059) alone, as every Phase 0 rule is, because Phase 0 halts the module before the checker runs | `reject_module_sweep_together` |
-| unknown identifier | `` Unknown identifier `x` `` | `reject_unknown_ident` |
-| wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
-| mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
-| string `+` number | `` ... got string and i32 (no implicit string conversion; use a template literal) `` | `reject_str_plus_number` |
-| arithmetic compound assignment | `` Operator `+=` requires two operands of the same numeric type, got string and string `` — one rule, naming the token that was written, for a local, a field and an element alike: the target must be numeric (so `+=` never concatenates) and the value must be exactly its type | `reject_cf_compound_string`, `reject_cf_compound_widths` |
-| object literal field of the wrong type | `` Field `code` of `IoError` expects a value of type i32, got f64 `` | `reject_struct_field_f64`, `reject_struct_field_u8` |
-| a dotted call that is not a builtin | `` Unknown builtin `foo.bar` (supported: console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, ...) `` — the callee is named, not its receiver, whether the receiver is a namespace or not | `reject_unknown_builtin`, `reject_arch_call` |
-| bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
-| bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
-| ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
-| `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`, `reject_null_narrowing_assigned_in_chain`, `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked` |
-| non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
-| non-boolean condition | `Condition must be boolean, got i32 (Nish has no truthiness)` | `reject_cf_nonbool_cond` |
-| `&&`/`\|\|` on numbers | `` Operator `&&` requires boolean operands, got i32 and i32 `` | `reject_cf_logical_numbers` |
-| ternary arm mismatch | `Ternary branches must have the same type, got i32 and boolean` | `reject_cf_ternary_mismatch` |
-| assignment to `const` / parameter | `` Cannot assign to `x` because it is a const `` / `... a parameter` | `reject_assign_const`, `reject_assign_param`, `reject_cf_compound_const`, `reject_cf_incdec_param` |
-| missing return | `` Function `f` must return a value of type i32 on every path `` | `reject_missing_return`, `reject_cf_missing_return_loop` |
-| unreachable code | `Unreachable code after return` / `break` / `process.exit` / ... | `reject_unreachable`, `reject_cf_unreachable_after_break`, `reject_exit_unreachable` |
-| `break`/`continue` outside a loop | `` `break` outside of a loop `` | `reject_cf_break_outside`, `reject_cf_continue_outside` |
-| `console.log` misuse | `` `console.log` expects exactly 1 argument, got 0 `` / `returns void and can only be used as a statement` | `reject_console_log_noargs`, `reject_console_log_two_args`, `reject_console_log_as_value` |
-| unknown property / method / builtin | `` Unknown property `foo` on string `` / `` Unknown property `length` on i32 `` / `` Unknown builtin `Math.foo` (supported: ...) `` | `reject_unknown_property`, `reject_length_on_number`, `reject_unknown_builtin` |
-| `Math.*` on an integer | `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) `` | `reject_math_i32` |
-| conversion of a non-number | `` `toI32` expects a number (i32, i64, or f64), got string `` | `reject_toi32_string` |
-| I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type` |
-| I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `spawnPiped` expects exactly 4 arguments, got 3 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_spawn_piped_arity`, `reject_monotonic_arity` |
-| array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
-| element reference held across a `push` or `pop` | `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it `` — see [Arrays of records are contiguous](#arrays-of-records-are-contiguous) | `reject_arr_element_across_push`, `reject_arr_element_loop_push`, `reject_arr_element_push_self` |
-| `push` or `pop` on a receiver spelled `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` (NL2415) | `` `push` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop `` | `reject_typed_push_f64`, `reject_typed_pop_receivers` ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)) |
-| class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
-| `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
-| a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |
-| module errors | see [`export` and `import`](#export-and-import), [`main`](#main) | `reject_bare_import`, `reject_default_import`, `reject_namespace_import`, `reject_side_effect_import`, `reject_missing_module`, `reject_std_escaping_module`, `reject_export_*`, `reject_main_params`, `tests/link/*` |
-| unsupported syntax the validator allows | `Unsupported statement in Phase 1: <Kind>` / `Unsupported expression in Phase 1: <Kind>` / `` Unsupported binary operator `**` `` / `` Unsupported unary operator `+` `` / `` Unsupported type `...` `` | *(CLI only)* |
+- **top-level statement other than
+  function/class/interface/const/type/enum/import, outside an entry without
+  `main`**:
+  `Only top-level function declarations are supported in Phase 1 (found <Kind>)`
+  (`reject_top_level_stmt`)
+- **a function naming a variable of the entry's top-level code**:
+  `` `count` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it; pass it as a parameter, or declare it as an annotated module `const` above the code ``
+  (`reject_script_local_in_function`)
+- **a declaration below top-level code that reaches it**:
+  `` `twice` is declared below the top-level code on line 5 that reaches it: under Node a top-level statement runs where it stands, before the declarations after it exist, so declare it above that line ``
+  (`reject_script_declared_below`)
+- **a variable of top-level code named like a declaration or import**:
+  `` `go` is a variable of the top-level code and also a name the module declares or imports: under Node both live in the one module scope, so rename one ``
+  (`reject_script_name_collision`)
+- **type alias cycle**: `` Type alias `Feet` is defined in terms of itself ``
+  (`reject_type_alias_cycle`)
+- **a member of an unconstrained type parameter**:
+  `` Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>` ``
+  (`reject_generic_member_unconstrained`)
+- **a member the constraint does not declare**:
+  `` Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares ``
+  (`reject_generic_member_not_in_constraint`)
+- **a constraint that is not a class or interface**:
+  `` `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's ``
+  (`reject_generic_constraint`)
+- **a constraint that mentions a type parameter**:
+  `` `U extends T` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out ``
+  (`reject_generic_constraint`)
+- **a type parameter list that names one parameter twice**:
+  `` Duplicate type parameter `T` ``, on the first repeat alone
+  (`reject_generic_duplicate_type_parameter`, `…_arrow`, `…_method`,
+  `…_class`, `…_interface`, `…_template`, `…_triple`)
+- **a type argument that does not satisfy its constraint**:
+  `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` ``
+  (`reject_generic_unsatisfied_constraint`)
+- **a function parameter used as a value**:
+  `` `f` is a function parameter and can only be called or passed on as a function argument: ... ``
+  (`reject_fnarg_store`, `reject_fnarg_return`)
+- **an arrow argument that reads a `let`, `this`, or a function parameter of
+  its function, or assigns to a capture**:
+  `` The arrow reads `k`, a `let` of the function it is written in: ... `` /
+  `` The arrow reads `this`: ... `` /
+  `` The arrow assigns to `total`, which belongs to the function it is written in: ... ``
+  (`reject_fnarg_capture_let`, `_this`, `_function_param`, `_write`)
+- **an arrow inside another arrow that reads the function's locals**:
+  `` The arrow reads `k` from outside the arrow it is written in: ... ``
+  (`reject_fnarg_capture_nested`)
+- **an arrow anywhere but as a function argument**:
+  `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, ... ``
+  (`reject_fnarg_arrow_value`)
+- **a function type anywhere but on a parameter of a top-level function**:
+  `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: ... ``
+  / `` `f` cannot have a function type here: ... `` (`reject_fnarg_field`,
+  `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`,
+  `reject_fnarg_method`, `reject_fnarg_nested`)
+- **a function argument that is not a function's name or an arrow, or does not
+  match**:
+  `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... ``
+  / `` ...; a function argument must have exactly its parameter's type ``
+  (`reject_fnarg_not_name`, `reject_fnarg_generic_name`,
+  `reject_fnarg_mismatch`, `reject_fnarg_arity`)
+- **an arrow argument whose types cannot be inferred**:
+  `` Cannot infer the type of `x` in the arrow passed to `run`: ... `` /
+  `` The arrow passed to `map` needs a return type annotation: ... ``
+  (`reject_fnarg_infer`, `reject_fnarg_block_return`)
+- **a method type parameter named like one of its class's**:
+  `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name ``
+  (`reject_generic_method_shadow`)
+- **type arguments written at a method call**:
+  `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` ``
+  (`reject_generic_method`)
+- **a `Secret` where a value would leave it, or a `Secret` the function made
+  and did not return or wipe on some path**: NL2428 to NL2453 and NL2540 to
+  NL2548, worded in [Secrets](#secrets-nishsecret) (`reject_secret_*`)
+- **type alias named after a built-in type**:
+  `` `string` is a built-in type name and cannot be used for a type alias ``
+  (`reject_type_alias_builtin`)
+- **enum named after a built-in type**:
+  `` `i32` is a built-in type name and cannot be used for an enum ``
+  (`reject_enum_builtin_name`)
+- **importing an enum or a type alias its module does not export**:
+  `` `Kind` is declared in `./kinds` but not exported (add `export`) ``
+  (`tests/link/enum_import_not_exported`, `alias_import_not_exported`)
+- **a declaration named like an imported enum or alias, or a second import of
+  its name**: `` `Kind` is already declared in this module `` /
+  `` `Kind` is already imported from `./kinds` ``
+  (`tests/link/enum_import_clash`, `enum_import_clash_function`,
+  `enum_import_duplicate`, `enum_import_duplicate_function`,
+  `alias_import_clash`, `alias_import_duplicate`)
+- **`const enum`**:
+  `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing ``
+  (`reject_enum_const_enum`)
+- **`declare enum`**: `` `declare enum` is not supported ``
+  (`reject_enum_declare`, `nl2286_declare_enum`)
+- **enum with no members**: `` Enum `Kind` must declare at least one member ``
+  (`reject_enum_empty`)
+- **two enum members of one name**: `` Duplicate member `If` in enum `Kind` ``
+  (`reject_enum_duplicate_member`)
+- **enum member that is not an integer**:
+  `` Enum member `Kind.Half` must be an integer literal ``
+  (`reject_enum_float`)
+- **enum member outside `i32`**:
+  `` Enum member `Kind.Big` does not fit in i32 `` (`reject_enum_overflow`)
+- **name that is not a member of the enum**:
+  `` Enum `Kind` has no member `Nope` `` (`reject_enum_unknown_member`)
+- **top-level `let`, outside an entry without `main`**:
+  `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available ``
+  (`reject_const_top_level_let`)
+- **`for await`, in any body, a template nothing instantiates included**:
+  `` `for await` is not supported `` (`nl2133_for_await`,
+  `reject_for_await_template`)
+- **`for (x of a)`, assigning rather than declaring**:
+  `` `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)` ``
+  (`reject_arr_forof_expression`, `reject_arr_forof_expression_template`,
+  `nl2135_for_of_without_declaration`)
+- **`a ** b`, in any body, a template nothing instantiates included**:
+  `` Unsupported binary operator `**` `` (`reject_op_exponent`,
+  `reject_op_exponent_template`, `nl2254_unsupported_binary`)
+- **`x **= e`, to a local, a field or an element**:
+  `` Unsupported assignment operator `**=` `` (`reject_exponent_assign_local`,
+  `reject_cls_compound_operator`, `nl2253_field_compound_operator`)
+- **a hole in an array literal, `[1, , 2]`**:
+  `Holes in array literals are not supported` (`reject_arr_hole`,
+  `nl2210_array_hole`)
+- **a spread in an array literal, `[...a]`**:
+  `Spread in array literals is not supported` (`reject_arr_spread`,
+  `reject_map_iter_spread`, `nl2237_array_spread`)
+- **`new` of anything but a class name, `new a.B()`, `new cs[0]()`**:
+  `` `new` requires a class name `` (`reject_cls_new_not_identifier`,
+  `reject_new_parenthesized`, `nl2144_new_non_identifier`)
+- **`x as T`, `<T>x`, `x satisfies T`, to anything but `any` and `unknown`
+  ([Phase 0's](#types-1))**: `Unsupported expression in Phase 1: AsExpression`
+  / `TypeAssertionExpression` / `SatisfiesExpression` (`reject_as_type`,
+  `reject_angle_assertion`, `reject_satisfies`, `nl2256_satisfies_expression`)
+- **more than one of these in one declaration**: the first, alone: the refusal
+  comes before the declaration is collected (`reject_expr_sweep_together`)
+- **constant initialiser that is not constant**:
+  `A module constant's initialiser must be a literal, another constant, or arithmetic over them`
+  (`reject_const_not_constant`)
+- **constant cycle**: `` Module constant `A` is defined in terms of itself ``
+  (`reject_const_cycle`)
+- **assignment to a module constant**:
+  `` Cannot assign to `LIMIT` because it is a module constant ``
+  (`reject_const_assign`, `reject_const_incdec`)
+- **missing return type, a function's or a method's, in a template nothing
+  instantiates too**:
+  `` Function `f` needs an explicit return type annotation `` /
+  `` Method `m` of class `Box` needs an explicit return type annotation ``
+  (`reject_missing_return_type`, `reject_arrow_return_type`,
+  `reject_method_return_template`, `reject_method_return_generic`)
+- **a function with no body (an overload signature)**:
+  `Functions must have a body` (`nl2204_function_without_body`)
+- **`export default function ()`**: `Functions must be named`
+  (`reject_fn_anonymous`)
+- **a destructuring pattern, but for `const [a, b] = await awaitAll(…)`**:
+  `Destructured constants are not supported` /
+  `Destructured parameters are not supported` /
+  `Destructuring is not supported` (a local) (`reject_const_destructured`,
+  `reject_param_destructured`, `reject_destructure_local`)
+- **an optional parameter; a default or rest outside a function, method,
+  constructor or `const` arrow; a spread argument**:
+  `Optional parameters are not supported` /
+  `Optional/default parameters are not supported here` /
+  `Rest parameters are not supported here` /
+  `Spread arguments are not supported` (`reject_param_optional`,
+  `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest`,
+  `reject_param_spread_call`)
+- **an arrow bound with `let`, annotated, or beside a second name**:
+  `` Function `f` must be declared `const`, not `let` `` /
+  `` Function `f` takes its signature from the arrow; drop the annotation on `f` ``
+  / `A function declaration binds one name` (`reject_arrow_let`,
+  `reject_arrow_annotated`, `reject_fn_two_names`)
+- **a getter or setter; a method in an interface**:
+  `` Getters and setters are not supported in class `Box` (use a method) `` /
+  `` Interface `Shape` cannot declare methods (interfaces describe layout only) ``
+  (`reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor`)
+- **more than one function or binding form in one declaration**: the first in
+  source order, alone (`reject_fn_sweep_together`)
+- **a class with no name: `export default class { }`, a class expression**:
+  `Classes must be named` (a named class expression:
+  `Unsupported expression in Phase 1: ClassExpression`)
+  (`reject_cls_anonymous`, `nl2018_anonymous_class`)
+- **`declare class`, `declare interface`; `abstract` on a class or a member**:
+  `` `declare class` is not supported `` /
+  `Abstract classes are not supported` (`reject_cls_declare`,
+  `reject_generic_declare_class`, `reject_generic_abstract`)
+- **a method or a constructor with no body, a constructor's return type**:
+  `` Method `m` of class `Point` must have a body `` /
+  `` Constructor of class `Point` must have a body (no overload signatures) ``
+  / `Constructors cannot declare a return type` (`reject_cls_method_no_body`,
+  `reject_cls_ctor_no_body`, `reject_cls_ctor_return_type`)
+- **a member named by a string or a number, a parameter property**:
+  `` Members of `Point` must have plain identifier names `` /
+  ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it``
+  (`reject_cls_field_string_name`, `reject_cls_param_property`)
+- **an index signature, a `static { }` block, a construct or call signature,
+  `interface … extends`**:
+  `` Index signatures are not supported in class `Point` (object layout is fixed) ``
+  (or `interface`) /
+  `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` /
+  `` Unsupported interface member in `Point`: ConstructSignature `` /
+  ``Interface inheritance (`extends`) is not supported; list every field``
+  (`reject_cls_index_signature`, `reject_iface_index_signature`,
+  `reject_cls_static_block`, `reject_iface_member_unsupported`,
+  `reject_iface_extends`)
+- **an object literal key that is not a name, a method in an object literal**:
+  `Object literal keys must be plain identifiers` /
+  ``Unsupported object literal member: MethodDeclaration (only `key: value`)``
+  (`reject_cls_literal_key`, `reject_cls_literal_member`)
+- **an object literal typed as a class with methods**:
+  `` `Counter` has methods, so it is made only by `new`: ... Write `new Counter(...)` ``
+  (`reject_class_literal_*`, `nl2556_class_literal`)
+- **more than one class, interface or enum form in one declaration**: the
+  first in source order, alone; a `static` or `readonly` header before one is
+  the member's own refusal (`reject_cls_sweep_together`)
+- **a side-effect import, `import "./m"`**:
+  `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code ``
+  (`reject_side_effect_import`)
+- **`import type`, `{ type A }`**: `Type-only imports are not supported`
+  (`reject_import_type_only`, `nl2243_type_only_import`)
+- **a default import: `import d from`, `import d, { a } from`,
+  `{ default as d }`**:
+  `` Default imports are not supported; use `import { math } from "./locals"` ``
+  (`reject_default_import`)
+- **a namespace import**:
+  `` Namespace imports (`import * as math`) are not supported; import functions by name ``
+  (`reject_namespace_import`)
+- **a specifier that is not a string literal**:
+  `Import specifier must be a string literal`
+  (`reject_import_template_specifier`, `nl2212_template_specifier`)
+- **`export { a }`, `export { a } from`, `export * from`,
+  `export * as ns from`, `export type { A }`**:
+  `` `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself ``
+  (`reject_export_list`, `nl2128_export_list`)
+- **`export default <value>`, `export =`**:
+  `` `export default` / `export =` are not supported; use a named `export function` ``
+  (`reject_export_assignment`, `nl2129_export_default_value`)
+- **`export default function f`**:
+  `` `export default` is not supported; use a named `export function` ``
+  (`reject_export_default`)
+- **`export default class C`, `export default interface I`**:
+  `` `export default` is not supported; use a named `export` ``
+  (`reject_cls_export_default`, `reject_generic_export_default`,
+  `nl2131_export_default_class`)
+- **`export import`**:
+  `` Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration) ``
+  (or `ImportDeclaration`) (`reject_export_import_equals`,
+  `nl2226_export_import_equals`)
+- **`import x = require("./m")`, `import x = A.B`, `export as namespace X`**:
+  `Only top-level function declarations are supported in Phase 1 (found ImportEqualsDeclaration)`
+  (or `NamespaceExportDeclaration`) (`reject_module_sweep_together`)
+- **a function or an import declared inside a body**:
+  `Unsupported statement in Phase 1: FunctionDeclaration` (or
+  `ImportDeclaration`) (`reject_fn_nested`, `reject_fn_nested_template`)
+- **the empty statement `;` in a body**:
+  `Unsupported statement in Phase 1: EmptyStatement` (`reject_stmt_empty`)
+- **more than one import or export form in one module**: the checker's
+  refusals one each, since each is its own declaration; a Phase 0 one
+  (NL1057–NL1059) alone, as every Phase 0 rule is, because Phase 0 halts the
+  module before the checker runs (`reject_module_sweep_together`)
+- **unknown identifier**: `` Unknown identifier `x` ``
+  (`reject_unknown_ident`)
+- **wrong arity**: `` `f` expects 1 argument(s), got 2 `` (`reject_arity`)
+- **mixed operand types**:
+  `` Operator `+` requires two operands of the same numeric type, got i32 and boolean ``
+  (`reject_type_mismatch`, `reject_i64_mixed`)
+- **string `+` number**:
+  `` ... got string and i32 (no implicit string conversion; use a template literal) ``
+  (`reject_str_plus_number`)
+- **arithmetic compound assignment**:
+  `` Operator `+=` requires two operands of the same numeric type, got string and string ``
+  — one rule, naming the token that was written, for a local, a field and an
+  element alike: the target must be numeric (so `+=` never concatenates) and
+  the value must be exactly its type (`reject_cf_compound_string`,
+  `reject_cf_compound_widths`)
+- **object literal field of the wrong type**:
+  `` Field `code` of `IoError` expects a value of type i32, got f64 ``
+  (`reject_struct_field_f64`, `reject_struct_field_u8`)
+- **a dotted call that is not a builtin**:
+  `` Unknown builtin `foo.bar` (supported: console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, ...) ``
+  — the callee is named, not its receiver, whether the receiver is a namespace
+  or not (`reject_unknown_builtin`, `reject_arch_call`)
+- **bitwise operator on a non-integer**:
+  `` Operator `&` requires two operands of the same integer type, got f64 and f64 ``
+  (with
+  `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) ``
+  appended in that mode) /
+  `` Operator `~` requires an integer operand, got f64 ``; a compound form
+  names itself,
+  `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``,
+  for a local, a field and an element alike (`reject_bit_f64`,
+  `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`,
+  `reject_arr_element_bitwise_f64`)
+- **bitwise operator on booleans**:
+  `` Operator `&` is not available on boolean (use `&&`) `` (`|` names `||`,
+  `^` names `!==`, `~` names `!`) (`reject_bit_boolean`)
+- **ordering on booleans / strings / structs**:
+  `` Operator `<` requires two numeric operands, got string and i32 ``
+  (`reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`,
+  `reject_cls_ordering`)
+- **`T | null` misuse**: see [Nullable types](#nullable-types)
+  (`reject_nullable_scalar`, `reject_null_to_nonnull`,
+  `reject_null_field_access`, `reject_null_compare_two`,
+  `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`,
+  `reject_null_narrowing_assigned_in_chain`,
+  `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked`)
+- **non-integer literal in i32 mode**:
+  `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) ``
+  (`reject_float_in_i32`)
+- **non-boolean condition**:
+  `Condition must be boolean, got i32 (Nish has no truthiness)`
+  (`reject_cf_nonbool_cond`)
+- **`&&`/`||` on numbers**:
+  `` Operator `&&` requires boolean operands, got i32 and i32 ``
+  (`reject_cf_logical_numbers`)
+- **ternary arm mismatch**:
+  `Ternary branches must have the same type, got i32 and boolean`
+  (`reject_cf_ternary_mismatch`)
+- **assignment to `const` / parameter**:
+  `` Cannot assign to `x` because it is a const `` / `... a parameter`
+  (`reject_assign_const`, `reject_assign_param`, `reject_cf_compound_const`,
+  `reject_cf_incdec_param`)
+- **missing return**:
+  `` Function `f` must return a value of type i32 on every path ``
+  (`reject_missing_return`, `reject_cf_missing_return_loop`)
+- **unreachable code**: `Unreachable code after return` / `break` /
+  `process.exit` / ... (`reject_unreachable`,
+  `reject_cf_unreachable_after_break`, `reject_exit_unreachable`)
+- **`break`/`continue` outside a loop**: `` `break` outside of a loop ``
+  (`reject_cf_break_outside`, `reject_cf_continue_outside`)
+- **`console.log` misuse**:
+  `` `console.log` expects exactly 1 argument, got 0 `` /
+  `returns void and can only be used as a statement`
+  (`reject_console_log_noargs`, `reject_console_log_two_args`,
+  `reject_console_log_as_value`)
+- **unknown property / method / builtin**:
+  `` Unknown property `foo` on string `` /
+  `` Unknown property `length` on i32 `` /
+  `` Unknown builtin `Math.foo` (supported: ...) ``
+  (`reject_unknown_property`, `reject_length_on_number`,
+  `reject_unknown_builtin`)
+- **`Math.*` on an integer**:
+  `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``
+  (`reject_math_i32`)
+- **conversion of a non-number**:
+  `` `toI32` expects a number (i32, i64, or f64), got string ``
+  (`reject_toi32_string`)
+- **I/O with the wrong type**:
+  `` `readFileSync` expects an argument of type string, got i32 ``
+  (`reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type`)
+- **I/O with the wrong arity**:
+  `` `readdirSync` expects exactly 1 argument, got 2 ``;
+  `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``;
+  `` `spawnPiped` expects exactly 4 arguments, got 3 ``;
+  `` `spawnPipedWithin` expects exactly 5 arguments, got 4 ``;
+  `` `monotonicNanos` expects exactly 0 arguments, got 1 ``
+  (`reject_readdir_arity`, `reject_spawn_to_arity`,
+  `reject_spawn_piped_arity`, `reject_spawn_piped_within_arity`,
+  `reject_monotonic_arity`)
+- **array errors**: see [Arrays](#array-literals), [Element
+  access](#element-access), [`for...of`](#for-const-x-of-a) (`reject_arr_*`)
+- **element reference held across a `push` or `pop`**:
+  `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it ``
+  — see [Arrays of records are contiguous](#arrays-of-records-are-contiguous)
+  (`reject_arr_element_across_push`, `reject_arr_element_loop_push`,
+  `reject_arr_element_push_self`)
+- **`push` or `pop` on a receiver spelled `Int32Array`, `Float32Array`,
+  `Float64Array` or `BigInt64Array` (NL2415)**:
+  `` `push` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop ``
+  (`reject_typed_push_f64`, `reject_typed_pop_receivers` ([Typed-array names
+  have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)))
+- **class and interface errors**: see [Classes](#classes),
+  [Interfaces](#interfaces-and-object-literals) (`reject_cls_*`)
+- **`extends` or `super` on a class (WP25: there is no inheritance)**:
+  `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them ``
+  /
+  `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach ``
+  (`reject_cls_extends`, `reject_cls_super`)
+- **a class does not cover the interface it `implements`**:
+  `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) ``
+  (`reject_cls_implements_short`, `reject_cls_implements_mismatch`)
+- **module errors**: see [`export` and `import`](#export-and-import),
+  [`main`](#main) (`reject_bare_import`, `reject_default_import`,
+  `reject_namespace_import`, `reject_side_effect_import`,
+  `reject_missing_module`, `reject_std_escaping_module`, `reject_export_*`,
+  `reject_main_params`, `tests/link/*`)
+- **unsupported syntax the validator allows**:
+  `Unsupported statement in Phase 1: <Kind>` /
+  `Unsupported expression in Phase 1: <Kind>` /
+  `` Unsupported binary operator `**` `` /
+  `` Unsupported unary operator `+` `` / `` Unsupported type `...` `` (*(CLI
+  only)*)
 
 ## Known inconsistencies
 

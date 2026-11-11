@@ -7,6 +7,10 @@ Nish and get it accepted on the first try**. It is a digest, not the authority:
 This page exists because LANGUAGE.md is 2,300 lines written to be *read*, and
 what an author needs is the rules in one pass with the traps first.
 
+> Its short form, published to agents by the docs site, is the
+> [`writing-nish` skill](../skills/writing-nish/SKILL.md): a change here to the
+> loop, the unlearn table or the checklist below moves it too.
+
 > Working **on the compiler** rather than **in the language**? That is a
 > different document: [`AGENTS.md`](../AGENTS.md) and [`.claude/`](../.claude/).
 
@@ -168,6 +172,7 @@ rejects. This table is the highest-value part of the page.
 | `xs.reduce(f)`, `.forEach`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
 | `xs.find(f)` | `` `find` is not supported: TypeScript types its answer `T \| undefined` … `` (NL2697) | `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }` |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
+| `x.toFixed(2)`, `s.split(sep, limit)` | `` Unknown method `toFixed` on f64 `` | `toFixed(x, 2)` and `splitLimit(s, sep, limit)` from `nish/text` |
 | `a?.b`, `a ?? b` | `?.` only in a chain that ends in `??`; `??` only on a `T \| null`, a chain or `m.get(k)` | `a?.b ?? d`, `a ?? d`, or `if (a !== null)` first |
 | `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |
 | `typeof x`, `x instanceof C`, `"k" in o`, `delete o.k`, `void 0`, `a, b` | each refused by name (`` `typeof` is forbidden ``, …) | there is no runtime type information: a value's type is its declared one |
@@ -223,6 +228,43 @@ const xs = [1, 2, 3];
 if (xs.length !== 0) {
   console.log("non-empty");
 }
+```
+
+### Lines that type-check and are still refused
+
+Some mistakes have nothing wrong with their types. rustc warns about them and
+Clippy denies some. Nish refuses all of them, because each is a bug far more
+often than a choice
+([LANGUAGE.md](LANGUAGE.md#mistakes-every-type-accepts)). They are reported
+only once the program has no other error, so they show up last.
+
+| You wrote | Code | Write instead |
+| --- | --- | --- |
+| a local nothing reads, or only stores into (`n++` that nothing reports) | NL2712 | use it, delete it, or name it `_n`; a loop that only counts is `for (const _x of xs)` |
+| a statement with no call, store or `await` in it: `a === b;`, `p.x + 1;` | NL2713 | `a = b`, or delete the line |
+| `x = x`, `p.x = p.x` | NL2714 | the value you meant to store |
+| the same operand on both sides: `a.w === a.w`, `xs[i] - xs[i]`, `ok && ok` | NL2715 | the other operand you meant; to compare a value with itself, copy it to a second `const` first. On a float, `x !== x` (NaN) and `x - x` are allowed |
+| `if (c) … else if (c) …`, the same condition again | NL2716 | the condition you meant for the second branch |
+| `u < 0` or `u >= 0` on a `u8`, `u16`, `u32`, `u64` | NL2717 | test before the subtraction that would wrap, or use a signed type |
+
+```ts nish:err-body NL2712
+const xs = [3, 4];
+let total = 0;
+for (const x of xs) {
+  total = total + x;
+}
+const average = total / 2;
+console.log(`${total}`);
+```
+
+```ts nish:ok-body
+const xs = [3, 4];
+let total = 0;
+for (const x of xs) {
+  total = total + x;
+}
+const average = total / 2;
+console.log(`${average}`);
 ```
 
 ## Types
@@ -988,6 +1030,9 @@ export const main = (): i32 => {
   `boolean` or an enum**: map strings to numbers first.
 - **`dst` may not be reachable from an element of `src`**: mapping `Row[]` into
   `f64[]` is refused when `Row` holds an `f64[]`, because it could be `dst`.
+  A `Map` or `Set` in `Row` reaches only its keys and values, so `f` may
+  `get`, `has` and `size` a `Map<string, i32>` (but not `set`, `delete`,
+  `clear` or iterate it); a `Map<string, f64[]>` is refused.
 - **A reduce's `f` is associative and `identity` is its identity** — `0` for
   `+`, `1` for `*`. The array is folded in fixed blocks and the blocks combined
   in order, so `-` or a wrong identity is refused when `f` is an arrow of one
@@ -1650,6 +1695,108 @@ export const main = (): i32 => {
 };
 ```
 
+### A tree links first child and next sibling
+
+A tree node keeps `first` and `next` links, **not a `kids: Node[]` per
+node**. Every `kids` is a 24-byte header plus a block that doubles as it
+grows, and the blocks it outgrows stay in the arena; a walk over `kids`
+follows two pointers per child where the links follow one. On a 4M-node
+tree the links took 0.52x the memory and 0.68x the time of `kids`.
+
+```ts nish:ok
+class Node {
+  kind: i32;
+  parent: Node | null;
+  first: Node | null = null;
+  next: Node | null = null;
+
+  constructor(kind: i32, parent: Node | null) {
+    this.kind = kind;
+    this.parent = parent;
+  }
+}
+
+// `last` is the parent's last child so far, or null before the first.
+const add = (parent: Node, last: Node | null, kind: i32): Node => {
+  const kid = new Node(kind, parent);
+  if (last === null) {
+    parent.first = kid;
+  } else {
+    last.next = kid;
+  }
+  return kid;
+};
+
+const sum = (n: Node): i32 => {
+  let s = n.kind;
+  let kid = n.first;
+  while (kid !== null) {
+    s = s + sum(kid);
+    kid = kid.next;
+  }
+  return s;
+};
+
+export const main = (): i32 => {
+  const root = new Node(1, null);
+  const a = add(root, null, 2);
+  add(root, a, 3);
+  add(a, null, 4);
+  console.log(`${sum(root)}`);
+  return 0;
+};
+```
+
+- Where a pass needs a node's children by index, keep a child count and a
+  `Node[]` filled once, when the node is complete, not pushed to as each child
+  arrives. `new Array<Node>(n)` is refused for a class, so fill it with `push`
+  in one go.
+- A **hot, closed table** (a token stream, a type or symbol table) uses
+  **columns**: one `i32[]` per field, each `new Array<i32>(n)` at its final
+  length, a row an `i32` index, `-1` for none. Write one out per type; no
+  generic `Pool<T>`. Measured: 0.32x the memory and 0.63x the time of `kids`.
+- `uncheckedGet` / `uncheckedSet` belong in that table's code only: an index
+  out of range there is undefined behaviour, not a panic.
+
+```ts nish:ok
+import { uncheckedGet, uncheckedSet } from "nish:unsafe";
+
+// One column per field, each allocated once at its final length.
+class Tokens {
+  kind: i32[];
+  start: i32[];
+  count: i32 = 0;
+
+  constructor(capacity: i32) {
+    this.kind = new Array<i32>(capacity);
+    this.start = new Array<i32>(capacity);
+  }
+
+  add(kind: i32, start: i32): i32 {
+    if (this.count >= this.kind.length) {
+      return -1;
+    }
+    const id = this.count;
+    uncheckedSet(this.kind, id, kind);
+    uncheckedSet(this.start, id, start);
+    this.count = id + 1;
+    return id;
+  }
+}
+
+export const main = (): i32 => {
+  const t = new Tokens(3);
+  t.add(7, 0);
+  t.add(9, 4);
+  let s = 0;
+  for (let i = 0; i < t.count; i++) {
+    s = s + uncheckedGet(t.kind, i) * uncheckedGet(t.start, i);
+  }
+  console.log(`${s}`);
+  return 0;
+};
+```
+
 ### Object literals
 
 An object literal takes its type from context — a variable annotation, the
@@ -1839,7 +1986,8 @@ export const main = (): i32 => {
   NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2559. Any
   other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
-  (`Shape | null`). An alias may name another union, which is flattened. A
+  (`Shape | null`), and a `Map`'s value is any of those (`Map<string, Shape>`,
+  `Map<string, Shape[]>`, `Map<string, Shape | null>`). An alias may name another union, which is flattened. A
   variant, or a smaller union, converts into it wherever the union is
   expected — argument, `return`, `push`, an annotated array literal, a
   ternary arm or `??` default whose other side is the union. A class that
@@ -1911,8 +2059,9 @@ export const main = (): i32 => {
   anywhere or the whole type, which accepts a few comparisons `tsc` refuses
   (TS2367; LANGUAGE.md, "Accepted here, refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,
-  `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
-  union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
+  `Result<Shape, E>`, a generic call binding `T` to a union: NL2533; a
+  built-in `Map`'s value is the one that may be a union, though `nish/map`'s
+  generic `getOrInsert`/`reserve` on such a map is NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
   is not `Shape[]`), and inferred unions (an unannotated ternary or array of
   two variants).
 - **Declare what you store.** A store of a value that is only some of the
@@ -2275,7 +2424,16 @@ a `\u` escape `nish/json` decodes) is one unit per byte, and counts its bytes.
 
 **Files and the system.** `readFileSync(path)` (exits 1 on failure),
 `readFileSyncOrNull(path)` (`string | null`), `readFileBytesSync(path)`
-(`u8[] | null`, the bytes as they are on disk), `writeFileSync(path, data)`,
+(`u8[] | null`, the bytes as they are on disk), and a file a window at a
+time: `fileOpen(path)` (an `i32` descriptor for a regular file, or a negative
+Linux errno: `-2` missing, `-13` denied, `-21` a directory, `-22` not a
+regular file), `fileReadAt(fd, buf, off, len, pos)` (at most `len` bytes from
+`i64` byte `pos` into `buf[off, off + len)`, a `u8[]`; the count, `0` at the
+end, short reads allowed so loop; the window panics like `netRead`'s),
+`fileSize(fd)` (an `i64`, which can change between calls), `fileClose(fd)`
+(never call it twice: the number may name another file by then); all four
+`fs.read`, refused on freestanding `wasm32` (NL2718) but not under
+`--profile wasi`; `writeFileSync(path, data)`,
 `appendFileSync(path, data)`, `writeFileBytesSync(path, bytes)` (a `u8[]` as
 it is; `i32`: the length, or a negative errno), `renameSync(from, to)` (`0` or
 a negative errno; atomic on one filesystem, `-18` across two, so write the
@@ -2292,6 +2450,9 @@ bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 `spawnPiped(argv, stdin, stdout, stderr)` (stdin from a `u8[]`, both outputs
 appended to `u8[]`s, the status; `-2` past 16 MiB; the way to hand a child a
 secret, never argv or the environment),
+`spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)` (the same with a
+deadline in milliseconds, negative for none: `-3` when it passes, the child
+killed and its bytes so far kept; only the child's pid is killed),
 `getenv(name)` (`string | null` — unset and empty are different answers),
 `realpathSync(path)` (`string | null`; symbolic links resolved, absolute, and
 `null` when it does not resolve),
@@ -2579,7 +2740,17 @@ literal (NL2493), an unknown option (NL2494), a name that is no field (NL2495),
 a rename to a non-string (NL2496) or to a key that is not valid UTF-8
 (NL2499), two fields with one key (NL2497). A
 `JsonNumber` field keeps a number's text byte for byte (`text`, `i64`, `u64`,
-`f64`, `setText`).
+`f64`, `setText`). A tagged union of classes is a field, an array element or
+`jsonEncode`'s value too: the object with its tag key first, the tag the
+member's name or the variant's `tag` option. Decode one with
+`const u = jsonDecodeUnion(d, prev)` (never `jsonDecode`, NL2719, and no type
+argument): it answers `prev` refilled when the tag matches, else a new variant,
+and `prev` on failure (only at the top: a nested union slot may hold the new
+variant, half read, so check `d.failed`); a bad tag is `JSON_DECODE_TAG`.
+`tag: ""` is the same as no `tag`. Every variant writes its
+tag under one key (NL2721) as a different string (NL2720). A `tag` on a class
+no union holds does nothing, and a JSON call on that class refuses its
+enum-member field.
 
 ```ts nish:ok
 import { JsonWriter } from "nish/json";
@@ -2816,6 +2987,16 @@ bytes at a time, so prefer it to a `charCodeAt` loop over a long text — and
 never call it on secret data, because its time says where the match is.
 (No block: a program importing `nish/text` writes two `.ll` files;
 `tests/link/std_text_index_of_any` is its program.)
+
+**Format a number with fixed digits, or split with a limit** — there are no
+methods on a number and no optional parameters, so `x.toFixed(n)` is
+`toFixed(x, n)` and `text.split(sep, limit)` is `splitLimit(text, sep, limit)`,
+both from `nish/text` and both answering what JavaScript does. `toFixed`
+rounds the exact binary value (`toFixed(1.005, 2)` is `"1.00"`) and panics
+outside 0 to 100 digits; `splitLimit` keeps the first `limit` pieces, a
+negative limit keeps all of them, and an empty separator panics.
+(No block, as for `nish/text`; `tests/link/std_text_to_fixed` and
+`tests/link/std_text_split_limit` are its programs.)
 
 **Match a pattern** — there is no `RegExp` and no `/re/` literal:
 `regexCompile(pattern, flags)` from `nish/regex` answers a
@@ -3132,22 +3313,25 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    in an object-literal property or a method argument expecting a width?
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
-8. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside a `T | null`, a chain or `Map.get`), `?.` without a `??`, a cast, a
+8. Is every local read, and does every statement do something? An unread
+   local, `x = x`, `a === a` or a repeated `else if` is an error
+   ([Lines that type-check and are still refused](#lines-that-type-check-and-are-still-refused)).
+9. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside a `T | null`, a chain or `Map.get`), `?.` without a `??`, a cast, a
    stored or returned callback, a generic *alias*, or `extends`?
-9. Does it reach only what you meant it to? `nish file.ts --emit-capabilities
+10. Does it reach only what you meant it to? `nish file.ts --emit-capabilities
    caps.json` lists every capability each function can reach — files, processes,
    the network, the environment, the clock, entropy, signals, `exit`, C calls —
    with the call chain that reaches it, and `nish run --capabilities file.ts`
    prints the one-line summary ([LANGUAGE.md](LANGUAGE.md#capabilities)).
    A package that must not touch the network says so in `package.json`
    ([Holding it to its capabilities](#holding-it-to-its-capabilities)).
-10. Must it never panic? Compile with `--deny-panics` (or list the module in
+11. Must it never panic? Compile with `--deny-panics` (or list the module in
    `package.json`'s `"nish": { "noPanic": [...] }`): every index, division,
    signed `+ - *`, `pop`, range entry, `expect` and exiting call it cannot
    prove is an error
    naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)); an
    `uncheckedGet` or `uncheckedSet` behind its `nish:unsafe` import is allowed.
-11. If you are adding to this repository: `npm run check` and the touched
+12. If you are adding to this repository: `npm run check` and the touched
    `node tests/run.js` sections green locally, every CI `test` shard green
    ([CLAUDE.md](../CLAUDE.md#definition-of-done)), and a new construct ships a
    golden `.ll`, an `llvm-as` pass, a native round trip, a negative test, its

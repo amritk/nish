@@ -702,6 +702,58 @@ const caseEnv = (file) => {
 const selectedCases = cases.filter((name) => !only || name.includes(only))
 
 /**
+ * The files the WP44 file cases open and cannot make themselves, made once
+ * before any section runs, because the cases run natively here and under Node
+ * in the differential section, which may be another shard: a FIFO and a
+ * socket for `file_open_errors` (the language has no `mkfifo`, and a socket
+ * bound by the program would not run under Node), and a sparse file of
+ * 2^32 + 16 bytes for `file_size_large`, made with `fs.truncateSync`, so it
+ * costs no disk. A process that exits without closing its server leaves the
+ * socket file behind, which is all `fileOpen` needs.
+ */
+const prepareFileCases = () => {
+  fs.mkdirSync(buildDir, { recursive: true })
+  const fifo = path.join(buildDir, "file_open_errors.fifo")
+  const sock = path.join(buildDir, "file_open_errors.sock")
+  for (const file of [fifo, sock]) {
+    fs.rmSync(file, { force: true })
+  }
+  // Through `sh`, which is the binary knip sees, so `mkfifo` needs no entry of its own in knip.json.
+  const made = spawnSync("sh", ["-c", 'mkfifo "$0"', fifo], { encoding: "utf8" })
+  const bound = spawnSync(
+    "node",
+    ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => process.exit(0))`],
+    { encoding: "utf8", timeout: 10000 }
+  )
+  const large = path.join(buildDir, "file_size_large.bin")
+  fs.closeSync(fs.openSync(large, "w"))
+  fs.truncateSync(large, 2 ** 32 + 16)
+  // Without them file_open_errors would print other errnos and fail with a
+  // diff that does not say why, so a fixture that could not be made is named.
+  const kind = (file, test) => fs.existsSync(file) && test(fs.lstatSync(file))
+  check(
+    "file fixtures: the FIFO and the socket file_open_errors opens were made",
+    kind(fifo, (st) => st.isFIFO()) && kind(sock, (st) => st.isSocket()),
+    `mkfifo: ${made.status} ${made.stderr}\nsocket: ${bound.status} ${bound.stderr}`
+  )
+}
+// Only when a file case can run: no filter, a filter naming one, the guard of
+// the file-window wasi section below (which builds the fixture cases whatever
+// it matches), or a filter naming no case at all, which is another section's
+// and may run every case.
+const fileFixtureCases = ["file_open_errors", "file_size_large"]
+if (
+  !only ||
+  "file_".includes(only) ||
+  only.startsWith("file_") ||
+  "wasi".includes(only) ||
+  selectedCases.length === 0 ||
+  selectedCases.some((name) => fileFixtureCases.includes(name))
+) {
+  prepareFileCases()
+}
+
+/**
  * The lane a case's native program runs in: one program at a time, whatever
  * else section A has in flight.
  *
@@ -1624,6 +1676,9 @@ const TEXT_REFUSALS = [
   ["std_text_split_empty_separator", "split: an empty separator"],
   ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
   ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
+  ["std_text_split_limit_empty_separator", "splitLimit: an empty separator"],
+  ["std_text_to_fixed_negative_digits", "toFixed: digits must be 0 to 100"],
+  ["std_text_to_fixed_too_many_digits", "toFixed: digits must be 0 to 100"],
 ]
 
 /**
@@ -1704,6 +1759,7 @@ const DEALT_SECTIONS = {
   },
   runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
   sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
+  fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
   differential: { name: "the WP13 differential section", selected: selects("differential") },
   p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
   netStartup: { name: "the net servers' startup links", selected: true, tail: true },
@@ -3080,6 +3136,106 @@ if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
   }
 }
 
+// ---- The file-window builtins under WASI (WP44 F2) --------------------------------
+//
+// `fileOpen`, `fileReadAt`, `fileSize` and `fileClose` are `open`, `pread`,
+// `fstat` and `close` through wasi-libc, so each case that reads a file is
+// built with `--profile wasi`, run by examples/wasi-host.mjs (which preopens
+// the repository root, where the cases' relative paths start) and held to the
+// same `.out` as its native run. `file_open_errors` is the one that showed a
+// gap: WASI resolves "" to the preopened directory, so the runtime refuses an
+// empty path, and a path holding a NUL, before it asks.
+if (!only || "file_".includes(only) || only.startsWith("file_") || "wasi".includes(only)) {
+  const fileCases = [
+    "file_read_at",
+    "file_read_at_eof",
+    "file_read_at_pos",
+    "file_open_errors",
+    "file_size_large",
+    "mem_file_stream_flat",
+  ]
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const fileDir = path.join(buildDir, "file-wasi")
+    fs.rmSync(fileDir, { recursive: true, force: true })
+    fs.mkdirSync(fileDir, { recursive: true })
+    for (const name of fileCases) {
+      const module = path.join(fileDir, `${name}.wasm`)
+      const source = path.join(casesDir, `${name}.ts`)
+      const built = spawnSync(NISH, [source, "-o", fileDir + path.sep, "--link", module, "--profile", "wasi"], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const ran =
+        built.status === 0
+          ? // A host that ignored O_NONBLOCK would block on the FIFO's open: fail, do not hang the shard.
+            spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], {
+              cwd: root,
+              encoding: "utf8",
+              timeout: 60000,
+            })
+          : built
+      const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
+      check(
+        `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints its .out`,
+        ran.status === 0 && ran.stdout.trim() === want.trim(),
+        shown(ran)
+      )
+    }
+  } else {
+    skip(
+      `skipped: file_: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the file-window cases are not run`
+    )
+  }
+}
+
+// WP44 §9 Q7: the checker refuses the four file builtins on a wasm32 target
+// (NL2718), but IR compiled for the host reaches `--profile wasm` unchecked.
+// runtime-wasm.c answers each -38 (`ENOSYS`), so such a module links, imports
+// nothing, and every call says there is no file system.
+if (!only || only.startsWith("file_") || "file_wasm_stubs".includes(only)) {
+  if (has("wasm-ld")) {
+    const stubsTs = path.join(buildDir, "file_wasm_stubs.ts")
+    const stubsLl = path.join(buildDir, "file_wasm_stubs.ll")
+    const stubsWasm = path.join(buildDir, "file_wasm_stubs.wasm")
+    fs.writeFileSync(
+      stubsTs,
+      [
+        'export function openProbe(): i32 { return fileOpen("missing"); }',
+        "export function readProbe(): i32 {",
+        "  const buf: u8[] = new Array<u8>(4);",
+        "  const pos: i64 = 0;",
+        "  return fileReadAt(3, buf, 0, 4, pos);",
+        "}",
+        "export function sizeProbe(): i64 { return fileSize(3); }",
+        "export function closeProbe(): i32 { return fileClose(3); }",
+        "",
+      ].join("\n")
+    )
+    const sc = spawnSync(NISH, [stubsTs, "-o", stubsLl], { cwd: root })
+    const sl =
+      sc.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", stubsLl, "runtime/runtime-wasm.c", "-o", stubsWasm, "--profile", "wasm"],
+            { cwd: root }
+          )
+        : sc
+    const stubsProbe = [
+      "const m = new WebAssembly.Module(require('fs').readFileSync(process.argv[1]))",
+      "const e = new WebAssembly.Instance(m, {}).exports",
+      "console.log([WebAssembly.Module.imports(m).length, e.openProbe(), e.readProbe(), e.sizeProbe(), e.closeProbe()].join(' '))",
+    ].join("\n")
+    const sr = sl.status === 0 ? spawnSync("node", ["-e", stubsProbe, stubsWasm], { cwd: root }) : null
+    check(
+      "wasm profile links host IR calling fileOpen, fileReadAt, fileSize and fileClose, and each answers -38",
+      sr !== null && String(sr.stdout).trim() === "0 -38 -38 -38 -38",
+      String(sc.stderr) + String(sl.stderr) + (sr ? String(sr.stdout) + String(sr.stderr) : "")
+    )
+  } else {
+    skip("skipped: file_wasm_stubs: no wasm-ld: the --profile wasm link of the file builtins is not checked")
+  }
+}
+
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
 //
 // `tests/cases/net_udp_echo` binds, prints its port and echoes each datagram to
@@ -3998,6 +4154,29 @@ for (const name of [
     `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
     r.status === 1 && errors.length === 1,
     String(r.stderr)
+  )
+}
+
+// ---- The mistakes every type accepts wait for every other rule (src/hygiene.ts) ---------
+// `reject_hygiene_held` has a type error and an unread local. The local's
+// finding is held until everything else passes, so the count is what says the
+// type error was reported alone; a `.err` substring could not.
+for (const name of ["reject_hygiene_held"]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  const at = selectedCases.indexOf(name)
+  const r = at < 0 ? null : caseResults[at]
+  const errors =
+    r === null
+      ? []
+      : String(r.stderr)
+          .split("\n")
+          .filter((l) => /:\d+:\d+: error: /.test(l))
+  check(
+    `${name}: an unread local is not reported beside the type error that stops the program`,
+    r !== null && r.status === 1 && errors.length === 1,
+    r === null ? "(no such case)" : String(r.stderr)
   )
 }
 
@@ -6110,6 +6289,11 @@ if (!only || "arena_removed".includes(only)) {
 //                  to be refused at several sites (tests/nish/run.ts reads only the
 //                  needle, so expected.err keeps it)
 //   expected.ir    lines (substring match) that must appear in some emitted module
+//   expected.once  lines each of which exactly one emitted line contains, to pin that a
+//                  function is defined once; `@fn :: text` asks it of the body of the
+//                  function `@fn` alone, to pin the call one function makes (that
+//                  name must be defined in exactly one module); required, and not
+//                  empty, for a program that decodes a typed JSON union
 //   expected.caps.json  the `--emit-capabilities` report, byte for byte (WP35)
 //   expected.portability  the `--warn-portability --json` portability objects, one per
 //                  line, as a case's `.portability` (WP33): a second compile with the
@@ -6430,6 +6614,54 @@ const runLinkProgram = async (name) => {
         `link/${name}: emitted IR contains every expected.ir line`,
         missing.length === 0,
         missing.map((l) => `missing: ${l}`).join("\n")
+      )
+    }
+
+    // A program whose IR holds a typed JSON union's function pins who calls
+    // it, so that deleting the pins cannot pass unnoticed.
+    const unionRoute = modules.some((m) => m.ir.includes("define internal %union.tagged* @.json.decode.union."))
+    if (unionRoute || fs.existsSync(side("expected.once"))) {
+      const once = fs.existsSync(side("expected.once")) ? read("expected.once") : ""
+      const wants = once
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+      expect(`link/${name}: expected.once is there and pins at least one line`, wants.length > 0)
+      const lines = modules.flatMap((m) => m.ir.split("\n"))
+      // Each function's bodies, by the name its `define` line gives it: an
+      // internal function may have the same name in two modules.
+      const bodies = new Map()
+      for (const m of modules) {
+        let current = null
+        for (const line of m.ir.split("\n")) {
+          const defined = /^define [^@]*(@[^(]+)\(/.exec(line)
+          if (defined) {
+            current = []
+            const seen = bodies.get(defined[1]) || []
+            seen.push(current)
+            bodies.set(defined[1], seen)
+          } else if (line === "}") {
+            current = null
+          } else if (current) {
+            current.push(line)
+          }
+        }
+      }
+      const wrong = wants.flatMap((want) => {
+        const scoped = want.indexOf(" :: ")
+        const fn = scoped < 0 ? null : want.slice(0, scoped)
+        const text = scoped < 0 ? want : want.slice(scoped + 4)
+        const found = fn === null ? [lines] : bodies.get(fn) || []
+        if (found.length !== 1) {
+          return [`${found.length} function(s) named ${fn}, not 1: ${want}`]
+        }
+        const count = found[0].filter((l) => l.includes(text)).length
+        return count === 1 ? [] : [`${count} line(s), not 1: ${want}`]
+      })
+      expect(
+        `link/${name}: each expected.once line is on exactly one emitted line`,
+        wrong.length === 0,
+        wrong.join("\n")
       )
     }
 
@@ -10371,6 +10603,164 @@ if (dealtHere("sqliteLink")) {
           "sqlite-link: the napi addon exports no `sqlite3_` symbol",
           b.status === 0 && dynamic.status === 0 && !dynamic.stdout.includes("sqlite3_"),
           b.stderr + dynamic.stderr + dynamic.stdout.slice(0, 2000)
+        )
+      }
+    }
+  }
+}
+
+// ---- WP44: the file-server example's flat memory ----------------------------------------
+// examples/file-server.ts streams one file through a fixed 64 KiB window with
+// `fileReadAt` and `Http1Connection.write`, so its peak resident set must not
+// follow the file. It serves (a) a file one window long and (b) one 1,024
+// windows long (64 MiB), each from a fresh process, since VmHWM only rises,
+// to a reader that stalls 250 ms after its first MiB and 5 ms after each MiB
+// after it, so the kernel's socket buffers can fill and the server meet
+// H1_AGAIN and partial takes (the check does not count them: it holds the
+// memory and the bytes, whatever path they took); the body must hash to the
+// file's, and (b)'s VmHWM must stay within `FILE_SERVER_HWM_BAND` of (a)'s.
+//
+// The band. Ten runs of each file (Linux x64, `--profile speed`) read VmHWM at
+// 1,888 to 1,896 kB for both: no difference between the files beyond a spread
+// of 8 kB, two pages. The band is 256 KiB, 32 times that spread and four
+// windows, so a server that held four more windows than it does, or any part
+// of the file proportional to its size, fails; the same program with an 8 MiB
+// window read 10,024 kB on (b).
+if (dealtHere("fileServer")) {
+  const FILE_SERVER_HWM_BAND = 256
+  if (process.platform !== "linux") {
+    skip("file-server: VmHWM is read from /proc, which only Linux has")
+  } else if (!HAS_CLANG) {
+    skip("file-server: clang not on PATH, so nothing can be linked")
+  } else {
+    const fsDir = path.join(buildDir, "file-server")
+    fs.rmSync(fsDir, { recursive: true, force: true })
+    fs.mkdirSync(fsDir, { recursive: true })
+    const exe = path.join(fsDir, "file-server")
+    const built = spawnSync(
+      NISH,
+      [path.join(root, "examples", "file-server.ts"), "-o", fsDir + path.sep, "--link", exe, "--profile", "speed"],
+      { cwd: root, encoding: "utf8", timeout: 300_000, killSignal: "SIGKILL" }
+    )
+    // One fetch from a fresh server: the response head, the body's length and
+    // SHA-256, and the server's VmHWM in kB once the body is in. The server is
+    // killed whatever happens, and the whole exchange has a deadline.
+    const serveOnce = (file, method) =>
+      new Promise((resolve) => {
+        const server = spawn(exe, [file, "0"], {
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 90_000,
+          killSignal: "SIGKILL",
+        })
+        let out = ""
+        let fetching = false
+        let settled = false
+        const finish = (r) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          server.kill("SIGKILL")
+          resolve({ ...r, out })
+        }
+        const timer = setTimeout(() => finish({ error: "timed out after 60 s" }), 60_000)
+        server.on("error", (e) => finish({ error: String(e) }))
+        server.on("exit", (code, signal) => finish({ error: `the server exited (${code ?? signal})` }))
+        server.stderr.on("data", (d) => (out += d))
+        server.stdout.on("data", (d) => {
+          out += d
+          const port = /http:\/\/127\.0\.0\.1:(\d+)\//.exec(out)
+          if (port === null || fetching) return
+          fetching = true
+          const socket = net.connect(Number(port[1]), "127.0.0.1")
+          const hash = crypto.createHash("sha256")
+          let head = Buffer.alloc(0)
+          let inBody = false
+          let got = 0
+          let sincePause = 0
+          let pauses = 0
+          socket.on("connect", () => socket.write(`${method} / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`))
+          socket.on("data", (chunk) => {
+            if (!inBody) {
+              head = Buffer.concat([head, chunk])
+              const end = head.indexOf("\r\n\r\n")
+              if (end < 0) return
+              inBody = true
+              chunk = head.subarray(end + 4)
+              head = head.subarray(0, end)
+            }
+            hash.update(chunk)
+            got += chunk.length
+            sincePause += chunk.length
+            if (sincePause >= 1 << 20) {
+              sincePause = 0
+              socket.pause()
+              setTimeout(() => socket.resume(), pauses++ === 0 ? 250 : 5)
+            }
+          })
+          socket.on("error", (e) => finish({ error: String(e) }))
+          socket.on("close", () => {
+            let hwm = -1
+            try {
+              const status = fs.readFileSync(`/proc/${server.pid}/status`, "utf8")
+              hwm = Number(/VmHWM:\s+(\d+) kB/.exec(status)?.[1] ?? -1)
+            } catch {
+              // The server is gone; `hwm` stays -1 and the check says so.
+            }
+            finish({ head: head.toString("latin1"), got, sha: hash.digest("hex"), hwm })
+          })
+        })
+      })
+    if (check("file-server: examples/file-server.ts links", built.status === 0, shown(built))) {
+      const window = path.join(fsDir, "window.bin")
+      const large = path.join(fsDir, "large.bin")
+      let written = true
+      try {
+        fs.writeFileSync(window, crypto.randomBytes(1 << 16))
+        const fd = fs.openSync(large, "w")
+        for (let k = 0; k < 64; k++) {
+          fs.writeSync(fd, crypto.randomBytes(1 << 20))
+        }
+        fs.closeSync(fd)
+      } catch (e) {
+        written = false
+        check("file-server: the window-sized and 64 MiB files are written", false, String(e))
+      }
+      if (written) {
+        const peaks = {}
+        for (const [name, file] of [
+          ["window-sized", window],
+          ["64 MiB", large],
+        ]) {
+          const size = fs.statSync(file).size
+          const want = crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")
+          const r = await serveOnce(file, "GET")
+          check(
+            `file-server: the ${name} file arrives whole to a stalling reader`,
+            r.error === undefined &&
+              r.head.startsWith("HTTP/1.1 200 ") &&
+              r.head.includes(`Content-Length: ${size}`) &&
+              r.got === size &&
+              r.sha === want &&
+              r.hwm > 0,
+            JSON.stringify({ ...r, size, want })
+          )
+          peaks[name] = r.hwm
+        }
+        check(
+          `file-server: the 64 MiB file's peak RSS is within ${FILE_SERVER_HWM_BAND} kB of the window-sized one's`,
+          peaks["window-sized"] > 0 &&
+            peaks["64 MiB"] > 0 &&
+            Math.abs(peaks["64 MiB"] - peaks["window-sized"]) <= FILE_SERVER_HWM_BAND,
+          `VmHWM ${peaks["window-sized"]} kB serving 64 KiB, ${peaks["64 MiB"]} kB serving 64 MiB`
+        )
+        const headOnly = await serveOnce(large, "HEAD")
+        check(
+          "file-server: HEAD answers the length and no body",
+          headOnly.error === undefined &&
+            headOnly.head.startsWith("HTTP/1.1 200 ") &&
+            headOnly.head.includes(`Content-Length: ${1 << 26}`) &&
+            headOnly.got === 0,
+          JSON.stringify(headOnly)
         )
       }
     }
@@ -20453,6 +20843,70 @@ if (dealtHere("cliChecks")) {
     )
   }
 
+  // ---- #1328: every bodiless instance states its write facts ------------------------------
+  // `tests/bodiless-stance.js` reads `src/attributes.ts`: every `mark*` helper
+  // answers a stance, nothing else sets those facts, no call drops the answer,
+  // and every body the emitter writes is on `needsStance`'s list. Its
+  // self-test mutates the source once per rule and has each mutant refused.
+  // What gets past the text fails closed in the compiler: an instance on the
+  // list that stated no stance is given the unknown one, and
+  // `NISH_SIMULATE_ICE=nostance:<name>` drops `<name>`'s stated stance, so a
+  // spawned task that encodes into shared memory, accepted as stated, has to
+  // be refused without it.
+  if (!only || "bodiless".includes(only)) {
+    for (const args of [[], ["--self-test"]]) {
+      const r = spawnSync("node", [path.join(root, "tests", "bodiless-stance.js"), ...args], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `bodiless: the stance check${args.length > 0 ? " refuses each of its mutants" : " passes"} (${r.stdout.trim()})`,
+        r.status === 0,
+        r.stdout + r.stderr
+      )
+    }
+    const bodilessDir = path.join(buildDir, "bodiless")
+    fs.rmSync(bodilessDir, { recursive: true, force: true })
+    fs.mkdirSync(bodilessDir, { recursive: true })
+    const encodeTs = path.join(bodilessDir, "encode.ts")
+    fs.writeFileSync(
+      encodeTs,
+      [
+        'import { sleep, spawn } from "nish:async"',
+        'import { JsonWriter } from "nish/json"',
+        'import { jsonEncode } from "nish/json-typed"',
+        "class Tally { name: string = \"\"; hits: i32 = 0 }",
+        "async function work(tally: Tally, ms: i32): Promise<void> {",
+        "  await sleep(ms)",
+        "  const w = new JsonWriter(new Array<u8>(64), 0)",
+        "  jsonEncode(w, tally)",
+        "}",
+        "export async function main(): Promise<i32> {",
+        "  const tally = new Tally()",
+        "  spawn(work(tally, 1))",
+        "  await sleep(10)",
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const stated = spawnSync(NISH, [encodeTs, "-o", path.join(bodilessDir, "stated") + path.sep], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("bodiless: a task that encodes shared memory to JSON compiles", stated.status === 0, shown(stated))
+    const forgotten = spawnSync(NISH, [encodeTs, "-o", path.join(bodilessDir, "forgotten") + path.sep], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_SIMULATE_ICE: "nostance:jsonEncode<Tally>" },
+    })
+    check(
+      "bodiless: the same task is refused once `jsonEncode`'s stance is missing",
+      forgotten.status === 1 && forgotten.stderr.includes("hands `tally` to `jsonEncode<Tally>`, which stores into it"),
+      shown(forgotten)
+    )
+  }
+
   // ---- WP35: the capability report ---------------------------------------------------
   // The golden reports are the `caps_*` cases' `.caps.json` and the `tests/link/caps_*`
   // programs' `expected.caps.json`; what is checked here is everything around them:
@@ -21673,8 +22127,12 @@ if (dealtHere("releaseChecks")) {
   // program to show.
   if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(only)) {
     const guideDir = path.join(root, "docs", "guide")
+    // The writing-nish agent skill is AI.md's short form, published to agents by the
+    // docs site (`agentSkills` in scalar.config.json), so its examples are held to
+    // the same markers.
     const docPages = [
       path.join(root, "docs", "AI.md"),
+      path.join(root, "skills", "writing-nish", "SKILL.md"),
       ...fs
         .readdirSync(guideDir, { recursive: true })
         .filter((f) => f.endsWith(".md"))
@@ -27754,6 +28212,10 @@ const runFixtureUnderNode = (entry, encoding) =>
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
 // `thread_scope_task_map_reads` has two tasks read one `Map` and one `Set`,
 // and `par_map_table_reads` has a parallel map's body read them.
+// `par_map_read_into` and `par_map_read_into_keys` read a `Map` and a `Set`
+// through the element while `dst` shares their value or key type, and
+// `par_map_read_capture` reads a captured `Map` beside a `dst` parameter:
+// a table's own arrays are private to it, so neither is `dst`.
 // `thread_task_own_writes` has tasks write only what they made: a holder poked
 // through a method, a `Map` and a `Set`, an object's array fields, an array
 // handed back by a helper returning its argument, and an array under a second
@@ -27863,6 +28325,9 @@ for (const name of [
   "thread_scope_region_param_lookup",
   "thread_scope_task_map_reads",
   "par_map_table_reads",
+  "par_map_read_into",
+  "par_map_read_into_keys",
+  "par_map_read_capture",
   "thread_task_own_writes",
   "par_map_captured_strings",
   "thread_scope_libc_named_tasks",
@@ -28632,15 +29097,14 @@ if (!only || "std_text_index_of_any".includes(only)) {
 // and are held to the same bytes. That is the whole claim `codePointLength`
 // makes: its native walk counts UTF-8 lead bytes and its Node walk counts
 // UTF-16 units less the second half of each pair, and é, €, 😀, "©®±" and a
-// lone surrogate print the same count both ways.
+// lone surrogate print the same count both ways. `std_text_camel_case`, the
+// guide's example, is held here too: its `Regex.replaceAll` on a class did not
+// finish under Node until `nish/regex` stopped reading holes as zeros (#1362).
 if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
-  // `std_text_camel_case`, the guide's example, is held natively only: under
-  // the Node prelude its `Regex.replaceAll` on a class of two members does
-  // not finish, which is `nish/regex`'s and not this module's (#1362). It
-  // rejoins this list when #1362 is fixed.
-  for (const name of ["std_text", "std_text_f64"]) {
+  for (const name of ["std_text", "std_text_f64", "std_text_camel_case"]) {
     const dir = path.join(linkDir, name)
-    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    // A timeout, so a #1362 regression fails this check instead of hanging the shard.
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
     const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
     const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
     check(
@@ -28659,6 +29123,36 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
       divergent.stdout === "built from bytes: 2\nstray continuation byte: 1\njoined halves: 1, length 2\n",
     shown(divergent)
   )
+  // `toFixed` and `splitLimit` are held to JavaScript itself: each line of
+  // expected.out names its arguments, Node answers `Number(x).toFixed(n)` and
+  // `text.split(sep, limit)` for them, and the run under the prelude prints
+  // expected.out too, so the native answers, the prelude's and Node's agree.
+  for (const name of ["std_text_to_fixed", "std_text_split_limit"]) {
+    const dir = path.join(linkDir, name)
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
+    check(
+      `link/${name}: under the Node prelude it exits 0 and prints expected.out`,
+      run.status === 0 && run.stdout === out,
+      `--- native (expected.out)\n${out}--- node\n${shown(run)}`
+    )
+    const wrong = []
+    for (const line of out.trimEnd().split("\n")) {
+      const fixed = /^toFixed\((.*), (-?\d+)\) = (.*)$/.exec(line)
+      const split = /^"(.*)" "(.*)" (-?\d+) -> (\d+): (.*)$/.exec(line)
+      if (fixed) {
+        if (Number(fixed[1]).toFixed(Number(fixed[2])) !== fixed[3]) wrong.push(line)
+      } else if (split) {
+        const pieces = split[1].split(split[2], Number(split[3]))
+        if (`${pieces.length}: ${pieces.join("|")}` !== `${split[4]}: ${split[5]}`) wrong.push(line)
+      } else if (line !== '-0 gives "0": true' && line !== "same as split: true") {
+        // Each program ends with one line of its own, which the checks above
+        // cannot read; any other line is one they would silently pass.
+        wrong.push(`not checked: ${line}`)
+      }
+    }
+    check(`link/${name}: every line is JavaScript's own answer`, wrong.length === 0, wrong.join("\n"))
+  }
   // The pads count `text` in the platform's units: natively é is two bytes
   // and 😀 four, under Node one and two UTF-16 units, so each pad is a unit or
   // two longer there. expected.out holds the native answers; these are Node's.
@@ -28692,6 +29186,22 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
       )
     }
   }
+}
+
+// `nish/regex` under the Node prelude (#1362). The link loop runs
+// `std_regex_node` natively against expected.out, which JavaScript's own
+// `RegExp` wrote; here the same file runs under `runtime/nish.mjs`. Each of its
+// patterns builds the lazy DFA, whose tables are read as zeros: holes there once
+// left `[-\s]+` probing a hash table forever, so a timeout is the failure.
+if (!only || "std_regex_node".includes(only) || only.startsWith("std_regex_node")) {
+  const dir = path.join(linkDir, "std_regex_node")
+  const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
+  const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+  check(
+    "link/std_regex_node: under the Node prelude a class, a set escape and an alternation finish and print expected.out",
+    run.status === 0 && run.stdout === out,
+    `--- native (expected.out)\n${out}--- node\n${shown(run)}`
+  )
 }
 
 // WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own
@@ -29116,7 +29626,7 @@ if (!only || "std_json_typed".includes(only)) {
     "link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)",
     run.status === 1 &&
       run.stderr.includes(
-        "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
+        "nish/json-typed: jsonDecode, jsonDecodeUnion and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
       ),
     shown(run)
   )

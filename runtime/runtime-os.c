@@ -250,6 +250,84 @@ int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
   return r < 0 ? r : (int32_t)bytes->len;
 }
 
+/* ---- Streaming reads (WP44, docs/wp44-streaming-files.md): `fileOpen`,
+   `fileReadAt`, `fileSize` and `fileClose`. A program reads a regular file a
+   window at a time into a `u8[]` it owns, so nothing here allocates and the
+   arena follows the window, not the file. Every failure is a negated errno in
+   Linux's numbering whatever the platform, through `nish_fs_err`, so Darwin's
+   and WASI's numbers (WASI's `ENOENT` is 44) come out as Linux's and the Node
+   shim, which maps `err.code` by the same names, answers the same bytes. */
+
+/* The errno set of docs/wp44-streaming-files.md §3, by name; any other code,
+   WASI's `ENOTCAPABLE` among them (§9 Q7), is -5, as the shim collapses it. */
+static int32_t nish_fs_err(int e) {
+  switch (e) {
+  case ENOENT: return -2;
+  case ENXIO: return -6;
+  case EBADF: return -9;
+  case EACCES: return -13;
+  case ENOTDIR: return -20;
+  case EISDIR: return -21;
+  case EINVAL: return -22;
+  case ENFILE: return -23;
+  case EMFILE: return -24;
+  case ESPIPE: return -29;
+  case ENAMETOOLONG: return -36;
+  case ELOOP: return -40;
+  default: return -5;
+  }
+}
+
+/* `fileOpen(path)`: a descriptor for a regular file, or the errno. A path
+   holding a NUL, or none at all, answers -2, as a missing file does, before
+   any system call (RT-3): `nish_cpath` gives the first as "", and WASI would
+   resolve "" to the preopened directory rather than refuse it. `O_CLOEXEC`
+   keeps the descriptor out of a spawned child (RT-12); `O_NONBLOCK` only stops
+   a FIFO with no writer from hanging the open, and changes nothing for the
+   regular file that is all this hands out: a directory is closed again and
+   answers -21, anything else -22 (§9 Q6). `fstat` on the descriptor, so the
+   answer is about the file opened. */
+int32_t nish_file_open(const nish_str *path) {
+  const char *p = nish_cpath(path);
+  if (p != path->data || path->len == 0) return -2;
+  int fd = open(p, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+  if (fd < 0) return nish_fs_err(errno);
+  struct stat st;
+  int32_t r = fstat(fd, &st) != 0 ? nish_fs_err(errno) : S_ISREG(st.st_mode) ? 0 : S_ISDIR(st.st_mode) ? -21 : -22;
+  if (r == 0) return fd;
+  close(fd);
+  return r;
+}
+
+/* `fileReadAt(fd, buf, off, len, pos)`: `pread` into `buf[off, off + len)`,
+   which the compiled call has range-checked as `netRead`'s. A `pos` below 0 or
+   a `pos + len` past 2^63 - 1 is -22 before the kernel is asked, as Linux
+   would answer the second and Node could not be trusted to answer the first;
+   `len` 0 is 0. A negative `fd` is -9 (`EBADF`) here and in the two calls
+   below, before the kernel is asked: WASI's descriptor is unsigned, so -1
+   would reach the host as 2^32 - 1, which uvwasi answers -22. An `EINTR` before a byte moves is retried (RT-13), and the
+   count may still be short of `len` before the end. */
+int32_t nish_file_read_at(int32_t fd, nish_array *buf, int64_t off, int64_t len, int64_t pos) {
+  if (pos < 0 || len > INT64_MAX - pos) return -22;
+  if (len == 0) return 0;
+  if (fd < 0) return -9;
+  ssize_t n;
+  while ((n = pread(fd, buf->data + off, (size_t)len, (off_t)pos)) < 0 && errno == EINTR) {
+  }
+  return n < 0 ? nish_fs_err(errno) : (int32_t)n;
+}
+
+/* `fileSize(fd)`: `fstat`'s size now, which a later read may find changed. */
+int64_t nish_file_size(int32_t fd) {
+  if (fd < 0) return -9;
+  struct stat st;
+  return fstat(fd, &st) == 0 ? (int64_t)st.st_size : nish_fs_err(errno);
+}
+
+/* `fileClose(fd)`: never retried on `EINTR`, because Linux has released the
+   number by then and a retry could close a descriptor opened since. */
+int32_t nish_file_close(int32_t fd) { return fd < 0 ? -9 : close(fd) == 0 ? 0 : nish_fs_err(errno); }
+
 /* ---- Files and directories with an explicit mode (docs/security/runtime.md,
    RT-24 to RT-26): `writeFileSyncMode`, `createFileExclusiveSync` and
    `mkdirSyncMode`. Each answers a value and never exits, as the writers just
@@ -510,6 +588,28 @@ int32_t nish_spawn_with_fds(const nish_array *argv, const nish_array *fds) {
 #endif
 }
 
+#define NISH_PIPED_CAP (16u << 20)
+#ifndef __wasi__
+static int nish_pipe(int *p) {
+#ifdef __linux__
+  if (pipe2(p, O_CLOEXEC)) return -1;
+#else
+  if (pipe(p)) return -1;
+#endif
+  for (int k = 0; k < 2; k++) {
+#ifdef __linux__
+    if (p[k] > 2) continue;
+#endif
+    int moved = fcntl(p[k], F_DUPFD_CLOEXEC, 3);
+    close(p[k]);
+    p[k] = moved;
+    if (moved < 0) return -1;
+  }
+  return 0;
+}
+
+#endif
+
 /* `spawnPiped(argv, stdin, stdout, stderr)`: run the child as `nish_spawn`
    does, with `stdin`'s bytes on its standard input and its standard output
    and error appended to `stdout` and `stderr`, and answer its status. -1 is
@@ -542,36 +642,32 @@ int32_t nish_spawn_with_fds(const nish_array *argv, const nish_array *fds) {
    appends to it without feeding the output back in, and the pointer at each
    write, because that array moves when it grows and its stdin bytes stay
    its first `n`. */
-#define NISH_PIPED_CAP (16u << 20)
-#ifndef __wasi__
-static int nish_pipe(int *p) {
-#ifdef __linux__
-  if (pipe2(p, O_CLOEXEC)) return -1;
-#else
-  if (pipe(p)) return -1;
-#endif
-  for (int k = 0; k < 2; k++) {
-#ifdef __linux__
-    if (p[k] > 2) continue;
-#endif
-    int moved = fcntl(p[k], F_DUPFD_CLOEXEC, 3);
-    close(p[k]);
-    p[k] = moved;
-    if (moved < 0) return -1;
-  }
-  return 0;
-}
+/* `spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)`: the same run,
+   killed when `timeout_ms` milliseconds have passed since it started, and a
+   negative `timeout_ms` is no deadline, as `pollWait`'s is. The answers are
+   `spawnPiped`'s, plus -3 for a run the deadline ended: the child is killed
+   with SIGKILL and reaped, and the arrays keep the bytes read before the kill.
 
-#endif
-
-int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err) {
+   The deadline is CLOCK_MONOTONIC's, so a wall clock set back cannot stretch
+   it. Each `poll` waits the milliseconds left, rounded up, and an EINTR goes
+   round the loop to recompute them. A child that closes both outputs and then
+   hangs leaves the loop with no stream to wait on, so with a deadline the
+   final wait is a `WNOHANG` poll with a backoff of 1 ms doubling to 64 ms, up
+   to the deadline. Only the child's pid is killed, never a group: a grandchild
+   that holds a pipe open keeps the loop waiting until the deadline, and is not
+   killed with the child (docs/security/runtime.md, RT-49). */
+int32_t nish_spawn_piped_within(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err,
+                                int32_t timeout_ms) {
 #ifdef __wasi__
   (void)argv;
   (void)in;
   (void)out;
   (void)err;
+  (void)timeout_ms;
   return -1;
 #else
+  int timed = timeout_ms >= 0;
+  int64_t deadline = timed ? nish_monotonic_nanos() + (int64_t)timeout_ms * 1000000 : 0;
   uint64_t n = in->len, sent = 0, got[3] = { 0, 0, 0 };
   int p[6] = { -1, -1, -1, -1, -1, -1 };
   int32_t rc = -1;
@@ -604,7 +700,16 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
   }
   nish_array *to[3] = { 0, out, err };
   while (!rc && (f[0].fd >= 0 || f[1].fd >= 0 || f[2].fd >= 0)) {
-    if (poll(f, 3, -1) < 0) {
+    int wait = -1;
+    if (timed) {
+      int64_t left = deadline - nish_monotonic_nanos();
+      if (left <= 0) {
+        rc = -3;
+        break;
+      }
+      wait = (int)((left + 999999) / 1000000);
+    }
+    if (poll(f, 3, wait) < 0) {
       if (errno != EINTR) rc = -1;
       continue;
     }
@@ -648,8 +753,26 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
   if (rc) kill(pid, SIGKILL);
   for (int k = 0; k < 3; k++)
     if (f[k].fd >= 0) close(f[k].fd);
-  int status;
-  while (waitpid(pid, &status, 0) < 0) {
+  int status = 0, reaped = 0;
+  for (long nap = 1000000; timed && !rc && !reaped;) {
+    pid_t w = waitpid(pid, &status, WNOHANG);
+    if (w == pid) {
+      reaped = 1;
+    } else if (w < 0 && errno != EINTR) {
+      rc = -1;
+    } else {
+      int64_t left = deadline - nish_monotonic_nanos();
+      if (left <= 0) {
+        rc = -3;
+        kill(pid, SIGKILL);
+      } else {
+        struct timespec ts = { 0, left < nap ? (long)left : nap };
+        nanosleep(&ts, 0);
+        if (nap < 64000000) nap *= 2;
+      }
+    }
+  }
+  while (!reaped && waitpid(pid, &status, 0) < 0) {
     if (errno != EINTR) {
       rc = -1;
       break;
@@ -661,6 +784,11 @@ done:
     if (p[k] >= 0) close(p[k]);
   return rc;
 #endif
+}
+
+/* `spawnPiped` is `spawnPipedWithin` with no deadline. */
+int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err) {
+  return nish_spawn_piped_within(argv, in, out, err, -1);
 }
 
 /* `kill(pid, sig)`: 0, or a negative errno. Only the four signals a program

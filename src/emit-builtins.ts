@@ -40,6 +40,7 @@ import {
   isSimdExport,
   NET_INT,
   NET_RANGE,
+  NET_WIDE,
   NET_STRING,
   netOption,
   isNetRangeBuffer,
@@ -974,6 +975,19 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
       `call i32 ${emitter.useRuntime("nish_spawn_piped")}(${ARRAY_STRUCT}* ${argv}, ${ARRAY_STRUCT}* ${input}, ${ARRAY_STRUCT}* ${out}, ${ARRAY_STRUCT}* ${err})`
     )
   }
+  // The same four, then the deadline, an `i32` of milliseconds.
+  if (name === "spawnPipedWithin") {
+    emitter.declareType(ARRAY_TYPE)
+    const args = expr.children[1].children
+    const argv = emitter.emitExpression(args[0])
+    const input = emitter.emitExpression(args[1])
+    const out = emitter.emitExpression(args[2])
+    const err = emitter.emitExpression(args[3])
+    const timeout = emitter.emitExpression(args[4])
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_spawn_piped_within")}(${ARRAY_STRUCT}* ${argv}, ${ARRAY_STRUCT}* ${input}, ${ARRAY_STRUCT}* ${out}, ${ARRAY_STRUCT}* ${err}, i32 ${timeout})`
+    )
+  }
   // The vector and the descriptors, left to right; the runtime only reads both.
   if (name === "spawnWithFds") {
     emitter.declareType(ARRAY_TYPE)
@@ -1120,6 +1134,22 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "readStdin") {
     return emitNetCall(emitter, expr, name)
   }
+  // WP44, runtime-os.c. `fileReadAt` is `netRead` with an `i64` position, so
+  // it takes the same range check; `fileSize` answers an `i64`, and the other
+  // two an `i32`, as they are.
+  if (name === "fileReadAt") {
+    return emitNetCall(emitter, expr, name)
+  }
+  if (name === "fileOpen") {
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_file_open")}(${stringArgs(emitter, expr)})`
+    )
+  }
+  if (name === "fileSize" || name === "fileClose") {
+    const fd = emitter.emitExpression(firstArgument(expr))
+    const result = name === "fileSize" ? "i64" : "i32"
+    return emitter.fn.emitValue(`call ${result} ${emitter.useRuntime(netSymbol(name))}(i32 ${fd})`)
+  }
   if (name === "waitStdin") {
     const timeout = emitter.emitExpression(firstArgument(expr))
     return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("nish_wait_stdin")}(i32 ${timeout})`)
@@ -1149,12 +1179,12 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
 
 /** The other half of the pair above, in the same order. */
 /**
- * A call of the `spawnSync`, `spawnSyncTo`, `spawn`, `spawnPiped` or `spawnWithFds` builtin (not of a user
- * function that happens to be called any of them, which wins the name as every
+ * A call of the `spawnSync`, `spawnSyncTo`, `spawn`, `spawnPiped`, `spawnPipedWithin` or `spawnWithFds`
+ * builtin (not of a user function that happens to be called any of them, which wins the name as every
  * identifier builtin loses it). `attributes.ts` asks, because the argument escapes into
  * the runtime: the spawn path copies each element's bytes pointer into an arena
- * vector that outlives the call. It answers for all five names, because all
- * five reach that same C.
+ * vector that outlives the call. It answers for all six names, because all
+ * six reach that same C.
  */
 export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   const callee = call.children[0]
@@ -1167,6 +1197,7 @@ export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
     name === "spawnSyncTo" ||
     name === "spawn" ||
     name === "spawnPiped" ||
+    name === "spawnPipedWithin" ||
     name === "spawnWithFds"
   )
 }
@@ -1297,6 +1328,10 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_spawn_piped")
     return out
   }
+  if (name === "spawnPipedWithin") {
+    out.push("nish_spawn_piped_within")
+    return out
+  }
   if (name === "spawnWithFds") {
     out.push("nish_spawn_with_fds")
     return out
@@ -1408,6 +1443,15 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_panic_slice")
     return out
   }
+  if (name === "fileReadAt") {
+    out.push("nish_file_read_at")
+    out.push("nish_panic_slice")
+    return out
+  }
+  if (name === "fileOpen" || name === "fileSize" || name === "fileClose") {
+    out.push(netSymbol(name))
+    return out
+  }
   if (name === "waitStdin") {
     out.push("nish_wait_stdin")
     return out
@@ -1466,15 +1510,17 @@ export const identifierBuiltinCalleesNamed = (
 
 /**
  * One call into runtime-net.c (runtime-term.c for `readStdin`, runtime-os.c
- * for `writeBytes`), its arguments emitted left to right as every call's are and passed as
- * `bufferSignature` spells them: an `i32` as itself, a
+ * for `writeBytes` and `fileReadAt`), its arguments emitted left to right as
+ * every call's are and passed as `bufferSignature` spells them: an `i32` or an
+ * `i64` (`l`) as itself, a
  * string as its `i8*`, a `u8[]` (or `meta`'s `i32[]`) as its header, whose
  * `len` and `data` the runtime reads, and an offset or a length (`n`) widened
  * to an `i64` as an index is. The answer is the runtime's `i32` in either
  * number mode.
  *
- * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom`, `readStdin` and `writeBytes` take the range `[off,
- * off + len)` of the buffer before their first `n`, and `netWrite2` two such ranges, each checked here the way
+ * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom`, `readStdin`, `writeBytes`
+ * and `fileReadAt` take the range `[off, off + len)` of the buffer before their
+ * first `n`, and `netWrite2` two such ranges, each checked here the way
  * `dst.set(src, at)` checks the range it writes, through the same panic and
  * with the same words: `0 <= off <= off + len <= buf.length`. Both are
  * `i32`s, so their sum cannot wrap an `i64`, and the unsigned compares refuse
@@ -1500,6 +1546,8 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
       values.push(value)
       if (param === NET_INT) {
         parts.push(`i32 ${value}`)
+      } else if (param === NET_WIDE) {
+        parts.push(`i64 ${value}`)
       } else if (param === NET_STRING) {
         parts.push(`i8* ${value}`)
       } else {

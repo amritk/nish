@@ -992,10 +992,9 @@ export async function main(): Promise<i32> {
   claim of it. Give it to `pgAsyncRelease` exactly once, with the result's
   `reusable`: a second release, or a ticket from before `close()`, panics, so
   two tasks never share a connection.
-- **Waiting for a connection.** When all are claimed, `pgAsyncClaim` sleeps
-  1 ms, then twice as long up to 16 ms, and answers -2 once it has slept
-  `claimWaitMs` (5000 by default). A connection given back is found on the
-  waiter's next look, so up to 16 ms later.
+- **Waiting for a connection.** When all are claimed, `pgAsyncClaim` waits
+  on the pool's wake, which a release rings, and answers -2 once
+  `claimWaitMs` (5000 by default) has passed.
 - **A result.** `ok()` is true when the server ran the statement; `failure`
   is the `PG_ERR_*` code (0 with `errorCode` and `errorMessage` for an error
   the server sent, 8 for a NUL in the SQL or a text parameter, 9 for a lost
@@ -1017,8 +1016,10 @@ export async function main(): Promise<i32> {
 - **The target** is a Unix socket or a numeric address: the pool resolves no
   names. Parameters go in text, never spliced into the SQL.
 
-A wait has no deadline of its own: a server that accepts and never answers
-holds the task awaiting it until the task is cancelled, by `cancelAfter` in
+`pgAsyncConnect` gives each connection `connectWaitMs` (10000 by default) to
+connect and finish its startup, and leaves a slot empty past it; `connects`
+counts the connections it made. A query's wait has no deadline of its own: a
+server that accepts and never answers holds the task awaiting it until the task is cancelled, by `cancelAfter` in
 `nish:async` or by a server's `deadline`. A cancelled claim answers -3 and
 holds nothing; a cancelled query fails with `socketError` -3 and its
 connection is closed, since its answer would reach nobody, and the pool
@@ -1044,6 +1045,67 @@ return await serve(8080, router, new ServeLimits(), async (req: Request): Promis
   return r.ok() && r.rows > 0 ? new Response(200).text(r.text(0, 0)) : new Response(404)
 })
 ```
+
+### Pipelining statements from many tasks
+
+A claim holds a connection for one task's whole round trip. For short
+statements, let tasks share connections instead: register each statement once
+with `pgAsyncPrepare`, then each task takes a seat on a connection, sends,
+waits for its turn and reads its answer. Up to `depth` (8 by default, at most
+16) statements from different tasks are in flight on one connection at once,
+and each is parsed once a connection, then only bound and executed:
+
+```ts nish:ok
+import { spawn } from "nish:async"
+import {
+  PgAsyncParams, PgAsyncPool, pgAsyncAnswer, pgAsyncDone, pgAsyncPrepare, pgAsyncSeat, pgAsyncSend,
+  pgAsyncTurn,
+} from "nish/net/postgres-async"
+
+async function title(pool: PgAsyncPool, statement: i32, id: i32): Promise<void> {
+  const ticket: i32 = await pgAsyncSeat(pool, statement)
+  if (ticket < 0) {
+    return
+  }
+  const params = new PgAsyncParams()
+  params.int(id)
+  const sent: i32 = await pgAsyncSend(pool, ticket, params)
+  const turn: i32 = await pgAsyncTurn(pool, ticket, sent)
+  const r = await pgAsyncAnswer(pool, ticket, turn)
+  pgAsyncDone(pool, ticket, turn, r.reusable)
+  console.log(r.ok() && r.rows > 0 ? r.text(0, 0) : "none")
+}
+
+export async function main(): Promise<i32> {
+  const pool = new PgAsyncPool(4)
+  const byId: i32 = pgAsyncPrepare(pool, "select title from article where id = $1")
+  // ... pgAsyncConnect as above ...
+  for (let id: i32 = 1; id <= 100; id++) {
+    spawn(title(pool, byId, id))
+  }
+  return 0
+}
+```
+
+- **Five calls, in order, in the task.** `pgAsyncSeat` fixes the
+  statement's place in the connection's order, so the task makes the other
+  four calls straight after it, each once, with no other `await` between.
+  `pgAsyncDone` spends the ticket; a ticket used after it, or a statement
+  number `pgAsyncPrepare` did not give, panics.
+- **Answers come back in order.** A statement the server refuses fails
+  alone and the ones behind it are answered. A task cancelled before its
+  answer is read fails alone too (`socketError` -3): the next task reads past
+  that answer. A connection lost, sent a frame past a cap, or left out of
+  step (a cancelled task's answer that left a transaction open or changed a
+  setting) fails every statement in flight on it with `PG_ERR_CLOSED` and is
+  closed. A slow statement
+  delays the ones seated behind it: keep long or transactional work on
+  `pgAsyncClaim`.
+- **Waiting for a seat.** When every connection has `depth` in flight,
+  `pgAsyncSeat` waits on the pool's wake, which an answered statement rings,
+  and answers -2 after `claimWaitMs`; -1 when none is connected. Waiting
+  tasks are seated in the order they began to wait, so a task that keeps
+  asking cannot take every seat that frees.
 
 ## What it does not do
 

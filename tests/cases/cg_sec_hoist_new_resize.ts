@@ -91,8 +91,8 @@ const compoundKeeps = (): i32 => {
 };
 
 export const forOfGrows = (xs: i32[]): i32 => {
-  for (const x of xs) {
-    const r = new R(xs);
+  for (const _x of xs) {
+    const _r = new R(xs);
   }
   return 0;
 };

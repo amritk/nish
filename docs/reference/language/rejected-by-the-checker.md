@@ -3,116 +3,398 @@
 # Rejected by the checker
 
 Everything the validator lets through but the checker cannot compile. The
-messages are exact for the cases cited; other rows quote the checker
+messages are exact for the cases cited; other entries quote the checker
 (`src/checker.ts` and the modules beside it) and `src/types.ts`.
 
-| Situation | Message | Test |
-| --- | --- | --- |
-| top-level statement other than function/class/interface/const/type/enum/import, outside an entry without `main` | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
-| a function naming a variable of the entry's top-level code | `` `count` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it; pass it as a parameter, or declare it as an annotated module `const` above the code `` | `reject_script_local_in_function` |
-| a declaration below top-level code that reaches it | `` `twice` is declared below the top-level code on line 5 that reaches it: under Node a top-level statement runs where it stands, before the declarations after it exist, so declare it above that line `` | `reject_script_declared_below` |
-| a variable of top-level code named like a declaration or import | `` `go` is a variable of the top-level code and also a name the module declares or imports: under Node both live in the one module scope, so rename one `` | `reject_script_name_collision` |
-| type alias cycle | `` Type alias `Feet` is defined in terms of itself `` | `reject_type_alias_cycle` |
-| a member of an unconstrained type parameter | `` Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>` `` | `reject_generic_member_unconstrained` |
-| a member the constraint does not declare | `` Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares `` | `reject_generic_member_not_in_constraint` |
-| a constraint that is not a class or interface | `` `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's `` | `reject_generic_constraint` |
-| a constraint that mentions a type parameter | `` `U extends T` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out `` | `reject_generic_constraint` |
-| a type parameter list that names one parameter twice | `` Duplicate type parameter `T` ``, on the first repeat alone | `reject_generic_duplicate_type_parameter`, `…_arrow`, `…_method`, `…_class`, `…_interface`, `…_template`, `…_triple` |
-| a type argument that does not satisfy its constraint | `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` `` | `reject_generic_unsatisfied_constraint` |
-| a function parameter used as a value | `` `f` is a function parameter and can only be called or passed on as a function argument: ... `` | `reject_fnarg_store`, `reject_fnarg_return` |
-| an arrow argument that reads a `let`, `this`, or a function parameter of its function, or assigns to a capture | `` The arrow reads `k`, a `let` of the function it is written in: ... `` / `` The arrow reads `this`: ... `` / `` The arrow assigns to `total`, which belongs to the function it is written in: ... `` | `reject_fnarg_capture_let`, `_this`, `_function_param`, `_write` |
-| an arrow inside another arrow that reads the function's locals | `` The arrow reads `k` from outside the arrow it is written in: ... `` | `reject_fnarg_capture_nested` |
-| an arrow anywhere but as a function argument | `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, ... `` | `reject_fnarg_arrow_value` |
-| a function type anywhere but on a parameter of a top-level function | `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: ... `` / `` `f` cannot have a function type here: ... `` | `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_method`, `reject_fnarg_nested` |
-| a function argument that is not a function's name or an arrow, or does not match | `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... `` / `` ...; a function argument must have exactly its parameter's type `` | `reject_fnarg_not_name`, `reject_fnarg_generic_name`, `reject_fnarg_mismatch`, `reject_fnarg_arity` |
-| an arrow argument whose types cannot be inferred | `` Cannot infer the type of `x` in the arrow passed to `run`: ... `` / `` The arrow passed to `map` needs a return type annotation: ... `` | `reject_fnarg_infer`, `reject_fnarg_block_return` |
-| a method type parameter named like one of its class's | `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name `` | `reject_generic_method_shadow` |
-| type arguments written at a method call | `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` `` | `reject_generic_method` |
-| a `Secret` where a value would leave it, or a `Secret` the function made and did not return or wipe on some path | NL2428 to NL2453 and NL2540 to NL2548, worded in [Secrets](builtins.md#secrets-nishsecret) | `reject_secret_*` |
-| type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
-| enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |
-| importing an enum or a type alias its module does not export | `` `Kind` is declared in `./kinds` but not exported (add `export`) `` | `tests/link/enum_import_not_exported`, `alias_import_not_exported` |
-| a declaration named like an imported enum or alias, or a second import of its name | `` `Kind` is already declared in this module `` / `` `Kind` is already imported from `./kinds` `` | `tests/link/enum_import_clash`, `enum_import_clash_function`, `enum_import_duplicate`, `enum_import_duplicate_function`, `alias_import_clash`, `alias_import_duplicate` |
-| `const enum` | `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing `` | `reject_enum_const_enum` |
-| `declare enum` | `` `declare enum` is not supported `` | `reject_enum_declare`, `nl2286_declare_enum` |
-| enum with no members | `` Enum `Kind` must declare at least one member `` | `reject_enum_empty` |
-| two enum members of one name | `` Duplicate member `If` in enum `Kind` `` | `reject_enum_duplicate_member` |
-| enum member that is not an integer | `` Enum member `Kind.Half` must be an integer literal `` | `reject_enum_float` |
-| enum member outside `i32` | `` Enum member `Kind.Big` does not fit in i32 `` | `reject_enum_overflow` |
-| name that is not a member of the enum | `` Enum `Kind` has no member `Nope` `` | `reject_enum_unknown_member` |
-| top-level `let`, outside an entry without `main` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
-| `for await`, in any body, a template nothing instantiates included | `` `for await` is not supported `` | `nl2133_for_await`, `reject_for_await_template` |
-| `for (x of a)`, assigning rather than declaring | `` `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)` `` | `reject_arr_forof_expression`, `reject_arr_forof_expression_template`, `nl2135_for_of_without_declaration` |
-| `a ** b`, in any body, a template nothing instantiates included | `` Unsupported binary operator `**` `` | `reject_op_exponent`, `reject_op_exponent_template`, `nl2254_unsupported_binary` |
-| `x **= e`, to a local, a field or an element | `` Unsupported assignment operator `**=` `` | `reject_exponent_assign_local`, `reject_cls_compound_operator`, `nl2253_field_compound_operator` |
-| a hole in an array literal, `[1, , 2]` | `Holes in array literals are not supported` | `reject_arr_hole`, `nl2210_array_hole` |
-| a spread in an array literal, `[...a]` | `Spread in array literals is not supported` | `reject_arr_spread`, `reject_map_iter_spread`, `nl2237_array_spread` |
-| `new` of anything but a class name, `new a.B()`, `new cs[0]()` | `` `new` requires a class name `` | `reject_cls_new_not_identifier`, `reject_new_parenthesized`, `nl2144_new_non_identifier` |
-| `x as T`, `<T>x`, `x satisfies T`, to anything but `any` and `unknown` ([Phase 0's](forbidden-constructs-phase-0-validator.md#types-1)) | `Unsupported expression in Phase 1: AsExpression` / `TypeAssertionExpression` / `SatisfiesExpression` | `reject_as_type`, `reject_angle_assertion`, `reject_satisfies`, `nl2256_satisfies_expression` |
-| more than one of these in one declaration | the first, alone: the refusal comes before the declaration is collected | `reject_expr_sweep_together` |
-| constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
-| constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |
-| assignment to a module constant | `` Cannot assign to `LIMIT` because it is a module constant `` | `reject_const_assign`, `reject_const_incdec` |
-| missing return type, a function's or a method's, in a template nothing instantiates too | `` Function `f` needs an explicit return type annotation `` / `` Method `m` of class `Box` needs an explicit return type annotation `` | `reject_missing_return_type`, `reject_arrow_return_type`, `reject_method_return_template`, `reject_method_return_generic` |
-| a function with no body (an overload signature) | `Functions must have a body` | `nl2204_function_without_body` |
-| `export default function ()` | `Functions must be named` | `reject_fn_anonymous` |
-| a destructuring pattern, but for `const [a, b] = await awaitAll(…)` | `Destructured constants are not supported` / `Destructured parameters are not supported` / `Destructuring is not supported` (a local) | `reject_const_destructured`, `reject_param_destructured`, `reject_destructure_local` |
-| an optional parameter; a default or rest outside a function, method, constructor or `const` arrow; a spread argument | `Optional parameters are not supported` / `Optional/default parameters are not supported here` / `Rest parameters are not supported here` / `Spread arguments are not supported` | `reject_param_optional`, `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest`, `reject_param_spread_call` |
-| an arrow bound with `let`, annotated, or beside a second name | `` Function `f` must be declared `const`, not `let` `` / `` Function `f` takes its signature from the arrow; drop the annotation on `f` `` / `A function declaration binds one name` | `reject_arrow_let`, `reject_arrow_annotated`, `reject_fn_two_names` |
-| a getter or setter; a method in an interface | `` Getters and setters are not supported in class `Box` (use a method) `` / `` Interface `Shape` cannot declare methods (interfaces describe layout only) `` | `reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor` |
-| more than one function or binding form in one declaration | the first in source order, alone | `reject_fn_sweep_together` |
-| a class with no name: `export default class { }`, a class expression | `Classes must be named` (a named class expression: `Unsupported expression in Phase 1: ClassExpression`) | `reject_cls_anonymous`, `nl2018_anonymous_class` |
-| `declare class`, `declare interface`; `abstract` on a class or a member | `` `declare class` is not supported `` / `Abstract classes are not supported` | `reject_cls_declare`, `reject_generic_declare_class`, `reject_generic_abstract` |
-| a method or a constructor with no body, a constructor's return type | `` Method `m` of class `Point` must have a body `` / `` Constructor of class `Point` must have a body (no overload signatures) `` / `Constructors cannot declare a return type` | `reject_cls_method_no_body`, `reject_cls_ctor_no_body`, `reject_cls_ctor_return_type` |
-| a member named by a string or a number, a parameter property | `` Members of `Point` must have plain identifier names `` / ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it`` | `reject_cls_field_string_name`, `reject_cls_param_property` |
-| an index signature, a `static { }` block, a construct or call signature, `interface … extends` | `` Index signatures are not supported in class `Point` (object layout is fixed) `` (or `interface`) / `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` / `` Unsupported interface member in `Point`: ConstructSignature `` / ``Interface inheritance (`extends`) is not supported; list every field`` | `reject_cls_index_signature`, `reject_iface_index_signature`, `reject_cls_static_block`, `reject_iface_member_unsupported`, `reject_iface_extends` |
-| an object literal key that is not a name, a method in an object literal | `Object literal keys must be plain identifiers` / ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` | `reject_cls_literal_key`, `reject_cls_literal_member` |
-| an object literal typed as a class with methods | `` `Counter` has methods, so it is made only by `new`: ... Write `new Counter(...)` `` | `reject_class_literal_*`, `nl2556_class_literal` |
-| more than one class, interface or enum form in one declaration | the first in source order, alone; a `static` or `readonly` header before one is the member's own refusal | `reject_cls_sweep_together` |
-| a side-effect import, `import "./m"` | `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code `` | `reject_side_effect_import` |
-| `import type`, `{ type A }` | `Type-only imports are not supported` | `reject_import_type_only`, `nl2243_type_only_import` |
-| a default import: `import d from`, `import d, { a } from`, `{ default as d }` | `` Default imports are not supported; use `import { math } from "./locals"` `` | `reject_default_import` |
-| a namespace import | `` Namespace imports (`import * as math`) are not supported; import functions by name `` | `reject_namespace_import` |
-| a specifier that is not a string literal | `Import specifier must be a string literal` | `reject_import_template_specifier`, `nl2212_template_specifier` |
-| `export { a }`, `export { a } from`, `export * from`, `export * as ns from`, `export type { A }` | `` `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself `` | `reject_export_list`, `nl2128_export_list` |
-| `export default <value>`, `export =` | `` `export default` / `export =` are not supported; use a named `export function` `` | `reject_export_assignment`, `nl2129_export_default_value` |
-| `export default function f` | `` `export default` is not supported; use a named `export function` `` | `reject_export_default` |
-| `export default class C`, `export default interface I` | `` `export default` is not supported; use a named `export` `` | `reject_cls_export_default`, `reject_generic_export_default`, `nl2131_export_default_class` |
-| `export import` | `` Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration) `` (or `ImportDeclaration`) | `reject_export_import_equals`, `nl2226_export_import_equals` |
-| `import x = require("./m")`, `import x = A.B`, `export as namespace X` | `Only top-level function declarations are supported in Phase 1 (found ImportEqualsDeclaration)` (or `NamespaceExportDeclaration`) | `reject_module_sweep_together` |
-| a function or an import declared inside a body | `Unsupported statement in Phase 1: FunctionDeclaration` (or `ImportDeclaration`) | `reject_fn_nested`, `reject_fn_nested_template` |
-| the empty statement `;` in a body | `Unsupported statement in Phase 1: EmptyStatement` | `reject_stmt_empty` |
-| more than one import or export form in one module | the checker's refusals one each, since each is its own declaration; a Phase 0 one (NL1057–NL1059) alone, as every Phase 0 rule is, because Phase 0 halts the module before the checker runs | `reject_module_sweep_together` |
-| unknown identifier | `` Unknown identifier `x` `` | `reject_unknown_ident` |
-| wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
-| mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
-| string `+` number | `` ... got string and i32 (no implicit string conversion; use a template literal) `` | `reject_str_plus_number` |
-| arithmetic compound assignment | `` Operator `+=` requires two operands of the same numeric type, got string and string `` — one rule, naming the token that was written, for a local, a field and an element alike: the target must be numeric (so `+=` never concatenates) and the value must be exactly its type | `reject_cf_compound_string`, `reject_cf_compound_widths` |
-| object literal field of the wrong type | `` Field `code` of `IoError` expects a value of type i32, got f64 `` | `reject_struct_field_f64`, `reject_struct_field_u8` |
-| a dotted call that is not a builtin | `` Unknown builtin `foo.bar` (supported: console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, ...) `` — the callee is named, not its receiver, whether the receiver is a namespace or not | `reject_unknown_builtin`, `reject_arch_call` |
-| bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
-| bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
-| ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
-| `T \| null` misuse | see [Nullable types](types.md#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`, `reject_null_narrowing_assigned_in_chain`, `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked` |
-| non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
-| non-boolean condition | `Condition must be boolean, got i32 (Nish has no truthiness)` | `reject_cf_nonbool_cond` |
-| `&&`/`\|\|` on numbers | `` Operator `&&` requires boolean operands, got i32 and i32 `` | `reject_cf_logical_numbers` |
-| ternary arm mismatch | `Ternary branches must have the same type, got i32 and boolean` | `reject_cf_ternary_mismatch` |
-| assignment to `const` / parameter | `` Cannot assign to `x` because it is a const `` / `... a parameter` | `reject_assign_const`, `reject_assign_param`, `reject_cf_compound_const`, `reject_cf_incdec_param` |
-| missing return | `` Function `f` must return a value of type i32 on every path `` | `reject_missing_return`, `reject_cf_missing_return_loop` |
-| unreachable code | `Unreachable code after return` / `break` / `process.exit` / ... | `reject_unreachable`, `reject_cf_unreachable_after_break`, `reject_exit_unreachable` |
-| `break`/`continue` outside a loop | `` `break` outside of a loop `` | `reject_cf_break_outside`, `reject_cf_continue_outside` |
-| `console.log` misuse | `` `console.log` expects exactly 1 argument, got 0 `` / `returns void and can only be used as a statement` | `reject_console_log_noargs`, `reject_console_log_two_args`, `reject_console_log_as_value` |
-| unknown property / method / builtin | `` Unknown property `foo` on string `` / `` Unknown property `length` on i32 `` / `` Unknown builtin `Math.foo` (supported: ...) `` | `reject_unknown_property`, `reject_length_on_number`, `reject_unknown_builtin` |
-| `Math.*` on an integer | `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) `` | `reject_math_i32` |
-| conversion of a non-number | `` `toI32` expects a number (i32, i64, or f64), got string `` | `reject_toi32_string` |
-| I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type` |
-| I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `spawnPiped` expects exactly 4 arguments, got 3 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_spawn_piped_arity`, `reject_monotonic_arity` |
-| array errors | see [Arrays](expressions.md#array-literals), [Element access](expressions.md#element-access), [`for...of`](statements.md#for-const-x-of-a) | `reject_arr_*` |
-| element reference held across a `push` or `pop` | `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it `` — see [Arrays of records are contiguous](expressions.md#arrays-of-records-are-contiguous) | `reject_arr_element_across_push`, `reject_arr_element_loop_push`, `reject_arr_element_push_self` |
-| `push` or `pop` on a receiver spelled `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` (NL2415) | `` `push` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop `` | `reject_typed_push_f64`, `reject_typed_pop_receivers` ([Typed-array names have no `push` or `pop`](builtins.md#typed-array-names-have-no-push-or-pop)) |
-| class and interface errors | see [Classes](declarations.md#classes), [Interfaces](declarations.md#interfaces-and-object-literals) | `reject_cls_*` |
-| `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
-| a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |
-| module errors | see [`export` and `import`](declarations.md#export-and-import), [`main`](declarations.md#main) | `reject_bare_import`, `reject_default_import`, `reject_namespace_import`, `reject_side_effect_import`, `reject_missing_module`, `reject_std_escaping_module`, `reject_export_*`, `reject_main_params`, `tests/link/*` |
-| unsupported syntax the validator allows | `Unsupported statement in Phase 1: <Kind>` / `Unsupported expression in Phase 1: <Kind>` / `` Unsupported binary operator `**` `` / `` Unsupported unary operator `+` `` / `` Unsupported type `...` `` | *(CLI only)* |
+- **top-level statement other than
+  function/class/interface/const/type/enum/import, outside an entry without
+  `main`**:
+  `Only top-level function declarations are supported in Phase 1 (found <Kind>)`
+  (`reject_top_level_stmt`)
+- **a function naming a variable of the entry's top-level code**:
+  `` `count` is a variable of the entry module's top-level code, which runs as `main`, so a function cannot read it; pass it as a parameter, or declare it as an annotated module `const` above the code ``
+  (`reject_script_local_in_function`)
+- **a declaration below top-level code that reaches it**:
+  `` `twice` is declared below the top-level code on line 5 that reaches it: under Node a top-level statement runs where it stands, before the declarations after it exist, so declare it above that line ``
+  (`reject_script_declared_below`)
+- **a variable of top-level code named like a declaration or import**:
+  `` `go` is a variable of the top-level code and also a name the module declares or imports: under Node both live in the one module scope, so rename one ``
+  (`reject_script_name_collision`)
+- **type alias cycle**: `` Type alias `Feet` is defined in terms of itself ``
+  (`reject_type_alias_cycle`)
+- **a member of an unconstrained type parameter**:
+  `` Cannot read `x` of `T`: an unconstrained type parameter has no members; say which ones it has with `<T extends Point>` ``
+  (`reject_generic_member_unconstrained`)
+- **a member the constraint does not declare**:
+  `` Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares ``
+  (`reject_generic_member_not_in_constraint`)
+- **a constraint that is not a class or interface**:
+  `` `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's ``
+  (`reject_generic_constraint`)
+- **a constraint that mentions a type parameter**:
+  `` `U extends T` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out ``
+  (`reject_generic_constraint`)
+- **a type parameter list that names one parameter twice**:
+  `` Duplicate type parameter `T` ``, on the first repeat alone
+  (`reject_generic_duplicate_type_parameter`, `…_arrow`, `…_method`,
+  `…_class`, `…_interface`, `…_template`, `…_triple`)
+- **a type argument that does not satisfy its constraint**:
+  `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` ``
+  (`reject_generic_unsatisfied_constraint`)
+- **a function parameter used as a value**:
+  `` `f` is a function parameter and can only be called or passed on as a function argument: ... ``
+  (`reject_fnarg_store`, `reject_fnarg_return`)
+- **an arrow argument that reads a `let`, `this`, or a function parameter of
+  its function, or assigns to a capture**:
+  `` The arrow reads `k`, a `let` of the function it is written in: ... `` /
+  `` The arrow reads `this`: ... `` /
+  `` The arrow assigns to `total`, which belongs to the function it is written in: ... ``
+  (`reject_fnarg_capture_let`, `_this`, `_function_param`, `_write`)
+- **an arrow inside another arrow that reads the function's locals**:
+  `` The arrow reads `k` from outside the arrow it is written in: ... ``
+  (`reject_fnarg_capture_nested`)
+- **an arrow anywhere but as a function argument**:
+  `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, ... ``
+  (`reject_fnarg_arrow_value`)
+- **a function type anywhere but on a parameter of a top-level function**:
+  `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: ... ``
+  / `` `f` cannot have a function type here: ... `` (`reject_fnarg_field`,
+  `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`,
+  `reject_fnarg_method`, `reject_fnarg_nested`)
+- **a function argument that is not a function's name or an arrow, or does not
+  match**:
+  `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... ``
+  / `` ...; a function argument must have exactly its parameter's type ``
+  (`reject_fnarg_not_name`, `reject_fnarg_generic_name`,
+  `reject_fnarg_mismatch`, `reject_fnarg_arity`)
+- **an arrow argument whose types cannot be inferred**:
+  `` Cannot infer the type of `x` in the arrow passed to `run`: ... `` /
+  `` The arrow passed to `map` needs a return type annotation: ... ``
+  (`reject_fnarg_infer`, `reject_fnarg_block_return`)
+- **a method type parameter named like one of its class's**:
+  `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name ``
+  (`reject_generic_method_shadow`)
+- **type arguments written at a method call**:
+  `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` ``
+  (`reject_generic_method`)
+- **a `Secret` where a value would leave it, or a `Secret` the function made
+  and did not return or wipe on some path**: NL2428 to NL2453 and NL2540 to
+  NL2548, worded in [Secrets](builtins.md#secrets-nishsecret) (`reject_secret_*`)
+- **type alias named after a built-in type**:
+  `` `string` is a built-in type name and cannot be used for a type alias ``
+  (`reject_type_alias_builtin`)
+- **enum named after a built-in type**:
+  `` `i32` is a built-in type name and cannot be used for an enum ``
+  (`reject_enum_builtin_name`)
+- **importing an enum or a type alias its module does not export**:
+  `` `Kind` is declared in `./kinds` but not exported (add `export`) ``
+  (`tests/link/enum_import_not_exported`, `alias_import_not_exported`)
+- **a declaration named like an imported enum or alias, or a second import of
+  its name**: `` `Kind` is already declared in this module `` /
+  `` `Kind` is already imported from `./kinds` ``
+  (`tests/link/enum_import_clash`, `enum_import_clash_function`,
+  `enum_import_duplicate`, `enum_import_duplicate_function`,
+  `alias_import_clash`, `alias_import_duplicate`)
+- **`const enum`**:
+  `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing ``
+  (`reject_enum_const_enum`)
+- **`declare enum`**: `` `declare enum` is not supported ``
+  (`reject_enum_declare`, `nl2286_declare_enum`)
+- **enum with no members**: `` Enum `Kind` must declare at least one member ``
+  (`reject_enum_empty`)
+- **two enum members of one name**: `` Duplicate member `If` in enum `Kind` ``
+  (`reject_enum_duplicate_member`)
+- **enum member that is not an integer**:
+  `` Enum member `Kind.Half` must be an integer literal ``
+  (`reject_enum_float`)
+- **enum member outside `i32`**:
+  `` Enum member `Kind.Big` does not fit in i32 `` (`reject_enum_overflow`)
+- **name that is not a member of the enum**:
+  `` Enum `Kind` has no member `Nope` `` (`reject_enum_unknown_member`)
+- **top-level `let`, outside an entry without `main`**:
+  `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available ``
+  (`reject_const_top_level_let`)
+- **`for await`, in any body, a template nothing instantiates included**:
+  `` `for await` is not supported `` (`nl2133_for_await`,
+  `reject_for_await_template`)
+- **`for (x of a)`, assigning rather than declaring**:
+  `` `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)` ``
+  (`reject_arr_forof_expression`, `reject_arr_forof_expression_template`,
+  `nl2135_for_of_without_declaration`)
+- **`a ** b`, in any body, a template nothing instantiates included**:
+  `` Unsupported binary operator `**` `` (`reject_op_exponent`,
+  `reject_op_exponent_template`, `nl2254_unsupported_binary`)
+- **`x **= e`, to a local, a field or an element**:
+  `` Unsupported assignment operator `**=` `` (`reject_exponent_assign_local`,
+  `reject_cls_compound_operator`, `nl2253_field_compound_operator`)
+- **a hole in an array literal, `[1, , 2]`**:
+  `Holes in array literals are not supported` (`reject_arr_hole`,
+  `nl2210_array_hole`)
+- **a spread in an array literal, `[...a]`**:
+  `Spread in array literals is not supported` (`reject_arr_spread`,
+  `reject_map_iter_spread`, `nl2237_array_spread`)
+- **`new` of anything but a class name, `new a.B()`, `new cs[0]()`**:
+  `` `new` requires a class name `` (`reject_cls_new_not_identifier`,
+  `reject_new_parenthesized`, `nl2144_new_non_identifier`)
+- **`x as T`, `<T>x`, `x satisfies T`, to anything but `any` and `unknown`
+  ([Phase 0's](forbidden-constructs-phase-0-validator.md#types-1))**: `Unsupported expression in Phase 1: AsExpression`
+  / `TypeAssertionExpression` / `SatisfiesExpression` (`reject_as_type`,
+  `reject_angle_assertion`, `reject_satisfies`, `nl2256_satisfies_expression`)
+- **more than one of these in one declaration**: the first, alone: the refusal
+  comes before the declaration is collected (`reject_expr_sweep_together`)
+- **constant initialiser that is not constant**:
+  `A module constant's initialiser must be a literal, another constant, or arithmetic over them`
+  (`reject_const_not_constant`)
+- **constant cycle**: `` Module constant `A` is defined in terms of itself ``
+  (`reject_const_cycle`)
+- **assignment to a module constant**:
+  `` Cannot assign to `LIMIT` because it is a module constant ``
+  (`reject_const_assign`, `reject_const_incdec`)
+- **missing return type, a function's or a method's, in a template nothing
+  instantiates too**:
+  `` Function `f` needs an explicit return type annotation `` /
+  `` Method `m` of class `Box` needs an explicit return type annotation ``
+  (`reject_missing_return_type`, `reject_arrow_return_type`,
+  `reject_method_return_template`, `reject_method_return_generic`)
+- **a function with no body (an overload signature)**:
+  `Functions must have a body` (`nl2204_function_without_body`)
+- **`export default function ()`**: `Functions must be named`
+  (`reject_fn_anonymous`)
+- **a destructuring pattern, but for `const [a, b] = await awaitAll(…)`**:
+  `Destructured constants are not supported` /
+  `Destructured parameters are not supported` /
+  `Destructuring is not supported` (a local) (`reject_const_destructured`,
+  `reject_param_destructured`, `reject_destructure_local`)
+- **an optional parameter; a default or rest outside a function, method,
+  constructor or `const` arrow; a spread argument**:
+  `Optional parameters are not supported` /
+  `Optional/default parameters are not supported here` /
+  `Rest parameters are not supported here` /
+  `Spread arguments are not supported` (`reject_param_optional`,
+  `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest`,
+  `reject_param_spread_call`)
+- **an arrow bound with `let`, annotated, or beside a second name**:
+  `` Function `f` must be declared `const`, not `let` `` /
+  `` Function `f` takes its signature from the arrow; drop the annotation on `f` ``
+  / `A function declaration binds one name` (`reject_arrow_let`,
+  `reject_arrow_annotated`, `reject_fn_two_names`)
+- **a getter or setter; a method in an interface**:
+  `` Getters and setters are not supported in class `Box` (use a method) `` /
+  `` Interface `Shape` cannot declare methods (interfaces describe layout only) ``
+  (`reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor`)
+- **more than one function or binding form in one declaration**: the first in
+  source order, alone (`reject_fn_sweep_together`)
+- **a class with no name: `export default class { }`, a class expression**:
+  `Classes must be named` (a named class expression:
+  `Unsupported expression in Phase 1: ClassExpression`)
+  (`reject_cls_anonymous`, `nl2018_anonymous_class`)
+- **`declare class`, `declare interface`; `abstract` on a class or a member**:
+  `` `declare class` is not supported `` /
+  `Abstract classes are not supported` (`reject_cls_declare`,
+  `reject_generic_declare_class`, `reject_generic_abstract`)
+- **a method or a constructor with no body, a constructor's return type**:
+  `` Method `m` of class `Point` must have a body `` /
+  `` Constructor of class `Point` must have a body (no overload signatures) ``
+  / `Constructors cannot declare a return type` (`reject_cls_method_no_body`,
+  `reject_cls_ctor_no_body`, `reject_cls_ctor_return_type`)
+- **a member named by a string or a number, a parameter property**:
+  `` Members of `Point` must have plain identifier names `` /
+  ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it``
+  (`reject_cls_field_string_name`, `reject_cls_param_property`)
+- **an index signature, a `static { }` block, a construct or call signature,
+  `interface … extends`**:
+  `` Index signatures are not supported in class `Point` (object layout is fixed) ``
+  (or `interface`) /
+  `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` /
+  `` Unsupported interface member in `Point`: ConstructSignature `` /
+  ``Interface inheritance (`extends`) is not supported; list every field``
+  (`reject_cls_index_signature`, `reject_iface_index_signature`,
+  `reject_cls_static_block`, `reject_iface_member_unsupported`,
+  `reject_iface_extends`)
+- **an object literal key that is not a name, a method in an object literal**:
+  `Object literal keys must be plain identifiers` /
+  ``Unsupported object literal member: MethodDeclaration (only `key: value`)``
+  (`reject_cls_literal_key`, `reject_cls_literal_member`)
+- **an object literal typed as a class with methods**:
+  `` `Counter` has methods, so it is made only by `new`: ... Write `new Counter(...)` ``
+  (`reject_class_literal_*`, `nl2556_class_literal`)
+- **more than one class, interface or enum form in one declaration**: the
+  first in source order, alone; a `static` or `readonly` header before one is
+  the member's own refusal (`reject_cls_sweep_together`)
+- **a side-effect import, `import "./m"`**:
+  `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code ``
+  (`reject_side_effect_import`)
+- **`import type`, `{ type A }`**: `Type-only imports are not supported`
+  (`reject_import_type_only`, `nl2243_type_only_import`)
+- **a default import: `import d from`, `import d, { a } from`,
+  `{ default as d }`**:
+  `` Default imports are not supported; use `import { math } from "./locals"` ``
+  (`reject_default_import`)
+- **a namespace import**:
+  `` Namespace imports (`import * as math`) are not supported; import functions by name ``
+  (`reject_namespace_import`)
+- **a specifier that is not a string literal**:
+  `Import specifier must be a string literal`
+  (`reject_import_template_specifier`, `nl2212_template_specifier`)
+- **`export { a }`, `export { a } from`, `export * from`,
+  `export * as ns from`, `export type { A }`**:
+  `` `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself ``
+  (`reject_export_list`, `nl2128_export_list`)
+- **`export default <value>`, `export =`**:
+  `` `export default` / `export =` are not supported; use a named `export function` ``
+  (`reject_export_assignment`, `nl2129_export_default_value`)
+- **`export default function f`**:
+  `` `export default` is not supported; use a named `export function` ``
+  (`reject_export_default`)
+- **`export default class C`, `export default interface I`**:
+  `` `export default` is not supported; use a named `export` ``
+  (`reject_cls_export_default`, `reject_generic_export_default`,
+  `nl2131_export_default_class`)
+- **`export import`**:
+  `` Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration) ``
+  (or `ImportDeclaration`) (`reject_export_import_equals`,
+  `nl2226_export_import_equals`)
+- **`import x = require("./m")`, `import x = A.B`, `export as namespace X`**:
+  `Only top-level function declarations are supported in Phase 1 (found ImportEqualsDeclaration)`
+  (or `NamespaceExportDeclaration`) (`reject_module_sweep_together`)
+- **a function or an import declared inside a body**:
+  `Unsupported statement in Phase 1: FunctionDeclaration` (or
+  `ImportDeclaration`) (`reject_fn_nested`, `reject_fn_nested_template`)
+- **the empty statement `;` in a body**:
+  `Unsupported statement in Phase 1: EmptyStatement` (`reject_stmt_empty`)
+- **more than one import or export form in one module**: the checker's
+  refusals one each, since each is its own declaration; a Phase 0 one
+  (NL1057–NL1059) alone, as every Phase 0 rule is, because Phase 0 halts the
+  module before the checker runs (`reject_module_sweep_together`)
+- **unknown identifier**: `` Unknown identifier `x` ``
+  (`reject_unknown_ident`)
+- **wrong arity**: `` `f` expects 1 argument(s), got 2 `` (`reject_arity`)
+- **mixed operand types**:
+  `` Operator `+` requires two operands of the same numeric type, got i32 and boolean ``
+  (`reject_type_mismatch`, `reject_i64_mixed`)
+- **string `+` number**:
+  `` ... got string and i32 (no implicit string conversion; use a template literal) ``
+  (`reject_str_plus_number`)
+- **arithmetic compound assignment**:
+  `` Operator `+=` requires two operands of the same numeric type, got string and string ``
+  — one rule, naming the token that was written, for a local, a field and an
+  element alike: the target must be numeric (so `+=` never concatenates) and
+  the value must be exactly its type (`reject_cf_compound_string`,
+  `reject_cf_compound_widths`)
+- **object literal field of the wrong type**:
+  `` Field `code` of `IoError` expects a value of type i32, got f64 ``
+  (`reject_struct_field_f64`, `reject_struct_field_u8`)
+- **a dotted call that is not a builtin**:
+  `` Unknown builtin `foo.bar` (supported: console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, ...) ``
+  — the callee is named, not its receiver, whether the receiver is a namespace
+  or not (`reject_unknown_builtin`, `reject_arch_call`)
+- **bitwise operator on a non-integer**:
+  `` Operator `&` requires two operands of the same integer type, got f64 and f64 ``
+  (with
+  `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) ``
+  appended in that mode) /
+  `` Operator `~` requires an integer operand, got f64 ``; a compound form
+  names itself,
+  `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``,
+  for a local, a field and an element alike (`reject_bit_f64`,
+  `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`,
+  `reject_arr_element_bitwise_f64`)
+- **bitwise operator on booleans**:
+  `` Operator `&` is not available on boolean (use `&&`) `` (`|` names `||`,
+  `^` names `!==`, `~` names `!`) (`reject_bit_boolean`)
+- **ordering on booleans / strings / structs**:
+  `` Operator `<` requires two numeric operands, got string and i32 ``
+  (`reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`,
+  `reject_cls_ordering`)
+- **`T | null` misuse**: see [Nullable types](types.md#nullable-types)
+  (`reject_nullable_scalar`, `reject_null_to_nonnull`,
+  `reject_null_field_access`, `reject_null_compare_two`,
+  `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`,
+  `reject_null_narrowing_assigned_in_chain`,
+  `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked`)
+- **non-integer literal in i32 mode**:
+  `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) ``
+  (`reject_float_in_i32`)
+- **non-boolean condition**:
+  `Condition must be boolean, got i32 (Nish has no truthiness)`
+  (`reject_cf_nonbool_cond`)
+- **`&&`/`||` on numbers**:
+  `` Operator `&&` requires boolean operands, got i32 and i32 ``
+  (`reject_cf_logical_numbers`)
+- **ternary arm mismatch**:
+  `Ternary branches must have the same type, got i32 and boolean`
+  (`reject_cf_ternary_mismatch`)
+- **assignment to `const` / parameter**:
+  `` Cannot assign to `x` because it is a const `` / `... a parameter`
+  (`reject_assign_const`, `reject_assign_param`, `reject_cf_compound_const`,
+  `reject_cf_incdec_param`)
+- **missing return**:
+  `` Function `f` must return a value of type i32 on every path ``
+  (`reject_missing_return`, `reject_cf_missing_return_loop`)
+- **unreachable code**: `Unreachable code after return` / `break` /
+  `process.exit` / ... (`reject_unreachable`,
+  `reject_cf_unreachable_after_break`, `reject_exit_unreachable`)
+- **`break`/`continue` outside a loop**: `` `break` outside of a loop ``
+  (`reject_cf_break_outside`, `reject_cf_continue_outside`)
+- **`console.log` misuse**:
+  `` `console.log` expects exactly 1 argument, got 0 `` /
+  `returns void and can only be used as a statement`
+  (`reject_console_log_noargs`, `reject_console_log_two_args`,
+  `reject_console_log_as_value`)
+- **unknown property / method / builtin**:
+  `` Unknown property `foo` on string `` /
+  `` Unknown property `length` on i32 `` /
+  `` Unknown builtin `Math.foo` (supported: ...) ``
+  (`reject_unknown_property`, `reject_length_on_number`,
+  `reject_unknown_builtin`)
+- **`Math.*` on an integer**:
+  `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``
+  (`reject_math_i32`)
+- **conversion of a non-number**:
+  `` `toI32` expects a number (i32, i64, or f64), got string ``
+  (`reject_toi32_string`)
+- **I/O with the wrong type**:
+  `` `readFileSync` expects an argument of type string, got i32 ``
+  (`reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type`)
+- **I/O with the wrong arity**:
+  `` `readdirSync` expects exactly 1 argument, got 2 ``;
+  `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``;
+  `` `spawnPiped` expects exactly 4 arguments, got 3 ``;
+  `` `spawnPipedWithin` expects exactly 5 arguments, got 4 ``;
+  `` `monotonicNanos` expects exactly 0 arguments, got 1 ``
+  (`reject_readdir_arity`, `reject_spawn_to_arity`,
+  `reject_spawn_piped_arity`, `reject_spawn_piped_within_arity`,
+  `reject_monotonic_arity`)
+- **array errors**: see [Arrays](expressions.md#array-literals), [Element
+  access](expressions.md#element-access), [`for...of`](statements.md#for-const-x-of-a) (`reject_arr_*`)
+- **element reference held across a `push` or `pop`**:
+  `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it ``
+  — see [Arrays of records are contiguous](expressions.md#arrays-of-records-are-contiguous)
+  (`reject_arr_element_across_push`, `reject_arr_element_loop_push`,
+  `reject_arr_element_push_self`)
+- **`push` or `pop` on a receiver spelled `Int32Array`, `Float32Array`,
+  `Float64Array` or `BigInt64Array` (NL2415)**:
+  `` `push` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop ``
+  (`reject_typed_push_f64`, `reject_typed_pop_receivers` ([Typed-array names
+  have no `push` or `pop`](builtins.md#typed-array-names-have-no-push-or-pop)))
+- **class and interface errors**: see [Classes](declarations.md#classes),
+  [Interfaces](declarations.md#interfaces-and-object-literals) (`reject_cls_*`)
+- **`extends` or `super` on a class (WP25: there is no inheritance)**:
+  `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them ``
+  /
+  `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach ``
+  (`reject_cls_extends`, `reject_cls_super`)
+- **a class does not cover the interface it `implements`**:
+  `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) ``
+  (`reject_cls_implements_short`, `reject_cls_implements_mismatch`)
+- **module errors**: see [`export` and `import`](declarations.md#export-and-import),
+  [`main`](declarations.md#main) (`reject_bare_import`, `reject_default_import`,
+  `reject_namespace_import`, `reject_side_effect_import`,
+  `reject_missing_module`, `reject_std_escaping_module`, `reject_export_*`,
+  `reject_main_params`, `tests/link/*`)
+- **unsupported syntax the validator allows**:
+  `Unsupported statement in Phase 1: <Kind>` /
+  `Unsupported expression in Phase 1: <Kind>` /
+  `` Unsupported binary operator `**` `` /
+  `` Unsupported unary operator `+` `` / `` Unsupported type `...` `` (*(CLI
+  only)*)

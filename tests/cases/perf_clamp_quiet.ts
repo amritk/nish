@@ -29,7 +29,8 @@ export const test = (): number => {
 
   // Outside any loop the clamp runs once, which is nothing anybody is paying
   // for, so an unproven bound there is silent as well.
-  const at = total - total;
+  const copy = total;
+  const at = total - copy;
   total = total + s.substring(at, at + 1).length;
 
   // A bound that is not a plain local has no guard to write in the first place.

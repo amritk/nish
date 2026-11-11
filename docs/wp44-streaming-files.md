@@ -1,15 +1,14 @@
 # WP44: Streaming file reads — a descriptor, a positional read, a size and a close
 
-**Status: proposed; design only, nothing built.** This note answers
+**Status: decided on 2026-11-11 (§9); done: F1, F2 and F3 built.** This note answers
 [#710](https://github.com/amritk/nish/issues/710). Today a Nish program reads a
 file only whole. `readFileSync`, `readFileSyncOrNull` and `readFileBytesSync`
 each return the entire file as one arena value, and refuse a file past
 2^31 − 1 bytes ([LANGUAGE.md](LANGUAGE.md#file-io)). This package adds four
 builtins. With them, a program reads a file a window at a time, into a `u8[]`
 the program owns, and memory follows the window rather than the file. The
-questions the owner settles are in §9, each marked **Owner decides**, with a
-recommendation. The rest of the note follows the recommended answers. Every
-recommendation is a default, not a decision.
+questions the owner settled are in §9: every recommendation was accepted, so
+the rest of the note describes what is built.
 
 [LANGUAGE.md](LANGUAGE.md) stays normative. Nothing here changes the language
 until a stage lands with its rule. Every claim about today's compiler is
@@ -174,8 +173,8 @@ part of this package.
   `ESPIPE` is `-29` and `EIO` is `-5`. Any other errno is `-5`.
 - **The window.** It is checked as `netRead`'s is. `0 <= off <= off + len <=
   buf.length` holds once all five arguments are evaluated, or the call panics
-  with `slice out of range: [off, off + len) of length n`.
-  `--unchecked-indexing` drops the check
+  with `slice out of range: [off, off + len) of length n`. No flag drops
+  the check: `--unchecked-indexing` was removed before 1.0
   ([LANGUAGE.md](LANGUAGE.md#bounds)). A `readonly u8[]` or any other
   element type is refused, as `reject_net_readonly` and `reject_net_element`
   refuse them.
@@ -377,20 +376,19 @@ same gap noted beside a new refusal is a separate fix, not this package's.
 
 ## 9. Open questions
 
-Each is the owner's call. The note follows the recommendation until one is
-made.
+The owner accepted every recommendation on 2026-11-11.
 
 | # | Question | Recommendation | Decided |
 | --- | --- | --- | --- |
-| Q1 | **The handle's type**: a plain `i32` descriptor, or an opaque handle class? | `i32` (§2): the server must store the handle across wakes, and WP40's handle class cannot be stored | **Owner decides** |
-| Q2 | **The names**: `fileOpen`, `fileReadAt`, `fileSize`, `fileClose`, or Node's `openSync`, `readSync`, `fstatSync`, `closeSync`? | the `file*` names. Node's names throw where these answer a number, so reusing them would give a global two meanings across the runtimes | **Owner decides** |
-| Q3 | **Failure as a value**: the negated Linux errno over the fixed set of §3, or a bare `-1`? | the errno, as `nish:net` answers. A 404 and a 403 need `-2` and `-13` apart | **Owner decides** |
-| Q4 | **Positional only**, or a cursor `fileRead` beside it? | positional only (§8) | **Owner decides** |
-| Q5 | **`using`**: once WP40 H1 lands, should `std/` offer a `File` class closed by `using` over these builtins, which needs H1 to accept an `i32` field closed by a builtin? Or does that stay out? | out of this package. Reopen it after H1 ships, with a program that wants it | **Owner decides** |
-| Q6 | **Regular files only**, or FIFOs, devices and stdin too? | regular files only (§3, §8). A pipe has no size and no position | **Owner decides** |
-| Q7 | **Freestanding wasm**: refuse at check time on a `wasm32` target outside the wasi profile, with a `runtime-wasm.c` that defines the four as answering `-38` (`ENOSYS`) for the `--profile wasm` route? Or let that route fail at link time, as the whole-file builtins do today? And on WASI, is `ENOTCAPABLE` folded into `-13` (permission denied) or left as `-5`? It has no Linux number of its own (WASI's 76 is Linux's `ENOTUNIQ`) | refuse at check time, and answer `-38` on the freestanding route so the link never fails. `ENOTCAPABLE` stays `-5`: a path outside every preopen is a deployment bug, not a 403 | **Owner decides** |
-| Q8 | **Capability of `fileSize` and `fileClose`**: `fs.read`, or `CAP_NONE`? | `fs.read` (§4) | **Owner decides** |
-| Q9 | **`sendfile`**: confirm it stays deferred to WP39 §6 | deferred (§8) | **Owner decides** |
+| Q1 | **The handle's type**: a plain `i32` descriptor, or an opaque handle class? | `i32` (§2): the server must store the handle across wakes, and WP40's handle class cannot be stored | Decided: a plain `i32` descriptor |
+| Q2 | **The names**: `fileOpen`, `fileReadAt`, `fileSize`, `fileClose`, or Node's `openSync`, `readSync`, `fstatSync`, `closeSync`? | the `file*` names. Node's names throw where these answer a number, so reusing them would give a global two meanings across the runtimes | Decided: the `file*` names |
+| Q3 | **Failure as a value**: the negated Linux errno over the fixed set of §3, or a bare `-1`? | the errno, as `nish:net` answers. A 404 and a 403 need `-2` and `-13` apart | Decided: the negated Linux errno over §3's set; any other code is `-5` |
+| Q4 | **Positional only**, or a cursor `fileRead` beside it? | positional only (§8) | Decided: positional only |
+| Q5 | **`using`**: once WP40 H1 lands, should `std/` offer a `File` class closed by `using` over these builtins, which needs H1 to accept an `i32` field closed by a builtin? Or does that stay out? | out of this package. Reopen it after H1 ships, with a program that wants it | Decided: no `File` class in this package |
+| Q6 | **Regular files only**, or FIFOs, devices and stdin too? | regular files only (§3, §8). A pipe has no size and no position | Decided: regular files only |
+| Q7 | **Freestanding wasm**: refuse at check time on a `wasm32` target outside the wasi profile, with a `runtime-wasm.c` that defines the four as answering `-38` (`ENOSYS`) for the `--profile wasm` route? Or let that route fail at link time, as the whole-file builtins do today? And on WASI, is `ENOTCAPABLE` folded into `-13` (permission denied) or left as `-5`? It has no Linux number of its own (WASI's 76 is Linux's `ENOTUNIQ`) | refuse at check time, and answer `-38` on the freestanding route so the link never fails. `ENOTCAPABLE` stays `-5`: a path outside every preopen is a deployment bug, not a 403 | Decided: refused at check time on freestanding wasm; `runtime-wasm.c` answers `-38`; `ENOTCAPABLE` stays `-5` |
+| Q8 | **Capability of `fileSize` and `fileClose`**: `fs.read`, or `CAP_NONE`? | `fs.read` (§4) | Decided: `fs.read` |
+| Q9 | **`sendfile`**: confirm it stays deferred to WP39 §6 | deferred (§8) | Decided: deferred to WP39 §6 |
 
 ## 10. Stages, once the questions are settled
 
@@ -416,7 +414,7 @@ rolling freeze), and nothing in this package needs it to.
    - `file_read_at_pos`: a negative `pos` and a `pos + len` past 2^63 − 1, both `-22`
    - `file_size_large`: a sparse file past 2^31 bytes, which `tests/run.js`
      makes with `fs.truncateSync`, sized and read at its end
-   - `file_read_at_bounds`, `file_read_at_unchecked`
+   - `file_read_at_bounds` (no `_unchecked` twin: no flag drops the check)
    - `mem_file_stream_flat`: 10,000 windows, with the arena checked unchanged
    - `reject_file_read_readonly`, `reject_file_read_element`,
      `reject_file_fd_type`, `reject_file_read_task`
@@ -431,6 +429,9 @@ rolling freeze), and nothing in this package needs it to.
    a stated band, against a file the size of the window. Then `bun-http-framework-benchmark`'s
    `/video` route can be met. Submitting to it is the owner's call, as
    TechEmpower is in WP39 §4.
+   Built as `examples/file-server.ts`; the check is `tests/run.js`'s
+   `file-server` section, which serves 64 KiB and 64 MiB and holds the two
+   peaks within 256 kB.
 
 **The bar.** F1 lands when the native and Node runs print the same bytes for
 every positive case and `mem_file_stream_flat` holds the arena flat. F3 lands

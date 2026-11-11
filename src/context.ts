@@ -7,7 +7,7 @@
 // a sentinel or stop. stage0's `src/` throws a `CompileError` from 292 sites and
 // catches it in six; every one of those catches becomes a status test here.
 
-import { DiagnosticSink, Edit, SourceFile } from "./diagnostics"
+import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { Lexer } from "./lexer"
 import { StringMap, StringSet } from "./map"
 import { Node } from "./nodes"
@@ -269,6 +269,12 @@ export class CheckContext {
    * it is the template's, so the second instantiation refuses it silently.
    */
   reportedOnce: StringSet
+  /**
+   * What `src/hygiene.ts` found in this module's bodies, held back rather than
+   * reported: the compilation adds them only once every other rule has passed
+   * (`Compilation.reportHygiene`), so they never bury the error that matters.
+   */
+  hygiene: Diagnostic[]
   /** Requested but not yet checked, FIFO so the enumeration order is the discovery order. */
   pending: Instantiation[]
   /**
@@ -379,6 +385,7 @@ export class CheckContext {
     this.constraintsDeferred = true
     this.deferredConstraints = []
     this.reportedOnce = new StringSet()
+    this.hygiene = []
     this.pending = []
     this.pendingFinish = []
   }

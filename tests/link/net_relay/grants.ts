@@ -186,12 +186,9 @@ const jsonChecks = (t: Suite): void => {
     "",
     "{",
   ];
-  let count: i32 = 0;
   const missed: string[] = [];
   for (const text of refused) {
-    if (!reads(j, text)) {
-      count++;
-    } else {
+    if (reads(j, text)) {
       missed.push(text);
     }
   }

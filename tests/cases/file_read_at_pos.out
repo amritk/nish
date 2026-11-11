@@ -1,0 +1,10 @@
+negative pos: -22
+pos + len past 2^63 - 1: -22
+in range: 3
+closed: 0
+read after close: -9
+size after close: -9
+closed again: -9
+read on -1: -9
+size of -1: -9
+close -1: -9

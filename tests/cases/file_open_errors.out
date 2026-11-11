@@ -1,0 +1,6 @@
+missing: -2
+directory: -21
+fifo: -22
+socket: -6
+nul in path: -2
+empty path: -2

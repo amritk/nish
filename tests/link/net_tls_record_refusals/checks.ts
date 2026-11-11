@@ -286,7 +286,6 @@ export const refusalChecks = (): i32 => {
   feed(dropped, join([rfc8448ClientHelloRecord(), ccs]));
   t.ok("one after the ClientHello is dropped", dropped.state === TLS_RECORD_STATE_HANDSHAKE && dropped.alert === 0);
   dropped.sign(rfc8448RsaPssSignature());
-  const clientHandshake = protectionFor(SUITE, rfc8448ClientHandshakeTraffic());
   feed(dropped, ccs);
   t.ok("so is one between the server's flight and the client's Finished", dropped.alert === 0);
   const wrongValue = traceConnection();

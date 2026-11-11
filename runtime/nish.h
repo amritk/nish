@@ -552,6 +552,23 @@ nish_array *nish_readdir(const nish_str *path);
  * and the bytes live in the arena, so copy what you keep before the next reset
  * or release. */
 nish_array *nish_read_file_bytes(const nish_str *path);
+/* `fileOpen(path)`, `fileReadAt(fd, buf, off, len, pos)`, `fileSize(fd)` and
+ * `fileClose(fd)` (WP44): a regular file read a window at a time. `fileOpen`
+ * answers a descriptor (`O_RDONLY | O_CLOEXEC | O_NONBLOCK`, so a FIFO with
+ * no writer does not hang the open) or -21 for a directory and -22
+ * for anything else that is not a regular file. `nish_file_read_at` reads at
+ * most `len` bytes from byte `pos` into `buf[off, off + len)`, which the
+ * compiled call has range-checked; it answers the count, 0 at or past the end
+ * and for `len` 0, and -22 for a `pos` below 0 or a `pos + len` past
+ * 2^63 - 1. A negative `fd` is -9 to the three that take one, before any
+ * call. `nish_file_size` answers `st_size` now; `nish_file_close` closes
+ * and is never retried. None allocates. Every failure is a negated errno in
+ * Linux's numbering on every platform (-2, -6, -9, -13, -20, -21, -22, -23,
+ * -24, -29, -36, -40), and any other is -5; a path holding a NUL is -2. */
+int32_t nish_file_open(const nish_str *path);
+int32_t nish_file_read_at(int32_t fd, nish_array *buf, int64_t off, int64_t len, int64_t pos);
+int64_t nish_file_size(int32_t fd);
+int32_t nish_file_close(int32_t fd);
 /* `renameSync(from, to)`, `unlinkSync(path)` and `writeFileBytesSync(path,
  * bytes)`: rename(2), unlink(2), and every element of a `u8[]` written to a
  * file opened as `nish_write_file` opens it (`O_TRUNC`, 0644, a link refused).
@@ -619,6 +636,14 @@ int32_t nish_spawn_child(const nish_array *argv);
  * copied; SIGPIPE is blocked on the calling thread for the call, a SIGPIPE the
  * call raised is consumed, and the thread's mask is restored after it. */
 int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err);
+/* `spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)`: `nish_spawn_piped`
+ * with a deadline of `timeout_ms` milliseconds on CLOCK_MONOTONIC, a negative
+ * one none (`nish_spawn_piped` is this with -1). The same answers, plus -3 for
+ * a run the deadline ended: the child, its pid alone, is killed with SIGKILL
+ * and reaped, and both arrays keep the bytes read before the kill. The wait for
+ * the child's exit is bounded by the same deadline. -1 always under WASI. */
+int32_t nish_spawn_piped_within(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err,
+                                int32_t timeout_ms);
 /* `spawnWithFds(argv, fds)`: `nish_spawn_child` with the child holding
  * `fds[i]` (element type `int32_t`) as descriptor `3 + i`, close-on-exec
  * cleared there. More than 64 descriptors or a negative one is -EINVAL before

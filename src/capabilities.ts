@@ -319,7 +319,13 @@ export const builtinCapability = (name: string): i32 => {
     name === "realpathSync" ||
     name === "isDirectorySync" ||
     name === "lstatOwnerModeSync" ||
-    name === "isExecutableSync"
+    name === "isExecutableSync" ||
+    // WP44 Q8: `fileSize` and `fileClose` too, so a program denied `fs.read`
+    // holds no descriptor and closes none.
+    name === "fileOpen" ||
+    name === "fileReadAt" ||
+    name === "fileSize" ||
+    name === "fileClose"
   ) {
     return CAP_FS_READ
   }
@@ -351,9 +357,10 @@ export const builtinCapability = (name: string): i32 => {
   }
   // The child of `spawnPiped` runs anything too; its streams come back into
   // the program's own arrays rather than reaching a file or the network.
+  // `spawnPipedWithin` is the same run with a deadline, and takes no more.
   // `spawnWithFds` hands the child descriptors the program already holds, so
   // it reaches nothing the program could not already reach.
-  if (name === "spawnPiped" || name === "spawnWithFds") {
+  if (name === "spawnPiped" || name === "spawnPipedWithin" || name === "spawnWithFds") {
     return CAP_PROCESS_SPAWN
   }
   // Lowering this process's own priority, or narrowing its CPU mask, reaches

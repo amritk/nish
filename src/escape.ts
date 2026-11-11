@@ -120,6 +120,16 @@ export const FLOW_LEAKS: i32 = 2
 const worse = (a: i32, b: i32): i32 => (a >= b ? a : b)
 
 /**
+ * A `spawnPiped` call with its four arguments, or a `spawnPipedWithin` call
+ * with its five: one whose `stdout` and `stderr` the runtime grows. A call
+ * with the wrong count was refused by the checker and grows nothing here.
+ */
+const isSpawnPipedArity = (name: string, call: Node): boolean => {
+  const count = call.children[1].children.length
+  return (name === "spawnPiped" && count === 4) || (name === "spawnPipedWithin" && count === 5)
+}
+
+/**
  * Whether an identifier builtin answers fresh arena memory, which is what makes
  * a call of one an allocation site of the function around it.
  *
@@ -354,7 +364,7 @@ class EscapeAnalysis {
   declarations: Node[]
   /**
    * Calls that grow an array in the arena, checked against the site locals
-   * below: `xs.push(v)`, and `spawnPiped`, which appends to its `stdout` and
+   * below: `xs.push(v)`, and `spawnPiped` (or `spawnPipedWithin`), which appends to its `stdout` and
    * `stderr` and so appears once for each. `pushReceivers` is parallel to it.
    */
   pushes: Node[]
@@ -632,9 +642,10 @@ class EscapeAnalysis {
       if (isAllocatingBuiltin(builtin)) {
         this.sites.push(new Site(call, false))
       }
-      // `spawnPiped` grows `stdout` and `stderr` with `nish_array_grow`, as
-      // `push` grows its receiver, so each is a push of the call's.
-      if (builtin === "spawnPiped" && call.children[1].children.length === 4) {
+      // `spawnPiped` and `spawnPipedWithin` grow `stdout` and `stderr` with
+      // `nish_array_grow`, as `push` grows its receiver, so each is a push of
+      // the call's.
+      if (isSpawnPipedArity(builtin, call)) {
         for (const k of [2, 3]) {
           this.pushes.push(call)
           this.pushReceivers.push(call.children[1].children[k])
@@ -2204,7 +2215,7 @@ class PassWalk {
   }
 
   /**
-   * `xs.push(v)` grows `xs` in the arena, and `spawnPiped` its `stdout` and
+   * `xs.push(v)` grows `xs` in the arena, and `spawnPiped` (or `spawnPipedWithin`) its `stdout` and
    * `stderr`: fine for an array this pass made, a leak into any other.
    */
   visitPush(call: Node, grown: Node): void {
@@ -2267,7 +2278,7 @@ class PassWalk {
         this.visitCallee(callee, node)
       } else if (isPushCall(program, this.table, node)) {
         this.visitPush(node, node.children[0].children[0])
-      } else if (builtinNameOf(program, node) === "spawnPiped" && node.children[1].children.length === 4) {
+      } else if (isSpawnPipedArity(builtinNameOf(program, node), node)) {
         this.visitPush(node, node.children[1].children[2])
         this.visitPush(node, node.children[1].children[3])
       } else if (resultMethodName(program, this.table, node) === "orReturn") {

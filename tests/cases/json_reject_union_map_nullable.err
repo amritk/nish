@@ -1,0 +1,1 @@
+`A` and `B` both write their tag in `A | B` as `"same"`: a decoder picks a union's variant by the string its tag is written as, so each variant of a union writes a different one
