@@ -150,12 +150,12 @@ function walkHygiene(ctx: CheckContext, node: Node): void -> @walkHygiene
   callee +0:18 hygieneUnwrap -> @hygieneUnwrap
   callee +1:34 isPure -> @isPure
   local +2:13 hint: string (const)
-  callee +3:7 holdFinding -> @holdFinding
-  callee +12:5 checkRepeatedCondition -> @checkRepeatedCondition
-  callee +15:5 checkSameOperands -> @checkSameOperands
-  callee +16:5 checkUnsignedZero -> @checkUnsignedZero
-  local +18:14 child: Node (const)
-  callee +19:5 walkHygiene -> @walkHygiene
+  callee +4:7 holdFinding -> @holdFinding
+  callee +13:5 checkRepeatedCondition -> @checkRepeatedCondition
+  callee +16:5 checkSameOperands -> @checkSameOperands
+  callee +17:5 checkUnsignedZero -> @checkUnsignedZero
+  local +19:14 child: Node (const)
+  callee +20:5 walkHygiene -> @walkHygiene
 function hygieneUnwrap(node: Node): Node -> @hygieneUnwrap
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: node
@@ -171,10 +171,10 @@ function isPure(node: Node): boolean -> @isPure
   callee +0:15 isStoreOperator -> @isStoreOperator
   callee +0:45 isPure -> @isPure
   callee +0:73 isPure -> @isPure
-  callee +3:95 isPure -> @isPure
-  callee +8:14 isPure -> @isPure
-  local +13:18 child: Node (const)
-  callee +14:14 isPure -> @isPure
+  callee +4:9 isPure -> @isPure
+  callee +9:14 isPure -> @isPure
+  local +14:18 child: Node (const)
+  callee +15:14 isPure -> @isPure
 function sameValue(program: CheckedProgram, a: Node, b: Node): boolean -> @sameValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: hygieneUnwrap isPure mentionsVariable sameShape
@@ -232,16 +232,16 @@ function checkSameOperands(ctx: CheckContext, node: Node): void -> @checkSameOpe
   local +2:9 right: Node (const)
   callee +4:9 sameValue -> @sameValue
   callee +5:7 holdFinding -> @holdFinding
-  callee +5:35 CheckContext.textOf -> @CheckContext.textOf
-  callee +5:67 CheckContext.textOf -> @CheckContext.textOf
-  local +9:9 ordered: boolean (const)
-  local +10:9 comparison: boolean (const)
-  local +11:9 other: boolean (const)
-  callee +15:8 sameValue -> @sameValue
-  callee +18:19 isFloating -> @isFloating
-  callee +21:3 holdFinding -> @holdFinding
-  callee +24:41 CheckContext.textOf -> @CheckContext.textOf
-  callee +24:69 CheckContext.textOf -> @CheckContext.textOf
+  callee +8:14 CheckContext.textOf -> @CheckContext.textOf
+  callee +8:46 CheckContext.textOf -> @CheckContext.textOf
+  local +13:9 ordered: boolean (const)
+  local +14:9 comparison: boolean (const)
+  local +16:9 other: boolean (const)
+  callee +28:8 sameValue -> @sameValue
+  callee +31:19 isFloating -> @isFloating
+  callee +34:3 holdFinding -> @holdFinding
+  callee +37:41 CheckContext.textOf -> @CheckContext.textOf
+  callee +37:69 CheckContext.textOf -> @CheckContext.textOf
 function checkRepeatedCondition(ctx: CheckContext, node: Node): void -> @checkRepeatedCondition
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding

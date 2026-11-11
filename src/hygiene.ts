@@ -47,7 +47,7 @@ import {
   N_UNARY,
   N_VAR,
   N_VAR_DECL,
-  Node
+  Node,
 } from "./nodes"
 import { CheckedProgram } from "./program"
 import { Local, sourceLocal } from "./symbols"
@@ -151,7 +151,8 @@ const isStoreOperator = (op: string): boolean =>
   op === "||=" ||
   op === "??="
 
-const isStepOperator = (node: Node): boolean => node.kind === N_UNARY && (node.text === "++" || node.text === "--")
+const isStepOperator = (node: Node): boolean =>
+  node.kind === N_UNARY && (node.text === "++" || node.text === "--")
 
 /**
  * Mark what the body does with each declared local. A bare name stored into —
@@ -231,7 +232,8 @@ const walkHygiene = (ctx: CheckContext, node: Node): void => {
     // named `try` or `var` on a line of its own (`tests/parser/names.ts`).
     const expr = hygieneUnwrap(node.children[0])
     if (expr.kind !== N_IDENT && isPure(expr)) {
-      const hint = expr.kind === N_BINARY && (expr.text === "===" || expr.text === "==") ? " (to assign, write `=`)" : ""
+      const hint =
+        expr.kind === N_BINARY && (expr.text === "===" || expr.text === "==") ? " (to assign, write `=`)" : ""
       holdFinding(
         ctx,
         node.children[0],
@@ -283,7 +285,8 @@ const isPure = (node: Node): boolean => {
       return !isStoreOperator(node.text) && isPure(node.children[0]) && isPure(node.children[1])
     case N_UNARY:
       return (
-        (node.text === "!" || node.text === "-" || node.text === "+" || node.text === "~") && isPure(node.children[0])
+        (node.text === "!" || node.text === "-" || node.text === "+" || node.text === "~") &&
+        isPure(node.children[0])
       )
     case N_PAREN:
     case N_AS:
@@ -374,13 +377,26 @@ const checkSameOperands = (ctx: CheckContext, node: Node): void => {
   const right = node.children[1]
   if (op === "=") {
     if (sameValue(ctx.program, left, right)) {
-      holdFinding(ctx, node, `\`${ctx.textOf(node)}\` assigns \`${ctx.textOf(left)}\` to itself, which does nothing`)
+      holdFinding(
+        ctx,
+        node,
+        `\`${ctx.textOf(node)}\` assigns \`${ctx.textOf(left)}\` to itself, which does nothing`
+      )
     }
     return
   }
   const ordered = op === "<" || op === ">"
-  const comparison = ordered || op === "===" || op === "!==" || op === "==" || op === "!=" || op === "<=" || op === ">="
-  const other = op === "&&" || op === "||" || op === "&" || op === "|" || op === "^" || op === "-" || op === "/" || op === "%"
+  const comparison =
+    ordered || op === "===" || op === "!==" || op === "==" || op === "!=" || op === "<=" || op === ">="
+  const other =
+    op === "&&" ||
+    op === "||" ||
+    op === "&" ||
+    op === "|" ||
+    op === "^" ||
+    op === "-" ||
+    op === "/" ||
+    op === "%"
   if (!comparison && !other) {
     return
   }
