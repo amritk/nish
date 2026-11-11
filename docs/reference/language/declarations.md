@@ -1183,8 +1183,8 @@ and their `.ll` goldens are byte-identical files.
     itself `nish` is still one, and the standard library never is.
   - **A builtin with no runtime on the target is refused by what the program
     reaches**, once every module is checked. A freestanding `--target wasm32`
-    build has no file, clock, environment, process, network, signal, terminal
-    or entropy call (`runtime/runtime-wasm.c`), so a program whose `main` or
+    build has no file, clock, environment, process, signal, terminal or
+    entropy call (`runtime/runtime-wasm.c`), so a program whose `main` or
     any exported function of its own modules reaches one — `readFileSync`,
     `getenv`, `spawnSync`, `monotonicNanos` among the ones no call-site rule
     refuses — is refused with the N3 rule's words (NL2404), one error per
