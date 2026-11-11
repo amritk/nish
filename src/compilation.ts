@@ -2940,11 +2940,12 @@ export class Compilation {
   reportPortability(): void {
     for (const unit of this.analysisUnits) {
       for (const finding of portabilityFindings(unit, this.table, this.opts)) {
-        this.sink.reportPortability(
+        this.sink.reportPortabilityReview(
           unit.program.source,
           finding.node.start,
           finding.node.end,
-          finding.message
+          finding.message,
+          finding.review
         )
       }
     }

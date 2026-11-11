@@ -38,6 +38,7 @@
 
 import { AnalysisUnit } from "./attributes"
 import { CLI } from "./branding"
+import { Edit } from "./diagnostics"
 import { numericLiteralValue } from "./constants"
 import { StringSet } from "./map"
 import { FLAG_PREFIX, N_ARROW, N_IDENT, N_NEW, N_NUMBER, N_PAREN, N_UNARY, Node } from "./nodes"
@@ -58,10 +59,16 @@ import { isFloat, isNumeric, T_BOOL, TypeTable } from "./types"
 export class PortabilityFinding {
   node: Node
   message: string
+  /**
+   * The `review` edits (WP33 R5), empty unless the row knows a rewrite that
+   * compiles to the same IR and quiets the site; set after construction.
+   */
+  review: Edit[]
 
   constructor(node: Node, message: string) {
     this.node = node
     this.message = message
+    this.review = []
   }
 }
 

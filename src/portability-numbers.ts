@@ -27,16 +27,20 @@ import { isFractional, parseIntegerLiteral } from "./constants"
 import {
   FLAG_PREFIX,
   N_BINARY,
+  N_CALL,
   N_CONSTRUCTOR,
   N_EMPTY,
+  N_IDENT,
   N_NUMBER,
   N_PAREN,
   N_UNARY,
   N_VAR_DECL,
   Node,
 } from "./nodes"
+import { isBuiltinConversion } from "./bounds"
+import { Edit } from "./diagnostics"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
-import { intBits, isInteger, isUnsigned, T_I32 } from "./types"
+import { intBits, isInteger, isUnsigned, T_I32, T_U16, T_U32, T_U8 } from "./types"
 
 /**
  * The numbers rows, asked about one node at a time.
@@ -85,8 +89,10 @@ const binaryFindings = (walk: PortabilityWalk, node: Node, out: PortabilityFindi
   const op = node.text
   if (op === "/" || op === "/=") {
     const operand = walk.table.baseOf(walk.program.nodeTypes[node.children[0].id])
-    if (isInteger(operand)) {
-      out.push(operatorFinding(walk, node, operand, "truncates here, and TypeScript divides exactly"))
+    if (isInteger(operand) && !isConverted(walk, node, operand)) {
+      const finding = operatorFinding(walk, node, operand, "truncates here, and TypeScript divides exactly")
+      finding.review = divisionReview(walk, node, operand)
+      out.push(finding)
     }
     return
   }
@@ -103,6 +109,86 @@ const binaryFindings = (walk: PortabilityWalk, node: Node, out: PortabilityFindi
   if (op === "+" || op === "-" || op === "*" || op === "+=" || op === "-=" || op === "*=") {
     wrapFinding(walk, node, out)
   }
+}
+
+/**
+ * The builtin that converts to `type` and is the identity on it, so wrapping
+ * an integer quotient in it emits no IR; `""` for a type with none (`i8`,
+ * `i16`) or whose TypeScript reading is not a double (`i64`, `u64`).
+ */
+const conversionTo = (type: i32): string => {
+  if (type === T_I32) {
+    return "toI32"
+  }
+  if (type === T_U8) {
+    return "toU8"
+  }
+  if (type === T_U16) {
+    return "toU16"
+  }
+  return type === T_U32 ? "toU32" : ""
+}
+
+/**
+ * Whether the `/` is the one argument of its own type's conversion builtin,
+ * `toI32(a / b)`: TypeScript truncates there too, so the site is portable.
+ * Parentheses between the two are looked through.
+ */
+const isConverted = (walk: PortabilityWalk, node: Node, type: i32): boolean => {
+  const name = conversionTo(type)
+  if (node.text !== "/" || name === "") {
+    return false
+  }
+  let arg = node
+  let up = walk.parents.parentOf(arg)
+  while (up !== null && up.kind === N_PAREN) {
+    arg = up
+    up = walk.parents.parentOf(arg)
+  }
+  const call = up === null ? null : walk.parents.parentOf(up)
+  return call !== null && call.kind === N_CALL && call.children[1] === up && isBuiltinConversion(walk.program, call, name)
+}
+
+/**
+ * NL8006's `review` edits (WP33 R5): `a / b` becomes `toI32(a / b)` and
+ * `q /= b` becomes `q = toI32(q / b)`, which `isConverted` reads as portable.
+ * The conversion is the identity on its own type, so the IR does not move,
+ * and under Node it truncates the exact quotient to the one written here.
+ *
+ * None is offered where that is not certain: a generic body, whose other
+ * instantiations the edit would change too; an operand or result not exactly
+ * `type` (a ranged value, which a check reads); a quotient the checker folded,
+ * whose operands the call's `number` parameter would retype; and a `/=` on
+ * anything but a plain name, which the rewrite would evaluate twice.
+ */
+const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] => {
+  const edits: Edit[] = []
+  const name = conversionTo(type)
+  const types = walk.program.nodeTypes
+  const left = node.children[0]
+  const right = node.children[1]
+  if (
+    name === "" ||
+    walk.sig.instance !== null ||
+    types[node.id] !== type ||
+    types[left.id] !== type ||
+    types[right.id] !== type ||
+    walk.program.nodeConstants[node.id] !== null
+  ) {
+    return edits
+  }
+  if (node.text === "/") {
+    edits.push(new Edit(node.start, node.start, `${name}(`))
+    edits.push(new Edit(node.end, node.end, ")"))
+    return edits
+  }
+  if (left.kind !== N_IDENT) {
+    return edits
+  }
+  const bare = right.kind === N_IDENT || right.kind === N_NUMBER || right.kind === N_PAREN || right.kind === N_CALL
+  const divisor = bare ? walk.textOf(right) : `(${walk.textOf(right)})`
+  edits.push(new Edit(left.end, right.end, ` = ${name}(${left.text} / ${divisor})`))
+  return edits
 }
 
 /**

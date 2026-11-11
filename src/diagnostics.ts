@@ -272,6 +272,13 @@ export class Diagnostic {
    * rather than through the constructor, so every other report stays as it is.
    */
   edits: Edit[]
+  /**
+   * The `review` tier (WP33 R5): a rewrite that compiles to the same IR and
+   * makes the site portable, but that changes what the source says, so a
+   * reader approves it. Printed as `review` in `--json`; `nish --fix` never
+   * applies it. Empty everywhere but a portability row that knows one.
+   */
+  review: Edit[]
 
   constructor(source: SourceFile, start: i32, end: i32, kind: string, text: string) {
     this.source = source
@@ -282,6 +289,7 @@ export class Diagnostic {
     this.line = source.lineOf(start)
     this.column = source.columnOf(start)
     this.edits = []
+    this.review = []
   }
 
   /**
@@ -398,7 +406,9 @@ export class Diagnostic {
    * The key order is the one stage0's `diagnosticJson` printed, and a reader
    * that compared lines byte for byte still can: `fix` comes last, after
    * `message`, and only when there is at least one edit, so a diagnostic
-   * without a fix prints exactly the line it always has. Each edit is placed
+   * without a fix prints exactly the line it always has. `review` follows
+   * `fix` on the same terms, so a line without review edits is unchanged too.
+   * Each edit is placed
    * the way the diagnostic is — 1-based, columns in UTF-16 code units, the end
    * exclusive.
    */
@@ -409,20 +419,20 @@ export class Diagnostic {
     const severity = warning ? this.kind : "error"
     const message = this.kind === "error" || warning ? this.text : `${this.kind}: ${this.text}`
     const code = codeFor(this.kind, this.text)
-    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}${this.fixJson()}}`
+    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}${this.editsJson("fix", this.edits)}${this.editsJson("review", this.review)}}`
   }
 
-  /** `,"fix":[...]` for `json()`, or `""` when there is no fix to print. */
-  fixJson(): string {
-    if (this.edits.length === 0) {
+  /** `,"<key>":[...]` for `json()`, or `""` when `edits` is empty. */
+  editsJson(key: string, edits: Edit[]): string {
+    if (edits.length === 0) {
       return ""
     }
     const source = this.source
     const out = new StringBuilder()
-    out.add(`,"fix":[`)
+    out.add(`,"${key}":[`)
     let i = 0
-    while (i < this.edits.length) {
-      const edit = this.edits[i]
+    while (i < edits.length) {
+      const edit = edits[i]
       out.add(i === 0 ? "{" : ",{")
       out.add(
         `"line":${source.lineOf(edit.start)},"column":${source.columnOf(edit.start)},"endLine":${source.lineOf(edit.end)},"endColumn":${source.columnOf(edit.end)},"text":`
@@ -578,6 +588,17 @@ export class DiagnosticSink {
   reportPortabilityFix(source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void {
     const warning = new Diagnostic(source, start, end, PORTABILITY, text)
     warning.edits = edits
+    this.insertWarning(this.portability, warning)
+  }
+
+  /**
+   * `reportPortability` with `review` edits (WP33 R5): a rewrite the row
+   * found to compile to the same IR, offered for a reader to approve and
+   * never applied by `nish --fix`.
+   */
+  reportPortabilityReview(source: SourceFile, start: i32, end: i32, text: string, review: Edit[]): void {
+    const warning = new Diagnostic(source, start, end, PORTABILITY, text)
+    warning.review = review
     this.insertWarning(this.portability, warning)
   }
 
