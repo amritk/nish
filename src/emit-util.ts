@@ -178,8 +178,8 @@ export const isArrayWriteMethod = (name: string): boolean =>
  * `netAddress`'s `out`, `tcpAccept`'s `peer`, `netRead`'s `buf` and
  * `udpRecvFrom`'s `buf` and `from`, and whose `m` arguments are
  * `udpRecvFrom`'s `meta` and `pollWait`'s `ready`; `readStdin` is `netRead`'s
- * letters less the descriptor and `fileReadAt` its letters with an `i64` `l` after (`bufferSignature`); `uncheckedSet` is `w`, for its
- * receiver; `spawnPiped` is `rrww`, for the two arrays it appends the child's
+ * letters less the descriptor and `fileReadAt` its letters with an `i64` `l`
+ * after (`bufferSignature`); `uncheckedSet` is `w`, for its receiver; `spawnPiped` is `rrww`, for the two arrays it appends the child's
  * output to. A user function that shares a builtin's name wins it, as it wins
  * every identifier builtin, and writes nothing here. The parameter classification, the fact
  * collector and a scope's region rule ask this, each for the reason it asks

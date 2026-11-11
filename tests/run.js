@@ -718,7 +718,8 @@ const prepareFileCases = () => {
   for (const file of [fifo, sock]) {
     fs.rmSync(file, { force: true })
   }
-  spawnSync("mkfifo", [fifo])
+  // Through `sh`, which is the binary knip sees, so `mkfifo` needs no entry of its own in knip.json.
+  spawnSync("sh", ["-c", 'mkfifo "$0"', fifo])
   spawnSync("node", ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => process.exit(0))`])
   const large = path.join(buildDir, "file_size_large.bin")
   fs.closeSync(fs.openSync(large, "w"))

@@ -1,6 +1,8 @@
 export const main = (): number => {
   const fd = fileOpen("big.log")
-  if (fd < 0) return 1
+  if (fd < 0) {
+    return 1
+  }
   const size = fileSize(fd)
   const buf: u8[] = new Array<u8>(4096)
   let pos: i64 = toI64(0)

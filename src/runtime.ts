@@ -793,7 +793,9 @@ export class RuntimeTable {
     // `willreturn`, for `nish_read_file_bytes`'s reason: a file on a network or
     // FUSE file system can block as long as it likes, and so can its `close`.
     // The window is `nocapture`, written and never kept; nothing allocates.
-    this.add(mayNotReturn("nish_file_open", `declare noundef i32 @nish_file_open(${STR_NOCAP})`, EFFECT_WRITE))
+    this.add(
+      mayNotReturn("nish_file_open", `declare noundef i32 @nish_file_open(${STR_NOCAP})`, EFFECT_WRITE)
+    )
     this.add(
       mayNotReturn(
         "nish_file_read_at",
@@ -802,7 +804,9 @@ export class RuntimeTable {
       )
     )
     this.add(mayNotReturn("nish_file_size", "declare noundef i64 @nish_file_size(i32 noundef)", EFFECT_WRITE))
-    this.add(mayNotReturn("nish_file_close", "declare noundef i32 @nish_file_close(i32 noundef)", EFFECT_WRITE))
+    this.add(
+      mayNotReturn("nish_file_close", "declare noundef i32 @nish_file_close(i32 noundef)", EFFECT_WRITE)
+    )
     // WP34 N3, runtime/runtime-host.c. The wall clock is `nish_monotonic_nanos`'s
     // case exactly: not memory, so not `readnone`, or two reads around a
     // piece of work would fold into one; and `willreturn`, one `clock_gettime`.

@@ -281,11 +281,12 @@ static int32_t nish_fs_err(int e) {
 /* `fileOpen(path)`: a descriptor for a regular file, or the errno. A path
    holding a NUL, or none at all, answers -2, as a missing file does, before
    any system call (RT-3): `nish_cpath` gives the first as "", and WASI would
-   resolve "" to the preopened directory rather than refuse it. `O_CLOEXEC` keeps it out of a spawned child
-   (RT-12); `O_NONBLOCK` only stops a FIFO with no writer from hanging the open,
-   and changes nothing for the regular file that is all this hands out: a
-   directory is closed again and answers -21, anything else -22 (§9 Q6).
-   `fstat` on the descriptor, so the answer is about the file opened. */
+   resolve "" to the preopened directory rather than refuse it. `O_CLOEXEC`
+   keeps the descriptor out of a spawned child (RT-12); `O_NONBLOCK` only stops
+   a FIFO with no writer from hanging the open, and changes nothing for the
+   regular file that is all this hands out: a directory is closed again and
+   answers -21, anything else -22 (§9 Q6). `fstat` on the descriptor, so the
+   answer is about the file opened. */
 int32_t nish_file_open(const nish_str *path) {
   const char *p = nish_cpath(path);
   if (p != path->data || path->len == 0) return -2;

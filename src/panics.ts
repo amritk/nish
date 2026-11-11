@@ -217,8 +217,9 @@ export const builtinPanicKind = (name: string): i32 => {
   if (name === "uncheckedGet" || name === "uncheckedSet" || name === "readCString") {
     return PANIC_UNCHECKED
   }
-  // `netRead` and its siblings, `readStdin`, `writeBytes` and `fileReadAt` check the range of
-  // their buffer the way `dst.set(src, at)` does, through the slice panic (`emitNetCall`).
+  // `netRead` and its siblings, `readStdin`, `writeBytes` and `fileReadAt` check
+  // the range of their buffer the way `dst.set(src, at)` does, through the
+  // slice panic (`emitNetCall`).
   if (
     (isNetExport(name) || isTermExport(name) || name === "writeBytes" || name === "fileReadAt") &&
     netRangeBuffer(name) >= 0

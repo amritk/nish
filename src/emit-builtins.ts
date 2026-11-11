@@ -1128,7 +1128,9 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     return emitNetCall(emitter, expr, name)
   }
   if (name === "fileOpen") {
-    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_file_open")}(${stringArgs(emitter, expr)})`)
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_file_open")}(${stringArgs(emitter, expr)})`
+    )
   }
   if (name === "fileSize" || name === "fileClose") {
     const fd = emitter.emitExpression(firstArgument(expr))
@@ -1490,15 +1492,17 @@ export const identifierBuiltinCalleesNamed = (
 
 /**
  * One call into runtime-net.c (runtime-term.c for `readStdin`, runtime-os.c
- * for `writeBytes` and `fileReadAt`), its arguments emitted left to right as every call's are and passed as
- * `bufferSignature` spells them: an `i32` or an `i64` (`l`) as itself, a
+ * for `writeBytes` and `fileReadAt`), its arguments emitted left to right as
+ * every call's are and passed as `bufferSignature` spells them: an `i32` or an
+ * `i64` (`l`) as itself, a
  * string as its `i8*`, a `u8[]` (or `meta`'s `i32[]`) as its header, whose
  * `len` and `data` the runtime reads, and an offset or a length (`n`) widened
  * to an `i64` as an index is. The answer is the runtime's `i32` in either
  * number mode.
  *
- * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom`, `readStdin`, `writeBytes` and `fileReadAt` take the range `[off,
- * off + len)` of the buffer before their first `n`, and `netWrite2` two such ranges, each checked here the way
+ * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom`, `readStdin`, `writeBytes`
+ * and `fileReadAt` take the range `[off, off + len)` of the buffer before their
+ * first `n`, and `netWrite2` two such ranges, each checked here the way
  * `dst.set(src, at)` checks the range it writes, through the same panic and
  * with the same words: `0 <= off <= off + len <= buf.length`. Both are
  * `i32`s, so their sum cannot wrap an `i64`, and the unsigned compares refuse
