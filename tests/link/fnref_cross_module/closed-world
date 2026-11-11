@@ -1,0 +1,3 @@
+`apply` in ops.ts takes a function reference through an exported signature,
+which only a closed-world `--link` build keeps from a host (WP51 §5.2), so the
+suite's `--emit-panics` compile of this program links as well.

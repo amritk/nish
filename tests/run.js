@@ -6450,7 +6450,11 @@ const runLinkProgram = async (name) => {
     // Named after the program, like `outDir`.
     fs.rmSync(panicsDir, { recursive: true, force: true })
     const panicsFile = path.join(panicsDir, "panics.json")
-    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
+    // A program with a `closed-world` file is one only a `--link` build may
+    // compile (a function reference crosses an exported signature, which an
+    // open build hands a host: WP51 §5.2), so its listing links too.
+    const closedWorld = fs.existsSync(side("closed-world")) ? ["--link", path.join(panicsDir, "exe")] : []
+    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...args, "--emit-panics", panicsFile], {
       cwd: root,
       encoding: "utf8",
     })
