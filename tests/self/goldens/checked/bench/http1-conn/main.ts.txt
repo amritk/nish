@@ -1520,7 +1520,7 @@ function Http1TlsServer.flush(this: Http1TlsServer, slot: i32): i32 -> @nish.Htt
   callee +11:5 Http1Connection.park -> @nish.Http1Connection.park
   local +12:11 wants: i32 (const)
   callee +12:24 TlsTcpServer.interest -> @nish.TlsTcpServer.interest
-  callee +13:12 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  callee +14:13 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
 function Http1TlsServer.send(this: Http1TlsServer, slot: i32): void -> @nish.Http1TlsServer.send [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
