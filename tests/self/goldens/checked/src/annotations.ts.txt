@@ -21,6 +21,8 @@ import REGION_SPECIFIER from "./nish-modules" -> const REGION_SPECIFIER
 import SIMD_SPECIFIER from "./nish-modules" -> const SIMD_SPECIFIER
 import simdMaskWidth from "./nish-modules" -> function @simdMaskWidth
 import FLAG_DEFAULT from "./nodes" -> const FLAG_DEFAULT
+import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
+import FLAG_REST from "./nodes" -> const FLAG_REST
 import FLAG_READONLY from "./nodes" -> const FLAG_READONLY
 import FLAG_STATIC from "./nodes" -> const FLAG_STATIC
 import N_FIELD from "./nodes" -> const N_FIELD
@@ -111,20 +113,23 @@ function unwrapTypeParen(node: Node): Node -> @unwrapTypeParen
 function resolveFunctionReference(node: Node, ctx: CheckContext): i32 -> @resolveFunctionReference
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
-  calls: CheckContext.errorType CheckContext.textOf TypeTable.fnRefOf nish_array_grow nish_panic_index nish_str_concat resolveType unwrapTypeParen
-  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.textOf#0 resolveType#1 resolveType#1
+  calls: CheckContext.errorType CheckContext.textOf TypeTable.fnRefOf nish_array_grow nish_panic_index nish_str_concat nish_str_eq resolveType unwrapTypeParen
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1 CheckContext.textOf#1
+  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.textOf#0 CheckContext.errorType#0 CheckContext.textOf#0 resolveType#1 resolveType#1
   stackSites=1 stackLocals=1
   local +0:9 params: i32[] (const)
   local +1:14 param: Node (const)
-  callee +2:9 unwrapTypeParen -> @unwrapTypeParen
-  callee +3:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +5:14 CheckContext.textOf -> @CheckContext.textOf
-  local +9:11 type: i32 (const)
-  callee +9:18 resolveType -> @resolveType
-  local +15:9 result: i32 (const)
-  callee +15:18 resolveType -> @resolveType
-  callee +19:10 TypeTable.fnRefOf -> @TypeTable.fnRefOf
+  local +2:9 partial: string (let)
+  callee +11:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +13:14 CheckContext.textOf -> @CheckContext.textOf
+  callee +17:9 unwrapTypeParen -> @unwrapTypeParen
+  callee +18:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +20:14 CheckContext.textOf -> @CheckContext.textOf
+  local +24:11 type: i32 (const)
+  callee +24:18 resolveType -> @resolveType
+  local +30:9 result: i32 (const)
+  callee +30:18 resolveType -> @resolveType
+  callee +34:10 TypeTable.fnRefOf -> @TypeTable.fnRefOf
 function resolveType(node: Node, ctx: CheckContext): i32 -> @resolveType [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via resolveType

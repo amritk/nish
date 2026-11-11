@@ -573,10 +573,10 @@ function numberMembers(pass: RefPass, modules: RefModule[]): void -> @numberMemb
   local -12:17 at: i32 (let)
   local -1:16 sig: FunctionSig (const)
   callee +1:29 referenceTypeOf -> @referenceTypeOf
-  local +6:7 k: i32 (let)
-  local +8:9 tag: i32 (let)
-  local +9:9 j: i32 (let)
-  callee +17:29 TypeTable.refOf -> @TypeTable.refOf
+  local +5:7 k: i32 (let)
+  local +7:9 tag: i32 (let)
+  local +8:9 j: i32 (let)
+  callee +16:29 TypeTable.refOf -> @TypeTable.refOf
 function Builder.constructor(this: Builder, module: RefModule): void -> @Builder.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: module

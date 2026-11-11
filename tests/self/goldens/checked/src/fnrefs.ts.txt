@@ -179,26 +179,38 @@ function hostReferenceMessage(what: string): string -> @hostReferenceMessage
 function holdsFnRef(table: TypeTable, type: i32): boolean -> @holdsFnRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.isArray TypeTable.isFnRef TypeTable.isNullable TypeTable.refOf holdsFnRef
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isFnRef#0 TypeTable.isArray#0 TypeTable.isNullable#0 holdsFnRef#0 TypeTable.refOf#0
+  calls: TypeTable.errOf TypeTable.isArray TypeTable.isFnRef TypeTable.isMaybe TypeTable.isNullable TypeTable.isResult TypeTable.okOf TypeTable.refOf holdsFnRef
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isFnRef#0 TypeTable.isArray#0 TypeTable.isNullable#0 TypeTable.isMaybe#0 holdsFnRef#0 TypeTable.refOf#0 TypeTable.isResult#0 holdsFnRef#0 TypeTable.okOf#0 holdsFnRef#0 TypeTable.errOf#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isFnRef -> @TypeTable.isFnRef
   callee +3:7 TypeTable.isArray -> @TypeTable.isArray
   callee +3:30 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +3:56 TypeTable.isMaybe -> @TypeTable.isMaybe
   callee +4:12 holdsFnRef -> @holdsFnRef
   callee +4:30 TypeTable.refOf -> @TypeTable.refOf
+  callee +6:7 TypeTable.isResult -> @TypeTable.isResult
+  callee +7:12 holdsFnRef -> @holdsFnRef
+  callee +7:30 TypeTable.okOf -> @TypeTable.okOf
+  callee +7:51 holdsFnRef -> @holdsFnRef
+  callee +7:69 TypeTable.errOf -> @TypeTable.errOf
 function classesOf(table: TypeTable, type: i32, into: i32[]): void -> @classesOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: type
-  calls: TypeTable.isArray TypeTable.isNullable TypeTable.isStruct TypeTable.refOf classesOf nish_array_grow
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isArray#0 TypeTable.isNullable#0 classesOf#0 TypeTable.refOf#0 TypeTable.isStruct#0
-  pointer into: size=0 writesThrough=true captured=false passedTo=classesOf#2
+  calls: TypeTable.errOf TypeTable.isArray TypeTable.isMaybe TypeTable.isNullable TypeTable.isResult TypeTable.isStruct TypeTable.okOf TypeTable.refOf classesOf nish_array_grow
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isArray#0 TypeTable.isNullable#0 TypeTable.isMaybe#0 classesOf#0 TypeTable.refOf#0 TypeTable.isResult#0 classesOf#0 TypeTable.okOf#0 classesOf#0 TypeTable.errOf#0 TypeTable.isStruct#0
+  pointer into: size=0 writesThrough=true captured=false passedTo=classesOf#2 classesOf#2 classesOf#2
   stackSites=0 stackLocals=0
-  callee -3:7 TypeTable.isArray -> @TypeTable.isArray
-  callee -3:30 TypeTable.isNullable -> @TypeTable.isNullable
+  callee -6:7 TypeTable.isArray -> @TypeTable.isArray
+  callee -6:30 TypeTable.isNullable -> @TypeTable.isNullable
+  callee -6:56 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee -5:5 classesOf -> @classesOf
+  callee -5:22 TypeTable.refOf -> @TypeTable.refOf
+  callee -4:14 TypeTable.isResult -> @TypeTable.isResult
+  callee -3:5 classesOf -> @classesOf
+  callee -3:22 TypeTable.okOf -> @TypeTable.okOf
   callee -2:5 classesOf -> @classesOf
-  callee -2:22 TypeTable.refOf -> @TypeTable.refOf
+  callee -2:22 TypeTable.errOf -> @TypeTable.errOf
   callee -1:14 TypeTable.isStruct -> @TypeTable.isStruct
 function paramList(decl: Node): Node | null -> @paramList
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false

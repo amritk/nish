@@ -1321,6 +1321,8 @@ const DECLARED = [
     "tests/cases/fnref_eq.ts",
     "tests/cases/fnref_generic.ts",
     "tests/cases/fnref_place_set.ts",
+    "tests/cases/fnref_row_assign.ts",
+    "tests/cases/fnref_row_index_store.ts",
   ].map((program) => ({
     program,
     file: "exit",
