@@ -42,6 +42,12 @@ The inverse of `f64ToBits`: `bitsToF64(f64ToBits(x)) === x` for every `x` except
 
 </scalar-card>
 
+<scalar-card title="c​Errno" icon="phosphor/regular/function" href="#cerrno">
+
+`cErrno()`, from `nish:unsafe` (WP27 S5): the errno the most recent `declare function` call on this thread left, or 0 before any.
+
+</scalar-card>
+
 <scalar-card title="connect​Result" icon="phosphor/regular/function" href="#connectresult">
 
 How the connection of a `tcpConnect` went, asked once `fd` is writable.
@@ -967,6 +973,26 @@ the 64 bits to read as a float.
 <scalar-field name="returns" type="f64">
 
 the `f64` those bits are.
+
+</scalar-field>
+
+### cErrno
+
+`cErrno()`, from `nish:unsafe` (WP27 S5): the errno the most recent
+`declare function` call on this thread left, or 0 before any. Naming it
+anywhere in a program makes every foreign call zero errno just before it
+and save it just after, before the result is copied or anything allocated,
+so the runtime's own work after the call cannot change it. Meaningful only
+where the C function documents that it sets errno. Per thread; refused on a
+freestanding wasm32 build, which has no libc. Capability: unsafe.
+
+```ts
+function cErrno(): i32
+```
+
+<scalar-field name="returns" type="i32">
+
+the saved errno, an `i32`.
 
 </scalar-field>
 

@@ -84,7 +84,7 @@ conservatism is the feature and the stages are small.
 | S2 | an opaque pointer type, `null` only from a foreign call, no arithmetic | **built**, 0.3.0, §7 |
 | S3 | `string` ↔ `char *` marshalling, and who owns the bytes | **built**, §8: S3.1 (`string` parameters), S3.2 (`string` returns), S3.3 (`readCString`, the literal-`null` `CPtr \| null` parameter) |
 | S4 | C structs by layout declaration | proposed |
-| S5 | `errno`, and whether it is a builtin or a declared foreign global | proposed |
+| S5 | `errno`: `cErrno()` in `nish:unsafe`, zeroed before and saved after each foreign call | **built**, §10 |
 
 S1 calls a great deal of libc (`getpid`, `abs`, `isatty`, `sysconf`). It is not
 enough to write `readdirSync` in Nish, the motivating request, and neither is
@@ -559,3 +559,117 @@ correct-looking program has undefined behaviour, so the LANGUAGE.md text has to
 say so in the first sentence and name `putenv` as the example. If that is not
 acceptable, the fallback is to stop at S3.2's *return* direction (copying out
 is sound by construction) and leave string parameters to a shim.
+
+## 10. S5 as built: `cErrno`
+
+### 10a. The decision
+
+```ts
+import { cErrno } from "nish:unsafe";
+declare function open(path: string, flags: i32): i32;
+
+if (open("/nonexistent/x", 0) < 0) console.log(`${cErrno()}`); // 2
+```
+
+`cErrno(): i32` in [`nish:unsafe`](LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping)
+answers the errno the most recent `declare function` call **on this thread**
+left. In a program that names it anywhere, the compiler sets errno to 0
+immediately before every `declare function` call and copies errno into a
+runtime slot immediately after it returns, before any result marshalling.
+Before any foreign call it answers 0. A program that never names it pays
+nothing: no store, no load, no runtime call, and its IR is byte for byte what
+it was.
+
+### 10b. Why not a foreign global
+
+errno is not a variable C exports. glibc and musl define it as
+`(*__errno_location())` and Darwin as `(*__error())`, a macro over a function
+answering a pointer into thread-local storage, so `declare let errno: i32` would
+name a symbol that does not exist on any of them. Nish also has no `declare let`
+(`reject_ffi_errno_global` pins the parser's refusal). Exposing the
+platform's accessor by name would put a per-libc spelling in the compiler, so
+the runtime reads errno through C's own `errno`: `nish_errno_ptr()` is
+`return &errno;`, and each libc (glibc, musl, Darwin, wasi-libc) compiles its
+own definition of it.
+
+### 10c. Why after the call, and why before
+
+Anything the compiler runs after the call may call into libc and move errno:
+copying a `string` result into the arena (`@nish.ffi.str`, §8d), an arena
+allocation that maps a new chunk, or a later `console.log`. So the save is the
+first thing after the `call` instruction, ahead of the `NULL` check of a
+`string` result, and `cErrno()` reads the saved copy, not errno. The case
+`ffi_errno` calls a C function that sets errno to 5 and answers a C string,
+then reads 5 after the copy.
+
+The zeroing is the owner's decision at sign-off. A C function that reports
+failure only through errno, `strtol` out of range or `readdir` at the end of a
+directory against on an error, can only be checked if errno was 0 going in, and
+Nish exposes no setter. So in such a program `cErrno()` after a successful
+call is 0 unless the callee set it: `strtol("42")` reads 0 right after an
+out-of-range `strtol` read `ERANGE` (34).
+
+### 10d. The runtime: one pointer and one slot
+
+```c
+NISH_TLS int32_t nish_errno_slot;
+int *nish_errno_ptr(void) { return &errno; }
+```
+
+The emitted sequence around a foreign call is:
+
+```llvm
+%e = call i32* @nish_errno_ptr()      ; errno's address on this thread
+store i32 0, i32* %e
+%r = call i32 @open(i8* %p, i32 0)
+%v = load i32, i32* %e
+store i32 %v, i32* @nish_errno_slot
+```
+
+and `cErrno()` is `load i32, i32* @nish_errno_slot`. Three runtime functions
+(zero, save, read) would be the plainer shape, but `runtime.c` is held to a
+`.text*` ceiling (`tests/runtime-budgets.js`) and three functions did not fit
+under it; `nish_errno_ptr` compiles to one jump to the libc accessor, and the
+slot is data. `nish_errno_ptr` is declared `nonnull`, and the attribute pass
+gives it no memory effect of its own, so a caller of C keeps exactly the facts
+a caller of C kept before. A function that calls `cErrno()` reads memory: it is
+`readonly`, never `readnone`, so it is not moved across a foreign call or
+merged with a `cErrno()` on the other side of one. A foreign call in such a
+program is never a tail call, since the save follows it.
+
+### 10e. Threads
+
+The slot is `NISH_TLS`, `_Thread_local` under `-DNISH_THREADS=1`, and the IR of
+a `--threads` build declares it `thread_local(initialexec)`, as it does the
+arena. errno is per thread in every libc, so each thread reads what its own
+last foreign call left. A `parallel` worker cannot call a `declare function`
+at all (a foreign call is a shared write, §8 and WP20), so the per-thread case,
+`ffi_errno_threads`, runs two pthreads from its C driver: each stages a
+different errno through a Nish function, waits at a barrier until both have,
+and reads its own.
+
+### 10f. What it does not cover
+
+- **A host-module import** (`--host`, WP50) is not a C call and leaves no
+  errno, so it is neither zeroed nor saved.
+- **A `using` handle's close** (WP53) runs C's close function at scope exit
+  and is not captured: the close is the compiler's call, not the program's,
+  and a program that wants the close's errno calls the close function itself.
+- **wasm32.** A freestanding wasm build has no operating system, and a
+  `declare function` there is already refused, so `cErrno` is refused too,
+  with the wasm32 message every OS builtin gives (`reject_ffi_errno_wasm`).
+  `--profile wasi` links `runtime.c` against wasi-libc, whose `errno` is a
+  plain global, and keeps it.
+- **No setter, no `strerror`.** A program that wants the text declares
+  `strerror(e: i32): string` itself; the copy of its result does not move the
+  saved errno.
+
+### 10g. What a reviewer should push back on
+
+The capture is program-wide, not per call: naming `cErrno` once makes every
+foreign call in every module of the program pay two stores, a load and a call
+it did not ask for. A per-declaration opt-in (`@errno` on the `declare
+function`) would be cheaper and more precise, but it is a new attribute
+syntax for a few nanoseconds against a call into C, and the rule "the most
+recent foreign call on this thread" would then quietly mean "the most recent
+foreign call that asked", which is the kind of rule a reader gets wrong.

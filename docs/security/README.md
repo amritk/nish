@@ -162,6 +162,9 @@ the record that found it. The notes below the table name each such finding.
    fixed Medium. Its use after close is recorded in the row, as nothing
    checks it for a socket either, and is not counted, as RT-30's Darwin
    window is not.
+
+   RT-51 (Low), the `cErrno` slot and the errno capture around a C call
+   (WP27 S5), was reviewed with nothing to fix and is not counted.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache

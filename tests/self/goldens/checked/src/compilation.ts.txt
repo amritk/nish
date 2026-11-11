@@ -1882,8 +1882,11 @@ function Compilation.analyze(this: Compilation): FactsTable -> @Compilation.anal
   callee -5:18 new AnalysisUnit -> @AnalysisUnit.constructor
   local -2:16 unit: ModuleUnit (const)
   callee +0:9 Compilation.entry -> @Compilation.entry
-  local +3:11 facts: FactsTable (const)
-  callee +3:19 analyzeFunctions -> @analyzeFunctions
+  local +4:9 capturesErrno: boolean (let)
+  local +5:16 unit: ModuleUnit (const)
+  local +11:18 unit: ModuleUnit (const)
+  local +15:11 facts: FactsTable (const)
+  callee +15:19 analyzeFunctions -> @analyzeFunctions
 function Compilation.panicsText(this: Compilation): string -> @Compilation.panicsText [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze

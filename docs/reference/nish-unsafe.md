@@ -6,6 +6,7 @@ Element access with no bounds check, signed arithmetic that wraps, and a C strin
 
 ```ts
 import {
+  cErrno,
   readCString,
   uncheckedGet,
   uncheckedSet,
@@ -28,6 +29,12 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="c​Errno" icon="phosphor/regular/function" href="#cerrno">
+
+The errno the most recent `declare function` call on this thread left: a program that names `cErrno` zeroes errno just before every foreign call and saves it just after, before any result marshalling.
+
+</scalar-card>
 
 <scalar-card title="read​CString" icon="phosphor/regular/function" href="#readcstring">
 
@@ -106,6 +113,24 @@ are defined for every pair.
 Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping
 
 ## Functions
+
+### cErrno
+
+The errno the most recent `declare function` call on this thread left:
+a program that names `cErrno` zeroes errno just before every foreign
+call and saves it just after, before any result marshalling. Native and
+`--profile wasi` only.
+
+```ts
+function cErrno(): i32
+```
+
+<scalar-field name="returns" type="i32">
+
+The saved errno; 0 before any foreign call, and 0 after one that
+  did not set it.
+
+</scalar-field>
 
 ### readCString
 

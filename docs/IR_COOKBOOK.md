@@ -14813,6 +14813,121 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-owned-string -->
 
+### `cErrno`: errno after a foreign call
+
+In a program that names `cErrno` (WP27 S5, `nish:unsafe`), every call to a
+`declare function` is bracketed by errno. Before it, `call i32*
+@nish_errno_ptr()` answers errno's address on this thread (the runtime's
+`return &errno;`, so each libc spells it its own way) and `store i32 0` clears
+it; after it, the first thing is a `load` through the same pointer and a
+`store` into `@nish_errno_slot`, a runtime global that is
+`thread_local(initialexec)` under `--threads`. Both come after the NUL check of
+a `string` argument and before anything done with the result, so a copy or an
+allocation that moves errno cannot reach the saved value. `cErrno()` itself is
+one `load i32` of the slot. `@parse` gets no `readonly`, as any caller of C
+does; a function whose only effect is `cErrno()` is `readonly`, never
+`readnone`, so it stays on its side of a foreign call. A program that never
+names `cErrno` emits none of this.
+
+<!-- cookbook:begin decl-ffi-errno -->
+```ts
+import { cErrno } from "nish:unsafe"
+
+declare function strtol(s: string, end: CPtr | null, base: i32): i64
+
+const parse = (s: string): i64 => {
+  const n = strtol(s, null, 10)
+  return cErrno() === 0 ? n : -1
+}
+
+export const main = (): i32 => (parse("99999999999999999999") === -1 ? 0 : 1)
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\00\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [87 x i8] } { i64 86, [87 x i8] c"`strtol`: argument 1 (s) holds a NUL byte, which C would read as the end of the string\00" }, align 8
+@nish_errno_slot = external global i32, align 4
+@.str.2 = private unnamed_addr constant { i64, [21 x i8] } { i64 20, [21 x i8] c"99999999999999999999\00" }, align 8
+
+declare i64 @strtol(i8*, i8*, i32)
+declare void @nish_free_arena() #1
+declare nonnull i32* @nish_errno_ptr() #1
+declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+
+define internal noundef i64 @parse(i8* noundef nonnull noalias readonly align 8 %s) #0 {
+entry:
+  %n.addr = alloca i64, align 8
+  %0 = call i64 @nish_str_index_of(i8* %s, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %1 = icmp sge i64 %0, 0
+  br i1 %1, label %ffi.nul, label %ffi.ok
+
+ffi.nul:
+  call void @nish_panic(i8* bitcast ({ i64, [87 x i8] }* @.str.1 to i8*))
+  unreachable
+
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %s, i64 8
+  %3 = call i32* @nish_errno_ptr()
+  store i32 0, i32* %3, align 4
+  %4 = call i64 @strtol(i8* %2, i8* null, i32 10)
+  %5 = load i32, i32* %3, align 4
+  store i32 %5, i32* @nish_errno_slot, align 4
+  store i64 %4, i64* %n.addr, align 8
+  %6 = load i32, i32* @nish_errno_slot, align 4
+  %7 = icmp eq i32 %6, 0
+  br i1 %7, label %cond.true, label %cond.false
+
+cond.true:
+  %8 = load i64, i64* %n.addr, align 8
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %9 = phi i64 [ %8, %cond.true ], [ -1, %cond.false ]
+  ret i64 %9
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %0 = call i64 @parse(i8* bitcast ({ i64, [21 x i8] }* @.str.2 to i8*))
+  %1 = icmp eq i64 %0, -1
+  br i1 %1, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %2 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  ret i32 %2
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-ffi-errno -->
+
 ### `u8[]`: a buffer and its count
 
 A `u8[]` or `readonly u8[]` argument to a `declare function` (WP53 B1.2) is
@@ -31179,6 +31294,7 @@ declare noundef i32 @nish_async_cancel_after(i64 noundef, i32 noundef) #3
 declare nonnull i8* @nish_async_copy_str(i8* nonnull) #3
 declare nonnull %struct.nish_array* @nishshm_lend(i32 noundef, i32 noundef, i32 noundef, %struct.nish_array*) #3
 declare noundef i32 @nishshm_give_back(i32 noundef, %struct.nish_array* nonnull) #3
+declare nonnull i32* @nish_errno_ptr() #2
 declare noundef i64 @nish_arena_used() #2
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2
