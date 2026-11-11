@@ -28636,7 +28636,8 @@ if (!only || "std_text_index_of_any".includes(only)) {
 if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
   for (const name of ["std_text", "std_text_f64", "std_text_camel_case"]) {
     const dir = path.join(linkDir, name)
-    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    // A timeout, so a #1362 regression fails this check instead of hanging the shard.
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
     const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
     const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
     check(
