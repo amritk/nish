@@ -3975,11 +3975,6 @@ const initialisesFields = (sig: FunctionSig): boolean => {
 }
 
 /**
- * Per-function facts from one walk of the body. `memory` (round 2, see
- * `analyzeFunctions`) tells the collectors which allocations are allocas and
- * which locals hold them, and carries the allocation facts into the result.
- */
-/**
  * One function's facts, before the fixpoint. An instance that `needsStance`
  * and stated none (a `mark*` helper's answer dropped, or a route that calls
  * none) is given the unknown stance here, once, whichever way the build
@@ -4005,7 +4000,12 @@ const collectFacts = (
   return facts
 }
 
-/** `collectFacts` without the unknown-stance fallback: what the walk and the stated stances give. */
+/**
+ * Per-function facts from one walk of the body and the stated stances,
+ * without `collectFacts`' unknown-stance fallback. `memory` (round 2, see
+ * `analyzeFunctions`) tells the collectors which allocations are allocas and
+ * which locals hold them, and carries the allocation facts into the result.
+ */
 const collectStatedFacts = (
   unit: AnalysisUnit,
   table: TypeTable,
