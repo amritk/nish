@@ -7,6 +7,7 @@ import Lexer from "./lexer" -> struct Lexer
 import withoutSeparators from "./lexer" -> function @withoutSeparators
 import StringMap from "./map" -> struct StringMap
 import FLAG_ABSTRACT from "./nodes" -> const FLAG_ABSTRACT
+import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import FLAG_SPREAD_ARGUMENT from "./nodes" -> const FLAG_SPREAD_ARGUMENT
 import FLAG_ACCESSOR from "./nodes" -> const FLAG_ACCESSOR
 import FLAG_ANGLE from "./nodes" -> const FLAG_ANGLE
@@ -3184,51 +3185,51 @@ function Parser.parseObjectLiteral(this: Parser, start: i32): Node -> @Parser.pa
   calls: Parser.advance Parser.allowIn Parser.at Parser.computedNameFailed Parser.eat Parser.expect Parser.methodAfterComputedName Parser.node Parser.objectMethodAhead Parser.parseComputedName Parser.parseExpression Parser.parseMemberNameNode Parser.parseObjectMethod Parser.peek Parser.report Parser.skipBrokenProperty nish_array_grow nish_panic_index
   pointer this: size=112 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.allowIn#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.node#0 Parser.advance#0 Parser.parseExpression#0 Parser.eat#0 Parser.node#0 Parser.at#0 Parser.parseComputedName#0 Parser.computedNameFailed#0 Parser.skipBrokenProperty#0 Parser.objectMethodAhead#0 Parser.methodAfterComputedName#0 Parser.parseObjectMethod#0 Parser.skipBrokenProperty#0 Parser.eat#0 Parser.at#0 Parser.advance#0 Parser.at#0 Parser.at#0 Parser.peek#0 Parser.parseMemberNameNode#0 Parser.report#0 Parser.advance#0 Parser.expect#0 Parser.parseExpression#0 Parser.eat#0 Parser.parseExpression#0 Parser.node#0 Parser.eat#0 Parser.expect#0
   stackSites=0 stackLocals=0
-  callee -10:5 Parser.advance -> @Parser.advance
-  local -9:11 node: Node (const)
-  callee -9:18 Parser.node -> @Parser.node
-  local -8:11 outerNoIn: boolean (const)
-  callee -8:23 Parser.allowIn -> @Parser.allowIn
-  callee -7:13 Parser.at -> @Parser.at
-  callee -7:37 Parser.at -> @Parser.at
-  local -6:13 propertyStart: i32 (const)
-  callee -3:11 Parser.at -> @Parser.at
-  local -2:15 spread: Node (const)
-  callee -2:24 Parser.node -> @Parser.node
-  callee -1:9 Parser.advance -> @Parser.advance
-  callee +0:30 Parser.parseExpression -> @Parser.parseExpression
-  callee +3:14 Parser.eat -> @Parser.eat
-  local +8:13 property: Node (const)
-  callee +8:24 Parser.node -> @Parser.node
-  local +12:13 beforeKey: i32 (const)
-  local +13:13 computed: Node | null (const)
-  callee +13:37 Parser.at -> @Parser.at
-  callee +13:61 Parser.parseComputedName -> @Parser.parseComputedName
-  callee +17:32 Parser.computedNameFailed -> @Parser.computedNameFailed
-  callee +18:13 Parser.skipBrokenProperty -> @Parser.skipBrokenProperty
-  callee +25:31 Parser.objectMethodAhead -> @Parser.objectMethodAhead
-  callee +25:58 Parser.methodAfterComputedName -> @Parser.methodAfterComputedName
-  local +26:15 method: Node (const)
-  callee +26:24 Parser.parseObjectMethod -> @Parser.parseObjectMethod
-  callee +28:15 Parser.skipBrokenProperty -> @Parser.skipBrokenProperty
-  callee +37:14 Parser.eat -> @Parser.eat
-  local +46:11 key: Node | null (let)
-  callee +50:18 Parser.at -> @Parser.at
-  callee +52:9 Parser.advance -> @Parser.advance
-  callee +53:19 Parser.at -> @Parser.at
-  callee +53:42 Parser.at -> @Parser.at
-  callee +53:66 Parser.peek -> @Parser.peek
-  callee +54:15 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
-  callee +56:9 Parser.report -> @Parser.report
-  callee +57:9 Parser.advance -> @Parser.advance
-  callee +61:9 Parser.expect -> @Parser.expect
-  callee +62:32 Parser.parseExpression -> @Parser.parseExpression
-  callee +63:18 Parser.eat -> @Parser.eat
+  callee -9:5 Parser.advance -> @Parser.advance
+  local -8:11 node: Node (const)
+  callee -8:18 Parser.node -> @Parser.node
+  local -7:11 outerNoIn: boolean (const)
+  callee -7:23 Parser.allowIn -> @Parser.allowIn
+  callee -6:13 Parser.at -> @Parser.at
+  callee -6:37 Parser.at -> @Parser.at
+  local -5:13 propertyStart: i32 (const)
+  callee -2:11 Parser.at -> @Parser.at
+  local -1:15 spread: Node (const)
+  callee -1:24 Parser.node -> @Parser.node
+  callee +1:9 Parser.advance -> @Parser.advance
+  callee +2:30 Parser.parseExpression -> @Parser.parseExpression
+  callee +5:14 Parser.eat -> @Parser.eat
+  local +10:13 property: Node (const)
+  callee +10:24 Parser.node -> @Parser.node
+  local +14:13 beforeKey: i32 (const)
+  local +15:13 computed: Node | null (const)
+  callee +15:37 Parser.at -> @Parser.at
+  callee +15:61 Parser.parseComputedName -> @Parser.parseComputedName
+  callee +19:32 Parser.computedNameFailed -> @Parser.computedNameFailed
+  callee +20:13 Parser.skipBrokenProperty -> @Parser.skipBrokenProperty
+  callee +27:31 Parser.objectMethodAhead -> @Parser.objectMethodAhead
+  callee +27:58 Parser.methodAfterComputedName -> @Parser.methodAfterComputedName
+  local +28:15 method: Node (const)
+  callee +28:24 Parser.parseObjectMethod -> @Parser.parseObjectMethod
+  callee +30:15 Parser.skipBrokenProperty -> @Parser.skipBrokenProperty
+  callee +39:14 Parser.eat -> @Parser.eat
+  local +48:11 key: Node | null (let)
+  callee +52:18 Parser.at -> @Parser.at
+  callee +54:9 Parser.advance -> @Parser.advance
+  callee +55:19 Parser.at -> @Parser.at
+  callee +55:42 Parser.at -> @Parser.at
+  callee +55:66 Parser.peek -> @Parser.peek
+  callee +56:15 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
+  callee +58:9 Parser.report -> @Parser.report
+  callee +59:9 Parser.advance -> @Parser.advance
+  callee +63:9 Parser.expect -> @Parser.expect
   callee +64:32 Parser.parseExpression -> @Parser.parseExpression
-  local +67:15 shorthand: Node (const)
-  callee +67:27 Parser.node -> @Parser.node
-  callee +76:12 Parser.eat -> @Parser.eat
-  callee +81:5 Parser.expect -> @Parser.expect
+  callee +65:18 Parser.eat -> @Parser.eat
+  callee +66:32 Parser.parseExpression -> @Parser.parseExpression
+  local +69:15 shorthand: Node (const)
+  callee +69:27 Parser.node -> @Parser.node
+  callee +78:12 Parser.eat -> @Parser.eat
+  callee +83:5 Parser.expect -> @Parser.expect
 function Parser.objectMethodAhead(this: Parser): boolean -> @Parser.objectMethodAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek

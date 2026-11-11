@@ -680,8 +680,12 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * the caller's chunk had left into a chunk above the region's, so a loop that never
  * releases keeps its lanes' bytes rather than a chunk per lane. Measured **850 bytes**
  * against 766 on 2026-11-09 with clang 18.1.3 on linux-x64; the next 256-byte boundary.
+ * Raised to 1,536 by parent/child regions (RT-48, docs/security/runtime.md): each slot
+ * links its parent and children, `free` cascades deepest first and unlinks, and adopt
+ * refuses a region in a tree. Measured **1,486 bytes** against 850 on 2026-11-10 with
+ * clang 18.1.3 on linux-x64; the next 256-byte boundary.
  */
-const RUNTIME_REGION_TEXT_BUDGET = 1024
+const RUNTIME_REGION_TEXT_BUDGET = 1536
 /**
  * The same file with `-DNISH_THREADS=1`: the table's spin lock, the thread number taken
  * from a process-wide counter, and the innermost entered handle, which is thread-local.
@@ -689,8 +693,10 @@ const RUNTIME_REGION_TEXT_BUDGET = 1024
  * as `runtime.c`'s threads build has, so neither number covers the other's room.
  * Raised to 1,280 by ASYNC-15's carve (as above): measured **1,099 bytes** against 994 on
  * 2026-11-09 with clang 18.1.3 on linux-x64; the next 256-byte boundary.
+ * Raised to 1,792 by parent/child regions (as above): measured **1,733 bytes** against
+ * 1,099 on 2026-11-10 with clang 18.1.3 on linux-x64; the next 256-byte boundary.
  */
-const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1280
+const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1792
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-async.c`
@@ -922,6 +928,15 @@ export const RUNTIME_BUDGETS = [
  * code is 2,502; the same template with only the `i32` links to 1,111 bytes, because
  * `--gc-sections` drops the printer and its table. Its loader is 3,556 bytes (gzip
  * 1,483, brotli 1,302): 28 of them the `ignoreBOM` option that keeps a leading U+FEFF.
+ *
+ * examples/wasm-arena/client.ts is the whole-page row (WP50 stage 6, measured
+ * 2026-11-10): client.ts, sim.ts and nish/host/ring compiled with `--host
+ * examples/wasm-arena/host.ts --memory 4` (the page's own build), one `.ll` each,
+ * linked with no runtime-wasm.c. Its 14,108-byte `.wasm` (gzip 6,356, brotli 5,814;
+ * one byte and 66 brotli bytes over the build without `--memory`) is the whole
+ * simulation, the renderer's instance packing and the input ring; its loader is
+ * 10,767 bytes (gzip 3,522, brotli 3,090), most of it the eight module-storage
+ * views and the two host imports that take a string.
  */
 export const WASM_HOST_SIZE_BUDGETS = [
   {
@@ -951,6 +966,15 @@ export const WASM_HOST_SIZE_BUDGETS = [
     wasm: [13046, 11786, 11297],
     loader: [3556, 1483, 1302],
     inline: [44371, 15639, 13682],
+  },
+  {
+    src: "examples/wasm-arena/client.ts",
+    host: "examples/wasm-arena/host.ts",
+    memory: 4,
+    runtime: false,
+    wasm: [14108, 6356, 5814],
+    loader: [10767, 3522, 3090],
+    inline: [42249, 7821, 6770],
   },
 ]
 

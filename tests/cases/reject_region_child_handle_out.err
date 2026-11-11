@@ -1,0 +1,1 @@
+`leak` runs inside a region, and stores `root` into `outer.next`: region memory kept by memory outside the region points at freed memory

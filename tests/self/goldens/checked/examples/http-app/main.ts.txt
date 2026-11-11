@@ -394,7 +394,7 @@ function HttpHandler.acceptAll(this: HttpHandler): void -> @nish.HttpHandler.acc
   callee +2:28 Http1Server.fd -> @nish.Http1Server.fd
   callee +4:14 Http1Server.accept -> @nish.Http1Server.accept
 function HttpHandler.flush(this: HttpHandler): void -> @nish.HttpHandler.flush [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1Server.connection nish.Http1Server.holds nish.HttpHandler.settle nish_panic_index
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.HttpHandler.settle#0

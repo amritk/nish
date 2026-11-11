@@ -1,0 +1,1 @@
+Spread of `Point | null` into `Point` may spread `null`, which under Node copies no field at all: narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)

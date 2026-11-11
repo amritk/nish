@@ -113,6 +113,7 @@ const FLAG_SIGNATURE: i32 = 67108864 [exported]
 const FLAG_GATHERED: i32 = 67108864 [exported]
 const FLAG_SPREAD_ARGUMENT: i32 = 67108864 [exported]
 const FLAG_SCRIPT: i32 = 134217728 [exported]
+const FLAG_OBJECT_SPREAD: i32 = 268435456 [exported]
 struct Node (class) size=40 align=8 exported
   field kind: i32 index=0 offset=0
   field id: i32 index=1 offset=4

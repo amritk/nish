@@ -1,0 +1,1 @@
+Spread of the `Tagged` instance into `Point` copies its field `tag`, which `Point` does not declare: Node copies every own field of an instance and none of its methods, so a class instance is spread only into a type that declares each of its fields; otherwise set the fields by name

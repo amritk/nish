@@ -1,6 +1,12 @@
 /**
- * `nish:region` — memory a program frees when it says so (docs/LANGUAGE.md,
- * "Regions").
+ * `nish:region` — the source behind the builtin module: memory a program frees
+ * when it says so.
+ *
+ * **What the module means is documented once, in `runtime/nish.d.ts`**: the
+ * `declare module "nish:region"` block there is what an editor shows and what
+ * `docs/reference/nish-region.md` is generated from, and `docs/LANGUAGE.md`
+ * ("Regions") holds the rules. The comments in this file say how the module
+ * is built; change a meaning there first.
  *
  *     import { Region, enter, free, regionWith } from "nish:region"
  *
@@ -25,15 +31,19 @@
  * **This file is the source behind the builtin module**, and it is imported
  * only by that name: `nish/region` is refused, so there is one spelling for the
  * checker's rules to be read under (`src/region-check.ts`). What is written
- * here is the meaning, over five intrinsics the compiler gives bodies of their
+ * here is the meaning, over six intrinsics the compiler gives bodies of their
  * own (`src/emit-region.ts`), which swap the thread's arena for the region's
  * around the function they run:
  *
  *   - `region(f)` makes a region, runs `f` with every allocation landing in
  *     it, and keeps what `f` answers as the region's root;
  *   - `enter(r, f)` runs `f(root)` the same way, and answers `f`'s scalar;
- *   - `free(r)` gives the region's memory back. A handle used after it is
- *     freed, or entered twice, or freed while entered, stops the program.
+ *   - `free(r)` gives the region's memory back, and its children's. A handle
+ *     used after it is freed, or entered twice, or freed while it or a child
+ *     is entered, stops the program;
+ *   - `child(f)` and `childWith(arg, f)`, inside an `enter`, make a region
+ *     whose parent is the one entered: it may keep what the parent's root
+ *     reaches, and is freed with the parent.
  *
  * **A `Region<T>` is a handle**, a 64-bit integer, and not a pointer: the root
  * never leaves the region except through `enter`'s function, and that
@@ -53,7 +63,7 @@ export class Region<T> {
   root: T | null = null
 }
 
-// The five intrinsics below are the runtime's region calls. Each is written
+// The six intrinsics below are the runtime's region calls. Each is written
 // here as a call of itself, so it has a type and nothing more; the compiler
 // gives every instance a body of its own (`src/emit-region.ts`), one call into
 // `runtime/runtime-region.c`.
@@ -72,6 +82,9 @@ const reopen = <T>(r: Region<T>): T => reopen(r)
 
 /** `nish_region_leave` with the root `reopen` gave. */
 const leave = <T>(r: Region<T>, root: T): void => leave(r, root)
+
+/** `nish_region_child_new`: a fresh handle whose parent is the region entered now. */
+const childNew = (): i64 => childNew()
 
 /**
  * A new region, whose root is what `f` answers; everything `f` allocates is in
@@ -93,8 +106,8 @@ export const region = <T>(f: () => T): Region<T> => {
  * nothing.
  *
  * @param arg handed to `f`. It lives outside the region, so unless it is a
- *   number, `boolean`, `enum` or string literal `f` may not store it into
- *   region memory (NL2610).
+ *   number, `boolean` or `enum` `f` may not store it into region memory
+ *   (NL2610), a string included.
  * @param f builds the root from `arg`, under the same rules as `region`'s.
  * @returns the handle to the new region, which holds its memory until `free`.
  */
@@ -138,12 +151,50 @@ export const enterWith = <T, A, R>(r: Region<T>, arg: A, f: (root: T, arg: A) =>
 }
 
 /**
+ * A new region whose parent is the region entered now: `region`, except that
+ * the child may keep the parent's memory that `enter` handed in, and freeing
+ * the parent frees the child. Written only in the function an `enter` or
+ * `enterWith` runs (NL2702).
+ *
+ * @param f builds the child's root, under `region`'s rules, except that it may
+ *   store into the child what the parent's root reaches. What the entered
+ *   function allocated in the parent it may not (NL2610).
+ * @returns the handle to the child, which holds its memory until `free` of it
+ *   or of its parent.
+ */
+export const child = <T>(f: () => T): Region<T> => {
+  const h: i64 = childNew()
+  open(h)
+  return close(h, f())
+}
+
+/**
+ * `child` with one argument for `f`: the way the parent's memory reaches the
+ * child, because the arrow `child` runs captures nothing.
+ *
+ * @param arg handed to `f`: a number, `boolean` or `enum`, or memory the
+ *   parent's root reaches, which `f` may store into the child, a string read
+ *   off the root included. Memory the entered function allocated, and a string
+ *   the root does not reach, are refused when `f` stores them (NL2610).
+ * @param f builds the child's root from `arg`, under the same rules as
+ *   `child`'s.
+ * @returns the handle to the child, which holds its memory until `free` of it
+ *   or of its parent.
+ */
+export const childWith = <A, T>(arg: A, f: (arg: A) => T): Region<T> => {
+  const h: i64 = childNew()
+  open(h)
+  return close(h, f(arg))
+}
+
+/**
  * Give the region's memory back. The handle is dead after it. The compiler
  * writes the body.
  *
- * @param _r the region to free. It and every copy of the handle are dead after
- *   this; freeing it again, or while it is entered, stops the program rather
- *   than freeing twice.
+ * @param _r the region to free, with every child made under it. It, its
+ *   children and every copy of their handles are dead after this; freeing it
+ *   again, or while it or a child is entered, stops the program rather than
+ *   freeing twice.
  */
 export const free = <T>(_r: Region<T>): void => {
   // `nish_region_free`: see above.

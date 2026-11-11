@@ -60,8 +60,7 @@ import taskLetCaptureMessage from "./parallel" -> function @taskLetCaptureMessag
 import taskThisCaptureMessage from "./parallel" -> function @taskThisCaptureMessage
 import thisCaptureMessage from "./parallel" -> function @thisCaptureMessage
 import isRegionRunner from "./region-check" -> function @isRegionRunner
-import REGION_ENTER_WITH from "./region-check" -> const REGION_ENTER_WITH
-import REGION_MAKE from "./region-check" -> const REGION_MAKE
+import isRunnerRole from "./region-check" -> function @isRunnerRole
 import regionRoleOf from "./region-check" -> function @regionRoleOf
 import recordRegionCall from "./region-rules" -> function @recordRegionCall
 import isExposeTemplate from "./secret" -> function @isExposeTemplate
@@ -250,7 +249,7 @@ function Expansion.constructor(this: Expansion, ancestor: Instantiation, index: 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: ancestor index
   pointer this: size=16 writesThrough=true captured=false
-  pointer ancestor: size=184 writesThrough=true captured=true
+  pointer ancestor: size=192 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function StructExpansion.constructor(this: StructExpansion, ancestor: StructInstantiation, index: i32): void -> @StructExpansion.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -367,7 +366,7 @@ function expandingAncestor(ctx: CheckContext, from: Instantiation | null, templa
   escaping: from
   calls: Expansion.constructor chainArguments growingArgument nish_alloc_struct
   pointer ctx: size=312 writesThrough=false captured=false passedTo=growingArgument#0
-  pointer from: size=184 writesThrough=true captured=true
+  pointer from: size=192 writesThrough=true captured=true
   pointer template: size=64 writesThrough=false captured=false passedTo=chainArguments#0
   pointer args: size=0 writesThrough=true captured=true passedTo=chainArguments#1
   stackSites=0 stackLocals=0
@@ -491,7 +490,7 @@ function nonTerminatingMessage(table: TypeTable, template: TemplateInfo, ancesto
   calls: TypeTable.typeName chainArguments chainParameters instanceDisplayName nish_panic_index nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=instanceDisplayName#0 instanceDisplayName#0 TypeTable.typeName#0
   pointer template: size=64 writesThrough=true captured=true passedTo=chainParameters#0
-  pointer ancestor: size=184 writesThrough=false captured=false
+  pointer ancestor: size=192 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
   stackSites=0 stackLocals=0
   local +0:7 earlier: TemplateInfo (let)
@@ -837,7 +836,7 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: expr
-  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName argumentLead checkExpression enterMember fitTemplateArguments holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isGatheredRest isParallelEntry isSpawnTemplate jsonRefusal jsonRouteOf matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry recordRegionCall reduceElementMessage refuseUnawaitedCall regionRoleOf resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
+  calls: CheckContext.error CheckContext.errorType CheckContext.textOf CheckedProgram.isEnumMember FunctionSig.isCompileTime StringMap.constructor StringMap.get TypeTable.assignable TypeTable.isEnumMemberType TypeTable.typeName argumentLead checkExpression enterMember fitTemplateArguments holdsAnyUnion instanceDisplayName instantiate isContextualLiteral isFunctionParameter isGatheredRest isParallelEntry isRunnerRole isSpawnTemplate jsonRefusal jsonRouteOf matchFunctionArguments mentionsTypeParam mentionsUnbound nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 noteJsonRoute recordExposeCall recordMemberEntry recordParallelCall recordRangeEntry recordRegionCall reduceElementMessage refuseUnawaitedCall regionRoleOf resolveFunctionArgument resolveInTemplate secretArgumentShapeMessage secretRoleOf typeParamSet unifyAnnotation unionArgumentMessage unwrapParens
   pointer ctx: size=312 writesThrough=true captured=true passedTo=refuseUnawaitedCall#0 fitTemplateArguments#0 checkExpression#0 unifyAnnotation#0 checkExpression#0 unifyAnnotation#0 resolveFunctionArgument#0 CheckContext.errorType#0 matchFunctionArguments#0 CheckContext.errorType#0 CheckContext.errorType#0 secretArgumentShapeMessage#0 CheckContext.errorType#0 instantiate#0 CheckContext.errorType#0 noteJsonRoute#0 recordRangeEntry#0 recordMemberEntry#0 enterMember#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=refuseUnawaitedCall#1 fitTemplateArguments#1 resolveFunctionArgument#1 matchFunctionArguments#1 reduceElementMessage#5 CheckContext.errorType#1 CheckContext.errorType#1 instantiate#4 argumentLead#0 recordParallelCall#1 recordExposeCall#1 recordRegionCall#1
   pointer template: size=64 writesThrough=true captured=true passedTo=isSpawnTemplate#0 typeParamSet#0 resolveInTemplate#0 resolveFunctionArgument#2 matchFunctionArguments#2 reduceElementMessage#2 secretArgumentShapeMessage#1 instantiate#1
@@ -939,6 +938,7 @@ function checkGenericCall(ctx: CheckContext, expr: Node, template: TemplateInfo,
   callee +165:5 recordExposeCall -> @recordExposeCall
   local +168:9 regionRole: i32 (const)
   callee +168:22 regionRoleOf -> @regionRoleOf
+  callee +169:7 isRunnerRole -> @isRunnerRole
   callee +170:5 recordRegionCall -> @recordRegionCall
 function unwrapTypeParens(node: Node): Node -> @unwrapTypeParens
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40

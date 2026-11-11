@@ -244,7 +244,7 @@ function answersFreshElements(name: string): boolean -> @answersFreshElements
 function isListingCall(program: CheckedProgram, facts: FactsTable, expr: Node): boolean -> @isListingCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get answersFreshElements builtinNameOf nish_panic_index unwrapParens
-  pointer program: size=704 writesThrough=false captured=false passedTo=builtinNameOf#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=builtinNameOf#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
@@ -1010,7 +1010,7 @@ function isScalarArgument(table: TypeTable, type: i32): boolean -> @isScalarArgu
 function rootsHoldNoPointer(program: CheckedProgram, table: TypeTable, sig: FunctionSig): boolean -> @rootsHoldNoPointer [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: holdsNoPointerSlot
-  pointer program: size=704 writesThrough=false captured=false passedTo=holdsNoPointerSlot#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=holdsNoPointerSlot#0
   pointer table: size=96 writesThrough=false captured=false passedTo=holdsNoPointerSlot#1
   pointer sig: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1020,7 +1020,7 @@ function holdsNoPointerSlot(program: CheckedProgram, table: TypeTable, type: i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull isScalarArgument
-  pointer program: size=704 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isScalarArgument#0 TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0 isScalarArgument#0
   stackSites=0 stackLocals=0
   callee +0:7 isScalarArgument -> @isScalarArgument
@@ -1037,7 +1037,7 @@ function identRefs(program: CheckedProgram, node: Node, local: Local, out: Node[
   sharedWrite: +0:5
   escaping: node
   calls: identRefs nish_array_grow nish_panic_index
-  pointer program: size=704 writesThrough=false captured=false passedTo=identRefs#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=identRefs#0
   pointer node: size=40 writesThrough=true captured=true
   pointer local: size=64 writesThrough=false captured=false passedTo=identRefs#2
   pointer out: size=0 writesThrough=true captured=false passedTo=identRefs#3
@@ -1050,7 +1050,7 @@ function paramRefs(program: CheckedProgram, node: Node, name: string, out: Node[
   sharedWrite: +0:7
   escaping: name node
   calls: nish_array_grow nish_panic_index nish_str_eq paramRefs
-  pointer program: size=704 writesThrough=false captured=false passedTo=paramRefs#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=paramRefs#0
   pointer node: size=40 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=false passedTo=paramRefs#3
   stackSites=0 stackLocals=0
@@ -1350,7 +1350,7 @@ function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, fact
 function isArenaUsing(program: CheckedProgram, stmt: Node): boolean -> @isArenaUsing [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isArenaCall nish_panic_index unwrapParens
-  pointer program: size=704 writesThrough=false captured=false passedTo=isArenaCall#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=isArenaCall#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 decl: Node (const)

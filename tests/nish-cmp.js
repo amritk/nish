@@ -1195,6 +1195,66 @@ const DECLARED = [
     changelog: "nish.host",
     why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
   },
+  // Parent/child regions: the 0.38.0 seed's nish:region has no child or
+  // childWith, so only the candidate compiles these programs.
+  ...[
+    "tests/cases/region_child_builder_list.ts",
+    "tests/cases/region_child_chain.ts",
+    "tests/cases/region_child_fresh_list.ts",
+    "tests/cases/region_child_keep.ts",
+    "tests/cases/region_child_local_map.ts",
+    "tests/cases/region_child_map.ts",
+    "tests/cases/region_child_plain.ts",
+    "docs/cookbook/mem-region-child.ts",
+    "tests/link/region_child_stale/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "Add parent/child regions",
+    why: "the program imports child or childWith from nish:region, which the 0.38.0 seed does not have, so only the candidate compiles it",
+  })),
+  {
+    program: "tests/cases/obj_spread_class.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_narrowed.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_nested.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_twin.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_override_type.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_order.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "docs/cookbook/obj-spread.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
   {
     program: "tests/cases/arr_filter.ts",
     file: "exit",

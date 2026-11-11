@@ -90,8 +90,8 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish:io`](nish-io.md) | Text and bytes to stdout and stderr with nothing added, and the panic that ends a program on an unmet invariant. |
 | [`nish:net`](nish-net.md) | Non-blocking sockets for a program that owns its loop: TCP, UDP, Unix-domain sockets, and a level-triggered readiness loop to wait on them. |
 | [`nish:process`](nish-process.md) | The process and its host: exit, the environment, children, signals, the clocks, scheduling, and the size of the machine. |
-| [`nish:region`](nish-region.md) | Memory a program frees when it says so (docs/LANGUAGE.md, "Regions"). |
-| [`nish:secret`](nish-secret.md) | Key material, and the rules that keep it in (docs/LANGUAGE.md, "Secrets"). |
+| [`nish:region`](nish-region.md) | Memory a program frees when it says so: an arena of its own, reached through a handle, so that what lives and dies together goes back with one `free` where the thread's arena would hold it until the program ends. |
+| [`nish:secret`](nish-secret.md) | Key material as an opaque value that the checker keeps from leaving the program by any road but one, and that is zeroed, with a store no optimiser may remove, before the function that made it lets go of it. |
 | [`nish:simd`](nish-simd.md) | Sixteen-byte vectors of one lane type, and the lane-wise operations on them, each lowered to target-independent LLVM vector IR. |
 | [`nish:term`](nish-term.md) | Terminal input for a full-screen program: read a key the moment it is pressed, wait for one with a timeout that doubles as a frame clock, and ask the terminal whether it is one, how big it is, and to stop echoing. |
 | [`nish:unsafe`](nish-unsafe.md) | Element access with no bounds check, signed arithmetic that wraps, and a C string read through a pointer nothing proves. |

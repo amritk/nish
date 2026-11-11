@@ -32,8 +32,10 @@ import intrinsicType from "./emit-util" -> function @intrinsicType
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import isGuardedAccess from "./parallel" -> function @isGuardedAccess
 import N_FALSE from "./nodes" -> const N_FALSE
+import N_IDENT from "./nodes" -> const N_IDENT
 import N_MEMBER from "./nodes" -> const N_MEMBER
 import N_NULL from "./nodes" -> const N_NULL
+import N_SPREAD from "./nodes" -> const N_SPREAD
 import N_STRING from "./nodes" -> const N_STRING
 import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
 import N_TRUE from "./nodes" -> const N_TRUE
@@ -201,11 +203,38 @@ function emitConstructorPrologue(emitter: Emitter, sig: FunctionSig): void -> @e
   local +0:9 info: StructInfo | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor
   callee +4:3 emitFieldInitializers -> @emitFieldInitializers
+function emitSpreadCopy(emitter: Emitter, info: StructInfo, obj: string, spread: Node): void -> @emitSpreadCopy
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_exit
+  escaping: obj
+  calls: Emitter.emitExpression StructInfo.field internalErrorFor loadField nish_exit nish_panic_index nish_str_concat storeField structInfoOf
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=structInfoOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 storeField#0 loadField#0
+  pointer info: size=168 writesThrough=true captured=true passedTo=StructInfo.field#0 storeField#1
+  pointer spread: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 copy: SpreadCopy | null (const)
+  callee +2:18 internalErrorFor -> @internalErrorFor
+  local +4:11 sourceInfo: StructInfo (const)
+  callee +4:24 structInfoOf -> @structInfoOf
+  local +5:11 value: Node (const)
+  local +6:11 named: boolean (const)
+  local +7:11 once: string (const)
+  callee +7:31 Emitter.emitExpression -> @Emitter.emitExpression
+  local +8:16 name: string (const)
+  local +9:13 from: FieldInfo | null (const)
+  callee +9:20 StructInfo.field -> @StructInfo.field
+  local +10:13 into: FieldInfo | null (const)
+  callee +10:20 StructInfo.field -> @StructInfo.field
+  callee +13:11 internalErrorFor -> @internalErrorFor
+  local +19:15 source: string (const)
+  callee +19:32 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +20:9 storeField -> @storeField
+  callee +20:46 loadField -> @loadField
 function emitObjectLiteral(emitter: Emitter, expr: Node): string -> @emitObjectLiteral [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via structInfoOf
-  calls: Emitter.emitExpression Emitter.typeOf StructInfo.field allocate internalErrorFor nish_exit nish_panic_index nish_str_concat storeField structInfoOf
-  pointer emitter: size=376 writesThrough=true captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 allocate#0 storeField#0 Emitter.emitExpression#0
+  calls: Emitter.emitExpression Emitter.typeOf StructInfo.field allocate emitSpreadCopy internalErrorFor nish_exit nish_panic_index nish_str_concat storeField structInfoOf
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 allocate#0 emitSpreadCopy#0 storeField#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 allocate#2
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo (const)
@@ -214,11 +243,12 @@ function emitObjectLiteral(emitter: Emitter, expr: Node): string -> @emitObjectL
   local +1:9 obj: string (const)
   callee +1:15 allocate -> @allocate
   local +2:14 prop: Node (const)
-  local +3:11 field: FieldInfo | null (const)
-  callee +3:19 StructInfo.field -> @StructInfo.field
-  callee +6:9 internalErrorFor -> @internalErrorFor
-  callee +9:7 storeField -> @storeField
-  callee +9:45 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +4:7 emitSpreadCopy -> @emitSpreadCopy
+  local +7:11 field: FieldInfo | null (const)
+  callee +7:19 StructInfo.field -> @StructInfo.field
+  callee +10:9 internalErrorFor -> @internalErrorFor
+  callee +13:7 storeField -> @storeField
+  callee +13:45 Emitter.emitExpression -> @Emitter.emitExpression
 function emitNew(emitter: Emitter, expr: Node): string -> @emitNew [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf

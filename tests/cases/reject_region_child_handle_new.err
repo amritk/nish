@@ -1,0 +1,1 @@
+stores `new Item("new")` into `root.next`: region memory kept by memory outside the region

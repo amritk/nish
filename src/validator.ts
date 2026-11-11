@@ -23,7 +23,8 @@
 // forms nothing could make mean anything: `import defer`, a module export
 // name written as a string, and import attributes — and the shapes a fixed
 // layout rules out: a computed name in an object literal, a class or an
-// interface, and object spread. What the parser still turns down itself is
+// interface. Object spread is the checker's (`checkObjectLiteral`), which
+// lowers it to field copies; NL1061 stays reserved. What the parser still turns down itself is
 // syntax TypeScript refuses as syntax too, listed case by case in
 // `tests/self/parser-refusals.txt`.
 
@@ -70,11 +71,9 @@ import {
   N_NAMESPACE,
   N_NEW,
   N_NUMBER,
-  N_OBJECT,
   N_PAREN,
   N_PROPERTY,
   N_REGEX,
-  N_SPREAD,
   N_STRING,
   N_SWITCH,
   N_TEMPLATE,
@@ -352,17 +351,6 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       // the offending member on its own — `T | undefined` is a union first.
       checkNullUnion(ctx, node)
       break
-    case N_OBJECT:
-      // `{ ...a }` is an N_SPREAD among the properties (`src/nodes.ts`),
-      // refused in its turn so that the first form in the literal is the one
-      // reported.
-      for (const member of node.children) {
-        if (member.kind === N_SPREAD) {
-          ctx.error(member, "Object spread is forbidden in " + LANGUAGE + " (set each field by name)")
-        }
-        visit(ctx, member, inTypePosition)
-      }
-      return
     case N_PROPERTY:
       // A computed key is the property's second child, where a string key
       // would be. Its expression is not swept: `[Symbol.iterator]` is one
