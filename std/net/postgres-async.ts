@@ -1353,9 +1353,12 @@ const pgAsyncPlain = (pool: PgAsyncPool, s: i32): boolean => {
   const input: u8[] = pool.inputs[s]
   const stop: i32 = pool.inAnswer[s]
   let at: i32 = pool.inStart[s]
-  while (at >= 0 && at + 5 <= stop && stop <= toI32(input.length)) {
+  while (at >= 0 && at + 5 < toI32(input.length) && at + 5 <= stop && stop <= toI32(input.length)) {
     const type: i32 = toI32(input[at])
     const next: i32 = at + 1 + getI32BE(input, at + 1)
+    if (next < at + 5) {
+      return false
+    }
     if (type === 90) {
       return next === stop && next - at === 6 && toI32(input[at + 5]) === PG_ASYNC_IDLE
     }
