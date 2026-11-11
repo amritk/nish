@@ -319,9 +319,10 @@ export class PgAsyncPool {
   /** How many connections `pgAsyncConnect` made, in all. */
   connects: i32 = 0
   /**
-   * The queue number of the task `pgAsyncSeat` seats next. Tasks waiting for
-   * a seat take one in turn, in the order they began to wait, and a task
-   * that has not waited takes none while any is queued.
+   * The queue number of the first task still waiting for a seat. Of the
+   * tasks waiting, in the order they began to wait, the first as many as
+   * there are free seats may each take one, and a task that has not waited
+   * takes none while any is queued.
    */
   seatHead: i32 = 0
   /** The queue number the next task to wait for a seat takes. */
@@ -877,9 +878,10 @@ const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
 }
 
 /**
- * The seats a task could take now or once a write in progress ends: on each
- * live connection no task claimed whole and none doomed, `depth` less those
- * in flight.
+ * The seats a task could take now: on each live connection no task claimed
+ * whole, none doomed and none mid-write, `depth` less those in flight. A
+ * connection mid-write is left out because a task woken for it would only
+ * wait again; the write's end wakes the pool once more.
  */
 const pgAsyncFreeSeats = (pool: PgAsyncPool): i32 => {
   let free: i32 = 0
@@ -888,6 +890,7 @@ const pgAsyncFreeSeats = (pool: PgAsyncPool): i32 => {
       pool.fds[s] >= 0 &&
       toI32(pool.claimed[s]) === 0 &&
       pool.doomAt[s] < 0 &&
+      toI32(pool.writing[s]) === 0 &&
       pool.seated[s] < pool.depth
     ) {
       free += pool.depth - pool.seated[s]

@@ -803,7 +803,7 @@ class PgAsyncPool
 | `readonly seatClaims: i32[]` | Per seat: its claim count, the high part of its current ticket. |
 | `readonly seated: i32[]` | Per slot: the seats in use. |
 | `readonly seatGone: u8[]` | Per queue number, modulo its length: 1 when its task stopped waiting before its turn. |
-| `seatHead: i32` | The queue number of the task `pgAsyncSeat` seats next. Tasks waiting for a seat take one in turn, in the order they began to wait, and a task that has not waited takes none while any is queued. |
+| `seatHead: i32` | The queue number of the first task still waiting for a seat. Of the tasks waiting, in the order they began to wait, the first as many as there are free seats may each take one, and a task that has not waited takes none while any is queued. |
 | `readonly seatParse: u8[]` | Per seat: 1 when its write carries the statement's Parse. |
 | `readonly seatSeq: i32[]` | Per seat: its statement's sequence number on the connection. |
 | `readonly seatStatement: i32[]` | Per seat: its statement. |

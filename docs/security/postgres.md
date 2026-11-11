@@ -418,7 +418,19 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   freed together go in one loop turn, and a task that has not waited takes
   one only while none waits: "eight seats freed together: 8 seated, over at
   most 5 loop turns", where one a turn took nine
-  (`link/std_postgres_async_pipeline`).
+  (`link/std_postgres_async_pipeline`). A wake counts only the seats a task
+  could take at once, so a connection mid-write wakes no one until its write
+  ends.
+- **A task waiting for its answer yields before it parks.** `pgAsyncTurn`
+  yields to the loop (`sleep(0)`) up to `PG_ASYNC_TURN_YIELDS` (4) times
+  while the answer ahead of its own is unread, then parks on the
+  connection's wake. The yields are bounded, so a stalled server costs four
+  loop turns and then the same park, `claimWaitMs` and cancel as before.
+- **`pgAsyncRead` grows its buffer only as an answer needs it.** The buffer
+  starts the size of the input already read for the answer, then doubles
+  (from `PG_ASYNC_INPUT_SIZE` at the least) whenever it is full, clamped to
+  `maxMessage` + 1 once doubling would pass it, so a message over
+  `maxMessage` still fails `PG_ERR_TOO_BIG` before its body is read.
 - **A pool holds up to `size` + 129 socket pairs for its wakes.** Each
   connection has a wake, the pool has one, and so does each of 128 queue
   lanes. A pair is opened the first time a task waits on its wake and kept

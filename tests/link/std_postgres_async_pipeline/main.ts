@@ -581,7 +581,8 @@ export async function main(): Promise<i32> {
     first = turns.seatedAt[i] < first ? turns.seatedAt[i] : first
     last = turns.seatedAt[i] > last ? turns.seatedAt[i] : last
   }
-  // Seated together, the eight span four turns; one a turn, they span nine.
+  // Seated together, the eight span four turns here, and the check allows five
+  // (`last - first < 5`) for a turn of slack; one a turn, they span nine.
   const span: string = last - first < 5 ? "at most 5" : `${last - first + 1}`
   console.log(`eight seats freed together: ${turns.seated} seated, over ${span} loop turns`)
 

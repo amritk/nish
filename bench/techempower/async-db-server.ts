@@ -15,7 +15,11 @@
 // once, ascending, a seat of its own once the read is answered. Single-row
 // reads (/db) go further, as `TfbDb`'s batcher does: the ids of every /db
 // request that arrives in one loop turn go out as one statement, sent by the
-// first of them, which hands each the number its row answered. The first
+// first of them, which hands each the number its row answered. Whether
+// batching /db reads across requests complies with TFB's rules is unresolved,
+// for this entry and db-server.ts alike (bench/techempower/README.md, "Reads
+// are batched across requests"); it is the owner's call before any
+// submission. The first
 // cached query reads the whole table, and every cached query answers from that
 // copy; one task reads it while the others that need it wait, and a read that
 // fails fails them all and leaves it to the next request. No response is
