@@ -23,7 +23,7 @@ const REGION_CHILD_NEW: i32 = 13 [exported]
 function isRegionSource(program: CheckedProgram): boolean -> @isRegionSource [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isRegionModule
-  pointer program: size=704 writesThrough=false captured=false
+  pointer program: size=728 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isRegionModule -> @isRegionModule
 function isRegionTemplate(template: StructTemplateInfo): boolean -> @isRegionTemplate [exported]
@@ -76,7 +76,7 @@ function regionRoleOf(sig: FunctionSig | null): i32 -> @regionRoleOf [exported]
 function regionRoleIn(program: CheckedProgram, sig: FunctionSig): i32 -> @regionRoleIn [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.definedIn isRegionSource regionRoleOf roleNamed
-  pointer program: size=704 writesThrough=false captured=false passedTo=isRegionSource#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=isRegionSource#0
   pointer sig: size=176 writesThrough=false captured=false passedTo=regionRoleOf#0 FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee +0:12 regionRoleOf -> @regionRoleOf
@@ -86,7 +86,7 @@ function regionRoleIn(program: CheckedProgram, sig: FunctionSig): i32 -> @region
 function isRegionIntrinsic(program: CheckedProgram, sig: FunctionSig): boolean -> @isRegionIntrinsic [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isChildMaker regionRoleIn
-  pointer program: size=704 writesThrough=false captured=false passedTo=regionRoleIn#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=regionRoleIn#0
   pointer sig: size=176 writesThrough=false captured=false passedTo=regionRoleIn#1
   stackSites=0 stackLocals=0
   local +0:9 role: i32 (const)

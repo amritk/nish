@@ -60,7 +60,7 @@ import { codeFor } from "./codes"
 import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { AsyncRegistry, finalizeAsync } from "./emit-async"
 import { emitProgram } from "./emit"
-import { spellCSymbolsApart } from "./generics"
+import { implementsDeclaration, spellCSymbolsApart } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -120,7 +120,9 @@ import {
   FunctionSig,
   ImportBinding,
   ParallelCall,
+  SpreadCopy,
   STRUCT_CLASS,
+  StructInfo,
   StructRegistry,
   StructTemplateInfo,
   TemplateInfo,
@@ -1398,6 +1400,7 @@ export class Compilation {
         this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
       }
     }
+    this.rejectWideSpreads()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -3259,6 +3262,67 @@ export class Compilation {
       at.start,
       at.end,
       `C function \`${sig.name}\` is declared as ${signatureText(this.table, sig)} in ${unit.name} and as ${signatureText(this.table, previousSig)} in ${previousModule.name}; C has one namespace, so every \`declare function\` of one name must agree on its parameter and return types`
+    )
+  }
+
+  /**
+   * An object spread whose source is an interface some class implements with
+   * more fields. The native copy reads the interface's fields, the prefix of
+   * every implementer (`checkImplements`), where Node copies every own field
+   * of the instance the value holds, so the two would build different
+   * objects. Which classes implement an interface is known only once every
+   * module is checked, so this runs then, over every spread any body or
+   * instance recorded (`spreadCopies`).
+   */
+  rejectWideSpreads(): void {
+    const classes: StructInfo[] = []
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (info.kind === STRUCT_CLASS && info.implementsNames.length > 0) {
+          classes.push(info)
+        }
+      }
+    }
+    if (classes.length === 0) {
+      return
+    }
+    // A spread in a generic body is recorded once per instance, at one place.
+    const reported = new StringSet()
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const copy of program.spreadCopies) {
+        const iface = program.struct(this.table.nameOf(copy.source))
+        if (iface === null || iface.kind === STRUCT_CLASS) {
+          continue
+        }
+        const place = `${copy.file.path}:${copy.at.start}:${copy.source}`
+        if (reported.has(place)) {
+          continue
+        }
+        for (const cls of classes) {
+          if (cls.fields.length > iface.fields.length && implementsDeclaration(cls, iface)) {
+            this.reportWideSpread(copy, cls, cls.fields[iface.fields.length].name)
+            reported.add(place)
+            break
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * The refusal of spread `copy`, whose interface source may hold an instance
+   * of class `cls`, which carries field `extra` beyond the interface's.
+   */
+  reportWideSpread(copy: SpreadCopy, cls: StructInfo, extra: string): void {
+    this.sink.report(
+      copy.file,
+      copy.at.start,
+      copy.at.end,
+      `Spread of \`${this.table.typeName(copy.source)}\` into \`${this.table.typeName(copy.into)}\` may ` +
+        `spread an instance of \`${cls.name}\`, which implements it with field \`${extra}\` besides: Node copies every own ` +
+        "field of the instance a value holds, and the native copy only the interface's, so spread a value " +
+        "of a class type, or set the fields by name"
     )
   }
 

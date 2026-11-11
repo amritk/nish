@@ -94,7 +94,7 @@ function RangeBody.constructor(this: RangeBody, ctx: CheckContext, sig: Function
   pointer ctx: size=312 writesThrough=true captured=true passedTo=StoreScan.constructor#1
   pointer sig: size=176 writesThrough=true captured=true passedTo=isShmWindowIntrinsic#1
   pointer body: size=40 writesThrough=true captured=true
-  pointer instance: size=184 writesThrough=true captured=true
+  pointer instance: size=192 writesThrough=true captured=true
   pointer tables: size=64 writesThrough=true captured=true passedTo=StoreScan.constructor#2
   pointer callees: size=0 writesThrough=true captured=true passedTo=StoreScan.constructor#3
   stackSites=0 stackLocals=0
@@ -493,7 +493,7 @@ function noteStore(program: CheckedProgram, ctx: CheckContext, target: Node, sca
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_array_grow nish_str_eq recordStoreType unwrapBoundsParens
-  pointer program: size=704 writesThrough=false captured=false passedTo=recordStoreType#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=recordStoreType#0
   pointer ctx: size=312 writesThrough=false captured=false
   pointer target: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer scan: size=88 writesThrough=true captured=false

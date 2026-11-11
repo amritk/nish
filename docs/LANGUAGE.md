@@ -5761,6 +5761,53 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   (`tests/cases/cls_literal_methodless`). The `nish/threads` classes keep
   their own refusal, NL2515 (see "Atomics"), and a class holding a `Secret`
   keeps NL2545.
+- An **object spread** `{ ...s, x: 1 }` copies `s`'s fields into the
+  literal, one store per field, and is otherwise the literal written out:
+  the spread and `{ x: 1, y: s.y }` emit the same IR, an `alloca` where the
+  literal stays local and an arena allocation where it escapes
+  (`tests/run.js` "object spread", `tests/cases/obj_spread_twin`). Each
+  spread is evaluated once, in source order with the entries around it, and
+  the entry written later wins: a field set after a spread overrides it, and
+  of two spreads the later one supplies the fields both have; only the
+  fields no later entry overrides are stored
+  (`tests/cases/obj_spread_order`). A field holding an object is copied as
+  the reference it is (`obj_spread_nested`), a class instance spreads its
+  fields and none of its methods, as Node's spread does
+  (`obj_spread_class`), and a nullable source spreads once narrowed
+  (`obj_spread_narrowed`); a write to the source after the spread leaves the
+  copy as it was (`obj_spread_class`). The literal must still set every
+  field of its type, by the spread or by name: a spread that supplies only
+  some of them leaves the rest
+  `` Object literal for `Point` is missing field `z` ``
+  (`reject_object_spread_missing_field`). Each form whose Node reading would
+  differ from the copy is refused:
+
+  | Form | Code | Tests |
+  | --- | --- | --- |
+  | no contextual class or interface type, `const o = { ...s }`: ``An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)`` | NL2709 | `reject_object_spread_no_target`, `reject_ffi_handle_walk_spread` |
+  | a source that is not a class or interface value, `{ ...n }` for an `i32` | NL2705 | `reject_object_spread` |
+  | a source that may be `null`, which Node spreads as no field at all: narrow it first | NL2703 | `reject_object_spread_nullable` |
+  | a union source, whose fields depend on the variant it holds | NL2704 | `reject_object_spread_union` |
+  | a class instance with a field the target does not declare, which Node would carry on the object | NL2706 | `reject_object_spread_class_extra` |
+  | an interface value with a field the target does not declare | NL2707 | `reject_object_spread_extra_field` |
+  | a copied field whose type differs from the target's, `i32` into `i64`: the copy converts nothing. A field a later entry sets by name is not copied, so its type is not checked (`obj_spread_override_type`); one a later spread supplies is still checked | NL2708 | `reject_object_spread_field_type` |
+  | a field set by name before a spread that always overwrites it, TypeScript's TS2783 | NL2710 | `reject_object_spread_overwritten` |
+
+  An interface value may hold any class that implements it, and such a
+  class may declare fields after the interface's prefix (see `implements`
+  below): Node copies every own field of the instance, the native copy only
+  the interface's. So once the whole program is checked, a spread of an
+  interface `I` into a type that lacks a field of some class implementing
+  `I` is
+  `` Spread of `Named` into `Tagged` may spread an instance of `Item`, which implements it with field `weight` besides: … ``
+  (NL3055, `reject_object_spread_width`); spread a value of the class type
+  instead. A spread into the typed JSON options of a class is NL2711
+  (`reject_json_options_spread`). One gap remains: Nish accepts `private`
+  on a field and ignores it, so a class instance with a `private` field
+  spreads into a type that declares that field, where `tsc` refuses the
+  spread; under Node the copy is the same object either way. A computed key is still refused
+  (NL1041). NL1061, Phase 0's old refusal of every object spread, is
+  retired and never reused.
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
@@ -10750,8 +10797,11 @@ export const main = (): i32 => {
   | `presence` naming a field, or a presence field, the class does not declare | NL2495 | `json_reject_presence_misspelt_field`, `json_reject_presence_misspelt_flag` |
   | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded by a presence field of its own or is renamed or made optional; a field recorded twice | NL2592 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `reject_json_presence_twice` |
 
-  A spread or a computed key in the literal is refused by Phase 0 as it is
-  anywhere (NL1061, NL1041; `reject_json_options_spread`,
+  A spread in the literal is
+  `` `User.json` spreads another value into the typed JSON options: … ``,
+  because the options are read from the class's text, where a spread names
+  nothing (NL2711, `reject_json_options_spread`), and a computed key is
+  refused by Phase 0 as it is anywhere (NL1041,
   `json_reject_options_computed`), a subclass by `extends`
   (`json_reject_options_subclass`), and a second `static readonly json` is a
   duplicate member (`reject_json_options_twice`). The options are not a
@@ -12752,7 +12802,6 @@ fragment `tests/run.js` matches and the case that proves it.
 | `yield` | `` `yield` is forbidden in Nish (no coroutine runtime) `` | `reject_yield` |
 | regex literals | `Regular expression literals are forbidden in Nish (no regex engine in the runtime)` | `reject_regex`, `reject_regex_class` |
 | `bigint` literals (`10n`) | `` `bigint` literals are forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_literal` |
-| object spread `{ ...a }` | `Object spread is forbidden in Nish (set each field by name)` (NL1061, Phase 0) | `reject_object_spread` |
 | `{ __proto__: x }` | `` `__proto__` is forbidden in Nish (no prototype chain) `` | `reject_proto_literal` |
 | `x.__proto__` | `` `__proto__` access is forbidden in Nish (no prototype chain) `` | `reject_proto_access` |
 | `x.prototype` | `` `.prototype` access is forbidden in Nish (no prototype chain) `` | `reject_prototype_access` |

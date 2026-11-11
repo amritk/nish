@@ -1,0 +1,1 @@
+Spread of `Point3` into `Point` copies field `z`, which `Point` does not declare, and Node would carry it on the object anyway: spread a value whose every field the target declares, or set the fields by name

@@ -37,12 +37,12 @@ const COPY_SPREAD: i32 = 1
 const COPY_AT_RUN: i32 = 2
 function inlineRecord(program: CheckedProgram, type: i32): boolean -> @inlineRecord
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer program: size=704 writesThrough=false captured=false
+  pointer program: size=728 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 info: StructInfo (const)
 function hasInlineRecords(program: CheckedProgram): boolean -> @hasInlineRecords
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer program: size=704 writesThrough=false captured=false
+  pointer program: size=728 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 info: StructInfo (const)
 function recordReference(walk: Walk, type: i32): boolean -> @recordReference

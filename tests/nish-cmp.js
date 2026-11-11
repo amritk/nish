@@ -1209,6 +1209,48 @@ const DECLARED = [
     why: "the program imports child or childWith from nish:region, which the 0.38.0 seed does not have, so only the candidate compiles it",
   })),
   {
+    program: "tests/cases/obj_spread_class.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_narrowed.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_nested.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_twin.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_override_type.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "tests/cases/obj_spread_order.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
+    program: "docs/cookbook/obj-spread.ts",
+    file: "exit",
+    changelog: "object literals, lowered to field copies",
+    why: "the 0.38.0 seed refuses every object spread (NL1061), so only the candidate compiles the program",
+  },
+  {
     program: "tests/cases/arr_filter.ts",
     file: "exit",
     changelog: "methods map, filter, some, every, findIndex and slice",

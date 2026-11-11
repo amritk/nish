@@ -147,7 +147,7 @@ tagged classes and interfaces, `eval`, `Function`, `Proxy`,
 `var`, `try`/`catch`/`finally` and `throw` (a failure is a `Result<T, E>`,
 WP16), a label on anything but a loop, a block or a `switch`, generators and `yield`, `async` on a method, a field or a constructor (a top-level `async` function or arrow compiles, WP49),
 decorators, enum members that are not numeric literals, namespaces and
-`declare global`, computed property names, object spread, prototype access,
+`declare global`, computed property names, prototype access,
 `Object.assign` and its relatives, string-keyed element access, `?.` outside a
 chain that ends in `??`, `?.[i]` and `f?.()`, `??` except on a `T | null`, a
 `?.` chain or a `Map.get` result, regex literals, dynamic `import()`,

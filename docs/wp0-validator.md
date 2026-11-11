@@ -34,7 +34,9 @@ Every row of the LANGUAGE.md table breaks one of four guarantees from
 - **Layout**: every value has one fixed, known memory layout. This rules out
   `any`, `unknown`, `undefined`, unions other than `T | null`, `var` (hoisting
   with an implicit `undefined`), non-numeric enum members, computed property
-  names, object spread and `delete`.
+  names and `delete`. Object spread was on this list until it was lowered to
+  field copies of a type the program declares (`docs/LANGUAGE.md`, "Interfaces
+  and object literals").
 - **No dynamic dispatch**: no prototype chain and no runtime property lookup,
   so field access is always a `getelementptr`. This rules out `with`, `in`,
   `instanceof`, `typeof`, `==`/`!=` (which coerce across types), `Proxy`,

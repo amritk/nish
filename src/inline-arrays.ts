@@ -76,6 +76,7 @@ import {
   N_OBJECT,
   N_PAREN,
   N_RETURN,
+  N_SPREAD,
   N_UNARY,
   N_VAR_DECL,
   Node,
@@ -87,6 +88,7 @@ import {
   inlineElementStruct,
   Instantiation,
   JSON_NONE,
+  SpreadCopy,
   STRUCT_CLASS,
   StructInfo,
 } from "./program"
@@ -683,6 +685,35 @@ const checkOrder = (walk: InlineWalk, c: Candidate): void => {
 }
 
 /**
+ * A spread `{ ...s }` reads each field it copies off `s` as a whole value and
+ * stores it into the literal's, so both fields keep the pointer layout. Where
+ * the walk has no types, which fields it copies is unknown, so every candidate
+ * is spoiled.
+ */
+const spoilSpread = (walk: InlineWalk, program: CheckedProgram, spread: Node, typed: boolean): void => {
+  let copy: SpreadCopy | null = null
+  if (typed) {
+    copy = program.nodeSpreadCopies[spread.id]
+  }
+  if (copy === null) {
+    for (const c of walk.candidates) {
+      c.ok = false
+    }
+    return
+  }
+  const from = walk.table.nameOf(copy.source)
+  const into = walk.table.nameOf(copy.into)
+  for (const name of copy.fields) {
+    for (const key of [`${from}.${name}`, `${into}.${name}`]) {
+      const at = walk.byKey.get(key, -1)
+      if (at >= 0) {
+        walk.candidates[at].ok = false
+      }
+    }
+  }
+}
+
+/**
  * An object literal of a class sets every field of it with a value the rule
  * does not look at, so each array field it names keeps the pointer layout.
  */
@@ -690,6 +721,10 @@ const spoilLiteral = (walk: InlineWalk, program: CheckedProgram, node: Node, typ
   const type = program.nodeTypes[node.id]
   const t = type < 0 ? -1 : walk.table.stripNull(type)
   for (const prop of node.children) {
+    if (prop.kind === N_SPREAD) {
+      spoilSpread(walk, program, prop, typed)
+      continue
+    }
     if (!walk.names.has(prop.text)) {
       continue
     }

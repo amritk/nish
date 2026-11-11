@@ -60,6 +60,7 @@ import {
   N_PAREN,
   N_PROPERTY,
   N_RETURN,
+  N_SPREAD,
   N_THIS,
   N_UNARY,
   N_VAR_DECL,
@@ -76,7 +77,15 @@ import {
 } from "./parallel"
 import { isRegionSource, isRegionTemplate } from "./region-check"
 import { recordRegionCall, regionNewMessage } from "./region-rules"
-import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
+import {
+  EnumInfo,
+  FieldInfo,
+  FunctionSig,
+  ROLE_CONSTRUCTOR,
+  SpreadCopy,
+  STRUCT_CLASS,
+  StructInfo,
+} from "./program"
 import { simdCompareMessage } from "./simd"
 import { refuseStorageLength } from "./module-storage"
 import { Scope } from "./symbols"
@@ -720,9 +729,219 @@ const classLiteralMessage = (name: string): string =>
   `\`${name}\` has methods, so it is made only by \`new\`: an object literal would be a plain object under Node, ` +
   `with none of the methods the class is used through. Write \`new ${name}(...)\``
 
-/** `{ x: 1, y: 2 }`, which needs a contextual class or interface type. */
+/** Whether an object literal has a `...s` among its properties. */
+const hasSpread = (expr: Node): boolean => {
+  for (const prop of expr.children) {
+    if (prop.kind === N_SPREAD) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `name` is one of `names`. */
+const namedIn = (names: string[], name: string): boolean => {
+  for (const each of names) {
+    if (each === name) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether an entry of literal `expr` after entry `entry` sets key `name` by name. */
+const setByNameAfter = (expr: Node, entry: Node, name: string): boolean => {
+  let after = false
+  for (const prop of expr.children) {
+    if (after && prop.kind === N_PROPERTY && prop.text === name) {
+      return true
+    }
+    if (prop.id === entry.id) {
+      after = true
+    }
+  }
+  return false
+}
+
+/**
+ * The struct a `...s` in a literal for `info` copies from, or `null` once it
+ * is reported. A spread is lowered to one load and one store per field, so
+ * what it copies has to be the source's declared fields, each the type the
+ * target declares it unless an entry of `literal` after the spread sets it
+ * by name, and nothing Node would copy besides: every refusal
+ * below is a value whose spread under Node copies a different set of fields,
+ * or a field the native copy would have to convert.
+ */
+const checkSpreadSource = (
+  ctx: CheckContext,
+  spread: Node,
+  info: StructInfo,
+  literal: Node,
+  scope: Scope
+): StructInfo | null => {
+  const value = spread.children[0]
+  const got = checkExpression(ctx, value, scope, -1)
+  if (got === T_ERROR) {
+    return null
+  }
+  if (ctx.table.isNullable(got)) {
+    const target = ctx.table.typeName(info.type)
+    const spelled = ctx.table.typeName(got)
+    ctx.error(
+      value,
+      `Spread of \`${spelled}\` into \`${target}\` may spread \`null\`, which under Node copies no field at all: ` +
+        "narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)"
+    )
+    return null
+  }
+  if (ctx.table.isUnion(got)) {
+    const target = ctx.table.typeName(info.type)
+    const spelled = ctx.table.typeName(got)
+    ctx.error(
+      value,
+      `Spread of the union \`${spelled}\` into \`${target}\`: which fields a spread copies depends on the variant ` +
+        "it holds at run time, so narrow it to one variant first, or set the fields by name"
+    )
+    return null
+  }
+  let source: StructInfo | null = null
+  if (ctx.table.isStruct(got)) {
+    source = structOf(ctx, got)
+  }
+  if (
+    source === null ||
+    isCollectionStruct(source) ||
+    isThreadsStruct(source) ||
+    ctx.table.secretInner(got) >= 0
+  ) {
+    const target = ctx.table.typeName(info.type)
+    const spelled = ctx.table.typeName(got)
+    ctx.error(
+      value,
+      `Spread of \`${spelled}\` into \`${target}\`: only a value of a class or interface the program declares has fields ` +
+        "an object spread copies one by one, so set each field by name"
+    )
+    return null
+  }
+  // Find the first field the copy cannot make, allocating nothing per pass;
+  // the refusal's words are built once, after the loop.
+  let bad: FieldInfo | null = null
+  let badInto: FieldInfo | null = null
+  for (const field of source.fields) {
+    const into = info.field(field.name)
+    // A field an entry after the spread sets by name is never copied, so its
+    // type here is the later entry's to give, as TypeScript reads it.
+    if (into === null || (into.type !== field.type && !setByNameAfter(literal, spread, field.name))) {
+      bad = field
+      badInto = into
+      break
+    }
+  }
+  if (bad === null) {
+    return source
+  }
+  reportSpreadField(ctx, value, source, info, got, bad, badInto)
+  return null
+}
+
+/**
+ * The refusal of field `field` of `source`, which a spread of `value` (of
+ * type `got`) into `info` cannot copy: `into`, the target's field of its
+ * name, is missing or of another type.
+ */
+const reportSpreadField = (
+  ctx: CheckContext,
+  value: Node,
+  source: StructInfo,
+  info: StructInfo,
+  got: i32,
+  field: FieldInfo,
+  into: FieldInfo | null
+): void => {
+  const target = ctx.table.typeName(info.type)
+  const spelled = ctx.table.typeName(got)
+  if (into === null && source.kind === STRUCT_CLASS) {
+    ctx.error(
+      value,
+      `Spread of the \`${spelled}\` instance into \`${target}\` copies its field \`${field.name}\`, which \`${target}\` ` +
+        "does not declare: Node copies every own field of an instance and none of its methods, so a class " +
+        "instance is spread only into a type that declares each of its fields; otherwise set the fields by name"
+    )
+    return
+  }
+  if (into === null) {
+    ctx.error(
+      value,
+      `Spread of \`${spelled}\` into \`${target}\` copies field \`${field.name}\`, which \`${target}\` does not ` +
+        "declare, and Node would carry it on the object anyway: spread a value whose every field the target " +
+        "declares, or set the fields by name"
+    )
+    return
+  }
+  ctx.error(
+    value,
+    `Field \`${field.name}\` spread from \`${spelled}\` is \`${ctx.table.typeName(field.type)}\`, but \`${target}\` ` +
+      `declares it \`${ctx.table.typeName(into.type)}\`: a spread copies each field as it is, so the two types ` +
+      `must be the same; set it by name (\`${field.name}: s.${field.name}\`)`
+  )
+}
+
+/**
+ * Record what each spread of a checked literal copies: walking the entries
+ * from the last, a spread stores the fields of its source that no entry
+ * after it sets, since the later entry wins.
+ */
+const recordSpreadCopies = (ctx: CheckContext, expr: Node, into: i32, sources: StructInfo[]): void => {
+  const later: string[] = []
+  let next = sources.length - 1
+  let i = expr.children.length - 1
+  while (i >= 0) {
+    const prop = expr.children[i]
+    if (prop.kind === N_PROPERTY) {
+      later.push(prop.text)
+    } else if (prop.kind === N_SPREAD && next >= 0 && next < sources.length) {
+      const source = sources[next]
+      next = next - 1
+      const fields: string[] = []
+      for (const field of source.fields) {
+        if (!namedIn(later, field.name)) {
+          fields.push(field.name)
+        }
+      }
+      for (const name of fields) {
+        later.push(name)
+      }
+      const copy = new SpreadCopy(prop, ctx.source, source.type, into, fields)
+      ctx.program.nodeSpreadCopies[prop.id] = copy
+      ctx.program.spreadCopies.push(copy)
+    }
+    i = i - 1
+  }
+}
+
+/**
+ * The refusal of entry `entry`, which sets field `name` by name before a
+ * spread of a `source` that always sets it (TypeScript's TS2783).
+ */
+const reportOverwritten = (ctx: CheckContext, entry: Node, name: string, source: i32): void => {
+  ctx.error(
+    entry,
+    `Field \`${name}\` is set by name and then always overwritten by the spread of ` +
+      `\`${ctx.table.typeName(source)}\` after it, which TypeScript refuses (TS2783): ` +
+      "set it after the spread, or leave it out"
+  )
+}
+
+/** `{ x: 1, y: 2 }` and `{ ...s, x: 1 }`, which need a contextual class or interface type. */
 export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   if (want < 0 || !ctx.table.isStruct(ctx.table.stripNull(want))) {
+    if (hasSpread(expr)) {
+      return ctx.errorType(
+        expr,
+        "An object literal with a spread needs a contextual class or interface type, whose layout the spread's " +
+          "fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)"
+      )
+    }
     return ctx.errorType(
       expr,
       "Object literal needs a contextual class or interface type (annotate the variable: `const p: P = { ... }`)"
@@ -743,8 +962,35 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
   if (info.kind === STRUCT_CLASS && hasMethods(info) && !isThreadsStruct(info)) {
     return ctx.errorType(expr, classLiteralMessage(ctx.table.typeName(info.type)))
   }
+  // `seen` is the fields set by name, `named` their nodes, and `spread` the
+  // fields a spread sets; `sources` is each spread's struct, in order.
   const seen: string[] = []
+  const named: Node[] = []
+  const spread: string[] = []
+  const sources: StructInfo[] = []
+  let spreadFailed = false
   for (const prop of expr.children) {
+    if (prop.kind === N_SPREAD) {
+      const source = checkSpreadSource(ctx, prop, info, expr, scope)
+      if (source === null) {
+        spreadFailed = true
+        continue
+      }
+      for (const field of source.fields) {
+        let k = 0
+        while (k < seen.length && k < named.length) {
+          // TS2783: a field set by name before a spread that always sets it.
+          if (seen[k] === field.name) {
+            reportOverwritten(ctx, named[k], field.name, source.type)
+            spreadFailed = true
+          }
+          k = k + 1
+        }
+        spread.push(field.name)
+      }
+      sources.push(source)
+      continue
+    }
     if (prop.kind !== N_PROPERTY) {
       continue
     }
@@ -764,6 +1010,7 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
       continue
     }
     seen.push(prop.text)
+    named.push(prop)
     const value = prop.children[0]
     // A ranged field is the exception (WP31 §6): the range is a sink the value
     // enters, not a width a literal might take, so it always reaches the value,
@@ -778,14 +1025,11 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
       )
     }
   }
+  if (spreadFailed) {
+    return target
+  }
   for (const field of info.fields) {
-    let set = false
-    for (const name of seen) {
-      if (name === field.name) {
-        set = true
-      }
-    }
-    if (!set) {
+    if (!namedIn(seen, field.name) && !namedIn(spread, field.name)) {
       ctx.error(
         expr,
         `Object literal for \`${ctx.table.typeName(info.type)}\` is missing field \`${field.name}\``
@@ -793,6 +1037,7 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
       return target
     }
   }
+  recordSpreadCopies(ctx, expr, info.type, sources)
   return target
 }
 
