@@ -1345,7 +1345,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "exit",
-    changelog: "function references as arguments, `| null` and `Map` values",
+    changelog: "a Map value may be a function reference",
     why: "the 0.38.0 seed refuses a function type outside a parameter, and a Map value is one, so only the candidate compiles the program (WP51 stage 2)",
   })),
   {

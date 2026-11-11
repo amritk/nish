@@ -344,110 +344,113 @@ struct CheckedProgram (class) size=800 align=8 exported
   field isEntry: boolean index=2 offset=16
   field scriptLocals: StringSet index=3 offset=24
   field gathered: boolean index=4 offset=32
-  field packageName: string index=5 offset=40
-  field symbolPrefix: string index=6 offset=48
-  field functions: FunctionSig[] index=7 offset=56
-  field exports: StringMap index=8 offset=64
-  field imports: ImportBinding[] index=9 offset=72
-  field structs: StringMap index=10 offset=80
-  field structList: StructInfo[] index=11 offset=88
-  field reachableStructs: i32[] index=12 offset=96
-  field externalInstances: FunctionSig[] index=13 offset=104
-  field externalInstanceNames: StringSet index=14 offset=112
-  field deferredInstances: DeferredInstance[] index=15 offset=120
-  field typeNames: StringSet index=16 offset=128
-  field importsUsedAsTypes: StringSet index=17 offset=136
-  field constants: StringMap index=18 offset=144
-  field constantList: ConstInfo[] index=19 offset=152
-  field builtinImports: StringMap index=20 offset=160
-  field builtinImportList: BuiltinExport[] index=21 offset=168
-  field aliases: StringMap index=22 offset=176
-  field aliasList: AliasInfo[] index=23 offset=184
-  field templates: StringMap index=24 offset=192
-  field templateList: TemplateInfo[] index=25 offset=200
-  field instantiations: StringMap index=26 offset=208
-  field instantiationList: Instantiation[] index=27 offset=216
-  field structTemplates: StringMap index=28 offset=224
-  field structTemplateList: StructTemplateInfo[] index=29 offset=232
-  field structInstantiations: StringMap index=30 offset=240
-  field structInstantiationList: StructInstantiation[] index=31 offset=248
-  field methodTemplateList: TemplateInfo[] index=32 offset=256
-  field methodConstraints: StringMap index=33 offset=264
-  field methodConstraintLists: ConstraintList[] index=34 offset=272
-  field activeInstance: Instantiation | null index=35 offset=280
-  field savedNodeTypes: i32[] index=36 offset=288
-  field savedNodeLocals: Local | null[] index=37 offset=296
-  field savedNodeConstants: ConstInfo | null[] index=38 offset=304
-  field savedNodeCallees: FunctionSig | null[] index=39 offset=312
-  field savedNodeCoercions: i32[] index=40 offset=320
-  field savedNodeCaseValues: i64[] index=41 offset=328
-  field savedNodeProvenIndex: boolean[] index=42 offset=336
-  field savedNodeProvenClamp: boolean[] index=43 offset=344
-  field savedNodeProvenRange: boolean[] index=44 offset=352
-  field savedNodeProvenNoOverflow: boolean[] index=45 offset=360
-  field savedNodeDisjointCopy: boolean[] index=46 offset=368
-  field savedNodeSpreadCopies: SpreadCopy | null[] index=47 offset=376
-  field savedFusion: FusionTable index=48 offset=384
-  field enums: StringMap index=49 offset=392
-  field enumList: EnumInfo[] index=50 offset=400
-  field typeImports: ImportBinding[] index=51 offset=408
-  field entryMain: FunctionSig | null index=52 offset=416
-  field usesArgv: boolean index=53 offset=424
-  field f64Mode: boolean index=54 offset=425
-  field guardShadows: i32 index=55 offset=428
-  field unsafeImports: ImportBinding[] index=56 offset=432
-  field unsafeCalls: UnsafeCall[] index=57 offset=440
-  field parallelCalls: ParallelCall[] index=58 offset=448
-  field spawnCalls: ParallelCall[] index=59 offset=456
-  field scopeChannels: ScopeChannels[] index=60 offset=464
-  field exposeCalls: ParallelCall[] index=61 offset=472
-  field regionCalls: ParallelCall[] index=62 offset=480
-  field asyncSpawns: ParallelCall[] index=63 offset=488
-  field channelSends: ParallelCall[] index=64 offset=496
-  field secretNeeds: SecretNeed[] index=65 offset=504
-  field panicSites: PanicSite[] index=66 offset=512
-  field inlineAssignNodes: Node[] index=67 offset=520
-  field inlineAssignLengths: i32[] index=68 offset=528
-  field newTypeArgumentIds: StringMap index=69 offset=536
-  field newTypeArguments: Node[] index=70 offset=544
-  field memberSets: i32[] index=71 offset=552
-  field memberLists: i32[][] index=72 offset=560
-  field collectionsLibrary: boolean index=73 offset=568
-  field secretLibrary: boolean index=74 offset=569
-  field regionLibrary: boolean index=75 offset=570
-  field mapExtrasLibrary: boolean index=76 offset=571
-  field jsonTypedLibrary: boolean index=77 offset=572
-  field mathLibrary: boolean index=78 offset=573
-  field floatRemainder: FunctionSig | null index=79 offset=576
-  field nodeTypes: i32[] index=80 offset=584
-  field nodeLocals: Local | null[] index=81 offset=592
-  field nodeConstants: ConstInfo | null[] index=82 offset=600
-  field nodeCallees: FunctionSig | null[] index=83 offset=608
-  field nodeFnRefs: FunctionSig | null[] index=84 offset=616
-  field refCalls: Node[] index=85 offset=624
-  field refCallTables: FunctionSig | null[][] index=86 offset=632
-  field refCallTypes: i32[] index=87 offset=640
-  field refSites: Node[] index=88 offset=648
-  field refSiteCallees: Node[] index=89 offset=656
-  field refSiteDispatchers: FunctionSig[] index=90 offset=664
-  field refSiteShown: string[] index=91 offset=672
-  field refSiteVia: string[][] index=92 offset=680
-  field nodeBuiltins: string[] index=93 offset=688
-  field nodeCoercions: i32[] index=94 offset=696
-  field nodeCaseValues: i64[] index=95 offset=704
-  field nodeEnumValues: i32[] index=96 offset=712
-  field nodeProvenIndex: boolean[] index=97 offset=720
-  field nodeNullTests: boolean[] index=98 offset=728
-  field switchCoverage: i32[] index=99 offset=736
-  field nodeProvenClamp: boolean[] index=100 offset=744
-  field nodeProvenRange: boolean[] index=101 offset=752
-  field nodeProvenNoOverflow: boolean[] index=102 offset=760
-  field nodeDisjointCopy: boolean[] index=103 offset=768
-  field nodeSpreadCopies: SpreadCopy | null[] index=104 offset=776
-  field spreadCopies: SpreadCopy[] index=105 offset=784
-  field fusion: FusionTable index=106 offset=792
+  field nodeCount: i32 index=5 offset=36
+  field packageName: string index=6 offset=40
+  field symbolPrefix: string index=7 offset=48
+  field functions: FunctionSig[] index=8 offset=56
+  field exports: StringMap index=9 offset=64
+  field imports: ImportBinding[] index=10 offset=72
+  field structs: StringMap index=11 offset=80
+  field structList: StructInfo[] index=12 offset=88
+  field reachableStructs: i32[] index=13 offset=96
+  field externalInstances: FunctionSig[] index=14 offset=104
+  field externalInstanceNames: StringSet index=15 offset=112
+  field deferredInstances: DeferredInstance[] index=16 offset=120
+  field typeNames: StringSet index=17 offset=128
+  field importsUsedAsTypes: StringSet index=18 offset=136
+  field constants: StringMap index=19 offset=144
+  field constantList: ConstInfo[] index=20 offset=152
+  field builtinImports: StringMap index=21 offset=160
+  field builtinImportList: BuiltinExport[] index=22 offset=168
+  field aliases: StringMap index=23 offset=176
+  field aliasList: AliasInfo[] index=24 offset=184
+  field templates: StringMap index=25 offset=192
+  field templateList: TemplateInfo[] index=26 offset=200
+  field instantiations: StringMap index=27 offset=208
+  field instantiationList: Instantiation[] index=28 offset=216
+  field structTemplates: StringMap index=29 offset=224
+  field structTemplateList: StructTemplateInfo[] index=30 offset=232
+  field structInstantiations: StringMap index=31 offset=240
+  field structInstantiationList: StructInstantiation[] index=32 offset=248
+  field methodTemplateList: TemplateInfo[] index=33 offset=256
+  field methodConstraints: StringMap index=34 offset=264
+  field methodConstraintLists: ConstraintList[] index=35 offset=272
+  field activeInstance: Instantiation | null index=36 offset=280
+  field savedNodeTypes: i32[] index=37 offset=288
+  field savedNodeLocals: Local | null[] index=38 offset=296
+  field savedNodeConstants: ConstInfo | null[] index=39 offset=304
+  field savedNodeCallees: FunctionSig | null[] index=40 offset=312
+  field savedNodeCoercions: i32[] index=41 offset=320
+  field savedNodeCaseValues: i64[] index=42 offset=328
+  field savedNodeProvenIndex: boolean[] index=43 offset=336
+  field savedNodeProvenClamp: boolean[] index=44 offset=344
+  field savedNodeProvenRange: boolean[] index=45 offset=352
+  field savedNodeProvenNoOverflow: boolean[] index=46 offset=360
+  field savedNodeDisjointCopy: boolean[] index=47 offset=368
+  field savedNodeSpreadCopies: SpreadCopy | null[] index=48 offset=376
+  field savedFusion: FusionTable index=49 offset=384
+  field enums: StringMap index=50 offset=392
+  field enumList: EnumInfo[] index=51 offset=400
+  field typeImports: ImportBinding[] index=52 offset=408
+  field entryMain: FunctionSig | null index=53 offset=416
+  field usesArgv: boolean index=54 offset=424
+  field f64Mode: boolean index=55 offset=425
+  field guardShadows: i32 index=56 offset=428
+  field unsafeImports: ImportBinding[] index=57 offset=432
+  field unsafeCalls: UnsafeCall[] index=58 offset=440
+  field parallelCalls: ParallelCall[] index=59 offset=448
+  field spawnCalls: ParallelCall[] index=60 offset=456
+  field scopeChannels: ScopeChannels[] index=61 offset=464
+  field exposeCalls: ParallelCall[] index=62 offset=472
+  field regionCalls: ParallelCall[] index=63 offset=480
+  field asyncSpawns: ParallelCall[] index=64 offset=488
+  field channelSends: ParallelCall[] index=65 offset=496
+  field secretNeeds: SecretNeed[] index=66 offset=504
+  field panicSites: PanicSite[] index=67 offset=512
+  field inlineAssignNodes: Node[] index=68 offset=520
+  field inlineAssignLengths: i32[] index=69 offset=528
+  field newTypeArgumentIds: StringMap index=70 offset=536
+  field newTypeArguments: Node[] index=71 offset=544
+  field memberSets: i32[] index=72 offset=552
+  field memberLists: i32[][] index=73 offset=560
+  field collectionsLibrary: boolean index=74 offset=568
+  field secretLibrary: boolean index=75 offset=569
+  field regionLibrary: boolean index=76 offset=570
+  field mapExtrasLibrary: boolean index=77 offset=571
+  field jsonTypedLibrary: boolean index=78 offset=572
+  field mathLibrary: boolean index=79 offset=573
+  field floatRemainder: FunctionSig | null index=80 offset=576
+  field nodeTypes: i32[] index=81 offset=584
+  field nodeLocals: Local | null[] index=82 offset=592
+  field nodeConstants: ConstInfo | null[] index=83 offset=600
+  field nodeCallees: FunctionSig | null[] index=84 offset=608
+  field nodeFnRefs: FunctionSig | null[] index=85 offset=616
+  field refCalls: Node[] index=86 offset=624
+  field refCallTables: FunctionSig | null[][] index=87 offset=632
+  field refCallTypes: i32[] index=88 offset=640
+  field refSites: Node[] index=89 offset=648
+  field refSiteCallees: Node[] index=90 offset=656
+  field refSiteDispatchers: FunctionSig[] index=91 offset=664
+  field refSiteShown: string[] index=92 offset=672
+  field refSiteVia: string[][] index=93 offset=680
+  field nodeBuiltins: string[] index=94 offset=688
+  field nodeCoercions: i32[] index=95 offset=696
+  field nodeCaseValues: i64[] index=96 offset=704
+  field nodeEnumValues: i32[] index=97 offset=712
+  field nodeProvenIndex: boolean[] index=98 offset=720
+  field nodeNullTests: boolean[] index=99 offset=728
+  field switchCoverage: i32[] index=100 offset=736
+  field nodeProvenClamp: boolean[] index=101 offset=744
+  field nodeProvenRange: boolean[] index=102 offset=752
+  field nodeProvenNoOverflow: boolean[] index=103 offset=760
+  field nodeDisjointCopy: boolean[] index=104 offset=768
+  field nodeSpreadCopies: SpreadCopy | null[] index=105 offset=776
+  field spreadCopies: SpreadCopy[] index=106 offset=784
+  field fusion: FusionTable index=107 offset=792
   constructor -> @CheckedProgram.constructor
   method growTables -> @CheckedProgram.growTables
+  method newNode -> @CheckedProgram.newNode
+  method grewNodes -> @CheckedProgram.grewNodes
   method newTypeArgumentsOf -> @CheckedProgram.newTypeArgumentsOf
   method isCollections -> @CheckedProgram.isCollections
   method isMapExtras -> @CheckedProgram.isMapExtras
@@ -926,6 +929,27 @@ function CheckedProgram.growTables(this: CheckedProgram, nodeCount: i32): void -
   local -4:11 noConstant: ConstInfo | null (const)
   local -3:11 noSig: FunctionSig | null (const)
   local -2:11 noCopy: SpreadCopy | null (const)
+function CheckedProgram.newNode(this: CheckedProgram, kind: i32, start: i32, end: i32, text: string, children: Node[]): Node -> @CheckedProgram.newNode [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
+  sharedWrite: +0:5
+  escaping: children end kind start text
+  calls: Node.constructor nish_alloc_struct nish_panic_overflow
+  pointer this: size=800 writesThrough=true captured=false
+  pointer children: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local -2:11 made: Node (const)
+  callee -2:18 new Node -> @Node.constructor
+function CheckedProgram.grewNodes(this: CheckedProgram): void -> @CheckedProgram.grewNodes [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckedProgram.growTables
+  calls: CheckedProgram.enterInstance CheckedProgram.growTables CheckedProgram.leaveInstance
+  pointer this: size=800 writesThrough=true captured=false passedTo=CheckedProgram.growTables#0 CheckedProgram.leaveInstance#0 CheckedProgram.growTables#0 CheckedProgram.enterInstance#0
+  stackSites=0 stackLocals=0
+  local +0:11 info: Instantiation | null (const)
+  callee +2:7 CheckedProgram.growTables -> @CheckedProgram.growTables
+  callee +5:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  callee +6:5 CheckedProgram.growTables -> @CheckedProgram.growTables
+  callee +7:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
 function CheckedProgram.newTypeArgumentsOf(this: CheckedProgram, expr: Node): Node | null -> @CheckedProgram.newTypeArgumentsOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.get nish_str_from_i32
@@ -1185,12 +1209,14 @@ function CheckedProgram.addStructInstance(this: CheckedProgram, name: string, in
   stackSites=0 stackLocals=0
   callee -1:5 StringMap.set -> @StringMap.set
 function CheckedProgram.enterInstance(this: CheckedProgram, info: Instantiation): void -> @CheckedProgram.enterInstance [exported method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: info
+  calls: Instantiation.growTables
   pointer this: size=800 writesThrough=true captured=false
-  pointer info: size=192 writesThrough=true captured=true
+  pointer info: size=192 writesThrough=true captured=true passedTo=Instantiation.growTables#0
   stackSites=0 stackLocals=0
+  callee -1:5 Instantiation.growTables -> @Instantiation.growTables
 function CheckedProgram.leaveInstance(this: CheckedProgram): void -> @CheckedProgram.leaveInstance [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

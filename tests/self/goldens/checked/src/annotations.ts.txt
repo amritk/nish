@@ -553,17 +553,18 @@ function nullableOfChecked(ctx: CheckContext, node: Node, inner: i32): i32 -> @n
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: inner
-  calls: CheckContext.errorType TypeTable.isPointer TypeTable.isResult TypeTable.nullableOf TypeTable.typeName nish_str_concat
+  calls: CheckContext.errorType TypeTable.isFnRef TypeTable.isPointer TypeTable.isResult TypeTable.nullableOf TypeTable.typeName nish_str_concat
   pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isResult -> @TypeTable.isResult
   callee +1:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +6:8 TypeTable.isPointer -> @TypeTable.isPointer
-  local +7:11 spelled: string (const)
-  callee +7:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +8:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +13:10 TypeTable.nullableOf -> @TypeTable.nullableOf
+  callee +7:8 TypeTable.isPointer -> @TypeTable.isPointer
+  callee +7:39 TypeTable.isFnRef -> @TypeTable.isFnRef
+  local +8:11 spelled: string (const)
+  callee +8:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +9:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +14:10 TypeTable.nullableOf -> @TypeTable.nullableOf
 function builtinTypeName(name: string): boolean -> @builtinTypeName [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name

@@ -3699,8 +3699,8 @@ function functionAttributes(f: FunctionFacts): string[] -> @functionAttributes [
 function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionFacts, privateAbi: boolean): string[] -> @paramAttributes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name type
-  calls: FunctionFacts.pointerParam StringSet.has TypeTable.kindOf TypeTable.refOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.refOf#0
+  calls: FunctionFacts.pointerParam StringSet.has TypeTable.isFnRef TypeTable.kindOf TypeTable.refOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.isFnRef#0 TypeTable.refOf#0 TypeTable.refOf#0
   pointer f: size=432 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   local +0:9 attrs: string[] (const)
@@ -3711,20 +3711,24 @@ function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionF
   callee +10:16 TypeTable.kindOf -> @TypeTable.kindOf
   callee +20:10 StringSet.has -> @StringSet.has
   callee +59:28 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +83:9 TypeTable.refOf -> @TypeTable.refOf
-  local +90:11 uncaptured: boolean (const)
-  callee +90:64 StringSet.has -> @StringSet.has
+  callee +81:30 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +81:44 TypeTable.refOf -> @TypeTable.refOf
+  callee +86:9 TypeTable.refOf -> @TypeTable.refOf
+  local +93:11 uncaptured: boolean (const)
+  callee +93:64 StringSet.has -> @StringSet.has
 function returnAttributes(table: TypeTable, type: i32, deref: i32, privateAbi: boolean, align: i32): string[] -> @returnAttributes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.kindOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_from_i32
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.resultByValue#0
+  calls: TypeTable.isFnRef TypeTable.kindOf TypeTable.refOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_from_i32
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.resultByValue#0 TypeTable.isFnRef#0 TypeTable.refOf#0
   stackSites=0 stackLocals=0
   local +0:9 attrs: string[] (const)
   local +1:9 kind: i32 (const)
   callee +1:16 TypeTable.kindOf -> @TypeTable.kindOf
   callee +8:21 TypeTable.resultByValue -> @TypeTable.resultByValue
   callee +27:28 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +43:31 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +43:45 TypeTable.refOf -> @TypeTable.refOf
 function isNumericLiteral(node: Node): boolean -> @isNumericLiteral
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq

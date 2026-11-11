@@ -140,7 +140,7 @@ function arenaObject(emitter: Emitter, info: StructInfo): string -> @arenaObject
 function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @initializerConstant [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
-  calls: Emitter.stringConstant floatText internalErrorFor isFloat nish_exit nish_panic_index nish_panic_overflow nish_str_from_i32 nish_str_from_i64 numericLiteralValue parseIntegerLiteral
+  calls: Emitter.stringConstant TypeTable.isFnRef TypeTable.stripNull floatText internalErrorFor isFloat nish_exit nish_panic_index nish_panic_overflow nish_str_from_i32 nish_str_from_i64 numericLiteralValue parseIntegerLiteral
   pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.stringConstant#0 Emitter.stringConstant#0
   pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -148,14 +148,16 @@ function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @ini
   callee +2:18 internalErrorFor -> @internalErrorFor
   local +4:9 negated: boolean (const)
   local +5:9 literal: Node (const)
-  callee +16:12 Emitter.stringConstant -> @Emitter.stringConstant
-  callee +20:12 Emitter.stringConstant -> @Emitter.stringConstant
-  callee +25:7 isFloat -> @isFloat
-  local +26:11 value: f64 (const)
-  callee +26:19 numericLiteralValue -> @numericLiteralValue
-  callee +27:12 floatText -> @floatText
-  local +29:7 value: i64 (let)
-  callee +29:15 parseIntegerLiteral -> @parseIntegerLiteral
+  callee +14:12 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +14:34 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +17:12 Emitter.stringConstant -> @Emitter.stringConstant
+  callee +21:12 Emitter.stringConstant -> @Emitter.stringConstant
+  callee +26:7 isFloat -> @isFloat
+  local +27:11 value: f64 (const)
+  callee +27:19 numericLiteralValue -> @numericLiteralValue
+  callee +28:12 floatText -> @floatText
+  local +30:7 value: i64 (let)
+  callee +30:15 parseIntegerLiteral -> @parseIntegerLiteral
 function defaultValue(emitter: Emitter, sig: FunctionSig, p: i32, passed: string[]): string -> @defaultValue [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
