@@ -15859,6 +15859,82 @@ if (dealtHere("simd")) {
     }
   }
 
+  // runtime/runtime-sha256.c and runtime/runtime-aes.c on a toolchain without the
+  // intrinsic headers (#1087): each selects its kernel only where `__has_include` finds
+  // every header the kernel includes, as runtime-checksum.c does, and builds its stubs
+  // otherwise, so a clang without them still links `--profile speed`. Compiled here for
+  // x86-64 and AArch64 Linux with `-nostdinc` and an include directory holding only the
+  // freestanding headers nish.h needs, each object must define the stubs' symbols and
+  // nothing else, and ask the C library for nothing. The same build with the headers
+  // visible is the control: it must hold the CPU probe (`nish_sha256_cpu`,
+  // `nish_aes_cpu`), so a guard that always fell back cannot pass.
+  if (!only || "runtime-sha256 runtime-aes hidden-headers crypto stub".includes(only)) {
+    const nm = ["llvm-nm", "llvm-nm-18"].find(has)
+    if (!HAS_CLANG || nm === undefined) {
+      skip("runtime-sha256/runtime-aes hidden headers: no clang and llvm-nm to compile the crypto kernels without their intrinsic headers")
+    } else {
+      const dir = path.join(buildDir, "crypto-hidden-headers")
+      const bare = path.join(dir, "include")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(bare, { recursive: true })
+      const resource = spawnSync("clang", ["-print-resource-dir"], { encoding: "utf8" }).stdout.trim()
+      for (const f of fs.readdirSync(path.join(resource, "include"))) {
+        if (["stdint.h", "stdbool.h", "stddef.h"].includes(f) || /^__stddef_.*\.h$/.test(f)) {
+          fs.copyFileSync(path.join(resource, "include", f), path.join(bare, f))
+        }
+      }
+      /** The defined and undefined symbols of `file` built for `triple` with `extra`. */
+      const symbols = (file, triple, extra, obj) => {
+        const cc = spawnSync(
+          "clang",
+          ["-c", "-ffreestanding", "-std=c11", "-Wall", "-Wextra", "-Werror", `--target=${triple}`, ...extra, "-Iruntime", file, "-o", obj],
+          { cwd: root, encoding: "utf8" }
+        )
+        if (cc.status !== 0) return { ok: false, cc, defined: [], undef: [] }
+        const out = spawnSync(nm, [obj], { encoding: "utf8" })
+        const syms = out.stdout
+          .split("\n")
+          .map((l) => l.trim().split(/\s+/))
+          .filter((f) => f.length >= 2)
+          .map((f) => ({ type: f[f.length - 2], name: f[f.length - 1] }))
+        return {
+          ok: out.status === 0,
+          cc,
+          defined: syms.filter((x) => x.type !== "U").map((x) => x.name).sort(),
+          undef: syms.filter((x) => x.type === "U").map((x) => x.name).sort(),
+        }
+      }
+      for (const [file, stub, probe] of [
+        ["runtime/runtime-sha256.c", ["nish_sha256_compress", "nish_sha256_hw"], "nish_sha256_cpu"],
+        [
+          "runtime/runtime-aes.c",
+          ["nish_aes_block", "nish_aes_ctr", "nish_aes_ghash", "nish_aes_hw", "nish_aes_schedule"],
+          "nish_aes_cpu",
+        ],
+      ]) {
+        const base = path.basename(file, ".c")
+        for (const triple of ["x86_64-linux-gnu", "aarch64-linux-gnu"]) {
+          const hidden = symbols(file, triple, ["-nostdinc", "-isystem", bare], path.join(dir, `${base}-${triple}-hidden.o`))
+          if (!hidden.ok && /no available targets|unknown target triple|unable to create target/i.test(hidden.cc.stderr)) {
+            skip(`runtime-sha256/runtime-aes hidden headers: this clang cannot compile for ${triple}: ${hidden.cc.stderr.trim().split("\n")[0]}`)
+            continue
+          }
+          const shown = symbols(file, triple, [], path.join(dir, `${base}-${triple}.o`))
+          check(
+            `${base}.c for ${triple} with the intrinsic headers hidden is the stub, ${stub.join(", ")} and nothing it asks for, where the same build with them selects the kernel`,
+            hidden.ok &&
+              hidden.defined.join(" ") === stub.join(" ") &&
+              hidden.undef.length === 0 &&
+              shown.ok &&
+              shown.defined.includes(probe),
+            `hidden: ${hidden.cc.stderr}defined ${hidden.defined.join(" ")}; undefined ${hidden.undef.join(" ")}\n` +
+              `shown: ${shown.cc.stderr}defined ${shown.defined.join(" ")}`
+          )
+        }
+      }
+    }
+  }
+
   // ---- WP38 S5: the AES kernels against the bitsliced walkers, end to end ---------------
   // The compiler lowers each seam of std/crypto/aes.ts to a branch on `nish_aes_hw`: the
   // runtime kernel on one arm, the walker it replaces on the other (src/kernels.ts). Two
