@@ -2065,9 +2065,9 @@ scope's region it is refused on an array a task may read, as `fill` is. Anything
 but a `u8[]` is `` `crypto.getRandomValues` fills a `u8[]`, got i32[] ``
 (NL2402).
 
-**A descriptor, not a handler.** A handler would be a function value, which the
-language does not have, and would run between any two instructions of the
-program. A descriptor is what a server's loop can wait on beside its sockets
+**A descriptor, not a handler.** A handler would be a callback the runtime
+calls, which a [function reference](declarations.md#function-references) is not, and would
+run between any two instructions of the program. A descriptor is what a server's loop can wait on beside its sockets
 (WP34 N5 will add that wait); until then `readSignal` is the blocking read.
 Underneath it is a handler rather than a Linux `signalfd`, because a `signalfd`
 hears only a signal blocked in every thread, and a mask reaches only the thread

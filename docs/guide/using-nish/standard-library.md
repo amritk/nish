@@ -1832,9 +1832,8 @@ export const main = (): i32 => {
 says `api users: missing command (one of: list)` on standard error and
 exits 2.
 
-**A builder, not a table.** A command cannot carry its handler, because Nish
-has no function values; instead every declaration answers a handle, an
-`i32`, and the program reads a value by the handle it declared rather than
+**A builder, not a table.** A command does not carry its handler; instead
+every declaration answers a handle, an `i32`, and the program reads a value by the handle it declared rather than
 by a name a typo could miss. Each command gets an id you choose, which a
 `switch` on `r.id` dispatches on.
 

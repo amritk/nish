@@ -12,16 +12,31 @@ function square(x: i32): i32 -> @square
 function half(x: i32): i32 -> @half
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function at(xs: i32[], i: i32): i32 -> @at
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function first(xs: i32[], i: i32): i32 -> @first
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: $ref.0.fr1.i32.i32.0 nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_concat nish_str_from_i32
-  stackSites=1 stackLocals=1
+  calls: $ref.0.fr1.i32.i32.0 $ref.0.fr2.arr.i32.i32.i32.1 nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_i32
+  stackSites=3 stackLocals=3
   local +0:9 steps: ((i32) => i32)[] (const)
   local +2:7 v: i32 (let)
   local +3:14 step: (i32) => i32 (const)
   callee +4:9 $ref.0.fr1.i32.i32.0 -> @$ref.0.fr1.i32.i32.0
-  callee +6:39 $ref.0.fr1.i32.i32.0 -> @$ref.0.fr1.i32.i32.0
+  local +6:9 gets: ((i32[], i32) => i32)[] (const)
+  local +7:9 xs: i32[] (const)
+  local +8:7 g: i32 (let)
+  local +9:12 k: i32 (let)
+  callee +10:13 $ref.0.fr2.arr.i32.i32.i32.1 -> @$ref.0.fr2.arr.i32.i32.i32.1
+  callee +12:39 $ref.0.fr1.i32.i32.0 -> @$ref.0.fr1.i32.i32.0
 function $ref.0.fr1.i32.i32.0($t: i32, $a0: i32): i32 -> @$ref.0.fr1.i32.i32.0
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: $a0 $t
@@ -30,3 +45,11 @@ function $ref.0.fr1.i32.i32.0($t: i32, $a0: i32): i32 -> @$ref.0.fr1.i32.i32.0
   callee +0:1 inc -> @inc
   callee +0:1 square -> @square
   callee +0:1 half -> @half
+function $ref.0.fr2.arr.i32.i32.i32.1($t: i32, $a0: i32[], $a1: i32): i32 -> @$ref.0.fr2.arr.i32.i32.i32.1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: $a1 $t
+  calls: at first
+  pointer $a0: size=0 writesThrough=false captured=false passedTo=at#0 first#0
+  stackSites=0 stackLocals=0
+  callee +0:1 at -> @at
+  callee +0:1 first -> @first

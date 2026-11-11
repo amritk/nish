@@ -2617,9 +2617,13 @@ export class Compilation {
         let refused = false
         let i = 0
         while (i < arity && !refused) {
+          // Only a pointer has a place to lose: a scalar argument is a
+          // register, whatever a member's facts say of its name.
+          const type = members.length > 0 ? members[0].paramTypes[i] : 0
+          const placed = this.table.isPointer(type) || this.table.isNullable(type)
           let keeper = -1
           let other = -1
-          let k = 0
+          let k = placed ? 0 : members.length
           while (k < members.length) {
             const f = facts.get(members[k].name)
             const keeps = f !== null && f.escaping.has(members[k].paramNames[i])

@@ -1365,6 +1365,165 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end fnarg-capture -->
 
+### A function reference in a field
+
+A name bound to a capture-free top-level function is a value of its function
+type when it is written anywhere but a call's callee or a function argument.
+The value is an `i32` tag, the function's position (from 1) among the
+program's functions of that signature, so `%struct.Stage` holds an `i32`,
+`new Stage(double)` passes `i32 1` and `s.op = negate` stores `i32 2`. A call
+through the reference, `this.op(x)`, is a direct call of an internal
+dispatcher, `@$ref.0.fr1.i32.i32.0`, which takes the tag and the arguments,
+switches on the tag, and tail-calls each function the place can hold
+directly: there is no function pointer and no indirect call, and the last
+function is the `default` arm. Under `--profile debug` the dispatcher first
+checks that the tag is one of the set and panics if it is not; the speed
+build checks nothing (docs/LANGUAGE.md, "Function references").
+
+<!-- cookbook:begin fnref-field -->
+```ts
+// A reference held in a field: the field is an `i32` tag, and `this.op(x)`
+// is a direct call of the dispatcher for `Op`'s set, which switches on the
+// tag and tail-calls the function it names.
+type Op = (x: i32) => i32
+
+const double = (x: i32): i32 => x * 2
+const negate = (x: i32): i32 => 0 - x
+
+class Stage {
+  op: Op
+  constructor(op: Op) {
+    this.op = op
+  }
+  run(x: i32): i32 {
+    return this.op(x)
+  }
+}
+
+export const both = (x: i32): i32 => {
+  const s = new Stage(double)
+  const a = s.run(x)
+  s.op = negate
+  return a + s.run(x)
+}
+```
+
+```llvm
+%struct.Stage = type { i32 }
+
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
+
+define internal noundef i32 @double(i32 noundef %x) #0 {
+entry:
+  %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %x, i32 2)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
+}
+
+define internal noundef i32 @negate(i32 noundef %x) #0 {
+entry:
+  %0 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 0, i32 %x)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
+}
+
+define internal void @Stage.constructor(%struct.Stage* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %op) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Stage, %struct.Stage* %this, i32 0, i32 0
+  store i32 %op, i32* %0, align 4, !tbaa !4
+  ret void
+}
+
+define internal noundef i32 @Stage.run(%struct.Stage* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %x) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Stage, %struct.Stage* %this, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4, !tbaa !4
+  %2 = call i32 @$ref.0.fr1.i32.i32.0(i32 %1, i32 %x)
+  ret i32 %2
+}
+
+define noundef i32 @both(i32 noundef %x) #0 {
+entry:
+  %s.addr = alloca %struct.Stage*, align 8
+  %Stage.obj = alloca %struct.Stage, align 8
+  %a.addr = alloca i32, align 4
+  call void @Stage.constructor(%struct.Stage* %Stage.obj, i32 1)
+  store %struct.Stage* %Stage.obj, %struct.Stage** %s.addr, align 8
+  %0 = load %struct.Stage*, %struct.Stage** %s.addr, align 8
+  %1 = call i32 @Stage.run(%struct.Stage* %0, i32 %x)
+  store i32 %1, i32* %a.addr, align 4
+  %2 = load %struct.Stage*, %struct.Stage** %s.addr, align 8
+  %3 = getelementptr inbounds %struct.Stage, %struct.Stage* %2, i32 0, i32 0
+  store i32 2, i32* %3, align 4, !tbaa !4
+  %4 = load i32, i32* %a.addr, align 4
+  %5 = load %struct.Stage*, %struct.Stage** %s.addr, align 8
+  %6 = call i32 @Stage.run(%struct.Stage* %5, i32 %x)
+  %7 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 %6)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %8
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define internal noundef i32 @$ref.0.fr1.i32.i32.0(i32 noundef %$t, i32 noundef %$a0) #0 {
+entry:
+  switch i32 %$t, label %sw.default [
+    i32 1, label %sw.case
+  ]
+
+sw.case:
+  %0 = tail call i32 @double(i32 %$a0)
+  ret i32 %0
+
+sw.default:
+  %1 = tail call i32 @negate(i32 %$a0)
+  ret i32 %1
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!5, !6, !7, !8, !9}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Stage", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{i32 8, !"cf-protection-branch", i32 1}
+!6 = !{i32 8, !"cf-protection-return", i32 1}
+!7 = !{i32 8, !"branch-target-enforcement", i32 1}
+!8 = !{i32 8, !"sign-return-address", i32 1}
+!9 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end fnref-field -->
+
 ### Default and rest parameters, filled at the call
 
 A default and a rest parameter are both the **caller's** work

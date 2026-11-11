@@ -176,7 +176,7 @@ rejects. This table is the highest-value part of the page.
 | `undefined` | forbidden, except `x === undefined` on a `Map.get` result | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
 | `for (const k in o)` | `` `for...in` is forbidden `` | `for (const x of xs)` over an array, or `for (const k of m.keys())` over a `Map` |
-| a callback stored or returned: `const cb = (n: i32) => n`, a field `cb: (n: i32) => i32` | `An arrow may only be written as the argument for a function-typed parameter` / `` … is a function type, which may only annotate a parameter of a top-level function `` | there are **no function values**; a callback the call names is a [function parameter](#function-parameters) |
+| a closure stored or returned: `const cb = (n: i32) => n + k` inside a function | `` this arrow captures `k`: a function reference names a top-level function and carries no environment `` / `an arrow in value position is not yet a function reference: declare it as a top-level function and name it` | a [function reference](#function-references) names a capture-free top-level function: declare the function at the top level and store its name, or pass the arrow straight to a [function parameter](#function-parameters) |
 | `type Pair<T>` (a generic alias) | `Generic type parameters are forbidden on a type alias` | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
 | `constructor<T>(x: T)` | a syntax error: `a constructor cannot have type parameters` | put the parameter on the class (`class Box<T>`), or on a method |
 | `h.get<i32>(7)` (type argument at a method call) | `Type arguments are not written at a call site in Nish` | `h.get(7)` — a generic method infers like a generic function |
@@ -457,7 +457,8 @@ export const main = (): i32 => {
 The surface: `Ok(v)` / `Ok()`, `Err(e)`, `r.isOk()`, `r.isErr()`, `r.ok`,
 `r.value`, `r.error`, `r.orReturn()`, `r.unwrapOr(d)`, `r.expect(msg)`. There
 is deliberately no `unwrap()` — `expect` insists on a reason — and no
-`map`/`andThen`, which would need function values.
+`map`/`andThen`, whose callbacks are usually closures, which a function
+reference cannot hold.
 
 **Three rules, and they are the ones that catch you out:**
 
@@ -616,15 +617,15 @@ const double = (n: i32): i32 => n * 2;   // a concise body is that one `return`
 ```
 
 - A function is a **module-level `const` bound to an arrow**. `let` is
-  rejected; annotating the `const` is rejected (the annotation would be a
-  function type, which only a parameter may have). The `function` keyword is
+  rejected; annotating the `const` is rejected (the signature is written once,
+  on the arrow). The `function` keyword is
   accepted as the legacy spelling and compiles to identical IR.
 - **Every parameter and the return type must be annotated.**
-- **A function is not a value.** `const alias = double` is
-  `` Unknown identifier `double` ``. A function may be *passed* only for a
-  function-typed parameter, where it is resolved at compile time — see
-  [Function parameters](#function-parameters) — and never stored, returned or
-  held in a field, a local or an array.
+- **A capture-free top-level function is a value** — a
+  [function reference](#function-references): `const h: Op = double`, a field
+  `op: Op`, an `Op[]`, a returned `Op`, where `type Op = (n: i32) => i32`. An
+  arrow written inside a function is not one: declare it at the top level and
+  name it.
 - **Parameters are immutable**: `p = 1`, `p++`, `p += 1` are all rejected. Copy
   into a `let` first.
 - A non-`void` function must return on every path.
@@ -909,8 +910,11 @@ export const main = (): i32 => {
 - **Annotate what cannot be inferred**: an arrow parameter whose type no value
   argument binds, and the return type of a block-bodied arrow whose result is a
   type parameter.
-- **Only a top-level function** may have one: not a method, a constructor, a
-  field, a local, a return type or an alias.
+- **Only a top-level function's parameter, written inline**, is one. On a
+  method or constructor parameter an inline function type is refused; type it
+  through an alias and it is an ordinary [function reference](#function-references)
+  parameter. A variable holding a reference is not a function argument
+  (NL2727): type the parameter through an alias to take one.
 
 ```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
@@ -921,6 +925,51 @@ export const main = (): i32 => {
   return apply((x) => x + k, 1);   // reads the `let` `k`: bind `const kNow = k` before the call
 };
 ```
+
+### Function references
+
+A **capture-free top-level function** is a value of a function type written
+through an alias. It can sit in a local, a field, an array element or a
+return value, be passed for an alias-typed parameter, called and compared
+with `===` / `!==`:
+
+```ts nish:ok
+type Op = (x: i32) => i32;
+
+const inc = (x: i32): i32 => x + 1;
+const square = (x: i32): i32 => x * x;
+
+class Stage {
+  op: Op;
+  constructor(op: Op) { this.op = op; }
+  run(x: i32): i32 { return this.op(x); }
+}
+
+export const main = (): i32 => {
+  const ops: Op[] = [inc, square];
+  const s = new Stage(ops[1]);
+  console.log(`${s.run(3)}`);            // 9
+  s.op = inc;
+  console.log(`${s.run(3)}`);            // 4
+  console.log(`${s.op === inc}`);        // true
+  return 0;
+};
+```
+
+- **Only a top-level function with no captures.** An arrow inside a function
+  is refused (NL2724 when it captures, NL2336 when it does not); so are a
+  generic (NL2718), `async` (NL2720), `declare` (NL2721) or rest-parameter
+  (NL2722) function, one with a function parameter (NL2719), and a method
+  (NL2725).
+- **No empty value.** `new Array<Op>(n)` (NL2723) and `Op | null` are
+  refused; a module `const` cannot hold one either.
+- **Called, compared, stored, passed — nothing else.** Not printed or
+  interpolated (NL2730), ordered, joined or encoded as JSON.
+- **Not a function argument**: a variable holding a reference cannot fill an
+  inline function-typed parameter (NL2727); type that parameter through the
+  alias.
+- **It stays in the program**: a `-o` library cannot export it in a
+  signature or an exported class's field (NL2726); `--link` can.
 
 ### Async functions
 
@@ -3173,7 +3222,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    local, `x = x`, `a === a` or a repeated `else if` is an error
    ([Lines that type-check and are still refused](#lines-that-type-check-and-are-still-refused)).
 9. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside a `T | null`, a chain or `Map.get`), `?.` without a `??`, a cast, a
-   stored or returned callback, a generic *alias*, or `extends`?
+   stored or returned closure, a generic *alias*, or `extends`?
 10. Does it reach only what you meant it to? `nish file.ts --emit-capabilities
    caps.json` lists every capability each function can reach — files, processes,
    the network, the environment, the clock, entropy, signals, `exit`, C calls —

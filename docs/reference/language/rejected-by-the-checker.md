@@ -53,14 +53,21 @@ messages are exact for the cases cited; other entries quote the checker
 - **an arrow inside another arrow that reads the function's locals**:
   `` The arrow reads `k` from outside the arrow it is written in: ... ``
   (`reject_fnarg_capture_nested`)
-- **an arrow anywhere but as a function argument**:
-  `` An arrow may only be written as the argument for a function-typed parameter of a top-level function, ... ``
-  (`reject_fnarg_arrow_value`)
-- **a function type anywhere but on a parameter of a top-level function**:
-  `` `(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function: ... ``
-  / `` `f` cannot have a function type here: ... `` (`reject_fnarg_field`,
-  `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`,
-  `reject_fnarg_method`, `reject_fnarg_nested`)
+- **an arrow anywhere but as a function argument or a top-level `const`**:
+  `` an arrow in value position is not yet a function reference: declare it as a top-level function and name it ``
+  (`reject_fnarg_arrow_value`), or, when it captures,
+  `` this arrow captures `k`: a function reference names a top-level function and carries no environment ``
+  (`reject_arrow_as_value`, `reject_fnref_capture`)
+- **a function type written inline on a parameter of a method, a constructor
+  or a function type**:
+  `` `f` cannot have a function type here: ... `` (`reject_fnarg_method`,
+  `reject_fnarg_nested`)
+- **a function reference to a function it cannot hold, or used other than
+  called, compared, stored or passed**: NL2718, NL2719, NL2720, NL2721,
+  NL2722, NL2723, NL2725, NL2726, NL2727, NL2728, NL2729 and NL2730
+  (`reject_fnref_generic`, `_async`, `_ffi`, `_rest`, `_zero_fill`, `_host`,
+  `_host_field`, `_no_strict`, `_escape_join`, `_print`, `_json`,
+  `reject_fnarg_alias`; [Function references](declarations.md#function-references))
 - **a function argument that is not a function's name or an arrow, or does not
   match**:
   `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... ``

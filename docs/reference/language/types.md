@@ -59,9 +59,12 @@ crosses to C, then the exact rules.
 - **A function reports failure with a `Result`**, the only way it can; the
   payload is unreachable until the discriminant is tested
   ([Result and error handling](result-and-error-handling.md)).
-- **A function type** is allowed only on a parameter of a top-level
-  function, and names the callee chosen at each call
-  ([Function parameters](declarations.md#function-parameters)).
+- **A function type** written inline on a parameter of a top-level
+  function names the callee chosen at each call
+  ([Function parameters](declarations.md#function-parameters)); anywhere else it is the type
+  of a reference to a capture-free top-level function, which can be held,
+  passed, called and compared, nothing else
+  ([Function references](declarations.md#function-references)).
 
 ## In memory and in C
 
@@ -125,9 +128,12 @@ Every other type is a pointer, 8 bytes and 8-aligned, to:
   functions of one module. In C, a `nish_result_<T>_<E>_word` by value, and a
   `struct nish_result_<T>_<E> *` otherwise.
 
-A function type, `(x: T) => U`, is no value at all: it has no LLVM type and
-no parameter, and the callee is compiled into the instantiation's body as a
-direct call. Not in C.
+A function type, `(x: T) => U`, written inline on a parameter of a
+top-level function is no value at all: it has no LLVM type and no parameter,
+and the callee is compiled into the instantiation's body as a direct call.
+Anywhere else it is a function reference, LLVM `i32`, 4 / 4: a tag naming
+one of the program's functions of that signature, never an address
+([Function references](declarations.md#function-references)). Not in C.
 
 Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`; a type is
 interned, and two types are the same type exactly when they are the same
