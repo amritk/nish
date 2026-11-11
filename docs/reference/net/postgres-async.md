@@ -616,8 +616,9 @@ waits for its answer, `pgAsyncAnswer` builds it and `pgAsyncDone` spends
 the ticket. Until `pgAsyncTurn` no other seat on the connection is taken,
 so the statements go out in the order of their seats. While no connection has room it waits until a seat
 or a connection frees and wakes it, for at most `pool.claimWaitMs` in all;
-waiting tasks are seated in the order they began to wait, and a task that
-has not waited is seated only while none waits.
+waiting tasks are seated in the order they began to wait, the first as many
+as there are seats free at once, and a task that has not waited is seated
+only while none waits.
 It writes only numbers into the pool, so a spawned task may call it.
 
 ```ts

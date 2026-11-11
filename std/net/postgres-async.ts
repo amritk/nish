@@ -884,7 +884,12 @@ const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
 const pgAsyncFreeSeats = (pool: PgAsyncPool): i32 => {
   let free: i32 = 0
   for (let s: i32 = 0; s < pool.size; s++) {
-    if (pool.fds[s] >= 0 && toI32(pool.claimed[s]) === 0 && pool.doomAt[s] < 0 && pool.seated[s] < pool.depth) {
+    if (
+      pool.fds[s] >= 0 &&
+      toI32(pool.claimed[s]) === 0 &&
+      pool.doomAt[s] < 0 &&
+      pool.seated[s] < pool.depth
+    ) {
       free += pool.depth - pool.seated[s]
     }
   }
@@ -1076,8 +1081,9 @@ const pgAsyncUnqueue = (pool: PgAsyncPool, n: i32): void => {
  * the ticket. Until `pgAsyncTurn` no other seat on the connection is taken,
  * so the statements go out in the order of their seats. While no connection has room it waits until a seat
  * or a connection frees and wakes it, for at most `pool.claimWaitMs` in all;
- * waiting tasks are seated in the order they began to wait, and a task that
- * has not waited is seated only while none waits.
+ * waiting tasks are seated in the order they began to wait, the first as many
+ * as there are seats free at once, and a task that has not waited is seated
+ * only while none waits.
  * It writes only numbers into the pool, so a spawned task may call it.
  * @param pool The pool.
  * @param statement A number `pgAsyncPrepare` answered; any other panics, as
@@ -2123,7 +2129,9 @@ const pgAsyncRead = async (
     }
     if (end === toI32(buf.length)) {
       const twice: i32 = toI32(buf.length) < PG_ASYNC_INPUT_SIZE ? PG_ASYNC_INPUT_SIZE : toI32(buf.length) * 2
-      const grown: u8[] = new Array<u8>(twice > maxMessage + 1 && end < maxMessage + 1 ? maxMessage + 1 : twice)
+      const grown: u8[] = new Array<u8>(
+        twice > maxMessage + 1 && end < maxMessage + 1 ? maxMessage + 1 : twice
+      )
       copyBytes(grown, 0, buf, 0, end)
       buf = grown
     }
