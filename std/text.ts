@@ -379,6 +379,7 @@ export const toFixed = (x: f64, digits: i32): string => {
   if (digits < 0 || digits > TO_FIXED_MAX_DIGITS) {
     panic("toFixed: digits must be 0 to 100")
   }
+  // biome-ignore lint/suspicious/noSelfCompare: NaN is the only value that is not itself; Nish has no Number.isNaN
   if (x !== x || x >= TO_FIXED_LIMIT || x <= -TO_FIXED_LIMIT) {
     return `${x}`
   }

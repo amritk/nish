@@ -130,7 +130,7 @@ shown).
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
-| [`nish/text`](#nishtext) | `split`, `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `asciiUpper`, `asciiLower`, `padStart`, `padEnd`, `firstDifference`, `codePointLength`, `indexOfAny` |
+| [`nish/text`](#nishtext) | `split`, `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `asciiUpper`, `asciiLower`, `padStart`, `padEnd`, `firstDifference`, `codePointLength`, `indexOfAny`, `splitLimit`, `toFixed` |
 | [`nish/regex`](#nishregex) | `regexCompile`: JavaScript-syntax regular expressions, matched in time linear in the input |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
@@ -230,6 +230,41 @@ separator that never occurs gives `[text]`. An empty separator panics
 (`split: an empty separator`) rather than splitting into units, which are
 bytes in a compiled program and UTF-16 units under Node. The answers are the
 same both ways for any text and any non-empty separator.
+
+`splitLimit(text, sep, limit)` is JavaScript's `text.split(sep, limit)`: it
+keeps the first `limit` pieces and drops the rest, so
+`splitLimit("a,b,c", ",", 2)` is `["a", "b"]` and a limit of 0 gives `[]`. A
+negative limit keeps every piece, as JavaScript's does, so
+`splitLimit(text, sep, -1)` is `split(text, sep)`. An empty separator panics
+here too (`splitLimit: an empty separator`).
+
+`toFixed(x, digits)` is JavaScript's `x.toFixed(digits)`, which Nish cannot
+write as a method: `x` with `digits` digits after the point, rounded on the
+exact value the `f64` holds. That is why `toFixed(1.005, 2)` is `"1.00"`:
+1.005 is stored a little below itself. A tie rounds away from zero, so
+`toFixed(2.5, 0)` is `"3"` and `toFixed(-2.5, 0)` is `"-3"`.
+
+```ts nish:ok
+import { toFixed } from "nish/text";
+
+export const main = (): i32 => {
+  const price: f64 = 19.999;
+  console.log(`total: ${toFixed(price * 3, 2)}`);
+  console.log(toFixed(-0.0001, 2));
+  return 0;
+};
+```
+
+```console
+$ nish run fixed.ts
+total: 60.00
+-0.00
+```
+
+`digits` is 0 to 100, and any other count panics
+(`toFixed: digits must be 0 to 100`). `NaN`, the infinities and a number of
+magnitude `1e21` or more print as a template hole prints them, as JavaScript
+does. The answers are the same compiled and under Node.
 
 `asciiUpper(text)` and `asciiLower(text)` change the letters `a` to `z` and
 `A` to `Z` and nothing else, so every other byte, the bytes of `é` and `ß`

@@ -16,8 +16,10 @@ import {
   padStart,
   replaceAll,
   split,
+  splitLimit,
   splitLines,
   splitWhitespace,
+  toFixed,
   trim,
   trimEnd,
   trimStart,
@@ -105,6 +107,12 @@ The pieces of `text` between the occurrences of `sep`: JavaScript's `text.split(
 
 </scalar-card>
 
+<scalar-card title="split​Limit" icon="phosphor/regular/function" href="#splitlimit">
+
+The first `limit` pieces of `text` between the occurrences of `sep`: JavaScript's `text.split(sep, limit)` for a separator that is not empty, and `split`'s pieces otherwise.
+
+</scalar-card>
+
 <scalar-card title="split​Lines" icon="phosphor/regular/function" href="#splitlines">
 
 The lines of `text`, without their terminators.
@@ -114,6 +122,12 @@ The lines of `text`, without their terminators.
 <scalar-card title="split​Whitespace" icon="phosphor/regular/function" href="#splitwhitespace">
 
 The runs of non-blank bytes in `text`, with every blank run as the separator.
+
+</scalar-card>
+
+<scalar-card title="to​Fixed" icon="phosphor/regular/function" href="#tofixed">
+
+`x` written with exactly `digits` digits after the point: JavaScript's `x.toFixed(digits)`, and the same text natively and under Node.
 
 </scalar-card>
 
@@ -583,6 +597,58 @@ A fresh array of the pieces, in order; never empty.
 
 </scalar-field>
 
+### splitLimit
+
+The first `limit` pieces of `text` between the occurrences of `sep`:
+JavaScript's `text.split(sep, limit)` for a separator that is not empty, and
+`split`'s pieces otherwise. The pieces past the limit are dropped, not joined
+into the last one, so `splitLimit("a,b,c", ",", 2)` is `["a", "b"]`, and a
+limit of 0 gives `[]`.
+
+**A negative limit keeps every piece**, as it does under Node: JavaScript
+reads the limit with `ToUint32`, so `-1` is 4294967295, and any negative
+`i32` is at least 2147483648 there, more pieces than a string can split
+into. So `splitLimit(text, sep, -1)` is `split(text, sep)`, and the two
+readings agree on every `i32`. Refusing a negative limit would have been a
+panic where JavaScript answers.
+
+**An empty separator panics**, whatever the limit, for the reason `split`
+gives; JavaScript would answer `[]` for a limit of 0, and its UTF-16 units
+otherwise.
+
+```ts
+function splitLimit(
+  text: string,
+  sep: string,
+  limit: i32,
+): string[]
+```
+
+<scalar-field name="text" type="string" required>
+
+The text to split.
+
+</scalar-field>
+
+<scalar-field name="sep" type="string" required>
+
+The separator, compared byte for byte; it must not be empty.
+  Occurrences are found left to right and do not overlap.
+
+</scalar-field>
+
+<scalar-field name="limit" type="i32" required>
+
+The most pieces kept; a negative one keeps them all.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string[]">
+
+A fresh array of at most `limit` pieces, in order.
+
+</scalar-field>
+
 ### splitLines
 
 The lines of `text`, without their terminators.
@@ -632,6 +698,54 @@ The text to split; the blanks are space, tab, newline and
 
 A fresh array of the non-blank runs, in order; empty when `text` is
   all blank.
+
+</scalar-field>
+
+### toFixed
+
+`x` written with exactly `digits` digits after the point: JavaScript's
+`x.toFixed(digits)`, and the same text natively and under Node.
+
+The answer is the decimal closest to the **exact binary value** of `x`, and
+a tie between two takes the larger, as ECMA-262 says. That is not rounding
+the shortest printed decimal: `1.005` is stored as a little less than
+1.005, so `toFixed(1.005, 2)` is `"1.00"`, while `2.5` is exact and a tie, so
+`toFixed(2.5, 0)` is `"3"` and `toFixed(-2.5, 0)` is `"-3"`. The digits are
+worked out in full, one decimal digit per array element, so the value is
+never rounded on the way; that is why this is written here and not with a
+multiplication by a power of ten, which rounds twice.
+
+The edges are JavaScript's. `NaN` gives `"NaN"`. `x` at or beyond 1e21 in
+size gives `String(x)`, the text a template hole gives, so
+`toFixed(1e21, 2)` is `"1e+21"`, and the infinities give `"Infinity"` and
+`"-Infinity"`. `-0` loses its sign, `"0.00"`, but a negative value that
+rounds to zero keeps it: `toFixed(-0.0001, 2)` is `"-0.00"`.
+
+**`digits` outside 0 to 100 panics**, where JavaScript throws a
+`RangeError`: the count is almost always a literal the caller chose, so a
+bad one is a mistake in the program, as `split`'s empty separator is.
+
+```ts
+function toFixed(x: f64, digits: i32): string
+```
+
+<scalar-field name="x" type="f64" required>
+
+The number to write.
+
+</scalar-field>
+
+<scalar-field name="digits" type="i32" required>
+
+How many digits to write after the point, from 0 to 100; with
+  0 there is no point.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string">
+
+`x` in fixed notation, or `String(x)` when `x` is NaN or at least
+  1e21 in size.
 
 </scalar-field>
 
