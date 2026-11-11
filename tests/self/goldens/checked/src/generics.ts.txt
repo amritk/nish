@@ -1705,21 +1705,22 @@ function checkConstraints(asker: CheckContext, home: CheckContext, templateName:
   pointer home: size=320 writesThrough=false captured=false passedTo=satisfiesConstraint#1
   pointer typeParams: size=0 writesThrough=false captured=false
   pointer constraints: size=16 writesThrough=false captured=false passedTo=ConstraintList.at#0
-  pointer args: size=0 writesThrough=true captured=false
+  pointer args: size=0 writesThrough=false captured=false
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 want: i32 (const)
   callee +2:18 ConstraintList.at -> @ConstraintList.at
-  callee +3:23 satisfiesConstraint -> @satisfiesConstraint
-  local +4:13 bound: string (const)
-  callee +4:21 TypeTable.typeName -> @TypeTable.typeName
-  local +5:13 info: StructInfo | null (const)
-  callee +5:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +5:40 TypeTable.nameOf -> @TypeTable.nameOf
-  local +9:13 fix: string (const)
-  callee +13:7 CheckContext.error -> @CheckContext.error
-  callee +16:16 TypeTable.typeName -> @TypeTable.typeName
+  local +3:11 arg: i32 (const)
+  callee +4:23 satisfiesConstraint -> @satisfiesConstraint
+  local +5:13 bound: string (const)
+  callee +5:21 TypeTable.typeName -> @TypeTable.typeName
+  local +6:13 info: StructInfo | null (const)
+  callee +6:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +6:40 TypeTable.nameOf -> @TypeTable.nameOf
+  local +10:13 fix: string (const)
+  callee +14:7 CheckContext.error -> @CheckContext.error
+  callee +17:16 TypeTable.typeName -> @TypeTable.typeName
 function checkStructConstraints(home: CheckContext, template: StructTemplateInfo, args: i32[], at: Node, asker: CheckContext): boolean -> @checkStructConstraints
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

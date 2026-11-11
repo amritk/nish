@@ -3082,7 +3082,8 @@ const checkConstraints = (
   let i = 0
   while (i < args.length) {
     const want = constraints.at(i)
-    if (want >= 0 && !satisfiesConstraint(asker, home, args[i], want)) {
+    const arg = args[i]
+    if (want >= 0 && !satisfiesConstraint(asker, home, arg, want)) {
       const bound = home.table.typeName(want)
       const info = home.program.struct(home.table.nameOf(want))
       // A class constraint is met by the class and nothing else, because a
@@ -3095,7 +3096,7 @@ const checkConstraints = (
       asker.error(
         at,
         `\`${typeParams[i]}\` of \`${templateName}\` requires \`${typeParams[i]} extends ${bound}\`, and ` +
-          `\`${asker.table.typeName(args[i])}\` does not implement it; ${fix}`
+          `\`${asker.table.typeName(arg)}\` does not implement it; ${fix}`
       )
       return false
     }
