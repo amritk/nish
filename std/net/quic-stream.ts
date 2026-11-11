@@ -116,6 +116,7 @@ import {
   quicStreamOverhead,
 } from "nish/net/quic-frame"
 import { BufferPool } from "nish/net/buffer-pool"
+import { copyBytes } from "nish/bytes"
 
 // ---- What the stream calls answer -----------------------------------------------
 
@@ -246,6 +247,94 @@ export const quicStreamSetBit = (bits: u8[], k: i32, on: boolean): void => {
   const mask: i32 = QUIC_STREAM_ONE << (k & 7)
   const old: i32 = toI32(bits[at])
   bits[at] = toU8(on ? old | mask : old & ~mask)
+}
+
+/**
+ * Sets or clears bits `[from, to)` of `bits`: the ragged ends a bit at a
+ * time, the whole bytes between with one `fill`. Bits outside the array are
+ * left alone.
+ */
+const quicStreamSetBits = (bits: u8[], from: i32, to: i32, on: boolean): void => {
+  const length: i32 = toI32(bits.length) << 3
+  let k: i32 = from < 0 ? 0 : from
+  const top: i32 = to < length ? to : length
+  while (k < top && (k & 7) !== 0) {
+    quicStreamSetBit(bits, k, on)
+    k = k + 1
+  }
+  const whole: i32 = top & ~7
+  if (k < whole) {
+    bits.fill(on ? 255 : 0, k >> 3, whole >> 3)
+    k = whole
+  }
+  while (k < top) {
+    quicStreamSetBit(bits, k, on)
+    k = k + 1
+  }
+}
+
+/**
+ * The first bit in `[from, to)` of `bits` that is not `on`, or `to` when
+ * they all are; a whole byte of them is passed over at once. A bit outside
+ * the array reads as clear.
+ */
+const quicStreamScan = (bits: u8[], from: i32, to: i32, on: boolean): i32 => {
+  const full: i32 = on ? 255 : 0
+  let k: i32 = from
+  while (k < to) {
+    const at: i32 = k >> 3
+    if ((k & 7) === 0 && k + 8 <= to && at >= 0 && at < toI32(bits.length) && toI32(bits[at]) === full) {
+      k = k + 8
+    } else if (quicStreamBit(bits, k) !== on) {
+      return k
+    } else {
+      k = k + 1
+    }
+  }
+  return to
+}
+
+/**
+ * The first of `count` bytes of a ring of `size` from index `slot`: they run
+ * to the ring's end at most, and the rest wrap to index 0.
+ */
+const quicStreamFirstRun = (size: i32, slot: i32, count: i32): i32 => (count < size - slot ? count : size - slot)
+
+/** Sets or clears the bits of `count` ring indexes from `slot`, wrapping at `size`: at most two runs. */
+const quicStreamMarkRing = (bits: u8[], size: i32, slot: i32, count: i32, on: boolean): void => {
+  const first: i32 = quicStreamFirstRun(size, slot, count)
+  quicStreamSetBits(bits, slot, slot + first, on)
+  if (count > first) {
+    quicStreamSetBits(bits, 0, count - first, on)
+  }
+}
+
+/** How many of `count` ring indexes from `slot`, wrapping at `size`, have their bit `on` before the first that does not. */
+const quicStreamRingRun = (bits: u8[], size: i32, slot: i32, count: i32, on: boolean): i32 => {
+  const first: i32 = quicStreamFirstRun(size, slot, count)
+  const got: i32 = quicStreamScan(bits, slot, slot + first, on) - slot
+  if (got < first || count <= first) {
+    return got
+  }
+  return first + quicStreamScan(bits, 0, count - first, on)
+}
+
+/** Copies `count` bytes of `src` from `from` into the ring `ring` at index `slot`, wrapping at its end: at most two slices. */
+const quicStreamRingIn = (ring: u8[], slot: i32, src: u8[], from: i32, count: i32): void => {
+  const first: i32 = quicStreamFirstRun(toI32(ring.length), slot, count)
+  copyBytes(ring, slot, src, from, first)
+  if (count > first) {
+    copyBytes(ring, 0, src, from + first, count - first)
+  }
+}
+
+/** Copies `count` bytes of the ring `ring` from index `slot`, wrapping at its end, into `dst` at `at`: at most two slices. */
+const quicStreamRingOut = (dst: u8[], at: i32, ring: u8[], slot: i32, count: i32): void => {
+  const first: i32 = quicStreamFirstRun(toI32(ring.length), slot, count)
+  copyBytes(dst, at, ring, slot, first)
+  if (count > first) {
+    copyBytes(dst, at + first, ring, 0, count - first)
+  }
 }
 
 /** The smaller of two `i64`s. */
@@ -1441,22 +1530,31 @@ export class QuicStreams {
       this.borrowRecv(stream)
     }
     const size: i32 = toI32(stream.recvBuf.length)
-    for (let k2: i32 = 0; k2 < length; k2 += 1) {
-      const position: i64 = offset + toI64(k2)
-      const src: i32 = from + k2
-      if (position >= stream.recvContiguous && src >= 0 && src < toI32(buf.length)) {
-        const slot: i32 = stream.at(position)
-        if (slot >= 0 && slot < size) {
-          stream.recvBuf[slot] = buf[src]
-          quicStreamSetBit(stream.recvHave, slot, true)
-        }
+    if (size > 0 && size === stream.size) {
+      // The frame's bytes from the first not yet contiguous, inside `buf`; of
+      // more than a buffer, the last buffer's worth, which a byte-wise copy
+      // would have left there.
+      const skipped: i64 = stream.recvContiguous - offset
+      let low: i32 = skipped > 0 ? (skipped < toI64(length) ? toI32(skipped) : length) : 0
+      if (low < -from) {
+        low = -from
       }
-    }
-    while (
-      stream.recvContiguous < stream.recvHighest &&
-      quicStreamBit(stream.recvHave, stream.at(stream.recvContiguous))
-    ) {
-      stream.recvContiguous = stream.recvContiguous + 1
+      const high: i32 = length < toI32(buf.length) - from ? length : toI32(buf.length) - from
+      if (high - low > size) {
+        low = high - size
+      }
+      if (low < high) {
+        const slot: i32 = stream.at(offset + toI64(low))
+        quicStreamRingIn(stream.recvBuf, slot, buf, from + low, high - low)
+        quicStreamMarkRing(stream.recvHave, size, slot, high - low, true)
+      }
+      if (stream.recvContiguous < stream.recvHighest) {
+        const pending: i64 = stream.recvHighest - stream.recvContiguous
+        const count: i32 = pending < toI64(size) ? toI32(pending) : size
+        stream.recvContiguous =
+          stream.recvContiguous +
+          toI64(quicStreamRingRun(stream.recvHave, size, stream.at(stream.recvContiguous), count, true))
+      }
     }
     if (stream.recvFinal >= 0 && stream.recvContiguous === stream.recvFinal) {
       stream.recvState = QUIC_RECV_DATA_RECVD
@@ -1686,12 +1784,8 @@ export class QuicStreams {
     if (n > 0) {
       this.borrowSend(stream)
     }
-    const size: i32 = toI32(stream.sendBuf.length)
-    for (let j: i32 = 0; j < n; j += 1) {
-      const slot: i32 = stream.at(stream.sendEnd + toI64(j))
-      if (slot >= 0 && slot < size && from + j >= 0 && from + j < toI32(buf.length)) {
-        stream.sendBuf[slot] = buf[from + j]
-      }
+    if (n > 0 && toI32(stream.sendBuf.length) === stream.size) {
+      quicStreamRingIn(stream.sendBuf, stream.at(stream.sendEnd), buf, from, n)
     }
     stream.sendEnd = stream.sendEnd + toI64(n)
     this.writtenTotal = this.writtenTotal + toI64(n)
@@ -1745,12 +1839,10 @@ export class QuicStreams {
     }
     const n: i32 = toI64(length) < available ? length : toI32(available)
     const size: i32 = toI32(stream.recvBuf.length)
-    for (let j: i32 = 0; j < n; j += 1) {
-      const slot: i32 = stream.at(stream.recvRead + toI64(j))
-      if (slot >= 0 && slot < size && at + j >= 0 && at + j < toI32(buf.length)) {
-        buf[at + j] = stream.recvBuf[slot]
-        quicStreamSetBit(stream.recvHave, slot, false)
-      }
+    if (n > 0 && size === stream.size) {
+      const slot: i32 = stream.at(stream.recvRead)
+      quicStreamRingOut(buf, at, stream.recvBuf, slot, n)
+      quicStreamMarkRing(stream.recvHave, size, slot, n, false)
     }
     stream.recvRead = stream.recvRead + toI64(n)
     if (n > 0) {
@@ -1919,8 +2011,10 @@ export class QuicStreams {
   private putResend(stream: QuicStream, buf: u8[], at: i32, end: i32): i32 {
     if (stream.resendLow >= 0) {
       let low: i64 = stream.resendLow < stream.sendBase ? stream.sendBase : stream.resendLow
-      while (low < stream.resendHigh && quicStreamBit(stream.sendAcked, stream.at(low))) {
-        low = low + 1
+      if (low < stream.resendHigh && stream.size > 0) {
+        const span: i64 = stream.resendHigh - low
+        const count: i32 = span < toI64(stream.size) ? toI32(span) : stream.size
+        low = low + toI64(quicStreamRingRun(stream.sendAcked, stream.size, stream.at(low), count, true))
       }
       const want: i32 = toI32(stream.resendHigh - low)
       if (want <= 0) {
@@ -2197,14 +2291,22 @@ export class QuicStreams {
       // Done or reset: its buffer may be back in the pool, and nothing is owed.
       return
     }
-    const top: i64 = offset + toI64(length) < stream.sendEnd ? offset + toI64(length) : stream.sendEnd
-    for (let o: i64 = offset < stream.sendBase ? stream.sendBase : offset; o < top; o += 1) {
-      quicStreamSetBit(stream.sendAcked, stream.at(o), true)
-    }
     const before: i64 = stream.sendBase
-    while (stream.sendBase < stream.sendNext && quicStreamBit(stream.sendAcked, stream.at(stream.sendBase))) {
-      quicStreamSetBit(stream.sendAcked, stream.at(stream.sendBase), false)
-      stream.sendBase = stream.sendBase + 1
+    const size: i32 = stream.size
+    if (size > 0) {
+      const top: i64 = offset + toI64(length) < stream.sendEnd ? offset + toI64(length) : stream.sendEnd
+      const low: i64 = offset < stream.sendBase ? stream.sendBase : offset
+      // The bytes in flight are fewer than a buffer, so a chunk is too.
+      if (low < top) {
+        quicStreamMarkRing(stream.sendAcked, size, stream.at(low), toI32(quicStreamMin(top - low, toI64(size))), true)
+      }
+      if (stream.sendBase < stream.sendNext) {
+        const slot: i32 = stream.at(stream.sendBase)
+        const count: i32 = toI32(quicStreamMin(stream.sendNext - stream.sendBase, toI64(size)))
+        const done: i32 = quicStreamRingRun(stream.sendAcked, size, slot, count, true)
+        quicStreamMarkRing(stream.sendAcked, size, slot, done, false)
+        stream.sendBase = stream.sendBase + toI64(done)
+      }
     }
     if (fin) {
       stream.finAcked = true
