@@ -1640,9 +1640,7 @@ export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, turn: i32): 
   const carried: u8[] = new Array<u8>(
     from >= 0 && from <= to && to <= toI32(input.length) ? to - from : toI32(0)
   )
-  for (let i: i32 = 0; i < toI32(carried.length); i++) {
-    carried[i] = input[from + i]
-  }
+  copyBytes(carried, 0, input, from, toI32(carried.length))
   return await pgAsyncRead(
     pool.fds[s],
     carried,
@@ -1960,15 +1958,13 @@ const pgAsyncRead = async (
   maxResultBytes: i32
 ): Promise<PgAsyncResult> => {
   const result = new PgAsyncResult()
-  let buf: u8[] = new Array<u8>(
-    toI32(seed.length) > PG_ASYNC_INPUT_SIZE ? toI32(seed.length) : PG_ASYNC_INPUT_SIZE
-  )
+  // The buffer starts the size of the seed, not a zero-filled 8 KiB: an answer
+  // already scanned whole is parsed without clearing memory it never reads, and
+  // only a read past it grows the buffer.
+  let buf: u8[] = new Array<u8>(toI32(seed.length))
+  copyBytes(buf, 0, seed, 0, toI32(seed.length))
   let start: i32 = 0
-  let end: i32 = 0
-  for (let i: i32 = 0; i < toI32(seed.length) && end < toI32(buf.length); i++) {
-    buf[end] = seed[i]
-    end += 1
-  }
+  let end: i32 = toI32(seed.length)
   let refused: boolean = false
   let tooBig: boolean = false
   let changed: boolean = false
@@ -2085,9 +2081,8 @@ const pgAsyncRead = async (
       start = 0
     }
     if (end === toI32(buf.length)) {
-      const grown: u8[] = new Array<u8>(
-        toI32(buf.length) * 2 > maxMessage + 1 ? maxMessage + 1 : toI32(buf.length) * 2
-      )
+      const twice: i32 = toI32(buf.length) < PG_ASYNC_INPUT_SIZE ? PG_ASYNC_INPUT_SIZE : toI32(buf.length) * 2
+      const grown: u8[] = new Array<u8>(twice > maxMessage + 1 && end < maxMessage + 1 ? maxMessage + 1 : twice)
       copyBytes(grown, 0, buf, 0, end)
       buf = grown
     }
