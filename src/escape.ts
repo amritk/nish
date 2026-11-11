@@ -3159,7 +3159,6 @@ export const explainMemory = (
   unit: AnalysisUnit,
   table: TypeTable,
   facts: FactsTable,
-  noElision: boolean,
   out: MemoryReport
 ): void => {
   const program = unit.program
@@ -3173,7 +3172,7 @@ export const explainMemory = (
     if (instance !== null) {
       program.enterInstance(instance)
     }
-    explainFunction(unit, table, facts, noElision, sig, f, body, out)
+    explainFunction(unit, table, facts, sig, f, body, out)
     if (instance !== null) {
       program.leaveInstance()
     }
@@ -3185,7 +3184,6 @@ const explainFunction = (
   unit: AnalysisUnit,
   table: TypeTable,
   facts: FactsTable,
-  noElision: boolean,
   sig: FunctionSig,
   f: FunctionFacts,
   body: Node,
@@ -3204,7 +3202,7 @@ const explainFunction = (
     if (kept !== null) {
       out.functionsKept = out.functionsKept + 1
       const until = isMain ? "for the rest of the run" : "until the memory of its caller is released"
-      const reason = keptReason(unit, table, facts, f, noElision, kept)
+      const reason = keptReason(unit, table, facts, f, kept)
       out.notes.push(
         new ArenaFinding(sig.decl, `\`${f.sourceName}\` keeps what it allocates ${until}, because ${reason}`)
       )
@@ -3213,7 +3211,7 @@ const explainFunction = (
   // Every loop of the body has its entry in `f.loopScopes`
   // (`collectLoopScopes` descends into each statement that can hold one).
   if (f.allocates) {
-    explainLoops(unit, table, facts, f, noElision, isMain, body, null, null, out)
+    explainLoops(unit, table, facts, f, isMain, body, null, null, out)
   }
 }
 
@@ -3322,10 +3320,9 @@ const keptReason = (
   table: TypeTable,
   facts: FactsTable,
   f: FunctionFacts,
-  noElision: boolean,
   kept: Node
 ): string => {
-  if (noElision) {
+  if (facts.noElision) {
     return NO_ELISION_REASON
   }
   // `Arena.mark` refuses a pass its scope, not the function (`LOOP_CONTROL`).
@@ -3345,11 +3342,11 @@ const keptReason = (
   // give this function its scope back while its own remains.
   if (f.leaksItself) {
     const held = ownLeakNode(facts, f)
-    const heldLine = held === null ? line : program.source.lineOf(held.start)
+    const where =
+      held === null ? "" : `; the first allocation it holds is on line ${program.source.lineOf(held.start)}`
     return (
       "an allocation it makes is held where this analysis does not prove it dead when it returns (a local " +
-      "assigned more than once, an array of its own, or a callee that keeps its argument); the first " +
-      `allocation it holds is on line ${heldLine}`
+      `assigned more than once, an array of its own, or a callee that keeps its argument)${where}`
     )
   }
   // What a callee leaves behind is the caller's to release, and with no
@@ -3385,7 +3382,6 @@ const explainLoops = (
   table: TypeTable,
   facts: FactsTable,
   f: FunctionFacts,
-  noElision: boolean,
   isMain: boolean,
   node: Node,
   pass: LoopScope | null,
@@ -3412,7 +3408,7 @@ const explainLoops = (
     // scopes away, so a call into a function a scope had emptied allocates again.
     // A callee this analysis cannot see may allocate: the pass is listed
     // with that reason rather than counted as allocating nothing.
-    const unwalked = noElision || scope.why === LOOP_CONTROL
+    const unwalked = facts.noElision || scope.why === LOOP_CONTROL
     const allocates =
       scope.allocates ||
       (!scope.scoped && callsUnseen(unit.program, table, facts, scope.body)) ||
@@ -3428,7 +3424,7 @@ const explainLoops = (
       }
       until = keptUntil(unit, f, isMain, pass, block)
       if (bodyKeeps) {
-        const reason = loopKeptReason(unit, scope, noElision)
+        const reason = loopKeptReason(unit, facts, scope)
         out.notes.push(
           new ArenaFinding(node, `this loop keeps what each pass allocates ${until}, because ${reason}`)
         )
@@ -3457,7 +3453,7 @@ const explainLoops = (
     if (scope !== null && child === scope.body) {
       childPass = inner
     }
-    explainLoops(unit, table, facts, f, noElision, isMain, child, childPass, held, out)
+    explainLoops(unit, table, facts, f, isMain, child, childPass, held, out)
   }
   if (lateCondition !== null) {
     out.notes.push(headNote(lateCondition, "condition", until))
@@ -3473,16 +3469,15 @@ const headNote = (head: Node, part: string, until: string): ArenaFinding =>
 
 /** The node of `loop` that is tested before or after every pass, or null for a `for...of`. */
 const loopCondition = (loop: Node): Node | null => {
-  if (loop.kind === N_WHILE && loop.children.length > 0) {
-    return loop.children[0]
+  switch (loop.kind) {
+    case N_WHILE:
+      return loop.children.length > 0 ? loop.children[0] : null
+    case N_DO:
+    case N_FOR:
+      return loop.children.length > 1 ? loop.children[1] : null
+    default:
+      return null
   }
-  if (loop.kind === N_DO && loop.children.length > 1) {
-    return loop.children[1]
-  }
-  if (loop.kind === N_FOR && loop.children.length > 1) {
-    return loop.children[1]
-  }
-  return null
 }
 
 /** The node of a `for` that runs after every pass, or null. */
@@ -3512,8 +3507,8 @@ const keptUntil = (
 }
 
 /** Why a loop that allocates has no scope of its own, for `--explain-memory`. */
-const loopKeptReason = (unit: AnalysisUnit, scope: LoopScope, noElision: boolean): string => {
-  if (noElision) {
+const loopKeptReason = (unit: AnalysisUnit, facts: FactsTable, scope: LoopScope): string => {
+  if (facts.noElision) {
     return NO_ELISION_REASON
   }
   if (scope.why === LOOP_CONTROL) {

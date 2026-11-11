@@ -3476,7 +3476,7 @@ export class Compilation {
         continue
       }
       const from = report.notes.length
-      explainMemory(unit, this.table, facts, this.opts.noElision, report)
+      explainMemory(unit, this.table, facts, report)
       let i = from
       while (i < report.notes.length) {
         const note = report.notes[i]
