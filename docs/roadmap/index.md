@@ -27,7 +27,7 @@ and where it is specified.
 4. [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md): stage 3, the soak.
 5. [WP21: Packages](wp21-packages.md): S4, the build cache.
 6. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
-7. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
+7. [WP38: SIMD](wp38-simd.md): `--cpu` levels for AArch64 or `x86-64-v4`.
 8. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
 
 [WP34: Hosting cs: the network stack](wp34-hosting-cs.md)'s remaining waves are in the cs repository.
@@ -62,7 +62,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 6 of 9 |
 | [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 9 of 18 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 3 of 8 |
-| [WP38: SIMD](wp38-simd.md) | In progress | 8 of 10 |
+| [WP38: SIMD](wp38-simd.md) | In progress | 9 of 10 |
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 12 of 27 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
 | [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md) | In progress | 3 of 4 |
