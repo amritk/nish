@@ -24,8 +24,11 @@ import { deferInstantiation, instantiateWritten } from "./generics"
 import { REGION_SPECIFIER, SIMD_SPECIFIER, simdMaskWidth } from "./nish-modules"
 import {
   FLAG_DEFAULT,
+  FLAG_OPTIONAL,
   FLAG_READONLY,
+  FLAG_REST,
   FLAG_STATIC,
+  N_EMPTY,
   N_FIELD,
   N_IDENT,
   N_LIST,
@@ -197,6 +200,49 @@ export const namesRegion = (ctx: CheckContext, name: string): boolean => {
   return name === "Region" && ctx.program.isRegionLibrary()
 }
 
+/**
+ * `(x: A, y: B) => R` outside a parameter of a top-level function: the
+ * function reference type of that signature (WP51 S1). Every parameter is one
+ * the caller passes and none is itself a function, because a function that
+ * takes a function is a template with no single body a tag could name.
+ */
+const unwrapTypeParen = (node: Node): Node =>
+  node.kind === N_TYPE_PAREN ? unwrapTypeParen(node.children[0]) : node
+
+const resolveFunctionReference = (node: Node, ctx: CheckContext): i32 => {
+  const params: i32[] = []
+  for (const param of node.children[0].children) {
+    if (
+      (param.flags & (FLAG_OPTIONAL | FLAG_REST)) !== 0 ||
+      param.children.length < 2 ||
+      param.children[1].kind === N_EMPTY
+    ) {
+      return ctx.errorType(
+        param,
+        `\`${ctx.textOf(node)}\` has a parameter the caller may leave out: a function reference names a ` +
+          "function whose every parameter the caller passes, each with its type written"
+      )
+    }
+    if (unwrapTypeParen(param.children[1]).kind === N_TYPE_FUNCTION) {
+      return ctx.errorType(
+        param,
+        `\`${ctx.textOf(node)}\` takes a function parameter, so no function it could name has a single body ` +
+          "to refer to"
+      )
+    }
+    const type = resolveType(param.children[1], ctx)
+    if (type === T_ERROR) {
+      return T_ERROR
+    }
+    params.push(type)
+  }
+  const result = resolveType(node.children[1], ctx)
+  if (result === T_ERROR) {
+    return T_ERROR
+  }
+  return ctx.table.fnRefOf(params, result)
+}
+
 export const resolveType = (node: Node, ctx: CheckContext): i32 => {
   switch (node.kind) {
     case N_TYPE_PAREN:
@@ -215,15 +261,10 @@ export const resolveType = (node: Node, ctx: CheckContext): i32 => {
     case N_TYPE_FUNCTION:
       // WP29: a parameter of a top-level function takes a function type
       // without coming here (`collectParams`), because it names a callee the
-      // checker resolves at each call rather than a type. Anywhere a type is
-      // actually wanted, a function type would be a function *value*, and the
-      // language has none (docs/wp23-language-surface.md §6).
-      return ctx.errorType(
-        node,
-        `\`${ctx.textOf(node)}\` is a function type, which may only annotate a parameter of a top-level function: ` +
-          `a function is never a value in ${LANGUAGE}, so it cannot be the type of a field, a local, an element, ` +
-          "a return value or an alias"
-      )
+      // checker resolves at each call. Anywhere else a function type is a
+      // function reference (WP51 S1): an `i32` tag naming one capture-free
+      // top-level function of this signature.
+      return resolveFunctionReference(node, ctx)
     case N_TYPE_LITERAL:
       if (isStringLiteralType(node)) {
         return ctx.errorType(
