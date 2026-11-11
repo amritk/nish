@@ -171,7 +171,7 @@ function HandleClose.constructor(this: HandleClose, info: StructInfo, sig: Funct
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: info sig tested
   pointer this: size=24 writesThrough=true captured=false
-  pointer info: size=168 writesThrough=true captured=true
+  pointer info: size=176 writesThrough=true captured=true
   pointer sig: size=200 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function isThisField(expr: Node): boolean -> @isThisField
@@ -232,7 +232,7 @@ function checkDispose(program: CheckedProgram, table: TypeTable, info: StructInf
   calls: HandleClose.constructor HandleFinding.constructor StructInfo.field TypeTable.assignable TypeTable.stripNull TypeTable.typeName closeArityMessage closeTypeMessage closeUnknownMessage disposeCall disposeMethod disposeShapeMessage functionNamed nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noDisposeMessage
   pointer program: size=800 writesThrough=false captured=false passedTo=functionNamed#0
   pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.assignable#0 TypeTable.typeName#0 TypeTable.typeName#0
-  pointer info: size=168 writesThrough=true captured=true passedTo=StructInfo.field#0 HandleClose.constructor#1
+  pointer info: size=176 writesThrough=true captured=true passedTo=StructInfo.field#0 HandleClose.constructor#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:9 cls: string (const)
@@ -369,7 +369,7 @@ function checkFieldRead(walk: HandleWalk, member: Node, info: StructInfo): void 
   calls: HandleFinding.constructor HandleWalk.parent climbParens foreignCallOf handlePointerMessage nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow refuseClose sourceLocal unwrapParens
   pointer walk: size=72 writesThrough=false captured=false passedTo=climbParens#0 foreignCallOf#0 refuseClose#0 HandleWalk.parent#0 HandleWalk.parent#0
   pointer member: size=40 writesThrough=true captured=true passedTo=HandleFinding.constructor#1
-  pointer info: size=168 writesThrough=false captured=false
+  pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -21:9 receiver: Node (const)
   callee -21:20 unwrapParens -> @unwrapParens
@@ -434,7 +434,7 @@ function checkHandleNew(walk: HandleWalk, node: Node, info: StructInfo, depth: i
   calls: HandleFinding.constructor HandleWalk.parent climbParens handleValueMessage nish_alloc_struct nish_array_grow nish_panic_overflow
   pointer walk: size=72 writesThrough=false captured=false passedTo=climbParens#0 HandleWalk.parent#0
   pointer node: size=40 writesThrough=true captured=true passedTo=HandleFinding.constructor#1
-  pointer info: size=168 writesThrough=false captured=false
+  pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -5:9 up: i32 (const)
   callee -5:14 climbParens -> @climbParens

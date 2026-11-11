@@ -211,7 +211,8 @@ the record that found it. The notes below the table name each such finding.
    open Lows, beside the carrier's TLS-4.
 10. JSON-1, JSON-4, JSON-5, JSON-6, JSON-7, JSON-8, JSON-9, JSON-11 and JSON-12 (Low) are accepted, with the reason in
     their record, and are not counted, and so is JSON-14 (Low), a `JsonNumber`'s
-    bytes written raw. JSON-2 is open. JSON-13 (Medium), the map keys a body
+    bytes written raw, and JSON-17 (Low), a tagged union's read-ahead to a
+    tag that is not the first key. JSON-2 is open. JSON-13 (Medium), the map keys a body
     can make collide, was bounded by `jsonDecode` (#622, `maxMapKeys`) and
     closed by #900, which seeds the global `Map`'s string hash; it is counted
     as a fixed Medium. JSON-15 (Medium), the same flood through integer, `boolean`

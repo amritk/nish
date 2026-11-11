@@ -1,0 +1,9 @@
+call i1 @nish.JsonDecoder.unionTag(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }*
+call i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* %r)
+call %struct.Num* @.json.new.Num()
+call i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* %r)
+call void @.json.decode.in.Num.kind(%struct.JsonDecoder* %r, %struct.Num* %
+call void @nish.JsonDecoder.unknownTag(%struct.JsonDecoder* %r)
+switch i32 %
+label %json.other [ i32 0, label %json.variant i32 1, label %json.variant.1 i32 2, label %json.variant.2 ]
+call void @.json.encode.Neg(%struct.JsonWriter* %r, %struct.Neg* %

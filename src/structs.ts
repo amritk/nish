@@ -1106,6 +1106,13 @@ export const noteStructNames = (table: TypeTable, type: i32, out: StringSet): vo
     noteStructNames(table, table.errOf(type), out)
     return
   }
+  // A union is laid out as each of its variants.
+  if (table.isUnion(type)) {
+    for (const variant of table.variantsOf(type)) {
+      noteStructNames(table, variant, out)
+    }
+    return
+  }
   const inner = table.refOf(type)
   if (inner >= 0) {
     noteStructNames(table, inner, out)

@@ -2040,7 +2040,8 @@ export const main = (): i32 => {
   NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2559. Any
   other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
-  (`Shape | null`). An alias may name another union, which is flattened. A
+  (`Shape | null`), and a `Map`'s value is any of those (`Map<string, Shape>`,
+  `Map<string, Shape[]>`, `Map<string, Shape | null>`). An alias may name another union, which is flattened. A
   variant, or a smaller union, converts into it wherever the union is
   expected — argument, `return`, `push`, an annotated array literal, a
   ternary arm or `??` default whose other side is the union. A class that
@@ -2112,8 +2113,9 @@ export const main = (): i32 => {
   anywhere or the whole type, which accepts a few comparisons `tsc` refuses
   (TS2367; LANGUAGE.md, "Accepted here, refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,
-  `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
-  union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
+  `Result<Shape, E>`, a generic call binding `T` to a union: NL2533; a
+  built-in `Map`'s value is the one that may be a union, though `nish/map`'s
+  generic `getOrInsert`/`reserve` on such a map is NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
   is not `Shape[]`), and inferred unions (an unannotated ternary or array of
   two variants).
 - **Declare what you store.** A store of a value that is only some of the
@@ -2792,7 +2794,17 @@ literal (NL2493), an unknown option (NL2494), a name that is no field (NL2495),
 a rename to a non-string (NL2496) or to a key that is not valid UTF-8
 (NL2499), two fields with one key (NL2497). A
 `JsonNumber` field keeps a number's text byte for byte (`text`, `i64`, `u64`,
-`f64`, `setText`).
+`f64`, `setText`). A tagged union of classes is a field, an array element or
+`jsonEncode`'s value too: the object with its tag key first, the tag the
+member's name or the variant's `tag` option. Decode one with
+`const u = jsonDecodeUnion(d, prev)` (never `jsonDecode`, NL2719, and no type
+argument): it answers `prev` refilled when the tag matches, else a new variant,
+and `prev` on failure (only at the top: a nested union slot may hold the new
+variant, half read, so check `d.failed`); a bad tag is `JSON_DECODE_TAG`.
+`tag: ""` is the same as no `tag`. Every variant writes its
+tag under one key (NL2721) as a different string (NL2720). A `tag` on a class
+no union holds does nothing, and a JSON call on that class refuses its
+enum-member field.
 
 ```ts nish:ok
 import { JsonWriter } from "nish/json";

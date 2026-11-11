@@ -1790,7 +1790,7 @@ function Compilation.reportWideSpread(this: Compilation, copy: SpreadCopy, cls: 
   calls: DiagnosticSink.report TypeTable.typeName nish_str_concat
   pointer this: size=208 writesThrough=false captured=false
   pointer copy: size=32 writesThrough=false captured=false
-  pointer cls: size=168 writesThrough=false captured=false
+  pointer cls: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 DiagnosticSink.report -> @DiagnosticSink.report
   callee +4:22 TypeTable.typeName -> @TypeTable.typeName

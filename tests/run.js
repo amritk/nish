@@ -6525,6 +6525,11 @@ if (!only || "arena_removed".includes(only)) {
 //                  to be refused at several sites (tests/nish/run.ts reads only the
 //                  needle, so expected.err keeps it)
 //   expected.ir    lines (substring match) that must appear in some emitted module
+//   expected.once  lines each of which exactly one emitted line contains, to pin that a
+//                  function is defined once; `@fn :: text` asks it of the body of the
+//                  function `@fn` alone, to pin the call one function makes (that
+//                  name must be defined in exactly one module); required, and not
+//                  empty, for a program that decodes a typed JSON union
 //   expected.caps.json  the `--emit-capabilities` report, byte for byte (WP35)
 //   expected.portability  the `--warn-portability --json` portability objects, one per
 //                  line, as a case's `.portability` (WP33): a second compile with the
@@ -6849,6 +6854,54 @@ const runLinkProgram = async (name) => {
         `link/${name}: emitted IR contains every expected.ir line`,
         missing.length === 0,
         missing.map((l) => `missing: ${l}`).join("\n")
+      )
+    }
+
+    // A program whose IR holds a typed JSON union's function pins who calls
+    // it, so that deleting the pins cannot pass unnoticed.
+    const unionRoute = modules.some((m) => m.ir.includes("define internal %union.tagged* @.json.decode.union."))
+    if (unionRoute || fs.existsSync(side("expected.once"))) {
+      const once = fs.existsSync(side("expected.once")) ? read("expected.once") : ""
+      const wants = once
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+      expect(`link/${name}: expected.once is there and pins at least one line`, wants.length > 0)
+      const lines = modules.flatMap((m) => m.ir.split("\n"))
+      // Each function's bodies, by the name its `define` line gives it: an
+      // internal function may have the same name in two modules.
+      const bodies = new Map()
+      for (const m of modules) {
+        let current = null
+        for (const line of m.ir.split("\n")) {
+          const defined = /^define [^@]*(@[^(]+)\(/.exec(line)
+          if (defined) {
+            current = []
+            const seen = bodies.get(defined[1]) || []
+            seen.push(current)
+            bodies.set(defined[1], seen)
+          } else if (line === "}") {
+            current = null
+          } else if (current) {
+            current.push(line)
+          }
+        }
+      }
+      const wrong = wants.flatMap((want) => {
+        const scoped = want.indexOf(" :: ")
+        const fn = scoped < 0 ? null : want.slice(0, scoped)
+        const text = scoped < 0 ? want : want.slice(scoped + 4)
+        const found = fn === null ? [lines] : bodies.get(fn) || []
+        if (found.length !== 1) {
+          return [`${found.length} function(s) named ${fn}, not 1: ${want}`]
+        }
+        const count = found[0].filter((l) => l.includes(text)).length
+        return count === 1 ? [] : [`${count} line(s), not 1: ${want}`]
+      })
+      expect(
+        `link/${name}: each expected.once line is on exactly one emitted line`,
+        wrong.length === 0,
+        wrong.join("\n")
       )
     }
 
@@ -29788,7 +29841,7 @@ if (!only || "std_json_typed".includes(only)) {
     "link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)",
     run.status === 1 &&
       run.stderr.includes(
-        "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
+        "nish/json-typed: jsonDecode, jsonDecodeUnion and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
       ),
     shown(run)
   )

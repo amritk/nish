@@ -259,7 +259,7 @@ function inlineField(emitter: Emitter, expr: Node): FieldInfo | null -> @inlineF
   callee +18:17 StructInfo.field -> @StructInfo.field
   callee +19:29 FieldInfo.inline -> @FieldInfo.inline
 function inlineOwnerOf(emitter: Emitter, expr: Node): StructInfo -> @inlineOwnerOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=168
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
   sharedWrite: via Emitter.typeOf
   calls: CheckedProgram.struct Emitter.typeOf TypeTable.nameOf TypeTable.stripNull internalErrorFor nish_exit
   pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.typeOf#0
@@ -276,7 +276,7 @@ function inlineHeaderPointer(emitter: Emitter, info: StructInfo, receiver: strin
   sharedWrite: via Emitter.declareType
   calls: Emitter.declareType IRFunction.emitValue nish_str_concat nish_str_from_i32
   pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.declareType#0
-  pointer info: size=168 writesThrough=false captured=false
+  pointer info: size=176 writesThrough=false captured=false
   pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 Emitter.declareType -> @Emitter.declareType
@@ -287,7 +287,7 @@ function inlineDataPointer(emitter: Emitter, info: StructInfo, receiver: string,
   sharedWrite: via Emitter.llvm
   calls: Emitter.llvm IRFunction.emitValue TypeTable.refOf nish_str_concat nish_str_from_i32
   pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.llvm#0
-  pointer info: size=168 writesThrough=false captured=false
+  pointer info: size=176 writesThrough=false captured=false
   pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -323,7 +323,7 @@ function initInlineArrays(emitter: Emitter, info: StructInfo, receiver: string):
   escaping: receiver
   calls: FieldInfo.inline inlineDataPointer inlineHeaderPointer nish_str_from_i32 slicePointer storeHeaderField storeSliceField
   pointer emitter: size=376 writesThrough=false captured=false passedTo=slicePointer#0 storeSliceField#0 storeSliceField#0 inlineHeaderPointer#0 storeHeaderField#0 storeHeaderField#0 storeHeaderField#0 inlineDataPointer#0
-  pointer info: size=168 writesThrough=false captured=false passedTo=slicePointer#1 inlineHeaderPointer#1 inlineDataPointer#1
+  pointer info: size=176 writesThrough=false captured=false passedTo=slicePointer#1 inlineHeaderPointer#1 inlineDataPointer#1
   stackSites=0 stackLocals=0
   local +0:14 field: FieldInfo (const)
   local +2:13 slice: string (const)
@@ -393,7 +393,7 @@ function slicePointer(emitter: Emitter, info: StructInfo, receiver: string, fiel
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat nish_str_from_i32
   pointer emitter: size=376 writesThrough=false captured=false
-  pointer info: size=168 writesThrough=false captured=false
+  pointer info: size=176 writesThrough=false captured=false
   pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -1273,6 +1273,16 @@ function emitElementAt(emitter: Emitter, arr: string, elem: i32, idx: string): s
   stackSites=1 stackLocals=0
   callee +0:3 loadElement -> @loadElement
   callee +0:24 new ArrayBase -> @ArrayBase.constructor
+function emitSetElementAt(emitter: Emitter, arr: string, elem: i32, idx: string, value: string): void -> @emitSetElementAt [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via storeElement
+  escaping: arr elem idx value
+  calls: ArrayBase.constructor elementPointer storeElement
+  pointer emitter: size=376 writesThrough=false captured=false passedTo=storeElement#0 elementPointer#0
+  stackSites=1 stackLocals=0
+  callee +0:12 storeElement -> @storeElement
+  callee +0:34 elementPointer -> @elementPointer
+  callee +0:58 new ArrayBase -> @ArrayBase.constructor
 function emitEmptyArray(emitter: Emitter): string -> @emitEmptyArray [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareType

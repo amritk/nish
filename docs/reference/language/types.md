@@ -662,6 +662,8 @@ type Shape = Circle | Square;
 const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
 ```
 
+Typed JSON reads and writes a union of classes by its tag ([Typed JSON](builtins.md#typed-json-nishjson-typed)).
+
 **Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
 behind a pointer. Every variant begins with its `i32` tag, so a variant
 pointer is a union pointer by a `bitcast`, and reading the tag is a
@@ -710,7 +712,9 @@ and each has its own code:
 
 **Where a union goes.** A union is the type of a local, a parameter, a
 field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
-spelled in place, `(Circle | Square)[]`), or of any of those made nullable.
+spelled in place, `(Circle | Square)[]`), or of any of those made nullable,
+and a `Map`'s value is any of those: `Map<string, Shape>`,
+`Map<string, Shape[]>`, `Map<string, Shape | null>` (`union_map_value`).
 An alias may name another union, which is flattened: with `type Round =
 Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
 of a variant, or of a union whose variants are all the wider union's,
@@ -971,12 +975,17 @@ boundary, so no other `i32` reaches it.
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
   narrows nothing, and is accepted. A test of the tag does narrow (above).
-- **No union type arguments.** `Box<Shape>`, a generic function or method
-  whose type parameter would bind to a union, `Map<K, Shape>` and
+- **No union type arguments, but a `Map`'s value.** `Box<Shape>`, a generic
+  function or method whose type parameter would bind to a union, and
   `Result<Shape, E>` / `Result<T, Shape>` are NL2533
   (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
-  `reject_union_generic_method`, `reject_union_map_value`,
-  `reject_union_result_ok`, `reject_union_result_err`). A union is not a
+  `reject_union_generic_method`, `reject_union_result_ok`,
+  `reject_union_result_err`). `Map<K, Shape>` is accepted: the map stores
+  its value as it is, the way an array stores an element of a union, and
+  `get` gives `Shape | undefined` (`union_map_value`). The `Map` here is the
+  built-in one and its methods: `nish/map`'s `getOrInsert` and `reserve` are
+  generic functions, so one called on a `Map<K, Shape>` binds `V` to the union
+  and is NL2533 as any generic call is. A union is not a
   `Map` or `Set` key, which is the key rule's refusal
   (`reject_union_map_key`, `reject_union_set`).
 - **No inferred unions.** A union is never inferred: an unannotated ternary

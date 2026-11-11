@@ -1,0 +1,1 @@
+`Point.json` gives a `tag`, and `Point` has no field whose type is one enum member: `tag` is the string a tagged union's variant writes its tag as, so only a variant gives one

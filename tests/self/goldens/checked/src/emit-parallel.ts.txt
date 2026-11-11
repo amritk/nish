@@ -480,7 +480,7 @@ function lockWord(emitter: Emitter, info: StructInfo, name: string): FieldInfo -
   escaping: name
   calls: StructInfo.field internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=376 writesThrough=false captured=false
-  pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.field#0
   stackSites=0 stackLocals=0
   local +0:9 field: FieldInfo | null (const)
   callee +0:17 StructInfo.field -> @StructInfo.field
@@ -615,7 +615,7 @@ function closeHandle(emitter: Emitter, info: StructInfo, object: string): void -
   escaping: object
   calls: Emitter.llvm Emitter.llvmAbi IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitDropped internalErrorFor loadField lockWord nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=376 writesThrough=false captured=false passedTo=lockWord#0 loadField#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 emitDropped#0 Emitter.llvm#0 emitDropped#0
-  pointer info: size=168 writesThrough=true captured=true passedTo=lockWord#1 loadField#1
+  pointer info: size=176 writesThrough=true captured=true passedTo=lockWord#1 loadField#1
   stackSites=0 stackLocals=0
   local +0:9 close: FunctionSig | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor

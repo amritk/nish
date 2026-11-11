@@ -74,8 +74,8 @@ still works, and so does `Shape | null`.
 
 ## Where a union goes
 
-A union is the type of a local, a parameter, a field, a return value or an
-array element, and `Shape | null` of any of those. An alias may name another
+A union is the type of a local, a parameter, a field, a return value, an
+array element or a `Map`'s value, and `Shape | null` of any of those. An alias may name another
 union: with `type Round = Circle | Square`, `type Shape = Round | Tri` holds
 all three. A variant converts into it wherever one is expected: a
 `new Circle()` passed to a `Shape` parameter, returned from a function that
@@ -88,9 +88,11 @@ holds one is refused. So is a field that holds one, in any class or interface
 of the program, exported or not: a header lays out every class, a private one
 too.
 
-A union is not a type argument, so `Box<Shape>`, `Map<string, Shape>`,
-`Set<Shape>` and `Result<Shape, string>` are refused, and so is a call to a
-generic function that would bind its type parameter to a union:
+`Map<string, Shape>` holds its values as they are, as an array does, and its
+`get` answers `Shape | undefined`. Otherwise a union is not a type argument,
+so `Box<Shape>`, `Set<Shape>`, a `Map` keyed by a union and
+`Result<Shape, string>` are refused, and so is a call to a generic function
+that would bind its type parameter to a union:
 
 ```ts nish:err NL2533
 enum Kind {
@@ -453,3 +455,10 @@ Nor is one on an enum field given a tag, `b.k = s.kind`: the field is still a
 counts is the subject itself, a variant's tag field read on a union value.
 TypeScript accepts all four. Give such a `switch` a `default`, or return after
 it.
+
+## Unions as JSON
+
+A union of classes reads and writes as JSON through `nish/json-typed`: the tag
+goes on the wire as the name of its enum member, and `jsonDecodeUnion` picks
+the variant by it. See
+[Tagged unions](../using-nish/standard-library.md#tagged-unions).

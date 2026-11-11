@@ -277,7 +277,7 @@ function refuseHostReferences(contexts: CheckContext[], mode: BuildMode): void -
 function fieldNode(info: StructInfo, name: string): Node -> @fieldNode
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index nish_str_eq
-  pointer info: size=168 writesThrough=false captured=false
+  pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 decl: Node (const)
   local +2:16 member: Node (const)

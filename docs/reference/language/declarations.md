@@ -743,8 +743,10 @@ and their `.ll` goldens are byte-identical files.
     `_field_init_level`, `_field_init_unknown`, `_field_init_i32`,
     `_field_init_dotted`).
   - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
-    it reads an enum as any of its members, which a member type cannot hold. A
-    member type crosses to C and JavaScript exactly where its enum does, which
+    it reads an enum as any of its members, which a member type cannot hold.
+    The one exception is a union's tag: a member that tags a variant of a
+    union is written as its name, the union's [typed JSON](builtins.md#typed-json-nishjson-typed)
+    tag (`tests/link/json_tagged_union`). A member type crosses to C and JavaScript exactly where its enum does, which
     is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``

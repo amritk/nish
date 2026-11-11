@@ -536,6 +536,11 @@ const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
   )
+const TAGGED_UNIONS = "Typed JSON decodes and encodes tagged unions"
+const taggedUnions = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: TAGGED_UNIONS, why }))
+  )
 const POOL_PIPELINE = "async Postgres pool pipelines queries across tasks"
 const poolPipeline = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1818,6 +1823,86 @@ const DECLARED = [
     changelog: PIPELINED_WRITE,
     why: "the program calls HttpHandler.deferSends, which the 0.38.0 seed does not have, so only the candidate compiles it (WP49 stage 6, part 3)",
   },
+  ...taggedUnions(
+    "JsonTokenizer gains rewindObject and JsonDecoder two trailing i32 fields (`unionStart`, where a read-ahead union object began, and `unionReread`, the bytes read again to reach a tag that is not the first key), so every program that links nish/json-tokenizer or nish/json-typed declares one more function and lays the decoder out 8 bytes wider; a program reading the tokenizer's header re-declares it",
+    {
+      "bench/http-app-carrier.ts": [
+        "http-app-carrier.h",
+        "json-tokenizer.ll",
+        "json-typed.ll",
+        "json-value.ll",
+      ],
+      "bench/http1-server.ts": ["json-tokenizer.ll", "json-typed.ll", "json-value.ll"],
+      "bench/json-compare/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
+      "bench/json-tokenizer/main.ts": ["json-tokenizer.ll", "main.ll"],
+      "bench/json-value/main.ts": ["json-tokenizer.ll", "json-value.ll", "loop.ll", "main.ll"],
+      "bench/yaml-json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
+      "docs/cookbook/json-presence.ts": [
+        "json-presence.h",
+        "json-presence.ll",
+        "json-tokenizer.ll",
+        "json-typed.ll",
+      ],
+      "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.ll", "std_json-tokenizer.ll"],
+      "docs/cookbook/json-typed.ts": [
+        "json-tokenizer.ll",
+        "json-typed.h",
+        "json-typed.ll",
+        "std_json-typed.ll",
+      ],
+      "docs/cookbook/json-value.ts": ["json-tokenizer.ll", "json-value.ll", "std_json-value.ll"],
+      "examples/merge-patch.ts": ["json-tokenizer.ll", "json-typed.ll", "merge-patch.h", "merge-patch.ll"],
+      "tests/link/json_merge_patch/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
+      "tests/link/json_presence/main.ts": ["json-tokenizer.ll", "json-typed.ll", "main.h", "main.ll"],
+      "tests/link/std_json_conformance/main.ts": ["conformance.ll", "json-tokenizer.ll", "rewrite.ll"],
+      "tests/link/std_json_equal/main.ts": [
+        "json-equal.ll",
+        "json-pointer.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "suite.ll",
+        "units.ll",
+      ],
+      "tests/link/std_json_number/main.ts": [
+        "json-equal.ll",
+        "json-pointer.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "suite.ll",
+      ],
+      "tests/link/std_json_pointer/main.ts": [
+        "json-equal.ll",
+        "json-pointer.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "suite.ll",
+        "units.ll",
+      ],
+      "tests/link/std_json_typed/main.ts": [
+        "checks.ll",
+        "json-tokenizer.ll",
+        "json-typed.ll",
+        "kinds.ll",
+        "main.h",
+        "main.ll",
+        "options.ll",
+        "renamed.ll",
+        "support.ll",
+        "tag.ll",
+      ],
+      "tests/link/std_json_value/main.ts": [
+        "alloc.ll",
+        "common.ll",
+        "corpus.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "units.ll",
+      ],
+      "tests/link/std_json_value_ranges/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll"],
+      "tests/link/std_json_writer/main.ts": ["common.ll", "json-tokenizer.ll", "json-typed.ll", "main.h"],
+      "tests/link/std_yaml_json/main.ts": ["json-tokenizer.ll", "json-value.ll", "main.ll", "yaml-json.ll"],
+    }
+  ),
   {
     program: "tests/cases/caps_process_spawn_piped_within.ts",
     file: "exit",

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 891
+export const RULE_COUNT: i32 = 897
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -131,6 +131,8 @@ const diagnosticRules = (): string[] => [
   "NL2470",
   "` cannot be a `Secret`: a field of a class or interface outlives the function that made the secret, which then can neither return nor wipe it; hold a `Secret` in a local, a parameter, or a `readonly` field of a class whose `wipe()` wipes it",
   "NL2430",
+  "`, a tagged union: `jsonDecode` decodes into the object it is given, and which variant a document holds is known only once its tag is read, so a union is decoded with `jsonDecodeUnion(d, prev)`, which answers the object it decoded into",
+  "NL2719",
   "`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join",
   "NL2513",
   "`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join",
@@ -217,6 +219,8 @@ const diagnosticRules = (): string[] => [
   "NL2338",
   "` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored",
   "NL2352",
+  "`, which is not a tagged union: `jsonDecodeUnion` picks a variant by the object's tag and answers it, so its value is a union of classes; a class is decoded into with `jsonDecode(d, out)`",
+  "NL2723",
   ": a presence field is a `boolean` that is not `readonly` and records whether one other field's key was given; it is off the wire, so no option renames it, makes it optional or records it",
   "NL2592",
   "`sort` takes one comparator: write `xs.sort((a, b) => a - b)`, a function answering a negative number, zero or a positive number (without one JavaScript compares the elements as strings)",
@@ -403,6 +407,10 @@ const diagnosticRules = (): string[] => [
   "NL2682",
   "` that this exit leaves neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2440",
+  "`: a decoder finds a union's tag before it knows which variant the object is, so every variant of a union writes its tag under the same key",
+  "NL2721",
+  "`'s `tag` is not a string literal: a variant's tag is written on the wire as a string, and typed JSON reads which one from the class's text",
+  "NL2722",
   ", and a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count",
   "NL2555",
   "` runs it on threads whose arenas are freed when they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)",
@@ -411,6 +419,8 @@ const diagnosticRules = (): string[] => [
   "NL2372",
   "` does not depend on its value; one of them is probably meant to be something else (to mean it, copy the value to a second `const` first)",
   "NL2715",
+  "` has no field whose type is one enum member: `tag` is the string a tagged union's variant writes its tag as, so only a variant gives one",
+  "NL2724",
   "`: which fields a spread copies depends on the variant it holds at run time, so narrow it to one variant first, or set the fields by name",
   "NL2704",
   " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
@@ -483,6 +493,8 @@ const diagnosticRules = (): string[] => [
   "NL2436",
   "--emit-ts cannot yet write an async function, whose resume order the TypeScript runtime does not answer yet; keep it native",
   "NL4016",
+  "`: a decoder picks a union's variant by the string its tag is written as, so each variant of a union writes a different one",
+  "NL2720",
   " in a host module: its exports are read without TypeScript's parser, so move that code into a module the host file imports",
   "NL3049",
   ": a handle class has no type parameters, no `implements` and no `export`, so no other type and no other module can name it",

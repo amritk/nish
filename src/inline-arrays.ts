@@ -92,7 +92,7 @@ import {
   STRUCT_CLASS,
   StructInfo,
 } from "./program"
-import { jsonClasses, jsonClassOf } from "./json-typed"
+import { jsonClasses, jsonRootsOf } from "./json-typed"
 import { computeLayout } from "./structs"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { isFloat, TypeTable } from "./types"
@@ -798,8 +798,8 @@ const visitInstance = (
 }
 
 /**
- * Typed JSON: the code written for a call of `jsonDecode` or `jsonEncode`
- * passes every array field of every class it reaches to a function and
+ * Typed JSON: the code written for a call of `jsonDecode`, `jsonDecodeUnion`
+ * or `jsonEncode` passes every array field of every class it reaches to a function and
  * assigns it the array that function answers (`src/emit-json.ts`). None of
  * that is a node any walk here reads, so each of those fields keeps the
  * pointer layout.
@@ -810,11 +810,8 @@ const spoilJsonRoutes = (walk: InlineWalk): void => {
       if (instance.jsonRoute === JSON_NONE || instance.typeArgs.length !== 1) {
         continue
       }
-      const root = jsonClassOf(ctx.program, walk.table, instance.typeArgs[0])
-      if (root === null) {
-        continue
-      }
-      for (const info of jsonClasses(ctx.program, walk.table, root)) {
+      const roots = jsonRootsOf(ctx.program, walk.table, instance.typeArgs[0])
+      for (const info of jsonClasses(ctx.program, walk.table, roots)) {
         for (const field of info.fields) {
           const at = walk.byKey.get(`${info.name}.${field.name}`, -1)
           if (at >= 0) {
