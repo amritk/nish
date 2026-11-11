@@ -1,0 +1,1 @@
+`(g: (x: i32) => i32) => i32` takes a function parameter, so no function it could name has a single body to refer to

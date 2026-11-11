@@ -1,0 +1,1 @@
+can reach `keepIt`, which keeps `p`, and `readX`, which does not, so every call here would allocate `p` in the arena
