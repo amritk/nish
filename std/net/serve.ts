@@ -50,6 +50,14 @@
  * order they came: a later request's task starts only after the earlier one
  * is answered, so it can never finish first.
  *
+ * **A pipelined burst goes out in one write.** The loop answers what the
+ * tasks wrote and takes what the handler queued until neither moves, so a
+ * handler that answers without waiting serves a whole burst in one turn.
+ * The handler holds each answer's send while the next request on its
+ * connection is queued and the output has room, and the loop flushes once
+ * before it parks: one write per connection per turn, and no wake byte for a
+ * task that answers while the loop runs.
+ *
  * **Every cap answers.** `ServeLimits` bounds the connections, the requests
  * in flight (503 past it), a request's header section (431) and body (413),
  * and the response a task may write (500 past it). `docs/security/serve.md`
@@ -146,6 +154,8 @@ export class ServeStats {
   usedWarm: i64 = 0
   /** `Arena.used()` in the server's loop once `maxRequests` were answered, before draining. */
   usedEnd: i64 = 0
+  /** The writes the server began to send answers, counted at the end of each loop turn: a pipelined burst that fits the output is one. */
+  sends: i64 = 0
 }
 
 /**
@@ -365,6 +375,10 @@ class ServeState {
   wakeFd: i32 = 0
   /** Whether a byte is waiting in the wake socket. */
   signalled: boolean = false
+  /** Whether the loop is running rather than parked: a task that answers now needs no wake byte, as the loop looks again before it parks. */
+  awake: boolean = false
+  /** Set by each task that answers, and cleared by the loop as it looks for answers. */
+  fresh: boolean = false
   /** Set when the loop has stopped: the ticker ends. */
   stopped: boolean = false
 
@@ -605,7 +619,8 @@ const serveTask = async (
     st.typeLengths[k] = n
   }
   st.done[k] = true
-  if (!st.signalled) {
+  st.fresh = true
+  if (!st.awake && !st.signalled) {
     st.signalled = true
     netWrite(st.wakeFd, st.one, 0, 1)
   }
@@ -652,6 +667,7 @@ export const serveOn = async (
   hl.http.headTimeout = limits.headTimeout
   hl.http.idleTimeout = limits.idleTimeout
   const h: HttpHandler = new HttpHandler(hl, listener, router)
+  h.deferSends()
   const st: ServeState = new ServeState()
   st.deadline = limits.deadline
   serveFields(st, limits.server)
@@ -667,6 +683,7 @@ export const serveOn = async (
   spawn(serveTick(st))
   let draining: boolean = false
   while (true) {
+    st.awake = true
     h.wait(0)
     if (h.fired(SERVE_WAKE)) {
       st.signalled = false
@@ -674,9 +691,14 @@ export const serveOn = async (
         // Each read takes up to 64 wake bytes; the loop empties the socket.
       }
     }
+    // Each pass answers what the tasks wrote and takes what the handler
+    // queued: a pipelined request is queued once the one before it is
+    // answered, so a burst on a connection is taken and answered in request
+    // order within this turn, and the handler sends the answers together.
     let moved: boolean = true
-    while (moved) {
+    while (moved || st.fresh) {
       moved = false
+      st.fresh = false
       for (let k: i32 = 0; k < toI32(st.busy.length); k++) {
         if (st.busy[k] && st.done[k]) {
           serveAnswer(h, st, k, typeCache, stats)
@@ -710,6 +732,10 @@ export const serveOn = async (
         spawn(serveTask(handle, st, k))
       }
     }
+    // The turn's answers go out together, before the arena is read, so a
+    // close the send causes is counted in the turn that caused it.
+    h.flush()
+    stats.sends = h.sends()
     stats.slots = toI32(st.busy.length)
     if (stats.warmAfter > 0 && stats.usedWarm === 0 && stats.answered >= stats.warmAfter) {
       stats.usedWarm = Arena.used()
@@ -728,6 +754,11 @@ export const serveOn = async (
     if (draining && h.connections() === 0 && !serveAnyBusy(st)) {
       break
     }
+    if (h.ready()) {
+      // A send let a parked request in: take it before parking.
+      continue
+    }
+    st.awake = false
     await readable(h.loop)
   }
   st.stopped = true

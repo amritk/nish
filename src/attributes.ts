@@ -99,6 +99,7 @@ import { StringMap, StringSet } from "./map"
 import { compareStrings } from "./strings"
 import {
   FLAG_CONST,
+  FLAG_OBJECT_SPREAD,
   N_ARRAY,
   N_BINARY,
   N_BLOCK,
@@ -125,6 +126,7 @@ import {
   N_PROPERTY,
   N_RETURN,
   N_TRY,
+  N_SPREAD,
   N_STRING,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
@@ -357,11 +359,19 @@ export class LoopScope {
    * arena-loop diagnostic has no rewrite to offer and says nothing.
    */
   handsBack: boolean
+  /**
+   * A pass bumps the arena, itself or through a callee that leaves memory
+   * behind: whether there is anything for a scope to release, which is what
+   * `--explain-memory` reads to tell a loop that keeps memory from one that
+   * has none to give back.
+   */
+  allocates: boolean
 
   constructor(loop: Node, body: Node) {
     this.loop = loop
     this.body = body
     this.scoped = false
+    this.allocates = false
     this.why = 0
     this.at = null
     this.name = ""
@@ -781,6 +791,11 @@ export class FunctionFacts {
   /** An allocation may survive the call other than through the return value. */
   allocLeaks: boolean
   /**
+   * `allocLeaks` for an allocation of the function's own, before any callee's
+   * flows up: which of the two `--explain-memory` names as the reason.
+   */
+  leaksItself: boolean
+  /**
    * WP9: an allocation is reachable *by the caller* after the call, other than
    * through the return value (fixpoint over callees). Refines `allocLeaks`,
    * which also counts a value assigned to a local of the frame; see the header
@@ -969,6 +984,7 @@ export class FunctionFacts {
     this.allocates = false
     this.directArena = false
     this.allocLeaks = false
+    this.leaksItself = false
     this.allocEscapes = false
     this.returnsAllocation = false
     this.returnsFreshElements = false
@@ -1239,6 +1255,11 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     }
     if (parent.kind === N_LIST) {
       return classifyArgumentUse(unit, table, parent, node)
+    }
+    // `{ ...s }` copies each of `s`'s fields into the literal's object
+    // (`emitSpreadCopy`): the source is read, and nothing keeps it.
+    if (parent.kind === N_SPREAD && (parent.flags & FLAG_OBJECT_SPREAD) !== 0) {
+      return use(USE_READ)
     }
     if (parent.kind === N_CALL) {
       return use(USE_NONE) // the callee position of `p(...)`, which the checker refuses anyway
@@ -2554,6 +2575,23 @@ class FactCollector {
       for (const property of init.children) {
         if (property.kind === N_PROPERTY && property.children.length > 0) {
           this.noteStore(key, `.${property.text}`, property.children[0])
+        } else if (property.kind === N_SPREAD) {
+          // `...s` stores each field it copies with what `s` reaches, the
+          // root a written-out `f: s.f` would name.
+          const copy = program.nodeSpreadCopies[property.id]
+          if (copy !== null) {
+            for (const name of copy.fields) {
+              this.noteStore(key, `.${name}`, property.children[0])
+            }
+          } else {
+            // Which fields it copies is unknown, so anything below the
+            // object may be anything.
+            const mark = new DirtMark(DIRT_STORE, key, "", true)
+            const desc = this.valueOf(property.children[0])
+            desc.unknown = true
+            mark.value = desc
+            this.facts.dirt.push(mark)
+          }
         }
       }
       return
@@ -2677,8 +2715,10 @@ class FactCollector {
       for (const property of v.children) {
         if (property.kind === N_PROPERTY && property.children.length > 0) {
           this.describe(property.children[0], desc)
+        } else if (property.kind === N_SPREAD) {
+          this.describe(property.children[0], desc) // its fields reach what the source reaches
         } else {
-          desc.unknown = true // a spread, which the validator refuses, or anything else
+          desc.unknown = true
         }
       }
       return
@@ -3436,6 +3476,15 @@ class FactCollector {
   collectClassFacts(node: Node): void {
     const program = this.unit.program
     const table = this.table
+    if (node.kind === N_SPREAD && (node.flags & FLAG_OBJECT_SPREAD) !== 0) {
+      // `{ ...s }` loads each field it copies off `s`, the reads a written-out
+      // `f: s.f` makes; with no record of what it copies, it reads anyway.
+      const copy = program.nodeSpreadCopies[node.id]
+      if ((copy === null || copy.fields.length > 0) && !this.isStackOwned(node.children[0])) {
+        this.facts.readsMemory = true
+      }
+      return
+    }
     if (node.kind === N_MEMBER) {
       const receiver = node.children[0]
       const type = program.nodeTypes[receiver.id]
@@ -3950,6 +3999,7 @@ const collectFacts = (
     facts.directArena = memory.directArena
     facts.allocates = memory.directArena
     facts.allocLeaks = memory.allocLeaks
+    facts.leaksItself = memory.allocLeaks
     facts.allocEscapes = memory.allocEscapes
     facts.returnsAllocation = memory.returnsAllocation
     facts.returnsFreshElements = memory.returnsFreshElements
@@ -4436,6 +4486,7 @@ const markJsonRoute = (
     facts.allocates = true
     facts.allocatesItself = true
     facts.allocLeaks = true
+    facts.leaksItself = true
     facts.allocEscapes = true
     facts.resizesArray = true
     facts.callees.add("nish_array_grow")
@@ -5321,6 +5372,9 @@ const differsFrom = (f: FunctionFacts, g: FunctionFacts): string => {
   if (!sameParams(f, g)) {
     return "pointer parameters"
   }
+  if (f.leaksItself !== g.leaksItself) {
+    return "leaksItself"
+  }
   return ""
 }
 
@@ -5363,9 +5417,12 @@ const visitFacts = (graph: FactGraph, fi: i32, f: FunctionFacts): boolean => {
     } else if (site.flow === FLOW_RETURNED && !f.returnsAllocation) {
       f.returnsAllocation = true
       changed = true
-    } else if (site.flow === FLOW_LEAKS && !f.allocLeaks) {
-      f.allocLeaks = true
-      changed = true
+    } else if (site.flow === FLOW_LEAKS) {
+      f.leaksItself = true
+      if (!f.allocLeaks) {
+        f.allocLeaks = true
+        changed = true
+      }
     }
   }
   // A pointer inherits what every callee it is passed to does with the

@@ -51,6 +51,7 @@ import {
   N_NUMBER,
   N_OBJECT,
   N_PROPERTY,
+  N_SPREAD,
   N_STRING,
   N_TEMPLATE,
   N_TRUE,
@@ -225,6 +226,16 @@ const jsonNotLiteral = (ctx: CheckContext, info: StructInfo, node: Node, where: 
   )
 }
 
+/** A `...x` among the options or inside `rename` or `presence`: the options are read from the text alone. */
+const jsonSpread = (ctx: CheckContext, info: StructInfo, node: Node, where: string): void => {
+  ctx.error(
+    node,
+    `\`${info.name}.${JSON_OPTIONS}\`${where} spreads another value into the typed JSON options: ` +
+      "typed JSON reads a class's options from its text, where a spread names nothing it can see, " +
+      "so write each option out by name"
+  )
+}
+
 /** The field `name` of `info` that an option names, or `null`, reported as not one of its fields. */
 const jsonOptionField = (
   ctx: CheckContext,
@@ -265,7 +276,11 @@ const jsonReadRename = (ctx: CheckContext, info: StructInfo, value: Node): void 
     if (ctx.errored) {
       return
     }
-    // A spread and a computed key were refused by Phase 0 (NL1061, NL1041).
+    if (prop.kind === N_SPREAD) {
+      jsonSpread(ctx, info, prop, "'s `rename`")
+      return
+    }
+    // A computed key was refused by Phase 0 (NL1041).
     if (prop.kind !== N_PROPERTY || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
       continue
     }
@@ -376,7 +391,11 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
     if (ctx.errored) {
       return
     }
-    // A spread and a computed key were refused by Phase 0 (NL1061, NL1041).
+    if (prop.kind === N_SPREAD) {
+      jsonSpread(ctx, info, prop, "'s `presence`")
+      return
+    }
+    // A computed key was refused by Phase 0 (NL1041).
     if (prop.kind !== N_PROPERTY || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {
       continue
     }
@@ -459,6 +478,10 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
   const given = new StringSet()
   for (const prop of literal.children) {
     if (ctx.errored) {
+      return
+    }
+    if (prop.kind === N_SPREAD) {
+      jsonSpread(ctx, info, prop, "")
       return
     }
     if (prop.kind !== N_PROPERTY || (prop.flags & FLAG_COMPUTED) !== 0 || prop.children.length === 0) {

@@ -203,6 +203,12 @@ write the arena retention report
 
 </scalar-field>
 
+<scalar-field name="--explain-memory">
+
+why loops and functions keep their memory
+
+</scalar-field>
+
 ## Code generation
 
 <scalar-field name="--number-mode" type="i32|f64">

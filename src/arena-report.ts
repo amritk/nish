@@ -14,14 +14,20 @@
 
 import { AnalysisUnit, CallSite, FactsTable, FunctionFacts, LoopScope } from "./attributes"
 import { builtinNameOf, dottedName } from "./emit-util"
-import { FLOW_LEAKS, FLOW_RETURNED, isArenaUsing, loopScopeOf, reclaimsReturnedString } from "./escape"
+import {
+  FLOW_LEAKS,
+  FLOW_RETURNED,
+  isArenaUsing,
+  isLoopKind,
+  loopScopeOf,
+  reclaimsReturnedString,
+} from "./escape"
 import {
   N_ARRAY,
   N_ARROW,
   N_BINARY,
   N_BLOCK,
   N_CALL,
-  N_DO,
   N_FOR,
   N_FOR_OF,
   N_IDENT,
@@ -29,7 +35,6 @@ import {
   N_NEW,
   N_OBJECT,
   N_TEMPLATE,
-  N_WHILE,
   Node,
 } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
@@ -241,9 +246,6 @@ const isGarbage = (placement: string): boolean =>
   placement === "caller" ||
   placement === "unscoped"
 
-const isLoopNode = (node: Node): boolean =>
-  node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
-
 /**
  * The walk, which carries the innermost scope around each node the way the
  * emitter opens them: a scoped pass for a loop's body, and a block from its
@@ -264,7 +266,7 @@ const walkNode = (
     return
   }
   visitSite(walk, node, scope, growing)
-  const isLoop = isLoopNode(node)
+  const isLoop = isLoopKind(node)
   const loop: LoopScope | null = isLoop ? loopScopeOf(walk.f, node) : null
   let inner = scope
   let innerGrowing = growing

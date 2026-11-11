@@ -205,8 +205,8 @@
  *             field of its own or is renamed or made optional; a field
  *             recorded twice
  *
- * A spread or a computed key in the literal is refused as it is anywhere
- * (NL1061, NL1041), a subclass by `extends`, and a second `static readonly
+ * A spread in the literal is refused (NL2711), a computed key as it is
+ * anywhere (NL1041), a subclass by `extends`, and a second `static readonly
  * json` is a duplicate member. The options are not a value: `User.json` names a
  * class where a value is due, and is refused as any class name there is.
  *

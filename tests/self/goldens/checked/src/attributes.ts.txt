@@ -66,6 +66,7 @@ import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import compareStrings from "./strings" -> function @compareStrings
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
+import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_BINARY from "./nodes" -> const N_BINARY
 import N_BLOCK from "./nodes" -> const N_BLOCK
@@ -92,6 +93,7 @@ import N_PAREN from "./nodes" -> const N_PAREN
 import N_PROPERTY from "./nodes" -> const N_PROPERTY
 import N_RETURN from "./nodes" -> const N_RETURN
 import N_TRY from "./nodes" -> const N_TRY
+import N_SPREAD from "./nodes" -> const N_SPREAD
 import N_STRING from "./nodes" -> const N_STRING
 import N_TEMPLATE from "./nodes" -> const N_TEMPLATE
 import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
@@ -234,6 +236,7 @@ struct LoopScope (class) size=40 align=8 exported
   field why: i32 index=4 offset=32
   field scoped: boolean index=5 offset=36
   field handsBack: boolean index=6 offset=37
+  field allocates: boolean index=7 offset=38
   constructor -> @LoopScope.constructor
 struct HoistedHeader (class) size=40 align=8 exported
   field root: Local index=0 offset=0
@@ -336,40 +339,41 @@ struct FunctionFacts (class) size=416 align=8 exported
   field allocates: boolean index=40 offset=225
   field directArena: boolean index=41 offset=226
   field allocLeaks: boolean index=42 offset=227
-  field allocEscapes: boolean index=43 offset=228
-  field returnsAllocation: boolean index=44 offset=229
-  field returnsFreshElements: boolean index=45 offset=230
-  field fillsParam: i32 index=46 offset=232
-  field readsArenaState: boolean index=47 offset=236
-  field opensArena: boolean index=48 offset=237
-  field usesRegion: boolean index=49 offset=238
-  field feedsTasks: boolean index=50 offset=239
-  field callSites: CallSite[] index=51 offset=240
-  field escapingNodes: Node[] index=52 offset=248
-  field carriedStores: Node[] index=53 offset=256
-  field carriers: Local[] index=54 offset=264
-  field arenaNodes: Node[] index=55 offset=272
-  field arenaFlows: i32[] index=56 offset=280
-  field loopScopes: LoopScope[] index=57 offset=288
-  field contained: boolean index=58 offset=296
-  field escapeSite: Node | null index=59 offset=304
-  field returnsScalar: boolean index=60 offset=312
-  field sourceName: string index=61 offset=320
-  field allocatesItself: boolean index=62 offset=328
-  field managesArena: boolean index=63 offset=329
-  field netAllocates: boolean index=64 offset=330
-  field hoistedHeaders: HoistedHeader[] index=65 offset=336
-  field hoistedScopeStarts: i32[] index=66 offset=344
-  field panicSites: PanicSite[] index=67 offset=352
-  field cycleOrder: i32 index=68 offset=360
-  field cycleLow: i32 index=69 offset=364
-  field onCycleStack: boolean index=70 offset=368
-  field caps: i32 index=71 offset=372
-  field capVia: string[] index=72 offset=376
-  field capSite: Node | null[] index=73 offset=384
-  field capDist: i32[] index=74 offset=392
-  field capCallees: string[] index=75 offset=400
-  field capSites: Node[] index=76 offset=408
+  field leaksItself: boolean index=43 offset=228
+  field allocEscapes: boolean index=44 offset=229
+  field returnsAllocation: boolean index=45 offset=230
+  field returnsFreshElements: boolean index=46 offset=231
+  field fillsParam: i32 index=47 offset=232
+  field readsArenaState: boolean index=48 offset=236
+  field opensArena: boolean index=49 offset=237
+  field usesRegion: boolean index=50 offset=238
+  field feedsTasks: boolean index=51 offset=239
+  field callSites: CallSite[] index=52 offset=240
+  field escapingNodes: Node[] index=53 offset=248
+  field carriedStores: Node[] index=54 offset=256
+  field carriers: Local[] index=55 offset=264
+  field arenaNodes: Node[] index=56 offset=272
+  field arenaFlows: i32[] index=57 offset=280
+  field loopScopes: LoopScope[] index=58 offset=288
+  field contained: boolean index=59 offset=296
+  field escapeSite: Node | null index=60 offset=304
+  field returnsScalar: boolean index=61 offset=312
+  field sourceName: string index=62 offset=320
+  field allocatesItself: boolean index=63 offset=328
+  field managesArena: boolean index=64 offset=329
+  field netAllocates: boolean index=65 offset=330
+  field hoistedHeaders: HoistedHeader[] index=66 offset=336
+  field hoistedScopeStarts: i32[] index=67 offset=344
+  field panicSites: PanicSite[] index=68 offset=352
+  field cycleOrder: i32 index=69 offset=360
+  field cycleLow: i32 index=70 offset=364
+  field onCycleStack: boolean index=71 offset=368
+  field caps: i32 index=72 offset=372
+  field capVia: string[] index=73 offset=376
+  field capSite: Node | null[] index=74 offset=384
+  field capDist: i32[] index=75 offset=392
+  field capCallees: string[] index=76 offset=400
+  field capSites: Node[] index=77 offset=408
   constructor -> @FunctionFacts.constructor
   method offerCapability -> @FunctionFacts.offerCapability
   method pointerParam -> @FunctionFacts.pointerParam
@@ -507,7 +511,7 @@ function AnalysisUnit.constructor(this: AnalysisUnit, program: CheckedProgram, p
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: parents program
   pointer this: size=16 writesThrough=true captured=false
-  pointer program: size=704 writesThrough=true captured=true
+  pointer program: size=728 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PointerParamFacts.constructor(this: PointerParamFacts, name: string, size: i32, align: i32): void -> @PointerParamFacts.constructor [exported constructor]
@@ -726,35 +730,36 @@ function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse 
   callee +35:14 classifyElementUse -> @classifyElementUse
   callee +38:14 classifyMemberUse -> @classifyMemberUse
   callee +41:14 classifyArgumentUse -> @classifyArgumentUse
-  callee +44:14 use -> @use
-  callee +47:14 use -> @use
-  callee +56:11 isAssignmentOperator -> @isAssignmentOperator
-  callee +58:18 use -> @use
-  local +62:15 target: Node (const)
-  callee +62:24 unwrapParens -> @unwrapParens
-  callee +63:40 storesInlineElements -> @storesInlineElements
-  callee +64:18 use -> @use
-  callee +66:16 use -> @use
-  callee +68:14 use -> @use
-  callee +72:36 storesInlineElements -> @storesInlineElements
+  callee +46:14 use -> @use
+  callee +49:14 use -> @use
+  callee +52:14 use -> @use
+  callee +61:11 isAssignmentOperator -> @isAssignmentOperator
+  callee +63:18 use -> @use
+  local +67:15 target: Node (const)
+  callee +67:24 unwrapParens -> @unwrapParens
+  callee +68:40 storesInlineElements -> @storesInlineElements
+  callee +69:18 use -> @use
+  callee +71:16 use -> @use
   callee +73:14 use -> @use
-  local +79:13 read: FunctionSig | null (const)
-  local +81:15 owner: StructInfo | null (const)
-  local +82:15 open: FunctionSig | null (const)
-  callee +82:66 StructInfo.method -> @StructInfo.method
-  callee +83:32 use -> @use
-  callee +83:50 argumentUse -> @argumentUse
-  callee +88:16 use -> @use
-  callee +90:12 storesInlineElements -> @storesInlineElements
-  callee +91:16 use -> @use
-  callee +93:14 classifyElementHolder -> @classifyElementHolder
-  callee +102:14 classifyElementHolder -> @classifyElementHolder
-  callee +102:80 enclosingBlock -> @enclosingBlock
-  callee +105:14 use -> @use
-  callee +108:14 use -> @use
-  callee +111:14 use -> @use
-  callee +114:14 use -> @use
-  callee +116:12 use -> @use
+  callee +77:36 storesInlineElements -> @storesInlineElements
+  callee +78:14 use -> @use
+  local +84:13 read: FunctionSig | null (const)
+  local +86:15 owner: StructInfo | null (const)
+  local +87:15 open: FunctionSig | null (const)
+  callee +87:66 StructInfo.method -> @StructInfo.method
+  callee +88:32 use -> @use
+  callee +88:50 argumentUse -> @argumentUse
+  callee +93:16 use -> @use
+  callee +95:12 storesInlineElements -> @storesInlineElements
+  callee +96:16 use -> @use
+  callee +98:14 classifyElementHolder -> @classifyElementHolder
+  callee +107:14 classifyElementHolder -> @classifyElementHolder
+  callee +107:80 enclosingBlock -> @enclosingBlock
+  callee +110:14 use -> @use
+  callee +113:14 use -> @use
+  callee +116:14 use -> @use
+  callee +119:14 use -> @use
+  callee +121:12 use -> @use
 function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse -> @classifyMemberUse
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: ParentTable.parentOf argumentUse arrayMethodName isArrayWriteMethod isAssignmentTarget isInlineField isStringMethodCall nish_panic_index nish_str_eq resultMethodName use
@@ -786,7 +791,7 @@ function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): 
 function isInlineField(program: CheckedProgram, table: TypeTable, access: Node): boolean -> @isInlineField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct FieldInfo.inline StructInfo.field TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull nish_panic_index
-  pointer program: size=704 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0
   pointer access: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -804,7 +809,7 @@ function spawnsShared(program: CheckedProgram, table: TypeTable, node: Node): bo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via capturesOf
   calls: CaptureSlot.type FunctionSig.isCompileTime TypeTable.sharedWithTask capturesOf nish_panic_index unwrapParens
-  pointer program: size=704 writesThrough=false captured=false
+  pointer program: size=728 writesThrough=false captured=false
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.sharedWithTask#0 TypeTable.sharedWithTask#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -923,7 +928,7 @@ function collectRefs(program: CheckedProgram, node: Node, local: Local, out: Nod
   sharedWrite: +0:7
   escaping: node
   calls: collectRefs nish_array_grow nish_panic_index
-  pointer program: size=704 writesThrough=false captured=false passedTo=collectRefs#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=collectRefs#0
   pointer node: size=40 writesThrough=true captured=true
   pointer local: size=64 writesThrough=false captured=false passedTo=collectRefs#2
   pointer out: size=0 writesThrough=true captured=false passedTo=collectRefs#3
@@ -934,7 +939,7 @@ function collectRefs(program: CheckedProgram, node: Node, local: Local, out: Nod
 function namedInArrow(program: CheckedProgram, node: Node, local: Local, inside: boolean): boolean -> @namedInArrow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: namedInArrow nish_panic_index sourceLocal
-  pointer program: size=704 writesThrough=false captured=false passedTo=namedInArrow#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=namedInArrow#0
   pointer node: size=40 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false passedTo=namedInArrow#2
   stackSites=0 stackLocals=0
@@ -1007,7 +1012,7 @@ function gatherDeclarations(program: CheckedProgram, node: Node, names: StringMa
   sharedWrite: +0:7
   escaping: node
   calls: StringMap.get StringMap.set gatherDeclarations nish_array_grow nish_panic_index
-  pointer program: size=704 writesThrough=false captured=false passedTo=gatherDeclarations#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=gatherDeclarations#0
   pointer node: size=40 writesThrough=true captured=true
   pointer names: size=40 writesThrough=true captured=false passedTo=StringMap.get#0 StringMap.set#0 gatherDeclarations#2
   pointer buckets: size=0 writesThrough=true captured=false passedTo=gatherDeclarations#3
@@ -1085,7 +1090,7 @@ function constructorOf(program: CheckedProgram, table: TypeTable, type: i32): Fu
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf
-  pointer program: size=704 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:20 TypeTable.isStruct -> @TypeTable.isStruct
@@ -1095,7 +1100,7 @@ function constructorOf(program: CheckedProgram, table: TypeTable, type: i32): Fu
 function isStringPassthrough(program: CheckedProgram, template: Node): boolean -> @isStringPassthrough
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: isTemplateExpression nish_arena_mark nish_arena_release nish_panic_index templateParts
-  pointer program: size=704 writesThrough=false captured=false
+  pointer program: size=728 writesThrough=false captured=false
   pointer template: size=40 writesThrough=false captured=false passedTo=isTemplateExpression#0 templateParts#0
   stackSites=0 stackLocals=0
   callee +0:8 isTemplateExpression -> @isTemplateExpression
@@ -1105,7 +1110,7 @@ function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isResult TypeTable.isStruct TypeTable.nameOf resultLayout
-  pointer program: size=704 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isResult#0 resultLayout#0 TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isResult -> @TypeTable.isResult
@@ -1118,7 +1123,7 @@ function pointerAlign(program: CheckedProgram, table: TypeTable, type: i32): i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.stripNull inlineElementStruct
-  pointer program: size=704 writesThrough=false captured=false passedTo=inlineElementStruct#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer table: size=96 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.stripNull#0
   stackSites=0 stackLocals=0
   local +0:9 record: StructInfo | null (const)
@@ -1533,28 +1538,35 @@ function FactCollector.isWipedFreshSecret(this: FactCollector, local: Local, ini
   callee +28:15 secretRoleOf -> @secretRoleOf
 function FactCollector.noteFreshInit(this: FactCollector, key: string, init: Node): void -> @FactCollector.noteFreshInit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:13
   escaping: key
   calls: DirtMark.constructor FactCollector.noteStore FactCollector.valueOf TypeTable.isStruct constructorOf intrinsicType nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
-  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteStore#0 FactCollector.noteStore#0 FactCollector.valueOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.noteStore#0 FactCollector.noteStore#0 FactCollector.noteStore#0 FactCollector.valueOf#0 FactCollector.valueOf#0
   pointer init: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
   stackSites=0 stackLocals=0
-  local -31:11 program: CheckedProgram (const)
-  local -30:11 type: i32 (const)
-  local -28:18 element: Node (const)
-  callee -27:9 FactCollector.noteStore -> @FactCollector.noteStore
-  local -20:18 property: Node (const)
-  callee -18:11 FactCollector.noteStore -> @FactCollector.noteStore
-  callee -13:22 TypeTable.isStruct -> @TypeTable.isStruct
-  local -10:11 ctor: FunctionSig | null (const)
-  callee -10:18 constructorOf -> @constructorOf
-  callee -10:53 intrinsicType -> @intrinsicType
-  local -9:11 mark: DirtMark (const)
-  callee -9:18 new DirtMark -> @DirtMark.constructor
-  local -7:16 arg: Node (const)
-  local -6:13 value: ValueDesc (const)
-  callee -6:21 FactCollector.valueOf -> @FactCollector.valueOf
-  local -4:18 name: string (const)
+  local -27:11 program: CheckedProgram (const)
+  local -26:11 type: i32 (const)
+  local -24:18 element: Node (const)
+  callee -23:9 FactCollector.noteStore -> @FactCollector.noteStore
+  local -16:18 property: Node (const)
+  callee -14:11 FactCollector.noteStore -> @FactCollector.noteStore
+  local -10:17 copy: SpreadCopy | null (const)
+  local -8:24 name: string (const)
+  callee -7:15 FactCollector.noteStore -> @FactCollector.noteStore
+  local -2:19 mark: DirtMark (const)
+  callee -2:26 new DirtMark -> @DirtMark.constructor
+  local -1:19 desc: ValueDesc (const)
+  callee -1:26 FactCollector.valueOf -> @FactCollector.valueOf
+  callee +8:22 TypeTable.isStruct -> @TypeTable.isStruct
+  local +11:11 ctor: FunctionSig | null (const)
+  callee +11:18 constructorOf -> @constructorOf
+  callee +11:53 intrinsicType -> @intrinsicType
+  local +12:11 mark: DirtMark (const)
+  callee +12:18 new DirtMark -> @DirtMark.constructor
+  local +14:16 arg: Node (const)
+  local +15:13 value: ValueDesc (const)
+  callee +15:21 FactCollector.valueOf -> @FactCollector.valueOf
+  local +17:18 name: string (const)
 function FactCollector.noteSlotStore(this: FactCollector, slot: MemPath, value: Node): void -> @FactCollector.noteSlotStore [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1608,9 +1620,9 @@ function FactCollector.describe(this: FactCollector, value: Node, desc: ValueDes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: FactCollector.describe FactCollector.isPlainValue FactCollector.pathOf TypeTable.isArray TypeTable.isStruct constructorOf intrinsicType nish_array_grow nish_panic_index nish_str_eq unwrapParens
-  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isPlainValue#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.pathOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isPlainValue#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.describe#0 FactCollector.pathOf#0
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
-  pointer desc: size=40 writesThrough=true captured=false passedTo=FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2
+  pointer desc: size=40 writesThrough=true captured=false passedTo=FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2 FactCollector.describe#2
   stackSites=0 stackLocals=0
   local -16:11 program: CheckedProgram (const)
   local -15:11 table: TypeTable (const)
@@ -1633,8 +1645,9 @@ function FactCollector.describe(this: FactCollector, value: Node, desc: ValueDes
   callee +21:7 FactCollector.describe -> @FactCollector.describe
   local +25:18 property: Node (const)
   callee +27:11 FactCollector.describe -> @FactCollector.describe
-  local +34:11 path: MemPath (const)
-  callee +34:18 FactCollector.pathOf -> @FactCollector.pathOf
+  callee +29:11 FactCollector.describe -> @FactCollector.describe
+  local +36:11 path: MemPath (const)
+  callee +36:18 FactCollector.pathOf -> @FactCollector.pathOf
 function FactCollector.noteOwnStore(this: FactCollector, node: Node): void -> @FactCollector.noteOwnStore [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteSlotStore
@@ -2117,37 +2130,39 @@ function FactCollector.collectClassFacts(this: FactCollector, node: Node): void 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: FactCollector.addComposedCallee FactCollector.initialisesThis FactCollector.isStackOwned FactCollector.noteArguments FactCollector.noteCall FactCollector.noteHandleClose FactCollector.noteSlotWrite FunctionFacts.isStackSite ParentTable.parentOf StringSet.add TypeTable.isStruct TypeTable.isUnion TypeTable.stripNull constructorOf intrinsicType isAssignmentTarget isGuardedAccess nish_panic_index nish_str_eq
-  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isStackOwned#0 FactCollector.initialisesThis#0 FactCollector.noteSlotWrite#0 FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.noteCall#0 FactCollector.noteHandleClose#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isStackOwned#0 FactCollector.isStackOwned#0 FactCollector.initialisesThis#0 FactCollector.noteSlotWrite#0 FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.noteCall#0 FactCollector.noteHandleClose#0
   pointer node: size=40 writesThrough=true captured=true passedTo=ParentTable.parentOf#1 isAssignmentTarget#1 isGuardedAccess#2 intrinsicType#1 FunctionFacts.isStackSite#1 intrinsicType#1 FactCollector.addComposedCallee#2 FactCollector.noteArguments#1 FactCollector.noteCall#1 FactCollector.noteHandleClose#1 FunctionFacts.isStackSite#1
   stackSites=0 stackLocals=0
-  local -9:11 program: CheckedProgram (const)
-  local -8:11 table: TypeTable (const)
-  local -6:13 receiver: Node (const)
-  local -5:13 type: i32 (const)
-  callee -1:11 TypeTable.isUnion -> @TypeTable.isUnion
-  callee -1:25 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +3:12 TypeTable.isStruct -> @TypeTable.isStruct
-  local +6:13 above: Node | null (const)
-  callee +6:21 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +10:11 FactCollector.isStackOwned -> @FactCollector.isStackOwned
-  callee +13:11 isAssignmentTarget -> @isAssignmentTarget
-  callee +17:14 FactCollector.initialisesThis -> @FactCollector.initialisesThis
-  callee +17:49 isGuardedAccess -> @isGuardedAccess
-  callee +18:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
-  local +29:13 type: i32 (const)
-  callee +29:20 intrinsicType -> @intrinsicType
-  callee +30:24 TypeTable.isStruct -> @TypeTable.isStruct
-  callee +33:12 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
-  callee +35:9 StringSet.add -> @StringSet.add
-  local +37:13 ctor: FunctionSig | null (const)
-  callee +37:20 constructorOf -> @constructorOf
-  callee +37:50 intrinsicType -> @intrinsicType
-  callee +39:9 FactCollector.addComposedCallee -> @FactCollector.addComposedCallee
-  callee +40:9 FactCollector.noteArguments -> @FactCollector.noteArguments
-  callee +41:9 FactCollector.noteCall -> @FactCollector.noteCall
-  callee +43:7 FactCollector.noteHandleClose -> @FactCollector.noteHandleClose
-  callee +46:36 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
-  callee +48:7 StringSet.add -> @StringSet.add
+  local -7:11 program: CheckedProgram (const)
+  local -6:11 table: TypeTable (const)
+  local -2:13 copy: SpreadCopy | null (const)
+  callee -1:57 FactCollector.isStackOwned -> @FactCollector.isStackOwned
+  local +5:13 receiver: Node (const)
+  local +6:13 type: i32 (const)
+  callee +10:11 TypeTable.isUnion -> @TypeTable.isUnion
+  callee +10:25 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +14:12 TypeTable.isStruct -> @TypeTable.isStruct
+  local +17:13 above: Node | null (const)
+  callee +17:21 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +21:11 FactCollector.isStackOwned -> @FactCollector.isStackOwned
+  callee +24:11 isAssignmentTarget -> @isAssignmentTarget
+  callee +28:14 FactCollector.initialisesThis -> @FactCollector.initialisesThis
+  callee +28:49 isGuardedAccess -> @isGuardedAccess
+  callee +29:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
+  local +40:13 type: i32 (const)
+  callee +40:20 intrinsicType -> @intrinsicType
+  callee +41:24 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +44:12 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
+  callee +46:9 StringSet.add -> @StringSet.add
+  local +48:13 ctor: FunctionSig | null (const)
+  callee +48:20 constructorOf -> @constructorOf
+  callee +48:50 intrinsicType -> @intrinsicType
+  callee +50:9 FactCollector.addComposedCallee -> @FactCollector.addComposedCallee
+  callee +51:9 FactCollector.noteArguments -> @FactCollector.noteArguments
+  callee +52:9 FactCollector.noteCall -> @FactCollector.noteCall
+  callee +54:7 FactCollector.noteHandleClose -> @FactCollector.noteHandleClose
+  callee +57:36 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
+  callee +59:7 StringSet.add -> @StringSet.add
 function FactCollector.collectResultFacts(this: FactCollector, node: Node): void -> @FactCollector.collectResultFacts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
@@ -2372,14 +2387,14 @@ function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: 
   pointer memory: size=104 writesThrough=false captured=false
   pointer known: size=24 writesThrough=true captured=true passedTo=FactCollector.constructor#6
   stackSites=2 stackLocals=2
-  local -166:9 program: CheckedProgram (const)
-  local -163:9 ownMemory: boolean (const)
-  callee -163:41 isChannelSend -> @isChannelSend
-  callee -163:63 jsonRouteOf -> @jsonRouteOf
-  local -158:9 facts: FunctionFacts (const)
-  callee -158:17 new FunctionFacts -> @FunctionFacts.constructor
-  callee -156:23 structSize -> @structSize
-  callee -155:23 pointerAlign -> @pointerAlign
+  local -167:9 program: CheckedProgram (const)
+  local -164:9 ownMemory: boolean (const)
+  callee -164:41 isChannelSend -> @isChannelSend
+  callee -164:63 jsonRouteOf -> @jsonRouteOf
+  local -159:9 facts: FunctionFacts (const)
+  callee -159:17 new FunctionFacts -> @FunctionFacts.constructor
+  callee -157:23 structSize -> @structSize
+  callee -156:23 pointerAlign -> @pointerAlign
   callee -135:23 rootsHoldNoPointer -> @rootsHoldNoPointer
   callee -127:54 isScalarArgument -> @isScalarArgument
   local -126:7 i: i32 (let)
@@ -2512,7 +2527,7 @@ function markJsonRoute(program: CheckedProgram, table: TypeTable, sig: FunctionS
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: FunctionFacts.pointerParam StringSet.add jsonRouteCallees jsonRouteOf markParallelEntry nish_array_grow
-  pointer program: size=704 writesThrough=false captured=false passedTo=jsonRouteCallees#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=jsonRouteCallees#0
   pointer table: size=96 writesThrough=false captured=false passedTo=jsonRouteCallees#1
   pointer sig: size=176 writesThrough=false captured=false passedTo=jsonRouteCallees#2 jsonRouteOf#0
   pointer facts: size=416 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0 markParallelEntry#0
@@ -2523,9 +2538,9 @@ function markJsonRoute(program: CheckedProgram, table: TypeTable, sig: FunctionS
   callee +6:24 jsonRouteCallees -> @jsonRouteCallees
   callee +7:5 StringSet.add -> @StringSet.add
   callee +13:7 jsonRouteOf -> @jsonRouteOf
-  callee +21:5 StringSet.add -> @StringSet.add
-  callee +22:5 markParallelEntry -> @markParallelEntry
-  local +26:16 pp: PointerParamFacts (const)
+  callee +22:5 StringSet.add -> @StringSet.add
+  callee +23:5 markParallelEntry -> @markParallelEntry
+  local +27:16 pp: PointerParamFacts (const)
 function analyzeInstanceEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, known: FactsTable, opts: Options): EscapeResult -> @analyzeInstanceEscapes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=104
   sharedWrite: via CheckedProgram.enterInstance
@@ -2969,17 +2984,17 @@ function visitFacts(graph: FactGraph, fi: i32, f: FunctionFacts): boolean -> @vi
   callee -11:7 settleKeeps -> @settleKeeps
   local -7:14 site: CallSite (const)
   local -6:11 callee: FunctionFacts | null (const)
-  local +16:14 pp: PointerParamFacts (const)
-  local +17:9 i: i32 (let)
-  local +19:13 g: FunctionFacts | null (const)
-  local +20:11 writes: boolean (let)
-  local +21:11 shared: boolean (let)
-  local +22:11 captures: boolean (let)
-  local +23:11 outlives: boolean (let)
-  local +24:11 reach: boolean (let)
-  local +25:11 deep: boolean (let)
-  local +27:15 target: PointerParamFacts | null (const)
-  callee +27:24 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
+  local +19:14 pp: PointerParamFacts (const)
+  local +20:9 i: i32 (let)
+  local +22:13 g: FunctionFacts | null (const)
+  local +23:11 writes: boolean (let)
+  local +24:11 shared: boolean (let)
+  local +25:11 captures: boolean (let)
+  local +26:11 outlives: boolean (let)
+  local +27:11 reach: boolean (let)
+  local +28:11 deep: boolean (let)
+  local +30:15 target: PointerParamFacts | null (const)
+  callee +30:24 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
 function propagateCallee(f: FunctionFacts, calleeFacts: FunctionFacts | null, rt: RuntimeFunction | null, callee: string, whole: boolean): boolean -> @propagateCallee
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -3172,7 +3187,7 @@ function pollutePath(f: FunctionFacts, path: MemPath): boolean -> @pollutePath
 function tableReceiver(program: CheckedProgram, call: Node): Node | null -> @tableReceiver
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isMapRoute methodReceiver nish_panic_index
-  pointer program: size=704 writesThrough=false captured=false
+  pointer program: size=728 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false passedTo=methodReceiver#0
   stackSites=0 stackLocals=0
   local +0:9 receiver: Node | null (const)
@@ -3183,7 +3198,7 @@ function tableReceiver(program: CheckedProgram, call: Node): Node | null -> @tab
 function keepsArguments(program: CheckedProgram, call: Node): boolean -> @keepsArguments
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StructInfo.method isCollectionStruct isMapRoute mapIntrinsicOf nish_panic_index
-  pointer program: size=704 writesThrough=false captured=false
+  pointer program: size=728 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: FunctionSig | null (const)
@@ -3441,7 +3456,7 @@ function stepOf(expr: Node, name: string): i32 -> @stepOf [exported]
 function bodyMayExtend(program: CheckedProgram, table: TypeTable, body: Node, known: FactsTable | null): boolean -> @bodyMayExtend
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get bodyMayExtend isResizeCall nish_panic_index
-  pointer program: size=704 writesThrough=false captured=false passedTo=isResizeCall#0 bodyMayExtend#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=isResizeCall#0 bodyMayExtend#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isResizeCall#1 bodyMayExtend#1
   pointer body: size=40 writesThrough=false captured=false passedTo=isResizeCall#2
   pointer known: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 bodyMayExtend#3
@@ -3471,7 +3486,7 @@ function hostWindowProven(program: CheckedProgram, table: TypeTable, call: Node,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: foreignBufferCountProven nish_panic_index nish_panic_overflow nish_str_eq
-  pointer program: size=704 writesThrough=false captured=false passedTo=foreignBufferCountProven#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=foreignBufferCountProven#0
   pointer table: size=96 writesThrough=false captured=false passedTo=foreignBufferCountProven#1
   pointer call: size=40 writesThrough=false captured=false passedTo=foreignBufferCountProven#2
   pointer known: size=24 writesThrough=false captured=false passedTo=foreignBufferCountProven#5
@@ -3490,7 +3505,7 @@ function foreignBufferCountProven(program: CheckedProgram, table: TypeTable, cal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: conversion count index
   calls: bodyMayExtend isBuiltinConversion nish_panic_index nish_str_eq
-  pointer program: size=704 writesThrough=false captured=false passedTo=isBuiltinConversion#0 bodyMayExtend#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=isBuiltinConversion#0 bodyMayExtend#0
   pointer table: size=96 writesThrough=false captured=false passedTo=bodyMayExtend#1
   pointer call: size=40 writesThrough=false captured=false
   pointer known: size=24 writesThrough=false captured=false passedTo=bodyMayExtend#3
@@ -3506,7 +3521,7 @@ function foreignBufferCountProven(program: CheckedProgram, table: TypeTable, cal
 function isResizeCall(program: CheckedProgram, table: TypeTable, node: Node): boolean -> @isResizeCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: arrayMethodName builtinNameOf nish_panic_index nish_str_eq
-  pointer program: size=704 writesThrough=false captured=false passedTo=arrayMethodName#0 builtinNameOf#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=arrayMethodName#0 builtinNameOf#0
   pointer table: size=96 writesThrough=false captured=false passedTo=arrayMethodName#1
   pointer node: size=40 writesThrough=false captured=false passedTo=arrayMethodName#2 builtinNameOf#1
   stackSites=0 stackLocals=0

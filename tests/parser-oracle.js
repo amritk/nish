@@ -470,7 +470,7 @@ const printTypeScriptTree = (source, sf) => {
             emit(depth + 1, "PROPERTY", ps, pe, property.name.text)
             emit(depth + 2, "IDENT", ps, pe, property.name.text)
           } else if (ts.isSpreadAssignment(property)) {
-            // `...a` is the SPREAD among the properties (NL1061).
+            // `...a` is the SPREAD among the properties, lowered to field copies.
             emit(depth + 1, "SPREAD", ps, pe)
             expression(property.expression, depth + 2)
           } else {

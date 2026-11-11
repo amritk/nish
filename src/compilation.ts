@@ -51,7 +51,7 @@
 import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
-import { arenaBlockFindings, arenaLoopFindings } from "./escape"
+import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
 import { Checker } from "./checker"
@@ -60,7 +60,7 @@ import { codeFor } from "./codes"
 import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { AsyncRegistry, finalizeAsync } from "./emit-async"
 import { emitProgram } from "./emit"
-import { spellCSymbolsApart } from "./generics"
+import { implementsDeclaration, spellCSymbolsApart } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -120,7 +120,9 @@ import {
   FunctionSig,
   ImportBinding,
   ParallelCall,
+  SpreadCopy,
   STRUCT_CLASS,
+  StructInfo,
   StructRegistry,
   StructTemplateInfo,
   TemplateInfo,
@@ -196,10 +198,11 @@ import {
   scopeSymbol,
 } from "./parallel"
 import { rejectAwaitCycles } from "./async-check"
-import { crossingMessage, holdsRegion, regionCallFindings, taskFindings } from "./region-rules"
+import { ChildSites, crossingMessage, holdsRegion, regionCallFindings, taskFindings } from "./region-rules"
+import { isChildMaker, regionRoleOf } from "./region-check"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
-import { jsonQuote, splitByte } from "./strings"
+import { jsonQuote, splitByte, StringBuilder } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
@@ -463,6 +466,11 @@ export class Compilation {
   dumpOnly: boolean
   /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
   hostRefused: boolean
+  /**
+   * The check got as far as the whole-program facts, so `explainMemoryText`
+   * can read them even when a later refusal (`--deny-retention`) fails it.
+   */
+  factsSettled: boolean
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[]
   /**
@@ -544,6 +552,7 @@ export class Compilation {
     this.grantArgTexts = []
     this.capabilityLockPath = ""
     this.capabilityLockText = ""
+    this.factsSettled = false
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -1015,7 +1024,7 @@ export class Compilation {
         path: "",
         name: "",
         packageName: "",
-        error: `\`${REGION_STD_SPECIFIER}\` is the builtin module \`${REGION_SPECIFIER}\`: import \`Region\`, \`region\`, \`regionWith\`, \`enter\`, \`enterWith\` and \`free\` from \`${REGION_SPECIFIER}\``,
+        error: `\`${REGION_STD_SPECIFIER}\` is the builtin module \`${REGION_SPECIFIER}\`: import \`Region\`, \`region\`, \`regionWith\`, \`child\`, \`childWith\`, \`enter\`, \`enterWith\` and \`free\` from \`${REGION_SPECIFIER}\``,
       }
       return spelled
     }
@@ -1397,6 +1406,7 @@ export class Compilation {
         this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
       }
     }
+    this.rejectWideSpreads()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -1440,6 +1450,7 @@ export class Compilation {
       layoutInlineArrays(contexts, mode)
       proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     }
+    this.factsSettled = true
     this.reportArenaLoops()
     this.denyRetention()
     this.checkParallel()
@@ -2547,9 +2558,26 @@ export class Compilation {
     const fresh = new FreshResults(programs, this.table, facts)
     const scopeName = scopeSymbol(programs)
     const table = this.table
+    // A `child` call is judged after every `enter` walk has said where it is made.
+    const sites = new ChildSites()
+    for (const unit of this.modules) {
+      for (const call of unit.checker.program.regionCalls) {
+        if (isChildMaker(regionRoleOf(call.sig))) {
+          sites.childTypes.push(call.sig.returnType)
+        }
+      }
+    }
+    // Which handles are plain matters only to a program that makes a child.
+    for (let i = 0; i < this.modules.length && sites.childTypes.length > 0; i++) {
+      const program = this.modules[i].checker.program
+      sites.scan(program, program.file)
+    }
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.regionCalls) {
+        if (isChildMaker(regionRoleOf(call.sig))) {
+          continue
+        }
         const findings = regionCallFindings(
           programs,
           table,
@@ -2558,7 +2586,8 @@ export class Compilation {
           call.node,
           call.sig,
           scopeName,
-          fresh
+          fresh,
+          sites
         )
         for (const finding of findings) {
           this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
@@ -2615,6 +2644,28 @@ export class Compilation {
             )
             break
           }
+        }
+      }
+    }
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const call of program.regionCalls) {
+        if (!isChildMaker(regionRoleOf(call.sig))) {
+          continue
+        }
+        const findings = regionCallFindings(
+          programs,
+          table,
+          facts,
+          program,
+          call.node,
+          call.sig,
+          scopeName,
+          fresh,
+          sites
+        )
+        for (const finding of findings) {
+          this.sink.report(finding.program.source, finding.node.start, finding.node.end, finding.message)
         }
       }
     }
@@ -3222,6 +3273,67 @@ export class Compilation {
   }
 
   /**
+   * An object spread whose source is an interface some class implements with
+   * more fields. The native copy reads the interface's fields, the prefix of
+   * every implementer (`checkImplements`), where Node copies every own field
+   * of the instance the value holds, so the two would build different
+   * objects. Which classes implement an interface is known only once every
+   * module is checked, so this runs then, over every spread any body or
+   * instance recorded (`spreadCopies`).
+   */
+  rejectWideSpreads(): void {
+    const classes: StructInfo[] = []
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (info.kind === STRUCT_CLASS && info.implementsNames.length > 0) {
+          classes.push(info)
+        }
+      }
+    }
+    if (classes.length === 0) {
+      return
+    }
+    // A spread in a generic body is recorded once per instance, at one place.
+    const reported = new StringSet()
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const copy of program.spreadCopies) {
+        const iface = program.struct(this.table.nameOf(copy.source))
+        if (iface === null || iface.kind === STRUCT_CLASS) {
+          continue
+        }
+        const place = `${copy.file.path}:${copy.at.start}:${copy.source}`
+        if (reported.has(place)) {
+          continue
+        }
+        for (const cls of classes) {
+          if (cls.fields.length > iface.fields.length && implementsDeclaration(cls, iface)) {
+            this.reportWideSpread(copy, cls, cls.fields[iface.fields.length].name)
+            reported.add(place)
+            break
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * The refusal of spread `copy`, whose interface source may hold an instance
+   * of class `cls`, which carries field `extra` beyond the interface's.
+   */
+  reportWideSpread(copy: SpreadCopy, cls: StructInfo, extra: string): void {
+    this.sink.report(
+      copy.file,
+      copy.at.start,
+      copy.at.end,
+      `Spread of \`${this.table.typeName(copy.source)}\` into \`${this.table.typeName(copy.into)}\` may ` +
+        `spread an instance of \`${cls.name}\`, which implements it with field \`${extra}\` besides: Node copies every own ` +
+        "field of the instance a value holds, and the native copy only the interface's, so spread a value " +
+        "of a class type, or set the fields by name"
+    )
+  }
+
+  /**
    * NL3040: a defined function whose symbol is a name some module declares as
    * a C function, which the link would bind both to and the fact table would
    * key both under. Only the root package's functions can be one, as every
@@ -3408,6 +3520,42 @@ export class Compilation {
   arenaText(): string {
     const facts = this.analyze()
     return arenaJson(this.analysisUnits, facts)
+  }
+
+  /**
+   * The `--explain-memory` report: one line per loop whose passes keep what
+   * they allocate and per function that keeps what it allocates past its
+   * return, each with the first thing that refused its scope, and a summary.
+   * The program's own modules only, as `--deny-retention` judges them: a
+   * dependency's memory is its author's to explain. It reads the facts `emit`
+   * reads, memoised by `analyze`, and changes no byte of the IR.
+   */
+  explainMemoryText(): string {
+    const facts = this.analyze()
+    const report = new MemoryReport()
+    const lines = new StringBuilder()
+    for (const unit of this.analysisUnits) {
+      const source = unit.program.source
+      if (!this.inRootPackage(source)) {
+        continue
+      }
+      const from = report.notes.length
+      explainMemory(unit, this.table, facts, report)
+      let i = from
+      while (i < report.notes.length) {
+        const note = report.notes[i]
+        lines.add(
+          `${source.path}:${source.lineOf(note.node.start)}:${source.columnOf(note.node.start)}: memory: `
+        )
+        lines.add(`${note.message}\n`)
+        i = i + 1
+      }
+    }
+    lines.add(
+      `explain-memory: ${report.loopsKept} of ${report.loops} allocating loops keep what a pass allocates past the pass; ` +
+        `${report.functionsKept} of ${report.functions} allocating functions with a scalar result keep what they allocate past the call`
+    )
+    return lines.toText()
   }
 
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */

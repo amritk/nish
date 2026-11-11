@@ -43,7 +43,7 @@ still running when it stops. One is accepted: the server keeps at most
 
 | File | Functions |
 | --- | --- |
-| `std/net/serve.ts` | `ServeLimits`; `ServeStats`; `Request` (`method`, `path`, `param`, `paramNumber`, `paramMalformed`, `query`, `header`, `text`); `Response` (`text`, `json`, `bytes`); `refuse`; `serve`; `serveOn`; the private `ServeState`, `serveFreeSlot`, `serveAnyBusy`, `serveAnswer`, `serveFields`, `serveType`, `serveBytes`, `serveTask`, `serveTick` |
+| `std/net/serve.ts` | `ServeLimits`; `ServeStats`; `Request` (`method`, `path`, `param`, `paramNumber`, `paramMalformed`, `query`, `header`, `text`); `Response` (`text`, `json`, `bytes`); `refuse`; `serve`; `serveOn`; the private `ServeState`, `serveFreeSlot`, `serveAnyBusy`, `serveAnswer`, `serveFields`, `serveType`, `serveBytes`, `serveTask`, `serveTick`; `ServeStats.sends` |
 
 Out of scope: the handler, the carrier and the router, each with its record;
 the executor and the spawn rule (`docs/security/async.md`); and what a
@@ -73,7 +73,8 @@ merge and SERVE-8 by the cancellation stage; both are counted as fixed in the
 index. SERVE-14 is open and counted; SERVE-9 and SERVE-11 to SERVE-13 are accepted. SERVE-11 to SERVE-14
 are what one client's connections, rather than its requests, can hold: each is
 bounded by a `ServeLimits` field, and none by the peer. SERVE-15 holds and is
-not counted: the field it guards is the program's, not the peer's.
+not counted: the field it guards is the program's, not the peer's. SERVE-16 holds
+and is recorded because the loop changed under it.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -92,6 +93,7 @@ not counted: the field it guards is the program's, not the peer's.
 | SERVE-13 | Low | `ServeLimits` | The server's worst-case memory must be known from its caps. | **Accepted, stated.** From the caps, not measured: each connection holds the carrier's input and head buffers (each about `headerBytes`), a 64 KiB output buffer while it writes, and the request the handler is assembling, up to `headerBytes` + `bodyBytes`; each in-flight request holds its copy in its task's region (the same size again) and its slot's `responseBytes` + 128 bytes, kept for reuse. So about `connections` × (`bodyBytes` + 3 × `headerBytes` + 64 KiB) + `inFlight` × (`bodyBytes` + `headerBytes` + `responseBytes` + 128) bytes: with the defaults about 256 × 1.11 MiB + 256 × 1.08 MiB, some 560 MiB, almost all of it two copies of a 1 MiB body per connection. A program sizes it by `bodyBytes`, `connections` and `inFlight`. |
 | SERVE-14 | Low | `serveOn`, `serveFreeSlot` | One client can take every in-flight slot: a connection holds at most one (HANDLER-4), but with `inFlight` connections, each sending a request its `handle` is slow to answer, every other client's request is answered 503 until those tasks end. | **Open.** The server has no per-peer share of `inFlight` or `connections`; the bound is `deadline` (SERVE-8), 30 s by default, and a client's hang-up ends its own task at once. A program behind a proxy that caps connections per address is not exposed. |
 | SERVE-15 | Low | `ServeLimits.server`, `serveFields`, `serveAnswer` | The `server` field the server writes into every answer's head must not let its value add a field or end the head, and must not cost work per request. | **Holds.** The value is the program's, never the peer's. `serveFields` makes its bytes once, as `serveOn` starts, and panics there on a byte under 32 or 127, so CR and LF never reach the carrier and a bad value stops the program before it listens; `serveAnswer` passes the same arrays to every answer, setting only the content type in place. The answers the server and the carrier write themselves (`refuse`, `problem`: 404, 405, 400, 413, 431, 500, 503) carry no `server` field. Pinned by `tests/link/net_serve_server_field`: "named /text: … server=nish", "named /empty: 204 [] \| server=nish", "named /nope: 404 … server=(none)" and the "unnamed" lines' "server=(none)"; the panic by `tests/link/net_serve_server_panic`, which exits 1 before it listens. |
+| SERVE-16 | Medium if it failed | `serve`, `serveTask` | Taking several queued requests per turn and sending a pipelined burst in one write must keep the answers in order, must not hold answers while the loop parks, must not buffer without bound for a peer that reads none, and must keep a hang-up cancelling the task it strands. | **Holds.** The handler still reads a connection's next request only once the one before it is answered, so the tasks a turn spawns are one per connection; the turn ends with `h.flush()` before it parks, and loops again rather than park while a send has let a parked request in. Backpressure and the hang-up path are the handler's (HANDLER-4, HANDLER-13) and unchanged. `tests/link/net_serve_burst` pins "burst of 16: 16 answered in order", "burst of 16: 1 write(s)", "big burst: 128 of 128 answered whole and in order" and "the parked task: its await answered false, cancelled true". |
 
 ## Properties verified
 
@@ -129,6 +131,12 @@ true", and the connection serves the next request; and the stop,
 `tests/link/net_serve_shutdown` — "slow: the sleep answered false, cancelled
 true", "serve: 0, answered 2, returned within 2 s: true".
 
+**Pipelined bursts** (SERVE-16): `tests/link/net_serve_burst` — "burst of 16:
+16 answered in order", "burst of 16: 1 write(s)", "big burst: fewer than 128
+answered while unread: true", "big burst: 128 of 128 answered whole and in
+order", "the parked task: its await answered false, cancelled true", "after
+the hang-up: 4 answered on that connection".
+
 ## Tests
 
 - `tests/link/net_serve`
@@ -137,3 +145,4 @@ true", "serve: 0, answered 2, returned within 2 s: true".
   `tests/link/net_serve_shutdown` (SERVE-8)
 - `tests/link/net_serve_server_field` (SERVE-15)
 - `tests/link/net_serve_server_panic` (SERVE-15)
+- `tests/link/net_serve_burst` (SERVE-16)

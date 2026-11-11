@@ -61,6 +61,7 @@ import isValueReceiver from "./members" -> function @isValueReceiver
 import neverNullMessage from "./members" -> function @neverNullMessage
 import structOf from "./members" -> function @structOf
 import FLAG_ACCESSOR from "./nodes" -> const FLAG_ACCESSOR
+import FLAG_OBJECT_SPREAD from "./nodes" -> const FLAG_OBJECT_SPREAD
 import FLAG_SPREAD_ARGUMENT from "./nodes" -> const FLAG_SPREAD_ARGUMENT
 import FLAG_ANGLE from "./nodes" -> const FLAG_ANGLE
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
@@ -173,13 +174,13 @@ function refuseExpressionForm(ctx: CheckContext, node: Node): void -> @refuseExp
   callee +2:9 CheckContext.error -> @CheckContext.error
   local +6:18 element: Node (const)
   callee +8:11 CheckContext.error -> @CheckContext.error
-  callee +15:9 CheckContext.error -> @CheckContext.error
-  callee +20:9 CheckContext.error -> @CheckContext.error
-  callee +25:9 CheckContext.error -> @CheckContext.error
-  callee +29:7 refusePropertyForm -> @refusePropertyForm
-  callee +34:9 CheckContext.error -> @CheckContext.error
-  callee +36:9 CheckContext.error -> @CheckContext.error
+  callee +19:9 CheckContext.error -> @CheckContext.error
+  callee +24:9 CheckContext.error -> @CheckContext.error
+  callee +29:9 CheckContext.error -> @CheckContext.error
+  callee +33:7 refusePropertyForm -> @refusePropertyForm
   callee +38:9 CheckContext.error -> @CheckContext.error
+  callee +40:9 CheckContext.error -> @CheckContext.error
+  callee +42:9 CheckContext.error -> @CheckContext.error
 function refusePropertyForm(ctx: CheckContext, node: Node): void -> @refusePropertyForm
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

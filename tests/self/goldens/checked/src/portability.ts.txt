@@ -47,7 +47,7 @@ function PortabilityWalk.constructor(this: PortabilityWalk, program: CheckedProg
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: body opts parents program sig table
   pointer this: size=48 writesThrough=true captured=false
-  pointer program: size=704 writesThrough=true captured=true
+  pointer program: size=728 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   pointer opts: size=208 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true

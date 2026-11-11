@@ -2548,7 +2548,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_par_arena`).
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
@@ -3199,7 +3199,7 @@ element's arena, which a task does not share, and each rule is reported at the
   allocates on the way is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, nor open a `using a = arena()` block, nor call `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` (`nish:region`) ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -4299,6 +4299,53 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   (`tests/cases/cls_literal_methodless`). The `nish/threads` classes keep
   their own refusal, NL2515 (see "Atomics"), and a class holding a `Secret`
   keeps NL2545.
+- An **object spread** `{ ...s, x: 1 }` copies `s`'s fields into the
+  literal, one store per field, and is otherwise the literal written out:
+  the spread and `{ x: 1, y: s.y }` emit the same IR, an `alloca` where the
+  literal stays local and an arena allocation where it escapes
+  (`tests/run.js` "object spread", `tests/cases/obj_spread_twin`). Each
+  spread is evaluated once, in source order with the entries around it, and
+  the entry written later wins: a field set after a spread overrides it, and
+  of two spreads the later one supplies the fields both have; only the
+  fields no later entry overrides are stored
+  (`tests/cases/obj_spread_order`). A field holding an object is copied as
+  the reference it is (`obj_spread_nested`), a class instance spreads its
+  fields and none of its methods, as Node's spread does
+  (`obj_spread_class`), and a nullable source spreads once narrowed
+  (`obj_spread_narrowed`); a write to the source after the spread leaves the
+  copy as it was (`obj_spread_class`). The literal must still set every
+  field of its type, by the spread or by name: a spread that supplies only
+  some of them leaves the rest
+  `` Object literal for `Point` is missing field `z` ``
+  (`reject_object_spread_missing_field`). Each form whose Node reading would
+  differ from the copy is refused:
+
+  | Form | Code | Tests |
+  | --- | --- | --- |
+  | no contextual class or interface type, `const o = { ...s }`: ``An object literal with a spread needs a contextual class or interface type, whose layout the spread's fields are copied into: annotate the variable (`const p: P = { ...s, x: 1 }`)`` | NL2709 | `reject_object_spread_no_target`, `reject_ffi_handle_walk_spread` |
+  | a source that is not a class or interface value, `{ ...n }` for an `i32` | NL2705 | `reject_object_spread` |
+  | a source that may be `null`, which Node spreads as no field at all: narrow it first | NL2703 | `reject_object_spread_nullable` |
+  | a union source, whose fields depend on the variant it holds | NL2704 | `reject_object_spread_union` |
+  | a class instance with a field the target does not declare, which Node would carry on the object | NL2706 | `reject_object_spread_class_extra` |
+  | an interface value with a field the target does not declare | NL2707 | `reject_object_spread_extra_field` |
+  | a copied field whose type differs from the target's, `i32` into `i64`: the copy converts nothing. A field a later entry sets by name is not copied, so its type is not checked (`obj_spread_override_type`); one a later spread supplies is still checked | NL2708 | `reject_object_spread_field_type` |
+  | a field set by name before a spread that always overwrites it, TypeScript's TS2783 | NL2710 | `reject_object_spread_overwritten` |
+
+  An interface value may hold any class that implements it, and such a
+  class may declare fields after the interface's prefix (see `implements`
+  below): Node copies every own field of the instance, the native copy only
+  the interface's. So once the whole program is checked, a spread of an
+  interface `I` into a type that lacks a field of some class implementing
+  `I` is
+  `` Spread of `Named` into `Tagged` may spread an instance of `Item`, which implements it with field `weight` besides: … ``
+  (NL3055, `reject_object_spread_width`); spread a value of the class type
+  instead. A spread into the typed JSON options of a class is NL2711
+  (`reject_json_options_spread`). One gap remains: Nish accepts `private`
+  on a field and ignores it, so a class instance with a `private` field
+  spreads into a type that declares that field, where `tsc` refuses the
+  spread; under Node the copy is the same object either way. A computed key is still refused
+  (NL1041). NL1061, Phase 0's old refusal of every object spread, is
+  retired and never reused.
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The

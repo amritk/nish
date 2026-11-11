@@ -74,7 +74,7 @@ import {
   taskThisCaptureMessage,
   thisCaptureMessage,
 } from "./parallel"
-import { isRegionRunner, REGION_ENTER_WITH, REGION_MAKE, regionRoleOf } from "./region-check"
+import { isRegionRunner, isRunnerRole, regionRoleOf } from "./region-check"
 import { recordRegionCall } from "./region-rules"
 import {
   isExposeTemplate,
@@ -1683,7 +1683,7 @@ export const checkGenericCall = (
   }
   // `nish:region`: so is the function a region runs (`Compilation.checkRegions`).
   const regionRole = regionRoleOf(sig)
-  if (regionRole >= REGION_MAKE && regionRole <= REGION_ENTER_WITH) {
+  if (isRunnerRole(regionRole)) {
     recordRegionCall(ctx.program.regionCalls, expr, sig)
   }
   return sig.returnType

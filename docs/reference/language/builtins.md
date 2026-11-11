@@ -200,8 +200,10 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
   every pair (`unsafe_wrapping`). In a module
   constant's initialiser the call folds, wrapping, where `2147483647 + 1` is
   refused ([Module constants](declarations.md#module-constants)).
-- **Under Node** `runtime/nish.mjs` answers the import; a program that stays
-  in range prints the same as natively (`unsafe_get_set` and
+- **Under Node** `runtime/nish.mjs` answers the import, and the five are
+  `xs[i]`, `xs[i] = v`, `(a + b) | 0`, `(a - b) | 0` and `Math.imul` on an
+  `i32`, and `BigInt.asIntN(64, …)` on the BigInt an `i64` is there; a program
+  that stays in range prints the same as natively (`unsafe_get_set` and
   `unsafe_wrapping` are run both ways by `tests/run.js`). `readCString` has no
   Node form: its `CPtr` comes only from a `declare function`, which Node cannot
   call, so a program that reads one is native only, as every FFI program is
@@ -309,7 +311,8 @@ Reference: [`nish:simd`](../nish-simd.md).
   (`reject_simd_secret`) and not nullable (`reject_simd_nullable`).
 - **Under Node** `runtime/nish.mjs` resolves the import to `runtime/core.mjs`,
   where a vector is a typed array whose element type does the lane's
-  arithmetic. `--emit-ts` writes the import as `nish/runtime`'s. A load or a
+  arithmetic: a `u8` lane wraps through `Uint8Array`, an `f32` lane rounds
+  through `Float32Array`. `--emit-ts` writes the import as `nish/runtime`'s. A load or a
   store checks the whole vector and panics with the native words.
   `tests/run.js`'s `simd` section runs every `simd_*` program with a `.out`
   natively, under `--profile wasi` (where a sysroot is installed) and under
@@ -370,8 +373,10 @@ Reference: [`nish:simd`](../nish-simd.md).
   and the width or more is
   `` `rotl` count 32 is not below the lane width of u32x4, 32 bits: a shift by the width or more moves every bit out, and a rotate by it is a rotate by 0 ``
   (NL2631, `reject_simd_shift_count`). LLVM gives a shift by the width no
-  meaning, and a rotate by it is a rotate by 0. They are what ChaCha20,
-  SHA-256 and other add-rotate-xor code is built from (`simd_chacha_quarter`).
+  meaning, and a rotate by it is a rotate by 0. `shr` is logical on `u8x16`,
+  `u16x8` and `u32x4` and arithmetic (it copies the sign) on `i32x4`; a
+  rotate is the same on either. They are what ChaCha20, SHA-256 and other
+  add-rotate-xor code is built from (`simd_chacha_quarter`).
 - **A mask is a compare's answer, held only as a value.** `eq` and the rest on
   two vectors answer `mask8x16`, `mask16x8`, `mask32x4` or `mask64x2` by lane
   width, an `<N x i1>`; there is no constructor
@@ -395,8 +400,10 @@ Reference: [`nish:simd`](../nish-simd.md).
   a wrong count, a variable or an index past the end is refused
   (NL2632 to NL2635, `reject_simd_shuffle`).
 - **Under Node** each operation is a function of `runtime/core.mjs` over the
-  typed arrays, and a mask is an array of booleans. `tests/run.js`'s `simd`
-  section holds the native, WASI and Node outputs to one.
+  typed arrays: an integer lane wraps through its array type, a float lane
+  rounds through `Float32Array`, a mask is an array of booleans, and a rotate
+  is two shifts and an `or`. `tests/run.js`'s `simd` section holds the native,
+  WASI and Node outputs to one.
 
 ## Constant time: `ctSelect` and `ctEq`
 
@@ -973,8 +980,9 @@ Reference: [`nish:region`](../nish-region.md).
 | --- | --- |
 | `Region<T>` | a handle to a region whose root is a `T`: a 64-bit number, not a pointer |
 | `region(f)`, `regionWith(arg, f)` | a new region, whose root is what `f` answers; `f`'s allocations land in it |
+| `child(f)`, `childWith(arg, f)` | a new region whose *parent* is the region entered now; called only in the `f` an `enter` or `enterWith` runs |
 | `enter(r, f)`, `enterWith(r, arg, f)` | `f(root)` (or `f(root, arg)`), allocating in the region |
-| `free(r)` | gives the region's memory back; `r` and every copy of it are dead |
+| `free(r)` | gives the region's memory back; `r` and every copy of it are dead. Freeing a parent frees its children first, deepest first; freeing a child unlinks it from its parent |
 
 `f` is an arrow or a named function, and an arrow captures nothing (NL2335),
 so the ways into a region are its root, `arg` and module state. The checker
@@ -996,7 +1004,8 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
 | a call inside `f` the region rules have no facts for. No program reaches it today, since every function, instantiation, lifted arrow and `declare function` has whole-program facts; it stays so that such a callee is never let through unexamined (`tests/wordings/unreachable.txt`) | **NL2616** |
 | `Arena.mark` or `Arena.used` inside `f`, or a callee reaching one: inside a region they would read the region's own arena, not the thread's | **NL2617** (`reject_region_arena_mark` through `region`, `reject_region_arena_used_callee` through `enter` and a callee) |
 | `new Region<T>()` | **NL2618** (`reject_region_new`) |
-| `region`, `regionWith`, `enter`, `enterWith` or `free` in a parallel body or a spawned function, directly or through a callee | NL2351 (`reject_region_enter_spawned`, `reject_region_parallel_callee`) |
+| `child` or `childWith` outside the `f` an `enter` or `enterWith` runs, or in a function that something other than an `enter` also calls: with no region entered there is no parent | **NL2702** (`reject_region_child_outside`, `reject_region_child_callee`; a helper making the child, called from `main`, `reject_region_child_helper_main`, or from the function `enter` runs, `reject_region_child_helper_f`) |
+| `region`, `regionWith`, `child`, `childWith`, `enter`, `enterWith` or `free` in a parallel body or a spawned function, directly or through a callee | NL2351 (`reject_region_enter_spawned`, `reject_region_parallel_callee`, `reject_region_child_parallel`, `reject_region_child_spawned`, `reject_region_child_with_parallel`, `reject_region_child_plain_spawned`) |
 | `using r = region(f)`, in any declarator: a block does not free a region | NL2387 (`reject_region_using_first`, `reject_region_using_second`) |
 
 - **`Arena.mark` and `Arena.used` are refused inside `f`** (NL2617). Inside a
@@ -1018,10 +1027,68 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   memory, or answered by `enter`, stays on its thread and is allowed.
 - `using a = arena()` inside `f` is allowed, and so is `enter` of a second
   region: only numbers come out of it.
+- **A child region may point into its parent's memory that existed before the
+  current `enter`**: what the root `enter` handed in reaches, and, in the
+  child's `f`, what `childWith`'s `arg` reaches when the root reaches it
+  (`tests/cases/region_child_keep`, `region_child_chain`, `region_child_map`).
+  The parent outlives the child, since freeing the parent frees the child,
+  and nothing can release that memory while the parent lives: a scope opened
+  during an `enter` rewinds only to a mark taken after the `enter` began, so
+  it releases only what this `enter` allocated. That memory *new in this
+  `enter`* is what the child may not keep (NL2610,
+  `reject_region_child_new_memory`). The other rules hold the parent as outer
+  memory: the child's memory stored into the parent's is NL2609
+  (`reject_region_child_to_parent`), growing a parent array, `Map` or `Set`
+  in the child's `f` is NL2615 (`reject_region_child_grow`), and the parent's
+  memory as the child's root is NL2614 (`reject_region_child_root_parent`,
+  and `reject_region_child_root_listed`, where it is read back out of a list
+  the child's `f` made). The child's `f` may keep the parent's memory in the
+  root it allocated, by a field or element store or a `push` onto that
+  root's own array (`tests/cases/region_child_builder_list`). Only `f`'s
+  own body may: a function it calls that keeps what it is handed in the
+  memory it answers makes that answer NL2614, under `regionWith` as under
+  `childWith` (`reject_region_helper_keeps_arg`,
+  `reject_region_child_helper_keeps_arg`).
+  A plain `region()` made inside `enter` stays independent of the region
+  entered, and keeps the rules above.
+- **What the root reaches counts as older than this `enter` only while `f`
+  stores nothing into memory the root may reach.** Once `f` stores into
+  memory that may be older than this `enter` — a field, `push`, or a callee
+  that writes into what it is handed, such as `Map.set` — anywhere in its
+  body, a value read off the root may be one it allocated, so `childWith`
+  handing it is NL2610 (`reject_region_child_root_readback`,
+  `reject_region_child_root_push`). A store into memory `f` made counts only
+  when `f` also puts the root's reach (other than a string) into memory it
+  made, as `[root]` or `new Holder(root)` does
+  (`tests/cases/region_child_fresh_list`, `tests/cases/region_child_local_map`);
+  then a store through it may put new memory in the root's reach
+  (`reject_region_child_alias_field`, `reject_region_child_alias_element`).
+  The check is not ordered: a store after the `childWith` counts too, and
+  one such store makes every `childWith` in `f` hand outer memory rather
+  than the parent's. To collect root nodes in a list, collect them in the
+  child's `f`, as above. A call's result handed to `childWith` is memory
+  this `enter` may have allocated, even when the callee only reads the root,
+  so a child may not keep it.
+- **In an `enter` of a handle that may be a child's, the root's reach may be
+  its ancestors' memory as well as the child's own.** A child made there may
+  keep it, but it may not grow (NL2615), keep memory other than an ancestor's
+  (NL2610 for outer memory, `reject_region_child_handle_in`; NL2609 for memory
+  new in this `enter`, `reject_region_child_handle_new`), nor be stored into
+  outer memory (NL2609, `reject_region_child_handle_out`). Nor may such a
+  root grow: a handle that reaches `enter` through a parameter is one, even
+  when every caller hands a plain region (NL2615,
+  `reject_region_child_handle_param`). A handle may be a child's when its type
+  is one `child` or `childWith` answers somewhere in the program, unless the
+  handle is a call of `region` or `regionWith` or a variable bound only ever
+  to one: a parameter, a field or an element of that type may hold a child's
+  (`tests/cases/region_child_plain`).
 - **Every call checks its handle at run time.** `enter`, `enterWith` and
   `free` stop the program on a handle that is 0, freed already, or another
   thread's; `enter` of a region already entered and `free` of an entered one
-  stop it too, so freeing twice is a panic and never a double free. Each call
+  (or of a parent with an entered child) stop it too, so freeing twice is a
+  panic and never a double free. A child's handle is dead once its parent is
+  freed (`tests/link/region_child_stale`), and `child` with no region entered
+  stops the program. Each call
   is a `region` site under [`--deny-panics`](semantics-decisions.md#panic-sites)
   (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
   regions `region` stops the program as well.
@@ -1335,7 +1402,7 @@ Reference: [`nish:process`](../nish-process.md).
 | `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, and so is a `pid` of 0 or below, which `kill(2)` reads as more than one process. A positive pid may be any process of this user, not only a child ([RT-19](../../security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
 | `waitPid(pid: i32, flags: i32): i32[]` | reap a child (`pid` a child's or **-1 for any child**; flag **1 is WNOHANG**) and answer a fresh **`[pid, status]`**, the status as `spawnSync`'s; a failure puts the negative errno first. After `signalFd()` a blocking wait never sees EINTR, because that handler is installed with `SA_RESTART` and the wait restarts. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
 | `availableParallelism(): i32` | the CPUs this program may use, **at least 1**: the smallest of the CPUs online, its affinity mask or cpuset, a cgroup v2 CPU quota rounded up, and a positive `NISH_NUM_THREADS`, which can lower the count and never raise it. It needs no `--threads` | none | `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm` |
-| `totalMemory(): i64` | bytes of **physical memory**, or **-1** where the host does not say. The machine's, not a cgroup's limit | none | `os_memory`; `reject_os_memory_wasm` |
+| `totalMemory(): i64` | bytes of **physical memory** — `_SC_PHYS_PAGES` times the page size on Linux, `hw.memsize` on Darwin — or **-1** where the host does not say. The machine's, not a cgroup's limit | none | `os_memory`; `reject_os_memory_wasm` |
 
 **Capabilities.** `spawn`, `kill` and `waitPid` carry `process.spawn`, the
 label `spawnSync` carries: each reaches other processes — `kill` any process of
@@ -1438,7 +1505,7 @@ Reference: [`nish:net`](../nish-net.md).
 | `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`) | write | `net_tcp_calls` |
 | `netClose(fd: i32): i32` | closes the descriptor, which is gone after the call whatever the answer. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
 | `netSetOption(fd: i32, option: i32, value: i32): i32` | sets one [socket option](#socket-options) from a whitelist; any other `option` is **`-22`**, so there is no way to pass a raw level and name through. `NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere** | write | `net_set_option`; `reject_net_set_option_wasm` |
-| `netMss(fd: i32): i32` | the maximum segment size a connected TCP socket sends, or **a plain `-1`, never an errno,** for every other descriptor and every call on wasm. It never panics | write | `net_mss`; `reject_net_mss_arity`, `reject_net_mss_type`; `net_mss` in `tests/run.js` for wasm32 and WASI |
+| `netMss(fd: i32): i32` | the maximum segment size a connected TCP socket sends: Linux's `TCP_INFO` `tcpi_snd_mss`, or `TCP_MAXSEG` where that is not above `0` and on Darwin; **a plain `-1`, never an errno,** for every other descriptor and every call on wasm. It never panics | write | `net_mss`; `reject_net_mss_arity`, `reject_net_mss_type`; `net_mss` in `tests/run.js` for wasm32 and WASI |
 | `unixListen(path: string, backlog: i32, flags: i32): i32` | a listening [Unix-domain](#unix-domain-sockets) stream socket at `path`, whose file only its owner may connect to (`0600`); its paths and refusals are under that heading | write | `net_unix_calls`, `net_unix_paths`, `net_unix_fds`; `reject_net_unix_arity`, `reject_net_unix_wasm` |
 | `unixListenMode(path: string, backlog: i32, flags: i32, mode: i32): i32` | `unixListen`'s socket with the file's mode chosen, `0` to `0o777`, set before the listen so no connect gets in under a wider one; an abstract name is `-22` | write | `net_unix_paths`, `net_unix_calls` |
 | `unixConnect(path: string): i32` | a new socket, non-blocking and close-on-exec, connected to the listener at `path`; a full backlog is `-11` on Linux and `-111` on Darwin | write | `net_unix_calls`, `net_unix_paths`; `reject_net_unix_path_type` |
@@ -3179,8 +3246,11 @@ export const main = (): i32 => {
   | `presence` naming a field, or a presence field, the class does not declare | NL2495 | `json_reject_presence_misspelt_field`, `json_reject_presence_misspelt_flag` |
   | a presence field that is not a `boolean`, is `readonly`, is the field it records, records two fields, is recorded by a presence field of its own or is renamed or made optional; a field recorded twice | NL2592 | `json_reject_presence_not_boolean`, `json_reject_presence_readonly`, `json_reject_presence_itself`, `json_reject_presence_shared`, `json_reject_presence_of_presence`, `json_reject_presence_recorded`, `json_reject_presence_renamed`, `json_reject_presence_optional`, `reject_json_presence_twice` |
 
-  A spread or a computed key in the literal is refused by Phase 0 as it is
-  anywhere (NL1061, NL1041; `reject_json_options_spread`,
+  A spread in the literal is
+  `` `User.json` spreads another value into the typed JSON options: … ``,
+  because the options are read from the class's text, where a spread names
+  nothing (NL2711, `reject_json_options_spread`), and a computed key is
+  refused by Phase 0 as it is anywhere (NL1041,
   `json_reject_options_computed`), a subclass by `extends`
   (`json_reject_options_subclass`), and a second `static readonly json` is a
   duplicate member (`reject_json_options_twice`). The options are not a

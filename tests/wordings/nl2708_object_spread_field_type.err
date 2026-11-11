@@ -1,0 +1,1 @@
+Field `x` spread from `Narrow` is `i32`, but `Wide` declares it `i64`: a spread copies each field as it is, so the two types must be the same; set it by name (`x: s.x`)

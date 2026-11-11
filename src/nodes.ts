@@ -87,7 +87,7 @@ export const N_THIS: i32 = 37
 export const N_TEMPLATE: i32 = 38 // children: TEMPLATE_TEXT and expressions, alternating
 export const N_TEMPLATE_TEXT: i32 = 39 // text: the decoded bytes of one span
 export const N_ARRAY: i32 = 40 // children: the elements
-export const N_OBJECT: i32 = 41 // children: the PROPERTYs, and an N_SPREAD for each `...a` (NL1061)
+export const N_OBJECT: i32 = 41 // children: the PROPERTYs, and an N_SPREAD for each `...a`
 export const N_PROPERTY: i32 = 42 // text: the key; children: the value
 export const N_BINARY: i32 = 43 // text: the operator; children: left, right
 export const N_UNARY: i32 = 44 // text: the operator; flags: PREFIX or POSTFIX; children: operand
@@ -173,7 +173,7 @@ export const N_REGEX: i32 = 67
 // every other one (NL2256). children: the expression, the type.
 export const N_AS: i32 = 68
 // `...a` in an array literal (NL2237), or among an object literal's
-// properties (NL1061): children: the expression spread.
+// properties (`checkObjectLiteral`): children: the expression spread.
 export const N_SPREAD: i32 = 69
 
 // ---- Refused declarations (WP33 R1) --------------------------------------------------
@@ -446,6 +446,10 @@ export const FLAG_SPREAD_ARGUMENT: i32 = 67108864
 // written back out as (`src/emit-ts-edits.ts`) moves the statements rather
 // than the function, and the checker's rules about that code read it here.
 export const FLAG_SCRIPT: i32 = 134217728
+// N_SPREAD: bit 28 marks one of an object literal's entries, `{ ...s }`,
+// which the checker lowers to field copies (`checkObjectLiteral`) rather than
+// refusing as the array literal's spread.
+export const FLAG_OBJECT_SPREAD: i32 = 268435456
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored

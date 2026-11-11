@@ -153,6 +153,19 @@ function passed by name — is no longer on this list: strict accepts it as a
 function-typed parameter of a top-level function, specialised per callee with
 a direct call and nothing lost ([LANGUAGE.md](LANGUAGE.md#function-parameters)).
 
+A function stored, returned or held in a field is still on it;
+[wp51-function-references.md](wp51-function-references.md) (proposed, design
+only) measures a lowering for references to capture-free top-level
+functions — a tag and a `switch` — and proposes taking them off this row into
+strict, as C2a was. It argues they are a third case, neither C2a nor C2b:
+the target is not named at the call, but the closed set that can reach each
+call is (per-place sets, in its first stage), so a reference costs the hand
+`switch` over the same declaration's tags, and more only against a hand
+program that keeps tags in finer places. A call whose set would join a
+member that keeps an argument with one that does not is refused there, so
+the escape cost this row measures cannot be reached through a reference.
+Closures stay here.
+
 ### 2.2 Tier 3, refused permanently
 
 `any` and `unknown` in value positions, adding or deleting an undeclared
@@ -532,7 +545,12 @@ analysis program-wide, while an opaque call disables it only for what the call
 can reach. In this program the two sets are the same, so 8.76x is an honest
 per-object figure and not a program-wide multiplier; how much of a real
 program is reachable from its closures is the measurement C2b has to take
-before it ships.
+before it ships. For a reference to a capture-free top-level function that
+reach is not a measurement but a fact the checker computes per call — the
+set of functions that can be stored into the place the call reads — which is
+the third case
+[wp51-function-references.md](wp51-function-references.md) §1 argues out of
+C2b (proposed, design only).
 
 ## 8. Declined, with the rule each one breaks
 

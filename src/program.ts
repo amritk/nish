@@ -790,6 +790,8 @@ export class Instantiation {
   nodeProvenNoOverflow: boolean[]
   /** The `dst.set(src)` calls whose two arrays are proven distinct, per instantiation like the proofs above. */
   nodeDisjointCopy: boolean[]
+  /** What each object spread copies, per instantiation: a later spread's fields may depend on a type argument. */
+  nodeSpreadCopies: (SpreadCopy | null)[]
   /** WP32 S5: the fused lookups of this body, which may differ by type argument like every table above. */
   fusion: FusionTable
   /**
@@ -850,6 +852,7 @@ export class Instantiation {
     this.nodeProvenRange = new Array<boolean>(nodeCount)
     this.nodeProvenNoOverflow = new Array<boolean>(nodeCount)
     this.nodeDisjointCopy = new Array<boolean>(nodeCount)
+    this.nodeSpreadCopies = new Array<SpreadCopy | null>(nodeCount)
     this.fusion = new FusionTable()
     this.from = null
     let i = 0
@@ -880,7 +883,31 @@ export class Instantiation {
     this.nodeProvenRange = outer.nodeProvenRange
     this.nodeProvenNoOverflow = outer.nodeProvenNoOverflow
     this.nodeDisjointCopy = outer.nodeDisjointCopy
+    this.nodeSpreadCopies = outer.nodeSpreadCopies
     this.fusion = outer.fusion
+  }
+}
+
+/**
+ * What one `...s` in an object literal copies (`checkObjectLiteral`): the
+ * spread itself and the file it is written in, the struct types of its source and of the literal, and the
+ * fields the emitter loads from the source and stores into the literal, by
+ * name -- the source's fields less every one a later entry of the literal
+ * sets, since the later entry wins.
+ */
+export class SpreadCopy {
+  at: Node
+  file: SourceFile
+  source: i32
+  into: i32
+  fields: string[]
+
+  constructor(at: Node, file: SourceFile, source: i32, into: i32, fields: string[]) {
+    this.at = at
+    this.file = file
+    this.source = source
+    this.into = into
+    this.fields = fields
   }
 }
 
@@ -1568,6 +1595,7 @@ export class CheckedProgram {
   savedNodeProvenRange: boolean[]
   savedNodeProvenNoOverflow: boolean[]
   savedNodeDisjointCopy: boolean[]
+  savedNodeSpreadCopies: (SpreadCopy | null)[]
   savedFusion: FusionTable
   /**
    * Local name -> index into `enumList`, for the numeric `enum`s this module
@@ -1791,6 +1819,20 @@ export class CheckedProgram {
    */
   nodeDisjointCopy: boolean[]
   /**
+   * `N_SPREAD` node id, for a spread among an object literal's properties ->
+   * what it copies, or `null` everywhere else. The checker writes it and the
+   * emitter reads nothing else about a spread; per instantiation, like the
+   * proofs above, because a later spread's fields may depend on a type
+   * argument.
+   */
+  nodeSpreadCopies: (SpreadCopy | null)[]
+  /**
+   * Every spread `nodeSpreadCopies` recorded, in any instantiation: the
+   * whole-program refusal of an interface source some class widens reads
+   * them once every body is checked (`Compilation.rejectWideSpreads`).
+   */
+  spreadCopies: SpreadCopy[]
+  /**
    * WP32 S5: the calls of this module's bodies that are one fused lookup
    * (docs/wp32-map.md §9.1). Inside a generic's body it is the
    * instantiation's own, which `enterInstance` installs.
@@ -1843,6 +1885,7 @@ export class CheckedProgram {
     this.savedNodeProvenRange = []
     this.savedNodeProvenNoOverflow = []
     this.savedNodeDisjointCopy = []
+    this.savedNodeSpreadCopies = []
     this.fusion = new FusionTable()
     this.savedFusion = this.fusion
     this.enums = new StringMap()
@@ -1897,6 +1940,8 @@ export class CheckedProgram {
     this.nodeProvenRange = new Array<boolean>(nodeCount)
     this.nodeProvenNoOverflow = new Array<boolean>(nodeCount)
     this.nodeDisjointCopy = new Array<boolean>(nodeCount)
+    this.nodeSpreadCopies = new Array<SpreadCopy | null>(nodeCount)
+    this.spreadCopies = []
     this.memberSets = new Array<i32>(nodeCount)
     this.memberLists = []
     let i = 0
@@ -2197,6 +2242,7 @@ export class CheckedProgram {
     this.savedNodeProvenRange = this.nodeProvenRange
     this.savedNodeProvenNoOverflow = this.nodeProvenNoOverflow
     this.savedNodeDisjointCopy = this.nodeDisjointCopy
+    this.savedNodeSpreadCopies = this.nodeSpreadCopies
     this.savedFusion = this.fusion
     this.nodeTypes = info.nodeTypes
     this.nodeLocals = info.nodeLocals
@@ -2209,6 +2255,7 @@ export class CheckedProgram {
     this.nodeProvenRange = info.nodeProvenRange
     this.nodeProvenNoOverflow = info.nodeProvenNoOverflow
     this.nodeDisjointCopy = info.nodeDisjointCopy
+    this.nodeSpreadCopies = info.nodeSpreadCopies
     this.fusion = info.fusion
     this.activeInstance = info
   }
@@ -2226,6 +2273,7 @@ export class CheckedProgram {
     this.nodeProvenRange = this.savedNodeProvenRange
     this.nodeProvenNoOverflow = this.savedNodeProvenNoOverflow
     this.nodeDisjointCopy = this.savedNodeDisjointCopy
+    this.nodeSpreadCopies = this.savedNodeSpreadCopies
     this.fusion = this.savedFusion
     this.activeInstance = null
   }
