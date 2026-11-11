@@ -161,7 +161,10 @@ strict, as C2a was. It argues they are a third case, neither C2a nor C2b:
 the target is not named at the call, but the closed set that can reach each
 call is (per-place sets, in its first stage), so a reference costs the hand
 `switch` over the same declaration's tags, and more only against a hand
-program that keeps tags in finer places. Closures stay here.
+program that keeps tags in finer places. A call whose set would join a
+member that keeps an argument with one that does not is refused there, so
+the escape cost this row measures cannot be reached through a reference.
+Closures stay here.
 
 ### 2.2 Tier 3, refused permanently
 

@@ -34,12 +34,32 @@ the C boundary.
 
 ## 1. The decision
 
-**Strict, with per-place sets a stage-1 ship requirement.** References to
-capture-free top-level functions, lowered as a tag and a `switch` over the
-members that can reach each call (§2.3), become part of the strict language:
-a `docs/LANGUAGE.md` rule, and the negative tests that refuse them today flip
-to positive. Closures, `Function` and references across the C boundary stay
-refused.
+**Strict, with three stage-1 ship requirements: per-place sets, the
+escape-join refusal and a dispatcher with no check in a speed build.**
+References to capture-free top-level functions, lowered as a tag and a
+`switch` over the members that can reach each call (§2.3), become part of the
+strict language: a `docs/LANGUAGE.md` rule, and the negative tests that refuse
+them today flip to positive. Closures, `Function` and references across the C
+boundary stay refused.
+
+- **What a reference cannot do to a program** (§4.4). A call through a
+  reference compiles to the `switch` a program writes by hand today, or is
+  refused. It cannot take an object's stack place from the members that keep
+  it: a call whose set holds both a member that keeps an argument and one that
+  does not is a compile error (§2.2), so case B's 6.4x to 9.1x and 1.5 GB
+  (below) cannot be reached through a reference. A speed build's dispatcher
+  carries no check, because every check timed cost up to 1.2x to 2.7x
+  somewhere; a `--profile debug` build checks the tag and panics outside the
+  set (§2.3). No variant leaks: peak memory is 13 MB at 1x, 10x and 100x the
+  loop length, and valgrind finds 0 bytes lost, while case B grows from 17 MB
+  to 1,528 MB with the loop.
+- **What it still costs, as the hand `switch` does** (§3.5, §4.4). A call
+  through a set of `K` members costs what a `switch` over `K` arms costs, which
+  grows with `K`: 1.0x **direct** up to four on a periodic stream, 1.35x at
+  eight, 4.6x at sixteen and 12.4x at thirty-two, and 2.5x to 5.6x on an
+  aperiodic stream. A reference adds nothing to that, and that cost is not
+  zero; a call whose set grows past eight members gets a `performance`
+  warning naming the stores that widened it.
 
 - **The call, by stream** (§3.5). On a **monomorphic** site an indirect call
   measured 0.99x to 1.24x the switch, most of it inside the 21% layout spread
@@ -97,9 +117,10 @@ refused.
   `switch` over the same declaration's tags, a reference adds nothing: the
   dispatcher is that `switch`, the same IR. Against a hand program that keeps
   tags in finer places than a declaration — one of two arrays of the same
-  element type, one object of a class — it can cost up to case B's 6.4x to
-  9.1x and 1.5 GB (§10), and stage 1's warning names the store that widened
-  the set. Placing it in
+  element type, one object of a class — a wider set costs more per call, as
+  a wider hand `switch` does (§4.4), and a set past eight members is warned;
+  a widening that would cost case B's 6.4x to 9.1x and 1.5 GB is refused
+  (§2.2), naming the store. Placing it in
   compat would also carry practical costs: C0 (`--compat`) is unbuilt
   (:458), `src/` may never use a compat construct (:244) where §5.4 wants
   this one, and `--compat` implies `--number-mode f64` (:316). Against
@@ -144,6 +165,7 @@ that signature, named without calling it: `const h: (x: i32) => i32 = double;`.
 | an `async` function, by reference | its call makes a promise, and a promise is not a value (wp24); a reference would be one by another route | `` `f` is async: a function reference cannot hold it, because its call is a promise `` |
 | a `declare function`, by reference | a C function is in no set: the tag indexes this program's own functions | `` `f` is declared in C: a function reference names a function this program defines `` |
 | a reference as `s.spawn`'s `entry` | `entry` is a function parameter (`LANGUAGE.md:4246`–`4250`): its task thunk is built per callee named at the call or per arrow lifted there (`tests/link/thread_task_arrow`; the old "task must be named" NL2391 is retired, `tests/wordings/unreachable.txt:67`). A reference would need a thunk over the dispatcher; stage 1 refuses it, a later stage may spawn the dispatcher. Async `spawn(f(x))` takes a direct call of an async function (NL2644), and an async function has no reference (above) | `` `h` is a function reference: `spawn` takes a top-level function or an arrow named at the call `` |
+| a call through a reference whose set holds a member that keeps an argument and a member that does not (the **escape-join refusal**) | the dispatcher's facts are its arms' join, so one member that keeps `p` takes `p`'s stack place from every call through the set, the members that do not keep it included: case B's 6.4x to 9.1x and 1.5 GB, growing with the loop (§4.3, §4.4). A hand `switch` pays the same, but the member that causes it can be stored far from the call. The check reads each member's `escaping` set (`src/attributes.ts:755`) by parameter position once the attribute fixpoint is done, as the region rules read facts (`src/region-rules.ts:206`); a set whose members all keep the argument, or none does, is admitted, since a direct call of any member costs the same | `` this call through `h` can reach `u3`, which keeps `p`, and `u0`, which does not, so every call here would allocate `p` in the arena; `u3` reaches `h` through `k.f = u3` (main.ts:12): call `u3` directly, or store it where `h` does not read `` |
 | a reference crossing an **external symbol**: an exported function of the program's own package called through the C ABI, a `wasm-host` import or export, a `declare function` parameter or return, or a signature `--emit-dts` writes | the tag means nothing outside the program, and a foreign caller could hand back a function the set does not hold. A Nish-module export, like `sortWith` (`std/sort.ts:162`) or `expose` (`std/secret.ts:77`), is not external: its callers are in the program | §5.2 |
 | `` `${h}` ``, `console.log(h)`, `typeof h`, `h.name`, `h.length`, `h.call`, `JSON.stringify(h)` | Node prints the function's source or a `[Function: name]`; native has a tag | `` `h` is a function reference: it can be called, compared, stored and passed, nothing else `` |
 | a reference read through a container: `ops.sort()`, `console.log(ops)`, `jsonEncode` of a class with a function-typed field | each would compare or print the element. `sort` without a comparator is refused already (NL2620), so is `console.log` of an array or an object (`LANGUAGE.md:7558`), and typed JSON's field whitelist (NL2485, `tests/wordings/nl2485_json_field_type`) names no function type; stage 1 keeps it so, with a negative test. `ops.indexOf(h)` and `ops.includes(h)` compare by `===` and agree (§5.1) | the existing diagnostics |
@@ -248,16 +270,24 @@ its dispatcher. The last arm is `default` because no other tag can reach
 the call: a non-null tag is made only by naming a member, `0` is ruled out
 above, and the set pass put every member that can flow to `p` in `F(p)`. A
 set of one has no `switch` at all; the tag is never read and the dispatcher
-is a direct call. **An empty set** — an `S | null` place that only `null`
+is a direct call. **A speed or size build checks nothing more; a
+`--profile debug` build checks the tag.** There, the dispatcher starts with
+`if (tag < 1 || tag > |F(p)|) panic(...)`, and a set of one with
+`tag !== 1`, so a store form the pass failed to model fails loudly in every
+`nish run` (whose default profile is `debug`, `src/compile.ts:636`) and in
+every `tests/cases/fnref_*` program, which stage 1 runs in both profiles.
+The profile reaches the emitter as `-g` does (`src/compile.ts:891`). Every
+check timed in a speed build cost up to 1.2x to 2.7x somewhere (§4.4): a
+dispatcher that can panic is no longer `willreturn readonly` to LLVM. **An empty set** — an `S | null` place that only `null`
 was ever stored into — has no member and no dispatcher: every call through
 it sits behind an `h !== null` that no value of the place passes, so the
 call lowers to a trap (an `unreachable` terminator after `llvm.trap`), and
 `fnref_place_set` pins it with a variant whose field is never assigned. Whether the last arm instead traps (`default:
-unreachable`-equivalent, with every member a `case`) is **open, decided in
-stage 1** by timing `fnref_place_set` both ways: if the trap is inside the
-band it ships, so a store form the pass missed fails loudly; if not, the
-`default` arm stays and soundness rests on the `F(S)` fallback above and
-its tests.
+unreachable`-equivalent, with every member a `case`) was **timed and
+decided** (§4.4): it cost 1.2x to 2.7x the `default` arm, and a range check
+ahead of the `switch` up to 1.23x, so the speed build keeps the `default`
+arm, the debug build checks, and soundness rests on the `F(S)` fallback
+above, its tests, and the debug build's check.
 
 **How a dispatcher's arguments line up.** The tag is the dispatcher's
 parameter `0`, and the call's argument `i` is its parameter `i + 1`, which
@@ -278,14 +308,20 @@ in each module that holds a call through `p`, as an `internal` copy (the
 `src/emit-map.ts` pattern for library copies, `src/emit.ts:390`), and a
 member stored into a place read from another module is marked `hidden`, as
 WP29 marks a function another module's instantiation calls
-(`src/emit.ts:625-633`). The consequence, stated rather than measured:
-`takesEntryFacts` refuses a `hidden` signature (`!sig.hidden`), so a member
-that crosses a module loses its call-site entry facts in every program,
-including its direct calls; a dispatcher copy keeps its own, being
-`internal`. Whether to lift that refusal for a member whose every caller is
-known — as a dispatcher's arms are — is **open, decided in stage 1**;
-until it is, a cross-module reference costs those facts, and none of §3's
-or §4's programs, all one module, measured it.
+(`src/emit.ts:625-633`). **It keeps its call-site entry facts.**
+`takesEntryFacts` refuses a `hidden` signature (`!sig.hidden`) because a
+`hidden` function is called from another module's *instantiation*, whose
+body the ranges walk does not reach with a state (`src/ranges.ts:33`;
+`forceCalls`, `src/ranges.ts:424`). A dispatcher is not an instantiation:
+it is an ordinary checked function, walked in `proveCallSiteRanges`' one
+loop over every module's contexts (`src/ranges.ts:387`), so its arm calls
+are sites like any other. Stage 1 therefore marks a member that crosses a
+module for `hidden` linkage only, with a separate flag that `takesEntryFacts`
+does not read; a member that an instantiation also calls is still forced to
+no entry facts by `forceCalls`'s scan, as today. A cross-module reference
+then costs what a one-module one does, by construction; stage 1's
+`tests/link/fnref_cross_module` pins it (the member's entry facts in its
+`.ll`).
 
 The spike (§3, §4, §12) numbered its tags from `0` and had no `null`, so its
 `switch` cases are `0` to `K - 2`. Numbering from `1` changes only the case
@@ -698,6 +734,96 @@ number, `u3`'s result on the one `P` after the loop.
   that would produce it is
   not built (§9).
 
+### 4.4 The safeguards, measured
+
+Three questions the review left open were answered by timing rather than
+argument: what a check on the tag costs, what sets past eight cost, and
+whether any variant leaks. Two runs of §12.8's runner, best of 11 rounds,
+interleaved, on an Intel Xeon @ 2.10GHz with 4 cores and 15 GB; every program
+compiled by the 0.38.0 release (`build/seed/bin/nish`, `--profile speed`),
+every `.ll` through `llvm-as`. Copy bands, run 4: serial 0.7%, array 0%,
+aperiodic 1.2%, escape 1.3%; run 5: 0.9%, 1.6%, 2.0% and 0.3%. Checksums
+match the `default` arm's in every row, and §3's and §4.3's where the
+program is theirs.
+
+**A check on the tag (run 5).** Three lowerings of the last arm:
+**default**, the last member as the `switch`'s `default` (§2.3); **trap**,
+every member a `case` and `default: panic(...)`; **guard**, `if (tag < 0 ||
+tag > K - 1) panic(...)` ahead of the `default`-arm `switch`. `/ direct`:
+
+| Program | default | trap | guard |
+| --- | ---: | ---: | ---: |
+| serial, `K = 1`, same (a set of one) | 0.98x (no check) | — | 1.00x |
+| serial, `K = 4`, same | 0.99x | 1.00x | 1.00x |
+| serial, `K = 4`, mixed | 1.05x | 1.49x | 1.08x |
+| serial, `K = 8`, same | 1.01x | 1.27x | 1.24x |
+| serial, `K = 8`, mixed | 1.38x | 3.69x | 1.64x |
+| array, `K = 4`, mixed | 1.02x | 1.22x | 1.03x |
+| array, `K = 8`, mixed | 1.27x | 1.72x | 1.07x |
+| aperiodic, `K = 4` | 3.78x | 4.49x | 3.76x |
+| aperiodic, `K = 8` | 4.86x | 4.98x | 4.89x |
+| escape A, same | 1.47x | 1.71x | 1.69x |
+| escape A, mixed | 1.46x | 1.67x | 1.71x |
+| escape C, same | 1.50x | 1.71x | 1.49x |
+| escape C, mixed | 1.83x | 1.71x | 1.75x |
+
+**trap** is past the band against **default** in eight of twelve rows, up to
+2.7x (serial `K = 8` mixed). **guard** is cheaper but still past it in three:
+1.19x serial `K = 8` mixed, 1.23x serial `K = 8` same, 1.16x escape A
+mixed. Where a check came out ahead (array `K = 8`, escape C mixed) the
+difference is inside §3's 21% layout spread. The visible difference in the
+IR: a dispatcher that can panic loses `willreturn readonly`. Escape A's
+`dispatch`, **default** then **guard**:
+
+```llvm
+define internal noundef i32 @dispatch(i32 noundef %tag, %struct.P* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, %struct.Keep* noundef nonnull readonly align 8 dereferenceable(8) nocapture %k) #1 {
+define internal noundef i32 @dispatch(i32 noundef %tag, %struct.P* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, %struct.Keep* noundef nonnull readonly align 8 dereferenceable(8) nocapture %k) #2 {
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
+```
+
+The escape proof survives every check (`nocapture` above, and `P` an
+`alloca` in `run` for A and C under all three); whether the lost attributes
+or the extra branch is the cost was not measured. So a speed build carries
+no check and a debug build does (§2.3).
+
+**Sets past eight (run 4, the `default` arm).** `/ direct`, the same
+generator as §12.1 with odd multipliers past the eighth (§12.8):
+
+| `K` | serial, same | serial, periodic mixed | aperiodic |
+| ---: | ---: | ---: | ---: |
+| 2 | 1.00x | 1.00x | 2.50x |
+| 4 | 1.00x | 1.02x | 3.75x |
+| 8 | 1.00x | 1.35x | 4.81x |
+| 16 | 1.92x | 4.60x | 5.17x |
+| 32 | 6.41x | 12.37x | 5.56x |
+
+Each row is a hand `switch` over `K` functions, written in Nish today, so a
+reference over the same set costs what it does. The cost grows steeply past
+eight, on a monomorphic stream too (6.4x at 32, where the tag never
+changes); why was not measured. That is why stage 1 warns when a call's
+set passes eight members, naming the stores that brought each one in (§10).
+
+**Leaks.** Every variant was built at 1x, 10x and 100x its loop length and
+run for its peak RSS, then at 1/1000 under `valgrind --leak-check=full`:
+
+| Program | 1x | 10x | 100x | valgrind, definitely / indirectly lost |
+| --- | ---: | ---: | ---: | --- |
+| direct (serial, escape) | 13.1 MB | 13.1 MB | 13.1 MB | 0 / 0 bytes |
+| serial `K = 1` guard, `K = 4` and `8` mixed, default and guard | 13.1 MB | 13.1 MB | 13.1 MB | 0 / 0 bytes |
+| escape A and C mixed, default and guard | 13.0–13.1 MB | 13.0–13.1 MB | 13.1 MB | 0 / 0 bytes |
+| escape B mixed | 16.6 MB | 154.0 MB | **1,527.8 MB** | 0 / 0 bytes |
+
+Nothing a reference adds allocates: a tag is an `i32` and a dispatcher a
+`switch` of direct calls. B's growth is not lost memory, which is why
+valgrind reports none: every `P` stays in the arena until `nish_main`
+releases it (§4.3). It is the growth the escape-join refusal (§2.2) keeps a
+reference from causing. Every program but `esc_direct` reports 62 to 70
+bytes "still reachable" at exit, two blocks allocated before `main` (a
+32-byte and a 30-to-38-byte `malloc` from the loader's constructor call);
+`esc_direct` is the one program that never reads `process.argv`, and the
+direct baselines carry them too, so they are not the construct's.
+
 ## 5. Semantics
 
 ### 5.1 Node and `--emit-ts`: identity and `===`
@@ -940,9 +1066,10 @@ promises, module storage, classes or a parameter's own storage, not functions
 
 ## 7. Not measured
 
-- **Where the jump table starts, and what it costs past eight.** `K = 8` was
-  a jump table (§3.5); `K = 5` to `7`, where `llc`'s threshold says the first
-  one appears, were not timed, and neither was any set larger than eight.
+- **Where the jump table starts.** `K = 8` was a jump table (§3.5); `K = 5`
+  to `7`, where `llc`'s threshold says the first one appears, were not
+  timed. Sets of 16 and 32 were (§4.4), and why their cost grows on a
+  monomorphic stream was not found.
 - **Performance counters.** No `perf stat` was read, so why the indirect call
   costs 3.1x to 4.7x on a periodic stream is unknown (§3.5): the `K = 8` row
   rules out the obvious cause, and the candidates left are not distinguished.
@@ -981,7 +1108,8 @@ promises, module storage, classes or a parameter's own storage, not functions
 
 ## 8. The recommendation
 
-**Strict, with per-place sets required in stage 1.**
+**Strict, with per-place sets, the escape-join refusal and a check-free
+speed-build dispatcher required in stage 1.**
 
 The three possible answers, against the numbers:
 
@@ -1036,7 +1164,8 @@ The three possible answers, against the numbers:
   third case a reference costs exactly the hand `switch` over the same
   declaration's tags — the dispatcher is that `switch` (§2.3, C in §4.3) —
   and more only against a hand program that keeps tags in finer places than
-  a declaration, up to B's 6.4x to 9.1x (§10). So references leave compat's
+  a declaration, and then only by a wider `switch` (§4.4): the escape-join
+  refusal (§2.2) keeps B's 6.4x to 9.1x out of reach. So references leave compat's
   list the way C2a did, with that gap stated. The practical costs of compat point the same way: C0,
   the `--compat` machinery, is unbuilt (:458); `src/` may never use compat
   (:244), where §5.4 wants references after the freeze; and compat implies
@@ -1050,11 +1179,13 @@ aperiodic stream narrows the claim: the switch's large advantage over an
 indirect call is a periodic-stream result, while its parity with a
 hand-written `switch` holds on every stream.
 
-The join stays a cliff within a place's set: a member that escapes, stored
-into a place that a hot call reads, removes the stack proof for that call.
-That is the program's own cost, as it is for a hand `switch` with that arm,
-but it is easy to cause by adding one store, so stage 1 ships a warning
-naming the member that weakened a dispatcher.
+The join would be a cliff within a place's set: a member that escapes,
+stored into a place that a hot call reads, would remove the stack proof for
+that call, and the program's memory would grow with the loop (§4.4). A hand
+`switch` with that arm pays the same, but a reference makes it easy to cause
+with one store far from the call, so stage 1 refuses it (§2.2): a call
+through a set that mixes members that keep an argument with members that do
+not does not compile, and the diagnostic names the member and the store.
 
 ## 9. If it ships: stages
 
@@ -1073,7 +1204,11 @@ program, do.
    the checker generates each set's dispatcher as a checked function, and
    records its arm calls and each reference call (as a call of its
    dispatcher) in `nodeCallees`, before ranges, attributes or the region
-   rules read it; `src/annotations.ts` admits a function type outside a
+   rules read it; after the attribute fixpoint, the escape-join refusal
+   (§2.2) reads each member's `escaping` set; the emitter writes the tag
+   check only under `--profile debug` (§2.3); a member that crosses a module
+   gets `hidden` linkage without losing its entry facts (§2.3);
+   `src/annotations.ts` admits a function type outside a
    parameter as an `i32` tag; the checker refuses everything in §2.2 and the
    zero-filled storage of §2.1 with new codes in `src/codes.ts`; `src/emit.ts`
    writes each generated dispatcher as `$ref.S.p` and lowers a reference
@@ -1139,24 +1274,29 @@ construct" and `CLAUDE.md`'s definition of done:
 | 2. Parser and validator | no new syntax: a function type and a bare name already parse; the validator keeps `Function` refused |
 | 3. Types | a function type outside a parameter: `llvmType` `i32`, `alignOf` 4, `assignable` by signature, the annotation resolver (`src/annotations.ts:224`); `src/interop-abi.ts`'s `cType` and `tsKeyword`, `src/interop-wasm.ts`'s `wasmType` and bridging decision, and `src/interop-napi.ts`'s readers and boxers each **refuse** it with `reject_fnref_ffi`'s code rather than leave it unmapped, since a type with no N-API row silently drops the function from the addon (§5.2); `src/debug.ts` the enumeration type (§5.3) |
 | 4. Checker | pass-1 signature sets; the post-pass-2 per-place sets; the generated dispatchers and their `nodeCallees` record (§2.4); value-position names; reference calls; the §2.2 refusals and §2.1's zero-fill refusals (`new Array<S>(n)`, module storage); the `hostVisible` refusal (§5.2) |
-| 5. Diagnostics | new NL codes in `src/codes.ts` for each §2.2 wording, the zero-fill refusals and `reject_fnref_ffi`, each with a `tests/wordings/` program; the dispatcher-weakened warning; NL2336, NL2334 and NL2337 reworded with their wordings programs |
+| 5. Diagnostics | new NL codes in `src/codes.ts` for each §2.2 wording, the zero-fill refusals, `reject_fnref_ffi` and the escape-join refusal, each with a `tests/wordings/` program; the `performance`-class warning for a set past eight members; NL2336, NL2334 and NL2337 reworded with their wordings programs |
 | 6. Emitter | the generated dispatcher written as `$ref.S.p`, and the call lowering; named blocks (`sw.case.N`, `sw.default`) |
 | 7. Runtime | none: no C symbol, so no `RuntimeTable` row and no budget move |
 | 8. Attributes | none expected: the dispatcher is a checker-generated function, ordinary to the fact collector, and its facts are the join of its place's set. `fnref_escape_join` pins §4.2's A and B facts; `fnref_place_set` pins C's |
-| 9. Tests | goldens `tests/cases/fnref_field`, `fnref_array`, `fnref_eq`, `fnref_escape_join`, `fnref_place_set` (`.ts`, `.ll`, `llvm-as`, `.out`); `reject_fnref_capture`, `reject_fnref_generic`, `reject_fnref_ffi` (a `declare function`, an open-world export, `--no-strict-exports`, a field reachable from a host-visible signature), `reject_fnref_print`, `reject_fnref_zero_fill`, `reject_fnref_rest`, `reject_fnref_async`, `reject_fnref_json`; `tests/self/goldens/checked/` regenerated with `node tests/self/goldens.js --update`; each new positive case registered with `node tests/differential/goldens.js --update`; `tests/differential/emit-ts-known.txt` regenerated under the Node `.github/workflows/ci.yml` pins; `DECLARED` entries in `tests/nish-cmp.js` for the reworded diagnostics. Negatives that flip, each rewritten to the refusal that remains: `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_store`, `reject_fnarg_return` (to a capturing arrow or a parameter bound to a named callee) and `reject_arrow_as_value` (to a capturing arrow); `reject_fnarg_not_name` flips in stage 2 |
+| 9. Tests | goldens `tests/cases/fnref_field`, `fnref_array`, `fnref_eq`, `fnref_escape_join`, `fnref_place_set` (`.ts`, `.ll`, `llvm-as`, `.out`); `reject_fnref_capture`, `reject_fnref_generic`, `reject_fnref_ffi` (a `declare function`, an open-world export, `--no-strict-exports`, a field reachable from a host-visible signature), `reject_fnref_print`, `reject_fnref_zero_fill`, `reject_fnref_rest`, `reject_fnref_async`, `reject_fnref_json`, `reject_fnref_escape_join` (case B's program); `fnref_debug_check` (the `--profile debug` dispatcher panics on a forged tag, the speed one has no check in its `.ll`); `tests/link/fnref_cross_module` (§2.3); `fnref_place_set` and `fnref_escape_join` also run at 10x their loop length with peak RSS pinned equal (§4.4); `tests/self/goldens/checked/` regenerated with `node tests/self/goldens.js --update`; each new positive case registered with `node tests/differential/goldens.js --update`; `tests/differential/emit-ts-known.txt` regenerated under the Node `.github/workflows/ci.yml` pins; `DECLARED` entries in `tests/nish-cmp.js` for the reworded diagnostics. Negatives that flip, each rewritten to the refusal that remains: `reject_fnarg_field`, `reject_fnarg_local`, `reject_fnarg_return_type`, `reject_fnarg_alias`, `reject_fnarg_store`, `reject_fnarg_return` (to a capturing arrow or a parameter bound to a named callee) and `reject_arrow_as_value` (to a capturing arrow); `reject_fnarg_not_name` flips in stage 2 |
 | 10. Docs | the `docs/LANGUAGE.md` rule replacing "a function is not a value" (1585) and the function-type rules (3337, 3392, 3409), with test citations; a `docs/cookbook/` snippet with the dispatcher's IR and its marker in `docs/IR_COOKBOOK.md`, regenerated by `docs/cookbook/regen.sh` against `build/nish`; a `docs/guide/` page on function references with its route in `scalar.config.json`, and `docs/guide/language/functions.md:195` rewritten; §6's broken rows rewritten; `docs/reference/` regenerated with `node scripts/gen-reference.mjs`, since `docs/LANGUAGE.md` moves; the changelog is the commit message |
 | 11. Security record | none: no `std/net` or `std/crypto` module, no `runtime/*.c` file and no builtin that reads the network, the terminal or another process. `docs/security/async.md:130`'s claim holds (§6) |
 
 ## 10. Risks
 
 - **The join within a site's set** (§4.3, §8). Per-place sets confine it to
-  the members a site can reach; one escaping member there still weakens that
-  site. Mitigated by stage 1's warning.
+  the members a site can reach, and the escape-join refusal (§2.2) makes a
+  site whose members disagree on keeping an argument a compile error, so the
+  join can no longer move an object to the arena. What remains is that a
+  program the refusal stops must call the keeping member directly or store
+  it in another place.
 - **A set of five or more members becomes a jump table**, an indirect branch
-  again: seen at eight (§3.5), expected at five, not timed between (§7). It
-  stays faster than an indirect call on a periodic stream and equal to a hand
-  `switch` of the same size on any stream. A program with dozens of handlers
-  at one site is the case to measure before stage 1 closes.
+  again: seen at eight (§3.5), expected at five, not timed between (§7). Its
+  cost grows with the set as a hand `switch`'s does: 1.92x and 6.41x
+  **direct** at 16 and 32 members on a monomorphic stream, 4.60x and 12.37x
+  on a periodic one (§4.4). A reference adds nothing to that, but a wide set
+  is easy to reach by storing into a shared place, so stage 1 warns past
+  eight members.
 - **A per-place set wider than it needs to be — the remaining risk.** A
   place (§2.3) is a local, a parameter, a field declaration, an array or `Map`
   element type, or a function's return; it is not an allocation. The
@@ -1177,11 +1317,12 @@ construct" and `CLAUDE.md`'s definition of done:
   - a function's return is one place for every call of it.
 
   Against a program that knows which member reaches a call and calls it
-  directly, the widened dispatcher can lose the stack proof: case B's 6.4x to
-  9.1x and 1.5 GB (§4.3). The workaround is to keep the cold member out of the hot
-  place — in its own field or local rather than a shared `S[]` — and stage 1's
-  warning names the member that widened a dispatcher and the place it came
-  through, so the user can see which store to move. Per-alias sets (§11) are
+  directly, a widened dispatcher would lose the stack proof, case B's 6.4x
+  to 9.1x and 1.5 GB (§4.3), which the escape-join refusal turns into a
+  compile error, and costs more per call as it grows (§4.4). The workaround is to keep the cold member out of the hot
+  place — in its own field or local rather than a shared `S[]`. A widening
+  that would mix keeping and non-keeping members is refused (§2.2) and names
+  the store; one that only widens past eight members is warned (above). Per-alias sets (§11) are
   the fallback if a real program needs a site narrower than its declaration.
 - **Compile-time cost.** Pass 1 now scans every value-position name, the
   per-place pass walks every store of a reference, and each distinct set gets
@@ -1214,17 +1355,6 @@ construct" and `CLAUDE.md`'s definition of done:
   refuses it (§5.2) for one rule across targets.
 - The numbering is declaration order; whether a debugger or a
   `nish-cmp` diff would prefer a name-sorted order.
-- The dispatcher's last arm — **decided in stage 1** (§2.3). The last
-  member as the `switch`'s `default` means a tag outside the set, which a
-  miscompile or a store form the pass did not model and did not widen would
-  make, calls that member. A trap arm catches it at the cost of one more
-  compare per call; not measured. Stage 1 times `fnref_place_set` both ways
-  and ships the trap if it is inside the band.
-- Cross-module members — **decided in stage 1** (§2.3). A member stored into
-  a place read in another module becomes `hidden`, and `takesEntryFacts`
-  refuses a `hidden` signature, so that member loses its call-site entry
-  facts; whether to admit a `hidden` function whose every caller is recorded
-  is the decision. No multi-module program was measured.
 - Function-type aliases (`type Handler = (x: i32) => i32`) and containers of
   references other than arrays and `Map` values, such as `Set<Handler>`:
   whether a `Set` may hold tags, and whether an alias names a set (above), is
@@ -2583,3 +2713,268 @@ loop; the arena bump at `1c30` is the one `P` for `u3`, after it:
 1c26:	mov    $0x7,%esi
 1c2b:	jmp    1b76
 ```
+
+### 12.8 The safeguard programs (§4.4)
+
+Generated into a temporary directory and never committed, like the rest.
+`gen.mjs` writes the `default`- and `trap`-arm variants of §12.1's and
+§12.4's programs and the sets of 16 and 32; its first eight multipliers and
+shifts are §12.1's, so `K` up to eight is §3's program:
+
+```js
+// WP51 follow-up spike: the trap arm, sets of 16 and 32, and the escape cases.
+import { writeFileSync } from "node:fs"
+const MUL = [1103515245, 22695477, 1664525, 134775813, 214013, 1103515243, 69069, -1403630843]
+const SHF = [13, 11, 15, 9, 7, 17, 5, 19]
+for (let i = 8; i < 32; i++) {
+  // Odd multipliers past the doc's eight, deterministic.
+  MUL.push((Math.imul(i * 2654435761 >>> 0, 40503) | 1) | 0)
+  SHF.push(5 + (i * 7) % 15)
+}
+const head = `import { wrappingAdd, wrappingMul } from "nish:unsafe";\n\n`
+const fn = (i) => `function t${i}(x: i32, acc: i32): i32 {
+  const m: i32 = acc ^ wrappingMul(x, ${MUL[i]});
+  return wrappingAdd((m >> ${SHF[i]}) ^ m, 1);
+}`
+const fns = (k) => Array.from({ length: k }, (_, i) => fn(i)).join("\n\n")
+// dflt: the last member is the default arm. trap: every member is a case, any other tag panics.
+const call = (k, arm) => {
+  const cases = []
+  const last = arm === "trap" ? k : k - 1
+  for (let i = 0; i < last; i++) cases.push(`    case ${i}:\n      return t${i}(x, acc);`)
+  cases.push(arm === "trap" ? `    default:\n      panic("tag outside the set");` : `    default:\n      return t${k - 1}(x, acc);`)
+  return `function call(tag: i32, x: i32, acc: i32): i32 {\n  switch (tag) {\n${cases.join("\n")}\n  }\n}`
+}
+const tags = (k, stream) => `function tags(base: i32): i32[] {
+  const t: i32[] = [];
+  let s: i32 = 463534242;
+  for (let i: i32 = 0; i < 1024; i++) {
+    s = s ^ (s << 13);
+    s = s ^ (s >>> 17);
+    s = s ^ (s << 5);
+    ${stream === "same" ? "t.push(base);" : `t.push((s ^ base) & ${k - 1});`}
+  }
+  return t;
+}`
+const serialRun = (k) => `function run(n: i32, ts: i32[]): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = 0; i < n; i++) {
+    acc = ${k === 0 ? "t0(i, acc)" : "call(ts[i % 1024], i, acc)"};
+  }
+  return acc;
+}
+
+export function main(): i32 {
+  const ts = tags(process.argv.length - 1);
+  console.log(\`\${run(400000000, ts)}\`);
+  return 0;
+}`
+const arrayRun = (k) => `function run(rounds: i32, xs: i32[], ts: i32[]): i32 {
+  let acc: i32 = 1;
+  for (let r: i32 = 0; r < rounds; r++) {
+    for (let j: i32 = 0; j < xs.length; j++) {
+      acc = ${k === 0 ? "t0(xs[j], acc)" : "call(ts[j], xs[j], acc)"};
+    }
+  }
+  return acc;
+}
+
+export function main(): i32 {
+  const ts = tags(process.argv.length - 1);
+  const xs: i32[] = [];
+  for (let i: i32 = 0; i < 1024; i++) {
+    xs.push(wrappingMul(i, 654435761) >> 3);
+  }
+  console.log(\`\${run(400000, xs, ts)}\`);
+  return 0;
+}`
+const randRun = (k) => `function run(n: i32, seed: i32): i32 {
+  let acc: i32 = 1;
+  let s: i32 = seed;
+  for (let i: i32 = 0; i < n; i++) {
+    s = s ^ (s << 13);
+    s = s ^ (s >>> 17);
+    s = s ^ (s << 5);
+    acc = ${k === 0 ? "t0(s, acc)" : `call((s >>> 24) & ${k - 1}, s, acc)`};
+  }
+  return acc;
+}
+
+export function main(): i32 {
+  console.log(\`\${run(400000000, 463534242 + process.argv.length)}\`);
+  return 0;
+}`
+const w = (name, s) => writeFileSync(`${name}.ts`, s + "\n")
+for (const shape of ["serial", "array"]) {
+  const run = shape === "serial" ? serialRun : arrayRun
+  w(`${shape}_direct`, head + fns(1) + "\n\n" + tags(2, "same") + "\n\n" + run(0))
+  for (const k of [2, 4, 8, 16, 32]) for (const stream of ["same", "mixed"]) for (const arm of ["dflt", "trap"]) {
+    if (shape === "array" && k > 8) continue
+    w(`${shape}_k${k}_${stream}_${arm}`, head + fns(k) + "\n\n" + call(k, arm) + "\n\n" + tags(k, stream) + "\n\n" + run(k))
+  }
+}
+w("rand_direct", head + fns(1) + "\n\n" + randRun(0))
+for (const k of [2, 4, 8, 16, 32]) for (const arm of ["dflt", "trap"])
+  w(`rand_k${k}_mixed_${arm}`, head + fns(k) + "\n\n" + call(k, arm) + "\n\n" + randRun(k))
+
+// Escape: A (no member keeps p), B (u3 keeps p, in the hot set), C (u3 kept out of the hot set).
+const escHead = `import { wrappingAdd, wrappingMul } from "nish:unsafe";
+
+class P {
+  x: i32;
+  y: i32;
+  constructor(x: i32, y: i32) {
+    this.x = x;
+    this.y = y;
+  }
+}
+
+class Keep {
+  last: P | null = null;
+}
+`
+const u = (i, keeps) => `function u${i}(p: P, k: Keep): i32 {
+${keeps ? "  k.last = p;\n" : ""}  return wrappingMul(p.x, ${3 + 2 * i}) ^ wrappingAdd(p.y, ${i + 1});
+}`
+const dispatch = (n, arm) => {
+  const cases = []
+  const last = arm === "trap" ? n : n - 1
+  for (let i = 0; i < last; i++) cases.push(`    case ${i}:\n      return u${i}(p, k);`)
+  cases.push(arm === "trap" ? `    default:\n      panic("tag outside the set");` : `    default:\n      return u${n - 1}(p, k);`)
+  return `function dispatch(tag: i32, p: P, k: Keep): i32 {\n  switch (tag) {\n${cases.join("\n")}\n  }\n}`
+}
+const escTags = (n, stream) => `function tags(base: i32): i32[] {
+  const t: i32[] = [];
+  let s: i32 = 463534242;
+  for (let i: i32 = 0; i < 1024; i++) {
+    s = s ^ (s << 13);
+    s = s ^ (s >>> 17);
+    s = s ^ (s << 5);
+    ${stream === "same" ? "t.push(base);" : n === 4 ? "t.push((s ^ base) & 3);" : "t.push(((s ^ base) & 0x7fffffff) % 3);"}
+  }
+  return t;
+}`
+const escRun = (tail) => `function run(n: i32, k: Keep, ts: i32[]): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = 0; i < n; i++) {
+    const p = new P(i, acc);
+    acc = wrappingAdd(dispatch(ts[i % 1024], p, k), 1);
+  }
+  return acc;
+}
+
+export function main(): i32 {
+  const k = new Keep();
+  const ts = tags(process.argv.length - 1);
+${tail}
+  return 0;
+}`
+w("esc_direct", escHead + "\n" + u(0, false) + `
+
+function run(n: i32, k: Keep): i32 {
+  let acc: i32 = 1;
+  for (let i: i32 = 0; i < n; i++) {
+    const p = new P(i, acc);
+    acc = wrappingAdd(u0(p, k), 1);
+  }
+  return acc;
+}
+
+export function main(): i32 {
+  const k = new Keep();
+  console.log(\`\${run(200000000, k)}\`);
+  return 0;
+}`)
+const us = (keep3) => [0, 1, 2, 3].map((i) => u(i, i === 3 && keep3)).join("\n\n")
+for (const stream of ["same", "mixed"]) {
+  for (const arm of ["dflt", "trap"]) {
+    w(`esc_a_${stream}_${arm}`, escHead + "\n" + us(false) + "\n\n" + dispatch(4, arm) + "\n\n" + escTags(4, stream) + "\n\n" + escRun("  console.log(`${run(200000000, k, ts)}`);"))
+    w(`esc_c_${stream}_${arm}`, escHead + "\n" + us(true) + "\n\n" + dispatch(3, arm) + "\n\n" + escTags(3, stream) + "\n\n" +
+      escRun("  const r = run(200000000, k, ts);\n  // u3 at another site: it keeps p, once.\n  const e = u3(new P(r, 1), k);\n  console.log(`${r} ${e}`);"))
+  }
+  w(`esc_b_${stream}_dflt`, escHead + "\n" + us(true) + "\n\n" + dispatch(4, "dflt") + "\n\n" + escTags(4, stream) + "\n\n" + escRun("  console.log(`${run(200000000, k, ts)}`);"))
+}
+```
+
+`gen2.mjs` writes the **guard** variants and the set of one from those:
+
+```js
+// Variants: guard (one range check, then the default-arm switch) and K = 1.
+import { readFileSync, writeFileSync } from "node:fs"
+const guardCall = (src, k, fname, args) => src.replace(/function (call|dispatch)\(tag: i32, ([^)]*)\): i32 \{\n  switch \(tag\) \{/, (m, n, params) =>
+  `function ${n}(tag: i32, ${params}): i32 {\n  if (tag < 0 || tag > ${k - 1}) {\n    panic("tag outside the set");\n  }\n  switch (tag) {`)
+for (const [base, k] of [["serial_k4_mixed", 4], ["serial_k8_mixed", 8], ["serial_k8_same", 8], ["serial_k4_same", 4], ["array_k4_mixed", 4], ["array_k8_mixed", 8], ["rand_k4_mixed", 4], ["rand_k8_mixed", 8], ["esc_a_same", 4], ["esc_a_mixed", 4], ["esc_c_same", 3], ["esc_c_mixed", 3]]) {
+  const src = readFileSync(`${base}_dflt.ts`, "utf8")
+  const out = guardCall(src, k)
+  if (out === src) throw new Error(base)
+  writeFileSync(`${base}_guard.ts`, out)
+}
+// K = 1: the set of one. dflt: a direct call, the tag never read. guard: the tag checked once.
+const d = readFileSync("serial_direct.ts", "utf8")
+const k1 = (body) => d.replace("acc = t0(i, acc);", "acc = call(ts[i % 1024], i, acc);").replace("function tags", `function call(tag: i32, x: i32, acc: i32): i32 {\n${body}\n}\n\nfunction tags`)
+writeFileSync("serial_k1_same_dflt.ts", k1("  return t0(x, acc);"))
+writeFileSync("serial_k1_same_guard.ts", k1(`  if (tag !== 0) {\n    panic("tag outside the set");\n  }\n  return t0(x, acc);`))
+```
+
+`gen3.mjs` writes the leak programs, each at four loop lengths:
+
+```js
+// Leak tests: each variant at three loop lengths (peak RSS must not grow with n),
+// and a short one for valgrind's leak check.
+import { readFileSync, writeFileSync } from "node:fs"
+const esc = ["esc_direct", "esc_a_mixed_dflt", "esc_a_mixed_guard", "esc_c_mixed_dflt", "esc_c_mixed_guard", "esc_b_mixed_dflt"]
+const ser = ["serial_direct", "serial_k4_mixed_dflt", "serial_k4_mixed_guard", "serial_k8_mixed_dflt", "serial_k8_mixed_guard", "serial_k1_same_guard"]
+const scale = { esc: [["s", 2000000], ["m", 20000000], ["l", 200000000], ["v", 200000]], serial: [["s", 4000000], ["m", 40000000], ["l", 400000000], ["v", 400000]] }
+for (const [list, full, kind] of [[esc, "200000000", "esc"], [ser, "400000000", "serial"]]) {
+  for (const b of list) {
+    const src = readFileSync(`${b}.ts`, "utf8")
+    if (!src.includes(`run(${full}`)) throw new Error(b)
+    for (const [tag, n] of scale[kind]) writeFileSync(`leak/${b}_${tag}.ts`, src.replace(`run(${full}`, `run(${n}`))
+  }
+}
+```
+
+The runner. It differs from §12.6's in rotating the order each round and in
+reading peak RSS from `wait4` per run:
+
+```python
+# WP51 follow-up runner: best of N, every variant run once per round (interleaved,
+# order rotated each round), wall time and peak RSS per run, stdout checked stable.
+import json, os, subprocess, sys, time
+groups = json.loads(sys.argv[1]); rounds = int(sys.argv[2])
+res = {}
+for g in groups:
+    for r in range(rounds):
+        order = g[r % len(g):] + g[:r % len(g)]
+        for b in order:
+            t0 = time.perf_counter()
+            p = subprocess.Popen(["./bin/" + b], stdout=subprocess.PIPE)
+            out = p.stdout.read().decode().strip()
+            _, status, ru = os.wait4(p.pid, 0)
+            dt = (time.perf_counter() - t0) * 1000
+            e = res.setdefault(b, {"ms": [], "rss_kb": 0, "out": out})
+            assert status == 0, (b, status)
+            assert e["out"] == out, (b, e["out"], out)
+            e["ms"].append(dt); e["rss_kb"] = max(e["rss_kb"], ru.ru_maxrss)
+        print(f"group {groups.index(g)} round {r + 1}/{rounds}", flush=True)
+for b, e in res.items():
+    e["best"] = min(e["ms"])
+json.dump(res, open(sys.argv[3] if len(sys.argv) > 3 else "results.json", "w"), indent=1)
+print("done")
+```
+
+How it was run, with `N=build/seed/bin/nish` (0.38.0):
+
+```sh
+node gen.mjs && node gen2.mjs && node gen3.mjs
+$N <x>.ts --link bin/<x> --profile speed -o ll/<x>.ll   # every program, leak/ too
+llvm-as ll/<x>.ll -o /dev/null                          # every .ll
+cp bin/<g>_direct bin/<g>_direct_copy                   # serial, array, rand, esc: the bands
+python3 bench.py "$(cat groups.json)" 11                # run 4: every variant of gen.mjs
+python3 bench.py "$(cat groups2.json)" 11 results2.json # run 5: default, trap and guard
+valgrind --leak-check=full --show-leak-kinds=all leak/bin/<x>_v
+```
+
+`groups.json` holds four groups, each `<g>_direct`, its copy and every
+variant of that shape; `groups2.json` the same baselines with the `default`,
+`trap` and `guard` triples of §4.4's first table and the `K = 1` pair.
