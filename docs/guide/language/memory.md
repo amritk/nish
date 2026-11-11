@@ -107,6 +107,81 @@ allocates on every pass and gives nothing back until the line says it does.
 The flag does not change the program it builds. The rules are in
 [Explaining kept memory](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#explaining-kept-memory).
 
+### A tree links its children, not an array of them
+
+A program that builds a large tree, such as a parser's syntax tree, should
+give each node a link to its first child and one to its next sibling, rather
+than a `kids: Node[]` array. Every array is a header and a separate block of
+memory, and an array that grows by `push` leaves the blocks it outgrew in the
+arena until they are released; a walk over the children then follows two
+pointers for each child where a sibling link follows one. On a tree of four
+million nodes, the linked layout took **0.52x the memory and 0.68x the time**
+of an array per node.
+
+```ts nish:ok
+class Node {
+  kind: i32;
+  parent: Node | null;
+  first: Node | null = null;
+  next: Node | null = null;
+
+  constructor(kind: i32, parent: Node | null) {
+    this.kind = kind;
+    this.parent = parent;
+  }
+}
+
+// `last` is the parent's last child so far, or null before the first.
+const add = (parent: Node, last: Node | null, kind: i32): Node => {
+  const kid = new Node(kind, parent);
+  if (last === null) {
+    parent.first = kid;
+  } else {
+    last.next = kid;
+  }
+  return kid;
+};
+
+const sum = (n: Node): i32 => {
+  let s = n.kind;
+  let kid = n.first;
+  while (kid !== null) {
+    s = s + sum(kid);
+    kid = kid.next;
+  }
+  return s;
+};
+
+export const main = (): i32 => {
+  const root = new Node(1, null);
+  const a = add(root, null, 2);
+  add(root, a, 3);
+  add(a, null, 4);
+  console.log(`${sum(root)}`);
+  return 0;
+};
+```
+
+This prints `10`. A child is added after the parent's last one, so the
+children stay in the order they were made, and the walk reads them in that
+order.
+
+Where some pass needs to reach a node's children by index, keep a count of
+them on the node, and fill its `Node[]` once, when the node is complete,
+rather than pushing to it as each child arrives.
+
+A large table that a hot loop reads and that has a fixed set of fields, such
+as a scanner's tokens or a table of types, can go further: one `i32[]` per
+field, each made at its final length with `new Array<i32>(n)`, and a row
+referred to by its index, with `-1` for none. On the same tree that took
+**0.32x the memory and 0.63x the time** of an array per node. Every read is
+then an index into a column, which is harder to follow than a field, so keep
+it to the tables that are hot. `uncheckedGet` and `uncheckedSet` from
+`nish:unsafe` skip the bounds check there; an index out of range is then
+undefined behaviour rather than a stopped program, so they belong in that
+table's code and nowhere else. The programs and the full measurements are in
+[the benchmark](https://github.com/amritk/nish/tree/main/bench/wp48-refs).
+
 <a id="freeing-a-batch-yourself-using-a--arena" style="scroll-margin-top: 65px"></a>
 
 ## Freeing a batch yourself: `using a = arena()`
