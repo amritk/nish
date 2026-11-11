@@ -1550,6 +1550,13 @@ export class CheckedProgram {
    */
   gathered: boolean
   /**
+   * WP51 stage 2: the next free node id. The parser numbers the tree; a
+   * reference passed for a function parameter is rewritten into an arrow
+   * written at the call, whose nodes the checker numbers from here
+   * (`newNode`), and the compilation takes the count back after checking.
+   */
+  nodeCount: i32
+  /**
    * The package this module belongs to (WP21 S1, `src/packages.ts`). `""` is
    * the root package — the program being compiled — which is where every
    * module of a single-package build lives.
@@ -1943,6 +1950,7 @@ export class CheckedProgram {
     this.source = source
     this.file = file
     this.isEntry = isEntry
+    this.nodeCount = nodeCount
     this.scriptLocals = new StringSet()
     this.packageName = packageName
     this.symbolPrefix = packageSymbolPrefix(packageName)
@@ -2097,6 +2105,36 @@ export class CheckedProgram {
       this.nodeSpreadCopies.push(noCopy)
       this.memberSets.push(-1)
     }
+  }
+
+  /**
+   * WP51 stage 2: a node the checker writes into the tree, numbered after the
+   * parser's, with the source span of the text it stands for. Call
+   * `grewNodes` once the new nodes are built and before any is checked.
+   */
+  newNode(kind: i32, start: i32, end: i32, text: string, children: Node[]): Node {
+    const made = new Node(kind, start, end)
+    made.id = this.nodeCount
+    this.nodeCount = this.nodeCount + 1
+    made.text = text
+    made.children = children
+    return made
+  }
+
+  /**
+   * Lengthen the installed tables, and the module's own under an installed
+   * instantiation, to cover the nodes `newNode` numbered; every other
+   * instantiation is lengthened by `enterInstance`.
+   */
+  grewNodes(): void {
+    const info = this.activeInstance
+    if (info === null) {
+      this.growTables(this.nodeCount)
+      return
+    }
+    this.leaveInstance()
+    this.growTables(this.nodeCount)
+    this.enterInstance(info)
   }
 
   /**
@@ -2373,6 +2411,9 @@ export class CheckedProgram {
    * drained in a loop and every other caller walks one function at a time.
    */
   enterInstance(info: Instantiation): void {
+    // An instantiation made before the checker numbered new nodes is
+    // lengthened to cover them when it is next walked.
+    info.growTables(this.nodeCount)
     this.savedNodeTypes = this.nodeTypes
     this.savedNodeLocals = this.nodeLocals
     this.savedNodeConstants = this.nodeConstants

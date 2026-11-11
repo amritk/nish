@@ -1394,6 +1394,12 @@ export class Compilation {
     let gathered = false
     for (const unit of this.modules) {
       gathered = gathered || unit.checker.program.gathered
+      // WP51 stage 2: the nodes the checker numbered after the parser's.
+      const none: Node | null = null
+      unit.nodeCount = unit.checker.program.nodeCount
+      while (unit.parents.parents.length < unit.nodeCount) {
+        unit.parents.parents.push(none)
+      }
     }
     if (gathered) {
       for (const unit of this.modules) {

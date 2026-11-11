@@ -137,6 +137,7 @@ import {
   N_TYPE_UNION,
   N_UNARY,
   Node,
+  FLAG_REFERENCE_ARROW,
 } from "./nodes"
 import {
   CheckedProgram,
@@ -2076,6 +2077,41 @@ const resolveFunctionArgument = (
     return liftArrowArgument(ctx, call, template, index, written, names, bindings, scope)
   }
   const lead = `${argumentLead(call, template.sourceName, index)} must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`
+  // WP51 stage 2: a reference held in a local, a field or an element is
+  // passed as the arrow that calls it, so the template is instantiated once
+  // per call over the reference's place and calls it through a dispatcher.
+  let inLocal: Local | null = null
+  if (written.kind === N_IDENT) {
+    inLocal = scope.lookup(written.text)
+  }
+  if (
+    (inLocal !== null && ctx.table.isFnRef(ctx.table.stripNull(inLocal.type))) ||
+    written.kind === N_MEMBER ||
+    written.kind === N_INDEX
+  ) {
+    const type = inLocal !== null ? inLocal.type : checkExpression(ctx, written, scope, -1)
+    if (type === T_ERROR) {
+      return null
+    }
+    if (ctx.table.isFnRef(type)) {
+      return referenceArgument(ctx, call, template, index, arg, written, type, names, bindings, scope)
+    }
+    if (inLocal !== null) {
+      // A nullable reference is called only once narrowed.
+      refuseOnce(
+        ctx,
+        arg,
+        `\`${written.text}\` may be \`null\`: \`${calleeSpelling(call, template)}\` calls it, so narrow it with \`${written.text} !== null\` first`
+      )
+      return null
+    }
+    refuseOnce(
+      ctx,
+      arg,
+      `${lead}; \`${ctx.source.text.slice(written.start, written.end)}\` is \`${ctx.table.typeName(type)}\`, which is not a function`
+    )
+    return null
+  }
   if (written.kind !== N_IDENT) {
     refuseOnce(
       ctx,
@@ -2087,15 +2123,7 @@ const resolveFunctionArgument = (
   const name = written.text
   const inScope = scope.lookup(name)
   if (inScope !== null) {
-    // WP51 S1: a reference is a value, and a function parameter takes a
-    // callee; stage 2 instantiates the template over a reference's set.
-    refuseOnce(
-      ctx,
-      arg,
-      ctx.table.isFnRef(ctx.table.stripNull(inScope.type))
-        ? `\`${name}\` is a function reference: \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
-        : `${lead}; \`${name}\` is a local, and a local is never a function`
-    )
+    refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`)
     return null
   }
   if (ctx.capturesOuter(name)) {
@@ -2168,6 +2196,98 @@ const resolveFunctionArgument = (
   }
   unifyAnnotation(ctx, answerAnnotation(fnType), fn.returnType, names, bindings)
   return fn
+}
+
+/**
+ * WP51 stage 2: the reference `written` (a local, field or element of
+ * reference type `type`) given for the function parameter at `index`,
+ * rewritten in the call into the arrow `($a0, ...) => written($a0, ...)` and
+ * lifted as an arrow written there is. The arrow captures what the expression
+ * reads, so the reference is the one the call site holds, and each call
+ * through it is a call through a reference, resolved over its place's set
+ * like any other (`src/fnref-places.ts`). A form that runs its function away
+ * from the call — on another thread, in a task, a region or over a secret —
+ * takes no reference: its arrow captures by its own rules, and a reference
+ * call is no part of them (NL2734).
+ */
+const referenceArgument = (
+  ctx: CheckContext,
+  call: Node,
+  template: TemplateInfo,
+  index: i32,
+  arg: Node,
+  written: Node,
+  type: i32,
+  names: StringSet,
+  bindings: StringMap,
+  scope: Scope
+): FunctionSig | null => {
+  const param = template.decl.children[1].children[index]
+  const fnType = unwrapTypeParens(param.children[1])
+  const shown = ctx.source.text.slice(written.start, written.end)
+  if (captureMode(template) !== CAPTURE_CALL || promisesAnswer(fnType)) {
+    refuseOnce(
+      ctx,
+      arg,
+      `\`${shown}\` is a function reference: \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
+    )
+    return null
+  }
+  const wanted = fnType.children[0].children
+  const params = ctx.table.fnRefParamsOf(type)
+  if (params.length !== wanted.length) {
+    refuseOnce(
+      ctx,
+      arg,
+      `${argumentLead(call, template.sourceName, index)}: \`${shown}\` is \`${ctx.table.typeName(type)}\`, ` +
+        `and \`${param.children[0].text}\` is \`${template.home.textOf(fnType)}\``
+    )
+    return null
+  }
+  let k = 0
+  while (k < wanted.length) {
+    unifyAnnotation(ctx, wanted[k].children[1], params[k], names, bindings)
+    k = k + 1
+  }
+  unifyAnnotation(ctx, answerAnnotation(fnType), ctx.table.fnRefResultOf(type), names, bindings)
+  const program = ctx.program
+  const none: Node[] = []
+  const formals: Node[] = []
+  const actuals: Node[] = []
+  k = 0
+  while (k < wanted.length) {
+    const name = program.newNode(N_IDENT, written.start, written.end, `$a${k}`, none)
+    const blank = program.newNode(N_EMPTY, written.start, written.end, "", none)
+    formals.push(program.newNode(N_PARAM, written.start, written.end, "", [name, blank]))
+    actuals.push(program.newNode(N_IDENT, written.start, written.end, `$a${k}`, none))
+    k = k + 1
+  }
+  const list = program.newNode(N_LIST, written.start, written.end, "", actuals)
+  const body = program.newNode(N_CALL, written.start, written.end, "", [written, list])
+  const arrow = program.newNode(N_ARROW, arg.start, arg.end, "", [
+    program.newNode(N_EMPTY, arg.start, arg.start, "", none),
+    program.newNode(N_LIST, arg.start, arg.end, "", formals),
+    program.newNode(N_EMPTY, arg.end, arg.end, "", none),
+    body,
+    program.newNode(N_LIST, arg.end, arg.end, "", none),
+  ])
+  arrow.flags = FLAG_REFERENCE_ARROW
+  program.grewNodes()
+  for (const child of call.children) {
+    if (child.kind === N_LIST) {
+      let at = 0
+      while (at < child.children.length) {
+        if (child.children[at] === arg) {
+          child.children[at] = arrow
+        }
+        at = at + 1
+      }
+    }
+  }
+  // The parents are linked again after checking, as for a gathered rest.
+  program.gathered = true
+  program.nodeTypes[arrow.id] = T_VOID
+  return liftArrowArgument(ctx, call, template, index, arrow, names, bindings, scope)
 }
 
 /**
@@ -2577,11 +2697,14 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
   }
   // A scope's task is told about itself: it runs when the scope joins.
   const task = mode === CAPTURE_TASK
-  if (name === "this") {
+  // The arrow written for a reference argument reads the reference as the call
+  // passes it, so a `let` or `this` it names is read once, at the call.
+  const passed = (ctx.arrowFns[0].decl.flags & FLAG_REFERENCE_ARROW) !== 0
+  if (name === "this" && !passed) {
     refuseOnce(ctx, expr, thisCaptureMessageFor(mode))
     return null
   }
-  if (outer.mutable) {
+  if (outer.mutable && !passed) {
     let message = letCaptureMessage(name)
     if (task) {
       message = taskLetCaptureMessage(name)
