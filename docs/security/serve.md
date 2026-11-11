@@ -9,8 +9,7 @@ answers, what a task may reach of the server's memory, and the test that pins
 each property. It is written with the code rather than after an audit, so
 that the audit of the HTTP application layer starts from evidence.
 
-Anchors are function names in `std/net/serve.ts` at `d6581983`, the last
-commit to change it on the head that merges this record.
+Anchors are function names in `std/net/serve.ts`.
 
 **Result.** The server adds no parser: the request line, the fields, the
 body framing, the head and body caps and the timeouts are the carrier's
@@ -24,8 +23,10 @@ an answer's body by `responseBytes`, its content type by 128 bytes.
 
 A task never writes past its slot's buffers and never stores its own memory
 into the server's: the spawn rule (`docs/LANGUAGE.md`, NL2609, NL2610,
-NL2615) refuses the program that would, and the task copies element by
-element. A response the program got wrong — a status outside 200 to 599, a
+NL2615) refuses the program that would. The task copies the request's head
+and body into arrays of its own with `copyBytes` (a copy out of the server's
+memory, which the rule allows) and its answer into its slot's buffer with
+`set`, which stores bytes, never a pointer. A response the program got wrong — a status outside 200 to 599, a
 body larger than `responseBytes`, a content type too long or holding a
 control byte — is answered 500, never sent as written, and never stops the
 server. Review before merge found one fault and fixed it with a test that
@@ -81,7 +82,7 @@ and is recorded because the loop changed under it.
 | SERVE-1 | Medium if it failed | `serveOn`, `serveFreeSlot` | Requests must not make the server spawn tasks or allocate slots without bound. | **Holds.** A slot is made only while fewer than `inFlight` exist; with every slot busy, a whole request is answered 503 (`stats.busy` counts it) and no task is spawned. Slots are reused, never freed, so the server holds at most `inFlight` request copies' worth of response and type buffers. Pinned by "in flight: 503". |
 | SERVE-2 | Medium if it failed | `serveOn` (`hl.slots`) | Connections must be bounded. | **Holds.** `connections` is the handler's `slots`; past it the carrier's accept closes the new connection unanswered (`H1_POOL_FULL`). Pinned by "connections: closed". |
 | SERVE-3 | Medium if it failed | `serveOn` (`hl.http`) | A header section or body must not grow past its cap. | **Holds.** `headerBytes` and `bodyBytes` are the carrier's `maxHeaderBytes` and `maxBody`; it answers 431 or 413 and ends the connection before the server sees the request (HANDLER-1). Pinned by "header cap: 431" and "body cap: 413". |
-| SERVE-4 | Medium if it failed | `serveTask`, `serveAnswer` | A response must not write past its slot's buffers, nor reach the carrier as something it refuses. | **Holds.** The task writes a body only when it fits `responseBytes` and a type only when it fits 128 bytes, else it marks the slot -1; `serveAnswer` answers 500 for a marked slot and for a status outside 200 to 599, and counts `stats.failed`. Pinned by "response cap: 500" and "bad status: 500". |
+| SERVE-4 | Medium if it failed | `serveTask`, `serveAnswer` | A response must not write past its slot's buffers, nor reach the carrier as something it refuses. | **Holds.** The task writes a body only when its `length` is neither negative nor past `responseBytes` or the body it names, and a type only when it fits 128 bytes, else it marks the slot -1; `serveAnswer` answers 500 for a marked slot and for a status outside 200 to 599, and counts `stats.failed`. Pinned by "response cap: 500", "bad status: 500" and "negative length: 500". |
 | SERVE-5 | Medium | `serveType` | A content type holding CR, LF or another control byte made the carrier refuse the head, and `HttpHandler.start` panicked on the refusal, so a peer whose input reached the type stopped the server. | **Fixed.** `serveType` refuses a type with a byte under 32 other than tab, or 127 — the carrier's field-text rule — so the request is answered 500. Before: `link/net_serve` panicked with "the carrier refused the head (-22)" and exited 1 after "bad status"; after: "bad type: 500". |
 | SERVE-6 | High if it failed | `serveOn`, `serveTask` | Pipelined answers must go out in request order, and one task must never read or write another request's memory. | **Holds.** The handler reads a connection's next request only once the one before it is answered (HANDLER-4), so one connection has at most one slot. A task reads only its slot `k`'s request, copied into its own region before `handle` runs, and writes only slot `k`'s buffers; a slot is reused only after the loop sent its answer. Pinned by "pipelined 1: ... slept 60" before "pipelined 2: ... slept 1" — the second request is read only once the first, slower one is answered, so this pins serial order on a connection, not a reordering of tasks that finish out of order — and by 4000 pipelined answers checked in order. |
 | SERVE-7 | Medium if it failed | `serveTask`, `serveOn` | The server's memory must not grow per request. | **Holds.** A task's allocations — the request copy, the `Request` and `Response`, `handle`'s own — live in its region and go when it ends; the loop allocates no per-request object in the arena once its slots and type cache are warm. What the runtime allocates outside the arena for a task's frame and region is not measured here. `Arena.used()` in the server's loop is 48 bytes after 100 requests and 48 after 4000 (also 48/48 at 200, 1000 and 8000). Pinned by "arena flat: true". |
@@ -109,7 +110,7 @@ task of the same program.
 "in flight: 503", "connections: closed".
 
 **Bad responses** (SERVE-4, SERVE-5): "response cap: 500", "bad status: 500",
-"bad type: 500", "no content type: 200 [] xxx" (a body with an empty type goes out with no `Content-Type`), and "serve: 0, answered 16, busy 1, failed 3, slots 1" — the
+"bad type: 500", "no content type: 200 [] xxx" (a body with an empty type goes out with no `Content-Type`), and "serve: 0, answered 17, busy 1, failed 4, slots 1" — the
 server answered every request and stopped cleanly.
 
 **A hang-up** (SERVE-10): "after a hang-up: 200 [text/plain; charset=utf-8]
