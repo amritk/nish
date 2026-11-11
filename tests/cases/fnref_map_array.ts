@@ -1,6 +1,5 @@
-// WP51 stage 1: an array of references is refused as a `Map` value, like a
-// reference: a value the map hands out is a place the place pass does not
-// follow (NL2738).
+// WP51 stage 2: an array of references is a `Map` value; an element of the
+// array the map hands back dispatches over the functions stored into it.
 type Op = (x: i32) => i32
 
 const inc = (x: i32): i32 => x + 1
@@ -11,6 +10,6 @@ export const main = (): void => {
   byName.set("up", [inc, twice])
   const up = byName.get("up")
   if (up !== undefined) {
-    console.log(`${up[0](5)}`)
+    console.log(`${up[0](5)} ${up[1](5)}`)
   }
 }

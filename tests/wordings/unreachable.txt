@@ -28,6 +28,7 @@ NL2004  retired: the `implements` field-order rule, reworded since
 NL2017  retired: a field clashing with a method, reworded since
 NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`Result` rule
 NL2040  retired: inheritance, removed
+NL2738  retired: `... cannot hold a function reference as its value: a `Map` value is not yet a place ...`; WP51 stage 2 made a `Map` value a place, so a reference, an array of them or a nullable of either is a value now (tests/cases/fnref_map*)
 NL2042  retired: the long form of the WP15 §8 allocation warning; the live one is NL9001
 NL2047  retired: inheritance, removed
 NL2049  retired: inheritance, removed

@@ -18,6 +18,7 @@ import { BuildMode, hostVisible } from "./visibility"
 import { isGuardType } from "./parallel"
 import { N_ARROW, N_CLASS, N_CONSTRUCTOR, N_FIELD, N_IDENT, N_PARAM, N_THIS, N_VAR_DECL, Node } from "./nodes"
 import { StringSet } from "./map"
+import { ROOT_PACKAGE } from "./packages"
 
 /** The refusal for a generic function named in a value position. */
 const genericReferenceMessage = (name: string): string =>
@@ -308,6 +309,10 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
   for (const ctx of contexts) {
     const program = ctx.program
     const table = ctx.table
+    // A dependency's export, `std/`'s included, is an export to Nish code, not
+    // to a host: the C ABI is the root package's (`src/interop-abi.ts`), so a
+    // `Map<K, F>`'s `set` is no door a host can call (WP51 stage 2).
+    const rootPackage = program.packageName === ROOT_PACKAGE
     for (const sig of program.functions) {
       const owner = sig.owner
       const exported = owner !== null ? owner.exported : sig.exported
@@ -317,7 +322,7 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
         !sig.definedIn(program.source) ||
         sig.dispatcher ||
         sig.compileTimeOnly() ||
-        (!sig.foreign() && !hostVisible(mode, exported, entry))
+        (!sig.foreign() && (!rootPackage || !hostVisible(mode, exported, entry)))
       ) {
         continue
       }
@@ -358,7 +363,10 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
   }
   for (const ctx of contexts) {
     for (const info of ctx.program.structList) {
-      if (info.origin !== ctx.program.source || (!mode.everyLayoutShared && reached.indexOf(info.type) < 0)) {
+      // Every layout is handed out only for the root package's classes; a
+      // dependency's class is shared where a signature reaches it.
+      const everyLayout = mode.everyLayoutShared && ctx.program.packageName === ROOT_PACKAGE
+      if (info.origin !== ctx.program.source || (!everyLayout && reached.indexOf(info.type) < 0)) {
         continue
       }
       for (const field of info.fields) {
