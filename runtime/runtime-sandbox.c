@@ -62,8 +62,12 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <linux/audit.h>
@@ -436,8 +440,79 @@ static void nish_sb_seccomp(int32_t caps) {
   if (loaded != 0) nish_sb_fail("cannot load the seccomp filter");
 }
 
+/* SBX-1: the exec allowlist must hold each granted program's interpreter (its
+ * ELF loader, or its `#!` line's program), because the kernel opens that file
+ * for execution too, and an interpreter runs whatever it is handed. The
+ * compiler writes an entry that is on the list only as another entry's
+ * interpreter with a second leading `/` (`//lib64/ld-linux-x86-64.so.2`),
+ * which names the same file. Each such file's identity is kept here when the
+ * sandbox is applied, and `nish_sb_spawn_open` refuses a spawn target that is
+ * one of them, by identity, so a symlink, a hardlink or any second name is
+ * refused as well. More marked entries than the table holds refuse every
+ * spawn rather than some. */
+#define NISH_SB_REFUSED 16
+static struct {
+  dev_t dev;
+  ino_t ino;
+} nish_sb_refused[NISH_SB_REFUSED];
+static int nish_sb_nrefused;
+
+/* The file `posix_spawnp` would execute for `file`: `file` itself when it
+ * holds a `/`, else the first executable regular file of that name in a PATH
+ * directory (an empty entry is the working directory). It is opened O_PATH and
+ * moved to a descriptor at or above `low` that a child inherits, and `proc`
+ * gets its /proc/self/fd name, so the child executes the very file checked: a
+ * name swapped between this check and the exec reaches nothing, and a script's
+ * interpreter can open the script by that name. Returns the descriptor, or
+ * -EACCES for a kept interpreter, or -ENOENT when there is no such file. */
+static int nish_sb_spawn_open(const char *file, int low, char *proc) {
+  const char *dir = strchr(file, '/') ? "" : getenv("PATH");
+  char buf[PATH_MAX];
+  struct stat st;
+  if (!dir) dir = "/bin:/usr/bin";
+  for (;;) {
+    const char *end = strchrnul(dir, ':'), *path = file;
+    size_t len = (size_t)(end - dir);
+    if (len && len + strlen(file) + 2 <= sizeof buf) {
+      memcpy(buf, dir, len);
+      buf[len] = '/';
+      strcpy(buf + len + 1, file);
+      path = buf;
+    }
+    int fd = len && path == file ? -1 : open(path, O_PATH | O_CLOEXEC);
+    if (fd >= 0) {
+      if (!fstat(fd, &st) && S_ISREG(st.st_mode) && (st.st_mode & 0111)) {
+        int k = nish_sb_nrefused > NISH_SB_REFUSED ? 0 : nish_sb_nrefused;
+        while (k-- > 0 && (nish_sb_refused[k].dev != st.st_dev || nish_sb_refused[k].ino != st.st_ino)) {
+        }
+        int moved = k >= 0 || nish_sb_nrefused > NISH_SB_REFUSED ? -EACCES : fcntl(fd, F_DUPFD, low);
+        if (moved == -1) moved = -errno;
+        close(fd);
+        snprintf(proc, 32, "/proc/self/fd/%d", moved);
+        return moved;
+      }
+      close(fd);
+    }
+    if (!*end) return -ENOENT;
+    dir = end + 1;
+  }
+}
+
+static void nish_sb_keep_interpreters(const char *paths) {
+  struct stat st;
+  for (; paths && *paths; paths += strlen(paths) + 1) {
+    /* An entry gone since the build has no identity to keep, and Landlock
+     * grants it nothing to execute either. */
+    if (paths[1] != '/' || stat(paths, &st)) continue;
+    int n = nish_sb_nrefused++;
+    if (n < NISH_SB_REFUSED) nish_sb_refused[n].dev = st.st_dev, nish_sb_refused[n].ino = st.st_ino;
+  }
+  if (nish_sb_nrefused) nish_spawn_target = nish_sb_spawn_open;
+}
+
 void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths) {
   nish_cpu_prime();
+  nish_sb_keep_interpreters(exec_paths);
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) nish_sb_fail("cannot set no_new_privs");
   nish_sb_drop_capabilities();
   nish_sb_landlock(caps, mode, read_dirs, write_dirs, exec_paths);

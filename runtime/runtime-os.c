@@ -445,6 +445,13 @@ _Bool nish_mkdir(const nish_str *path) {
    pid, or a negative errno: -EINVAL for an empty argv or an argument holding a
    NUL, and `posix_spawnp`'s own error otherwise (-ENOENT for a command that is
    not on PATH, on glibc). */
+#ifdef __linux__
+/* Set by `nish_sandbox` (runtime-sandbox.c) when the exec allowlist marks an
+   interpreter it keeps out of reach (SBX-1); null otherwise, so a spawn
+   outside `--sandbox` is the one `posix_spawnp` call it always was. */
+int (*nish_spawn_target)(const char *file, int low, char *proc);
+#endif
+
 static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err, const int *dup,
                                 int base, int n) {
 #ifdef __wasi__
@@ -470,6 +477,18 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
     if (v[i] != s[i]->data) return -EINVAL;
   }
   v[i] = 0;
+  const char *run = v[0];
+#ifdef __linux__
+  /* The child executes the file the sandbox checked, through a descriptor
+     above every one a `dup` action writes. */
+  char proc[32];
+  int fd = -1;
+  if (nish_spawn_target) {
+    fd = nish_spawn_target(run, base + n + 3, proc);
+    if (fd < 0) return fd;
+    run = proc;
+  }
+#endif
   /* One list of file actions whether or not a stream is redirected: an empty
      list is the same spawn as none, and one path through is less code than
      creating the list only when a stream needs it. */
@@ -491,8 +510,11 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
     if (to[k]) posix_spawn_file_actions_addopen(&fa, k + 1, nish_cpath(to[k]), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
   }
   pid_t pid;
-  failed = posix_spawnp(&pid, v[0], &fa, 0, v, environ);
+  failed = posix_spawnp(&pid, run, &fa, 0, v, environ);
   posix_spawn_file_actions_destroy(&fa);
+#ifdef __linux__
+  if (fd >= 0) close(fd);
+#endif
   return failed ? -failed : (int32_t)pid;
 #endif
 }

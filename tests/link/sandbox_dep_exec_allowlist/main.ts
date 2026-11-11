@@ -1,9 +1,9 @@
 // WP40 §2a, at run time: `pkg_runner` is granted `process.spawn` of `true`,
 // and runs the command line the program's arguments name. Under `--sandbox`
 // (tests/run.js) `true` runs and any other program is refused by Landlock,
-// except through the granted program's ELF loader (SBX-* in
-// docs/security/sandbox.md, recorded open); with no argument it runs nothing
-// and exits 0.
+// and its ELF loader, on the allowlist for its sake, is refused as a spawn
+// target of its own (SBX-1 in docs/security/sandbox.md); with no argument it
+// runs nothing and exits 0.
 import { runProgram } from "pkg_runner";
 
 export const main = (): i32 => {
