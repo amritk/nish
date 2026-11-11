@@ -1424,7 +1424,7 @@ Each figure comes from one tool:
 | Ir per request, frames by self Ir | callgrind (valgrind 3.22.0), through `profile.sh` |
 | frames by self samples | `perf record -e cpu-clock:u` (perf 6.8.12, Ubuntu's `linux-tools-generic`, installed after `apt-get update`) |
 | system calls per request | `strace -c -f` |
-| req/s, band | wrk 4.1.0 (Ubuntu's `wrk` package), through `run.sh` or the browser-head script below |
+| req/s, band | wrk 4.1.0 (Ubuntu's `wrk` package), through `run.sh`, and its `--browser-head` for the browser-shaped table |
 | peak RSS | the server's `VmHWM` in `/proc/<pid>/status` |
 | instructions per request in `bench/http1-request` | cachegrind `--cache-sim=no` (`run.mjs --instructions`) |
 
@@ -1511,7 +1511,7 @@ A `*` cell had socket errors: `async` read errors in all three rounds at 16384 (
 
 ### A browser-shaped request
 
-`profile.sh`'s TFB head is an 86-byte `Accept` and two short fields. A browser's is several times that, and the parser's cost grows with it. A non-pipelined wrk run at 256 connections sends this 759-byte `/plaintext` head (756 on `/json`) through `wrk -H`: `Host`, `Connection`, a 101-byte Chrome `User-Agent`, a 135-byte `Accept`, `Accept-Language`, `Accept-Encoding: gzip, deflate, br, zstd`, a 192-byte `Cookie` (a session id, a CSRF token, two analytics cookies, `theme` and `lang`), `Referer`, `Upgrade-Insecure-Requests` and three `Sec-Fetch-*` fields. It ran 3 rotated rounds of 10 s, each server started afresh and warmed for 1 s, with the same pinning as `run.sh`.
+`profile.sh`'s TFB head is an 86-byte `Accept` and two short fields. A browser's is several times that, and the parser's cost grows with it. A non-pipelined wrk run at 256 connections sends this 759-byte `/plaintext` head (756 on `/json`) through `wrk -H`: `Host`, `Connection`, a 101-byte Chrome `User-Agent`, a 135-byte `Accept`, `Accept-Language`, `Accept-Encoding: gzip, deflate, br, zstd`, a 192-byte `Cookie` (a session id, a CSRF token, two analytics cookies, `theme` and `lang`), `Referer`, `Upgrade-Insecure-Requests` and three `Sec-Fetch-*` fields. It ran 3 rotated rounds of 10 s, each server started afresh and warmed for 1 s, with the same pinning as `run.sh`; `bash bench/techempower/run.sh --browser-head --only plaintext` (and `--only json`) repeats it with these headers, contestants and connections.
 
 | contestant | `/plaintext` req/s, median (min) | `/json` req/s, median (min) | peak RSS, MiB |
 | --- | ---: | ---: | ---: |
@@ -1543,7 +1543,7 @@ The codec benches, with no socket:
 | loadgen POST, 447 bytes | 339.1 | 359.6 (±6.0%) | 272.4 | −19.7% |
 | browser GET, 1,028 bytes | 739.6 | 757.8 (±2.5%) | 552.5 | −25.3% |
 
-A browser head costs 2.7 times `short` in `bench/http1-request` (10,529 against 3,896): 6,633 more instructions for 719 more bytes, about 9.2 a byte.
+These counts ran at `4099299e`; the 3,872 for `short` in [bench/http1-request/README.md](https://github.com/amritk/nish/blob/main/bench/http1-request/README.md) ran at `4dc09dcc`, an earlier `std/net`. A browser head costs 2.7 times `short` in `bench/http1-request` (10,529 against 3,896): 6,633 more instructions for 719 more bytes, about 9.2 a byte.
 
 `varied` costs 305 instructions a request more than `short` (4,201 against 3,896). Its three heads differ, so a head kept from the request before cannot serve any of them. A head stage that reuses the response head must leave `varied` within its band of this figure: there the check is pure overhead.
 
@@ -1574,24 +1574,13 @@ bash bench/techempower/profile.sh --only plaintext
 bash bench/techempower/profile.sh --only json     # build/tfb/profile/summary.md
 bash bench/techempower/run.sh --only plaintext
 bash bench/techempower/run.sh --only json         # build/tfb/results.md
+bash bench/techempower/run.sh --browser-head --only plaintext
+bash bench/techempower/run.sh --browser-head --only json
 node bench/http1-request/run.mjs --rounds 11
 node bench/http1-request/run.mjs --instructions
 node bench/http1-parse/run.mjs
 ```
 
-The browser-head run starts each server as `run.sh` does and drives it with:
-
-```sh
-taskset -c 1-3 wrk -t 3 -c 256 -d 10s --timeout 8 \
-  -H "Host: tfb-server" -H "Connection: keep-alive" \
-  -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
-  -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" \
-  -H "Accept-Language: en-GB,en-US;q=0.9,en;q=0.8" -H "Accept-Encoding: gzip, deflate, br, zstd" \
-  -H "Cookie: session=8f3a9c2e7b1d4f6a0e5c9b2d7f1a3e6c; csrftoken=Qm9vZ2llV29vZ2llQm9vZ2llV29vZ2llQm9v; _ga=GA1.1.1234567890.1731300000; _ga_XYZ123=GS1.1.1731300000.4.1.1731300456.0.0.0; theme=dark; lang=en" \
-  -H "Referer: https://tfb-server/" -H "Upgrade-Insecure-Requests: 1" \
-  -H "Sec-Fetch-Dest: document" -H "Sec-Fetch-Mode: navigate" -H "Sec-Fetch-Site: same-origin" \
-  http://127.0.0.1:<port>/plaintext
-```
 <!-- http-codec-baseline:end -->
 
 <!-- syscall-cost:begin -->

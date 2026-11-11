@@ -73,6 +73,7 @@ docker run --rm -p 8080:8080 nish-tfb
 bash bench/http-twins/build.sh       # the twins, into build/http-twins/
 bash bench/techempower/run.sh        # 3 interleaved rounds of 10 s
 bash bench/techempower/run.sh --quick
+bash bench/techempower/run.sh --browser-head --only plaintext   # and --only json
 ```
 
 `run.sh` times the entry, a byte-identical copy of it (the noise band), its
@@ -86,7 +87,11 @@ it starts in `build/tfb/pg` (`PG_BIN` names its binaries; `--only db` runs
 these alone). The server is pinned to CPU 0, Postgres to CPU 1 and `wrk` to the
 rest. Each server's peak RSS is recorded beside its figures, and the report
 says, per concurrency, whether the async twin is inside the band: WP49 stage
-6's gate. Its header says the rest of the method. The recorded figures are in
+6's gate. Its header says the rest of the method. `--browser-head` swaps
+TFB's three request headers for a browser's 759-byte head, sends one request at
+a time on `/plaintext` too, and times only the entry, its copy, `uws` and
+`go-fasthttp` at 256 connections: the browser-shaped table of
+[the HTTP/1 codec baseline](../../docs/BENCHMARKS.md#http1-codec-baseline). The recorded figures are in
 [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext)
 and, for the gate, its
 [first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)
