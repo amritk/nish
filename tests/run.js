@@ -28667,7 +28667,7 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
   for (const name of ["std_text_to_fixed", "std_text_split_limit"]) {
     const dir = path.join(linkDir, name)
     const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
-    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
     check(
       `link/${name}: under the Node prelude it exits 0 and prints expected.out`,
       run.status === 0 && run.stdout === out,
@@ -28682,6 +28682,10 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
       } else if (split) {
         const pieces = split[1].split(split[2], Number(split[3]))
         if (`${pieces.length}: ${pieces.join("|")}` !== `${split[4]}: ${split[5]}`) wrong.push(line)
+      } else if (line !== '-0 gives "0": true' && line !== "same as split: true") {
+        // Each program ends with one line of its own, which the checks above
+        // cannot read; any other line is one they would silently pass.
+        wrong.push(`not checked: ${line}`)
       }
     }
     check(`link/${name}: every line is JavaScript's own answer`, wrong.length === 0, wrong.join("\n"))

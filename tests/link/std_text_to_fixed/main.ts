@@ -58,5 +58,16 @@ export const main = (): number => {
   show(9007199254740993, 2);
   show(0.1, 20);
   show(-1234.5678, 1);
+  // No f64 in [2^52, 2^53) has a fraction, so the closest with one sits just
+  // below 2^52: one ulp is a half there, and the tie rounds up to 2^52.
+  show(4503599627370495.5, 0);
+  show(2251799813685248.5, 0);
+  // A carry that runs through every digit and grows a new one; 9.995 is
+  // stored below what it prints, so it stays.
+  show(999.5, 0);
+  show(99.995, 2);
+  show(9.995, 2);
+  // -0's sign is invisible above, where "0.00" reads the same either way.
+  console.log(`-0 gives "0": ${toFixed(-0, 0) === "0"}`);
   return 0;
 };

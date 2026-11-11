@@ -214,13 +214,39 @@ export const contains = (haystack: string, needle: string): boolean => toI32(hay
  *   Occurrences are found left to right and do not overlap.
  * @returns A fresh array of the pieces, in order; never empty.
  */
-export const split = (text: string, sep: string): string[] => splitTextPieces(text, sep, -1, "split")
+export const split = (text: string, sep: string): string[] => {
+  const sepLength: i32 = toI32(sep.length)
+  if (sepLength === 0) {
+    panic("split: an empty separator")
+  }
+  const length: i32 = toI32(text.length)
+  const parts: string[] = []
+  let start: i32 = 0
+  while (true) {
+    // Searching from `start` rather than cutting `text` down after each match
+    // copies nothing until the piece is taken.
+    const at: i32 = toI32(text.indexOf(sep, start))
+    // `start` is 0 or one past a match, so it is never negative and never
+    // past `length`, and a hit starts at or after `start` and a whole
+    // separator before `length`. The tests around the `substring`s therefore
+    // always hold, but for the empty tail after a final separator; they are
+    // written because they are what proves both bounds within `text`, as in
+    // `splitLines`.
+    if (at < 0) {
+      parts.push(start >= 0 && start < length ? text.substring(start, length) : "")
+      return parts
+    }
+    if (start >= 0 && start < length && at >= 0 && at < length) {
+      parts.push(text.substring(start, at))
+    }
+    start = at + sepLength
+  }
+}
 
 /**
  * The first `limit` pieces of `text` between the occurrences of `sep`:
- * JavaScript's `text.split(sep, limit)` for a separator that is not empty, and
- * `split`'s pieces otherwise. The pieces past the limit are dropped, not joined
- * into the last one, so `splitLimit("a,b,c", ",", 2)` is `["a", "b"]`, and a
+ * JavaScript's `text.split(sep, limit)`. The pieces past the limit are
+ * dropped, not joined into the last one, so `splitLimit("a,b,c", ",", 2)` is `["a", "b"]`, and a
  * limit of 0 gives `[]`.
  *
  * **A negative limit keeps every piece**, as it does under Node: JavaScript
@@ -240,20 +266,10 @@ export const split = (text: string, sep: string): string[] => splitTextPieces(te
  * @param limit The most pieces kept; a negative one keeps them all.
  * @returns A fresh array of at most `limit` pieces, in order.
  */
-export const splitLimit = (text: string, sep: string, limit: i32): string[] =>
-  splitTextPieces(text, sep, limit, "splitLimit")
-
-/**
- * `split` and `splitLimit`'s one walk: the pieces of `text` between the
- * occurrences of `sep`, stopping once `limit` are taken. A negative `limit`
- * never equals a count, so it takes them all. `caller` names the function in
- * the panic for an empty separator. The name is long for the reason
- * `isTextBlankByte`'s is.
- */
-const splitTextPieces = (text: string, sep: string, limit: i32, caller: string): string[] => {
+export const splitLimit = (text: string, sep: string, limit: i32): string[] => {
   const sepLength: i32 = toI32(sep.length)
   if (sepLength === 0) {
-    panic(`${caller}: an empty separator`)
+    panic("splitLimit: an empty separator")
   }
   const length: i32 = toI32(text.length)
   const parts: string[] = []

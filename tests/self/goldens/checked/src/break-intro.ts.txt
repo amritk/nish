@@ -2534,20 +2534,17 @@ function contains(haystack: string, needle: string): boolean -> @nish.contains [
   calls: nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
 function split(text: string, sep: string): string[] -> @nish.split [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: sep text
-  calls: nish.splitTextPieces
-  stackSites=0 stackLocals=0
-  callee +0:63 splitTextPieces -> @nish.splitTextPieces
-function splitLimit(text: string, sep: string, limit: i32): string[] -> @nish.splitLimit [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: limit sep text
-  calls: nish.splitTextPieces
-  stackSites=0 stackLocals=0
-  callee +0:3 splitTextPieces -> @nish.splitTextPieces
-function splitTextPieces(text: string, sep: string, limit: i32, caller: string): string[] -> @nish.splitTextPieces
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow nish_panic nish_panic_overflow nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish_array_grow nish_panic nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:9 sepLength: i32 (const)
+  local +4:9 length: i32 (const)
+  local +5:9 parts: string[] (const)
+  local +6:7 start: i32 (let)
+  local +10:11 at: i32 (const)
+function splitLimit(text: string, sep: string, limit: i32): string[] -> @nish.splitLimit [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow nish_panic nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 sepLength: i32 (const)
   local +4:9 length: i32 (const)

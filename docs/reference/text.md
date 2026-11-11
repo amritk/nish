@@ -109,7 +109,7 @@ The pieces of `text` between the occurrences of `sep`: JavaScript's `text.split(
 
 <scalar-card title="split​Limit" icon="phosphor/regular/function" href="#splitlimit">
 
-The first `limit` pieces of `text` between the occurrences of `sep`: JavaScript's `text.split(sep, limit)` for a separator that is not empty, and `split`'s pieces otherwise.
+The first `limit` pieces of `text` between the occurrences of `sep`: JavaScript's `text.split(sep, limit)`.
 
 </scalar-card>
 
@@ -600,9 +600,8 @@ A fresh array of the pieces, in order; never empty.
 ### splitLimit
 
 The first `limit` pieces of `text` between the occurrences of `sep`:
-JavaScript's `text.split(sep, limit)` for a separator that is not empty, and
-`split`'s pieces otherwise. The pieces past the limit are dropped, not joined
-into the last one, so `splitLimit("a,b,c", ",", 2)` is `["a", "b"]`, and a
+JavaScript's `text.split(sep, limit)`. The pieces past the limit are
+dropped, not joined into the last one, so `splitLimit("a,b,c", ",", 2)` is `["a", "b"]`, and a
 limit of 0 gives `[]`.
 
 **A negative limit keeps every piece**, as it does under Node: JavaScript

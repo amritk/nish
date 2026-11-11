@@ -558,13 +558,6 @@ const DECLARED = [
     changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "the program imports asciiLower, asciiUpper and split from nish/text, which the 0.37.0 seed's std/text.ts does not export, so only the candidate compiles it",
   },
-  // std/text.ts's split becomes a call to the walk splitLimit shares.
-  {
-    program: "tests/link/std_text_camel_case/main.ts",
-    file: "main.ll",
-    changelog: "Add toFixed and split with a limit to nish/text",
-    why: "split is now a call to the walk it shares with splitLimit, which the compiler does not see through for nocapture, so the declare of split in an importer's own module loses nocapture on its two parameters",
-  },
   // Stage 5a: an --emit-dts compile is a page module, so Math.sin, cos, exp,
   // log, pow and a float % in it call std/math.ts's copies (`@nish.<name>F64`)
   // instead of an intrinsic or `frem` a page could not link.
