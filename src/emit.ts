@@ -349,7 +349,7 @@ export class Emitter {
   /** WP29 P3: true for a `using g = m.lock()`, whose entry is the address of its guard's lock word. */
   openScopeLocks: boolean[]
   /**
-   * WP40 H1.2: for a `using f = new File(p)`, the handle class, whose entry is
+   * WP53 H1.2: for a `using f = new File(p)`, the handle class, whose entry is
    * the object every exit closes the pointer of; `null` for the rest.
    */
   openScopeHandles: (StructInfo | null)[]
@@ -818,7 +818,7 @@ export class Emitter {
     if (capturesOf(callee).length > 0) {
       return false
     }
-    // WP29 P3, WP40 H1.2: a lock is given back and a handle closed after the
+    // WP29 P3, WP53 H1.2: a lock is given back and a handle closed after the
     // value, and a tail call would take the release ahead of itself.
     if (holdsRelease(this)) {
       return false
@@ -858,7 +858,7 @@ export class Emitter {
    */
   emitScopeExit(): void {
     emitWalkExits(this) // WP32: a `return` leaves every walk around it
-    emitHeldReleases(this) // WP29 P3, WP40 H1.2: after the value, which may read through a guard or a handle
+    emitHeldReleases(this) // WP29 P3, WP53 H1.2: after the value, which may read through a guard or a handle
     if (this.current.arenaScope) {
       this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`)
       return
@@ -1109,7 +1109,7 @@ export class Emitter {
     const params: string[] = []
     let i = 0
     while (i < sig.paramNames.length) {
-      // WP40 B1.2: C takes a buffer's bytes, not its header (`emitForeignBuffers`).
+      // WP53 B1.2: C takes a buffer's bytes, not its header (`emitForeignBuffers`).
       params.push(
         isForeignBuffer(this.table, sig.paramTypes[i]) ? "i8*" : this.llvmAbi(sig.paramTypes[i], false)
       )
@@ -1404,7 +1404,7 @@ export class Emitter {
         this.emitReturn(stmt)
         return
       case N_VAR:
-        // WP40 Q12(a): each declarator of a `using` opens before the next
+        // WP53 Q12(a): each declarator of a `using` opens before the next
         // initialiser runs, so one that leaves the function closes the ones
         // before it.
         for (const decl of stmt.children[0].children) {

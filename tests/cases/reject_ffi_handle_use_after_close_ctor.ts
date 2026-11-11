@@ -1,4 +1,4 @@
-// WP40 H1.3, §4c: a `using` inside a constructor reached by `new` closes at its
+// WP53 H1.3, §4c: a `using` inside a constructor reached by `new` closes at its
 // block's end like any other, so the rest of the constructor cannot read it.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

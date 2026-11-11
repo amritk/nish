@@ -1,4 +1,4 @@
-// WP40 H1.3: a `for` body's `using` binding is not in scope in the update
+// WP53 H1.3: a `for` body's `using` binding is not in scope in the update
 // clause, which is outside the body; it pins source order, not a close point.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

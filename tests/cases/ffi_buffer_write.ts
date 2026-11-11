@@ -1,4 +1,4 @@
-// WP40 B1.2: a `readonly u8[]` passed to `write` reaches C as its data
+// WP53 B1.2: a `readonly u8[]` passed to `write` reaches C as its data
 // pointer. The first call passes the array's own length, which the compiler
 // proves, so no check runs; the second passes a literal prefix of the same
 // array, so one `ffi-length` check compares 3 against its length first. Every

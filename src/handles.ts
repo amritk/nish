@@ -1,10 +1,10 @@
 /**
- * WP40 §4: the owned foreign handle. A class with one `CPtr` field owns the C
+ * WP53 §4: the owned foreign handle. A class with one `CPtr` field owns the C
  * resource the field points to, and its `[Symbol.dispose]` names the one C
  * function that closes it. The rules here keep every value of such a class,
  * and every name for its pointer, inside the `using` block that opens it, so
  * that the close that block emits is the last thing that touches the pointer
- * (`docs/wp40-ffi-buffers-handles.md` §4a–§4d).
+ * (`docs/wp53-ffi-buffers-handles.md` §4a–§4d).
  *
  * The shape of the class (one `readonly` field, no type parameters, no
  * `implements`, no `export`, no typed JSON) is checked where the class is

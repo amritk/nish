@@ -1,4 +1,4 @@
-// WP40 H1.2: a handle beside a mutex lock in one `using`. The block closes its
+// WP53 H1.2: a handle beside a mutex lock in one `using`. The block closes its
 // declarators in the reverse of the order they opened, on an early `return` as
 // on falling off its end: in `lock(), new File(...)` the file is closed while
 // the lock is still held, and in `new File(...), lock()` the lock is given back

@@ -551,6 +551,10 @@ const mssUnset = (why, moved) =>
   moved.map((program) => ({ program, file: "http-compress.ll", changelog: MSS_UNSET, why }))
 /** The changelog line of the stage that adds `spawnPipedWithin`. */
 const SPAWN_PIPED_WITHIN = "spawnPipedWithin, a captured run with a deadline"
+/** The changelog line of the fix that arms a held HTTP/1 write for writing. */
+const HELD_WRITE = "held HTTP/1 write keeps the write bit once a flush empties the output"
+const heldWrite = (why, moved) =>
+  moved.map((program) => ({ program, file: "http1-server.ll", changelog: HELD_WRITE, why }))
 
 const DECLARED = [
   // The hygiene rules found a dead local in std/compress/deflate.ts.
@@ -1925,6 +1929,27 @@ const DECLARED = [
     changelog: SPAWN_PIPED_WITHIN,
     why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
   },
+  ...heldWrite(
+    "Http1Server.flush and Http1TlsServer.flush answer the write bit while a write is held, even once the send emptied the output, so http1-server.ll's flush and settle move",
+    [
+      "tests/link/net_serve/main.ts",
+      "tests/link/net_serve_deadline/main.ts",
+      "tests/link/net_serve_hangup/main.ts",
+      "tests/link/net_serve_pg/main.ts",
+      "tests/link/net_serve_pipelined_flat/main.ts",
+      "tests/link/net_serve_server_field/main.ts",
+      "tests/link/net_serve_server_panic/main.ts",
+      "tests/link/net_serve_shutdown/main.ts",
+      "tests/link/std_postgres_async_cancel/main.ts",
+      "tests/link/std_postgres_async_caps_panic/main.ts",
+      "tests/link/std_postgres_async_double_release_panic/main.ts",
+      "tests/link/std_postgres_async_flat/main.ts",
+      "tests/link/std_postgres_async_release_closed_panic/main.ts",
+      "tests/link/std_postgres_async_release_panic/main.ts",
+      "tests/link/std_postgres_async_size_panic/main.ts",
+      "tests/link/tfb_async_entry/main.ts",
+    ]
+  ),
 ]
 
 /**

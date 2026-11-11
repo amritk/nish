@@ -4435,7 +4435,7 @@ for (const name of ["reject_hygiene_held"]) {
   )
 }
 
-// ---- A handle case reports exactly its own refusals (WP40 H1.1) -----------------------
+// ---- A handle case reports exactly its own refusals (WP53 H1.1) -----------------------
 // The same blind spot for the handle pass: each `.err` line names one refusal,
 // and the count says nothing else was found, so a check that starts firing
 // twice, or on a body it should skip (an arrow lifted out of its method), fails.
@@ -22221,7 +22221,7 @@ if (dealtHere("releaseChecks")) {
       ],
       [
         "ffi_buffer_late_load.ts",
-        // WP40 B1.2: the late load is pinned against a `pop` written inline in
+        // WP53 B1.2: the late load is pinned against a `pop` written inline in
         // a later argument, which shrinks the buffer after its length was read
         // for the count; its value is the argument, the `pop` divergence above.
         "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",

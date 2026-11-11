@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d absence: `f?.m()` is not a position for a handle.
+// WP53 H1.1, §4d absence: `f?.m()` is not a position for a handle.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

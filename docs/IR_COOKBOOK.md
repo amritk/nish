@@ -14815,7 +14815,7 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 ### `u8[]`: a buffer and its count
 
-A `u8[]` or `readonly u8[]` argument to a `declare function` (WP40 B1.2) is
+A `u8[]` or `readonly u8[]` argument to a `declare function` (WP53 B1.2) is
 its data pointer, `i8*`, read from the third field of the array header. The
 count after it is the declaration's word, so it is compared with the header's
 length before C runs: `icmp ule i64 %n, %len`, unsigned because the count is a
@@ -14937,7 +14937,7 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 ### `using` of a handle class: the close at every exit
 
-A class with a `CPtr` field is a handle class (WP40 H1.2), and a `using` of
+A class with a `CPtr` field is a handle class (WP53 H1.2), and a `using` of
 one closes it at every exit of its block, once. The object is the class's
 plain `%struct` on the stack, as a `using` of an arena or a lock is; it opens
 as soon as `new` returns, before anything after it runs. The close is the
@@ -19971,7 +19971,7 @@ Four things refuse the hoist, and each is the whole of a proof:
   fact (`cg_sec_hoist_new_resize`: `new P(xs)` pushes, `new Q(xs)` only
   reads and keeps it). A `declare function` is not such a call: C is handed
   an array's data pointer and never its header, so it cannot move `len` or
-  `data` (WP40 B1.3, `tests/cases/ffi_buffer_no_resize`);
+  `data` (WP53 B1.3, `tests/cases/ffi_buffer_no_resize`);
 - a store in the loop to a field named anywhere in the path (`h.xs = other`),
   since the hoisted value is a field load;
 - a path rooted at a local the loop itself declares, or at a reassignable one,

@@ -1,4 +1,4 @@
-// WP40 H1.1: a well-formed handle class (§4a D1-D5, F, R1, R2, L1, L2) and the
+// WP53 H1.1: a well-formed handle class (§4a D1-D5, F, R1, R2, L1, L2) and the
 // positions §4d allows it, as the checker sees them before any close is
 // lowered. The one `CPtr | null` field is `readonly` and written once by the
 // constructor from a `declare function`'s result (F); methods read it only as

@@ -78,8 +78,8 @@ export const main = (): void => {
 1. **The server must store it.** The program keeps a streaming response open
    across many wakes of its event loop. So the file it streams from has to sit
    in per-connection state, or in a table shared by every connection, from one
-   wake to the next. The only owned handle the language is building, WP40's
-   handle class ([wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md)
+   wake to the next. The only owned handle the language is building, WP53's
+   handle class ([wp53-ffi-buffers-handles.md](wp53-ffi-buffers-handles.md)
    §4d), deliberately cannot do that. It is bound only by `using`. It cannot
    be returned, stored in a field or an array, or captured, and "a handle
    cannot outlive the function that opens it". That is the right rule for an
@@ -89,7 +89,7 @@ export const main = (): void => {
    rule, `reject_thread_using_not_scope`). Only `nish/threads` may declare
    `[Symbol.dispose]` (`reject_thread_dispose_elsewhere`). A `using`-closed
    file would be a fourth disposal kind in `walkScopes` (`src/parallel.ts`)
-   and in the emitter's scope stack. WP40 H1 is building that kind now, for
+   and in the emitter's scope stack. WP53 H1 is building that kind now, for
    `CPtr`. Building a second, narrower one first means two sets of escape rules
    for one idea.
 3. **TypeScript must accept the program.** `npm run check` and the Node
@@ -115,7 +115,7 @@ What the plain integer gives up, said plainly:
 - **A forgotten `fileClose`** leaks until the process exits. The cap is the
   process's `RLIMIT_NOFILE`, past which `fileOpen` answers `-24` (`EMFILE`).
 
-An opaque `File` class on WP40's H1 can wrap these four builtins later, in
+An opaque `File` class on WP53's H1 can wrap these four builtins later, in
 `std/`, for a program whose file lives in one block. That is §9 Q5 and is not
 part of this package.
 
@@ -380,11 +380,11 @@ The owner accepted every recommendation on 2026-11-11.
 
 | # | Question | Recommendation | Decided |
 | --- | --- | --- | --- |
-| Q1 | **The handle's type**: a plain `i32` descriptor, or an opaque handle class? | `i32` (§2): the server must store the handle across wakes, and WP40's handle class cannot be stored | Decided: a plain `i32` descriptor |
+| Q1 | **The handle's type**: a plain `i32` descriptor, or an opaque handle class? | `i32` (§2): the server must store the handle across wakes, and WP53's handle class cannot be stored | Decided: a plain `i32` descriptor |
 | Q2 | **The names**: `fileOpen`, `fileReadAt`, `fileSize`, `fileClose`, or Node's `openSync`, `readSync`, `fstatSync`, `closeSync`? | the `file*` names. Node's names throw where these answer a number, so reusing them would give a global two meanings across the runtimes | Decided: the `file*` names |
 | Q3 | **Failure as a value**: the negated Linux errno over the fixed set of §3, or a bare `-1`? | the errno, as `nish:net` answers. A 404 and a 403 need `-2` and `-13` apart | Decided: the negated Linux errno over §3's set; any other code is `-5` |
 | Q4 | **Positional only**, or a cursor `fileRead` beside it? | positional only (§8) | Decided: positional only |
-| Q5 | **`using`**: once WP40 H1 lands, should `std/` offer a `File` class closed by `using` over these builtins, which needs H1 to accept an `i32` field closed by a builtin? Or does that stay out? | out of this package. Reopen it after H1 ships, with a program that wants it | Decided: no `File` class in this package |
+| Q5 | **`using`**: once WP53 H1 lands, should `std/` offer a `File` class closed by `using` over these builtins, which needs H1 to accept an `i32` field closed by a builtin? Or does that stay out? | out of this package. Reopen it after H1 ships, with a program that wants it | Decided: no `File` class in this package |
 | Q6 | **Regular files only**, or FIFOs, devices and stdin too? | regular files only (§3, §8). A pipe has no size and no position | Decided: regular files only |
 | Q7 | **Freestanding wasm**: refuse at check time on a `wasm32` target outside the wasi profile, with a `runtime-wasm.c` that defines the four as answering `-38` (`ENOSYS`) for the `--profile wasm` route? Or let that route fail at link time, as the whole-file builtins do today? And on WASI, is `ENOTCAPABLE` folded into `-13` (permission denied) or left as `-5`? It has no Linux number of its own (WASI's 76 is Linux's `ENOTUNIQ`) | refuse at check time, and answer `-38` on the freestanding route so the link never fails. `ENOTCAPABLE` stays `-5`: a path outside every preopen is a deployment bug, not a 403 | Decided: refused at check time on freestanding wasm; `runtime-wasm.c` answers `-38`; `ENOTCAPABLE` stays `-5` |
 | Q8 | **Capability of `fileSize` and `fileClose`**: `fs.read`, or `CAP_NONE`? | `fs.read` (§4) | Decided: `fs.read` |

@@ -4635,7 +4635,7 @@ The message of an error contains:
 …, and a declared C function takes scalars and `CPtr` only
 ```
 
-**Retired**: the `declare function` parameter rule that named scalars, `CPtr` and `string` only, before WP40 B1.1 let a `u8[]` buffer through; the live one is NL2555
+**Retired**: the `declare function` parameter rule that named scalars, `CPtr` and `string` only, before WP53 B1.1 let a `u8[]` buffer through; the live one is NL2555
 
 ## NL2323
 
@@ -10874,7 +10874,7 @@ The message of an error contains:
 `, and a call to a declared C function that takes a `u8[]` is not lowered yet: the declaration is checked, and the call waits for the release that passes the bytes and checks the count
 ```
 
-**Retired**: the refusal of a call to a `declare function` that takes a `u8[]`, from WP40 B1.1 until B1.2 lowered the call; the call passes `data` and holds the count to `len` now (tests/cases/ffi_buffer_call_sites, tests/cases/panics_ffi_length)
+**Retired**: the refusal of a call to a `declare function` that takes a `u8[]`, from WP53 B1.1 until B1.2 lowered the call; the call passes `data` and holds the count to `len` now (tests/cases/ffi_buffer_call_sites, tests/cases/panics_ffi_length)
 
 ## NL2555
 
@@ -11211,7 +11211,7 @@ The message of an error contains:
 ` is not lowered yet: until a release emits its close, hold the `CPtr` in a local and close it yourself
 ```
 
-**Retired**: the refusal of a `using` of a handle class, from WP40 H1.1 until H1.2 lowered its close; every exit of the block closes the handle now (tests/cases/ffi_handle_file, tests/cases/ffi_handle_exits)
+**Retired**: the refusal of a `using` of a handle class, from WP53 H1.1 until H1.2 lowered its close; every exit of the block closes the handle now (tests/cases/ffi_handle_file, tests/cases/ffi_handle_exits)
 
 ## NL2574
 

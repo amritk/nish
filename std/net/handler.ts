@@ -849,16 +849,11 @@ export class HttpHandler {
     if (conn.wantsWrite()) {
       this.sent += 1
     }
-    let wants: i32 = this.server.flush(slot)
+    // `flush` arms a held write for writing even once its send emptied the output.
+    const wants: i32 = this.server.flush(slot)
     if ((wants & H1_DONE) !== 0) {
       this.closeSlot(slot)
       return
-    }
-    if (conn.writeHeld) {
-      // A held write's `H1_WRITE` comes only from `next`, which `drive` runs
-      // on a writable socket. A send that emptied the output, as one `flush`
-      // makes after the peer has read, would otherwise arm nothing for it.
-      wants = wants | H1_WANT_WRITE
     }
     if (this.draining && this.current[slot] === -1 && !conn.wantsWrite()) {
       this.closeSlot(slot)

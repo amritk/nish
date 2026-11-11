@@ -566,12 +566,12 @@ export const emitForeignString = (
 }
 
 /**
- * WP40 B1.2: the `u8[]` and `readonly u8[]` arguments of the call `call` to the
+ * WP53 B1.2: the `u8[]` and `readonly u8[]` arguments of the call `call` to the
  * `declare function` `callee`, whose evaluated operands are `operands` and
  * `values`, lowered to the `i8*` C takes: the array's `data`, rewritten into
  * `operands` in place. Each is read here, after every argument is evaluated and
  * with nothing of the program's between the read and the call, because an
- * argument may push to the buffer and move its bytes (`docs/wp40-ffi-buffers-
+ * argument may push to the buffer and move its bytes (`docs/wp53-ffi-buffers-
  * handles.md` §3a).
  *
  * A buffer whose count is not proven (`foreignBufferCountProven`) is held

@@ -1,4 +1,4 @@
-// WP40 B1.2: `memcpy` takes a run of two buffers that one count closes, and
+// WP53 B1.2: `memcpy` takes a run of two buffers that one count closes, and
 // the count is checked against each. Counting `dst`'s own length proves
 // `dst`'s check and leaves `src`'s, which holds here: `src` is the longer.
 declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;

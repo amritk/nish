@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 35: the close takes exactly one argument, the pointer.
+// WP53 H1.1, Row 35: the close takes exactly one argument, the pointer.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

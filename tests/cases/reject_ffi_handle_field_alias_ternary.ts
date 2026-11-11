@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 16b: a ternary yielding the pointer would be another name for
+// WP53 H1.1, Row 16b: a ternary yielding the pointer would be another name for
 // it.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
