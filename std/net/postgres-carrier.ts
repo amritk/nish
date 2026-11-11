@@ -144,6 +144,7 @@ import {
 import { monotonicNanos, wallClockNanos } from "nish:process"
 import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
 import { TlsClient, TlsClientConfig } from "nish/net/tls/client"
+import { TLS_GROUP_SECP256R1, TLS_GROUP_X25519 } from "nish/net/tls/codec"
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client"
 import { TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_OPEN } from "nish/net/tls/record-server"
 import { TlsClientTrust, tlsClientTrust, tlsClientVerdict } from "nish/net/tls/verify"
@@ -1416,7 +1417,9 @@ const pgCarrierTrust = (path: string): TlsClientTrust => {
 /**
  * A TLS 1.3 client for `name`, offering ALPN `postgresql` as libpq does,
  * with fresh random and key shares; `TlsClient` copies the keys and zeroes
- * the arrays they came in.
+ * the arrays they came in. It offers secp256r1 beside x25519: a server
+ * before PostgreSQL 18 accepts only `ssl_ecdh_curve`, prime256v1 unless
+ * set, and asks for that share with a HelloRetryRequest.
  */
 const pgCarrierTlsStart = (name: string): TlsRecordClient => {
   const random: u8[] = new Array<u8>(PG_CARRIER_TLS_KEY_BYTES)
@@ -1425,5 +1428,7 @@ const pgCarrierTlsStart = (name: string): TlsRecordClient => {
   crypto.getRandomValues(random)
   crypto.getRandomValues(x25519)
   crypto.getRandomValues(p256)
-  return new TlsRecordClient(new TlsClient(new TlsClientConfig(name, ["postgresql"]), random, x25519, p256))
+  const config = new TlsClientConfig(name, ["postgresql"])
+  config.groups = [TLS_GROUP_X25519, TLS_GROUP_SECP256R1]
+  return new TlsRecordClient(new TlsClient(config, random, x25519, p256))
 }

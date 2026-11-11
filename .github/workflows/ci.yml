@@ -1547,7 +1547,9 @@ jobs:
   # tests/postgres/live/run.mjs prints a line a check and a summary that names
   # its skips, which must be none. The service's role and password are a
   # throwaway the job alone reaches; they match the names the expected
-  # outputs print, the same as the cluster run.mjs starts locally.
+  # outputs print, the same as the cluster run.mjs starts locally. The
+  # service speaks TLS with a leaf from a root made in the job, so the `tls`
+  # check can verify it and see it refused under another root or name.
   postgres-live:
     name: postgres-live
     runs-on: ubuntu-latest
@@ -1606,11 +1608,38 @@ jobs:
         timeout-minutes: 10
         run: npm run build
 
+      # A throwaway root and a leaf for 127.0.0.1 under it, copied into the
+      # service, which turns `ssl` on at a reload: the image takes no
+      # server options, and a service starts before the checkout.
+      - name: Turn TLS on in the PostgreSQL service
+        timeout-minutes: 2
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+          PG_TLS_DIR: ${{ runner.temp }}/pg-tls
+        run: |
+          bash tests/postgres/live/tls-certs.sh "$PG_TLS_DIR"
+          docker exec "$PG_CONTAINER" mkdir -p /var/lib/postgresql/tls
+          for f in server.pem server.key; do
+            docker cp "$PG_TLS_DIR/$f" "$PG_CONTAINER:/var/lib/postgresql/tls/$f"
+          done
+          docker exec "$PG_CONTAINER" chown -R postgres:postgres /var/lib/postgresql/tls
+          docker exec "$PG_CONTAINER" chmod 600 /var/lib/postgresql/tls/server.key
+          for sql in \
+            "alter system set ssl_cert_file = '/var/lib/postgresql/tls/server.pem'" \
+            "alter system set ssl_key_file = '/var/lib/postgresql/tls/server.key'" \
+            "alter system set ssl = on" \
+            "select pg_reload_conf()"; do
+            docker exec "$PG_CONTAINER" psql -U nish_live -d nish_live -v ON_ERROR_STOP=1 -qAt -c "$sql"
+          done
+          sleep 1
+          test "$(docker exec "$PG_CONTAINER" psql -U nish_live -d nish_live -qAt -c 'show ssl')" = on
+
       - name: The live PostgreSQL suite
         timeout-minutes: 5
         env:
           PG_TEST_URL: postgres://nish_live:nish-live@127.0.0.1:5432/nish_live
           PG_TEST_SOCKET_DIR: /tmp/nish-pg-socket
+          PG_TEST_TLS_DIR: ${{ runner.temp }}/pg-tls
         run: |
           set -o pipefail
           node tests/postgres/live/run.mjs | tee "$RUNNER_TEMP/postgres-live.log"
