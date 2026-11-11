@@ -9,7 +9,7 @@ answers, what a task may reach of the server's memory, and the test that pins
 each property. It is written with the code rather than after an audit, so
 that the audit of the HTTP application layer starts from evidence.
 
-Anchors are function names in `std/net/serve.ts` at `d6581983`, the last
+Anchors are function names in `std/net/serve.ts` at `4ddb78aa`, the last
 commit to change it on the head that merges this record.
 
 **Result.** The server adds no parser: the request line, the fields, the
@@ -24,8 +24,10 @@ an answer's body by `responseBytes`, its content type by 128 bytes.
 
 A task never writes past its slot's buffers and never stores its own memory
 into the server's: the spawn rule (`docs/LANGUAGE.md`, NL2609, NL2610,
-NL2615) refuses the program that would, and the task copies element by
-element. A response the program got wrong — a status outside 200 to 599, a
+NL2615) refuses the program that would. The task copies the request's head
+and body into arrays of its own with `copyBytes` (a copy out of the server's
+memory, which the rule allows) and its answer into its slot's buffer with
+`set`, which stores bytes, never a pointer. A response the program got wrong — a status outside 200 to 599, a
 body larger than `responseBytes`, a content type too long or holding a
 control byte — is answered 500, never sent as written, and never stops the
 server. Review before merge found one fault and fixed it with a test that

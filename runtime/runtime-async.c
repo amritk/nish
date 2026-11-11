@@ -46,7 +46,16 @@
  * (`F_DUPFD_CLOEXEC`) and the duplicate registered one-shot, so two tasks can
  * wait on one descriptor, and a program that closes the descriptor while a
  * task waits on it cannot have the registration answer for whatever the
- * number is reused for. The duplicate is closed when the wait fires.
+ * number is reused for. On Linux, a duplicate of an epoll, eventfd or timerfd
+ * descriptor (an anonymous inode: a served program's own poller) stays
+ * registered after its wait fires, disarmed by `EPOLLONESHOT`, and the next
+ * wait on the same descriptor re-arms it with `EPOLL_CTL_MOD`: adding an epoll
+ * descriptor to an epoll set walks every descriptor the inner set watches, so
+ * re-adding it per wait made each wait cost O(connections). A kept duplicate
+ * is reused only when `kcmp(KCMP_FILE)` says the descriptor still names the
+ * same open file, so a closed and reused number is registered afresh; it is
+ * closed when a wait on it expires or is cancelled. Any other duplicate is
+ * closed when the wait fires.
  *
  * **Regions.** Each spawned task owns a region (runtime-region.c), entered
  * whenever the task runs and freed when it finishes, so whatever a task

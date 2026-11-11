@@ -1,0 +1,11 @@
+the first wait: 1
+its duplicate stays open: yes
+a second wait duplicates nothing: yes
+the second wait: 1
+the number is reused: yes
+woken by: the timer
+the wait on the new set: -1
+after the new set's eventfd: 1
+a cancelled wait: 0
+its duplicate is closed: yes
+then nothing waits: yes
