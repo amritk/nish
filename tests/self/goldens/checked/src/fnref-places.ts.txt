@@ -3,6 +3,7 @@
 entry: src/fnref-places.ts src/checker.ts src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-region.ts src/ir.ts src/strings.ts src/map.ts src/program.ts src/region.ts src/branding.ts src/std-modules.ts src/paths.ts src/context.ts src/diagnostics.ts std/cli.ts src/codes.ts src/lexer.ts src/tokens.ts src/nodes.ts src/symbols.ts src/types.ts src/ice.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/builtins.ts src/arrays.ts src/simd.ts src/constants.ts src/async-check.ts src/expressions.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/emit-util.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/kernels.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/declarations.ts src/host-module.ts src/parser.ts src/options.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/visibility.ts src/target.ts src/parents.ts src/region-check.ts src/region-rules.ts src/members.ts src/fusion.ts src/fnrefs.ts src/module-storage.ts src/emit-shm-window.ts src/shm-window.ts src/emit-json.ts src/emit-async.ts src/capabilities.ts src/debug.ts src/emit-fnrefs.ts src/assignment.ts src/script.ts src/hygiene.ts src/statements.ts src/loop-flow.ts
 import checkSignatureBody from "./checker" -> function @checkSignatureBody
 import CheckContext from "./context" -> struct CheckContext
+import referenceTypeOf from "./fnrefs" -> function @referenceTypeOf
 import StringMap from "./map" -> struct StringMap
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
@@ -57,6 +58,7 @@ struct RefModule (class) size=40 align=8 exported
   field parents: ParentTable index=3 offset=24
   field nodeCount: i32 index=4 offset=32
   constructor -> @RefModule.constructor
+  method growTables -> @RefModule.growTables
 struct RefPass (class) size=200 align=8
   field table: TypeTable index=0 offset=0
   field members: FunctionSig[] index=1 offset=8
@@ -126,6 +128,16 @@ function RefModule.constructor(this: RefModule, program: CheckedProgram, ctx: Ch
   pointer file: size=40 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+function RefModule.growTables(this: RefModule): void -> @RefModule.growTables [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckedProgram.growTables
+  calls: CheckedProgram.growTables Instantiation.growTables
+  pointer this: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:5 CheckedProgram.growTables -> @CheckedProgram.growTables
+  local +1:16 sig: FunctionSig (const)
+  local +2:13 instance: Instantiation | null (const)
+  callee +4:9 Instantiation.growTables -> @Instantiation.growTables
 function RefPass.constructor(this: RefPass, table: TypeTable, first: CheckedProgram): void -> @RefPass.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: first table
@@ -544,21 +556,10 @@ function storeText(pass: RefPass, modules: RefModule[], s: i32): string -> @stor
   local +21:9 file: string (const)
   callee +21:16 basename -> @basename
   callee +22:34 SourceFile.lineOf -> @SourceFile.lineOf
-function referenceType(table: TypeTable, sig: FunctionSig): i32 -> @referenceType
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via TypeTable.fnRefOf
-  calls: FunctionSig.writtenArity TypeTable.fnRefOf nish_array_grow nish_panic_index
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.fnRefOf#0
-  pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0
-  stackSites=1 stackLocals=1
-  local +0:9 params: i32[] (const)
-  local +1:7 i: i32 (let)
-  callee +2:14 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  callee +6:10 TypeTable.fnRefOf -> @TypeTable.fnRefOf
 function numberMembers(pass: RefPass, modules: RefModule[]): void -> @numberMembers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: FunctionSig.definedIn TypeTable.refOf nish_array_grow nish_panic_index nish_panic_overflow referenceType
+  calls: FunctionSig.definedIn TypeTable.refOf nish_array_grow nish_panic_index nish_panic_overflow referenceTypeOf
   pointer pass: size=200 writesThrough=false captured=false
   pointer modules: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -571,7 +572,7 @@ function numberMembers(pass: RefPass, modules: RefModule[]): void -> @numberMemb
   local -18:22 held: FunctionSig (const)
   local -12:17 at: i32 (let)
   local -1:16 sig: FunctionSig (const)
-  callee +1:29 referenceType -> @referenceType
+  callee +1:29 referenceTypeOf -> @referenceTypeOf
   local +6:7 k: i32 (let)
   local +8:9 tag: i32 (let)
   local +9:9 j: i32 (let)
@@ -632,64 +633,61 @@ function makeDispatcher(table: TypeTable, module: RefModule, name: string, type:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=200
   sharedWrite: +0:5
   escaping: name type
-  calls: Builder.arm Builder.constructor Builder.empty Builder.ident Builder.node CheckedProgram.growTables FunctionBindings.add FunctionBindings.constructor FunctionSig.constructor Instantiation.growTables Local.constructor Scope.constructor Scope.declare TypeTable.fnRefParamsOf TypeTable.fnRefResultOf checkSignatureBody nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
+  calls: Builder.arm Builder.constructor Builder.empty Builder.ident Builder.node FunctionBindings.add FunctionBindings.constructor FunctionSig.constructor Local.constructor RefModule.growTables Scope.constructor Scope.declare TypeTable.fnRefParamsOf TypeTable.fnRefResultOf checkSignatureBody nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
   pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.fnRefParamsOf#0 TypeTable.fnRefResultOf#0
-  pointer module: size=40 writesThrough=true captured=true passedTo=Builder.constructor#1
+  pointer module: size=40 writesThrough=true captured=true passedTo=Builder.constructor#1 RefModule.growTables#0
   pointer members: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local -84:9 build: Builder (const)
-  callee -84:17 new Builder -> @Builder.constructor
-  local -83:9 params: i32[] (const)
-  callee -83:18 TypeTable.fnRefParamsOf -> @TypeTable.fnRefParamsOf
-  local -82:9 returnType: i32 (const)
-  callee -82:22 TypeTable.fnRefResultOf -> @TypeTable.fnRefResultOf
-  local -81:9 paramNodes: Node[] (const)
-  callee -81:31 Builder.node -> @Builder.node
-  callee -81:56 Builder.ident -> @Builder.ident
-  callee -81:75 Builder.empty -> @Builder.empty
-  local -80:7 i: i32 (let)
-  callee -78:21 Builder.node -> @Builder.node
-  callee -78:46 Builder.ident -> @Builder.ident
-  callee -78:69 Builder.empty -> @Builder.empty
-  local -75:9 statements: Node[] (const)
-  local -73:16 statement: Node (const)
-  callee -73:29 Builder.arm -> @Builder.arm
-  local -69:11 clauses: Node[] (const)
-  local -68:9 k: i32 (let)
-  local -66:13 arm: Node (const)
-  callee -66:19 Builder.arm -> @Builder.arm
-  callee -64:22 Builder.node -> @Builder.node
-  local -62:15 none: Node[] (const)
-  local -61:15 label: Node (const)
-  callee -61:23 Builder.node -> @Builder.node
-  callee -60:22 Builder.node -> @Builder.node
-  callee -56:21 Builder.node -> @Builder.node
-  callee -56:47 Builder.ident -> @Builder.ident
-  callee -56:66 Builder.node -> @Builder.node
-  local -54:9 typeParams: Node[] (const)
-  local -53:9 arrow: Node (const)
-  callee -53:17 Builder.node -> @Builder.node
-  callee -52:5 Builder.empty -> @Builder.empty
-  callee -51:5 Builder.node -> @Builder.node
-  callee -50:5 Builder.empty -> @Builder.empty
-  callee -49:5 Builder.node -> @Builder.node
-  callee -48:5 Builder.node -> @Builder.node
-  local -46:9 ctx: CheckContext (const)
-  local -45:9 fn: FunctionSig (const)
-  callee -45:14 new FunctionSig -> @FunctionSig.constructor
-  local -40:14 member: FunctionSig (const)
-  local -37:9 scope: Scope (const)
-  callee -37:17 new Scope -> @Scope.constructor
-  local -36:9 tag: Local (const)
-  callee -36:15 new Local -> @Local.constructor
-  callee -35:3 Scope.declare -> @Scope.declare
-  local -30:11 local: Local (const)
-  callee -30:19 new Local -> @Local.constructor
-  callee -29:5 Scope.declare -> @Scope.declare
-  callee -24:3 CheckedProgram.growTables -> @CheckedProgram.growTables
-  local -23:14 sig: FunctionSig (const)
-  local -22:11 instance: Instantiation | null (const)
-  callee -20:7 Instantiation.growTables -> @Instantiation.growTables
+  local -78:9 build: Builder (const)
+  callee -78:17 new Builder -> @Builder.constructor
+  local -77:9 params: i32[] (const)
+  callee -77:18 TypeTable.fnRefParamsOf -> @TypeTable.fnRefParamsOf
+  local -76:9 returnType: i32 (const)
+  callee -76:22 TypeTable.fnRefResultOf -> @TypeTable.fnRefResultOf
+  local -75:9 paramNodes: Node[] (const)
+  callee -75:31 Builder.node -> @Builder.node
+  callee -75:56 Builder.ident -> @Builder.ident
+  callee -75:75 Builder.empty -> @Builder.empty
+  local -74:7 i: i32 (let)
+  callee -72:21 Builder.node -> @Builder.node
+  callee -72:46 Builder.ident -> @Builder.ident
+  callee -72:69 Builder.empty -> @Builder.empty
+  local -69:9 statements: Node[] (const)
+  local -67:16 statement: Node (const)
+  callee -67:29 Builder.arm -> @Builder.arm
+  local -63:11 clauses: Node[] (const)
+  local -62:9 k: i32 (let)
+  local -60:13 arm: Node (const)
+  callee -60:19 Builder.arm -> @Builder.arm
+  callee -58:22 Builder.node -> @Builder.node
+  local -56:15 none: Node[] (const)
+  local -55:15 label: Node (const)
+  callee -55:23 Builder.node -> @Builder.node
+  callee -54:22 Builder.node -> @Builder.node
+  callee -50:21 Builder.node -> @Builder.node
+  callee -50:47 Builder.ident -> @Builder.ident
+  callee -50:66 Builder.node -> @Builder.node
+  local -48:9 typeParams: Node[] (const)
+  local -47:9 arrow: Node (const)
+  callee -47:17 Builder.node -> @Builder.node
+  callee -46:5 Builder.empty -> @Builder.empty
+  callee -45:5 Builder.node -> @Builder.node
+  callee -44:5 Builder.empty -> @Builder.empty
+  callee -43:5 Builder.node -> @Builder.node
+  callee -42:5 Builder.node -> @Builder.node
+  local -40:9 ctx: CheckContext (const)
+  local -39:9 fn: FunctionSig (const)
+  callee -39:14 new FunctionSig -> @FunctionSig.constructor
+  local -34:14 member: FunctionSig (const)
+  local -31:9 scope: Scope (const)
+  callee -31:17 new Scope -> @Scope.constructor
+  local -30:9 tag: Local (const)
+  callee -30:15 new Local -> @Local.constructor
+  callee -29:3 Scope.declare -> @Scope.declare
+  local -24:11 local: Local (const)
+  callee -24:19 new Local -> @Local.constructor
+  callee -23:5 Scope.declare -> @Scope.declare
+  callee -18:3 RefModule.growTables -> @RefModule.growTables
   local -16:11 bindings: FunctionBindings (const)
   callee -16:22 new FunctionBindings -> @FunctionBindings.constructor
   local -15:9 k: i32 (let)
@@ -733,57 +731,54 @@ function shapeReferenceCalls(program: CheckedProgram, written: boolean): void ->
 function resolveReferences(table: TypeTable, modules: RefModule[]): boolean -> @resolveReferences [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: Builder.constructor Builder.ident CheckedProgram.growTables FunctionSig.definedIn Instantiation.growTables ParentTable.link RefPass.constructor RefPass.enter RefPass.solve RefPass.storeOf RefPass.walkFunction RefPass.walkModule StringMap.constructor StringMap.get StringMap.set TypeTable.fnRefMangle exposeMember makeDispatcher nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 nish_str_new numberMembers storeText
+  calls: Builder.constructor Builder.ident FunctionSig.definedIn ParentTable.link RefModule.growTables RefPass.constructor RefPass.enter RefPass.solve RefPass.storeOf RefPass.walkFunction RefPass.walkModule StringMap.constructor StringMap.get StringMap.set TypeTable.fnRefMangle exposeMember makeDispatcher nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 nish_str_new numberMembers storeText
   pointer table: size=112 writesThrough=true captured=true passedTo=RefPass.constructor#1 TypeTable.fnRefMangle#0 makeDispatcher#0
   pointer modules: size=0 writesThrough=false captured=false passedTo=numberMembers#1 storeText#1
   stackSites=7 stackLocals=7
-  local -89:7 any: boolean (let)
-  local -88:14 module: RefModule (const)
-  local -84:16 sig: FunctionSig | null (const)
-  local -75:9 pass: RefPass (const)
-  callee -75:16 new RefPass -> @RefPass.constructor
-  callee -74:3 numberMembers -> @numberMembers
-  local -73:7 m: i32 (let)
-  local -71:11 module: RefModule (const)
-  callee -70:5 RefPass.enter -> @RefPass.enter
-  callee -69:5 RefPass.walkModule -> @RefPass.walkModule
-  local -67:16 sig: FunctionSig (const)
-  callee -66:11 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee -65:9 RefPass.enter -> @RefPass.enter
-  callee -64:9 RefPass.walkFunction -> @RefPass.walkFunction
-  callee -59:3 RefPass.solve -> @RefPass.solve
-  local -57:9 dispatchers: StringMap (const)
-  callee -57:23 new StringMap -> @StringMap.constructor
-  local -56:9 made: FunctionSig[] (const)
-  local -55:9 rewritten: Node[] (const)
-  local -54:7 s: i32 (let)
-  local -52:11 call: Node (const)
-  local -51:11 module: RefModule (const)
-  local -50:11 place: i32 (const)
-  local -49:11 type: i32 (const)
-  local -48:11 members: FunctionSig[] (const)
-  local -47:11 parts: string[] (const)
-  local -46:16 k: i32 (const)
-  local -42:11 key: string (const)
-  local -41:9 index: i32 (let)
-  callee -41:17 StringMap.get -> @StringMap.get
-  local -39:13 name: string (const)
-  callee -39:51 TypeTable.fnRefMangle -> @TypeTable.fnRefMangle
-  local -38:18 member: FunctionSig (const)
-  callee -37:9 exposeMember -> @exposeMember
-  callee -35:17 makeDispatcher -> @makeDispatcher
-  callee -33:7 StringMap.set -> @StringMap.set
-  local -31:11 dispatcher: FunctionSig (const)
-  local -25:13 build: Builder (const)
-  callee -25:21 new Builder -> @Builder.constructor
-  local -24:13 callee: Node (const)
-  callee -24:22 Builder.ident -> @Builder.ident
-  local -23:13 args: Node[] (const)
-  local -22:18 arg: Node (const)
-  callee -16:5 CheckedProgram.growTables -> @CheckedProgram.growTables
-  local -15:16 sig: FunctionSig (const)
-  local -14:13 instance: Instantiation | null (const)
-  callee -12:9 Instantiation.growTables -> @Instantiation.growTables
+  local -83:7 any: boolean (let)
+  local -82:14 module: RefModule (const)
+  local -78:16 sig: FunctionSig | null (const)
+  local -69:9 pass: RefPass (const)
+  callee -69:16 new RefPass -> @RefPass.constructor
+  callee -68:3 numberMembers -> @numberMembers
+  local -67:7 m: i32 (let)
+  local -65:11 module: RefModule (const)
+  callee -64:5 RefPass.enter -> @RefPass.enter
+  callee -63:5 RefPass.walkModule -> @RefPass.walkModule
+  local -61:16 sig: FunctionSig (const)
+  callee -60:11 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee -59:9 RefPass.enter -> @RefPass.enter
+  callee -58:9 RefPass.walkFunction -> @RefPass.walkFunction
+  callee -53:3 RefPass.solve -> @RefPass.solve
+  local -51:9 dispatchers: StringMap (const)
+  callee -51:23 new StringMap -> @StringMap.constructor
+  local -50:9 made: FunctionSig[] (const)
+  local -49:9 rewritten: Node[] (const)
+  local -48:7 s: i32 (let)
+  local -46:11 call: Node (const)
+  local -45:11 module: RefModule (const)
+  local -44:11 place: i32 (const)
+  local -43:11 type: i32 (const)
+  local -42:11 members: FunctionSig[] (const)
+  local -41:11 parts: string[] (const)
+  local -40:16 k: i32 (const)
+  local -36:11 key: string (const)
+  local -35:9 index: i32 (let)
+  callee -35:17 StringMap.get -> @StringMap.get
+  local -33:13 name: string (const)
+  callee -33:51 TypeTable.fnRefMangle -> @TypeTable.fnRefMangle
+  local -32:18 member: FunctionSig (const)
+  callee -31:9 exposeMember -> @exposeMember
+  callee -29:17 makeDispatcher -> @makeDispatcher
+  callee -27:7 StringMap.set -> @StringMap.set
+  local -25:11 dispatcher: FunctionSig (const)
+  local -19:13 build: Builder (const)
+  callee -19:21 new Builder -> @Builder.constructor
+  local -18:13 callee: Node (const)
+  callee -18:22 Builder.ident -> @Builder.ident
+  local -17:13 args: Node[] (const)
+  local -16:18 arg: Node (const)
+  callee -10:5 RefModule.growTables -> @RefModule.growTables
   local -6:11 via: string[] (const)
   local -5:16 k: i32 (const)
   local -4:13 store: i32 (const)
