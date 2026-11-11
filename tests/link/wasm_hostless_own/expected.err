@@ -1,0 +1,1 @@
+error: `getenv` reaches the operating system, and a wasm32 build has none to reach — the chain that reaches it: main.ts:7:17 calls getenv

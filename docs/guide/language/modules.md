@@ -204,3 +204,14 @@ so it is checked and optimised exactly as your own code is. Its
 - A program compiles one copy of each package. If two of your dependencies
   bring in two different copies of `hash`, the compiler refuses the second and
   names both directories.
+- An error inside a package's own source says so, under the excerpt, with the
+  package's version, so you know to upgrade it, pin another version or report
+  it upstream rather than look in your own code; under `--json` the object
+  carries the package's name in `package`:
+
+  ```text
+  node_modules/pkg_broken/src/index.ts:2:39: error: Return type mismatch: function returns i32 but expression is string
+    2 | export const twice = (n: i32): i32 => `${n * 2}`;
+      |                                       ^~~~~~~~~~
+    = note: this is in the dependency `pkg_broken` 0.3.1, not in this program's own source
+  ```
