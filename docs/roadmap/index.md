@@ -18,7 +18,7 @@ kept here, and a pull request that lands a stage ticks its box.
 
 ## Up next
 
-In order, as of 2026-11-10. Each package's page says what its next stage is
+In order, as of 2026-11-11. Each package's page says what its next stage is
 and where it is specified.
 
 1. [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): meet stage 6's gate.
@@ -30,6 +30,7 @@ and where it is specified.
 7. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
 8. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
 9. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
+10. [WP44: Streaming file reads](wp44-streaming-files.md): F3, the HTTP example with flat memory.
 
 [WP34: Hosting cs: the network stack](wp34-hosting-cs.md)'s remaining waves are in the cs repository.
 
@@ -39,7 +40,6 @@ and where it is specified.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
 - [WP27: Calling C](wp27-ffi.md): whether S4 (C structs) and S5 (`errno`) happen at all.
 - [WP28: Compatibility mode](wp28-compatibility-mode.md): whether to accept compatibility mode, and its open questions.
-- [WP44: Streaming file reads](wp44-streaming-files.md): its nine questions.
 - [WP48: Compressed 32-bit references](wp48-compressed-references.md): the recommendation to build neither design.
 - [WP51: References to capture-free top-level functions](wp51-function-references.md): the recommendation, strict with per-place sets, the escape-join refusal and no tag check in a speed build.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
@@ -70,10 +70,10 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP38: SIMD](wp38-simd.md) | In progress | 8 of 10 |
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 12 of 27 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
+| [WP44: Streaming file reads](wp44-streaming-files.md) | In progress | 3 of 4 |
 | [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md) | In progress | 3 of 4 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | Proposed | 2 of 13 |
-| [WP44: Streaming file reads](wp44-streaming-files.md) | Proposed | 0 of 4 |
 | [WP48: Compressed 32-bit references](wp48-compressed-references.md) | Proposed | 1 of 4 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | Proposed | 1 of 4 |
 
