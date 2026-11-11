@@ -16,6 +16,7 @@
 
 import { checkSignatureBody } from "./checker"
 import { CheckContext } from "./context"
+import { referenceTypeOf } from "./fnrefs"
 import { StringMap } from "./map"
 import {
   N_ARRAY,
@@ -77,6 +78,17 @@ export class RefModule {
     this.file = file
     this.parents = parents
     this.nodeCount = nodeCount
+  }
+
+  /** Grow the module's node tables, and each generic instance's, to cover the nodes the pass added. */
+  growTables(): void {
+    this.program.growTables(this.nodeCount)
+    for (const sig of this.program.functions) {
+      const instance = sig.instance
+      if (instance !== null) {
+        instance.growTables(this.nodeCount)
+      }
+    }
   }
 }
 
@@ -144,9 +156,9 @@ class RefPass {
 
   /**
    * The reference type `node`'s value holds: its own, or the one under a
-   * nullable or a maybe such as `Map.get`'s `Op | undefined`; -1 for any other value. A
-   * nullable reference is followed as the reference it holds, so a place it
-   * reaches is not left empty.
+   * nullable or a maybe such as `Map.get`'s `Op | undefined`; -1 for any
+   * other value. A nullable reference is followed as the reference it holds,
+   * so a place it reaches is not left empty.
    */
   refType(node: Node): i32 {
     const type = this.typeOf(node)
@@ -729,17 +741,6 @@ const storeText = (pass: RefPass, modules: RefModule[], s: i32): string => {
   return `\`${text}\` (${file}:${source.lineOf(node.start)})`
 }
 
-/** A function's reference type: the signature as the caller writes it. */
-const referenceType = (table: TypeTable, sig: FunctionSig): i32 => {
-  const params: i32[] = []
-  let i = 0
-  while (i < sig.writtenArity()) {
-    params.push(sig.paramTypes[i])
-    i = i + 1
-  }
-  return table.fnRefOf(params, sig.returnType)
-}
-
 /** Number the functions named in a value position: by module, then by where each is declared. */
 const numberMembers = (pass: RefPass, modules: RefModule[]): void => {
   for (const module of modules) {
@@ -767,7 +768,7 @@ const numberMembers = (pass: RefPass, modules: RefModule[]): void => {
     }
     for (const sig of found) {
       pass.members.push(sig)
-      pass.memberTypes.push(referenceType(pass.table, sig))
+      pass.memberTypes.push(referenceTypeOf(pass.table, sig))
       sig.refTag = pass.members.length
     }
   }
@@ -909,13 +910,7 @@ const makeDispatcher = (
     fn.paramTypes.push(params[i])
     i = i + 1
   }
-  module.program.growTables(module.nodeCount)
-  for (const sig of module.program.functions) {
-    const instance = sig.instance
-    if (instance !== null) {
-      instance.growTables(module.nodeCount)
-    }
-  }
+  module.growTables()
   if (members.length > 0) {
     const bindings = new FunctionBindings()
     let k = 0
@@ -1017,6 +1012,16 @@ export const shapeReferenceCalls = (program: CheckedProgram, written: boolean): 
   }
 }
 
+/**
+ * Resolve every function reference of the program: number the functions named
+ * as values, walk each module for the places references reach, solve those
+ * places, and rewrite each call through a reference into a call of the
+ * dispatcher for its module and member set.
+ *
+ * @param table The program's type table.
+ * @param modules Every module of the program, in compile order.
+ * @returns Whether any reference exists, so dispatchers were made.
+ */
 export const resolveReferences = (table: TypeTable, modules: RefModule[]): boolean => {
   let any = false
   for (const module of modules) {
@@ -1091,13 +1096,7 @@ export const resolveReferences = (table: TypeTable, modules: RefModule[]): boole
       call.children[0] = callee
       call.children[1].children = args
     }
-    module.program.growTables(module.nodeCount)
-    for (const sig of module.program.functions) {
-      const instance = sig.instance
-      if (instance !== null) {
-        instance.growTables(module.nodeCount)
-      }
-    }
+    module.growTables()
     pass.siteTables[s][call.id] = dispatcher
     // What the diagnostics after the attribute fixpoint name (§2.2): the
     // callee as written and where each member came into its place.

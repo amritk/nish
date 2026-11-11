@@ -126,18 +126,24 @@ export const functionReference = (ctx: CheckContext, expr: Node): i32 => {
     return ctx.errorType(expr, partialReferenceMessage(name, sig.restIndex >= 0))
   }
   ctx.program.nodeFnRefs[expr.id] = sig
-  return referenceTypeOf(ctx, sig)
+  return referenceTypeOf(ctx.table, sig)
 }
 
-/** The reference type of `sig`'s signature. */
-const referenceTypeOf = (ctx: CheckContext, sig: FunctionSig): i32 => {
+/**
+ * The reference type of `sig`'s signature, as a caller writes it.
+ *
+ * @param table The type table the reference type is interned in.
+ * @param sig The function the reference names.
+ * @returns The interned function-reference type.
+ */
+export const referenceTypeOf = (table: TypeTable, sig: FunctionSig): i32 => {
   const params: i32[] = []
   let i = 0
   while (i < sig.writtenArity()) {
     params.push(sig.paramTypes[i])
     i = i + 1
   }
-  return ctx.table.fnRefOf(params, sig.returnType)
+  return table.fnRefOf(params, sig.returnType)
 }
 
 /**
