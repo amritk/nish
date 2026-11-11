@@ -9,7 +9,7 @@
 
 ## Next
 
-Nothing: WP32 has landed.
+Nothing scheduled. Any unchecked item is deferred; the note says what would reopen it.
 
 ## Not planned
 
