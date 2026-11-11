@@ -238,6 +238,7 @@ cases/fnarg_forward added after R6: no rewriter to freeze it with
 cases/fnarg_generic added after R6: no rewriter to freeze it with
 cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
 cases/fnarg_named added after R6: no rewriter to freeze it with
+cases/fnref_arg added after R6: no rewriter to freeze it with
 cases/fnref_array added after R6: no rewriter to freeze it with
 cases/fnref_array_callback added after R6: no rewriter to freeze it with
 cases/fnref_capture added after R6: no rewriter to freeze it with
@@ -250,7 +251,13 @@ cases/fnref_eq added after R6: no rewriter to freeze it with
 cases/fnref_escape_join added after R6: no rewriter to freeze it with
 cases/fnref_field added after R6: no rewriter to freeze it with
 cases/fnref_generic added after R6: no rewriter to freeze it with
+cases/fnref_map added after R6: no rewriter to freeze it with
+cases/fnref_map_array added after R6: no rewriter to freeze it with
+cases/fnref_map_nullable added after R6: no rewriter to freeze it with
+cases/fnref_nullable added after R6: no rewriter to freeze it with
 cases/fnref_place_set added after R6: no rewriter to freeze it with
+cases/fnref_place_set_arg added after R6: no rewriter to freeze it with
+cases/fnref_place_set_nullable added after R6: no rewriter to freeze it with
 cases/fnref_row_assign added after R6: no rewriter to freeze it with
 cases/fnref_row_generic_class added after R6: no rewriter to freeze it with
 cases/fnref_row_index_store added after R6: no rewriter to freeze it with

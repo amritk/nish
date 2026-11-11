@@ -1284,7 +1284,10 @@ program, do.
    `F | null` needs a null test first (NL2740). A `Map` value is the element
    place of the `Map`'s value array, so no new place kind was needed; a call
    whose result has no place, `Map.get`, dispatches over every function of the
-   type, which is sound and less precise. A function-type `Map` key stays
+   type, which is sound and less precise: a `Map` whose type also has a
+   function that keeps `p` makes that call a mixed set, refused by NL2736
+   (`reject_fnref_place_set_map`), where an array of the same functions
+   compiles (`fnref_place_set_nullable`, `fnref_place_set_arg`). A function-type `Map` key stays
    refused (`reject_fnref_map_key`), and NL2738 is retired.
 3. **Stage 3 — capture-free arrows in value position**, lifted to a generated
    top-level function and then a reference. Capturing arrows stay refused.

@@ -3698,7 +3698,9 @@ export const main = (): void => {
   (NL2736, `reject_fnref_escape_join`, `fnref_escape_join`). A call whose
   result has no place of its own, `Map.get` among them, can hold every
   function of its type, so a call through what it returns dispatches over all
-  of them (`fnref_map`). A set past
+  of them (`fnref_map`); where one of them keeps a pointer argument the
+  others leave alone, that call is the mixed set above and refused
+  (`reject_fnref_place_set_map`). A set past
   eight members is warning NL9017, a `switch` where a direct call would not
   branch (`tests/wordings/nl9017_fnref_wide_set`). Under `--profile debug` the
   dispatcher first checks that the tag is in its set and panics with

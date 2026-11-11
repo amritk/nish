@@ -3681,6 +3681,14 @@ if (selects("fnref", "fnref_debug_check")) {
     peakOf("place_set_1x", scaled("fnref_place_set", 9, 1000)),
     peakOf("place_set_10x", scaled("fnref_place_set", 9, 10000))
   )
+  // WP51 stage 2: the same loop through an argument and a nullable element.
+  for (const variant of ["arg", "nullable"]) {
+    flat(
+      `fnref_place_set_${variant}: 10x the loop peaks where 1x does`,
+      peakOf(`place_set_${variant}_1x`, scaled(`fnref_place_set_${variant}`, 9, 1000)),
+      peakOf(`place_set_${variant}_10x`, scaled(`fnref_place_set_${variant}`, 9, 10000))
+    )
+  }
   const keepless = (t) => t.replace(/\n\s*sum = sum \+ slot\.use\(new P\(i\), k\)/, "")
   flat(
     "fnref_escape_join: 10x the loop through the set that keeps nothing peaks where 1x does",

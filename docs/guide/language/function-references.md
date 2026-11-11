@@ -208,6 +208,10 @@ export const main = (): i32 => {
 };
 ```
 
+If one of those functions keeps an argument and another does not, a call
+through `get` is refused (NL2736): keep such functions in an array instead,
+whose elements the compiler follows one place at a time.
+
 A reference cannot be a `Map` key.
 
 ## As a function argument

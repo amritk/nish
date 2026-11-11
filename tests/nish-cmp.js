@@ -1342,11 +1342,13 @@ const DECLARED = [
     "tests/cases/fnref_map.ts",
     "tests/cases/fnref_map_array.ts",
     "tests/cases/fnref_map_nullable.ts",
+    "tests/cases/fnref_place_set_arg.ts",
+    "tests/cases/fnref_place_set_nullable.ts",
   ].map((program) => ({
     program,
     file: "exit",
-    changelog: "A Map value may be a function reference",
-    why: "the 0.38.0 seed refuses a function type outside a parameter, and a Map value is one, so only the candidate compiles the program (WP51 stage 2)",
+    changelog: "references as arguments",
+    why: "the 0.38.0 seed refuses a function type outside a parameter, which a Map value, an element and a nullable reference are, so only the candidate compiles the program (WP51 stage 2)",
   })),
   {
     program: "tests/cases/obj_spread_class.ts",
