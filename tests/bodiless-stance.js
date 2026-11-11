@@ -19,7 +19,14 @@
  * helper that sets the facts itself and answers an empty stance beside them,
  * or a call site that drops the answer; this file refuses both, by reading
  * the source as `tests/capabilities.js` does. A shape it cannot read is a
- * failure, so a refactor cannot quietly turn it off.
+ * failure, so a refactor cannot quietly turn it off. What slips past it
+ * anyway fails closed: `collectFacts` gives an instance on `needsStance`'s
+ * list that stated no stance the unknown one, which a task is refused for
+ * (`tests/run.js`'s "bodiless" section pins that on the compiler).
+ *
+ * A bodiless helper is named `mark*` (a capital after it) and declared in the
+ * section; that name is how rules 1 and 3 find it, so a helper named
+ * otherwise is checked by rule 2 and the fallback only.
  *
  *   1. Every `const mark* =` between "What a bodiless instance states" and
  *      "The fixpoint" answers `BodilessStance`.
@@ -28,6 +35,9 @@
  *      `resizesArray`).
  *   3. Every call of one of those helpers in the file is the argument of
  *      `applyStance(facts, ...)`.
+ *   4. Every predicate `src/emit.ts`'s function-body dispatch asks (the
+ *      `if (pred(` chain before the walked block) is asked by `needsStance`,
+ *      so an emitter-written body cannot miss the fallback.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -37,7 +47,11 @@ const at = process.argv.indexOf("--src")
 const srcDir = at >= 0 ? path.resolve(process.argv[at + 1]) : path.join(root, "src")
 
 const SECTION_START = "// ---- What a bodiless instance states"
-const SECTION_END = "// ---- The fixpoint"
+// The whole rule line, matched after the start, so a mention of the fixpoint
+// in a comment or another banner cannot end the section early.
+const SECTION_END = /^\/\/ ---- The fixpoint -+$/m
+const DISPATCH_START = "has a body only the emitter can write"
+const DISPATCH_END = "} else if (body.kind === N_BLOCK) {"
 const STANCE_FACTS =
   /\.(writesThrough|writesShared|writesReach|writesDeep|captured|outlives|polluted|resizesArray)\s*=[^=]/
 const WRITERS = new Set(["applyParamStance", "applyStance"])
@@ -54,15 +68,34 @@ const declarations = (section) => {
   return out
 }
 
-/** The problems with one copy of `src/attributes.ts`'s text. */
-const check = (text) => {
+/** The problems with one copy of `src/attributes.ts`'s text and `src/emit.ts`'s. */
+const check = (text, emit) => {
   const problems = []
   const start = text.indexOf(SECTION_START)
-  const end = text.indexOf(SECTION_END)
-  if (start < 0 || end < 0 || end < start) {
-    return [`cannot find the "${SECTION_START}" section ending at "${SECTION_END}"`]
+  const endMatch = start < 0 ? null : SECTION_END.exec(text.slice(start))
+  if (start < 0 || endMatch === null) {
+    return [`cannot find the "${SECTION_START}" section ending at "${SECTION_END.source}"`]
   }
+  const end = start + endMatch.index
   const decls = declarations(text.slice(start, end))
+  const needs = decls.find((d) => d.name === "needsStance")
+  const dStart = emit.indexOf(DISPATCH_START)
+  const dEnd = dStart < 0 ? -1 : emit.indexOf(DISPATCH_END, dStart)
+  if (needs === undefined) {
+    problems.push("the section declares no needsStance (rule 4)")
+  } else if (dStart < 0 || dEnd < 0) {
+    problems.push(`cannot find src/emit.ts's body dispatch between "${DISPATCH_START}" and "${DISPATCH_END}"`)
+  } else {
+    const preds = [...emit.slice(dStart, dEnd).matchAll(/if \((\w+)\(/g)].map((m) => m[1])
+    if (preds.length === 0) {
+      problems.push("src/emit.ts's body dispatch asks no predicate this can read (rule 4)")
+    }
+    for (const pred of preds) {
+      if (!new RegExp(`\\b${pred}\\(`).test(needs.text)) {
+        problems.push(`needsStance: does not ask ${pred}, which src/emit.ts writes a body for (rule 4)`)
+      }
+    }
+  }
   const helpers = decls.filter((d) => /^mark[A-Z]/.test(d.name))
   if (helpers.length === 0) {
     return ["the section declares no mark* helper"]
@@ -102,6 +135,7 @@ const check = (text) => {
 }
 
 const live = fs.readFileSync(path.join(srcDir, "attributes.ts"), "utf8")
+const liveEmit = fs.readFileSync(path.join(srcDir, "emit.ts"), "utf8")
 
 if (process.argv.includes("--self-test")) {
   // Each mutant is one way a helper could forget its stance; each must fail.
@@ -125,9 +159,17 @@ if (process.argv.includes("--self-test")) {
       "a call that drops the stance",
       ["applyStance(facts, markChannelSend(facts))", "markChannelSend(facts)"],
     ],
+    ["a fallback list that misses an emitter-written body", ["  isLockMethod(sig)\n", "  false\n"]],
+    [
+      "a helper hidden below a mention of the fixpoint",
+      [
+        "const markLock = (facts: FunctionFacts): BodilessStance =>",
+        "// ---- The fixpoint walk reads these.\nconst markLock = (facts: FunctionFacts): void =>",
+      ],
+    ],
   ]
   let failed = 0
-  if (check(live).length > 0) {
+  if (check(live, liveEmit).length > 0) {
     console.error("bodiless-stance: the live source fails, so the mutants prove nothing")
     failed++
   }
@@ -135,7 +177,7 @@ if (process.argv.includes("--self-test")) {
     if (!live.includes(from)) {
       console.error(`bodiless-stance: self-test cannot find the text to mutate for ${what}`)
       failed++
-    } else if (check(live.replace(from, to)).length === 0) {
+    } else if (check(live.replace(from, to), liveEmit).length === 0) {
       console.error(`bodiless-stance: self-test: ${what} passes the check`)
       failed++
     }
@@ -147,7 +189,7 @@ if (process.argv.includes("--self-test")) {
   process.exit(0)
 }
 
-const problems = check(live)
+const problems = check(live, liveEmit)
 if (problems.length > 0) {
   for (const p of problems) {
     console.error(`bodiless-stance: ${p}`)

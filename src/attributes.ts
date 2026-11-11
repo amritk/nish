@@ -624,6 +624,13 @@ export class FunctionFacts {
    */
   resizesArray: boolean
   /**
+   * #1328: a `BodilessStance` was applied to these facts (`applyStance`). An
+   * instance that `needsStance` and has none is given the unknown stance
+   * (`assumeUnknownStance`), so a helper or a route that forgets to state one
+   * fails closed rather than leaving the pure defaults.
+   */
+  stanceStated: boolean
+  /**
    * WP29 P1: the function writes memory its caller could observe, directly or
    * through a callee (fixpoint over the call graph). `effect` is the wrong
    * question for that, because it is about what LLVM may reorder: a panic, a
@@ -940,6 +947,7 @@ export class FunctionFacts {
     this.loopsBounded = true
     this.hasTrap = false
     this.resizesArray = false
+    this.stanceStated = false
     this.sharedWrite = false
     this.atomic = false
     this.writesPastParams = false
@@ -3971,7 +3979,34 @@ const initialisesFields = (sig: FunctionSig): boolean => {
  * `analyzeFunctions`) tells the collectors which allocations are allocas and
  * which locals hold them, and carries the allocation facts into the result.
  */
+/**
+ * One function's facts, before the fixpoint. An instance that `needsStance`
+ * and stated none (a `mark*` helper's answer dropped, or a route that calls
+ * none) is given the unknown stance here, once, whichever way the build
+ * returned (#1328).
+ */
 const collectFacts = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  opts: Options,
+  sig: FunctionSig,
+  memory: EscapeResult | null,
+  nodeCount: i32,
+  known: FactsTable | null
+): FunctionFacts => {
+  const facts = collectStatedFacts(unit, table, opts, sig, memory, nodeCount, known)
+  // `NISH_SIMULATE_ICE=nostance:<name>` forgets one instance's stance. Stances
+  // only add, and the unknown one adds everything, so applying it over the
+  // stated one is what a missing stance would have given.
+  const forgotten = opts.statelessInstance !== "" && sig.sourceName === opts.statelessInstance
+  if ((!facts.stanceStated || forgotten) && needsStance(unit.program, sig)) {
+    assumeUnknownStance(facts)
+  }
+  return facts
+}
+
+/** `collectFacts` without the unknown-stance fallback: what the walk and the stated stances give. */
+const collectStatedFacts = (
   unit: AnalysisUnit,
   table: TypeTable,
   opts: Options,
@@ -4228,7 +4263,21 @@ const collectFacts = (
  * arguments: a helper that states no write, keep or growth stance does not
  * compile, under `tsc` or under the seed, and "writes nothing" is a word
  * (`STANCE_WRITES_NONE`) its author had to type. `applyStance` is the one
- * place those facts are set for such an instance.
+ * place those facts are set for such an instance, and it records that it ran
+ * (`FunctionFacts.stanceStated`).
+ *
+ * What the type cannot refuse is an answer dropped at the call, or a new
+ * routed instance that calls no helper at all. So the instances that need a
+ * stance are one list (`needsStance`), and `collectFacts` gives any of them
+ * that stated none the unknown stance (`assumeUnknownStance`): every
+ * parameter written deep, kept past the call and polluted, and arrays grown.
+ * That is `jsonDecode`'s stance, which a task handed shared memory is refused
+ * for, so a forgotten stance fails closed. `tests/bodiless-stance.js` checks
+ * the text around it: every helper's answer is applied, and every predicate
+ * the emitter's body dispatch asks is on the list.
+ *
+ * A bodiless helper is named `mark*` and declared in this section, which is
+ * how that check finds it.
  */
 
 /** Adds no write to the parameter: it is only read, or what writes it is a routed callee the fixpoint resolves. */
@@ -4288,6 +4337,18 @@ const statesNothing = (): ParamStance => new ParamStance(STANCE_WRITES_NONE, STA
 
 /** Set one pointer parameter's facts from its stance; never clears one. */
 const applyParamStance = (pp: PointerParamFacts, stance: ParamStance): void => {
+  // The levels are compared by order, so a value outside them would silently
+  // read as the nearest end; it is a broken invariant instead.
+  if (
+    stance.writes < STANCE_WRITES_NONE ||
+    stance.writes > STANCE_WRITES_DEEP ||
+    stance.keeps < STANCE_KEEPS_NONE ||
+    stance.keeps > STANCE_KEEPS_PAST
+  ) {
+    process.exit(
+      internalError(`attributes: a stance for \`${pp.name}\` has no level ${stance.writes}/${stance.keeps}`)
+    )
+  }
   if (stance.writes >= STANCE_WRITES_SLOTS) {
     pp.writesThrough = true
     pp.writesShared = true
@@ -4309,8 +4370,16 @@ const applyParamStance = (pp: PointerParamFacts, stance: ParamStance): void => {
   }
 }
 
-/** The one writer of a bodiless instance's parameter write, keep and growth facts (#1328). */
+/**
+ * The one writer of a bodiless instance's parameter write, keep and pollute
+ * facts and of its `resizesArray` (#1328). It owns only those: the
+ * function-level facts a helper also sets (`effect`, `sharedWrite`,
+ * `writesPastParams`, `writesElsewhere`, `atomic`, `callees`) stay the
+ * helper's, because the pure defaults of those are not what lets a task
+ * through.
+ */
 const applyStance = (facts: FunctionFacts, stance: BodilessStance): void => {
+  facts.stanceStated = true
   let i = 0
   while (i < facts.pointerParams.length) {
     applyParamStance(facts.pointerParams[i], i === 0 ? stance.first : stance.rest)
@@ -4318,6 +4387,49 @@ const applyStance = (facts: FunctionFacts, stance: BodilessStance): void => {
   }
   if (stance.grows) {
     facts.resizesArray = true
+  }
+}
+
+/**
+ * Every instance whose code is not, or not only, its walked source body: the
+ * ones the emitter writes or wraps (`emitFunction`'s body dispatch, the JSON
+ * route at the call, `src/emit-map.ts`, `src/emit-parallel.ts`). Each states
+ * its stance through a `mark*` helper; one that states none is given the
+ * unknown stance. A new such instance joins this list, and
+ * `tests/bodiless-stance.js` refuses an emitter body dispatch that asks a
+ * predicate this does not.
+ */
+const needsStance = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  jsonRouteOf(sig) !== JSON_NONE ||
+  isChannelSend(sig) ||
+  isAtomicMethod(sig) ||
+  isRegionIntrinsic(program, sig) ||
+  isShmWindowIntrinsic(program, sig) ||
+  isRegionEntry(sig) ||
+  isSpawnEntry(sig) ||
+  isMapRoute(sig) ||
+  secretRoleOf(sig) === SECRET_WIPE ||
+  isLockMethod(sig)
+
+/**
+ * What an instance that `needsStance` and stated none is taken to do: the
+ * worst of everything, as a `declare function` is (`collectFacts`). Every
+ * pointer parameter is written deep, kept past the call and polluted, arrays
+ * grow, and the instance writes and reads memory past its parameters and may
+ * not return. Inside a task that is a refusal wherever the task hands it
+ * memory its spawner shares.
+ */
+const assumeUnknownStance = (facts: FunctionFacts): void => {
+  const unknown = new ParamStance(STANCE_WRITES_DEEP, STANCE_KEEPS_PAST, true)
+  applyStance(facts, new BodilessStance(unknown, unknown, true))
+  facts.effect = EFFECT_WRITE
+  facts.sharedWrite = true
+  facts.writesPastParams = true
+  facts.writesElsewhere = true
+  facts.readsMemory = true
+  facts.willReturn = false
+  if (facts.worldVia.length === 0) {
+    facts.worldVia = `\`${facts.sourceName}\`, whose emitted code states no stance`
   }
 }
 

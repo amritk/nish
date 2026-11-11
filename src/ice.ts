@@ -80,10 +80,24 @@ const ENV_SIMULATE_ICE: string = "NISH_SIMULATE_ICE"
  */
 const UNLABELLED_PREFIX: string = "unlabelled:"
 
+/**
+ * The prefix that asks the fact build to forget one bodiless instance's stated
+ * stance: `nostance:<name>` compiles as usual and treats the instance whose
+ * source name is `<name>` as one that stated none (#1328,
+ * `Options.statelessInstance`), so the suite can show the unknown stance it
+ * falls back to is refused inside a task.
+ */
+const NOSTANCE_PREFIX: string = "nostance:"
+
 /** Whether the run asked for a simulated internal error at the driver (`ENV_SIMULATE_ICE`). */
 export const simulatedInternalError = (): boolean => {
   const value = getenv(ENV_SIMULATE_ICE)
-  return value !== null && value.length > 0 && !value.startsWith(UNLABELLED_PREFIX)
+  return (
+    value !== null &&
+    value.length > 0 &&
+    !value.startsWith(UNLABELLED_PREFIX) &&
+    !value.startsWith(NOSTANCE_PREFIX)
+  )
 }
 
 /** The builtin the run asked the capability audit to treat as unlabelled, or `""`. */
@@ -92,6 +106,12 @@ export const simulatedUnlabelledBuiltin = (): string => {
   return value !== null && value.startsWith(UNLABELLED_PREFIX)
     ? value.substring(UNLABELLED_PREFIX.length)
     : ""
+}
+
+/** The bodiless instance the run asked the fact build to treat as stating no stance, or `""`. */
+export const simulatedStatelessInstance = (): string => {
+  const value = getenv(ENV_SIMULATE_ICE)
+  return value !== null && value.startsWith(NOSTANCE_PREFIX) ? value.substring(NOSTANCE_PREFIX.length) : ""
 }
 
 /**
