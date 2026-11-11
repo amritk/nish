@@ -1782,13 +1782,31 @@ const CTX_MASK_LEN: i32 = 6
 const CTX_SLOTS: i32 = 4
 
 /**
+ * `n` zeros. `new Array<i32>(n)` zero-fills natively and leaves holes under
+ * Node, and this module reads a fresh table as zeros (the DFA's hash probe
+ * stops at a 0 slot), so every table it makes comes from here (#1362).
+ */
+const regexZeros = (n: i32): i32[] => {
+  const a: i32[] = new Array<i32>(n)
+  a.fill(0)
+  return a
+}
+
+/** `n` zero bytes, for the reason `regexZeros` gives. */
+const regexZeroBytes = (n: i32): u8[] => {
+  const a: u8[] = new Array<u8>(n)
+  a.fill(toU8(0))
+  return a
+}
+
+/**
  * Which kinds a program's assertions tell apart, as a map from each kind to
  * the one a state records. `bits` has bit `1 << kind` for every assertion
  * kind present; a pattern with none keeps one context, so it builds no state
  * twice.
  */
 const regexContextMask = (bits: i32): i32[] => {
-  const m: i32[] = new Array<i32>(CTX_MASK_LEN)
+  const m: i32[] = regexZeros(CTX_MASK_LEN)
   const line: boolean = (bits & (1 << ASSERT_BEGIN_LINE)) !== 0
   if ((bits & (1 << ASSERT_BEGIN_TEXT)) !== 0) {
     m[CTX_START] = CTX_START
@@ -1809,7 +1827,7 @@ const regexContextMask = (bits: i32): i32[] => {
 /** Sort `a` ascending, a bottom-up merge sort. */
 const regexSortPoints = (a: i32[]): void => {
   const n: i32 = toI32(a.length)
-  const tmp: i32[] = new Array<i32>(n)
+  const tmp: i32[] = regexZeros(n)
   let width: i32 = 1
   while (width < n) {
     let lo: i32 = 0
@@ -2646,14 +2664,14 @@ export class Regex {
     if (count > REGEX_MAX_SLOT_TABLE / slots) {
       return "too many groups for the pattern's size"
     }
-    this.cDense = new Array<i32>(count)
-    this.cSlots = new Array<i32>(count * slots)
-    this.nDense = new Array<i32>(count)
-    this.nSlots = new Array<i32>(count * slots)
+    this.cDense = regexZeros(count)
+    this.cSlots = regexZeros(count * slots)
+    this.nDense = regexZeros(count)
+    this.nSlots = regexZeros(count * slots)
     const states: i32 = 1 << this.levels
-    this.visit = new Array<i32>(count * states)
-    this.caps = new Array<i32>(slots)
-    this.mslots = new Array<i32>(slots)
+    this.visit = regexZeros(count * states)
+    this.caps = regexZeros(slots)
+    this.mslots = regexZeros(slots)
     // Each instruction is visited once per closure and set of marks, and
     // pushes at most one frame, or one per slot it clears.
     let frames: i32 = 1
@@ -2671,9 +2689,9 @@ export class Regex {
       return "too many groups for the pattern's size"
     }
     frames *= states
-    this.stkKind = new Array<i32>(frames)
-    this.stkA = new Array<i32>(frames)
-    this.stkB = new Array<i32>(frames)
+    this.stkKind = regexZeros(frames)
+    this.stkA = regexZeros(frames)
+    this.stkB = regexZeros(frames)
     this.findPrefilters()
     if (this.revOk && !this.anchored && this.prefix === "") {
       this.findInner(p, root)
@@ -2733,7 +2751,7 @@ export class Regex {
     if (bestLen === 0) {
       return
     }
-    const bytes: u8[] = new Array<u8>(bestLen)
+    const bytes: u8[] = regexZeroBytes(bestLen)
     i = 0
     while (i < toI32(bytes.length)) {
       bytes[i] = toU8(p.na[kids[best + i]])
@@ -2841,15 +2859,15 @@ export class Regex {
    */
   private findScan(): void {
     const count: i32 = this.pc()
-    const masks: u8[] = new Array<u8>(32 * REGEX_SCAN_DEPTH)
-    const odds: i32[] = new Array<i32>(REGEX_SCAN_DEPTH)
+    const masks: u8[] = regexZeroBytes(32 * REGEX_SCAN_DEPTH)
+    const odds: i32[] = regexZeros(REGEX_SCAN_DEPTH)
     // `seen[at]` is the depth plus one at which `at` was last walked.
-    const seen: i32[] = new Array<i32>(count)
+    const seen: i32[] = regexZeros(count)
     let frontier: i32[] = [REGEX_ENTRY]
     let depth: i32 = 0
     let ended: boolean = false
     while (depth < REGEX_SCAN_DEPTH && !ended) {
-      const set: u8[] = new Array<u8>(128)
+      const set: u8[] = regexZeroBytes(128)
       const next: i32[] = []
       let wide: boolean = false
       const work: i32[] = []
@@ -2976,7 +2994,7 @@ export class Regex {
     // The 32-byte forms the vector window reads, then a membership table of
     // 256 bytes a position, which the walker and the kernel's other positions
     // read a load a byte.
-    const both: u8[] = new Array<u8>(288 * depth)
+    const both: u8[] = regexZeroBytes(288 * depth)
     let at: i32 = 0
     while (at >= 0 && at < 32 * depth && at < toI32(both.length) && at < toI32(masks.length)) {
       both[at] = masks[at]
@@ -3387,7 +3405,7 @@ export class Regex {
     // terminator starts and where it stops. The reverse program reads the
     // same characters, so the forward one is enough.
     const classes: i32 = toI32(this.clsFrom.length)
-    const seenCls: u8[] = new Array<u8>(classes)
+    const seenCls: u8[] = regexZeroBytes(classes)
     const points: i32[] = []
     pc = 0
     while (pc < count) {
@@ -3446,7 +3464,7 @@ export class Regex {
     if (units > DFA_MAX_UNITS) {
       return
     }
-    const rep: i32[] = new Array<i32>(units)
+    const rep: i32[] = regexZeros(units)
     let u: i32 = 0
     while (u < 128 && u < toI32(rep.length)) {
       rep[u] = u
@@ -3460,9 +3478,9 @@ export class Regex {
     }
     // Refine one predicate at a time: a unit's class is its old class and
     // whether the predicate holds for it.
-    const cls: i32[] = new Array<i32>(units)
-    const hit: u8[] = new Array<u8>(units)
-    const remap: i32[] = new Array<i32>(2 * units)
+    const cls: i32[] = regexZeros(units)
+    const hit: u8[] = regexZeroBytes(units)
+    const remap: i32[] = regexZeros(2 * units)
     let n: i32 = 1
     let work: i32 = 0
     u = 0
@@ -3471,7 +3489,7 @@ export class Regex {
       u += 1
     }
     n = this.dRefine(cls, hit, units, n, remap)
-    const pairs: u8[] = new Array<u8>(16384)
+    const pairs: u8[] = regexZeroBytes(16384)
     i = 0
     while (i < toI32(seenCls.length)) {
       seenCls[i] = 0
@@ -3562,7 +3580,7 @@ export class Regex {
       return
     }
     this.dShift = shift
-    this.dCls = new Array<i32>(256)
+    this.dCls = regexZeros(256)
     u = 0
     while (u < 256) {
       this.dCls[u] = u < 128 && u < toI32(cls.length) ? cls[u] : n
@@ -3571,7 +3589,7 @@ export class Regex {
     this.dEot = cls[128]
     this.dWlo = lows
     this.dWide = wide
-    this.dWcls = new Array<i32>(wide)
+    this.dWcls = regexZeros(wide)
     i = 0
     while (i < wide && 129 + i < toI32(cls.length)) {
       this.dWcls[i] = cls[129 + i]
@@ -3584,11 +3602,11 @@ export class Regex {
       this.dMaskF[CTX_START] === CTX_OTHER &&
       this.dMaskF[CTX_WORD] === CTX_OTHER &&
       this.dMaskF[CTX_LINE] === CTX_OTHER
-    this.dRep = new Array<i32>(n)
-    this.dNextK = new Array<i32>(n)
-    this.dCtxF = new Array<i32>(n)
-    this.dCtxR = new Array<i32>(n)
-    const done: u8[] = new Array<u8>(n)
+    this.dRep = regexZeros(n)
+    this.dNextK = regexZeros(n)
+    this.dCtxF = regexZeros(n)
+    this.dCtxR = regexZeros(n)
+    const done: u8[] = regexZeroBytes(n)
     u = 0
     while (u < toI32(cls.length) && u < toI32(rep.length)) {
       const c: i32 = cls[u]
@@ -3610,24 +3628,24 @@ export class Regex {
       }
       u += 1
     }
-    this.dVisit = new Array<i32>(total)
-    this.dLeaf = new Array<i32>(total)
-    this.dBuf = new Array<i32>(total)
-    this.dStk = new Array<i32>(total + 1)
+    this.dVisit = regexZeros(total)
+    this.dLeaf = regexZeros(total)
+    this.dBuf = regexZeros(total)
+    this.dStk = regexZeros(total + 1)
     this.dMax = DFA_MAX_TABLE >> shift < DFA_MAX_STATES ? DFA_MAX_TABLE >> shift : DFA_MAX_STATES
     this.dCap = this.dMax < DFA_FIRST_STATES ? this.dMax : DFA_FIRST_STATES
-    this.dTrans = new Array<i32>(this.dCap << shift)
-    this.dStart = new Array<i32>(this.dCap)
-    this.dLen = new Array<i32>(this.dCap)
-    this.dFlags = new Array<i32>(this.dCap)
-    this.dHash = new Array<i32>(this.dHashSize(this.dCap))
+    this.dTrans = regexZeros(this.dCap << shift)
+    this.dStart = regexZeros(this.dCap)
+    this.dLen = regexZeros(this.dCap)
+    this.dFlags = regexZeros(this.dCap)
+    this.dHash = regexZeros(this.dHashSize(this.dCap))
     this.dPoolMax = 2 * total > DFA_MIN_POOL ? 2 * total : DFA_MIN_POOL
-    this.dPool = new Array<i32>(DFA_FIRST_POOL)
+    this.dPool = regexZeros(DFA_FIRST_POOL)
     this.dPoolLen = 0
     // Row 0 is never a state, so a plain transition, the next row's offset,
     // is never 0, the entry not yet computed.
     this.dCount = 1
-    this.dStartOff = new Array<i32>(4 * CTX_SLOTS)
+    this.dStartOff = regexZeros(4 * CTX_SLOTS)
     this.dSkip = !this.anchored && (this.prefix !== "" || this.scanSel)
     this.dPrefFast = this.dSkip && this.dCtxFree && this.prefix !== "" && isRegexAscii(this.prefix)
     this.dPrefOff = 0
@@ -3919,7 +3937,7 @@ export class Regex {
       if (grown > this.dPoolMax) {
         grown = this.dPoolMax
       }
-      const pool: i32[] = new Array<i32>(grown)
+      const pool: i32[] = regexZeros(grown)
       let k: i32 = 0
       while (k < this.dPoolLen && k < toI32(pool.length)) {
         pool[k] = this.dPool[k]
@@ -3956,16 +3974,16 @@ export class Regex {
       cap = this.dMax
     }
     const used: i32 = this.dCount << this.dShift
-    const trans: i32[] = new Array<i32>(cap << this.dShift)
+    const trans: i32[] = regexZeros(cap << this.dShift)
     let k: i32 = 0
     while (k < used && k < toI32(trans.length)) {
       trans[k] = this.dTrans[k]
       k += 1
     }
-    const start: i32[] = new Array<i32>(cap)
-    const len: i32[] = new Array<i32>(cap)
-    const flags: i32[] = new Array<i32>(cap)
-    const hash: i32[] = new Array<i32>(this.dHashSize(cap))
+    const start: i32[] = regexZeros(cap)
+    const len: i32[] = regexZeros(cap)
+    const flags: i32[] = regexZeros(cap)
+    const hash: i32[] = regexZeros(this.dHashSize(cap))
     const mask: i32 = toI32(hash.length) - 1
     // Every length test below always holds (`dCount` is at most `cap`, and
     // `& mask` keeps a slot within `hash`): each is what proves its index.
@@ -4621,7 +4639,7 @@ export class Regex {
       return false
     }
     if (toI32(m.slots.length) !== ns) {
-      m.slots = new Array<i32>(ns)
+      m.slots = regexZeros(ns)
     }
     let k: i32 = 0
     while (k < ns) {
