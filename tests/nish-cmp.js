@@ -1201,6 +1201,18 @@ const DECLARED = [
     changelog: "nish.host",
     why: "a `nish.host` entry that climbs out of the package's directory is refused where package.json writes it (NL2695), which the 0.37.0 seed, reading no `host` field, compiled",
   },
+  // A Map or Set read in a parallel map: the 0.38.0 seed walks a table's
+  // private arrays and refuses a body that reaches one beside a `dst`.
+  ...[
+    "tests/link/par_map_read_capture/main.ts",
+    "tests/link/par_map_read_into/main.ts",
+    "tests/link/par_map_read_into_keys/main.ts",
+  ].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "read a Map or Set reached through a parallelMapInto element",
+    why: "the 0.38.0 seed counts a Map's private entry arrays as reaching `dst` and refuses the program, so only the candidate compiles it",
+  })),
   // Parent/child regions: the 0.38.0 seed's nish:region has no child or
   // childWith, so only the candidate compiles these programs.
   ...[
