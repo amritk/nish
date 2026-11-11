@@ -83,6 +83,7 @@ import {
   emitRangeEntry,
   isIdentifierBuiltinCall,
 } from "./emit-builtins"
+import { emitEmptyDispatcher, emitTagCheck } from "./emit-fnrefs"
 import {
   emitBreak,
   emitConditional,
@@ -706,7 +707,12 @@ export class Emitter {
     const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3]
     // A concise arrow body is the one `return` it means; `nish:secret`'s
     // `wipe` has a body only the emitter can write (`src/emit-secret.ts`).
-    if (secretRoleOf(sig) === SECRET_WIPE) {
+    if (sig.dispatcher && this.opts.profile === "debug" && sig.refMembers.length > 0) {
+      emitTagCheck(this, sig) // WP51 §6
+    }
+    if (sig.dispatcher && sig.refMembers.length === 0) {
+      emitEmptyDispatcher(this) // WP51 §2.3
+    } else if (secretRoleOf(sig) === SECRET_WIPE) {
       emitWipeBody(this, sig)
     } else if (isRegionIntrinsic(this.program, sig)) {
       emitRegionBody(this, sig, regionRoleIn(this.program, sig)) // WP46

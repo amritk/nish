@@ -4155,6 +4155,16 @@ const collectFacts = (
   // tail (`emitParamRangeChecks`). Its callers keep the tail they recorded for
   // the entry they no longer check, which is sound and costs nothing: they call
   // this function, and it calls the same two.
+  // WP51: a dispatcher whose set is empty traps (`emitEmptyDispatcher`), and
+  // a debug build checks a dispatcher's tag on entry, which may panic
+  // (`emitTagCheck`). Its body, a `switch` of direct calls, says neither.
+  if (sig.dispatcher && sig.refMembers.length === 0) {
+    facts.hasTrap = true
+  } else if (sig.dispatcher && opts.profile === "debug") {
+    const tail: string[] = []
+    panicTailCallees(tail)
+    collector.addCallees(tail)
+  }
   if (checksRangesInPrologue(table, opts, sig)) {
     const tail: string[] = []
     panicTailCallees(tail)

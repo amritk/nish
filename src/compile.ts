@@ -634,8 +634,9 @@ export const main = (): number => {
   let output = ""
   let link = ""
   let profile = runMode ? "debug" : "speed"
-  // `--cpu`: empty for the baseline CPU, else CPU_LEVEL. Driver-level like
-  // the profile: it changes the link, never a byte of the IR.
+  // `--cpu`: empty for the baseline CPU, else CPU_LEVEL. Driver-level: it
+  // changes the link, never a byte of the IR. (The profile also adds the debug
+  // build's tag check to a function reference's dispatcher, WP51 §6.)
   let cpu = ""
   let json = false
   let emitChecked = false
