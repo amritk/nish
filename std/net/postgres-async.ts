@@ -876,11 +876,38 @@ const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
   pool.wakeRings[w] = (pool.wakeRings[w] + 1) % PG_ASYNC_QUEUE_WRAP
 }
 
-/** Wakes the tasks waiting for a slot or seat: those outside the queue, and the queue's head. */
+/**
+ * The seats a task could take now or once a write in progress ends: on each
+ * live connection no task claimed whole and none doomed, `depth` less those
+ * in flight.
+ */
+const pgAsyncFreeSeats = (pool: PgAsyncPool): i32 => {
+  let free: i32 = 0
+  for (let s: i32 = 0; s < pool.size; s++) {
+    if (pool.fds[s] >= 0 && toI32(pool.claimed[s]) === 0 && pool.doomAt[s] < 0 && pool.seated[s] < pool.depth) {
+      free += pool.depth - pool.seated[s]
+    }
+  }
+  return free
+}
+
+/**
+ * Wakes the tasks waiting for a slot or seat: those outside the queue, and as
+ * many of the queue's first as there are free seats, at least its head, so
+ * seats freed together are taken in one loop turn and not one a turn.
+ */
 const pgAsyncWakePool = (pool: PgAsyncPool): void => {
   pgAsyncSignal(pool, pool.size)
-  if (pool.seatHead !== pool.seatTail) {
-    pgAsyncSignal(pool, pool.size + 1 + (pool.seatHead % PG_ASYNC_LANES))
+  const queued: i32 = (pool.seatTail - pool.seatHead + PG_ASYNC_QUEUE_WRAP) % PG_ASYNC_QUEUE_WRAP
+  if (queued === 0) {
+    return
+  }
+  const free: i32 = pgAsyncFreeSeats(pool)
+  let wake: i32 = free < 1 ? 1 : free
+  wake = wake > queued ? queued : wake
+  wake = wake > PG_ASYNC_LANES ? PG_ASYNC_LANES : wake
+  for (let k: i32 = 0; k < wake; k++) {
+    pgAsyncSignal(pool, pool.size + 1 + ((pool.seatHead + k) % PG_ASYNC_LANES))
   }
 }
 
@@ -1078,17 +1105,17 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
     }
     let live: boolean = false
     let best: i32 = -1
+    let free: i32 = 0
     for (let s: i32 = 0; s < pool.size; s++) {
       if (pool.fds[s] < 0) {
         continue
       }
       live = true
-      if (
-        toI32(pool.claimed[s]) !== 0 ||
-        pool.doomAt[s] >= 0 ||
-        toI32(pool.writing[s]) !== 0 ||
-        pool.seated[s] >= pool.depth
-      ) {
+      if (toI32(pool.claimed[s]) !== 0 || pool.doomAt[s] >= 0 || pool.seated[s] >= pool.depth) {
+        continue
+      }
+      free += pool.depth - pool.seated[s]
+      if (toI32(pool.writing[s]) !== 0) {
         continue
       }
       if (best < 0 || pool.seated[s] < pool.seated[best]) {
@@ -1096,8 +1123,14 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
       }
     }
     // First come, first seated: under load a task that lost the seat it was
-    // woken for to another would wait on until `claimWaitMs` failed it.
-    const turn: boolean = queued >= 0 ? queued === pool.seatHead : pool.seatHead === pool.seatTail
+    // woken for to another would wait on until `claimWaitMs` failed it. Of
+    // the queue, the first as many as there are free seats may take one, so
+    // seats freed together go in one loop turn; a task outside the queue
+    // takes one only while none waits.
+    const turn: boolean =
+      queued >= 0
+        ? (queued - pool.seatHead + PG_ASYNC_QUEUE_WRAP) % PG_ASYNC_QUEUE_WRAP < free
+        : pool.seatHead === pool.seatTail
     if (best >= 0 && turn) {
       for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
         const seat: i32 = best * PG_ASYNC_MAX_DEPTH + k
