@@ -1,6 +1,6 @@
-# WP48: Fast rebuilds for `nish run`
+# WP52: Fast rebuilds for `nish run`
 
-**State:** Landed · **Done:** 1 of 2 · **Design note:** [`docs/wp48-run-rebuilds.md`](https://github.com/amritk/nish/blob/main/docs/wp48-run-rebuilds.md)
+**State:** Landed · **Done:** 1 of 2 · **Design note:** [`docs/wp52-run-rebuilds.md`](https://github.com/amritk/nish/blob/main/docs/wp52-run-rebuilds.md)
 
 ## Stages
 
