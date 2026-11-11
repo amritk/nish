@@ -106,6 +106,44 @@ native string built by `String.fromBytes` carries any bytes, and `write` and
 decodes UTF-8 and an invalid sequence becomes U+FFFD, so `writeBytes` and
 `writeFileBytesSync` are the route that is exact everywhere.
 
+A file too big to hold whole is read a window at a time. `fileOpen(path)`
+answers an `i32` descriptor for a regular file, or a negative errno (`-2`
+missing, `-21` a directory); `fileReadAt(fd, buf, off, len, pos)` reads at
+most `len` bytes from byte `pos` (an `i64`) into `buf` at `off` and answers
+the count, `0` at the end; `fileClose(fd)` gives the descriptor back, once.
+The buffer is yours, so memory stays the size of the window:
+
+```ts
+export function main(): number {
+  const fd = fileOpen("big.log");
+  if (fd < 0) {
+    console.log(`open failed: ${fd}`);
+    return 1;
+  }
+  const buf: u8[] = new Array<u8>(65536);
+  let pos: i64 = toI64(0);
+  while (true) {
+    const n = fileReadAt(fd, buf, 0, buf.length, pos);
+    if (n < 0) {
+      console.log(`read failed: ${n}`);
+      break;
+    }
+    if (n === 0) {
+      break;
+    }
+    pos = pos + toI64(n);
+  }
+  fileClose(fd);
+  console.log(`read ${pos} bytes`);
+  return 0;
+}
+```
+
+A read may come back short, so loop on the count rather than on
+`fileSize(fd)`. All four need `fs.read`, work natively, under Node and under
+`--profile wasi`, and are refused on freestanding `wasm32` (NL2718); see
+[File I/O](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-file-a-window-at-a-time).
+
 Writing a secret to disk, a key or a token, takes three things
 `writeFileSync` does not give. `writeFileSyncMode(path, data, 0o600)` leaves
 the file at exactly the mode you name, set before the first byte is written,

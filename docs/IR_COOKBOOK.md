@@ -27938,6 +27938,207 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-files -->
 
+### A file a window at a time
+
+`fileOpen` answers a plain `i32` descriptor and `fileReadAt` reads into a
+`u8[]` the program owns, so the loop allocates once and memory follows the
+window, not the file; here it is a fixed 4096 bytes that do not escape, so
+it lives on the stack. The window `[off, off + len)` is checked against the
+array's length at the call site (`net.ok` / `net.fail`, the same check
+`netRead` gets) before `nish_file_read_at` is called, and the position is an
+`i64` all the way down, so a file past 2^31 bytes is read where the whole-file
+builtins cannot reach. Every answer is a value: a count, `0` at the end, or a
+negative errno.
+
+<!-- cookbook:begin builtin-file-window -->
+```ts
+export const main = (): number => {
+  const fd = fileOpen("big.log")
+  if (fd < 0) return 1
+  const size = fileSize(fd)
+  const buf: u8[] = new Array<u8>(4096)
+  let pos: i64 = toI64(0)
+  let n = fileReadAt(fd, buf, 0, buf.length, pos)
+  while (n > 0) {
+    pos = pos + toI64(n)
+    n = fileReadAt(fd, buf, 0, buf.length, pos)
+  }
+  fileClose(fd)
+  return pos === size ? 0 : 2
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"big.log\00" }, align 8
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare void @nish_free_arena() #1
+declare noundef i32 @nish_file_open(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_file_read_at(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef) #0
+declare noundef i64 @nish_file_size(i32 noundef) #0
+declare noundef i32 @nish_file_close(i32 noundef) #0
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #3
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %fd.addr = alloca i32, align 4
+  %size.addr = alloca i64, align 8
+  %buf.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [4096 x i8], align 8
+  %pos.addr = alloca i64, align 8
+  %n.addr = alloca i32, align 4
+  %0 = call i32 @nish_file_open(i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*))
+  store i32 %0, i32* %fd.addr, align 4
+  %1 = load i32, i32* %fd.addr, align 4
+  %2 = icmp slt i32 %1, 0
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  ret i32 1
+
+if.end:
+  %3 = load i32, i32* %fd.addr, align 4
+  %4 = call i64 @nish_file_size(i32 %3)
+  store i64 %4, i64* %size.addr, align 8
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 4096, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 4096, i64* %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast [4096 x i8]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 4096, i1 false), !alias.scope !4, !noalias !3
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %7, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %buf.addr, align 8
+  %9 = sext i32 0 to i64
+  store i64 %9, i64* %pos.addr, align 8
+  %10 = load i32, i32* %fd.addr, align 4
+  %11 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %12 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 0
+  %14 = load i64, i64* %13, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %15 = trunc i64 %14 to i32
+  %16 = sext i32 %15 to i64
+  %17 = load i64, i64* %pos.addr, align 8
+  %18 = add i64 0, %16
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
+  %20 = load i64, i64* %19, align 8
+  %21 = icmp ule i64 0, %18
+  %22 = icmp ule i64 %18, %20
+  %23 = and i1 %21, %22
+  br i1 %23, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %18, i64 %20)
+  unreachable
+
+net.ok:
+  %24 = call i32 @nish_file_read_at(i32 %10, %struct.nish_array* %11, i64 0, i64 %16, i64 %17)
+  store i32 %24, i32* %n.addr, align 4
+  %25 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 0
+  %27 = load i64, i64* %26, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  br label %while.cond
+
+while.cond:
+  %28 = load i32, i32* %n.addr, align 4
+  %29 = icmp sgt i32 %28, 0
+  br i1 %29, label %while.body, label %while.end
+
+while.body:
+  %30 = load i64, i64* %pos.addr, align 8
+  %31 = load i32, i32* %n.addr, align 4
+  %32 = sext i32 %31 to i64
+  %33 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %30, i64 %32)
+  %34 = extractvalue { i64, i1 } %33, 0
+  %35 = extractvalue { i64, i1 } %33, 1
+  br i1 %35, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i64 %34, i64* %pos.addr, align 8
+  %36 = load i32, i32* %fd.addr, align 4
+  %37 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %38 = trunc i64 %27 to i32
+  %39 = sext i32 %38 to i64
+  %40 = load i64, i64* %pos.addr, align 8
+  %41 = add i64 0, %39
+  %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %37, i64 0, i32 0
+  %43 = load i64, i64* %42, align 8
+  %44 = icmp ule i64 0, %41
+  %45 = icmp ule i64 %41, %43
+  %46 = and i1 %44, %45
+  br i1 %46, label %net.ok.1, label %net.fail.1
+
+net.fail.1:
+  call void @nish_panic_slice(i64 0, i64 %41, i64 %43)
+  unreachable
+
+net.ok.1:
+  %47 = call i32 @nish_file_read_at(i32 %36, %struct.nish_array* %37, i64 0, i64 %39, i64 %40)
+  store i32 %47, i32* %n.addr, align 4
+  br label %while.cond
+
+while.end:
+  %48 = load i32, i32* %fd.addr, align 4
+  %49 = call i32 @nish_file_close(i32 %48)
+  %50 = load i64, i64* %pos.addr, align 8
+  %51 = load i64, i64* %size.addr, align 8
+  %52 = icmp eq i64 %50, %51
+  br i1 %52, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %53 = phi i32 [ 0, %cond.true ], [ 2, %cond.false ]
+  ret i32 %53
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-file-window -->
+
 ### Directories and subprocesses
 
 `mkdirSync` answers a `boolean` and `spawnSync` an exit status, so the failure
@@ -30279,6 +30480,10 @@ declare i64 @nish_wall_clock_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_file_open(i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_file_read_at(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef) #3
+declare noundef i64 @nish_file_size(i32 noundef) #3
+declare noundef i32 @nish_file_close(i32 noundef) #3
 declare double @nish_date_now() #2
 declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #3
 declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture) #2

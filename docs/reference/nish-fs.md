@@ -8,6 +8,10 @@ Files and directories: read, write, rename, remove and list paths on the host's 
 import {
   appendFileSync,
   createFileExclusiveSync,
+  fileClose,
+  fileOpen,
+  fileReadAt,
+  fileSize,
   isDirectorySync,
   mkdirSync,
   mkdirSyncMode,
@@ -49,6 +53,30 @@ Create the file or append to it, and write `data`; a statement, not a value.
 <scalar-card title="create​File​Exclusive​Sync" icon="phosphor/regular/function" href="#createfileexclusivesync">
 
 `O_CREAT|O_EXCL`: create `path` at exactly `mode`, set as for `writeFileSyncMode`, and write `data`.
+
+</scalar-card>
+
+<scalar-card title="file​Close" icon="phosphor/regular/function" href="#fileclose">
+
+Close a descriptor `fileOpen` gave; close it once.
+
+</scalar-card>
+
+<scalar-card title="file​Open" icon="phosphor/regular/function" href="#fileopen">
+
+Open a regular file to read a window at a time: read-only, close-on-exec and non-blocking.
+
+</scalar-card>
+
+<scalar-card title="file​Read​At" icon="phosphor/regular/function" href="#filereadat">
+
+Read up to `len` bytes from file offset `pos` into `buf[off .. off + len)` (`pread`).
+
+</scalar-card>
+
+<scalar-card title="file​Size" icon="phosphor/regular/function" href="#filesize">
+
+The file's size in bytes now, from `fstat`.
 
 </scalar-card>
 
@@ -244,6 +272,123 @@ The file's mode, `0..0o777`, as for `writeFileSyncMode`.
 The length written, `-17` EEXIST when any name is already at
   `path` (a dangling symbolic link included, which is never followed), or
   another negative errno as for `writeFileSyncMode`.
+
+</scalar-field>
+
+### fileClose
+
+Close a descriptor `fileOpen` gave; close it once.
+
+```ts
+function fileClose(fd: i32): i32
+```
+
+<scalar-field name="fd" type="i32" required>
+
+A descriptor from `fileOpen`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+`0`, or a negative errno (`-9` EBADF).
+
+</scalar-field>
+
+### fileOpen
+
+Open a regular file to read a window at a time: read-only, close-on-exec
+and non-blocking. A directory is `-21`, any other kind that is not a
+regular file `-22`. Close it with `fileClose` in a `finally`.
+
+```ts
+function fileOpen(path: string): i32
+```
+
+<scalar-field name="path" type="string" required>
+
+The file to open.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+A descriptor (`>= 0`), or the negated Linux errno: `-2` ENOENT,
+  `-13` EACCES, `-21` EISDIR, `-22` for a FIFO or device, `-6` ENXIO for a
+  socket; anything outside the documented set is `-5` EIO.
+
+</scalar-field>
+
+### fileReadAt
+
+Read up to `len` bytes from file offset `pos` into `buf[off .. off + len)`
+(`pread`). The window panics as `buf.slice` does when it falls outside
+`buf`; the array is never grown.
+
+```ts
+function fileReadAt(
+  fd: i32,
+  buf: u8[],
+  off: i32,
+  len: i32,
+  pos: i64,
+): i32
+```
+
+<scalar-field name="fd" type="i32" required>
+
+A descriptor from `fileOpen`.
+
+</scalar-field>
+
+<scalar-field name="buf" type="u8[]" required>
+
+The array the bytes land in.
+
+</scalar-field>
+
+<scalar-field name="off" type="i32" required>
+
+Where in `buf` the first byte lands.
+
+</scalar-field>
+
+<scalar-field name="len" type="i32" required>
+
+The most bytes to read.
+
+</scalar-field>
+
+<scalar-field name="pos" type="i64" required>
+
+The file offset, an `i64`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The bytes read, `0` at end of file, or a negative errno: `-22`
+  for a negative or overflowing `pos`, `-9` for a closed descriptor.
+
+</scalar-field>
+
+### fileSize
+
+The file's size in bytes now, from `fstat`.
+
+```ts
+function fileSize(fd: i32): i64
+```
+
+<scalar-field name="fd" type="i32" required>
+
+A descriptor from `fileOpen`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i64">
+
+The size, or a negative errno.
 
 </scalar-field>
 
