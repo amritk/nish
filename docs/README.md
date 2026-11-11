@@ -105,7 +105,8 @@ who write programs in Nish. A page there follows these rules:
   fence `file=<path>` (` ```ts nish:ok file=geometry.ts `, or
   ` ```json nish:ok file=node_modules/hash/package.json ` for a package): the
   `file=` fences of one section are written out together, each at its path,
-  and the last is compiled with its marker, so only it may be `nish:err`.
+  and the last is compiled with its marker, so only it may be `nish:err`;
+  each other `.ts` fence must also compile alone.
 - **The reference is normative.** Each page links the
   [LANGUAGE.md](LANGUAGE.md) section that governs it and describes nothing
   that section does not say; where the two disagree, the guide is wrong.

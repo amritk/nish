@@ -22455,19 +22455,17 @@ if (dealtHere("releaseChecks")) {
         while (end < lines.length && lines[end] !== "```") {
           end++
         }
-        // A `json` fence is only ever a file of a program; alone it is not one.
-        if (m[1] === "ts" || file !== null) {
-          found.push({
-            kind: m[2],
-            wrap: m[3] === "-body",
-            code,
-            args: rest,
-            file,
-            section,
-            line: i + 1,
-            source: lines.slice(i + 1, end).join("\n"),
-          })
-        }
+        found.push({
+          lang: m[1],
+          kind: m[2],
+          wrap: m[3] === "-body",
+          code,
+          args: rest,
+          file,
+          section,
+          line: i + 1,
+          source: lines.slice(i + 1, end).join("\n"),
+        })
         i = end
       }
       return found
@@ -22638,11 +22636,17 @@ if (dealtHere("releaseChecks")) {
      * Writes a program's fences out and compiles its entry, the last of them. A
      * program of `file=` fences gets a directory of its own, each fence at its path;
      * `misplaced` lists the lines of the fences before the entry that carry
-     * `nish:err` or flags, which nothing would check, or a path outside that
-     * directory, which is not written.
+     * `nish:err` or flags, which nothing would check, a path outside that
+     * directory, which is not written, or a `.ts` that does not compile alone, which
+     * the entry might never import. A `json` fence is only ever a file of a program;
+     * alone it fails.
      */
     const compileProgram = (program, stem) => {
       const s = program.entry
+      if (s.lang === "json" && s.file === null) {
+        const run = { status: 1, stdout: "", stderr: "a json fence is checked only as a file= of a program" }
+        return { run, errors: [], detail: "", body: s.source, misplaced: [] }
+      }
       let file = path.join(snippetDir, `${stem}.ts`)
       const misplaced = []
       if (s.file !== null) {
@@ -22657,6 +22661,16 @@ if (dealtHere("releaseChecks")) {
           fs.writeFileSync(target, fenceBody(f))
           if (f !== s && (f.kind !== "ok" || f.args.length > 0)) {
             misplaced.push(f.line)
+          }
+        }
+        for (const f of program.files) {
+          const target = path.resolve(dir, f.file)
+          if (f.lang === "ts" && !misplaced.includes(f.line)) {
+            const out = `${path.join(snippetDir, stem)}_${f.line}${path.sep}`
+            const alone = spawnSync(NISH, [target, "-o", out], { encoding: "utf8" })
+            if (alone.status !== 0) {
+              misplaced.push(f.line)
+            }
           }
         }
         file = path.join(dir, s.file)
@@ -22729,6 +22743,31 @@ if (dealtHere("releaseChecks")) {
         misplaced.misplaced.length === 1,
         JSON.stringify(misplaced.misplaced)
       )
+      const unimported = exported[0].entry.source.replace(/^import .*\n/, "").replace("half(4)", "2")
+      const strayPage = page
+        .replace("const half", "export const half")
+        .replace("x / 2;", "x / 2 + undefinedName;")
+        .replace(exported[0].entry.source, unimported)
+      const stray = compileProgram(programsOf(markedSnippets(strayPage))[0], "file_fences_unimported")
+      check(
+        "docs: a broken file= fence the entry never imports is reported",
+        stray.run.status === 0 && stray.misplaced.length === 1,
+        `${stray.run.status} ${JSON.stringify(stray.misplaced)}`
+      )
+      const escape = compileProgram(
+        programsOf(markedSnippets(page.replace("file=geometry.ts", "file=../geometry.ts")))[0],
+        "file_fences_escape"
+      )
+      check(
+        "docs: a file= path outside the program's directory is reported",
+        escape.misplaced.length === 1,
+        JSON.stringify(escape.misplaced)
+      )
+      const loneJson = compileProgram(
+        programsOf(markedSnippets('## Alone\n```json nish:ok\n{"name": "hash"}\n```'))[0],
+        "file_fences_json"
+      )
+      check("docs: a json fence without file= fails", loneJson.run.status !== 0, "it passed")
     }
 
     for (const page of docPages) {
