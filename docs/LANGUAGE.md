@@ -3438,7 +3438,9 @@ new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
 A parameter of a top-level function may have a **function type** written
 inline in its annotation, and its argument is then a function the checker can
 name at the call: a top-level
-function written by name, or an arrow written right there. Such a function is
+function written by name, an arrow written right there, or a local holding a
+function reference, which the call wraps in an arrow that calls it
+([Function references](#function-references)). Such a function is
 a template, with or without type parameters, and **each callee it is given is
 an instantiation of its own**, exactly as each type-argument tuple is: one
 `define` per (template, type arguments, function arguments), whose body calls
@@ -3613,7 +3615,8 @@ export const main = (): i32 => {
 ### Function references
 
 A name bound to a top-level function, in either spelling, written anywhere but
-a call's callee or a function argument is a **function reference**: a value
+a call's callee or a function argument is a **function reference**
+(a local holding one may itself be passed as a function argument, below): a value
 of the function's type, `(x: i32) => i32`. A function type names a reference
 everywhere but inline on a parameter of a top-level function
 ([Function parameters](#function-parameters)): on a local, a field, an array
@@ -15348,8 +15351,8 @@ messages are exact for the cases cited; other entries quote the checker
   `_escape_join_transitive`, `_print`, `_json`, `_map_key`, `_nullable_call`,
   `_arg_effect`, `_arg_field`, `_arg_element_nullable`, `reject_fnarg_alias`,
   `reject_mutex_guard_helper_*`; [Function references](#function-references))
-- **a function argument that is not a function's name or an arrow, or does not
-  match**:
+- **a function argument that is not a function's name, an arrow or a local
+  holding a reference, or does not match**:
   `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... ``
   / `` ...; a function argument must have exactly its parameter's type ``
   (`reject_fnarg_not_name`, `reject_fnarg_generic_name`,
