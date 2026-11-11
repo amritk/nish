@@ -161,6 +161,7 @@ import {
   FunctionSig,
   inlineElementStruct,
   JSON_DECODE,
+  JSON_DECODE_UNION,
   JSON_NONE,
   MAP_GET_OR_INSERT,
   PAR_MAP,
@@ -4460,6 +4461,8 @@ const markShmWindow = (facts: FunctionFacts): void => {
  *     parameter, as a parallel entry does, and that what it allocates escapes:
  *     no loop, arena scope or `using a = arena()` block around a call
  *     reclaims it (NL2424 refuses the block).
+ *   - `jsonDecodeUnion` is a decoding that answers `prev` or a variant it
+ *     made, so `prev` outlives the call and the result is an allocation.
  */
 const markJsonRoute = (
   program: CheckedProgram,
@@ -4480,7 +4483,8 @@ const markJsonRoute = (
       receiver.passedToIndices.push(0)
     }
   }
-  if (jsonRouteOf(sig) === JSON_DECODE) {
+  const route = jsonRouteOf(sig)
+  if (route === JSON_DECODE || route === JSON_DECODE_UNION) {
     facts.effect = EFFECT_WRITE
     facts.sharedWrite = true
     facts.allocates = true
@@ -4498,7 +4502,13 @@ const markJsonRoute = (
       pp.writesReach = true
       pp.writesDeep = true
       pp.polluted = true
+      // A union's decoding answers `prev`, or an object it made.
+      if (route === JSON_DECODE_UNION) {
+        pp.captured = true
+        pp.outlives = true
+      }
     }
+    facts.returnsAllocation = route === JSON_DECODE_UNION
   }
 }
 

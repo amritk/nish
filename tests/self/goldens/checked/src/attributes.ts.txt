@@ -124,6 +124,7 @@ import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
 import inlineElementStruct from "./program" -> function @inlineElementStruct
 import JSON_DECODE from "./program" -> const JSON_DECODE
+import JSON_DECODE_UNION from "./program" -> const JSON_DECODE_UNION
 import JSON_NONE from "./program" -> const JSON_NONE
 import MAP_GET_OR_INSERT from "./program" -> const MAP_GET_OR_INSERT
 import PAR_MAP from "./program" -> const PAR_MAP
@@ -2537,10 +2538,11 @@ function markJsonRoute(program: CheckedProgram, table: TypeTable, sig: FunctionS
   local +6:14 callee: FunctionSig (const)
   callee +6:24 jsonRouteCallees -> @jsonRouteCallees
   callee +7:5 StringSet.add -> @StringSet.add
-  callee +13:7 jsonRouteOf -> @jsonRouteOf
-  callee +22:5 StringSet.add -> @StringSet.add
-  callee +23:5 markParallelEntry -> @markParallelEntry
-  local +27:16 pp: PointerParamFacts (const)
+  local +13:9 route: i32 (const)
+  callee +13:17 jsonRouteOf -> @jsonRouteOf
+  callee +23:5 StringSet.add -> @StringSet.add
+  callee +24:5 markParallelEntry -> @markParallelEntry
+  local +28:16 pp: PointerParamFacts (const)
 function analyzeInstanceEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, known: FactsTable, opts: Options): EscapeResult -> @analyzeInstanceEscapes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=104
   sharedWrite: via CheckedProgram.enterInstance

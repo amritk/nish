@@ -11,11 +11,13 @@ import {
   JSON_DECODE_MISSING,
   JSON_DECODE_OK,
   JSON_DECODE_RANGE,
+  JSON_DECODE_TAG,
   JSON_DECODE_TYPE,
   JSON_DECODE_UNKNOWN,
   JsonDecoder,
   JsonNumber,
   jsonDecode,
+  jsonDecodeUnion,
   jsonEncode,
   jsonEncodeBooleanArray,
   jsonEncodeBooleanArrayOrNull,
@@ -60,6 +62,12 @@ if (jsonDecode(d, p) === 0) {
 <scalar-card title="json​Decode" icon="phosphor/regular/function" href="#jsondecode">
 
 Decodes the JSON object `d` holds, the whole input, into `out`.
+
+</scalar-card>
+
+<scalar-card title="json​Decode​Union" icon="phosphor/regular/function" href="#jsondecodeunion">
+
+Decodes the JSON text `d` reads into a tagged union, `T`: the object's tag picks the variant.
 
 </scalar-card>
 
@@ -191,10 +199,11 @@ That code is straight-line calls into the methods of `JsonDecoder` and the
 functions here for each field, and into `JsonWriter`'s, so all of the parsing
 is the tokenizer's and all of the writing is the writer's. A field may be an
 `i32`, `u32`, `i64`, `u64`, `f64` (or `number`), `boolean` or `string`, a
-numeric enum (its number), a class decoded the same way, a `JsonNumber`, an
-array of any of those, a `Map<string, V>` (a JSON object) whose `V` is any of
-these, or a string, class, array or map `| null`; anything else is refused at
-the call, naming the field (docs/LANGUAGE.md, "Typed JSON").
+numeric enum (its number), a class decoded the same way, a tagged union of
+classes, a `JsonNumber`, an array of any of those, a `Map<string, V>` (a
+JSON object) whose `V` is any of these, or a string, class, union, array or
+map `| null`; anything else is refused at the call, naming the field
+(docs/LANGUAGE.md, "Typed JSON").
 
 </scalar-detail>
 
@@ -245,6 +254,11 @@ Map<string, V>, or | null     an object whose keys are the  keys in order,  entr
                               map's, each value a V         each value set  map's order
 JsonNumber                    any number, kept as the text  d.number(n)     jsonEncodeNumber
                               it is written in
+tagged union U, U | null      an object whose tag names a   the variant's   the variant's
+                              variant, and null for the     decoding, into  encoding, its
+                              second                        the object held tag first
+                                                            when its tag
+                                                            matches
 ```
 
 </scalar-detail>
@@ -376,6 +390,8 @@ other than being absent:
   its field's type. Without it every field is required and a missing key is
   `JSON_DECODE_MISSING`.
 - `presence`, described below. Without it nothing is recorded.
+- `tag`, a string literal: what a variant of a tagged union writes as its
+  tag, described below. Without it the tag is the enum member's name.
 
 </scalar-detail>
 
@@ -388,7 +404,7 @@ NL2493  options, `rename`, a key or an `optional` entry not written as
         the literal it must be (a module constant, an array for the
         object, a string for `optional`'s array); `presence` or one of
         its entries not an object literal of string literals
-NL2494  an option other than `rename`, `optional` and `presence`
+NL2494  an option other than `rename`, `optional`, `presence` and `tag`
 NL2495  a name that is not one of the class's fields; `presence` naming
         a field or a presence field the class does not declare
 NL2496  a rename to a value that is not a string
@@ -401,6 +417,8 @@ NL2592  a presence field that is not a `boolean`, is `readonly`, is the
         field it records, records two fields, is recorded by a presence
         field of its own or is renamed or made optional; a field
         recorded twice
+NL2721  a `tag` that is not a string literal
+NL2723  a `tag` on a class with no field whose type is one enum member
 ```
 
 A spread in the literal is refused (NL2711), a computed key as it is
@@ -465,6 +483,58 @@ recipe in full.
 
 </scalar-detail>
 
+<scalar-detail title="A tagged union">
+
+A union of classes, each with a field whose type is
+one member of one enum (`readonly kind: Kind.Num = Kind.Num`), is written
+as one object whose tag picks the variant:
+
+<scalar-code-group>
+
+```ts example.ts
+enum Kind { Num, Neg }
+class Num { readonly kind: Kind.Num = Kind.Num; value: f64 = 0 }
+class Neg {
+  static readonly json = { tag: "negate" };
+  readonly kind: Kind.Neg = Kind.Neg;
+  arg: Expr;
+  constructor() { this.arg = zero() }
+}
+type Expr = Num | Neg;               // {"kind":"negate","arg":{"kind":"Num","value":2}}
+
+let e: Expr = zero();
+e = jsonDecodeUnion(d, e);           // d.failed says whether it worked
+jsonEncode(w, e);
+```
+
+</scalar-code-group>
+
+</scalar-detail>
+
+The tag's key is the tag field's name, or its `rename`, and every variant
+gives the same one (NL2720). Its value is the enum member's name, or the
+variant's `tag` option, and no two variants write the same one (NL2719). The
+tag may be any key of the object: when it is the first, the variant is picked
+at once; when it is not, the keys before it are stepped over, checked but not
+kept, and the object is read again from its first key once the variant is
+known. A nested union does the same inside the bytes its parent read ahead
+over only when it is decoded, so each byte of the input is read at most once
+per level of nesting above it: at most `maxDepth` times
+(docs/security/json.md, JSON-17).
+
+`jsonDecode` decodes into the object it is given and cannot change which
+class that is, so a union is decoded with `jsonDecodeUnion(d, prev)`, which
+answers the object it decoded into: `prev` when the tag names `prev`'s
+variant, a new one made by `new V()` when it does not or `prev` is `null`,
+and `prev` when the decode fails (NL2718 refuses `jsonDecode` of a union;
+NL2722 refuses `jsonDecodeUnion` of anything else). A union field, a union
+array's element and a `| null` union field follow the same rule. Encoding
+writes the tag first, then the variant's fields. A variant decoded alone,
+by `jsonDecode`, reads its tag like any field and fails with
+`JSON_DECODE_TAG` when it is not its own. The code is written once per
+union, so a recursive union is one function that calls itself. A union may
+not be a `Map`'s type argument, so no map holds one.
+
 <scalar-detail title="Errors are sticky codes">
 
 **Errors are sticky codes**, as the tokenizer's and the writer's are. The
@@ -486,6 +556,8 @@ JSON_DECODE_UNKNOWN       -22   a key that names no field       the key
 JSON_DECODE_DUPLICATE     -23   a key given twice               the second
 JSON_DECODE_MISSING       -24   a field the object lacks        the object's `}`
 JSON_DECODE_MAP_LIMIT     -25   more than maxMapKeys map keys   the first key past it
+JSON_DECODE_TAG           -26   a union's tag missing, not a    the tag's value, or
+                                string, or no variant's         the object's `{`
 JSON_TOK_ERR_*        -1 to -13 text that is not JSON, or past  the tokenizer's
                                 a JsonLimits limit
 ```
@@ -605,6 +677,45 @@ The object to decode into: a declared class, whose fields,
 
 `d.failed`: `JSON_DECODE_OK`, or the first error's code, a
   `JSON_DECODE_*` or the tokenizer's `JSON_TOK_ERR_*`.
+
+</scalar-field>
+
+### jsonDecodeUnion
+
+Decodes the JSON text `d` reads into a tagged union, `T`: the object's tag
+picks the variant. When it is `prev`'s, `prev` is decoded into and
+returned, its fields, nested objects and arrays reused; otherwise a new
+object of that variant is made with its constructor of no parameters and
+returned. The tag may be any key of the object; it is cheapest first. The
+compiler writes the code from the union's variants at every call, and `T`
+is never written at the call; under Node this body ends the program with a
+panic, because the types are erased.
+
+```ts
+function jsonDecodeUnion<T>(
+  _d: JsonDecoder,
+  _prev: T,
+): T
+```
+
+<scalar-field name="_d" type="JsonDecoder" required>
+
+The decoder over the input; its `failed` and `errorAt` say what
+  went wrong, and `reset` starts it over.
+
+</scalar-field>
+
+<scalar-field name="_prev" type="T" required>
+
+The value the union holds now, reused when the tag names its variant.
+
+</scalar-field>
+
+<scalar-field name="returns" type="T">
+
+The decoded value; on any failure `prev`, perhaps partly
+  overwritten, with `d.failed` set to the first error's code, such as
+  `JSON_DECODE_TAG`.
 
 </scalar-field>
 
@@ -1146,6 +1257,17 @@ Nothing has failed.
 A number its field cannot hold: a fraction or an exponent for an integer
 field, a value outside its range, or a negative number, `-0` included, for
 a `u64`. `errorAt` is the number.
+
+</scalar-card>
+
+<scalar-card title="-26" icon="phosphor/regular/hash">
+
+`JSON_DECODE_TAG: i32`
+
+A tagged union's object whose tag is missing, not a string, or none of the
+union's variants' wire tags, or a variant's object whose tag is not that
+variant's own; `errorAt` is the tag's value, or the object's `{` when the
+tag is missing.
 
 </scalar-card>
 

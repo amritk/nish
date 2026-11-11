@@ -277,7 +277,9 @@ the writer's depth limit. Nothing an input holds panics.
 Six findings are accepted, all Low, and JSON-13 (Medium), the map keys a body
 can make collide, is fixed by a keyed string hash, with the limit on the keys
 of one decoding kept. JSON-15 (Medium), the same flood through integer keys, is
-fixed by a keyed integer hash; JSON-16 (Low), float keys, is open.
+fixed by a keyed integer hash; JSON-16 (Low), float keys, is open. JSON-17
+(Low), a tagged union's read-ahead to a tag that is not the first key, is
+accepted with its bound pinned.
 
 ### Scope
 
@@ -288,6 +290,8 @@ fixed by a keyed integer hash; JSON-16 (Low), float keys, is open.
 | `src/emit-json.ts` | the code written per class: `emitJsonDecodeBody` and the key dispatch (`emitJsonDispatch`), `emitJsonDecodeArrayBody`, `emitJsonEnumCheck`, `emitJsonDecodeMapBody`, `emitJsonEncodeMapBody`, `emitJsonStopIfFailed` |
 | `std/collections.ts`, `src/emit-map.ts` | the global `Map` and `Set` a decoded value, or a program keying by what it decoded, lands in: `hashKey` and `homeBucket`, and their lowering per key type, `hashOf`, `emitStringHash`, `seedHashKey`, `spreadIntKey`, `loadIntKey`, `multiplyAddShift`, `foldedMultiply`, `fmix64` and `floatBits` (JSON-13, JSON-15, JSON-16; anchored at `65b8165a` on `feature/ts-port-language/map-keys`) |
 | `src/attributes.ts`, `src/inline-arrays.ts` | `markJsonRoute`, the facts every call is given; `spoilJsonRoutes`, which keeps the arrays the code reaches out of the inline layout |
+| `std/json-typed.ts`, `std/json-tokenizer.ts` | tagged unions (JSON-17; anchored on `feature/json-tagged-unions/json-tagged-unions`, #1389): `JsonDecoder.unionTag`, `unknownTag`, `enterUnion`, `tagValue`; `JsonTokenizer.rewindObject` |
+| `src/json-typed.ts`, `src/emit-json.ts` | tagged unions, same anchor: `jsonVariantsOf`, `jsonUnionRefusal`, `jsonTagField`, `jsonWireTag`, `jsonReadTag`; `emitJsonDecodeUnionBody`, `emitJsonDecodeUnionArrayBody`, `emitJsonDecodeUnionInto`, `emitJsonEncodeUnionBody` |
 
 ### Threat model
 
@@ -305,6 +309,7 @@ chooses the class, the limits and `ignoreUnknown`.
 | JSON-4 | Low | `std/json-typed.ts:295` (`unknownField`) | With `ignoreUnknown` set, a key that names no field is stepped over without being remembered, so a duplicate of such a key is not refused. Its value is checked by the tokenizer and never read, so no reading of it can differ between two components of this program. | **Accepted.** Remembering every unknown key would cost an allocation per key; a program that forwards the raw body to another parser leaves `ignoreUnknown` off. |
 | JSON-5 | Low | `src/emit-json.ts:1018` (`emitJsonDecodeArrayBody`) | A nested object is decoded into the object its field already holds, and an array's elements into the objects it has, so two fields that hold one object are decoded into it twice and the second wins. | **Accepted.** It is what reuse costs, and it is in the rule (docs/LANGUAGE.md, "Typed JSON"); a program that shares an object between fields owns the sharing. |
 | JSON-6 | Low | `std/json-typed.ts:467` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
+| JSON-17 | Low | `std/json-typed.ts:853` (`unionTag`), `:907` (`enterUnion`); `std/json-tokenizer.ts:1485` (`rewindObject`) | A tagged union's tag may be any key of its object. When it is not the first, `unionTag` steps over the values before it with `skipValue` to find the variant, and `enterUnion` rewinds to the object's first key, so those bytes are read twice; a union nested in what was stepped over reads ahead again when it is decoded. A body that puts every tag last makes each byte be read once per union object enclosing it, so a decode reads at most `maxDepth` + 1 times its input: 129 times at the default, never more. | **Accepted.** The bound is linear in the input for a fixed `maxDepth`, which the program sets; `skipValue` is iterative and recurses into nothing, so the read-ahead takes no native frames and allocates nothing. Tag-first input, what `jsonEncode` writes, reads every byte once. A program decoding untrusted input under a raised `maxDepth` keeps it low or rejects bodies whose tag is not first. |
 | JSON-7 | Low | `src/emit-json.ts:753` (`emitJsonDecodeBody`), `:1237` (`emitJsonStopIfFailed`) | Decoding recurses one native frame per level of nesting, bounded only by the caller's `JsonLimits.maxDepth` (128 by default): a caller that raises it into the hundreds of thousands can overflow the stack on a deep enough body. And the writer refuses past 64 levels, so a value decoded at 65 to 128 levels does not encode back (`JSON_WRITE_TOO_DEEP`). | **Accepted.** The default is safe and the limit is the program's; docs/LANGUAGE.md ("Typed JSON") and the guide say to keep it to a few thousand, and name the 64-level writer limit. |
 | JSON-12 | Low | `src/emit-json.ts:1158` (`emitJsonDecodeMapBody`) | A `Map` field is emptied and filled anew on every decode, so its keys are new strings and its values new objects, arrays or maps each time: a server decoding a stream of bodies into one object grows the arena by the entries it keeps, bounded by the bodies' size under `maxTotalBytes`, as JSON-6's strings are. | **Accepted.** Reusing an entry would need its key found before the entry is kept or dropped, and would keep the old order where the input gives a new one; docs/LANGUAGE.md ("Typed JSON") says a map's entries are made anew. |
 | JSON-13 | Medium | `src/emit-json.ts:1208` (`emitJsonDecodeMapBody`), `std/json-typed.ts:360` (`mapRoom`); the hash in `src/emit-map.ts:177` (`emitStringHash`), `src/emit-map.ts:305` (`seedHashKey`) and `std/collections.ts:68` (`hashKey`) | A `Map<string, V>` field takes its keys from the body, and the global `Map` hashes a string with unseeded FNV-1a and probes linearly, so a body can choose keys that all land on one probe chain and make each insert walk every key before it. Measured in review at `a336c929`, before any limit: a 278 KB body of 20,000 colliding keys decoded in 657 ms, against 2.4 ms for 20,000 ordinary keys (274x). | **Fixed.** Every `Map` and `Set` hashes a string with SipHash-1-3 under a 128-bit key the process draws from `getentropy` before `main`, so which keys share a bucket is not something a body can work out: the 4,096 keys of `tests/cases/map_hash_collide.ts`, which share one FNV-1a hash, took 8,386,560 key compares to insert under FNV-1a and take none now ("map_hash_collide: 4096 keys with one FNV-1a hash insert with under 16 key compares (8,386,560 unkeyed)", "map_hash_collide: the hash key is filled before main, and differently in two runs"), and under the key 00..0f the emitted hash and its 32-bit fold agree with a reference SipHash-1-3 checked against SipHash-2-4's published vector ("map_hash_kat: the string hash is SipHash-1-3 folded to 32 bits, as the reference computes it under key 00..0f"). Each module that hashes a string registers a constructor that fills `nish_hash_key` unless another already has, and panics before `main` when the entropy source fails rather than run unkeyed. The limit stays: `maxMapKeys` still bounds one decoding's keys, now as a bound on memory and not the only bound on time. What the key cannot reach: on wasm32 the bytes are whatever the host answers WASI's `random_get` with, and the constructor runs from `_start` or, in a reactor module, from `_initialize`, so an embedder that supplies predictable bytes, or calls an export without `_initialize`, leaves the hash keyed with what it supplied, or with zero. A reactor export that runs before `_initialize` and builds a table hashes it under the zero key, and once `_initialize` fills the key, lookups in that table miss. |
@@ -508,6 +513,22 @@ the same text"). No array a route reaches is laid out inline
 module is made callable there rather than linked `internal`
 (`src/generics.ts:1642`).
 
+**A tagged union's tag is checked** (`tests/link/json_tagged_union`'s
+`expected.out`, by label): a tag that names no variant ("unknown", "member"
+nested in an array), is missing ("missing") or is not a string ("number") is
+`JSON_DECODE_TAG` at the tag's value, or the object's `{` when missing, and the
+union keeps `prev`; a variant decoded alone with another's tag is
+`JSON_DECODE_TAG` ("alone -26"), and a tag given twice is
+`JSON_DECODE_DUPLICATE` ("event -23"). The key `kind` under a union renamed to
+`type` is a missing tag ("event -26 0"), not the tag.
+
+**The read-ahead is bounded** (JSON-17): a chain of 15 unions under
+`maxDepth` 16, every tag last so every level reads ahead over all of what it
+holds, decodes whole ("deep 15 0 -1 15"), and one level more is the
+tokenizer's depth error, raised while reading ahead before anything is decoded
+("deep 16 -9"). The depth limit is checked by the read-ahead's `skipValue` as
+by any read, so no body is read ahead past `maxDepth` levels.
+
 **The arena** is flat over 1,000 decodes of one body into one object ("reuse:
 Arena.used() is flat over 1,000 decodes into one object"), and 100 decodes of
 changed strings keep the strings and nothing else ("reuse: 100 changed
@@ -517,6 +538,8 @@ strings keep only the strings").
 
 - `link/${name}: exits with ${wantCode} and stdout matches expected.out`, for
   `std_json_typed`: every line quoted in this section.
+- `link/${name}: exits with ${wantCode} and stdout matches expected.out`, for
+  `json_tagged_union`: the tagged-union lines quoted above (JSON-17).
 - `link/std_json_typed: each of the ${lines.length} lines decoded and encoded natively is JSON.stringify(JSON.parse(line))`
 - `link/std_json_typed: each of the ${optionsLines.length} lines of JsonNumber fields decoded and encoded natively keeps every number's source text`
 - `link/std_json_typed: each of the ${kindsLines.length} lines of u64, enums and maps decoded and encoded natively is JSON.stringify(JSON.parse(line)), u64 exact`

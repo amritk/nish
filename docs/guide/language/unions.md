@@ -453,3 +453,10 @@ Nor is one on an enum field given a tag, `b.k = s.kind`: the field is still a
 counts is the subject itself, a variant's tag field read on a union value.
 TypeScript accepts all four. Give such a `switch` a `default`, or return after
 it.
+
+## Unions as JSON
+
+A union of classes reads and writes as JSON through `nish/json-typed`: the tag
+goes on the wire as the name of its enum member, and `jsonDecodeUnion` picks
+the variant by it. See
+[Tagged unions](../using-nish/standard-library.md#tagged-unions).

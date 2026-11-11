@@ -1609,7 +1609,9 @@ export const checkGenericCall = (
   if (refused.length > 0) {
     return ctx.errorType(expr, refused)
   }
-  if (holdsAnyUnion(ctx.table, tuple)) {
+  // Typed JSON's routes take a union too: their calls are written from the
+  // variants' fields (`src/emit-json.ts`), and no body of theirs is instantiated.
+  if (jsonRouteRole(template) === JSON_NONE && holdsAnyUnion(ctx.table, tuple)) {
     return ctx.errorType(
       expr,
       unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, tuple))

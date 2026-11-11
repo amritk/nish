@@ -62,7 +62,14 @@
 // carry no attributes: LLVM infers what it can.
 
 import { Emitter } from "./emit"
-import { emitElementAt, emitEmptyArray, emitPushValue, loadLength, storeHeaderField } from "./emit-arrays"
+import {
+  emitElementAt,
+  emitEmptyArray,
+  emitPushValue,
+  emitSetElementAt,
+  loadLength,
+  storeHeaderField,
+} from "./emit-arrays"
 import {
   emitNewWithoutArguments,
   initializerConstant,
@@ -82,24 +89,30 @@ import {
   JSON_FIELD_ENUM_ARRAY,
   JSON_FIELD_MAP,
   JSON_FIELD_SCALAR,
+  JSON_FIELD_TAG,
+  JSON_FIELD_UNION,
+  JSON_FIELD_UNION_ARRAY,
   JsonField,
   jsonDecodeMethod,
   jsonEncodeHelper,
   jsonFieldOf,
+  jsonRootsOf,
   jsonScalarMethod,
+  jsonWireTag,
 } from "./json-typed"
 import {
   CheckedProgram,
   FieldInfo,
   FunctionSig,
   JSON_DECODE,
+  JSON_DECODE_UNION,
   MAP_NONE,
   StructInfo,
   TemplateInfo,
 } from "./program"
 import { StringSet } from "./map"
 import { ARRAY_TYPE } from "./runtime"
-import { T_I32, T_STRING, T_VOID } from "./types"
+import { T_I32, T_STRING, T_VOID, UNION_TYPE } from "./types"
 
 /** What one written function is for. */
 const PART_DECODE: i32 = 1
@@ -109,6 +122,12 @@ const PART_ENCODE: i32 = 4
 const PART_ENCODE_ARRAY: i32 = 5
 const PART_DECODE_MAP: i32 = 6
 const PART_ENCODE_MAP: i32 = 7
+/** A union's object: its tag read, then its variant's fields; answers the object decoded into. */
+const PART_DECODE_UNION: i32 = 8
+/** A union's object: a `switch` on its tag to its variant's encoding. */
+const PART_ENCODE_UNION: i32 = 9
+/** A variant's fields, read after its union's tag: a class's decoding, its object already open. */
+const PART_DECODE_IN: i32 = 10
 
 /** The array header's LLVM type, as a value. */
 const ARRAY_PTR: string = "%struct.nish_array*"
@@ -126,6 +145,8 @@ export class JsonPart {
   home: CheckedProgram
   /** The symbol it is written under (`jsonPartName`). */
   name: string
+  /** For a variant's fields read after its union's tag, the field that holds the tag; `""` for every other part. */
+  tag: string = ""
 
   constructor(
     kind: i32,
@@ -148,7 +169,10 @@ export class JsonPart {
  * The symbol of a written function: a leading `.` no declared name can spell,
  * as the string constants have, then what it is for and the class, enum or map
  * it is for. `subject` is that name: a class's, `enum.` and an enum's symbol,
- * or a `Map` instance's.
+ * a `Map` instance's, or `union.` and its variants' names joined by `.`; a
+ * variant's fields read after its tag add the tag field's name to the
+ * variant's, since a class may be a variant of two unions with different
+ * tags. No declared name holds a `.`, so no two subjects are spelled alike.
  */
 const jsonPartName = (kind: i32, subject: string): string => {
   if (kind === PART_DECODE) {
@@ -166,6 +190,15 @@ const jsonPartName = (kind: i32, subject: string): string => {
   if (kind === PART_ENCODE_MAP) {
     return `.json.encode.map.${subject}`
   }
+  if (kind === PART_DECODE_UNION) {
+    return `.json.decode.union.${subject}`
+  }
+  if (kind === PART_ENCODE_UNION) {
+    return `.json.encode.union.${subject}`
+  }
+  if (kind === PART_DECODE_IN) {
+    return `.json.decode.in.${subject}`
+  }
   return kind === PART_ENCODE ? `.json.encode.${subject}` : `.json.encode.array.${subject}`
 }
 
@@ -182,15 +215,52 @@ const jsonRequestPart = (
   let subject = ""
   if (info !== null) {
     subject = info.name
+  } else if (value !== null && value.variants.length > 0) {
+    subject = jsonUnionSubject(value)
   } else if (value !== null) {
     subject = `enum.${emitter.table.nameOf(value.enumType)}`
   }
-  const name = jsonPartName(kind, subject)
+  return jsonQueuePart(emitter, kind, info, value, from, jsonPartName(kind, subject), "")
+}
+
+/** `union.` and the variants' names, joined by `.`: what a union's parts are named for. */
+const jsonUnionSubject = (f: JsonField): string => {
+  const names: string[] = []
+  for (const variant of f.variants) {
+    names.push(variant.name)
+  }
+  return `union.${names.join(".")}`
+}
+
+/** The symbol `name`, its part queued the first time it is asked for. */
+const jsonQueuePart = (
+  emitter: Emitter,
+  kind: i32,
+  info: StructInfo | null,
+  value: JsonField | null,
+  from: JsonPart,
+  name: string,
+  tag: string
+): string => {
   if (emitter.jsonPartNames.add(name)) {
-    emitter.jsonParts.push(new JsonPart(kind, info, value, from.receiver, from.home, name))
+    const part = new JsonPart(kind, info, value, from.receiver, from.home, name)
+    part.tag = tag
+    emitter.jsonParts.push(part)
   }
   return name
 }
+
+/** The symbol of the variant `info`'s fields read after its tag, the field `tag`, queued the first time. */
+const jsonRequestIn = (emitter: Emitter, info: StructInfo, tag: string, from: JsonPart): string =>
+  jsonQueuePart(
+    emitter,
+    PART_DECODE_IN,
+    info,
+    null,
+    from,
+    jsonPartName(PART_DECODE_IN, `${info.name}.${tag}`),
+    tag
+  )
 
 const jsonFail = (emitter: Emitter, message: string): void => {
   process.exit(internalErrorFor(`emitter: typed JSON: ${message}`, emitter.opts.json))
@@ -379,7 +449,9 @@ const jsonStore = (emitter: Emitter, place: JsonPlace, value: string): void => {
 /**
  * A call of the instantiation `sig` with its arguments lowered: `jsonDecode`
  * is the class's decoding, then `d.finish()`, whose answer is the call's;
- * `jsonEncode` is the class's encoding.
+ * `jsonEncode` is the class's encoding, or a union's; `jsonDecodeUnion` is
+ * the union's decoding, then `d.finish()`, and answers what was decoded into
+ * when that is `0` and `prev` when not.
  */
 export const emitJsonRoute = (emitter: Emitter, sig: FunctionSig, values: string[]): string => {
   const instance = sig.instance
@@ -388,8 +460,28 @@ export const emitJsonRoute = (emitter: Emitter, sig: FunctionSig, values: string
     jsonFail(emitter, `\`${sig.name}\` is not a call of \`jsonDecode\` or \`jsonEncode\``)
     return "void"
   }
-  const info = structInfoOf(emitter, instance.typeArgs[0])
   const receiver = structInfoOf(emitter, sig.paramTypes[0])
+  const type = instance.typeArgs[0]
+  const base = emitter.table.stripNull(type)
+  if (emitter.table.isUnion(base)) {
+    const f = new JsonField(null, type, JSON_FIELD_UNION, emitter.table.isNullable(type))
+    f.union = base
+    f.variants = jsonRootsOf(emitter.program, emitter.table, base)
+    const at = new JsonPart(0, null, null, receiver, template.home.program, "")
+    const self = `${jsonObjectType(receiver)} ${values[0]}`
+    // Only `jsonDecodeUnion`'s value may be `| null`, which its part takes.
+    if (instance.jsonRoute !== JSON_DECODE_UNION) {
+      const callee = jsonRequestPart(emitter, PART_ENCODE_UNION, null, f, at)
+      emitter.fn.emit(`call void @${callee}(${self}, ${UNION_TYPE} ${values[1]})`)
+      return "void"
+    }
+    const callee = jsonRequestPart(emitter, PART_DECODE_UNION, null, f, at)
+    const got = emitter.fn.emitValue(`call ${UNION_TYPE} @${callee}(${self}, ${UNION_TYPE} ${values[1]})`)
+    const code = jsonCallMethod(emitter, receiver, "finish", values[0], [])
+    const ok = emitter.fn.emitValue(`icmp eq i32 ${code}, 0`)
+    return emitter.fn.emitValue(`select i1 ${ok}, ${UNION_TYPE} ${got}, ${UNION_TYPE} ${values[1]}`)
+  }
+  const info = structInfoOf(emitter, type)
   const root = new JsonPart(0, info, null, receiver, template.home.program, "")
   const self = `${jsonObjectType(receiver)} ${values[0]}`
   const object = `${jsonObjectType(info)} ${values[1]}`
@@ -527,14 +619,26 @@ const jsonPartValue = (emitter: Emitter, part: JsonPart): JsonField => {
 const emitJsonPart = (emitter: Emitter, part: JsonPart): IRFunction => {
   const params: IRParam[] = []
   const isArray = part.kind === PART_DECODE_ARRAY || part.kind === PART_ENCODE_ARRAY
+  const isUnion = part.kind === PART_DECODE_UNION || part.kind === PART_ENCODE_UNION
   let ret = "void"
   if (part.kind === PART_NEW) {
     ret = jsonObjectType(jsonPartInfo(emitter, part))
   } else {
+    let value = ARRAY_PTR
+    if (isUnion) {
+      value = UNION_TYPE
+    } else if (!isArray) {
+      value = jsonObjectType(jsonPartInfo(emitter, part))
+    }
     params.push(new IRParam("r", jsonObjectType(part.receiver), []))
-    params.push(new IRParam("v", isArray ? ARRAY_PTR : jsonObjectType(jsonPartInfo(emitter, part)), []))
+    params.push(new IRParam("v", value, []))
+    if (part.kind === PART_DECODE_IN) {
+      params.push(new IRParam("first", "i1", []))
+    }
     if (part.kind === PART_DECODE_ARRAY) {
       ret = ARRAY_PTR
+    } else if (part.kind === PART_DECODE_UNION) {
+      ret = UNION_TYPE
     }
   }
   emitter.fn = new IRFunction(part.name, params, ret)
@@ -545,8 +649,12 @@ const emitJsonPart = (emitter: Emitter, part: JsonPart): IRFunction => {
   const subject = part.info
   if (subject !== null && subject.jsonNumber && (part.kind === PART_DECODE || part.kind === PART_ENCODE)) {
     emitJsonNumberBody(emitter, part)
-  } else if (part.kind === PART_DECODE) {
+  } else if (part.kind === PART_DECODE || part.kind === PART_DECODE_IN) {
     emitJsonDecodeBody(emitter, part)
+  } else if (part.kind === PART_DECODE_UNION) {
+    emitJsonDecodeUnionBody(emitter, part)
+  } else if (part.kind === PART_ENCODE_UNION) {
+    emitJsonEncodeUnionBody(emitter, part)
   } else if (part.kind === PART_DECODE_ARRAY) {
     emitJsonDecodeArrayBody(emitter, part)
   } else if (part.kind === PART_DECODE_MAP) {
@@ -589,23 +697,21 @@ const emitJsonNumberBody = (emitter: Emitter, part: JsonPart): void => {
  * its name is decoded (`targets`, by field), or `unknown`.
  */
 class JsonDispatch {
-  fields: JsonField[]
-  /** The label of the block each field is decoded in, by field. */
+  /** The strings told apart: a class's keys on the wire, or a union's tags. */
+  keys: string[]
+  /** The label of the block each key goes to, by key. */
   targets: string[]
   unknown: string
 
-  constructor(fields: JsonField[], targets: string[], unknown: string) {
-    this.fields = fields
+  constructor(keys: string[], targets: string[], unknown: string) {
+    this.keys = keys
     this.targets = targets
     this.unknown = unknown
   }
 }
 
-/** The key of field `k`: its name, or the one the class's `json.rename` gives it. */
-const jsonKeyOf = (d: JsonDispatch, k: i32): string => {
-  const field: FieldInfo | null = k >= 0 && k < d.fields.length ? d.fields[k].field : null
-  return field === null ? "" : field.wireName
-}
+/** The string `k`: a field's name, or the one the class's `json.rename` gives it, or a variant's tag. */
+const jsonKeyOf = (d: JsonDispatch, k: i32): string => (k >= 0 && k < d.keys.length ? d.keys[k] : "")
 
 /** Whether `x` is one of `xs`. */
 const jsonHas = (xs: i32[], x: i32): boolean => {
@@ -749,9 +855,9 @@ const emitJsonDispatchLength = (
  */
 const emitJsonDispatch = (emitter: Emitter, part: JsonPart, d: JsonDispatch): void => {
   const fn = emitter.fn
-  if (d.fields.length < JSON_DISPATCH_FROM) {
+  if (d.keys.length < JSON_DISPATCH_FROM) {
     const all: i32[] = []
-    while (all.length < d.fields.length) {
+    while (all.length < d.keys.length) {
       all.push(all.length)
     }
     emitJsonCompareEach(emitter, part, d, all)
@@ -759,7 +865,7 @@ const emitJsonDispatch = (emitter: Emitter, part: JsonPart, d: JsonDispatch): vo
   }
   const lengths: i32[] = []
   let k = 0
-  while (k < d.fields.length) {
+  while (k < d.keys.length) {
     const n = jsonKeyOf(d, k).length
     if (!jsonHas(lengths, n)) {
       lengths.push(n)
@@ -782,7 +888,7 @@ const emitJsonDispatch = (emitter: Emitter, part: JsonPart, d: JsonDispatch): vo
     const block = blocks[i]
     const candidates: i32[] = []
     k = 0
-    while (k < d.fields.length) {
+    while (k < d.keys.length) {
       if (jsonKeyOf(d, k).length === n) {
         candidates.push(k)
       }
@@ -794,15 +900,25 @@ const emitJsonDispatch = (emitter: Emitter, part: JsonPart, d: JsonDispatch): vo
   }
 }
 
+/**
+ * A class's object, decoded into `%v`. A variant's fields read after its
+ * union's tag (`PART_DECODE_IN`) are the same but for the start: the object
+ * is open already, and the tag counts as given when `%first` says it was read
+ * before the fields, so a second one is a duplicate.
+ */
 const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
   const fn = emitter.fn
   const info = jsonPartInfo(emitter, part)
   const fields = jsonFieldsOf(emitter, info)
   const seen: string[] = []
-  while (seen.length < fields.length) {
+  const names: string[] = []
+  for (const f of fields) {
+    const field = f.field
     const slot = fn.emitAlloca("seen", "i1", 1)
-    fn.emit(`store i1 false, i1* ${slot}, align 1`)
+    const tag = field !== null && part.tag.length > 0 && field.name === part.tag
+    fn.emit(`store i1 ${tag ? "%first" : "false"}, i1* ${slot}, align 1`)
     seen.push(slot)
+    names.push(field === null ? "" : field.wireName)
   }
   const loop = fn.newBlock("json.loop")
   const keys = fn.newBlock("json.key")
@@ -810,8 +926,12 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
   const check = fn.newBlock("json.check")
   const duplicate = fn.newBlock("json.duplicate")
   const done = fn.newBlock("json.done")
-  const open = jsonCallMethod(emitter, part.receiver, "beginObject", "%r", [])
-  jsonBranch(emitter, open, loop.label, done.label)
+  if (part.kind === PART_DECODE_IN) {
+    fn.emit(`br label %${loop.label}`)
+  } else {
+    const open = jsonCallMethod(emitter, part.receiver, "beginObject", "%r", [])
+    jsonBranch(emitter, open, loop.label, done.label)
+  }
 
   fn.placeBlock(loop)
   const more = jsonCallMethod(emitter, part.receiver, "nextField", "%r", [])
@@ -825,7 +945,7 @@ const emitJsonDecodeBody = (emitter: Emitter, part: JsonPart): void => {
     blocks.push(block)
     targets.push(block.label)
   }
-  emitJsonDispatch(emitter, part, new JsonDispatch(fields, targets, unknown.label))
+  emitJsonDispatch(emitter, part, new JsonDispatch(names, targets, unknown.label))
 
   // One place, moved to each field in turn, rather than one made per field.
   const place = new JsonPlace(info, "%v", null, "", T_I32)
@@ -950,6 +1070,18 @@ const emitJsonDecodeValue = (emitter: Emitter, part: JsonPart, f: JsonField, pla
     fn.placeBlock(join)
     return
   }
+  if (f.kind === JSON_FIELD_TAG) {
+    // A tag is checked, not stored: the field holds its one member already.
+    const info = place.info
+    const field = place.field
+    const wire = info === null || field === null ? "" : jsonWireTag(emitter.table, info, field)
+    jsonCallMethod(emitter, part.receiver, "tagValue", "%r", [`i8* ${emitter.stringConstant(wire)}`])
+    return
+  }
+  if (f.kind === JSON_FIELD_UNION) {
+    emitJsonDecodeUnionValue(emitter, part, f, place)
+    return
+  }
   let cur = jsonLoad(emitter, place)
   if (f.kind === JSON_FIELD_ARRAY) {
     const read = jsonCallMethod(emitter, part.receiver, jsonDecodeMethod(f), "%r", [
@@ -982,6 +1114,41 @@ const emitJsonDecodeValue = (emitter: Emitter, part: JsonPart, f: JsonField, pla
   }
   fn.emit(`br label %${join.label}`)
   fn.placeBlock(join)
+}
+
+/**
+ * A union's value, decoded into the variant the place holds when the input's
+ * tag is that variant's, or into a new one, which the place then holds. A
+ * `| null` one is `null` first when the input is.
+ */
+const emitJsonDecodeUnionValue = (emitter: Emitter, part: JsonPart, f: JsonField, place: JsonPlace): void => {
+  const fn = emitter.fn
+  if (!f.nullable) {
+    emitJsonDecodeUnionInto(emitter, part, f, place)
+    return
+  }
+  const isNull = jsonCallMethod(emitter, part.receiver, "takeNull", "%r", [])
+  const empty = fn.newBlock("json.null")
+  const value = fn.newBlock("json.value")
+  const join = fn.newBlock("json.stored")
+  jsonBranch(emitter, isNull, empty.label, value.label)
+  fn.placeBlock(empty)
+  jsonStore(emitter, place, "null")
+  fn.emit(`br label %${join.label}`)
+  fn.placeBlock(value)
+  emitJsonDecodeUnionInto(emitter, part, f, place)
+  fn.emit(`br label %${join.label}`)
+  fn.placeBlock(join)
+}
+
+/** The union's part called on what `place` holds, and what it answers stored back. */
+const emitJsonDecodeUnionInto = (emitter: Emitter, part: JsonPart, f: JsonField, place: JsonPlace): void => {
+  const callee = jsonRequestPart(emitter, PART_DECODE_UNION, null, f, part)
+  const cur = jsonLoad(emitter, place)
+  const got = emitter.fn.emitValue(
+    `call ${UNION_TYPE} @${callee}(${jsonObjectType(part.receiver)} %r, ${UNION_TYPE} ${cur})`
+  )
+  jsonStore(emitter, place, got)
 }
 
 /**
@@ -1079,7 +1246,12 @@ const emitJsonDecodeInto = (
  */
 const emitJsonDecodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
   if (part.info === null) {
-    emitJsonDecodeEnumArrayBody(emitter, part, jsonPartValue(emitter, part))
+    const f = jsonPartValue(emitter, part)
+    if (f.kind === JSON_FIELD_UNION_ARRAY) {
+      emitJsonDecodeUnionArrayBody(emitter, part, f)
+    } else {
+      emitJsonDecodeEnumArrayBody(emitter, part, f)
+    }
     return
   }
   const fn = emitter.fn
@@ -1140,6 +1312,160 @@ const emitJsonDecodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
 }
 
 /**
+ * An array of a union's objects: each element decoded by the union's part
+ * into the object the array has at its index, which answers that object or
+ * a new variant to put there, or into none past the end, where what it
+ * answers is pushed. A failed element past the end answers `null`, which is
+ * not pushed, so the array holds no `null`. Whatever is left over is dropped.
+ */
+const emitJsonDecodeUnionArrayBody = (emitter: Emitter, part: JsonPart, f: JsonField): void => {
+  const fn = emitter.fn
+  const callee = jsonRequestPart(emitter, PART_DECODE_UNION, null, f, part)
+  const self = `${jsonObjectType(part.receiver)} %r`
+  const counter = fn.emitAlloca("at", "i64", 8)
+  fn.emit(`store i64 0, i64* ${counter}, align 8`)
+  const loop = fn.newBlock("json.loop")
+  const element = fn.newBlock("json.element")
+  const reuse = fn.newBlock("json.reuse")
+  const grow = fn.newBlock("json.grow")
+  const push = fn.newBlock("json.push")
+  const next = fn.newBlock("json.next")
+  const end = fn.newBlock("json.end")
+  const cut = fn.newBlock("json.cut")
+  const done = fn.newBlock("json.done")
+  const open = jsonCallMethod(emitter, part.receiver, "beginArray", "%r", [])
+  jsonBranch(emitter, open, loop.label, done.label)
+
+  fn.placeBlock(loop)
+  const more = jsonCallMethod(emitter, part.receiver, "nextElement", "%r", [])
+  jsonBranch(emitter, more, element.label, end.label)
+
+  fn.placeBlock(element)
+  const at = fn.emitValue(`load i64, i64* ${counter}, align 8`)
+  const has = fn.emitValue(`icmp ult i64 ${at}, ${loadLength(emitter, "%v")}`)
+  jsonBranch(emitter, has, reuse.label, grow.label)
+
+  fn.placeBlock(reuse)
+  const old = emitElementAt(emitter, "%v", f.union, at)
+  const got = fn.emitValue(`call ${UNION_TYPE} @${callee}(${self}, ${UNION_TYPE} ${old})`)
+  emitSetElementAt(emitter, "%v", f.union, at, got)
+  fn.emit(`br label %${next.label}`)
+
+  fn.placeBlock(grow)
+  const made = fn.emitValue(`call ${UNION_TYPE} @${callee}(${self}, ${UNION_TYPE} null)`)
+  const absent = fn.emitValue(`icmp eq ${UNION_TYPE} ${made}, null`)
+  jsonBranch(emitter, absent, next.label, push.label)
+  fn.placeBlock(push)
+  emitPushValue(emitter, "%v", f.union, made)
+  fn.emit(`br label %${next.label}`)
+
+  fn.placeBlock(next)
+  fn.emit(`store i64 ${fn.emitValue(`add i64 ${at}, 1`)}, i64* ${counter}, align 8`)
+  fn.emit(`br label %${loop.label}`)
+
+  fn.placeBlock(end)
+  const count = fn.emitValue(`load i64, i64* ${counter}, align 8`)
+  const over = fn.emitValue(`icmp ult i64 ${count}, ${loadLength(emitter, "%v")}`)
+  jsonBranch(emitter, over, cut.label, done.label)
+  fn.placeBlock(cut)
+  storeHeaderField(emitter, "%v", 0, count, "i64")
+  fn.emit(`br label %${done.label}`)
+
+  fn.placeBlock(done)
+  fn.emit(`ret ${ARRAY_PTR} %v`)
+}
+
+/** The field of the variant `info` that holds the tag of `union`. */
+const jsonTagFieldOf = (emitter: Emitter, info: StructInfo, union: i32): FieldInfo | null =>
+  info.field(emitter.table.tagNameOf(union))
+
+/**
+ * A union's object, decoded into `%v` when the input's tag is the tag of the
+ * variant `%v` is, or else into a new object of the variant the tag names,
+ * and answered: `unionTag` finds the tag, wherever in the object it is, a
+ * dispatch on its string picks the variant, and the variant's fields are
+ * read on from the tag, or from the object's first key when the tag was not
+ * it. A tag no variant gives is `JSON_DECODE_TAG`, and a failure before a
+ * variant is picked answers `%v`, `null` included.
+ */
+const emitJsonDecodeUnionBody = (emitter: Emitter, part: JsonPart): void => {
+  const fn = emitter.fn
+  const f = jsonPartValue(emitter, part)
+  const variants = f.variants
+  const tagName = emitter.table.tagNameOf(f.union)
+  const self = `${jsonObjectType(part.receiver)} %r`
+  const wires: string[] = []
+  const targets: string[] = []
+  const blocks: IRBlock[] = []
+  let key = ""
+  for (const info of variants) {
+    const field = jsonTagFieldOf(emitter, info, f.union)
+    if (field === null) {
+      jsonFail(emitter, `\`${info.name}\` has no tag \`${tagName}\``)
+      return
+    }
+    if (key.length === 0) {
+      key = field.wireName
+    }
+    wires.push(jsonWireTag(emitter.table, info, field))
+    const block = fn.newBlock("json.variant")
+    blocks.push(block)
+    targets.push(block.label)
+  }
+  const dispatch = fn.newBlock("json.tag")
+  const failed = fn.newBlock("json.failed")
+  const unknown = fn.newBlock("json.unknown")
+  const found = jsonCallMethod(emitter, part.receiver, "unionTag", "%r", [
+    `i8* ${emitter.stringConstant(key)}`,
+  ])
+  jsonBranch(emitter, found, dispatch.label, failed.label)
+  fn.placeBlock(dispatch)
+  emitJsonDispatch(emitter, part, new JsonDispatch(wires, targets, unknown.label))
+
+  let k = 0
+  while (k < variants.length && k < blocks.length) {
+    // Both read before any call, which ends what the loop's test proved.
+    const info = variants[k]
+    const block = blocks[k]
+    k = k + 1
+    const field = jsonTagFieldOf(emitter, info, f.union)
+    const member = field === null ? 0 : emitter.table.memberValue(field.type)
+    const object = jsonObjectType(info)
+    fn.placeBlock(block)
+    const held = fn.newBlock("json.held")
+    const reuse = fn.newBlock("json.reuse")
+    const make = fn.newBlock("json.make")
+    const into = fn.newBlock("json.into")
+    const absent = fn.emitValue(`icmp eq ${UNION_TYPE} %v, null`)
+    jsonBranch(emitter, absent, make.label, held.label)
+    fn.placeBlock(held)
+    const ptr = fn.emitValue(`getelementptr inbounds %union.tagged, ${UNION_TYPE} %v, i32 0, i32 0`)
+    const tag = fn.emitValue(`load i32, i32* ${ptr}, align 4`)
+    const same = fn.emitValue(`icmp eq i32 ${tag}, ${member}`)
+    jsonBranch(emitter, same, reuse.label, make.label)
+    fn.placeBlock(reuse)
+    const old = fn.emitValue(`bitcast ${UNION_TYPE} %v to ${object}`)
+    fn.emit(`br label %${into.label}`)
+    fn.placeBlock(make)
+    const made = fn.emitValue(`call ${object} @${jsonRequestPart(emitter, PART_NEW, info, null, part)}()`)
+    const madeEdge = fn.currentBlock().label
+    fn.emit(`br label %${into.label}`)
+    fn.placeBlock(into)
+    const target = fn.emitValue(`phi ${object} [ ${old}, %${reuse.label} ], [ ${made}, %${madeEdge} ]`)
+    const first = jsonCallMethod(emitter, part.receiver, "enterUnion", "%r", [])
+    const callee = jsonRequestIn(emitter, info, tagName, part)
+    fn.emit(`call void @${callee}(${self}, ${object} ${target}, i1 ${first})`)
+    fn.emit(`ret ${UNION_TYPE} ${fn.emitValue(`bitcast ${object} ${target} to ${UNION_TYPE}`)}`)
+  }
+
+  fn.placeBlock(unknown)
+  jsonCallMethod(emitter, part.receiver, "unknownTag", "%r", [])
+  fn.emit(`br label %${failed.label}`)
+  fn.placeBlock(failed)
+  fn.emit(`ret ${UNION_TYPE} %v`)
+}
+
+/**
  * An array of enums: emptied once the input's array opens, then each element
  * read with `i32` and pushed when it is a member's value. Any other number is
  * `JSON_DECODE_TYPE`, and nothing is pushed for it, so every element the
@@ -1189,8 +1515,17 @@ const emitJsonFresh = (emitter: Emitter, part: JsonPart, f: JsonField): string =
   if (f.kind === JSON_FIELD_CLASS || f.kind === JSON_FIELD_MAP) {
     return emitJsonNew(emitter, part, f)
   }
-  if (f.kind === JSON_FIELD_ARRAY || f.kind === JSON_FIELD_CLASS_ARRAY || f.kind === JSON_FIELD_ENUM_ARRAY) {
+  if (
+    f.kind === JSON_FIELD_ARRAY ||
+    f.kind === JSON_FIELD_CLASS_ARRAY ||
+    f.kind === JSON_FIELD_ENUM_ARRAY ||
+    f.kind === JSON_FIELD_UNION_ARRAY
+  ) {
     return emitEmptyArray(emitter)
+  }
+  if (f.kind === JSON_FIELD_UNION) {
+    // The union's part makes the variant the input's tag names.
+    return "null"
   }
   if (f.kind === JSON_FIELD_ENUM) {
     const values = jsonEnumValues(emitter, f)
@@ -1273,6 +1608,11 @@ const emitJsonDecodeMapBody = (emitter: Emitter, part: JsonPart): void => {
 
 // ---- Encoding -----------------------------------------------------------------------------
 
+/**
+ * A class's object: `{`, each field's key and value, `}`. A variant's tag
+ * goes first, as its string on the wire, so a decoder reads it with no
+ * looking ahead.
+ */
 const emitJsonEncodeBody = (emitter: Emitter, part: JsonPart): void => {
   const info = jsonPartInfo(emitter, part)
   const fields = jsonFieldsOf(emitter, info)
@@ -1280,7 +1620,15 @@ const emitJsonEncodeBody = (emitter: Emitter, part: JsonPart): void => {
   jsonCallMethod(emitter, part.receiver, "beginObject", "%r", [])
   for (const f of fields) {
     const field = f.field
-    if (field !== null) {
+    if (field !== null && f.kind === JSON_FIELD_TAG) {
+      jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${emitter.stringConstant(field.wireName)}`])
+      const wire = emitter.stringConstant(jsonWireTag(emitter.table, info, field))
+      jsonCallMethod(emitter, part.receiver, "string", "%r", [`i8* ${wire}`])
+    }
+  }
+  for (const f of fields) {
+    const field = f.field
+    if (field !== null && f.kind !== JSON_FIELD_TAG) {
       jsonCallMethod(emitter, part.receiver, "key", "%r", [`i8* ${emitter.stringConstant(field.wireName)}`])
       emitJsonEncodeValue(emitter, part, f, loadField(emitter, info, "%v", field))
     }
@@ -1332,7 +1680,9 @@ const emitJsonEncodeValue = (emitter: Emitter, part: JsonPart, f: JsonField, val
     return
   }
   let write = ""
-  if (f.kind === JSON_FIELD_CLASS) {
+  if (f.kind === JSON_FIELD_UNION) {
+    write = `call void @${jsonRequestPart(emitter, PART_ENCODE_UNION, null, f, part)}(${self}, ${valueType} ${value})`
+  } else if (f.kind === JSON_FIELD_CLASS) {
     write = `call void @${jsonRequestPart(emitter, PART_ENCODE, jsonValueClass(emitter, f), null, part)}(${self}, ${valueType} ${value})`
   } else if (f.kind === JSON_FIELD_MAP) {
     const callee = jsonRequestPart(
@@ -1381,8 +1731,12 @@ const emitJsonEncodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
   const more = fn.emitValue(`icmp ult i64 ${at}, ${loadLength(emitter, "%v")}`)
   jsonBranch(emitter, more, body.label, end.label)
   fn.placeBlock(body)
-  if (info === null) {
-    const f = jsonPartValue(emitter, part)
+  const f = jsonPartValue(emitter, part)
+  if (info === null && f.kind === JSON_FIELD_UNION_ARRAY) {
+    const element = emitElementAt(emitter, "%v", f.union, at)
+    const callee = jsonRequestPart(emitter, PART_ENCODE_UNION, null, f, part)
+    fn.emit(`call void @${callee}(${jsonObjectType(part.receiver)} %r, ${UNION_TYPE} ${element})`)
+  } else if (info === null) {
     const element = emitElementAt(emitter, "%v", f.enumType, at)
     jsonCallMethod(emitter, part.receiver, "i32", "%r", [`i32 ${element}`])
   } else {
@@ -1394,6 +1748,51 @@ const emitJsonEncodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
   fn.emit(`br label %${loop.label}`)
   fn.placeBlock(end)
   jsonCallMethod(emitter, part.receiver, "endArray", "%r", [])
+  fn.emit("ret void")
+}
+
+/**
+ * A union's object: a `switch` on the tag every variant keeps first, to the
+ * variant's own encoding. Every value of the union is one of its variants,
+ * whose tags are the `switch`'s labels, so its default is never taken; it
+ * returns rather than being `unreachable`, which no proof here backs.
+ */
+const emitJsonEncodeUnionBody = (emitter: Emitter, part: JsonPart): void => {
+  const fn = emitter.fn
+  const f = jsonPartValue(emitter, part)
+  const self = `${jsonObjectType(part.receiver)} %r`
+  const ptr = fn.emitValue(`getelementptr inbounds %union.tagged, ${UNION_TYPE} %v, i32 0, i32 0`)
+  const tag = fn.emitValue(`load i32, i32* ${ptr}, align 4`)
+  const other = fn.newBlock("json.other")
+  const members: i32[] = []
+  const blocks: IRBlock[] = []
+  const labels: string[] = []
+  for (const info of f.variants) {
+    const field = jsonTagFieldOf(emitter, info, f.union)
+    const member = field === null ? 0 : emitter.table.memberValue(field.type)
+    const block = fn.newBlock("json.variant")
+    blocks.push(block)
+    if (!jsonHas(members, member)) {
+      members.push(member)
+      labels.push(`i32 ${member}, label %${block.label}`)
+    }
+  }
+  fn.emit(`switch i32 ${tag}, label %${other.label} [ ${labels.join(" ")} ]`)
+  let k = 0
+  while (k < f.variants.length && k < blocks.length) {
+    // Both read before any call, which ends what the loop's test proved.
+    const info = f.variants[k]
+    const block = blocks[k]
+    k = k + 1
+    const object = jsonObjectType(info)
+    fn.placeBlock(block)
+    const value = fn.emitValue(`bitcast ${UNION_TYPE} %v to ${object}`)
+    fn.emit(
+      `call void @${jsonRequestPart(emitter, PART_ENCODE, info, null, part)}(${self}, ${object} ${value})`
+    )
+    fn.emit("ret void")
+  }
+  fn.placeBlock(other)
   fn.emit("ret void")
 }
 

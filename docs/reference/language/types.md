@@ -656,6 +656,8 @@ type Shape = Circle | Square;
 const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
 ```
 
+Typed JSON reads and writes a union of classes by its tag ([Typed JSON](builtins.md#typed-json-nishjson-typed)).
+
 **Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
 behind a pointer. Every variant begins with its `i32` tag, so a variant
 pointer is a union pointer by a `bitcast`, and reading the tag is a

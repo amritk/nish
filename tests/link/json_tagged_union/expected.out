@@ -1,0 +1,20 @@
+first 0 -1 true {"kind":"Num","value":3}
+last 0 -1 true {"kind":"Num","value":4}
+add 0 -1 false {"kind":"Add","args":[{"kind":"Num","value":1},{"kind":"negate","arg":{"kind":"Num","value":2}}],"note":null}
+reuse 0 -1 true {"kind":"Add","args":[{"kind":"Num","value":5}],"note":{"kind":"Num","value":6}}
+unknown -26 8 true {"kind":"Num","value":4}
+missing -26 0 true {"kind":"Num","value":4}
+number -26 8 true {"kind":"Num","value":4}
+array -20 0 true {"kind":"Num","value":4}
+member -26 30 true {"kind":"Num","value":4}
+alone 0 -1 {"kind":"Num","value":7}
+alone -24 10 {"kind":"Num","value":7}
+alone -26 8 {"kind":"Num","value":0}
+env 0 -1 {"list":[{"kind":"Num","value":9}],"maybe":{"kind":"Num","value":3}}
+null 0 false
+deep 15 0 -1 15
+deep 16 -9 112 0
+event 0 -1 {"type":"open","path":"/a"}
+event 0 -1 {"type":"Close","code":0}
+event -26 0 {"type":"Close","code":0}
+event -23 15 {"type":"Close","code":0}

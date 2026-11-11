@@ -10087,6 +10087,24 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end json-typed -->
 
+### Typed JSON: a tagged union
+
+`jsonDecodeUnion(d, prev)` and `jsonEncode(w, u)` over a union of classes are
+lowered to one function per union and direction, written once into the module
+and called from every place the union appears, so a recursive union recurses
+through them. The decoding calls `unionTag`, which finds the tag key (at once
+when it is the first key, otherwise by reading ahead and rewinding) and leaves
+the tag's string to compare: a `switch` on `keyLength`, then `keyIs` per
+variant's wire tag. A match reuses `prev` when its `i32` tag is the variant's,
+and otherwise calls `.json.new.<V>`; `enterUnion` then steps into the object
+and the variant's own field loop runs with its tag already read. No match calls
+`unknownTag`, `JSON_DECODE_TAG`. The encoding is a `switch` on the loaded tag
+to each variant's encoding, which writes the tag key first (docs/LANGUAGE.md,
+"Typed JSON").
+
+<!-- cookbook:begin json-union -->
+<!-- cookbook:end json-union -->
+
 ### Typed JSON: which keys were given
 
 A `presence: { v: "hasV" }` option adds no code to the loop: the `seen` flag

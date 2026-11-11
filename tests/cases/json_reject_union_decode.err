@@ -1,0 +1,1 @@
+`jsonDecode`'s value is `A | B`, a tagged union: `jsonDecode` decodes into the object it is given, and which variant a document holds is known only once its tag is read, so a union is decoded with `jsonDecodeUnion(d, prev)`, which answers the object it decoded into

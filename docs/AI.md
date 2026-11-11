@@ -2616,7 +2616,13 @@ literal (NL2493), an unknown option (NL2494), a name that is no field (NL2495),
 a rename to a non-string (NL2496) or to a key that is not valid UTF-8
 (NL2499), two fields with one key (NL2497). A
 `JsonNumber` field keeps a number's text byte for byte (`text`, `i64`, `u64`,
-`f64`, `setText`).
+`f64`, `setText`). A tagged union of classes is a field, an array element or
+`jsonEncode`'s value too: the object with its tag key first, the tag the
+member's name or the variant's `tag` option. Decode one with
+`const u = jsonDecodeUnion(d, prev)` (never `jsonDecode`, NL2718, and no type
+argument): it answers `prev` refilled when the tag matches, else a new variant,
+and `prev` on failure; a bad tag is `JSON_DECODE_TAG`. Every variant writes its
+tag under one key (NL2720) as a different string (NL2719).
 
 ```ts nish:ok
 import { JsonWriter } from "nish/json";

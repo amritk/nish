@@ -1,0 +1,1 @@
+`jsonDecodeUnion`'s value is `Point`, which is not a tagged union: `jsonDecodeUnion` picks a variant by the object's tag and answers it, so its value is a union of classes; a class is decoded into with `jsonDecode(d, out)`

@@ -25,10 +25,11 @@
  *  functions here for each field, and into `JsonWriter`'s, so all of the parsing
  *  is the tokenizer's and all of the writing is the writer's. A field may be an
  *  `i32`, `u32`, `i64`, `u64`, `f64` (or `number`), `boolean` or `string`, a
- *  numeric enum (its number), a class decoded the same way, a `JsonNumber`, an
- *  array of any of those, a `Map<string, V>` (a JSON object) whose `V` is any of
- *  these, or a string, class, array or map `| null`; anything else is refused at
- *  the call, naming the field (docs/LANGUAGE.md, "Typed JSON").
+ *  numeric enum (its number), a class decoded the same way, a tagged union of
+ *  classes, a `JsonNumber`, an array of any of those, a `Map<string, V>` (a
+ *  JSON object) whose `V` is any of these, or a string, class, union, array or
+ *  map `| null`; anything else is refused at the call, naming the field
+ *  (docs/LANGUAGE.md, "Typed JSON").
  *
  * **Call shapes.** `jsonDecode(d, out)` reads the one JSON object `d` holds
  * into `out`, a declared class, and answers `d.failed`: `JSON_DECODE_OK` (0)
@@ -70,6 +71,11 @@
  *                                   map's, each value a V         each value set  map's order
  *     JsonNumber                    any number, kept as the text  d.number(n)     jsonEncodeNumber
  *                                   it is written in
+ *     tagged union U, U | null      an object whose tag names a   the variant's   the variant's
+ *                                   variant, and null for the     decoding, into  encoding, its
+ *                                   second                        the object held tag first
+ *                                                                 when its tag
+ *                                                                 matches
  *
  * A `Map`'s `V` is any type in this list, `| null` or not, a `Map` included;
  * `JsonNumber` may stand alone, be `| null`, be an array's element or be a
@@ -182,6 +188,8 @@
  *    its field's type. Without it every field is required and a missing key is
  *    `JSON_DECODE_MISSING`.
  *  - `presence`, described below. Without it nothing is recorded.
+ *  - `tag`, a string literal: what a variant of a tagged union writes as its
+ *    tag, described below. Without it the tag is the enum member's name.
  *
  * Each misuse has its own diagnostic:
  *
@@ -191,7 +199,7 @@
  *             the literal it must be (a module constant, an array for the
  *             object, a string for `optional`'s array); `presence` or one of
  *             its entries not an object literal of string literals
- *     NL2494  an option other than `rename`, `optional` and `presence`
+ *     NL2494  an option other than `rename`, `optional`, `presence` and `tag`
  *     NL2495  a name that is not one of the class's fields; `presence` naming
  *             a field or a presence field the class does not declare
  *     NL2496  a rename to a value that is not a string
@@ -204,6 +212,8 @@
  *             field it records, records two fields, is recorded by a presence
  *             field of its own or is renamed or made optional; a field
  *             recorded twice
+ *     NL2721  a `tag` that is not a string literal
+ *     NL2723  a `tag` on a class with no field whose type is one enum member
  *
  * A spread in the literal is refused (NL2711), a computed key as it is
  * anywhere (NL1041), a subclass by `extends`, and a second `static readonly
@@ -253,6 +263,48 @@
  * refused before any of it is applied. `examples/merge-patch.ts` is the
  * recipe in full.
  *
+ * **A tagged union.** A union of classes, each with a field whose type is
+ * one member of one enum (`readonly kind: Kind.Num = Kind.Num`), is written
+ * as one object whose tag picks the variant:
+ *
+ *     enum Kind { Num, Neg }
+ *     class Num { readonly kind: Kind.Num = Kind.Num; value: f64 = 0 }
+ *     class Neg {
+ *       static readonly json = { tag: "negate" };
+ *       readonly kind: Kind.Neg = Kind.Neg;
+ *       arg: Expr;
+ *       constructor() { this.arg = zero() }
+ *     }
+ *     type Expr = Num | Neg;               // {"kind":"negate","arg":{"kind":"Num","value":2}}
+ *
+ *     let e: Expr = zero();
+ *     e = jsonDecodeUnion(d, e);           // d.failed says whether it worked
+ *     jsonEncode(w, e);
+ *
+ * The tag's key is the tag field's name, or its `rename`, and every variant
+ * gives the same one (NL2720). Its value is the enum member's name, or the
+ * variant's `tag` option, and no two variants write the same one (NL2719). The
+ * tag may be any key of the object: when it is the first, the variant is picked
+ * at once; when it is not, the keys before it are stepped over, checked but not
+ * kept, and the object is read again from its first key once the variant is
+ * known. A nested union does the same inside the bytes its parent read ahead
+ * over only when it is decoded, so each byte of the input is read at most once
+ * per level of nesting above it: at most `maxDepth` times
+ * (docs/security/json.md, JSON-17).
+ *
+ * `jsonDecode` decodes into the object it is given and cannot change which
+ * class that is, so a union is decoded with `jsonDecodeUnion(d, prev)`, which
+ * answers the object it decoded into: `prev` when the tag names `prev`'s
+ * variant, a new one made by `new V()` when it does not or `prev` is `null`,
+ * and `prev` when the decode fails (NL2718 refuses `jsonDecode` of a union;
+ * NL2722 refuses `jsonDecodeUnion` of anything else). A union field, a union
+ * array's element and a `| null` union field follow the same rule. Encoding
+ * writes the tag first, then the variant's fields. A variant decoded alone,
+ * by `jsonDecode`, reads its tag like any field and fails with
+ * `JSON_DECODE_TAG` when it is not its own. The code is written once per
+ * union, so a recursive union is one function that calls itself. A union may
+ * not be a `Map`'s type argument, so no map holds one.
+ *
  * **Errors are sticky codes**, as the tokenizer's and the writer's are. The
  * first error sets `failed` to a negative code — a `JSON_DECODE_*` code here,
  * or the tokenizer's own `JSON_TOK_ERR_*` code when the text is not JSON or
@@ -271,6 +323,8 @@
  *     JSON_DECODE_DUPLICATE     -23   a key given twice               the second
  *     JSON_DECODE_MISSING       -24   a field the object lacks        the object's `}`
  *     JSON_DECODE_MAP_LIMIT     -25   more than maxMapKeys map keys   the first key past it
+ *     JSON_DECODE_TAG           -26   a union's tag missing, not a    the tag's value, or
+ *                                     string, or no variant's         the object's `{`
  *     JSON_TOK_ERR_*        -1 to -13 text that is not JSON, or past  the tokenizer's
  *                                     a JsonLimits limit
  *

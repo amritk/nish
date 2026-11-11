@@ -1048,7 +1048,8 @@ const JSON_DECODE_UNKNOWN: i32 = -22 [exported]
 const JSON_DECODE_DUPLICATE: i32 = -23 [exported]
 const JSON_DECODE_MISSING: i32 = -24 [exported]
 const JSON_DECODE_MAP_LIMIT: i32 = -25 [exported]
-const JSON_TYPED_ERASED: string = "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
+const JSON_DECODE_TAG: i32 = -26 [exported]
+const JSON_TYPED_ERASED: string = "nish/json-typed: jsonDecode, jsonDecodeUnion and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
 struct JsonNumber (class) size=16 align=8 exported
   field bytes: u8[] index=0 offset=0
   field count: i32 index=1 offset=8 initialized
@@ -1069,6 +1070,7 @@ struct JsonDecoder (class) size=32 align=8 exported
   field mapKeys: i32 index=4 offset=20 initialized
   field ignoreUnknown: boolean index=5 offset=24 initialized
   field held: boolean index=6 offset=25 initialized
+  field unionStart: i32 index=7 offset=28 initialized
   constructor -> @nish.JsonDecoder.constructor
   method reset -> @nish.JsonDecoder.reset
   method fail -> @nish.JsonDecoder.fail
@@ -1083,6 +1085,10 @@ struct JsonDecoder (class) size=32 align=8 exported
   method key -> @nish.JsonDecoder.key
   method text -> @nish.JsonDecoder.text
   method unknownField -> @nish.JsonDecoder.unknownField
+  method unionTag -> @nish.JsonDecoder.unionTag
+  method unknownTag -> @nish.JsonDecoder.unknownTag
+  method enterUnion -> @nish.JsonDecoder.enterUnion
+  method tagValue -> @nish.JsonDecoder.tagValue
   method duplicateField -> @nish.JsonDecoder.duplicateField
   method missingField -> @nish.JsonDecoder.missingField
   method finish -> @nish.JsonDecoder.finish
@@ -1308,6 +1314,54 @@ function JsonDecoder.unknownField(this: JsonDecoder): void -> @nish.JsonDecoder.
   local +3:11 k: i32 (const)
   callee +3:20 JsonTokenizer.skipValue -> @nish.JsonTokenizer.skipValue
   callee +5:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
+function JsonDecoder.unionTag(this: JsonDecoder, key: string): boolean -> @nish.JsonDecoder.unionTag [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: key
+  calls: nish.JsonDecoder.beginObject nish.JsonDecoder.fail nish.JsonDecoder.nextField nish.JsonTokenizer.keyEquals nish.JsonTokenizer.next nish.JsonTokenizer.skipValue
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.JsonDecoder.beginObject#0 nish.JsonDecoder.nextField#0 nish.JsonDecoder.fail#0 nish.JsonDecoder.fail#0 nish.JsonDecoder.fail#0 nish.JsonDecoder.fail#0
+  stackSites=0 stackLocals=0
+  callee -17:10 JsonDecoder.beginObject -> @nish.JsonDecoder.beginObject
+  local -14:11 tok: JsonTokenizer (const)
+  local -13:11 start: i32 (const)
+  local -12:9 first: boolean (let)
+  callee -11:12 JsonDecoder.nextField -> @nish.JsonDecoder.nextField
+  callee -10:11 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
+  local -9:15 k: i32 (const)
+  callee -9:24 JsonTokenizer.next -> @nish.JsonTokenizer.next
+  callee -7:11 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee -3:11 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  local +4:13 k: i32 (const)
+  callee +4:22 JsonTokenizer.skipValue -> @nish.JsonTokenizer.skipValue
+  callee +6:9 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee +10:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
+function JsonDecoder.unknownTag(this: JsonDecoder): void -> @nish.JsonDecoder.unknownTag [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonDecoder.fail
+  calls: nish.JsonDecoder.fail
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.JsonDecoder.fail#0
+  stackSites=0 stackLocals=0
+  callee +0:5 JsonDecoder.fail -> @nish.JsonDecoder.fail
+function JsonDecoder.enterUnion(this: JsonDecoder): boolean -> @nish.JsonDecoder.enterUnion [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.JsonTokenizer.rewindObject
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -4:11 start: i32 (const)
+  callee +1:5 JsonTokenizer.rewindObject -> @nish.JsonTokenizer.rewindObject
+function JsonDecoder.tagValue(this: JsonDecoder, name: string): void -> @nish.JsonDecoder.tagValue [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonDecoder.take
+  escaping: name
+  calls: nish.JsonDecoder.fail nish.JsonDecoder.take nish.JsonTokenizer.keyEquals
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.JsonDecoder.take#0 nish.JsonDecoder.fail#0 nish.JsonDecoder.fail#0
+  stackSites=0 stackLocals=0
+  local +0:11 k: i32 (const)
+  callee +0:20 JsonDecoder.take -> @nish.JsonDecoder.take
+  callee +2:12 JsonTokenizer.keyEquals -> @nish.JsonTokenizer.keyEquals
+  callee +3:9 JsonDecoder.fail -> @nish.JsonDecoder.fail
+  callee +8:7 JsonDecoder.fail -> @nish.JsonDecoder.fail
 function JsonDecoder.duplicateField(this: JsonDecoder): void -> @nish.JsonDecoder.duplicateField [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDecoder.fail
@@ -1975,6 +2029,7 @@ struct JsonTokenizer (class) size=96 align=8 exported
   method isIntegral -> @nish.JsonTokenizer.isIntegral
   method numberF64 -> @nish.JsonTokenizer.numberF64
   method numberSlow -> @nish.JsonTokenizer.numberSlow
+  method rewindObject -> @nish.JsonTokenizer.rewindObject
   method skipValue -> @nish.JsonTokenizer.skipValue
 function JsonLimits.constructor(this: JsonLimits): void -> @nish.JsonLimits.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -2506,6 +2561,13 @@ function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokeniz
   local +0:11 src: u8[] (const)
   local +1:11 start: i32 (const)
   local +2:11 end: i32 (const)
+function JsonTokenizer.rewindObject(this: JsonTokenizer, start: i32): void -> @nish.JsonTokenizer.rewindObject [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: start
+  calls: nish_panic_overflow
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function JsonTokenizer.skipValue(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.skipValue [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonTokenizer.next

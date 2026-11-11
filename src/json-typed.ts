@@ -30,6 +30,7 @@ import {
   FieldInfo,
   FunctionSig,
   JSON_DECODE,
+  JSON_DECODE_UNION,
   JSON_ENCODE,
   JSON_NONE,
   STRUCT_CLASS,
@@ -37,8 +38,9 @@ import {
   StructInstantiation,
   TemplateInfo,
 } from "./program"
-import { StringSet } from "./map"
+import { StringMap, StringSet } from "./map"
 import { CheckContext } from "./context"
+import { jsonQuote } from "./strings"
 import {
   FLAG_COMPUTED,
   FLAG_DEFINITE,
@@ -74,6 +76,12 @@ export const JSON_FIELD_ENUM: i32 = 5
 export const JSON_FIELD_ENUM_ARRAY: i32 = 6
 /** A `Map<string, V>`: a JSON object whose keys are the map's and whose values are each a `V`. */
 export const JSON_FIELD_MAP: i32 = 7
+/** A tagged union of classes: an object whose tag picks the variant. */
+export const JSON_FIELD_UNION: i32 = 8
+/** An array of a tagged union's values. */
+export const JSON_FIELD_UNION_ARRAY: i32 = 9
+/** A variant's tag, an enum member type: its string on the wire, and only its own. */
+export const JSON_FIELD_TAG: i32 = 10
 
 /**
  * One value as the written code reads and writes it: a field of a class, or
@@ -98,6 +106,10 @@ export class JsonField {
   map: StructInfo | null
   /** What a map holds; `null` for every other kind. */
   value: JsonField | null
+  /** The union of a union value or of an array's element, `| null` stripped; `-1` otherwise. */
+  union: i32
+  /** The union's variants, in `TypeTable.variantsOf`'s order; empty for every other kind. */
+  variants: StructInfo[]
 
   constructor(field: FieldInfo | null, type: i32, kind: i32, nullable: boolean) {
     this.field = field
@@ -109,6 +121,8 @@ export class JsonField {
     this.enumType = 0
     this.map = null
     this.value = null
+    this.union = -1
+    this.variants = []
   }
 }
 
@@ -445,6 +459,59 @@ const jsonReadPresence = (ctx: CheckContext, info: StructInfo, value: Node): voi
   }
 }
 
+/** Whether the enum member type `member` tags a variant of some union the program declares. */
+const jsonIsUnionTag = (table: TypeTable, member: i32): boolean => {
+  for (const tags of table.unionTags) {
+    if (tags.indexOf(member) >= 0) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `info` has a field whose type is one enum member: a tag, which makes it a union's variant. */
+const jsonHasTag = (table: TypeTable, info: StructInfo): boolean => {
+  for (const field of info.fields) {
+    if (table.isEnumMemberType(field.type)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** `tag: "wire"`: the string a union's variant writes its tag as, in place of its enum member's name. */
+const jsonReadTag = (ctx: CheckContext, info: StructInfo, value: Node): void => {
+  if (!jsonIsStringLiteral(value)) {
+    // The words after the class's name are NL2721's.
+    ctx.error(
+      value,
+      `\`${info.name}.${JSON_OPTIONS}\`'s \`tag\` is not a string literal: ` +
+        "a variant's tag is written on the wire as a string, and typed JSON reads which one from the class's text"
+    )
+    return
+  }
+  const wire = jsonStringLiteral(value)
+  if (!jsonIsUtf8(wire)) {
+    // The words after `tag` are NL2499's.
+    ctx.error(
+      value,
+      `\`${info.name}.${JSON_OPTIONS}\` sets \`tag\` to a key that is not valid UTF-8: ` +
+        "the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it"
+    )
+    return
+  }
+  if (!jsonHasTag(ctx.table, info)) {
+    // The words after the class's name are NL2723's.
+    ctx.error(
+      value,
+      `\`${info.name}.${JSON_OPTIONS}\` gives a \`tag\`, and \`${info.name}\` has no field whose type is one enum member: ` +
+        "`tag` is the string a tagged union's variant writes its tag as, so only a variant gives one"
+    )
+    return
+  }
+  info.jsonTag = wire
+}
+
 /**
  * Read the class's `static readonly json`, now that its fields are known, and
  * write what it says into them: a renamed field's `wireName`, an optional
@@ -488,11 +555,11 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
       continue
     }
     const option = prop.text
-    if (option !== "rename" && option !== "optional" && option !== "presence") {
+    if (option !== "rename" && option !== "optional" && option !== "presence" && option !== "tag") {
       // The words after the option's name are NL2494's.
       ctx.error(
         prop,
-        `\`${info.name}.${JSON_OPTIONS}\` has no option \`${option}\`: typed JSON's options are \`rename\` and \`optional\`, and \`presence\``
+        `\`${info.name}.${JSON_OPTIONS}\` has no option \`${option}\`: typed JSON's options are \`rename\` and \`optional\`, and \`presence\` and \`tag\``
       )
       return
     }
@@ -504,6 +571,8 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
       jsonReadRename(ctx, info, prop.children[0])
     } else if (option === "optional") {
       jsonReadOptional(ctx, info, prop.children[0])
+    } else if (option === "tag") {
+      jsonReadTag(ctx, info, prop.children[0])
     } else {
       jsonReadPresence(ctx, info, prop.children[0])
     }
@@ -554,6 +623,9 @@ export const jsonRouteRole = (template: TemplateInfo): i32 => {
   }
   if (template.sourceName === "jsonDecode") {
     return JSON_DECODE
+  }
+  if (template.sourceName === "jsonDecodeUnion") {
+    return JSON_DECODE_UNION
   }
   return template.sourceName === "jsonEncode" ? JSON_ENCODE : JSON_NONE
 }
@@ -619,6 +691,59 @@ const jsonMapOf = (program: CheckedProgram, table: TypeTable, type: i32): Struct
   return info
 }
 
+/**
+ * The variants of the union `type` as classes the route can read and write,
+ * or `null` when one is not: an interface, say, which `jsonBadVariant` names.
+ */
+const jsonVariantsOf = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo[] | null => {
+  const out: StructInfo[] = []
+  for (const variant of table.variantsOf(type)) {
+    const cls = jsonClassOf(program, table, variant)
+    if (cls === null) {
+      return null
+    }
+    out.push(cls)
+  }
+  return out
+}
+
+/** The first variant of the union `type` that is not a class the route can read and write, or `-1`. */
+const jsonBadVariant = (program: CheckedProgram, table: TypeTable, type: i32): i32 => {
+  for (const variant of table.variantsOf(type)) {
+    if (jsonClassOf(program, table, variant) === null) {
+      return variant
+    }
+  }
+  return -1
+}
+
+/**
+ * The classes a route over `type` starts from: the class itself, or every
+ * variant of a union (`| null` stripped); empty when it is neither, or a
+ * variant is not a class.
+ */
+export const jsonRootsOf = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo[] => {
+  const base = table.stripNull(type)
+  if (table.isUnion(base)) {
+    const variants = jsonVariantsOf(program, table, base)
+    return variants === null ? [] : variants
+  }
+  const out: StructInfo[] = []
+  const cls = jsonClassOf(program, table, type)
+  if (cls !== null) {
+    out.push(cls)
+  }
+  return out
+}
+
+/**
+ * The string the variant `info` writes its tag, the field `field`, as: the
+ * `tag` of its options, or else the name of the enum member the field's type
+ * is.
+ */
+export const jsonWireTag = (table: TypeTable, info: StructInfo, field: FieldInfo): string =>
+  info.jsonTag.length > 0 ? info.jsonTag : table.nameOf(field.type)
+
 /** A value of `type` as the route reads and writes it, held in `field` (`null` for a `Map`'s value), or `null` when it cannot. */
 const jsonValueOf = (
   program: CheckedProgram,
@@ -633,6 +758,27 @@ const jsonValueOf = (
     // Of these only a `string` can be `| null`: a number has no `null` to hold.
     const f = new JsonField(field, type, JSON_FIELD_SCALAR, nullable)
     f.scalar = scalar
+    return f
+  }
+  if (table.isEnumMemberType(base)) {
+    // A tag holds its one member, and a member has no `null`; a member no
+    // union tags a variant with is no tag, and stays refused
+    // (tests/cases/json_reject_enum_member).
+    if (nullable || !jsonIsUnionTag(table, base)) {
+      return null
+    }
+    const f = new JsonField(field, type, JSON_FIELD_TAG, false)
+    f.enumType = base
+    return f
+  }
+  if (table.isUnion(base)) {
+    const variants = jsonVariantsOf(program, table, base)
+    if (variants === null) {
+      return null
+    }
+    const f = new JsonField(field, type, JSON_FIELD_UNION, nullable)
+    f.union = base
+    f.variants = variants
     return f
   }
   if (table.isEnum(base)) {
@@ -659,6 +805,16 @@ const jsonValueOf = (
     if (table.isEnum(elem)) {
       const f = new JsonField(field, type, JSON_FIELD_ENUM_ARRAY, nullable)
       f.enumType = elem
+      return f
+    }
+    if (table.isUnion(elem)) {
+      const variants = jsonVariantsOf(program, table, elem)
+      if (variants === null) {
+        return null
+      }
+      const f = new JsonField(field, type, JSON_FIELD_UNION_ARRAY, nullable)
+      f.union = elem
+      f.variants = variants
       return f
     }
     const cls = jsonClassOf(program, table, elem)
@@ -705,15 +861,19 @@ const jsonValuesOf = (f: JsonField, out: JsonField[]): void => {
 }
 
 /**
- * Every class a route from `root` reaches, `root` first and each once, in the
- * order the fields name them, through arrays and `Map` values alike. A field
- * the route cannot handle reaches nothing; `jsonRefusal` has refused it.
+ * Every class a route from `roots` reaches, `roots` first and each once, in
+ * the order the fields name them, through arrays, `Map` values and a union's
+ * variants alike. A field the route cannot handle reaches nothing;
+ * `jsonRefusal` has refused it.
  */
-export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: StructInfo): StructInfo[] => {
+export const jsonClasses = (program: CheckedProgram, table: TypeTable, roots: StructInfo[]): StructInfo[] => {
   const out: StructInfo[] = []
   const seen = new StringSet()
-  seen.add(root.name)
-  out.push(root)
+  for (const root of roots) {
+    if (seen.add(root.name)) {
+      out.push(root)
+    }
+  }
   let at = 0
   while (at < out.length) {
     const info = out[at]
@@ -738,16 +898,21 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
         if (cls !== null && seen.add(cls.name)) {
           out.push(cls)
         }
+        for (const variant of v.variants) {
+          if (seen.add(variant.name)) {
+            out.push(variant)
+          }
+        }
       }
     }
   }
   return out
 }
 
-/** Every value a route from `root` reads or writes: each field of each class it reaches, and what each `Map` holds. */
-const jsonValues = (program: CheckedProgram, table: TypeTable, root: StructInfo): JsonField[] => {
+/** Every value a route from `roots` reads or writes: each field of each class it reaches, and what each `Map` holds. */
+const jsonValues = (program: CheckedProgram, table: TypeTable, roots: StructInfo[]): JsonField[] => {
   const out: JsonField[] = []
-  for (const info of jsonClasses(program, table, root)) {
+  for (const info of jsonClasses(program, table, roots)) {
     if (info.jsonNumber) {
       continue
     }
@@ -775,18 +940,37 @@ const jsonValues = (program: CheckedProgram, table: TypeTable, root: StructInfo)
 const jsonMakes = (f: JsonField): boolean => f.nullable || f.field === null
 
 /**
- * The classes of a decode from `root` that the decoder makes itself, with
+ * The classes of a decode from `roots` that the decoder makes itself, with
  * `new C()`: each class an array of objects holds, which it makes past the
- * array's end, and each class a `| null` field or a `Map` holds. One pass
- * over the values `jsonValues` reaches.
+ * array's end, each class a `| null` field or a `Map` holds, and every
+ * variant of a union, which it makes when the tag names another variant
+ * than the one it holds — the roots' too when `union` says they are one. One
+ * pass over the values `jsonValues` reaches.
  */
-const jsonMadeClasses = (program: CheckedProgram, table: TypeTable, root: StructInfo): StructInfo[] => {
+const jsonMadeClasses = (
+  program: CheckedProgram,
+  table: TypeTable,
+  roots: StructInfo[],
+  union: boolean
+): StructInfo[] => {
   const out: StructInfo[] = []
   const made = new StringSet()
-  for (const f of jsonValues(program, table, root)) {
+  if (union) {
+    for (const root of roots) {
+      if (made.add(root.name)) {
+        out.push(root)
+      }
+    }
+  }
+  for (const f of jsonValues(program, table, roots)) {
     const cls = f.cls
     if (cls !== null && (f.kind === JSON_FIELD_CLASS_ARRAY || jsonMakes(f)) && made.add(cls.name)) {
       out.push(cls)
+    }
+    for (const variant of f.variants) {
+      if (made.add(variant.name)) {
+        out.push(variant)
+      }
     }
   }
   return out
@@ -796,12 +980,12 @@ const jsonMadeClasses = (program: CheckedProgram, table: TypeTable, root: Struct
 const jsonMaps = (
   program: CheckedProgram,
   table: TypeTable,
-  root: StructInfo,
+  roots: StructInfo[],
   madeOnly: boolean
 ): StructInfo[] => {
   const out: StructInfo[] = []
   const seen = new StringSet()
-  for (const f of jsonValues(program, table, root)) {
+  for (const f of jsonValues(program, table, roots)) {
     const map = f.map
     if (map !== null && (!madeOnly || jsonMakes(f)) && seen.add(map.name)) {
       out.push(map)
@@ -811,10 +995,78 @@ const jsonMaps = (
 }
 
 /**
- * Why a call of the route `name` (`jsonDecode` or `jsonEncode`) cannot bind
- * its value to `type`, or `""` when it can. Every class the route reaches is
- * held to the same rule, so a nested class, an array's element, a `Map`'s
- * value and a `| null` field's class are refused exactly as `T` is.
+ * The union a field of `type` holds, alone, with `| null` or as an array's
+ * element, or `-1` when it holds none.
+ */
+const jsonUnionIn = (table: TypeTable, type: i32): i32 => {
+  const base = table.stripNull(type)
+  if (table.isUnion(base)) {
+    return base
+  }
+  if (table.isArray(base) && table.isUnion(table.refOf(base))) {
+    return table.refOf(base)
+  }
+  return -1
+}
+
+/** NL2486's refusal of the union `union`'s variant `variant`, which is not a class, reached by the route `name`. */
+const jsonNotClassVariant = (table: TypeTable, name: string, union: i32, variant: i32): string =>
+  `\`${name}\` reaches \`${table.typeName(union)}\`'s variant \`${table.typeName(variant)}\`, which is not a class: ` +
+  "typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version"
+
+/** The field of the variant `info` that holds its tag in the union `union`. */
+const jsonTagField = (table: TypeTable, info: StructInfo, union: i32): FieldInfo | null =>
+  info.field(table.tagNameOf(union))
+
+/**
+ * Why the variants of `union` cannot share one wire: two that write their tag
+ * as the same string, or two that write it under different keys. `""` when
+ * they can.
+ */
+const jsonUnionRefusal = (program: CheckedProgram, table: TypeTable, union: i32): string => {
+  const variants = jsonVariantsOf(program, table, union)
+  if (variants === null) {
+    return ""
+  }
+  const tags = new StringMap()
+  let firstKey = ""
+  let firstOwner = ""
+  let at = 0
+  for (const info of variants) {
+    at = at + 1
+    const field = jsonTagField(table, info, union)
+    if (field === null) {
+      continue
+    }
+    const wire = jsonWireTag(table, info, field)
+    if (tags.has(wire)) {
+      // The words after the tag are NL2719's in `src/codes.ts`.
+      return (
+        `\`${variants[tags.get(wire, 0)].name}\` and \`${info.name}\` both write their tag in \`${table.typeName(union)}\` as \`${jsonQuote(wire)}\`: ` +
+        "a decoder picks a union's variant by the string its tag is written as, so each variant of a union writes a different one"
+      )
+    }
+    tags.set(wire, at - 1)
+    if (firstOwner.length === 0) {
+      firstOwner = info.name
+      firstKey = field.wireName
+    } else if (field.wireName !== firstKey) {
+      // The words after the keys are NL2720's in `src/codes.ts`.
+      return (
+        `\`${firstOwner}\` writes its tag \`${field.name}\` under the key \`${jsonQuote(firstKey)}\` and \`${info.name}\` under \`${jsonQuote(field.wireName)}\`: ` +
+        "a decoder finds a union's tag before it knows which variant the object is, so every variant of a union writes its tag under the same key"
+      )
+    }
+  }
+  return ""
+}
+
+/**
+ * Why a call of the route `name` (`jsonDecode`, `jsonDecodeUnion` or
+ * `jsonEncode`) cannot bind its value to `type`, or `""` when it can. Every
+ * class the route reaches is held to the same rule, so a nested class, an
+ * array's element, a `Map`'s value, a `| null` field's class and a union's
+ * variant are refused exactly as `T` is.
  */
 export const jsonRefusal = (
   program: CheckedProgram,
@@ -823,14 +1075,47 @@ export const jsonRefusal = (
   role: i32,
   type: i32
 ): string => {
-  const root = jsonClassOf(program, table, type)
-  if (root === null) {
+  const base = table.stripNull(type)
+  const union = table.isUnion(base)
+  if (role === JSON_DECODE && union) {
+    // The words after the type are NL2718's in `src/codes.ts`.
+    return (
+      `\`${name}\`'s value is \`${table.typeName(type)}\`, a tagged union: ` +
+      "`jsonDecode` decodes into the object it is given, and which variant a document holds is known only once its tag is read, " +
+      "so a union is decoded with `jsonDecodeUnion(d, prev)`, which answers the object it decoded into"
+    )
+  }
+  if (role === JSON_DECODE_UNION && !union) {
+    // The words after the type are NL2722's in `src/codes.ts`.
+    return (
+      `\`${name}\`'s value is \`${table.typeName(type)}\`, which is not a tagged union: ` +
+      "`jsonDecodeUnion` picks a variant by the object's tag and answers it, so its value is a union of classes; " +
+      "a class is decoded into with `jsonDecode(d, out)`"
+    )
+  }
+  if (union) {
+    const bad = jsonBadVariant(program, table, base)
+    if (bad >= 0) {
+      return jsonNotClassVariant(table, name, base, bad)
+    }
+  }
+  // Only `jsonDecodeUnion`'s value may be `| null`: the object it decodes into when there is one.
+  const none: StructInfo[] = []
+  const roots = type !== base && role !== JSON_DECODE_UNION ? none : jsonRootsOf(program, table, type)
+  if (roots.length === 0) {
     return (
       `\`${name}\`'s value is \`${table.typeName(type)}\`, which is not a class: ` +
       "typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version"
     )
   }
-  const classes = jsonClasses(program, table, root)
+  if (union) {
+    const why = jsonUnionRefusal(program, table, base)
+    if (why.length > 0) {
+      return why
+    }
+  }
+  const decode = role !== JSON_ENCODE
+  const classes = jsonClasses(program, table, roots)
   for (const info of classes) {
     if (info.jsonNumber) {
       continue
@@ -840,7 +1125,15 @@ export const jsonRefusal = (
       if (field.jsonOffWire) {
         continue
       }
-      if (jsonFieldOf(program, table, field) === null) {
+      const f = jsonFieldOf(program, table, field)
+      if (f === null) {
+        const inner = jsonUnionIn(table, field.type)
+        if (inner >= 0) {
+          const bad = jsonBadVariant(program, table, inner)
+          if (bad >= 0) {
+            return jsonNotClassVariant(table, name, inner, bad)
+          }
+        }
         // The words up to `| null` are NL2485's in `src/codes.ts`, and the
         // kinds added since follow them.
         return (
@@ -848,24 +1141,35 @@ export const jsonRefusal = (
           "a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, " +
           "an array of one of those, or a `string`, a class or an array with `| null`; " +
           "a `u64` and a numeric enum are too, alone or in an array, and so is a `Map` whose keys are `string` " +
-          "and whose values are any of these, with `| null` or not"
+          "and whose values are any of these, with `| null` or not; " +
+          "so are a union of classes, alone, with `| null` or in an array, and a variant's tag"
         )
       }
-      if (role === JSON_DECODE && field.readonly) {
-        return `\`${info.name}.${field.name}\` is \`readonly\`, and \`jsonDecode\` assigns every field of the class it decodes into`
+      if (f.union >= 0 && f.variants.length > 0) {
+        const why = jsonUnionRefusal(program, table, f.union)
+        if (why.length > 0) {
+          return why
+        }
+      }
+      if (decode && field.readonly && f.kind !== JSON_FIELD_TAG) {
+        // The words after the field are NL2487's in `src/codes.ts`.
+        return (
+          `\`${info.name}.${field.name}\` is \`readonly\`, and \`jsonDecode\` assigns every field of the class it decodes into` +
+          (role === JSON_DECODE_UNION ? ", as `jsonDecodeUnion` does every field but a variant's tag" : "")
+        )
       }
     }
   }
-  if (role === JSON_DECODE) {
-    for (const info of jsonMadeClasses(program, table, root)) {
+  if (decode) {
+    for (const info of jsonMadeClasses(program, table, roots, role === JSON_DECODE_UNION)) {
       const ctor = info.ctor
       // A constructor's first parameter is `this`.
       if (ctor !== null && ctor.paramTypes.length > 1) {
         return (
-          `\`jsonDecode\` makes a \`${info.name}\` with \`new ${info.name}()\`, and its constructor takes ${ctor.paramTypes.length - 1} parameter(s): ` +
+          `\`${name}\` makes a \`${info.name}\` with \`new ${info.name}()\`, and its constructor takes ${ctor.paramTypes.length - 1} parameter(s): ` +
           // The words up to `takes none` are NL2488's in `src/codes.ts`.
           "an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none" +
-          ", and so is a `Map`'s value, one for each key"
+          ", and so is a `Map`'s value, one for each key, and a union's variant"
         )
       }
     }
@@ -944,17 +1248,38 @@ export const jsonEncodeHelper = (f: JsonField): string => {
 
 /** The `Map` methods the code written for a map calls: to fill one, and to walk one. */
 const jsonMapMethods = (role: i32): string[] =>
-  role === JSON_DECODE ? ["clear", "has", "set"] : ["walkNext", "keyAt", "valueAt"]
+  role === JSON_ENCODE ? ["walkNext", "keyAt", "valueAt"] : ["clear", "has", "set"]
 
-/** The names of every method of the receiver and every helper the code for a route from `root` calls. */
+/** The `JsonDecoder` methods the code written for a union's object calls: to find its tag, and to read on past it. */
+const jsonUnionMethods = (): string[] => [
+  "unionTag",
+  "unknownTag",
+  "enterUnion",
+  "keyLength",
+  "keyByte",
+  "keyIs",
+]
+
+/**
+ * The names of every method of the receiver and every helper the code for a
+ * route from `roots` calls. `union` says the roots are the variants of the
+ * union the route's value is.
+ */
 const jsonRouteNames = (
   program: CheckedProgram,
   table: TypeTable,
   role: i32,
-  root: StructInfo
+  roots: StructInfo[],
+  union: boolean
 ): StringSet => {
   const names = new StringSet()
-  if (role === JSON_DECODE) {
+  const decode = role !== JSON_ENCODE
+  if (decode && union) {
+    for (const name of jsonUnionMethods()) {
+      names.add(name)
+    }
+  }
+  if (decode) {
     for (const name of [
       "beginObject",
       "nextField",
@@ -973,19 +1298,40 @@ const jsonRouteNames = (
       names.add(name)
     }
   }
-  if (root.jsonNumber) {
-    names.add(role === JSON_DECODE ? "number" : "jsonEncodeNumber")
+  for (const root of roots) {
+    if (root.jsonNumber) {
+      names.add(decode ? "number" : "jsonEncodeNumber")
+    }
   }
-  for (const f of jsonValues(program, table, root)) {
+  for (const f of jsonValues(program, table, roots)) {
     const cls = f.cls
     if (cls !== null && cls.jsonNumber) {
-      names.add(role === JSON_DECODE ? "number" : "jsonEncodeNumber")
+      names.add(decode ? "number" : "jsonEncodeNumber")
     }
+    for (const variant of f.variants) {
+      if (variant.jsonNumber) {
+        names.add(decode ? "number" : "jsonEncodeNumber")
+      }
+    }
+    const isUnion = f.kind === JSON_FIELD_UNION || f.kind === JSON_FIELD_UNION_ARRAY
     const holdsObject =
-      f.kind === JSON_FIELD_CLASS || f.kind === JSON_FIELD_CLASS_ARRAY || f.kind === JSON_FIELD_MAP
+      f.kind === JSON_FIELD_CLASS || f.kind === JSON_FIELD_CLASS_ARRAY || f.kind === JSON_FIELD_MAP || isUnion
     const isEnum = f.kind === JSON_FIELD_ENUM || f.kind === JSON_FIELD_ENUM_ARRAY
-    const isArray = f.kind === JSON_FIELD_CLASS_ARRAY || f.kind === JSON_FIELD_ENUM_ARRAY
-    if (role === JSON_DECODE) {
+    const isArray =
+      f.kind === JSON_FIELD_CLASS_ARRAY ||
+      f.kind === JSON_FIELD_ENUM_ARRAY ||
+      f.kind === JSON_FIELD_UNION_ARRAY
+    if (f.kind === JSON_FIELD_TAG) {
+      // A tag is checked against its wire string, and written as one.
+      names.add(decode ? "tagValue" : "string")
+      continue
+    }
+    if (decode) {
+      if (isUnion) {
+        for (const name of jsonUnionMethods()) {
+          names.add(name)
+        }
+      }
       if (isEnum) {
         names.add("i32")
         names.add("wrongType")
@@ -1043,11 +1389,12 @@ export const jsonRouteCallees = (
     return out
   }
   const receiver = program.struct(table.nameOf(sig.paramTypes[0]))
-  const root = jsonClassOf(program, table, instance.typeArgs[0])
-  if (receiver === null || root === null) {
+  const roots = jsonRootsOf(program, table, instance.typeArgs[0])
+  if (receiver === null || roots.length === 0) {
     return out
   }
-  const names = jsonRouteNames(program, table, instance.jsonRoute, root)
+  const union = table.isUnion(table.stripNull(instance.typeArgs[0]))
+  const names = jsonRouteNames(program, table, instance.jsonRoute, roots, union)
   let i = 0
   while (i < names.size()) {
     const method = receiver.method(names.at(i))
@@ -1061,9 +1408,9 @@ export const jsonRouteCallees = (
       out.push(fn)
     }
   }
-  const decode = instance.jsonRoute === JSON_DECODE
+  const decode = instance.jsonRoute !== JSON_ENCODE
   const methods = jsonMapMethods(instance.jsonRoute)
-  for (const map of jsonMaps(program, table, root, false)) {
+  for (const map of jsonMaps(program, table, roots, false)) {
     for (const name of methods) {
       const method = map.method(name)
       if (method !== null) {
@@ -1072,13 +1419,13 @@ export const jsonRouteCallees = (
     }
   }
   if (decode) {
-    for (const info of jsonMadeClasses(program, table, root)) {
+    for (const info of jsonMadeClasses(program, table, roots, union)) {
       const ctor = info.ctor
       if (ctor !== null) {
         out.push(ctor)
       }
     }
-    for (const map of jsonMaps(program, table, root, true)) {
+    for (const map of jsonMaps(program, table, roots, true)) {
       const ctor = map.ctor
       if (ctor !== null) {
         out.push(ctor)

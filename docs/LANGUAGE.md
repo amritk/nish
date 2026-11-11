@@ -801,6 +801,8 @@ type Shape = Circle | Square;
 const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
 ```
 
+Typed JSON reads and writes a union of classes by its tag ([Typed JSON](#typed-json-nishjson-typed)).
+
 **Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
 behind a pointer. Every variant begins with its `i32` tag, so a variant
 pointer is a union pointer by a `bitcast`, and reading the tag is a
@@ -2304,8 +2306,10 @@ and their `.ll` goldens are byte-identical files.
     `_field_init_level`, `_field_init_unknown`, `_field_init_i32`,
     `_field_init_dotted`).
   - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
-    it reads an enum as any of its members, which a member type cannot hold. A
-    member type crosses to C and JavaScript exactly where its enum does, which
+    it reads an enum as any of its members, which a member type cannot hold.
+    The one exception is a union's tag: a member that tags a variant of a
+    union is written as its name, the union's [typed JSON](#typed-json-nishjson-typed)
+    tag (`tests/link/json_tagged_union`). A member type crosses to C and JavaScript exactly where its enum does, which
     is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``
@@ -12394,6 +12398,7 @@ export const main = (): i32 => {
   | a declared class `C`, `C \| null` | an object, and `null` for the second | `C`'s own decoding, into the object the field holds | `C`'s own encoding |
   | `T[]`, `T[] \| null` for any of the above | an array, and `null` for the second | `d.i32Array(cur)` and its kin, or `C`'s or `E`'s decoding per element | `jsonEncodeI32Array` and its kin, or `C`'s or `E`'s encoding per element |
   | `Map<string, V>`, `Map<string, V> \| null`, for any `V` in this table, `\| null` or not, a `Map` included | an object whose keys are the map's, each value a `V`, and `null` for the second | the object's keys in order, each value decoded as a `V` and `set` | the map's entries in its order, each value encoded as a `V` |
+  | a [tagged union](#discriminated-unions) `U` of declared classes, `U \| null`, `U[]` | an object whose tag key names its variant, and `null` for the second | the tag's string, then that variant's decoding, into the object the field holds when its tag matches | the tag first, then the variant's own encoding |
   | `JsonNumber` from `nish/json-typed`, alone, `\| null`, in an array or as a `Map`'s value | any number, kept as the text it is written in | `d.number(n)`, which copies the number's bytes into `n` | `jsonEncodeNumber`, which writes them back |
 
   `` `jsonEncode` cannot handle `Sample.ratio`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null` ``
@@ -12437,6 +12442,7 @@ export const main = (): i32 => {
   | a key given twice, a field's or a `Map`'s, however it is escaped | `JSON_DECODE_DUPLICATE` (-23) | the second |
   | a field the object does not give | `JSON_DECODE_MISSING` (-24) | the object's `}` |
   | more keys, over every `Map` field of the decoding, than `d.maxMapKeys` (4,096 unless set) | `JSON_DECODE_MAP_LIMIT` (-25) | the first key past it |
+  | a union's tag missing, not a string, or a string no variant writes | `JSON_DECODE_TAG` (-26) | the tag's value, or the object's `{` when it has none |
   | text that is not JSON, or that crosses a `JsonLimits` limit | the tokenizer's `JSON_TOK_ERR_*` (-1 to -13) | the tokenizer's |
 
   Nothing an input holds panics: the recursion is the data's, so the
@@ -12600,6 +12606,63 @@ export const main = (): i32 => {
   `Map` hashes a string under a per-process random key, so a body cannot
   choose keys that collide, and this limit bounds what all the maps of one
   decoding hold together (docs/security/json.md, JSON-13).
+- **A tagged union is an object with its tag.** A field, an array's element
+  or the value of `jsonEncode` may be a [discriminated union](#discriminated-unions)
+  whose variants are all declared classes, and the union is written as the
+  variant's object with its tag key first, the tag's value the name of its
+  enum member:
+
+  ```typescript
+  enum Kind { Num, Neg }
+  class Num {
+    readonly kind: Kind.Num = Kind.Num;
+    value: f64 = 0;
+  }
+  class Neg {
+    static readonly json = { tag: "negate" };
+    readonly kind: Kind.Neg = Kind.Neg;
+    arg: Expr;
+    constructor() { this.arg = zero(); }
+  }
+  type Expr = Num | Neg;
+  const zero = (): Expr => new Num();
+
+  const e = jsonDecodeUnion(d, zero());  // {"kind":"negate","arg":{"kind":"Num","value":2}}
+  jsonEncode(w, e);                      // the same text back
+  ```
+
+  A variant's `tag` option replaces its member's name on the wire, and
+  `rename` renames the tag key as it renames any field. Every variant writes
+  its tag under one key and as a different string, or the union is refused
+  where a call reaches it (NL2720, `json_reject_union_tag_key`; NL2719,
+  `json_reject_union_same_tag`); a `tag` that is not a string literal is
+  NL2721 (`json_reject_union_tag_literal`), one on a class that tags no
+  union's variant is NL2723 (`json_reject_union_tag_no_field`), and a variant
+  that is not a class, an interface, is NL2486's kin
+  (`json_reject_union_interface`). A field typed with an enum member that no
+  union tags a variant with is no tag, and is refused as any other field type
+  is (`json_reject_enum_member`). `jsonDecode` decodes into the object it is
+  given and a union's variant is known only from the input, so a union is
+  decoded with `jsonDecodeUnion(d, prev)`, which answers the object it decoded
+  into: `prev` itself when the input's tag is `prev`'s, reused as any nested
+  object is, and otherwise a new variant made with `new V()`. On a failure it
+  answers `prev`, with the code in `d.failed`. Its type argument is inferred
+  from `prev` and never written; `jsonDecode` with a union is
+  `` `jsonDecode`'s value is `A | B`, a tagged union: … ``
+  (NL2718, `json_reject_union_decode`), and `jsonDecodeUnion` with a class is
+  NL2722 (`json_reject_union_not_union`). A union field decodes into the
+  object it holds the same way, and an array's element past its end is made
+  fresh. The tag may come anywhere in the object: when it is the first key
+  the variant is known at once, and otherwise the decoder reads ahead to it,
+  stepping over the values before it, and rewinds, so each byte is read at
+  most `maxDepth` + 1 times (docs/security/json.md, JSON-17). A tag that is
+  missing, not a string or no variant's is `JSON_DECODE_TAG`. A variant used
+  alone, as a class, decodes and encodes its tag too, and a tag that is not
+  its own is `JSON_DECODE_TAG`. Each union gets one decoding and one
+  encoding function, `.json.decode.union.<U>` and `.json.encode.union.<U>`,
+  which every place it appears calls, so a recursive union such as `Expr`
+  above recurses through them (`tests/link/json_tagged_union`). A `Map` of a
+  union is not one the language declares: a union is no type argument.
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps
