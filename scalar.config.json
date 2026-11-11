@@ -1334,6 +1334,7 @@
     }
   },
   "assetsDir": "docs/site",
+  "agentSkills": [{ "filepath": "skills/writing-nish/SKILL.md" }],
   "siteConfig": {
     "isPrivate": true,
     "theme": "docs/site/theme.css",
