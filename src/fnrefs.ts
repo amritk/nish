@@ -15,6 +15,7 @@ import { FunctionSig, StructInfo } from "./program"
 import { Scope } from "./symbols"
 import { T_ERROR, TypeTable } from "./types"
 import { BuildMode, hostVisible } from "./visibility"
+import { isGuardType } from "./parallel"
 import { N_ARROW, N_CLASS, N_CONSTRUCTOR, N_FIELD, N_IDENT, N_PARAM, N_THIS, N_VAR_DECL, Node } from "./nodes"
 import { StringSet } from "./map"
 
@@ -42,6 +43,11 @@ const foreignReferenceMessage = (name: string): string =>
 const partialReferenceMessage = (name: string, rest: boolean): string =>
   `\`${name}\` has ${rest ? "a rest parameter" : "a parameter with a default"}: a function reference names a ` +
   "function whose every parameter the caller passes"
+
+/** The refusal for a function that takes a `MutexGuard`, named in a value position. */
+const guardReferenceMessage = (name: string): string =>
+  `\`${name}\` takes a \`MutexGuard\`: a guard is handed only to a function named at the call, so a function ` +
+  "reference cannot name it; call the helper by name"
 
 /** The refusal for `new Array<S>(n)` of a function type, whose zero is no function's tag. */
 export const zeroFilledReferenceMessage = (spelled: string): string =>
@@ -125,6 +131,11 @@ export const functionReference = (ctx: CheckContext, expr: Node): i32 => {
   if (sig.restIndex >= 0 || sig.requiredArity() < sig.writtenArity()) {
     return ctx.errorType(expr, partialReferenceMessage(name, sig.restIndex >= 0))
   }
+  for (const param of sig.paramTypes) {
+    if (isGuardType(ctx.program, ctx.table, param)) {
+      return ctx.errorType(expr, guardReferenceMessage(name))
+    }
+  }
   ctx.program.nodeFnRefs[expr.id] = sig
   return referenceTypeOf(ctx.table, sig)
 }
@@ -169,9 +180,10 @@ export const checkReferenceCall = (
   let bad = -1
   let badType = T_ERROR
   let i = 0
-  while (i < args.children.length) {
-    const got = checkExpression(ctx, args.children[i], scope, params[i])
-    if (bad < 0 && got !== T_ERROR && !ctx.table.assignable(got, params[i])) {
+  while (i < args.children.length && i < params.length) {
+    const want = params[i]
+    const got = checkExpression(ctx, args.children[i], scope, want)
+    if (bad < 0 && got !== T_ERROR && !ctx.table.assignable(got, want)) {
       bad = i
       badType = got
     }
@@ -190,7 +202,7 @@ export const checkReferenceCall = (
   let seen = false
   let k = 0
   while (k < ctx.program.refCalls.length) {
-    if (ctx.program.refCalls[k] === expr && tables[k] === ctx.program.nodeCallees) {
+    if (ctx.program.refCalls[k] === expr && k < tables.length && tables[k] === ctx.program.nodeCallees) {
       seen = true
     }
     k = k + 1
@@ -312,9 +324,10 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
   // The classes those signatures reach, and the classes their fields reach.
   let k = 0
   while (k < reached.length) {
+    const cls = reached[k]
     for (const ctx of contexts) {
       for (const info of ctx.program.structList) {
-        if (info.type === reached[k]) {
+        if (info.type === cls) {
           for (const field of info.fields) {
             classesOf(ctx.table, field.type, reached)
           }

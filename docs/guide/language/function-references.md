@@ -103,6 +103,8 @@ and naming one where a value is expected is an error:
 - a **generic** function (`NL2719`), an **`async`** function (`NL2721`), a
   function declared in C (`NL2722`), a function with a **rest parameter**
   (`NL2723`), and a function that takes a function parameter (`NL2720`);
+- a function that takes a **`MutexGuard`** (`NL2733`): a guard goes only to
+  a helper named at the call;
 - a **function type** with a rest, optional or defaulted parameter, such as
   `(x: i32, y?: i32) => i32` (`NL2723`): a call through a reference passes
   every parameter;

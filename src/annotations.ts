@@ -207,6 +207,7 @@ const unwrapTypeParen = (node: Node): Node =>
  */
 const resolveFunctionReference = (node: Node, ctx: CheckContext): i32 => {
   const params: i32[] = []
+  const shown = ctx.textOf(node)
   for (const param of node.children[0].children) {
     let partial = ""
     if ((param.flags & FLAG_REST) !== 0) {
@@ -219,14 +220,14 @@ const resolveFunctionReference = (node: Node, ctx: CheckContext): i32 => {
     if (partial !== "") {
       return ctx.errorType(
         param,
-        `\`${ctx.textOf(node)}\` has ${partial}: a function reference names a function whose every parameter ` +
+        `\`${shown}\` has ${partial}: a function reference names a function whose every parameter ` +
           "the caller passes"
       )
     }
     if (unwrapTypeParen(param.children[1]).kind === N_TYPE_FUNCTION) {
       return ctx.errorType(
         param,
-        `\`${ctx.textOf(node)}\` takes a function parameter, so no function it could name has a single body ` +
+        `\`${shown}\` takes a function parameter, so no function it could name has a single body ` +
           "to refer to"
       )
     }

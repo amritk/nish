@@ -3597,6 +3597,8 @@ export const main = (): void => {
     optional or defaulted parameter,
     `` `(x: i32, y?: i32) => i32` has an optional parameter: a function reference names a function whose every parameter the caller passes ``
     (NL2723, `reject_fnref_type_optional`, `reject_fnref_type_rest`);
+  - `` `bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name ``
+    (NL2733, `tests/wordings/nl2733_fnref_guard`);
   - `` `apply` takes a function parameter, so it has no single body to refer to ``
     (NL2720, `tests/wordings/nl2720_fnref_template`), and a function type
     whose own parameter is written as a function type,
@@ -5049,6 +5051,12 @@ breaks one is refused with that rule's own code:
     bump(g);
   }
   ```
+
+  A guard helper is named, never held: naming it as a value is
+  `` `bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name ``
+  (NL2733, `reject_mutex_guard_helper_ternary_alias`,
+  `reject_mutex_guard_helper_nullish`), because the rules below follow the
+  function a call names.
 
   The helper's parameter is held to R3–R5 in its body exactly as `g` is in the
   block, so it can only read and store through it, and R5 follows the call, so

@@ -599,7 +599,7 @@ function ParallelCall.constructor(this: ParallelCall, node: Node, sig: FunctionS
   pointer this: size=24 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
   pointer sig: size=200 writesThrough=true captured=true
-  pointer dst: size=72 writesThrough=true captured=true
+  pointer dst: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function capturedReads(program: CheckedProgram, node: Node, out: Node[]): void -> @capturedReads [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true

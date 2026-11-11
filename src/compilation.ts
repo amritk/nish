@@ -2632,23 +2632,28 @@ export class Compilation {
             t.isVector(type)
           let keeper = -1
           let other = -1
-          let k = placed ? 0 : members.length
-          while (k < members.length) {
-            const f = facts.get(members[k].name)
-            const keeps = f !== null && f.escaping.has(members[k].paramNames[i])
+          let keeperSig: FunctionSig | null = null
+          let otherSig: FunctionSig | null = null
+          const judged: FunctionSig[] = placed ? members : []
+          let k = 0
+          for (const member of judged) {
+            const f = facts.get(member.name)
+            const keeps = f !== null && f.escaping.has(member.paramNames[i])
             if (keeps && keeper < 0) {
               keeper = k
+              keeperSig = member
             } else if (!keeps && other < 0) {
               other = k
+              otherSig = member
             }
             k = k + 1
           }
-          if (keeper >= 0 && other >= 0) {
+          if (keeperSig !== null && otherSig !== null && keeper >= 0 && keeper < via.length) {
             const message = escapeJoinMessage(
               shown,
-              members[keeper].sourceName,
-              members[other].sourceName,
-              members[keeper].paramNames[i],
+              keeperSig.sourceName,
+              otherSig.sourceName,
+              keeperSig.paramNames[i],
               via[keeper]
             )
             this.sink.report(program.source, call.start, call.end, message)

@@ -554,13 +554,13 @@ function HoistedHeader.constructor(this: HoistedHeader, root: Local, path: strin
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: arr data len path root
   pointer this: size=40 writesThrough=true captured=false
-  pointer root: size=72 writesThrough=true captured=true
+  pointer root: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PrivateArray.constructor(this: PrivateArray, local: Local): void -> @PrivateArray.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: local
   pointer this: size=24 writesThrough=true captured=false
-  pointer local: size=72 writesThrough=true captured=true
+  pointer local: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function MemPath.constructor(this: MemPath, kind: i32, name: string, steps: string): void -> @MemPath.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -586,7 +586,7 @@ function LocalPath.constructor(this: LocalPath, local: Local, path: MemPath): vo
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: local path
   pointer this: size=16 writesThrough=true captured=false
-  pointer local: size=72 writesThrough=true captured=true
+  pointer local: size=64 writesThrough=true captured=true
   pointer path: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ArgEdge.constructor(this: ArgEdge, callee: string, index: i32, param: string, owner: PrivateArray | null, path: MemPath): void -> @ArgEdge.constructor [exported constructor]
@@ -666,7 +666,7 @@ function FunctionFacts.isStackParam(this: FunctionFacts, name: string): boolean 
 function FunctionFacts.holdsStackObject(this: FunctionFacts, local: Local): boolean -> @FunctionFacts.holdsStackObject [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=416 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 candidate: Local (const)
 function FactsTable.constructor(this: FactsTable): void -> @FactsTable.constructor [exported constructor]
@@ -924,7 +924,7 @@ function classifyElementHolder(unit: AnalysisUnit, table: TypeTable, holder: Loc
   calls: ParentTable.parentOf classifyMemberUse collectRefs use
   pointer unit: size=16 writesThrough=false captured=false passedTo=classifyMemberUse#0
   pointer table: size=112 writesThrough=false captured=false passedTo=classifyMemberUse#1
-  pointer holder: size=72 writesThrough=false captured=false passedTo=collectRefs#2
+  pointer holder: size=64 writesThrough=false captured=false passedTo=collectRefs#2
   pointer within: size=40 writesThrough=true captured=true passedTo=collectRefs#1
   stackSites=1 stackLocals=1
   callee +0:12 use -> @use
@@ -948,7 +948,7 @@ function collectRefs(program: CheckedProgram, node: Node, local: Local, out: Nod
   calls: collectRefs nish_array_grow nish_panic_index
   pointer program: size=800 writesThrough=false captured=false passedTo=collectRefs#0
   pointer node: size=40 writesThrough=true captured=true
-  pointer local: size=72 writesThrough=false captured=false passedTo=collectRefs#2
+  pointer local: size=64 writesThrough=false captured=false passedTo=collectRefs#2
   pointer out: size=0 writesThrough=true captured=false passedTo=collectRefs#3
   stackSites=0 stackLocals=0
   local -2:11 named: Local | null (const)
@@ -959,7 +959,7 @@ function namedInArrow(program: CheckedProgram, node: Node, local: Local, inside:
   calls: namedInArrow nish_panic_index sourceLocal
   pointer program: size=800 writesThrough=false captured=false passedTo=namedInArrow#0
   pointer node: size=40 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false passedTo=namedInArrow#2
+  pointer local: size=64 writesThrough=false captured=false passedTo=namedInArrow#2
   stackSites=0 stackLocals=0
   local +0:11 named: Local | null (const)
   callee +0:19 sourceLocal -> @sourceLocal
@@ -986,7 +986,7 @@ function isFreshArrayLocal(table: TypeTable, v: Local, decl: Node | null): boole
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray nish_panic_index unwrapParens
   pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isArray#0
-  pointer v: size=72 writesThrough=false captured=false
+  pointer v: size=64 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:39 TypeTable.isArray -> @TypeTable.isArray
@@ -998,7 +998,7 @@ function isJoinedParts(unit: AnalysisUnit, table: TypeTable, parts: Local, decl:
   calls: ParentTable.parentOf TypeTable.refOf isFreshArrayLocal isPartsUse namedInArrow
   pointer unit: size=16 writesThrough=false captured=false passedTo=isPartsUse#0
   pointer table: size=112 writesThrough=false captured=false passedTo=isFreshArrayLocal#0 TypeTable.refOf#0 isPartsUse#1
-  pointer parts: size=72 writesThrough=false captured=false passedTo=isFreshArrayLocal#1 namedInArrow#2
+  pointer parts: size=64 writesThrough=false captured=false passedTo=isFreshArrayLocal#1 namedInArrow#2
   pointer decl: size=40 writesThrough=true captured=true passedTo=isFreshArrayLocal#2
   pointer refs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1178,7 +1178,7 @@ function FactCollector.declarationOf(this: FactCollector, body: Node, local: Loc
   calls: StringMap.get gatherDeclarations nish_panic_index
   pointer this: size=72 writesThrough=true captured=false
   pointer body: size=40 writesThrough=true captured=true passedTo=gatherDeclarations#1
-  pointer local: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -1:7 gatherDeclarations -> @gatherDeclarations
   local +2:11 at: i32 (const)
@@ -1241,7 +1241,7 @@ function FactCollector.noteCaptured(this: FactCollector, source: Local, target: 
   escaping: via
   calls: ArgEdge.constructor DirtMark.constructor FactCollector.escapeParam FactCollector.localPathAt FactCollector.ownEdge FunctionFacts.pointerParam MemPath.constructor nish_alloc_struct nish_array_grow
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.escapeParam#0 FactCollector.localPathAt#0 FactCollector.ownEdge#0 FactCollector.escapeParam#0
-  pointer source: size=72 writesThrough=true captured=true passedTo=FactCollector.localPathAt#1
+  pointer source: size=64 writesThrough=true captured=true passedTo=FactCollector.localPathAt#1
   pointer target: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -6:13 pointer: PointerParamFacts | null (const)
@@ -1420,7 +1420,7 @@ function FactCollector.localPathAt(this: FactCollector, local: Local, depth: i32
   escaping: depth
   calls: FactCollector.resolveLocal LocalPath.constructor nish_alloc_struct nish_array_grow
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.resolveLocal#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=FactCollector.resolveLocal#1 LocalPath.constructor#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.resolveLocal#1 LocalPath.constructor#1
   stackSites=0 stackLocals=0
   local -6:16 seen: LocalPath (const)
   local -1:11 path: MemPath (const)
@@ -1431,7 +1431,7 @@ function FactCollector.resolveLocal(this: FactCollector, local: Local, depth: i3
   sharedWrite: via FactCollector.ownKeyOf
   calls: FactCollector.declarationOf FactCollector.elementPath FactCollector.ownKeyOf FactCollector.pathFrom FunctionSig.body MemPath.constructor ParentTable.parentOf nish_alloc_struct nish_panic_index nish_panic_overflow
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.ownKeyOf#0 FactCollector.declarationOf#0 FactCollector.elementPath#0 FactCollector.pathFrom#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=FactCollector.ownKeyOf#1 FactCollector.declarationOf#2
+  pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.ownKeyOf#1 FactCollector.declarationOf#2
   stackSites=0 stackLocals=0
   local +0:11 key: string (const)
   callee +0:17 FactCollector.ownKeyOf -> @FactCollector.ownKeyOf
@@ -1515,7 +1515,7 @@ function FactCollector.ownKeyOf(this: FactCollector, local: Local): string -> @F
   escaping: local
   calls: FactCollector.declarationOf FactCollector.isWipedFreshSecret FactCollector.noteFreshInit FactCollector.noteStore FunctionSig.body nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 unwrapParens
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.declarationOf#0 FactCollector.isWipedFreshSecret#0 FactCollector.noteFreshInit#0 FactCollector.noteStore#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=FactCollector.declarationOf#2 FactCollector.isWipedFreshSecret#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=FactCollector.declarationOf#2 FactCollector.isWipedFreshSecret#1
   stackSites=0 stackLocals=0
   local -15:11 at: i32 (const)
   local -11:11 body: Node | null (const)
@@ -1534,7 +1534,7 @@ function FactCollector.isWipedFreshSecret(this: FactCollector, local: Local, ini
   sharedWrite: via collectRefs
   calls: FunctionSig.body ParentTable.parentOf collectRefs nish_panic_index secretRoleOf unwrapParens
   pointer this: size=72 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false passedTo=collectRefs#2
+  pointer local: size=64 writesThrough=false captured=false passedTo=collectRefs#2
   pointer init: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 program: CheckedProgram (const)
@@ -1772,7 +1772,7 @@ function FactCollector.notePrivateArray(this: FactCollector, local: Local, decl:
   sharedWrite: +0:5
   calls: ArgEdge.constructor FactCollector.callAround FactCollector.heldByOf FactCollector.holdArray FactCollector.isReturned FactCollector.ownEdge FactCollector.ownKeyOf FunctionSig.body MemPath.constructor PrivateArray.constructor TypeTable.refOf classifyUse collectRefs inlineElementStruct isFreshArrayLocal namedInArrow nish_alloc_struct nish_array_grow
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isReturned#0 FactCollector.ownKeyOf#0 FactCollector.ownEdge#0 FactCollector.callAround#0 FactCollector.holdArray#0 FactCollector.heldByOf#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=isFreshArrayLocal#1 namedInArrow#2 collectRefs#2 PrivateArray.constructor#1 FactCollector.ownKeyOf#1
+  pointer local: size=64 writesThrough=true captured=true passedTo=isFreshArrayLocal#1 namedInArrow#2 collectRefs#2 PrivateArray.constructor#1 FactCollector.ownKeyOf#1
   pointer decl: size=40 writesThrough=false captured=false passedTo=isFreshArrayLocal#2
   stackSites=3 stackLocals=3
   local -30:11 program: CheckedProgram (const)

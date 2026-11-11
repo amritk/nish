@@ -12,6 +12,7 @@ import T_ERROR from "./types" -> const T_ERROR
 import TypeTable from "./types" -> struct TypeTable
 import BuildMode from "./visibility" -> struct BuildMode
 import hostVisible from "./visibility" -> function @hostVisible
+import isGuardType from "./parallel" -> function @isGuardType
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_CLASS from "./nodes" -> const N_CLASS
 import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
@@ -44,6 +45,10 @@ function foreignReferenceMessage(name: string): string -> @foreignReferenceMessa
   calls: nish_str_concat
   stackSites=0 stackLocals=0
 function partialReferenceMessage(name: string, rest: boolean): string -> @partialReferenceMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function guardReferenceMessage(name: string): string -> @guardReferenceMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
@@ -98,30 +103,34 @@ function refuseValueArrow(ctx: CheckContext, arrow: Node, scope: Scope): void ->
   callee +5:44 capturingArrowMessage -> @capturingArrowMessage
   callee +5:78 arrowElsewhereMessage -> @arrowElsewhereMessage
 function functionReference(ctx: CheckContext, expr: Node): i32 -> @functionReference [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.errorType CheckContext.signature CheckContext.template FunctionSig.foreign FunctionSig.isAsync FunctionSig.requiredArity FunctionSig.writtenArity asyncReferenceMessage foreignReferenceMessage genericReferenceMessage nish_panic_index partialReferenceMessage referenceTypeOf refuseOnce templateReferenceMessage
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.template#0 refuseOnce#0 CheckContext.signature#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=refuseOnce#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
+  calls: CheckContext.errorType CheckContext.signature CheckContext.template FunctionSig.foreign FunctionSig.isAsync FunctionSig.requiredArity FunctionSig.writtenArity asyncReferenceMessage foreignReferenceMessage genericReferenceMessage guardReferenceMessage isGuardType nish_panic_index partialReferenceMessage referenceTypeOf refuseOnce templateReferenceMessage
+  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.template#0 refuseOnce#0 CheckContext.signature#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=refuseOnce#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   stackSites=0 stackLocals=0
-  local -23:9 name: string (const)
-  local -22:9 template: TemplateInfo | null (const)
-  callee -22:20 CheckContext.template -> @CheckContext.template
-  callee -20:5 refuseOnce -> @refuseOnce
-  callee -17:40 genericReferenceMessage -> @genericReferenceMessage
-  callee -17:72 templateReferenceMessage -> @templateReferenceMessage
-  local -13:9 sig: FunctionSig | null (const)
-  callee -13:15 CheckContext.signature -> @CheckContext.signature
-  callee -9:7 FunctionSig.foreign -> @FunctionSig.foreign
-  callee -8:12 CheckContext.errorType -> @CheckContext.errorType
-  callee -8:32 foreignReferenceMessage -> @foreignReferenceMessage
-  callee -6:7 FunctionSig.isAsync -> @FunctionSig.isAsync
-  callee -5:12 CheckContext.errorType -> @CheckContext.errorType
-  callee -5:32 asyncReferenceMessage -> @asyncReferenceMessage
-  callee -3:29 FunctionSig.requiredArity -> @FunctionSig.requiredArity
-  callee -3:51 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  callee -2:12 CheckContext.errorType -> @CheckContext.errorType
-  callee -2:32 partialReferenceMessage -> @partialReferenceMessage
+  local -28:9 name: string (const)
+  local -27:9 template: TemplateInfo | null (const)
+  callee -27:20 CheckContext.template -> @CheckContext.template
+  callee -25:5 refuseOnce -> @refuseOnce
+  callee -22:40 genericReferenceMessage -> @genericReferenceMessage
+  callee -22:72 templateReferenceMessage -> @templateReferenceMessage
+  local -18:9 sig: FunctionSig | null (const)
+  callee -18:15 CheckContext.signature -> @CheckContext.signature
+  callee -14:7 FunctionSig.foreign -> @FunctionSig.foreign
+  callee -13:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -13:32 foreignReferenceMessage -> @foreignReferenceMessage
+  callee -11:7 FunctionSig.isAsync -> @FunctionSig.isAsync
+  callee -10:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -10:32 asyncReferenceMessage -> @asyncReferenceMessage
+  callee -8:29 FunctionSig.requiredArity -> @FunctionSig.requiredArity
+  callee -8:51 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  callee -7:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -7:32 partialReferenceMessage -> @partialReferenceMessage
+  local -5:14 param: i32 (const)
+  callee -4:9 isGuardType -> @isGuardType
+  callee -3:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -3:34 guardReferenceMessage -> @guardReferenceMessage
   callee +1:10 referenceTypeOf -> @referenceTypeOf
 function referenceTypeOf(table: TypeTable, sig: FunctionSig): i32 -> @referenceTypeOf [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -143,13 +152,14 @@ function checkReferenceCall(ctx: CheckContext, expr: Node, type: i32, shown: str
   pointer expr: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local -38:9 params: i32[] (const)
-  callee -38:18 TypeTable.fnRefParamsOf -> @TypeTable.fnRefParamsOf
-  local -37:9 args: Node (const)
-  callee -35:12 CheckContext.errorType -> @CheckContext.errorType
-  local -30:7 bad: i32 (let)
-  local -29:7 badType: i32 (let)
-  local -28:7 i: i32 (let)
+  local -39:9 params: i32[] (const)
+  callee -39:18 TypeTable.fnRefParamsOf -> @TypeTable.fnRefParamsOf
+  local -38:9 args: Node (const)
+  callee -36:12 CheckContext.errorType -> @CheckContext.errorType
+  local -31:7 bad: i32 (let)
+  local -30:7 badType: i32 (let)
+  local -29:7 i: i32 (let)
+  local -27:11 want: i32 (const)
   local -26:11 got: i32 (const)
   callee -26:17 checkExpression -> @checkExpression
   callee -25:40 TypeTable.assignable -> @TypeTable.assignable
@@ -252,17 +262,18 @@ function refuseHostReferences(contexts: CheckContext[], mode: BuildMode): void -
   callee +32:23 hostReferenceMessage -> @hostReferenceMessage
   callee +34:7 classesOf -> @classesOf
   local +38:7 k: i32 (let)
-  local +40:16 ctx: CheckContext (const)
-  local +41:18 info: StructInfo (const)
-  local +43:22 field: FieldInfo (const)
-  callee +44:13 classesOf -> @classesOf
-  local +51:14 ctx: CheckContext (const)
-  local +52:16 info: StructInfo (const)
-  local +56:18 field: FieldInfo (const)
-  callee +57:13 holdsFnRef -> @holdsFnRef
-  callee +58:11 CheckContext.error -> @CheckContext.error
-  callee +59:13 fieldNode -> @fieldNode
-  callee +60:13 hostReferenceMessage -> @hostReferenceMessage
+  local +40:11 cls: i32 (const)
+  local +41:16 ctx: CheckContext (const)
+  local +42:18 info: StructInfo (const)
+  local +44:22 field: FieldInfo (const)
+  callee +45:13 classesOf -> @classesOf
+  local +52:14 ctx: CheckContext (const)
+  local +53:16 info: StructInfo (const)
+  local +57:18 field: FieldInfo (const)
+  callee +58:13 holdsFnRef -> @holdsFnRef
+  callee +59:11 CheckContext.error -> @CheckContext.error
+  callee +60:13 fieldNode -> @fieldNode
+  callee +61:13 hostReferenceMessage -> @hostReferenceMessage
 function fieldNode(info: StructInfo, name: string): Node -> @fieldNode
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index nish_str_eq

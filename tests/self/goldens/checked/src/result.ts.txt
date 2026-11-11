@@ -304,7 +304,7 @@ function declarationIndex(program: CheckedProgram, declarations: Node[], local: 
   calls: nish_panic_index
   pointer program: size=800 writesThrough=false captured=false
   pointer declarations: size=0 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 declared: Local | null (const)

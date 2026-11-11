@@ -903,6 +903,11 @@ const fitsInI32 = (text: string, negated: boolean): boolean => {
   return numericLiteralValue(text) <= limit
 }
 
+/** A function reference in a template hole has no text to give. */
+const refuseReferenceHole = (ctx: CheckContext, part: Node): void => {
+  ctx.error(part, opaqueReferenceMessage(ctx.textOf(part)))
+}
+
 const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   for (const part of expr.children) {
     if (part.kind === N_TEMPLATE_TEXT) {
@@ -917,7 +922,7 @@ const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       continue
     }
     if (ctx.table.isFnRef(hole)) {
-      ctx.error(part, opaqueReferenceMessage(ctx.textOf(part)))
+      refuseReferenceHole(ctx, part)
       continue
     }
     if (!isNumeric(hole) && hole !== T_BOOL && hole !== T_STRING) {

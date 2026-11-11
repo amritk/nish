@@ -60,18 +60,6 @@ export class Local {
    * whose type is the annotation's, a `let`, a parameter.
    */
   literalKey: string
-  /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
-  type: i32
-  storage: i32
-  mutable: boolean
-  /**
-   * WP34 N2: a `const` whose initialiser allocated a fresh array — a literal,
-   * a `new`, a `readFileBytesSync` — so the element buffer it names belongs to
-   * it and to no other binding. Two such locals name two buffers that cannot
-   * overlap, which is the whole of the proof `dst.set(src)` needs before it
-   * may copy with `memcpy` (`disjointCopy` in `src/arrays.ts`).
-   */
-  fresh: boolean
   /**
    * WP29: on the parameter an arrow passed to a data-parallel form gets for a
    * name of the function it is written in, that function's local
@@ -81,11 +69,23 @@ export class Local {
    * the body reads it during the call.
    */
   captureOf: Local | null
+  /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
+  type: i32
+  storage: i32
   /**
    * WP51: the place of a local whose type is a function reference, in the
    * place table `src/fnref-places.ts` keeps, and -1 until that pass asks.
    */
   place: i32
+  mutable: boolean
+  /**
+   * WP34 N2: a `const` whose initialiser allocated a fresh array — a literal,
+   * a `new`, a `readFileBytesSync` — so the element buffer it names belongs to
+   * it and to no other binding. Two such locals name two buffers that cannot
+   * overlap, which is the whole of the proof `dst.set(src)` needs before it
+   * may copy with `memcpy` (`disjointCopy` in `src/arrays.ts`).
+   */
+  fresh: boolean
 
   constructor(name: string, type: i32, mutable: boolean, storage: i32) {
     this.name = name

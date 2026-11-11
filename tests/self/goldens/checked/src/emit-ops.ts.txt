@@ -359,7 +359,7 @@ function loadLocal(emitter: Emitter, local: Local): string -> @loadLocal [export
   sharedWrite: via Emitter.llvm
   calls: Emitter.alignSuffix Emitter.llvm Emitter.slotOf IRFunction.emitValue nish_str_concat
   pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
-  pointer local: size=72 writesThrough=false captured=false passedTo=Emitter.slotOf#1
+  pointer local: size=64 writesThrough=false captured=false passedTo=Emitter.slotOf#1
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 Emitter.llvm -> @Emitter.llvm
@@ -371,7 +371,7 @@ function storeLocal(emitter: Emitter, local: Local, value: string): void -> @sto
   sharedWrite: via Emitter.llvm
   calls: Emitter.alignSuffix Emitter.llvm Emitter.slotOf IRFunction.emit nish_str_concat
   pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
-  pointer local: size=72 writesThrough=false captured=false passedTo=Emitter.slotOf#1
+  pointer local: size=64 writesThrough=false captured=false passedTo=Emitter.slotOf#1
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 Emitter.llvm -> @Emitter.llvm
@@ -379,7 +379,7 @@ function storeLocal(emitter: Emitter, local: Local, value: string): void -> @sto
   callee +1:51 Emitter.slotOf -> @Emitter.slotOf
   callee +1:75 Emitter.alignSuffix -> @Emitter.alignSuffix
 function targetLocal(emitter: Emitter, target: Node): Local -> @targetLocal [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=72
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=64
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=376 writesThrough=false captured=false

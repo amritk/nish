@@ -581,7 +581,7 @@ function bindAwaitAllName(emitter: Emitter, local: Local, value: string, name: N
   sharedWrite: via Emitter.llvm
   calls: DebugInfo.declareLocal Emitter.align Emitter.alignSuffix Emitter.llvm Emitter.setSlot IRFunction.emit IRFunction.emitAlloca nish_str_concat
   pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.align#0 Emitter.setSlot#0 Emitter.alignSuffix#0
-  pointer local: size=72 writesThrough=true captured=true passedTo=Emitter.setSlot#1 DebugInfo.declareLocal#2
+  pointer local: size=64 writesThrough=true captured=true passedTo=Emitter.setSlot#1 DebugInfo.declareLocal#2
   pointer name: size=40 writesThrough=false captured=false passedTo=DebugInfo.declareLocal#4
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)

@@ -4112,7 +4112,7 @@ const isMutexType = (program: CheckedProgram, table: TypeTable, type: i32): bool
   isThreadsClass(classLayoutOf(program, table, type), MUTEX)
 
 /** Whether `type` is a `MutexGuard<T>` from `nish/threads`. */
-const isGuardType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
+export const isGuardType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
   isThreadsClass(classLayoutOf(program, table, type), MUTEX_GUARD)
 
 // ---- WP29 P3: the channel's members, as the checker, the fixpoint and the emitter see them ----

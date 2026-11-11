@@ -110,7 +110,6 @@ class RefPass {
   /** Where each store is written: the value stored and its module, for the diagnostics that name it. */
   storeNode: Node[]
   storeModule: i32[]
-  sigCount: i32
   /** The calls through a reference: the node, its table, its module, and the place its callee's value went to. */
   siteCalls: Node[]
   siteTables: (FunctionSig | null)[][]
@@ -123,8 +122,9 @@ class RefPass {
   callees: (FunctionSig | null)[]
   fnRefs: (FunctionSig | null)[]
   program: CheckedProgram
-  module: i32
   sig: FunctionSig | null
+  sigCount: i32
+  module: i32
 
   constructor(table: TypeTable, first: CheckedProgram) {
     this.table = table
@@ -286,7 +286,7 @@ class RefPass {
       let s = 0
       while (s < this.storeTarget.length) {
         const from = this.storePlace[s]
-        if (from >= 0 && into[this.storeTarget[s]] && !into[from]) {
+        if (from >= 0 && from < into.length && into[this.storeTarget[s]] && !into[from]) {
           into[from] = true
           moved = true
         }
@@ -702,7 +702,7 @@ class RefPass {
     // Kept in tag order, which is member order.
     let at = list.length
     list.push(member)
-    while (at > 0 && list[at - 1] > member) {
+    while (at > 0 && at < list.length && list[at - 1] > member) {
       list[at] = list[at - 1]
       at = at - 1
     }
@@ -757,11 +757,13 @@ const numberMembers = (pass: RefPass, modules: RefModule[]): void => {
           if (!seen) {
             let at = found.length
             found.push(sig)
-            while (at > 0 && found[at - 1].decl.start > sig.decl.start) {
+            while (at > 0 && at < found.length && found[at - 1].decl.start > sig.decl.start) {
               found[at] = found[at - 1]
               at = at - 1
             }
-            found[at] = sig
+            if (at >= 0 && at < found.length) {
+              found[at] = sig
+            }
           }
         }
       }
@@ -866,13 +868,13 @@ const makeDispatcher = (
   } else if (members.length > 1) {
     const clauses: Node[] = []
     let k = 0
-    while (k < members.length) {
+    for (const member of members) {
       const arm = build.arm(k, params.length, returnType)
       if (k === members.length - 1) {
         clauses.push(build.node(N_DEFAULT, "", [arm]))
       } else {
         const none: Node[] = []
-        const label = build.node(N_NUMBER, `${members[k].refTag}`, none)
+        const label = build.node(N_NUMBER, `${member.refTag}`, none)
         clauses.push(build.node(N_CASE, "", [label, arm]))
       }
       k = k + 1
@@ -903,10 +905,11 @@ const makeDispatcher = (
   fn.paramTypes.push(T_I32)
   i = 0
   while (i < params.length) {
-    const local = new Local(`$a${i}`, params[i], false, STORAGE_PARAM)
+    const param = params[i]
+    const local = new Local(`$a${i}`, param, false, STORAGE_PARAM)
     scope.declare(local)
     fn.paramNames.push(`$a${i}`)
-    fn.paramTypes.push(params[i])
+    fn.paramTypes.push(param)
     i = i + 1
   }
   module.growTables()
@@ -958,6 +961,33 @@ const makeDispatcher = (
  * module does not export is given a symbol the link can reach (`refHidden`),
  * which keeps its entry facts, unlike a `hidden` instantiation's (§2.3).
  */
+/**
+ * The dispatcher `key` names in `made`, made under `name` the first time the
+ * key is asked for, with each member exposed to the module that calls it.
+ */
+const dispatcherFor = (
+  table: TypeTable,
+  module: RefModule,
+  dispatchers: StringMap,
+  made: FunctionSig[],
+  key: string,
+  name: string,
+  type: i32,
+  members: FunctionSig[]
+): FunctionSig => {
+  const index = dispatchers.get(key, -1)
+  if (index >= 0 && index < made.length) {
+    return made[index]
+  }
+  for (const member of members) {
+    exposeMember(module, member)
+  }
+  const dispatcher = makeDispatcher(table, module, name, type, members)
+  dispatchers.set(key, made.length)
+  made.push(dispatcher)
+  return dispatcher
+}
+
 const exposeMember = (module: RefModule, sig: FunctionSig): void => {
   if (sig.definedIn(module.program.source)) {
     return
@@ -1064,18 +1094,8 @@ export const resolveReferences = (table: TypeTable, modules: RefModule[]): boole
       members.push(pass.members[k])
       parts.push(`${k}`)
     }
-    const key = parts.join(":")
-    let index = dispatchers.get(key, -1)
-    if (index < 0) {
-      const name = `$ref.${pass.siteModules[s]}.${table.fnRefMangle(type)}.${made.length}`
-      for (const member of members) {
-        exposeMember(module, member)
-      }
-      made.push(makeDispatcher(table, module, name, type, members))
-      index = made.length - 1
-      dispatchers.set(key, index)
-    }
-    const dispatcher = made[index]
+    const name = `$ref.${pass.siteModules[s]}.${table.fnRefMangle(type)}.${made.length}`
+    const dispatcher = dispatcherFor(table, module, dispatchers, made, parts.join(":"), name, type, members)
     // A generic body checked once per instantiation is one site per instance
     // but one node: it is rewritten once, and each instance's table names its
     // own dispatcher.

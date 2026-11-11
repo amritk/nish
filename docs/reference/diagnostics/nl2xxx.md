@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 724 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 725 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -13796,4 +13796,36 @@ export const main = (): void => {
 
 ```text
 `Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map
+```
+
+## NL2733
+
+The message of an error contains:
+
+```text
+…` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name
+```
+
+[`nl2733_fnref_guard.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2733_fnref_guard.ts):
+
+```ts
+// NL2733: a function that takes a `MutexGuard` named as a value.
+import { MutexGuard } from "nish/threads";
+
+class Counter {
+  n: i32 = 0;
+}
+
+const bump = (g: MutexGuard<Counter>): void => {
+  g.value.n = g.value.n + 1;
+};
+
+export const main = (): i32 => {
+  const f = bump;
+  return f === bump ? 0 : 1;
+};
+```
+
+```text
+`bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name
 ```

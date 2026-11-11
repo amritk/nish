@@ -46,7 +46,7 @@ function Declared.constructor(this: Declared, node: Node, local: Local): void ->
   escaping: local node
   pointer this: size=24 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
-  pointer local: size=72 writesThrough=true captured=true
+  pointer local: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function checkHygiene(ctx: CheckContext, body: Node): void -> @checkHygiene [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -90,7 +90,7 @@ function declaredIndex(declared: Declared[], local: Local | null): i32 -> @decla
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: sourceLocal
   pointer declared: size=0 writesThrough=false captured=false
-  pointer local: size=72 writesThrough=true captured=true passedTo=sourceLocal#0
+  pointer local: size=64 writesThrough=true captured=true passedTo=sourceLocal#0
   stackSites=0 stackLocals=0
   local +0:9 source: Local | null (const)
   callee +0:18 sourceLocal -> @sourceLocal

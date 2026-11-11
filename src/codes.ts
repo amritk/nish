@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 890
+export const RULE_COUNT: i32 = 891
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -385,6 +385,8 @@ const diagnosticRules = (): string[] => [
   "NL2390",
   "`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of ",
   "NL2375",
+  "` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name",
+  "NL2733",
   " mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`",
   "NL2622",
   " that reaches it: under Node a top-level statement runs where it stands, before the declarations after it exist, so declare it above that line",

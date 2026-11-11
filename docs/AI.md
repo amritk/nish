@@ -966,7 +966,8 @@ export const main = (): i32 => {
   generic (NL2719), `async` (NL2721), `declare` (NL2722) or rest-parameter
   (NL2723) function, one with a function parameter (NL2720), and a method
   (NL2726). A written function type has no rest, optional or defaulted
-  parameter either: `(x: i32, y?: i32) => i32` is NL2723.
+  parameter either: `(x: i32, y?: i32) => i32` is NL2723. A guard helper,
+  a function taking a `MutexGuard`, is only ever called by name (NL2733).
 - **No empty value.** `new Array<Op>(n)` (NL2724) and `Op | null` are
   refused; a module `const` cannot hold one either.
 - **Not a `Map` value.** `Map<K, Op>` is refused (NL2732): keep the

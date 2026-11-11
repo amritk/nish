@@ -1368,10 +1368,10 @@ function Compilation.checkParallel(this: Compilation): void -> @Compilation.chec
 function Compilation.checkReferenceSites(this: Compilation, facts: FactsTable): void -> @Compilation.checkReferenceSites [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
-  calls: DiagnosticSink.report DiagnosticSink.reportPerformance FactsTable.get FunctionSig.writtenArity StringSet.has TypeTable.isMaybe TypeTable.isNullable TypeTable.isPointer TypeTable.isRegion TypeTable.isResult TypeTable.isVector escapeJoinMessage nish_panic_index wideSetMessage
+  calls: DiagnosticSink.report DiagnosticSink.reportPerformance FactsTable.get FunctionSig.writtenArity StringSet.has TypeTable.isMaybe TypeTable.isNullable TypeTable.isPointer TypeTable.isRegion TypeTable.isResult TypeTable.isVector escapeJoinMessage nish_panic_index nish_panic_overflow wideSetMessage
   pointer this: size=208 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
-  stackSites=0 stackLocals=0
+  stackSites=1 stackLocals=0
   local +0:16 unit: ModuleUnit (const)
   local +1:13 program: CheckedProgram (const)
   local +2:11 s: i32 (let)
@@ -1394,16 +1394,20 @@ function Compilation.checkReferenceSites(this: Compilation, facts: FactsTable): 
   callee +24:13 TypeTable.isVector -> @TypeTable.isVector
   local +25:15 keeper: i32 (let)
   local +26:15 other: i32 (let)
-  local +27:15 k: i32 (let)
-  local +29:19 f: FunctionFacts | null (const)
-  callee +29:23 FactsTable.get -> @FactsTable.get
-  local +30:19 keeps: boolean (const)
-  callee +30:41 StringSet.has -> @StringSet.has
-  local +39:19 message: string (const)
-  callee +39:29 escapeJoinMessage -> @escapeJoinMessage
-  callee +46:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +52:11 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
-  callee +56:13 wideSetMessage -> @wideSetMessage
+  local +27:15 keeperSig: FunctionSig | null (let)
+  local +28:15 otherSig: FunctionSig | null (let)
+  local +29:17 judged: FunctionSig[] (const)
+  local +30:15 k: i32 (let)
+  local +31:22 member: FunctionSig (const)
+  local +32:19 f: FunctionFacts | null (const)
+  callee +32:23 FactsTable.get -> @FactsTable.get
+  local +33:19 keeps: boolean (const)
+  callee +33:41 StringSet.has -> @StringSet.has
+  local +44:19 message: string (const)
+  callee +44:29 escapeJoinMessage -> @escapeJoinMessage
+  callee +51:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +57:11 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
+  callee +61:13 wideSetMessage -> @wideSetMessage
 function Compilation.checkRegions(this: Compilation, facts: FactsTable): void -> @Compilation.checkRegions [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
