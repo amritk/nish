@@ -81,10 +81,12 @@ const nondeterministic = (): i32 =>
 /**
  * The capabilities a freestanding wasm32 build has no runtime for (WP21 S3):
  * `runtime/runtime-wasm.c` defines no file, clock, environment, process,
- * network, signal, terminal or entropy call, so a builtin labelled with one
- * of these is an undefined import at the link. `exit` traps, and `ffi` and
- * `unsafe` are the program's own, so those three are not in it. A function
- * rather than a constant because a module constant is a literal.
+ * signal, terminal or entropy call, so a builtin labelled with one of these is
+ * an undefined import at the link. `exit` traps, and `ffi` and `unsafe` are
+ * the program's own, so those three are not in it. Nor is `net`: every
+ * `nish:net` call is refused where it is written on wasm but `netMss`, which a
+ * wasm build compiles to its `-1`. A function rather than a constant because a
+ * module constant is a literal.
  */
 export const hostlessOnFreestandingWasm = (): i32 =>
   (1 << CAP_CLOCK) |
@@ -92,7 +94,6 @@ export const hostlessOnFreestandingWasm = (): i32 =>
   (1 << CAP_ENV) |
   (1 << CAP_FS_READ) |
   (1 << CAP_FS_WRITE) |
-  (1 << CAP_NET) |
   (1 << CAP_PROCESS_SPAWN) |
   (1 << CAP_SIGNAL) |
   (1 << CAP_TTY)

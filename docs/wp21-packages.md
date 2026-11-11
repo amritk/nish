@@ -413,7 +413,8 @@ the import. On `--target wasm32` without a WASI sysroot, the analysis's facts
 for the program's roots — `main` and every exported function of the root
 package — are read for the capabilities a freestanding module cannot have
 (`hostlessOnFreestandingWasm` in `src/capabilities.ts`: clock, entropy, env,
-fs.read, fs.write, net, process.spawn, signal, tty). For each one reached, the
+fs.read, fs.write, process.spawn, signal, tty; `net` is refused at every call
+but `netMss`, which a wasm build compiles to `-1`). For each one reached, the
 first root's witness chain names the builtin, the chain, and — walking the
 chain back — the dependency whose function calls it:
 
