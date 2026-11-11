@@ -739,12 +739,12 @@ const makeFileFixtures = (dir, { large }) => {
   const kind = (file, test) => fs.existsSync(file) && test(fs.lstatSync(file))
   const hasFifo = kind(fifo, (st) => st.isFIFO())
   const hasSock = kind(sock, (st) => st.isSocket())
-  const missing = (has, file, result) =>
+  const outcome = (has, file, result) =>
     `${has ? "made" : `missing ${file} (${Buffer.byteLength(file)} bytes)`}; ` +
     `exit ${result.status ?? result.signal ?? result.error?.message}${result.stderr ? `: ${result.stderr.trim()}` : ""}`
   return {
     ok: hasFifo && hasSock,
-    detail: `mkfifo: ${missing(hasFifo, fifo, made)}\nsocket bind: ${missing(hasSock, sock, bound)}`,
+    detail: `mkfifo: ${outcome(hasFifo, fifo, made)}\nsocket bind: ${outcome(hasSock, sock, bound)}`,
   }
 }
 
