@@ -22,7 +22,14 @@
 #   1. ports.ubuntu.com, Canonical's own, first: it is never behind, and it
 #      is what arm64 jobs have always fetched from, so the others take
 #      traffic only when it fails;
-#   2. (WIP: to be chosen from the probe's results)
+#   2. mirrors.ocf.berkeley.edu and 3. mirrors.mit.edu, two US university
+#      mirrors on networks of their own;
+#   4. mirror.leaseweb.com, a European one, should the US ones fail too.
+#
+# Each was shown serving noble, noble-updates and noble-security (InRelease
+# and binary-arm64) from an arm64 runner (PR #1415, run 43078069287).
+# kernel.org, mirror.kumi.systems and two German university mirrors answered
+# 404 at the ubuntu-ports paths tried, so they are not in the list.
 #
 # A mirror that lags behind the index apt fetched first is no harm: apt asks
 # for each index file by its hash (by-hash), which a lagging mirror does not
@@ -55,7 +62,8 @@ else
   printf '%s\tpriority:%s\n' \
     http://ports.ubuntu.com/ubuntu-ports/ 1 \
     https://mirrors.ocf.berkeley.edu/ubuntu-ports/ 2 \
-    https://mirror.kumi.systems/ubuntu-ports/ 3 |
+    https://mirrors.mit.edu/ubuntu-ports/ 3 \
+    https://mirror.leaseweb.com/ubuntu-ports/ 4 |
     sudo tee "$list" > /dev/null
   if [ "${#sources[@]}" -gt 0 ]; then
     sudo sed -i -E \
@@ -63,28 +71,6 @@ else
       -e 's#azure\.archive\.ubuntu\.com#archive.ubuntu.com#g' \
       "${sources[@]}"
   fi
-  # PROBE (temporary): which ports mirrors serve noble's suites for arm64.
-  for m in http://ports.ubuntu.com/ubuntu-ports/ \
-    https://ports.ubuntu.com/ubuntu-ports/ \
-    https://mirrors.ocf.berkeley.edu/ubuntu-ports/ \
-    https://mirror.kumi.systems/ubuntu-ports/ \
-    https://ftp.tu-chemnitz.de/pub/linux/ubuntu-ports/ \
-    https://mirrors.mit.edu/ubuntu-ports/ \
-    https://mirrors.edge.kernel.org/ubuntu-ports/ \
-    https://ftp.halifax.rwth-aachen.de/ubuntu-ports/ \
-    https://mirror.leaseweb.com/ubuntu-ports/ \
-    https://mirrors.dotsrc.org/ubuntu-ports/ \
-    https://ftp.uni-stuttgart.de/ubuntu-ports/; do
-    (
-      for suite in noble noble-updates noble-security; do
-        for path in "dists/$suite/InRelease" "dists/$suite/main/binary-arm64/"; do
-          code="$(curl -sS -o /dev/null -I -m 5 -w '%{http_code}' "$m$path" 2>&1 || true)"
-          echo "apt-probe: $code $m$path"
-        done
-      done
-    ) &
-  done
-  wait
 fi
 
 # What apt will fetch from, so a slow install's log names the mirror.
