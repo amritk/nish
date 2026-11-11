@@ -93,7 +93,8 @@ alone. The pool's `conns`, `quics` and `addresses` are dense arrays grown by
 `push` in `build`, so slot `k` sits at index `k` only once the `k` before it
 exist; building `k` alone would put it at the wrong index, and the accept path
 (`unowned`) relies on the same order, taking slots `0, 1, 2 ...` through
-`slotAt(used)`. A program that binds state to each slot's connection up front
+`slotAt(used)` once a released slot, taken first from the free list, is not
+available. A program that binds state to each slot's connection up front
 gets the connection the slot keeps for the whole run, which is why the call
 builds rather than answers null. The cost is the per-slot figure above,
 111,688 bytes of arena for each slot built, once: `connection(k)` on a fresh
