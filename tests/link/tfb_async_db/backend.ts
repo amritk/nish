@@ -64,7 +64,10 @@ export class Table {
   cacheHeld: boolean = false
   /** Whether the next World read is cut off after its first row, the connection closed. */
   dropWorld: boolean = false
-  /** Whether the next World read ends with ReadyForQuery 'T', in a transaction, so the connection is out of step. */
+  /**
+   * Whether the next World read ends with ReadyForQuery 'T', in a transaction,
+   * so the connection is out of step.
+   */
   busyWorld: boolean = false
   /** Whether the next fortunes read answers more rows than a page holds. */
   crowdFortunes: boolean = false

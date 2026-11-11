@@ -79,6 +79,8 @@ PASS  tfbKeepPool stops with it, having dialled two connections again
 PASS  the server answered each request once
 PASS  no query failed but the eight made to
 PASS  every statement was one of the entry's four
-PASS  each was prepared once a connection
+PASS  three connections were dialled
+PASS  each was prepared once a connection: seven Parses
+PASS  no connection was sent a Parse twice
 PASS  limits asked for 0 slots have one connection
-tfb async db: 9 passed, 0 failed, 0 skipped
+tfb async db: 11 passed, 0 failed, 0 skipped

@@ -44,6 +44,18 @@
 //   8. Hostile mid-pipeline: a frame past `maxMessage` fails `big` with
 //      PG_ERR_TOO_BIG; the connection, out of step, fails the statement
 //      behind it with PG_ERR_CLOSED and is closed.
+//   9. No spin: three seats wait behind `wait` on one wake; once `wait` is
+//      answered, a `gate` whose answer is held back has its turn but not its
+//      answer, and the two seats behind it wait on the wake again. Each
+//      waits a bounded number of times while the gate's answer is pending
+//      (the last waiter woken reads the wake's byte), not once per loop.
+//  10. Cancelled while queued: three tasks queue for a seat behind a held
+//      one; the one in the middle is cancelled (marked gone), then the head
+//      (the queue moves past both), and the last is seated once the held
+//      seat is answered.
+//  11. An abandoned answer with a frame it may not have: a ParameterStatus
+//      in the answer of a cancelled `set` is not read past; the connection
+//      is lost from it on, and the statement behind it fails.
 import { cancel, sleep, spawn, taskId } from "nish:async"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
@@ -75,7 +87,10 @@ const describe = (label: string, r: PgAsyncResult): string => {
   return `${label}: ok=${r.ok()} failure=${r.failure} socket=${r.socketError} rows=${r.rows} reusable=${r.reusable} first=${cell}${code}`
 }
 
-/** Seats `statement`, sends it with `arg` (none when empty), counts it sent, prints its answer and counts itself done. */
+/**
+ * Seats `statement`, sends it with `arg` (none when empty), counts it sent,
+ * prints its answer and counts itself done.
+ */
 async function pipe(pool: PgAsyncPool, board: Board, handles: Handles, statement: i32, arg: string, label: string): Promise<void> {
   handles.task = taskId()
   const ticket: i32 = await pgAsyncSeat(pool, statement)
@@ -97,6 +112,22 @@ async function pipe(pool: PgAsyncPool, board: Board, handles: Handles, statement
   if (label === "gate") {
     console.log(`sent before the gate was answered: ${board.sent}`)
   }
+  board.done += 1
+}
+
+/**
+ * As `pipe` with no argument, but sleeps `ms` before it asks for a seat, so
+ * a task spawned after it is seated ahead.
+ */
+async function seatLate(pool: PgAsyncPool, board: Board, statement: i32, ms: i32, label: string): Promise<void> {
+  await sleep(ms)
+  const ticket: i32 = await pgAsyncSeat(pool, statement)
+  const sent: i32 = await pgAsyncSend(pool, ticket, new PgAsyncParams())
+  board.sent += 1
+  const turn: i32 = await pgAsyncTurn(pool, ticket, sent)
+  const r = await pgAsyncAnswer(pool, ticket, turn)
+  pgAsyncDone(pool, ticket, turn, r.reusable)
+  console.log(describe(label, r))
   board.done += 1
 }
 
@@ -337,6 +368,65 @@ export async function main(): Promise<i32> {
   spawn(pipe(pool, board, handles, big, "", "big"))
   spawn(pipe(pool, board, handles, quick, "", "behind the big"))
   await until(board, 188)
+  console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
+
+  // 9. No spin.
+  live = await fill(pool, board, listen, port)
+  console.log(`connected ${live} of 1`)
+  board.sent = 0
+  board.want = 1000
+  spawn(pipe(pool, board, handles, wait, "", "ahead"))
+  spawn(seatLate(pool, board, quick, 3, "behind 1"))
+  spawn(seatLate(pool, board, quick, 4, "behind 2"))
+  spawn(pipe(pool, board, handles, gate, "", "gate"))
+  await sleep(10)
+  const parked: i32 = pool.turnWaits
+  board.open = 1
+  await sleep(50)
+  const spins: i32 = pool.turnWaits - parked
+  board.want = 0
+  await until(board, 192)
+  board.open = 0
+  console.log(`waits while the gate's answer was held: ${spins <= 3 ? "at most 3" : `${spins}`}`)
+  console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
+
+  // 10. Cancelled while queued.
+  pool.depth = 1
+  spawn(pipe(pool, board, handles, wait, "", "queue holder"))
+  await sleep(5)
+  spawn(pipe(pool, board, handles, quick, "", "queued head"))
+  await sleep(2)
+  const head: i64 = handles.task
+  spawn(pipe(pool, board, handles, quick, "", "queued middle"))
+  await sleep(2)
+  const middle: i64 = handles.task
+  spawn(pipe(pool, board, handles, quick, "", "queued last"))
+  await sleep(5)
+  cancel(middle)
+  await sleep(5)
+  cancel(head)
+  await sleep(5)
+  console.log(`queued after the cancels: ${pool.seatTail - pool.seatHead}`)
+  board.open = 1
+  await until(board, 196)
+  board.open = 0
+  pool.depth = 8
+  console.log(`queued at the end: ${pool.seatTail - pool.seatHead}, live: ${pool.live()}`)
+
+  // 11. An abandoned answer with a frame it may not have.
+  const set: i32 = pgAsyncPrepare(pool, "set")
+  spawn(pipe(pool, board, handles, wait, "", "ahead of the set"))
+  await sleep(5)
+  spawn(pipe(pool, board, handles, set, "", "set"))
+  await sleep(5)
+  const setTask: i64 = handles.task
+  spawn(pipe(pool, board, handles, quick, "", "behind the set"))
+  await sleep(5)
+  cancel(setTask)
+  await sleep(5)
+  board.open = 1
+  await until(board, 199)
+  board.open = 0
   console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
   pool.close()
   return 0

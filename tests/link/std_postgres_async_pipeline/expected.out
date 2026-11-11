@@ -57,3 +57,21 @@ sent before the gate was answered: 3
 big: ok=false failure=2 socket=0 rows=0 reusable=false first=
 behind the big: ok=false failure=9 socket=0 rows=0 reusable=false first=
 live: 0, dropped: 3
+connected 1 of 1
+ahead: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+gate: ok=true failure=0 socket=0 rows=1 reusable=true first=g
+sent before the gate was answered: 4
+behind 1: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind 2: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+waits while the gate's answer was held: at most 3
+live: 1, dropped: 3
+queued middle: no seat (-3)
+queued head: no seat (-3)
+queued after the cancels: 1
+queue holder: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+queued last: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+queued at the end: 0, live: 1
+set: ok=false failure=9 socket=-3 rows=0 reusable=false first=
+ahead of the set: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+behind the set: ok=false failure=9 socket=0 rows=0 reusable=false first=
+live: 0, dropped: 4

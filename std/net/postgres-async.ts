@@ -267,11 +267,20 @@ export class PgAsyncPool {
   readonly claims: i32[]
   /** The number of connection slots, fixed at construction. */
   readonly size: i32
-  /** The largest message a query accepts, in bytes, 1024 to 2^30 - 1; a larger one fails it with `PG_ERR_TOO_BIG` and closes the connection. */
+  /**
+   * The largest message a query accepts, in bytes, 1024 to 2^30 - 1; a larger
+   * one fails it with `PG_ERR_TOO_BIG` and closes the connection.
+   */
   maxMessage: i32 = 1048576
-  /** The most columns a row may have, 1 to 65535; more fails the query with `PG_ERR_TOO_BIG` and closes the connection. */
+  /**
+   * The most columns a row may have, 1 to 65535; more fails the query with
+   * `PG_ERR_TOO_BIG` and closes the connection.
+   */
   maxColumns: i32 = 1664
-  /** The most rows a query keeps, 1 to 2^24; later rows are read and dropped, and the query fails with `PG_ERR_TOO_BIG`. */
+  /**
+   * The most rows a query keeps, 1 to 2^24; later rows are read and dropped,
+   * and the query fails with `PG_ERR_TOO_BIG`.
+   */
   maxRows: i32 = 100000
   /**
    * The most bytes of rows a query keeps, 1024 to 2^30 - 1: each row costs
@@ -280,13 +289,24 @@ export class PgAsyncPool {
    * with `PG_ERR_TOO_BIG`.
    */
   maxResultBytes: i32 = 16777216
-  /** The most milliseconds `pgAsyncClaim` or `pgAsyncSeat` waits for a free connection before it answers `PG_CARRIER_FULL`. */
+  /**
+   * The most milliseconds `pgAsyncClaim` or `pgAsyncSeat` waits for a free
+   * connection before it answers `PG_CARRIER_FULL`.
+   */
   claimWaitMs: i32 = 5000
-  /** The most statements `pgAsyncSeat` puts in flight on one connection at once, 1 to `PG_ASYNC_MAX_DEPTH`. */
+  /**
+   * The most statements `pgAsyncSeat` puts in flight on one connection at once,
+   * 1 to `PG_ASYNC_MAX_DEPTH`.
+   */
   depth: i32 = 8
   /** How many times `pgAsyncClaim` or `pgAsyncSeat` waited because no live connection had room. */
   waits: i32 = 0
-  /** How many connections were closed rather than given back: by `pgAsyncRelease`, or once a lost pipeline emptied. */
+  /** How many times `pgAsyncTurn` waited for the answers seated ahead of its own. */
+  turnWaits: i32 = 0
+  /**
+   * How many connections were closed rather than given back: by
+   * `pgAsyncRelease`, or once a lost pipeline emptied.
+   */
   dropped: i32 = 0
   /**
    * The most milliseconds `pgAsyncConnect` gives one connection to connect
@@ -308,7 +328,10 @@ export class PgAsyncPool {
   readonly seatGone: u8[]
   /** Each statement `pgAsyncPrepare` registered: its SQL as UTF-8. */
   readonly statements: u8[][]
-  /** Per slot and statement (`slot * PG_ASYNC_MAX_STATEMENTS + statement`): 1 once a Parse for it was sent on that connection. */
+  /**
+   * Per slot and statement (`slot * PG_ASYNC_MAX_STATEMENTS + statement`): 1
+   * once a Parse for it was sent on that connection.
+   */
   readonly prepared: u8[]
   /** Per slot: answer bytes read past the last statement served, at `[inStart, inEnd)`. */
   readonly inputs: u8[][]
@@ -316,7 +339,10 @@ export class PgAsyncPool {
   readonly inStart: i32[]
   /** Per slot: where the unserved bytes in `inputs` end. */
   readonly inEnd: i32[]
-  /** Per slot: where the answer in turn ends in `inputs`, past its ReadyForQuery, or -1 while it is not there whole. */
+  /**
+   * Per slot: where the answer in turn ends in `inputs`, past its
+   * ReadyForQuery, or -1 while it is not there whole.
+   */
   readonly inAnswer: i32[]
   /** Per slot: 1 when the answer in turn begins with a ParseComplete. */
   readonly inParsed: u8[]
@@ -352,9 +378,12 @@ export class PgAsyncPool {
   readonly skipping: u8[]
   /**
    * Per slot, then one for the pool, then one per queue lane: a socket pair
-   * whose read end a waiting task waits on, or -1.
+   * whose read end a waiting task waits on, or -1. A pair is opened the first
+   * time a task waits on its wake, so a pool nobody waits on holds none.
    */
   readonly wakes: i32[]
+  /** Where `pgAsyncPark` opens a wake's socket pair, so it does not allocate. */
+  readonly wakePair: i32[]
   /** Per wake: 1 while a byte is written and not yet read. */
   readonly wakePending: u8[]
   /** The bytes a wake is rung with and read back into, so neither allocates. */
@@ -405,6 +434,7 @@ export class PgAsyncPool {
     this.wakes = new Array<i32>(wakes * 2)
     this.wakePending = new Array<u8>(wakes)
     this.wakeBytes = new Array<u8>(8)
+    this.wakePair = new Array<i32>(2)
     this.waiters = new Array<i32>(wakes)
     this.wakeRings = new Array<i32>(wakes)
     this.wakeUnseen = new Array<i32>(wakes)
@@ -414,15 +444,8 @@ export class PgAsyncPool {
       this.doomAt[s] = -1
       this.inputs.push(new Array<u8>(PG_ASYNC_INPUT_SIZE))
     }
-    const pair: i32[] = [-1, -1]
-    for (let w: i32 = 0; w < wakes; w++) {
-      // Without a pair (out of descriptors) a waiter sleeps 1 ms and looks again.
-      if (unixSocketPair(NET_UNIX_STREAM, pair) < 0) {
-        pair[0] = -1
-        pair[1] = -1
-      }
-      this.wakes[w * 2] = pair[0]
-      this.wakes[w * 2 + 1] = pair[1]
+    for (let w: i32 = 0; w < wakes * 2; w++) {
+      this.wakes[w] = -1
     }
   }
 
@@ -542,7 +565,10 @@ export class PgAsyncResult {
   code: i32
   /** When it failed: a `PG_ERR_*`, `PG_ERR_NONE` when the server refused the statement. */
   failure: i32 = 0
-  /** When the socket failed: its negative errno, 0 when the server closed cleanly, `PG_ASYNC_CANCELLED` when the task was cancelled. */
+  /**
+   * When the socket failed: its negative errno, 0 when the server closed
+   * cleanly, `PG_ASYNC_CANCELLED` when the task was cancelled.
+   */
   socketError: i32 = 0
   /** Whether the connection may serve another query: hand it to `pgAsyncRelease`. */
   reusable: boolean = false
@@ -830,14 +856,21 @@ const pgAsyncSince = (began: i64): i32 => {
  */
 const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
   const fd: i32 = pool.wakes[w * 2 + 1]
-  if (pool.waiters[w] > 0 && toI32(pool.wakePending[w]) === 0 && fd >= 0) {
-    pool.wakeBytes[0] = 1
-    if (netWrite(fd, pool.wakeBytes, 0, 1) === 1) {
-      pool.wakePending[w] = 1
-      pool.wakeUnseen[w] = pool.waiters[w]
-      pool.wakeRings[w] = (pool.wakeRings[w] + 1) % PG_ASYNC_QUEUE_WRAP
-    }
+  if (pool.waiters[w] <= 0 || fd < 0) {
+    return
   }
+  if (toI32(pool.wakePending[w]) === 0) {
+    pool.wakeBytes[0] = 1
+    if (netWrite(fd, pool.wakeBytes, 0, 1) !== 1) {
+      return
+    }
+    pool.wakePending[w] = 1
+  }
+  // Rung again while its byte is there, the byte now stays for every task
+  // waiting at this ring too: one that waited again after the last ring would
+  // otherwise see the byte read back before it was polled, and wait for ever.
+  pool.wakeUnseen[w] = pool.waiters[w]
+  pool.wakeRings[w] = (pool.wakeRings[w] + 1) % PG_ASYNC_QUEUE_WRAP
 }
 
 /** Wakes the tasks waiting for a slot or seat: those outside the queue, and the queue's head. */
@@ -858,10 +891,17 @@ const pgAsyncDrain = (pool: PgAsyncPool, w: i32): void => {
 }
 
 /**
- * Waits on wake `w` for up to `ms` milliseconds (no limit when negative), or
- * 1 ms when the pool has no socket pair for it. A cancelled task returns at once.
+ * Waits on wake `w` for up to `ms` milliseconds (no limit when negative),
+ * opening its socket pair the first time, or 1 ms when no pair can be opened.
+ * A cancelled task returns at once.
  */
 const pgAsyncPark = async (pool: PgAsyncPool, w: i32, ms: i32): Promise<void> => {
+  if (pool.wakes[w * 2] < 0 && unixSocketPair(NET_UNIX_STREAM, pool.wakePair) >= 0) {
+    // Opened before this task counts as waiting, so no byte is written to a
+    // wake without a pair. Out of descriptors, it sleeps 1 ms and tries again.
+    pool.wakes[w * 2] = pool.wakePair[0]
+    pool.wakes[w * 2 + 1] = pool.wakePair[1]
+  }
   const fd: i32 = pool.wakes[w * 2]
   const rings: i32 = pool.wakeRings[w]
   pool.waiters[w] += 1
@@ -1242,7 +1282,10 @@ const pgAsyncAbandon = (pool: PgAsyncPool, seat: i32): void => {
   pgAsyncWakePool(pool)
 }
 
-/** An abandoned seat whose answer is read past or lost: freed once its ticket is spent, else marked so `pgAsyncDone` frees it. */
+/**
+ * An abandoned seat whose answer is read past or lost: freed once its ticket is
+ * spent, else marked so `pgAsyncDone` frees it.
+ */
 const pgAsyncSettle = (pool: PgAsyncPool, seat: i32): void => {
   if (toI32(pool.seatAbandoned[seat]) === 2) {
     pgAsyncFree(pool, seat)
@@ -1496,7 +1539,11 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
     if (ahead >= 0) {
       await pgAsyncSkip(pool, s, ahead)
     } else {
+      pool.turnWaits += 1
       await pgAsyncPark(pool, s, -1)
+      // The last of the waiters the byte woke reads it, as in the claim and
+      // seat loops: a seat that waits again must not park on a byte nobody reads.
+      pgAsyncDrain(pool, s)
     }
   }
   pool.seatWaiting[seat] = 0
@@ -1860,7 +1907,10 @@ const pgAsyncEncode = (sql: u8[], name: i32, parse: boolean, params: PgAsyncPara
   return out
 }
 
-/** A prepared statement's name, `n` and the decimal digits of `name` (at most 2), or none for a negative `name`. */
+/**
+ * A prepared statement's name, `n` and the decimal digits of `name` (at most
+ * 2), or none for a negative `name`.
+ */
 const pgAsyncLabel = (name: i32): u8[] => {
   if (name >= 10) {
     return [110, toU8(toI32(48) + toI32(name / 10)), toU8(toI32(48) + (name % 10))]
@@ -2093,7 +2143,10 @@ const pgAsyncRow = (buf: u8[], at: i32, stop: i32, columns: i32, result: PgAsync
   return p === stop
 }
 
-/** An ErrorResponse's SQLSTATE and message in `[at, stop)` into `result`; false for a frame that does not add up. */
+/**
+ * An ErrorResponse's SQLSTATE and message in `[at, stop)` into `result`; false
+ * for a frame that does not add up.
+ */
 const pgAsyncError = (buf: u8[], at: i32, stop: i32, result: PgAsyncResult): boolean => {
   let p: i32 = at
   // `stop` never passes the buffer; each loop also tests `buf.length` so the prover reads the index.

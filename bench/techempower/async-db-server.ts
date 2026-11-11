@@ -4,18 +4,18 @@
 // It answers each request as `TfbDb` does, from the same encoders, sort and
 // HTML escape, and the same statements.
 //
-// Each request runs in a task of its own. It takes a seat on one of the
-// pool's connections and sends its statement there, behind the statements
-// other tasks have in flight on it, so a connection carries many requests'
-// statements at once; each of the four statements is prepared once a
-// connection, the first time a task sends it there. A World read is one statement whatever the count: the ids go as
-// one `int8[]` parameter, read back in the order they were drawn, repeats
-// included. An update reads its rows that way, then writes every new
-// randomNumber in one statement over two `int8[]` parameters, each distinct
-// id once, ascending, a seat of its own once the read is answered. The first
-// cached query reads the whole table, and every cached query answers from
-// that copy; one task reads it while the others that need it wait, and a read
-// that fails fails them all and leaves it to the next request. No response is
+// Each request runs in a task of its own. It takes a seat on one of the pool's
+// connections and sends its statement there, behind the statements other tasks
+// have in flight on it, so a connection carries many requests' statements at
+// once; each of the four statements is prepared once a connection, the first
+// time a task sends it there. A World read is one statement whatever the count:
+// the ids go as one `int8[]` parameter, read back in the order they were drawn,
+// repeats included. An update reads its rows that way, then writes every new
+// randomNumber in one statement over two `int8[]` parameters, each distinct id
+// once, ascending, a seat of its own once the read is answered. The first
+// cached query reads the whole table, and every cached query answers from that
+// copy; one task reads it while the others that need it wait, and a read that
+// fails fails them all and leaves it to the next request. No response is
 // cached. A fortune reads the table, adds the request-time row, sorts by the
 // message's bytes, and renders the page.
 //
@@ -78,7 +78,10 @@ const TFB_ZERO: i32 = 0
 /** The longest `tfbKeepPool` waits between dials while none succeeds. */
 const TFB_REDIAL_MOST_MS: i32 = 5000
 
-/** What every request's task shares: the pool, the cached table and the scratch a task fills and reads without waiting. */
+/**
+ * What every request's task shares: the pool, the cached table and the scratch
+ * a task fills and reads without waiting.
+ */
 export class TfbAsyncDb {
   readonly pool: PgAsyncPool
   /** The four statements' numbers, as `pgAsyncPrepare` registered them. */

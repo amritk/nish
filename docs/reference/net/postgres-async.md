@@ -813,12 +813,14 @@ class PgAsyncPool
 | `readonly size: i32` | The number of connection slots, fixed at construction. |
 | `readonly skipping: u8[]` | Per slot: 1 while a task reads past an abandoned seat's answer. |
 | `readonly statements: u8[][]` | Each statement `pgAsyncPrepare` registered: its SQL as UTF-8. |
+| `turnWaits: i32` | How many times `pgAsyncTurn` waited for the answers seated ahead of its own. |
 | `readonly waiters: i32[]` | Per wake: the tasks waiting on it. |
 | `waits: i32` | How many times `pgAsyncClaim` or `pgAsyncSeat` waited because no live connection had room. |
 | `readonly wakeBytes: u8[]` | The bytes a wake is rung with and read back into, so neither allocates. |
+| `readonly wakePair: i32[]` | Where `pgAsyncPark` opens a wake's socket pair, so it does not allocate. |
 | `readonly wakePending: u8[]` | Per wake: 1 while a byte is written and not yet read. |
 | `readonly wakeRings: i32[]` | Per wake: how many bytes were written to it, wrapping; a waiter that sees it move was rung. |
-| `readonly wakes: i32[]` | Per slot, then one for the pool, then one per queue lane: a socket pair whose read end a waiting task waits on, or -1. |
+| `readonly wakes: i32[]` | Per slot, then one for the pool, then one per queue lane: a socket pair whose read end a waiting task waits on, or -1. A pair is opened the first time a task waits on its wake, so a pool nobody waits on holds none. |
 | `readonly wakeUnseen: i32[]` | Per wake: the tasks waiting when its byte was written that have not yet woken; it is read back at 0. |
 | `readonly writing: u8[]` | Per slot: 1 while a seated statement has not yet been written whole. |
 | `close(): void` | Ends every connection: a Terminate is offered to each socket, which is then closed, claimed or not, and closes the wakes. Call it once the tasks that hold tickets are done; a ticket used afterwards panics. |

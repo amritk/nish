@@ -47,10 +47,10 @@
 // broken entry fails the test instead of hanging it; `watch` ends the
 // process if `serveOn` does not stop once the client is done.
 //
-// The entry prepares each of its statements once per connection, the
-// stand-in answering a Bind by the statement a Parse on that connection
-// named; tfb_db's batching and slot checks have no twin. Every request is counted in `ANSWERED`, so `serveOn` stops once the client
-// is done.
+// The entry prepares each of its statements once per connection, the stand-in
+// answering a Bind by the statement a Parse on that connection named; tfb_db's
+// batching and slot checks have no twin. Every request is counted in
+// `ANSWERED`, so `serveOn` stops once the client is done.
 import { awaitAll, readableWithin, sleep, spawn, writableWithin } from "nish:async"
 import {
   NET_UNIX_STREAM,
@@ -376,7 +376,10 @@ const snapshot = (table: Table): i32[] => {
   return s
 }
 
-/** How many rows `path` answers with, each checked against `rows`; -1 when any is wrong or the answer is not a 200 JSON array. */
+/**
+ * How many rows `path` answers with, each checked against `rows`; -1 when any
+ * is wrong or the answer is not a 200 JSON array.
+ */
 const count = async (c: Conn, path: string, table: Table, rows: i32[], ids: i32[], numbers: i32[]): Promise<i32> => {
   const a: Answer = await get(c, path)
   if (!headers(a, "application/json")) {
@@ -391,7 +394,10 @@ const count = async (c: Conn, path: string, table: Table, rows: i32[], ids: i32[
   return rowsMatch(held, ids, numbers, n) ? n : -1
 }
 
-/** Waits, polling every 5 ms for at most `WAIT_MS`, until the pool has `live` connections; false when it has not. */
+/**
+ * Waits, polling every 5 ms for at most `WAIT_MS`, until the pool has `live`
+ * connections; false when it has not.
+ */
 const liveWithin = async (db: TfbAsyncDb, live: i32): Promise<boolean> => {
   for (let waited: i32 = 0; waited < WAIT_MS; waited += 5) {
     if (db.pool.live() === live) {
@@ -402,7 +408,10 @@ const liveWithin = async (db: TfbAsyncDb, live: i32): Promise<boolean> => {
   return db.pool.live() === live
 }
 
-/** Waits, polling every millisecond for at most `WAIT_MS`, until the stand-in holds a whole-table read; false when it does not. */
+/**
+ * Waits, polling every millisecond for at most `WAIT_MS`, until the stand-in
+ * holds a whole-table read; false when it does not.
+ */
 const heldWithin = async (table: Table): Promise<boolean> => {
   for (let waited: i32 = 0; waited < WAIT_MS; waited++) {
     if (table.cacheHeld) {
@@ -413,7 +422,10 @@ const heldWithin = async (table: Table): Promise<boolean> => {
   return table.cacheHeld
 }
 
-/** Waits, polling every millisecond for at most `WAIT_MS`, until a cached query waits on the table's read; false when none does. */
+/**
+ * Waits, polling every millisecond for at most `WAIT_MS`, until a cached query
+ * waits on the table's read; false when none does.
+ */
 const waitedWithin = async (db: TfbAsyncDb, waits: i32): Promise<boolean> => {
   for (let waited: i32 = 0; waited < WAIT_MS; waited++) {
     if (db.cacheWaits > waits) {
@@ -743,7 +755,11 @@ export const main = async (): Promise<i32> => {
   t.eqI32("the server answered each request once", stats.answered, ANSWERED)
   t.eqI32("no query failed but the eight made to", db.failures, toI32(8))
   t.eqI32("every statement was one of the entry's four", table.other, toI32(0))
-  t.ok("each was prepared once a connection", table.parses > 0 && table.reparsed === 0)
+  t.eqI32("three connections were dialled", table.accepted, toI32(3))
+  // Each statement is parsed the first time a connection runs it: seven
+  // first uses across the three connections, and none parsed twice.
+  t.eqI32("each was prepared once a connection: seven Parses", table.parses, toI32(7))
+  t.eqI32("no connection was sent a Parse twice", table.reparsed, toI32(0))
   t.eqI32("limits asked for 0 slots have one connection", tfbDbLimits(0).connections, toI32(1))
   pool.close()
   netClose(listener)
