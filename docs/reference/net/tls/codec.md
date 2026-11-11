@@ -322,7 +322,7 @@ Writes a NewSessionTicket (§4.6.1) at `out[at]` and answers where it ends: `lif
 
 <scalar-card title="tls​Write​Server​Hello" icon="phosphor/regular/function" href="#tlswriteserverhello">
 
-Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends: choosing `suite` and TLS 1.3, echoing the session id `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying the server's x25519 share.
+Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends: choosing `suite` and TLS 1.3, echoing the session id `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying the server's key share, secp256r1 when `x25519Public` is a 65-byte point and x25519 otherwise.
 
 </scalar-card>
 
@@ -843,7 +843,8 @@ The cipher suite the server chose.
 
 <scalar-field name="x25519Public" type="u8[]" required>
 
-The server's x25519 public key, the share's `key_exchange`.
+The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+  65-byte uncompressed secp256r1 point.
 
 </scalar-field>
 
@@ -888,7 +889,8 @@ The cipher suite the server chose.
 
 <scalar-field name="x25519Public" type="u8[]" required>
 
-The server's x25519 public key, the share's `key_exchange`.
+The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+  65-byte uncompressed secp256r1 point.
 
 </scalar-field>
 
@@ -1913,7 +1915,8 @@ Where the message ends in `out`: `at` plus its length, written or not.
 Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends:
 choosing `suite` and TLS 1.3, echoing the session id
 `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying
-the server's x25519 share. The extensions are `key_share` then
+the server's key share, secp256r1 when `x25519Public` is a 65-byte point
+and x25519 otherwise. The extensions are `key_share` then
 `supported_versions`, the order RFC 8448 §3 shows.
 
 ```ts
@@ -1973,7 +1976,8 @@ The cipher suite the server chose, such as `nish/net/tls/schedule`'s `TLS_AES_12
 
 <scalar-field name="x25519Public" type="u8[]" required>
 
-The server's x25519 public key, the share's `key_exchange`.
+The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+  65-byte uncompressed secp256r1 point.
 
 </scalar-field>
 
@@ -2049,7 +2053,8 @@ The cipher suite the server chose.
 
 <scalar-field name="x25519Public" type="u8[]" required>
 
-The server's x25519 public key, the share's `key_exchange`.
+The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+  65-byte uncompressed secp256r1 point.
 
 </scalar-field>
 
@@ -2142,6 +2147,7 @@ class TlsClientHelloView
 | `groupsLength: i32` | The `supported_groups` window's length in bytes, two a group; 0 when the extension was absent. |
 | `hasAlpn: boolean` | Whether the hello carried ALPN. |
 | `hasKeyShare: boolean` | Whether the hello carried `key_share`, even an empty one. |
+| `hasP256Share: boolean` | Whether `key_share` offered a secp256r1 share, so `p256ShareAt` names one. |
 | `hasPreSharedKey: boolean` | Whether the hello carried `pre_shared_key`, which must be its last extension (§4.2.11). |
 | `hasPskModes: boolean` | Whether the hello carried `psk_key_exchange_modes`, without which a server must not resume (§4.2.9). |
 | `hasQuicTransportParameters: boolean` | Whether the hello carried `quic_transport_parameters`, which a QUIC handshake requires (RFC 9001 §8.2). |
@@ -2152,6 +2158,8 @@ class TlsClientHelloView
 | `hasX25519Share: boolean` | Whether `key_share` offered an x25519 share, so `x25519ShareAt` names one. |
 | `legacyVersion: i32` | `legacy_version` as sent; TLS 1.3 fixes it at 0x0303 and negotiates the real version in `supported_versions` (§4.1.2). |
 | `nullCompressionOnly: boolean` | Whether `legacy_compression_methods` is the single null method TLS 1.3 requires (§4.1.2). |
+| `p256ShareAt: i32` | The secp256r1 share's key_exchange, as sent; its length is the server's to check. |
+| `p256ShareLength: i32` | The secp256r1 share's length in bytes as sent, 0 when none was offered; a usable share is 65. |
 | `pskBinderAt: i32` | That identity's binder, the entry of the same index in `binders`. |
 | `pskBinderCount: i32` | How many binders `binders` holds, one an identity. |
 | `pskBinderLength: i32` | The chosen binder's length in bytes, 32 to 255: `tlsReadPreSharedKey` refuses a shorter one when it parses the extension. It must equal the suite's hash length. |
@@ -2424,7 +2432,7 @@ An extension in a server message that the client never offered (§4.2).
 
 `TLS_GROUP_SECP256R1: i32`
 
-secp256r1 (§4.2.7), the second group the client offers.
+secp256r1 (§4.2.7), the second group the client offers and the server agrees to.
 
 </scalar-card>
 
@@ -2432,7 +2440,7 @@ secp256r1 (§4.2.7), the second group the client offers.
 
 `TLS_GROUP_X25519: i32`
 
-x25519 (§4.2.7), the one group `nish/net/tls` agrees to.
+x25519 (§4.2.7), the group `nish/net/tls` prefers.
 
 </scalar-card>
 

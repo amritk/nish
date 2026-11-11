@@ -157,7 +157,7 @@ read, and gives up past `TLS_TCP_LINGER_LIMIT` bytes.
 A connection that failed, whose client sent its own `close_notify` (it writes
 nothing after it, RFC 8446 §6.1) or whose client's stream had already ended,
 is done at once. A client that never hangs up keeps its slot, as one that
-never sends does: how long a slot may wait is the program's
+never sends does, until `expire` finds it idle past `idleTimeout`
 (`docs/security/tls.md`, TLS-6 and TLS-4).
 
 </scalar-detail>
@@ -343,6 +343,7 @@ class TlsTcpServer
 | `connections: TlsRecordServer[]` | The connections built so far, slot `k`'s at `k`: one per slot ever accepted into. `connection` never adds to it; a slot never built reads one shared vacant connection instead. |
 | `fds: i32[]` | Each slot's descriptor, or -1 while the slot is free, for the slots accepted into so far: its length is the high-water mark, and a slot past it has never been used. |
 | `free: i32[]` | The slots closed since they were used, a stack whose top `accept` takes before it builds a slot past the high-water mark, so finding one costs the same with every slot free as with all but one busy. |
+| `idleTimeout: i32` | How long, in milliseconds, a slot may go without activity before `expire` closes it: a client that opens a connection and sends nothing, stalls its handshake, or never hangs up after the close holds its slot this long and no longer (`docs/security/tls.md`, TLS-4). 60 seconds by default, as `nish/net/http1-server`'s `idleTimeout`; 0 or less turns the timeout off. |
 | `peer: u8[]` | The last accepted peer's address, in `nish:net`'s 18-byte form. |
 | `pools: TlsRecordPools` | The pools every slot borrows its record buffers from, each with a ceiling of one per slot: `lent()` is 0 once every connection has ended, and `made()` is the most connections that were ever open at once. |
 | `randoms: u8[][]` | Each slot's own copy of its connection's server random: `TlsServer` keeps the array it is given and writes it into the ServerHello only once the ClientHello arrives, so the program's array may be refilled for the next one. The ephemeral key needs no copy here: `TlsServer.restart` copies it into the server's own `Secret` and wipes the array it was handed. |
@@ -352,6 +353,7 @@ class TlsTcpServer
 | `close(slot: i32): void` | Ends `slot`'s connection and frees the slot at once: a `close_notify` unless the connection already failed or closed, one attempt to send what is left, every key wiped, and the descriptor closed, which also takes it out of every loop. A program that must know every byte and the `close_notify` arrived calls `shutdown` instead, and `close` once the slot's interest says `TLS_RECORD_DONE`. |
 | `connection(slot: i32): TlsRecordServer` | The connection in `slot`: its state, its handshake (`tls`: suite, ALPN, server name) and the alerts sent and received. A free slot answers the last connection it held. A slot never accepted into answers one shared vacant connection, failed, as a free slot does, and builds no slot; a slot out of range names slot 0's. |
 | `enableTickets(): void` | Turns session resumption on for every slot (`TlsServer.enableTickets`): from the next `accept`, a connection offering a ticket, or one that may be issued one, says `TLS_RECORD_TICKET` in its interest. A slot built later is built with them on. |
+| `expire(now: i64): i32` | Closes, as `close` does, every slot that has had no activity for longer than `idleTimeout` at `now`, and answers how many it closed. The pool reads no clock of its own for this: a program calls it from its loop, between `pollWait`s whose timeout is at most `idleTimeout`, so a slot idles out within about twice the timeout. |
 | `fd(slot: i32): i32` | The descriptor of `slot`, for `pollAdd`; -1 for a free or unknown slot. |
 | `flush(slot: i32): i32` | Writes the connection's output until the socket would block or it is all sent, and answers its `interest`; once the connection is over and the program has read what the client sent, the slot lingers (`lingering`). A free slot answers `TLS_RECORD_DONE`. |
 | `holds(slot: i32): boolean` | Whether `slot` is a slot of this pool that holds a connection. |

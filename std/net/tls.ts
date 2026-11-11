@@ -22,8 +22,8 @@
  * space (RFC 9001 §4.1.3). Neither needs anything else from here.
  *
  * **Sans-IO.** Nothing here reads a socket, a clock or the random device. The
- * server random and the ephemeral x25519 private key are constructor
- * arguments, so a test injects RFC 8448's and a server draws them with
+ * server random and the ephemeral private key (32 bytes, the x25519 key or,
+ * its top bit cleared, the secp256r1 scalar) are constructor arguments, so a test injects RFC 8448's and a server draws them with
  * `crypto.getRandomValues`. Signing is handed off the same way: once the
  * Certificate is written the server stops at `TLS_STATE_WAIT_SIGNATURE`, the
  * caller signs `signatureInput()` with its own key (`tlsSignEcdsaP256` for a
@@ -33,10 +33,13 @@
  *
  * **What is negotiated.** TLS 1.3 only. The suites `TLS_AES_128_GCM_SHA256`,
  * `TLS_CHACHA20_POLY1305_SHA256` and `TLS_AES_256_GCM_SHA384`, the first of
- * them the client lists; the group x25519; the configuration's one signature
- * scheme. A client that offers x25519 in `supported_groups` without a share
- * gets one HelloRetryRequest (§4.1.4), and a second ClientHello still without
- * the share is refused. `server_name` is read and exposed as `serverName`.
+ * them the client lists; the group x25519 whenever the client lists it, and
+ * secp256r1 for a client that lists only that; the configuration's one
+ * signature scheme. A client that lists the chosen group in `supported_groups`
+ * without a share for it gets one HelloRetryRequest (§4.1.4), and a second
+ * ClientHello still without the share is refused. A secp256r1 share must be
+ * an uncompressed point on the curve (§4.2.8.2); any other is
+ * `illegal_parameter`. `server_name` is read and exposed as `serverName`.
  * ALPN picks the first of the configuration's protocols the client offers.
  * `quic_transport_parameters` is read and written only when the configuration
  * says the carrier is QUIC. 0-RTT and client authentication are not here:
@@ -727,7 +730,7 @@ const tlsExchange = (w: TlsExchangeWords): i32 => {
 
 /** The first input buffer: room for the ClientHello of every common client. It grows only for a longer one. */
 const TLS_INPUT_START: i32 = 2048
-/** The Initial output: a HelloRetryRequest and a ServerHello, each with a 32-byte session id, fit with room. */
+/** The Initial output: a HelloRetryRequest and a ServerHello with a 32-byte session id, a 65-byte secp256r1 share and a PSK, about 250 bytes; it grows for more. */
 const TLS_INITIAL_OUTPUT_SIZE: i32 = 256
 /** The longest DER ECDSA P-256 signature, what the flight is first sized for: two 33-byte integers and their headers. */
 const TLS_ECDSA_SIGNATURE_MAX: i32 = 72
@@ -1002,7 +1005,7 @@ export class TlsServer {
   /** The configuration this server was built with: its certificate chain, ALPN list and QUIC transport parameters. */
   config: TlsServerConfig
   private serverRandom: u8[]
-  /** The connection's x25519 private key, copied in by `restart` and wiped by the record layer once the ServerHello is written. */
+  /** The connection's 32-byte ephemeral private key (x25519, or the secp256r1 scalar with its top bit cleared), copied in by `restart` and wiped by the record layer once the ServerHello is written. */
   readonly ephemeral: Secret<u8[]>
   /** The client's `host_name`, or empty. */
   serverName: string = ""
@@ -1129,14 +1132,14 @@ export class TlsServer {
 
   /**
    * A server for one connection under `config`, with the 32-byte server
-   * random and the 32-byte x25519 private key drawn for it. A random or key of
+   * random and the 32-byte ephemeral private key drawn for it. A random or key of
    * another length, or a configuration `tlsConfigFits` refuses, leaves the
    * server failed with `internal_error` before it reads anything.
    *
    * @param config What the server offers and answers with; held, not copied, and checked by `tlsConfigFits`.
    * @param serverRandom The 32 random bytes of the ServerHello's `random`; the array itself is kept, so the
    *   caller hands over a fresh one.
-   * @param ephemeralPrivate The 32-byte x25519 private key; copied into the server's `Secret` and then zeroed
+   * @param ephemeralPrivate The 32-byte ephemeral private key, for x25519 or secp256r1; copied into the server's `Secret` and then zeroed
    *   in the caller's array, as `restart` does.
    */
   constructor(config: TlsServerConfig, serverRandom: u8[], ephemeralPrivate: u8[]) {
@@ -1173,7 +1176,7 @@ export class TlsServer {
 
   /**
    * Starts the next connection in this server's buffers, with its own
-   * 32-byte random and x25519 private key, as a fresh `TlsServer` would:
+   * 32-byte random and ephemeral private key, as a fresh `TlsServer` would:
    * every secret the last connection left is wiped (`wipe`) and none is
    * held. The random is kept, as the constructor keeps it; the key is copied
    * into `ephemeral` and the caller's array zeroed with `secureZero`, so the
@@ -1182,7 +1185,7 @@ export class TlsServer {
    * failed with `internal_error`.
    *
    * @param serverRandom The next connection's 32 random bytes; the array itself is kept.
-   * @param ephemeralPrivate The next connection's 32-byte x25519 private key; zeroed once copied in.
+   * @param ephemeralPrivate The next connection's 32-byte ephemeral private key; zeroed once copied in.
    */
   restart(serverRandom: u8[], ephemeralPrivate: u8[]): void {
     const keyLength: i32 = toI32(ephemeralPrivate.length)
@@ -1617,9 +1620,12 @@ export class TlsServer {
     // without a share of that group gets one HelloRetryRequest asking for it
     // (§4.1.4), and the second hello must carry that share or is
     // `illegal_parameter`; after a retry `group` is fixed already.
-    const group: i32 = this.retried ? this.group : offersX25519 ? TLS_GROUP_X25519 : TLS_GROUP_SECP256R1
+    const preferred: i32 = offersX25519 ? TLS_GROUP_X25519 : TLS_GROUP_SECP256R1
+    const group: i32 = this.retried ? this.group : preferred
     const p256Group: boolean = group === TLS_GROUP_SECP256R1
-    const hasShare: boolean = p256Group ? offersP256 && hello.hasP256Share : offersX25519 && hello.hasX25519Share
+    const hasShare: boolean = p256Group
+      ? offersP256 && hello.hasP256Share
+      : offersX25519 && hello.hasX25519Share
     if (!hasShare) {
       if (this.retried) {
         return TLS_ALERT_ILLEGAL_PARAMETER
