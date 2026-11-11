@@ -50,6 +50,7 @@
 
 import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
+import { RefModule, resolveReferences } from "./fnref-places"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
 import { portabilityFindings } from "./portability"
@@ -1396,6 +1397,22 @@ export class Compilation {
     if (gathered) {
       for (const unit of this.modules) {
         unit.parents.link(unit.file)
+      }
+    }
+    // WP51 §2.3: every body is checked, so each call through a function
+    // reference gets the dispatcher of the set its callee's place can hold.
+    const refModules: RefModule[] = []
+    for (const unit of this.modules) {
+      refModules.push(new RefModule(unit.checker.program, unit.checker.ctx, unit.file, unit.parents, unit.nodeCount))
+    }
+    if (resolveReferences(this.table, refModules)) {
+      let r = 0
+      while (r < refModules.length) {
+        this.modules[r].nodeCount = refModules[r].nodeCount
+        r = r + 1
+      }
+      if (this.sink.hasErrors()) {
+        return false
       }
     }
     // WP40 §4: the handle rules read the checked tables, so they run once

@@ -629,7 +629,9 @@ export class Emitter {
       // module whatever its declaration says. Its `Result` ABI stays the one
       // its declaration picks, and the library has no `Result` in it.
       this.fn.linkage = "internal"
-    } else if (sig.hidden) {
+    } else if (sig.hidden || sig.refHidden) {
+      // WP51 §2.3: a reference member another module's dispatcher calls is
+      // `hidden` too, but keeps its entry facts, as its body is not copied.
       this.fn.linkage = "hidden"
     } else if (privateAbi(this.opts, sig.exported)) {
       this.fn.linkage = "internal"
@@ -1683,6 +1685,11 @@ export class Emitter {
     }
     if (constant !== null) {
       return constantText(this, constant)
+    }
+    // WP51 §2.1: a function named in a value position is its tag.
+    const named = this.program.nodeFnRefs[expr.id]
+    if (named !== null) {
+      return `${named.refTag}`
     }
     // `import { argv } from "nish:process"`: the same load as `process.argv`,
     // reached by a name instead of a dot.

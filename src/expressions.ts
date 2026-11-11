@@ -126,6 +126,7 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
+import { checkReferenceCall, functionReference } from "./fnrefs"
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
@@ -1002,6 +1003,11 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (constant !== null) {
     ctx.program.nodeConstants[expr.id] = constant
     return constant.type
+  }
+  // WP51: a top-level function named as a value is a reference to it.
+  const reference = functionReference(ctx, expr)
+  if (reference >= 0) {
+    return reference
   }
   // A `nish:` import of a property builtin (`argv`, `platform`) is read as a
   // value rather than called, so it lands here, and after the scope chain for
@@ -3302,12 +3308,25 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     return checkBuiltinCall(ctx, expr, scope)
   }
   if (callee.kind !== N_IDENT) {
+    // WP51: `hs[i](x)`, `pick()(x)`: a call through a reference the callee computes.
+    const computed = checkExpression(ctx, callee, scope, -1)
+    if (computed === T_ERROR) {
+      return T_ERROR
+    }
+    if (ctx.table.isFnRef(computed)) {
+      return checkReferenceCall(ctx, expr, computed, ctx.textOf(callee), scope)
+    }
     return ctx.errorType(expr, "Only direct calls to named functions are supported")
   }
   // WP29: a compile-time function parameter is a direct call to whichever
   // function this instantiation was given, and a function the arrow around
   // this call is written inside is one it cannot reach.
   const local = scope.lookup(callee.text)
+  // WP51: a local holding a function reference is called through it.
+  if (local !== null && ctx.table.isFnRef(scope.typeOf(local))) {
+    const held = checkExpression(ctx, callee, scope, -1)
+    return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, callee.text, scope)
+  }
   if (local === null) {
     if (ctx.capturesOuter(callee.text)) {
       refuseOnce(ctx, callee, outerFunctionMessage(ctx, callee.text))

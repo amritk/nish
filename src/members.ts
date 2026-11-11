@@ -67,6 +67,7 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
+import { checkReferenceCall } from "./fnrefs"
 import { ParentTable } from "./parents"
 import {
   channelCapacityMessage,
@@ -424,7 +425,13 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
       }
       return type
     }
-    const hint = info.field(access.text) !== null ? " (it is a field, not a method)" : ""
+    // WP51: a field holding a function reference is called through it.
+    const field = info.field(access.text)
+    if (field !== null && ctx.table.isFnRef(field.type)) {
+      const held = checkExpression(ctx, access, scope, -1)
+      return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, ctx.textOf(access), scope)
+    }
+    const hint = field !== null ? " (it is a field, not a method)" : ""
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface"
     ctx.errorAtProperty(
       access,

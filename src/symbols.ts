@@ -81,6 +81,11 @@ export class Local {
    * the body reads it during the call.
    */
   captureOf: Local | null
+  /**
+   * WP51: the place of a local whose type is a function reference, in the
+   * place table `src/fnref-places.ts` keeps, and -1 until that pass asks.
+   */
+  place: i32
 
   constructor(name: string, type: i32, mutable: boolean, storage: i32) {
     this.name = name
@@ -93,6 +98,7 @@ export class Local {
     this.captureOf = null
     this.pathIndex = ""
     this.literalKey = ""
+    this.place = -1
   }
 }
 
