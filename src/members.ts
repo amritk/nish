@@ -67,7 +67,13 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
-import { checkReferenceCall, methodReferenceMessage, opaqueReferenceMessage } from "./fnrefs"
+import {
+  checkReferenceCall,
+  methodReferenceMessage,
+  nullableReference,
+  opaqueReferenceMessage,
+  refuseNullableCall
+} from "./fnrefs"
 import { ParentTable } from "./parents"
 import {
   channelCapacityMessage,
@@ -438,6 +444,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     if (field !== null && ctx.table.isFnRef(field.type)) {
       const held = checkExpression(ctx, access, scope, -1)
       return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, ctx.textOf(access), scope)
+    }
+    if (field !== null && nullableReference(ctx, field.type)) {
+      return refuseNullableCall(ctx, access, ctx.textOf(access))
     }
     const hint = field !== null ? " (it is a field, not a method)" : ""
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface"

@@ -129,8 +129,10 @@ import { fitArguments } from "./declarations"
 import {
   checkReferenceCall,
   functionReference,
+  nullableReference,
   opaqueReferenceMessage,
   outerReference,
+  refuseNullableCall,
   refuseValueArrow,
 } from "./fnrefs"
 import { ParentTable } from "./parents"
@@ -3341,6 +3343,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     if (ctx.table.isFnRef(computed)) {
       return checkReferenceCall(ctx, expr, computed, ctx.textOf(callee), scope)
     }
+    if (nullableReference(ctx, computed)) {
+      return refuseNullableCall(ctx, callee, ctx.textOf(callee))
+    }
     return ctx.errorType(expr, "Only direct calls to named functions are supported")
   }
   // WP29: a compile-time function parameter is a direct call to whichever
@@ -3351,6 +3356,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   if (local !== null && ctx.table.isFnRef(scope.typeOf(local))) {
     const held = checkExpression(ctx, callee, scope, -1)
     return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, callee.text, scope)
+  }
+  if (local !== null && nullableReference(ctx, scope.typeOf(local))) {
+    return refuseNullableCall(ctx, callee, callee.text)
   }
   if (local === null) {
     if (ctx.capturesOuter(callee.text)) {

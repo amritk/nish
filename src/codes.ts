@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 897
+export const RULE_COUNT: i32 = 898
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -755,6 +755,8 @@ const diagnosticRules = (): string[] => [
   "NL2320",
   "` must be the name of a top-level function or an arrow written at the call, because `",
   "NL2339",
+  "` may be `null`: a nullable function reference is called only after a test such as `",
+  "NL2740",
   "` specifier names a module inside it, so no segment may be empty or begin with a `.`",
   "NL3016",
   "` under a type constructor instead of passing it on, so the chain has no end; name `",

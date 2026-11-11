@@ -157,6 +157,20 @@ export const referenceTypeOf = (table: TypeTable, sig: FunctionSig): i32 => {
   return table.fnRefOf(params, sig.returnType)
 }
 
+/** WP51 stage 2: a `F | null` whose `null` no test has excluded here. */
+export const nullableReference = (ctx: CheckContext, type: i32): boolean =>
+  ctx.table.isNullable(type) && ctx.table.isFnRef(ctx.table.stripNull(type))
+
+/**
+ * WP51 stage 2: a call through a `F | null` is refused until a test proves it
+ * holds a function, as TypeScript refuses it, because tag 0 names none.
+ */
+export const refuseNullableCall = (ctx: CheckContext, callee: Node, shown: string): i32 =>
+  ctx.errorType(
+    callee,
+    `\`${shown}\` may be \`null\`: a nullable function reference is called only after a test such as \`${shown} !== null\` proves it holds a function`
+  )
+
 /**
  * A call through a reference of type `type`, whose callee `expr.children[0]`
  * is already checked: the arguments against the reference's signature, and
