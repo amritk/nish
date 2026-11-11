@@ -4044,8 +4044,10 @@ from the whole-program facts, and each rule is reported there:
   (`tests/link/par_panic_once`, `thread_panic_once`). Output is a write —
   `console.error` and `process.exit` as much as `console.log`
   (`reject_par_console_error`, `reject_par_process_exit`). Reading a shared
-  `Map` or `Set` that an element reaches, with `get`, `has` or `size`, is a
-  read (`tests/link/par_map_table_reads`). Handing a helper a number, a
+  `Map` or `Set` that an element or a capture reaches, with `get`, `has` or
+  `size`, is a read (`tests/link/par_map_table_reads`); `set`, `delete`,
+  `clear` and iterating one, whose walk counts itself on the table, are writes
+  (`tests/cases/reject_par_map_set`, `_delete`, `_clear`, `_values`). Handing a helper a number, a
   `boolean`, an enum or a `string` — a `string` element of the caller's array
   included, `verify(hashes[k])` — gives it no slot to store into, so it is a
   read (`tests/link/thread_bcrypt_batch`, whose task verifies against the
@@ -4205,7 +4207,14 @@ from the whole-program facts, and each rule is reported there:
   elements and `| null`, is
   `` `(r) => ...` can reach a `f64[]` through `r.cells`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads, so `dst` may not be reachable from an element of `src` ``
   (`tests/cases/reject_par_reaches_dst`). It is judged by type, so such an
-  array is refused whether or not it is `dst` at run time. A reduce writes no
+  array is refused whether or not it is `dst` at run time. A global `Map` or
+  `Set` reaches only what it stores: its own arrays are private to it, so a
+  `Map<string, i32>` beside a `dst: i32[]` is not refused
+  (`tests/link/par_map_read_into`, `par_map_read_into_keys`,
+  `par_map_read_capture`), while a `Map<string, i32[]>` is, through
+  `x.index.get(k)` (`tests/cases/reject_par_map_value_dst`). A program's own
+  class named `Map` is walked like any class
+  (`tests/cases/reject_par_map_user_class`). A reduce writes no
   array of its caller's and has no such rule.
 
 #### A data-parallel arrow reads its function's `const` locals
