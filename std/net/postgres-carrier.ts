@@ -1209,7 +1209,9 @@ export class PgCarrier {
     if (tls !== null && tls.outputEnd > tls.outputStart) {
       return true
     }
-    return (phase === PG_CARRIER_TLS_OFF || phase === PG_CARRIER_TLS_OPEN) && conn.outputEnd() > conn.outputStart()
+    return (
+      (phase === PG_CARRIER_TLS_OFF || phase === PG_CARRIER_TLS_OPEN) && conn.outputEnd() > conn.outputStart()
+    )
   }
 
   // Writes what slot `s` owes its socket, as its TLS phase has it: the
@@ -1246,7 +1248,11 @@ export class PgCarrier {
       if (phase !== PG_CARRIER_TLS_OPEN || conn.outputEnd() <= conn.outputStart()) {
         return 0
       }
-      const sealed: i32 = tls.write(conn.outputBuffer(), conn.outputStart(), conn.outputEnd() - conn.outputStart())
+      const sealed: i32 = tls.write(
+        conn.outputBuffer(),
+        conn.outputStart(),
+        conn.outputEnd() - conn.outputStart()
+      )
       if (sealed <= 0) {
         return 0
       }

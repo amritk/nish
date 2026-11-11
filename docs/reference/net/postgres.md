@@ -34,6 +34,7 @@ import {
   PG_ERR_SERVER,
   PG_ERR_SERVER_SIGNATURE,
   PG_ERR_SETTING,
+  PG_ERR_TLS,
   PG_ERR_TOO_BIG,
   PG_ERR_UNEXPECTED,
   PG_FAILED,
@@ -45,12 +46,16 @@ import {
   PG_POOL_NONE,
   PG_READY,
   PG_ROW,
+  PG_SSL_REQUEST_CODE,
   PG_TARGET_BAD_ESCAPE,
   PG_TARGET_BAD_HOST,
   PG_TARGET_BAD_PORT,
   PG_TARGET_BAD_URL,
   PG_TARGET_OK,
   PG_TARGET_TOO_LONG,
+  PG_TLS_DISABLE,
+  PG_TLS_REQUIRE,
+  PG_TLS_VERIFY_FULL,
   PG_TURNS_FULL,
   PG_TURNS_NONE,
   PgArrayWalker,
@@ -67,6 +72,7 @@ import {
   PgPool,
   PgTarget,
   PgText,
+  pgSslRequest,
   pgTarget,
   pgTargetUrl,
 } from "nish/net/postgres";
@@ -105,6 +111,12 @@ while (event !== PG_NEED_MORE && event !== PG_FAILED) {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="pg​Ssl​Request" icon="phosphor/regular/function" href="#pgsslrequest">
+
+The 8-byte SSLRequest a client sends before its StartupMessage to ask for TLS: its length, 8, and `PG_SSL_REQUEST_CODE`, both big-endian.
+
+</scalar-card>
 
 <scalar-card title="pg​Target" icon="phosphor/regular/function" href="#pgtarget">
 
@@ -322,8 +334,9 @@ or is disposed. The server's signature is checked in constant time before
 of an exchange SCRAM began is refused.
 
 Cleartext and MD5 passwords, and SASL mechanisms other than SCRAM-SHA-256,
-are refused: with no TLS here the first sends the password as it is, and the
-second is a hash any eavesdropper can replay. The password's bytes are used
+are refused: the first sends the password as it is, and the second is a
+hash any eavesdropper can replay, over a connection that need not be
+encrypted (TLS is off unless `PgConfig.tls` asks for it). The password's bytes are used
 as they are, without SASLprep (RFC 4013): an ASCII password works, and a
 non-ASCII one works only when it is already in the form SASLprep would give
 (PostgreSQL itself falls back to the raw bytes when it cannot prepare one).
@@ -420,6 +433,22 @@ Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
 and RFC 5802 and RFC 7677; not ported from another implementation.
 
 ## Functions
+
+### pgSslRequest
+
+The 8-byte SSLRequest a client sends before its StartupMessage to ask for
+TLS: its length, 8, and `PG_SSL_REQUEST_CODE`, both big-endian. The server
+answers one byte, `S` to go on with a TLS handshake or `N` to refuse.
+
+```ts
+function pgSslRequest(): u8[]
+```
+
+<scalar-field name="returns" type="u8[]">
+
+A new 8-byte array holding the message.
+
+</scalar-field>
 
 ### pgTarget
 
@@ -773,6 +802,9 @@ class PgConfig
 | `minIterations: i32` | The fewest SCRAM iterations accepted; 4096 is PostgreSQL's default and RFC 7677's floor. |
 | `options: string` | The startup `options` parameter (`-c name=value ...`); empty sends none. |
 | `pack: boolean` | Read by `PgPool` only: whether `dispatch()` packs requests onto the first ready connection with room, filling it to `maxInFlight` before the next, rather than spreading them over every connection, fewest in flight first. Fewer connections in use send fuller writes, fewer packets, which pays on a lossy link to the server; a connection is still wanted only once every ready one is full. |
+| `tls: i32` | Read by the carrier only: `PG_TLS_DISABLE` (the default), `PG_TLS_REQUIRE` or `PG_TLS_VERIFY_FULL`. TLS needs a TCP target. |
+| `tlsRootsPath: string` | Read by the carrier only, under `PG_TLS_VERIFY_FULL`: a PEM file of the roots to trust; empty means the system's store. |
+| `tlsServerName: string` | Read by the carrier only: the name the server's certificate must carry, and the SNI sent; empty means the target's host. |
 | `user: string` | The role to connect as; required. |
 
 ### PgConnection
@@ -849,6 +881,7 @@ class PgConnection
 | `tagIs(word: string): boolean` | Whether the tag of the execution just completed starts with the word `word`, read after `PG_COMPLETE` and before the next `next()`. |
 | `tagRows(): i64` | The row count the tag of the execution just completed ends with, read after `PG_COMPLETE` and before the next `next()`; `text.failed` is left as it was. |
 | `terminate(): void` | Terminate: tells the server the connection is ending; close the socket once it is sent. A bind still open is dropped unsent. It is queued in any state, and is never refused for room. |
+| `tlsFailed(): i32` | Reports that TLS under the connection failed, or the server refused it: unless it already has, the connection fails with `PG_ERR_TLS`, which wipes the password. |
 
 ### PgError
 
@@ -906,6 +939,7 @@ class PgPool
 | `register(name: string, sql: string, paramTypes: i32[]): boolean` | Registers a statement for every connection to prepare before its first request. False when a connection has been made already, `name` or `sql` holds a NUL, or 256 are registered. |
 | `request(): i32` | Queues a request and answers its ticket, or `PG_POOL_FULL` when `queueSize` are waiting. |
 | `send(): boolean` | Ends the group of the request `dispatch()` handed out. False when there is none; when a bind is still open, so finish it and call again; and when no message of the group was written, so the request is dropped and gets no events (`PG_LOST` if its connection has failed). |
+| `settings(): PgConfig` | The settings the pool's connections are made with, as given to the constructor. |
 | `waiting(): i32` | How many requests wait for a connection. |
 | `wanted(): i32` | A slot that needs a socket, or `PG_POOL_NONE`: connect it, then call `connect(slot, nonce)`. |
 
@@ -1180,6 +1214,16 @@ The server's `DateStyle` is not ISO or its `TimeZone` is not UTC, the two the de
 
 </scalar-card>
 
+<scalar-card title="11" icon="phosphor/regular/hash">
+
+`PG_ERR_TLS: i32`
+
+TLS to the server failed, reported by the carrier (`tlsFailed()`): the
+server answered `N` to the SSLRequest while `PgConfig.tls` asks for TLS,
+its certificate was refused, or the handshake failed.
+
+</scalar-card>
+
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `PG_ERR_TOO_BIG: i32`
@@ -1268,6 +1312,14 @@ A row: `columns` columns, each at `colStart(c)` for `colLength(c)` bytes.
 
 </scalar-card>
 
+<scalar-card title="80,877,103" icon="phosphor/regular/hash">
+
+`PG_SSL_REQUEST_CODE: i32`
+
+The SSLRequest's code, in place of a protocol version: 1234 in the high 16 bits, 5679 in the low.
+
+</scalar-card>
+
 <scalar-card title="2" icon="phosphor/regular/hash">
 
 `PG_TARGET_BAD_ESCAPE: i32`
@@ -1313,6 +1365,34 @@ A row: `columns` columns, each at `colStart(c)` for `colLength(c)` bytes.
 `PG_TARGET_TOO_LONG: i32`
 
 `PgTarget.failure`: a socket path longer than Linux's `sun_path` holds.
+
+</scalar-card>
+
+<scalar-card title="0" icon="phosphor/regular/hash">
+
+`PG_TLS_DISABLE: i32`
+
+`PgConfig.tls`: no SSLRequest; the connection is cleartext. The default.
+
+</scalar-card>
+
+<scalar-card title="1" icon="phosphor/regular/hash">
+
+`PG_TLS_REQUIRE: i32`
+
+`PgConfig.tls`: an SSLRequest first, and TLS 1.3 or nothing, the
+server's certificate not checked. Keeps a passive eavesdropper out; an
+active one who answers in the server's place is not.
+
+</scalar-card>
+
+<scalar-card title="2" icon="phosphor/regular/hash">
+
+`PG_TLS_VERIFY_FULL: i32`
+
+`PgConfig.tls`: an SSLRequest first, and TLS 1.3 or nothing, the
+server's chain checked against the trusted roots and its name against the
+host (libpq's `sslmode=verify-full`).
 
 </scalar-card>
 
