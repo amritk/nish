@@ -585,7 +585,8 @@ const RUNTIME_CHACHA20_TEXT_BUDGET = 3840
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-checksum.c`
  * -- CRC-32 on the CPU's carry-less multiply (WP38 CRC): `nish_crc32_hw`, its CPUID
- * question and `NISH_CRC32` pin, and the PCLMULQDQ folding kernel.
+ * question and `NISH_CRC32` pin, and the PCLMULQDQ folding kernel; and Adler-32 on
+ * SSSE3 (WP38 S8): `nish_adler32_hw`, its pin `NISH_ADLER32`, and the kernel.
  *
  * Measured **718 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64, all of it
  * `.text`: the folding kernel with its Barrett reduction 514, the nibble-table tail
@@ -595,8 +596,16 @@ const RUNTIME_CHACHA20_TEXT_BUDGET = 3840
  * AArch64 build is the CRC32 instructions and is smaller; the ceiling is measured
  * where the gate runs. The budget is the next 256-byte boundary above the
  * measurement, as every ceiling here was set.
+ *
+ * Raised to 1,280 on 2026-11-11 by Adler-32 on SSSE3 (WP38 S8), measured **1,153
+ * bytes**: the SSSE3 kernel with its scalar tail inlined 297, `nish_adler32_hw` with
+ * its CPUID question and `NISH_ADLER32` pin 113, and the entry point 22. Raised in
+ * place rather than split into a file of its own because both checksums are the
+ * same seam over the same `nish_array` window, and a program that inflates zlib or
+ * gzip already links this unit; the AArch64 build's NEON kernel is measured where
+ * the gate runs no more than the CRC32 one is.
  */
-const RUNTIME_CHECKSUM_TEXT_BUDGET = 768
+const RUNTIME_CHECKSUM_TEXT_BUDGET = 1280
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
  * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
