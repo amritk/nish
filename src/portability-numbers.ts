@@ -149,7 +149,12 @@ const isConverted = (walk: PortabilityWalk, node: Node, type: i32): boolean => {
     return false
   }
   const call = walk.parents.parentOf(up)
-  return call !== null && call.kind === N_CALL && call.children[1] === up && isBuiltinConversion(walk.program, call, name)
+  return (
+    call !== null &&
+    call.kind === N_CALL &&
+    call.children[1] === up &&
+    isBuiltinConversion(walk.program, call, name)
+  )
 }
 
 /**
@@ -188,7 +193,8 @@ const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] =>
   if (left.kind !== N_IDENT) {
     return edits
   }
-  const bare = right.kind === N_IDENT || right.kind === N_NUMBER || right.kind === N_PAREN || right.kind === N_CALL
+  const bare =
+    right.kind === N_IDENT || right.kind === N_NUMBER || right.kind === N_PAREN || right.kind === N_CALL
   const divisor = bare ? walk.textOf(right) : `(${walk.textOf(right)})`
   edits.push(new Edit(left.end, right.end, ` = ${name}(${left.text} / ${divisor})`))
   return edits
