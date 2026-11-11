@@ -193,6 +193,17 @@ export const checkReferenceCall = (
   return ctx.table.fnRefResultOf(type)
 }
 
+/** Whether `name`, outside the arrow being checked, is a local of the function around it holding a function reference. */
+export const outerReference = (ctx: CheckContext, name: string): boolean => {
+  for (const scope of ctx.arrowOuterScopes) {
+    const local = scope.lookup(name)
+    if (local !== null) {
+      return ctx.table.isFnRef(scope.typeOf(local))
+    }
+  }
+  return false
+}
+
 /** The refusal for a function reference that code outside the program could hold or hand in (§5.2). */
 export const hostReferenceMessage = (what: string): string =>
   `${what} holds a function reference that code outside this program can reach: a reference is a tag this ` +

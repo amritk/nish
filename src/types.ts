@@ -1030,10 +1030,11 @@ export class TypeTable {
     return `${this.joinedMangles(variants, from, mid)}${this.joinedMangles(variants, mid, to)}`
   }
 
-  /** An array's element as its type spells it: a union in parentheses, `(A | B)[]`. */
+  /** An array's element as its type spells it: a union or a function in parentheses, `(A | B)[]`, `((i32) => i32)[]`. */
   elementName(element: i32): string {
     const name = this.typeName(element)
-    return this.isUnion(this.stripNull(element)) ? `(${name})` : name
+    const inner = this.stripNull(element)
+    return this.isUnion(inner) || this.isFnRef(inner) ? `(${name})` : name
   }
 
   /** The variant names joined as the source joins them, ascending by id. */

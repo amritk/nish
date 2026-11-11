@@ -125,7 +125,7 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
-import { checkReferenceCall, functionReference, refuseValueArrow } from "./fnrefs"
+import { checkReferenceCall, functionReference, outerReference, refuseValueArrow } from "./fnrefs"
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
@@ -3328,6 +3328,12 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   }
   if (local === null) {
     if (ctx.capturesOuter(callee.text)) {
+      // WP51: a reference local of the function around the arrow is a value
+      // it captures like any other, so the call is through the capture.
+      if (outerReference(ctx, callee.text)) {
+        const held = checkExpression(ctx, callee, scope, -1)
+        return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, callee.text, scope)
+      }
       refuseOnce(ctx, callee, outerFunctionMessage(ctx, callee.text))
       return T_ERROR
     }

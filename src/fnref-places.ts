@@ -392,11 +392,10 @@ class RefPass {
     let k = 0
     while (k < this.program.refCalls.length) {
       if (this.program.refCalls[k] === call && this.program.refCallTables[k] === this.callees) {
-        const place = this.newPlace(this.program.refCallTypes[k])
+        const type = this.program.refCallTypes[k]
+        const place = this.newPlace(type)
         this.flow(callee, place)
-        for (const arg of args.children) {
-          this.scan(arg)
-        }
+        this.scanRefArgs(type, args)
         this.siteCalls.push(call)
         this.siteTables.push(this.callees)
         this.siteModules.push(this.module)
@@ -410,13 +409,47 @@ class RefPass {
     return false
   }
 
-  scanArgs(sig: FunctionSig | null, args: Node, element: i32): void {
+  /**
+   * The arguments of a call through a reference of type `type`: a reference
+   * argument may reach the parameter of any function of that type, so it
+   * flows to that parameter of every one. Wider than the call's own set, never
+   * narrower, since the set is not known until `solve`.
+   */
+  scanRefArgs(type: i32, args: Node): void {
     let i = 0
     while (i < args.children.length) {
       const arg = args.children[i]
       if (this.isRef(arg)) {
-        if (sig !== null && !sig.dispatcher && i < sig.writtenArity() && !sig.isCompileTime(i)) {
-          this.flow(arg, this.paramPlace(sig, i, this.typeOf(arg)))
+        const from = this.newPlace(this.typeOf(arg))
+        this.flow(arg, from)
+        let k = 0
+        while (k < this.members.length) {
+          const member = this.members[k]
+          if (this.memberTypes[k] === type && i < member.writtenArity()) {
+            this.storeFrom(this.paramPlace(member, i, this.typeOf(arg)), from, arg)
+          }
+          k = k + 1
+        }
+      } else {
+        this.scan(arg)
+      }
+      i = i + 1
+    }
+  }
+
+  scanArgs(sig: FunctionSig | null, args: Node, element: i32): void {
+    // A method's or a constructor's `this` is its parameter 0, so argument `i` is its parameter `i + 1`.
+    let self = 0
+    if (sig !== null && sig.owner !== null) {
+      self = 1
+    }
+    let i = 0
+    while (i < args.children.length) {
+      const arg = args.children[i]
+      const at = i + self
+      if (this.isRef(arg)) {
+        if (sig !== null && !sig.dispatcher && at < sig.writtenArity() && !sig.isCompileTime(at)) {
+          this.flow(arg, this.paramPlace(sig, at, this.typeOf(arg)))
         } else if (element >= 0) {
           this.flow(arg, this.elementPlace(element))
         } else {
@@ -962,6 +995,7 @@ export const resolveReferences = (table: TypeTable, modules: RefModule[]): boole
   // One dispatcher per module and member set.
   const dispatchers = new StringMap()
   const made: FunctionSig[] = []
+  const rewritten: Node[] = []
   let s = 0
   while (s < pass.siteCalls.length) {
     const call = pass.siteCalls[s]
@@ -986,14 +1020,20 @@ export const resolveReferences = (table: TypeTable, modules: RefModule[]): boole
       dispatchers.set(key, index)
     }
     const dispatcher = made[index]
-    const build = new Builder(module)
-    const callee = build.ident(dispatcher.name)
-    const args: Node[] = [call.children[0]]
-    for (const arg of call.children[1].children) {
-      args.push(arg)
+    // A generic body checked once per instantiation is one site per instance
+    // but one node: it is rewritten once, and each instance's table names its
+    // own dispatcher.
+    if (rewritten.indexOf(call) < 0) {
+      rewritten.push(call)
+      const build = new Builder(module)
+      const callee = build.ident(dispatcher.name)
+      const args: Node[] = [call.children[0]]
+      for (const arg of call.children[1].children) {
+        args.push(arg)
+      }
+      call.children[0] = callee
+      call.children[1].children = args
     }
-    call.children[0] = callee
-    call.children[1].children = args
     module.program.growTables(module.nodeCount)
     for (const sig of module.program.functions) {
       const instance = sig.instance
@@ -1009,7 +1049,7 @@ export const resolveReferences = (table: TypeTable, modules: RefModule[]): boole
       const store = pass.storeOf(place, k)
       via.push(store >= 0 ? storeText(pass, modules, store) : "")
     }
-    const shown = args[0]
+    const shown = call.children[1].children[0]
     module.program.refSites.push(call)
     module.program.refSiteDispatchers.push(dispatcher)
     module.program.refSiteShown.push(module.program.source.text.substring(shown.start, shown.end))
