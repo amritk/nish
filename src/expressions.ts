@@ -123,6 +123,7 @@ import {
   N_VAR_DECL,
   N_WHILE,
   Node,
+  FLAG_REFERENCE_ARROW,
 } from "./nodes"
 import { fitArguments } from "./declarations"
 import {
@@ -1087,6 +1088,16 @@ const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
 const checkThis = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const self = scope.lookup("this")
   if (self === null && ctx.capturesOuter("this")) {
+    // WP51 stage 2: the arrow written for `this.op` passed as an argument
+    // reads `this` once, at the call, as its capture.
+    if (ctx.arrowFns.length === 1 && (ctx.arrowFns[0].decl.flags & FLAG_REFERENCE_ARROW) !== 0) {
+      const captured = captureOuter(ctx, expr, "this")
+      if (captured === null) {
+        return T_ERROR
+      }
+      ctx.program.nodeLocals[expr.id] = captured
+      return captured.type
+    }
     // WP29: an arrow argument has no `this`, and is told what it may read instead.
     refuseOnce(ctx, expr, thisCaptureMessageFor(ctx.arrowMode()))
     return T_ERROR

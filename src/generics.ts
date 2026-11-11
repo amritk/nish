@@ -2047,6 +2047,16 @@ const mentionsUnbound = (annotation: Node, names: StringSet, bindings: StringMap
 }
 
 /**
+ * The refusal for a local passed for a function-typed parameter that holds no
+ * function reference: it names the local's type. A reference written in an
+ * arrow, outside the arrow's own scope, is a capture an arrow cannot make.
+ */
+const notFunctionLocal = (ctx: CheckContext, lead: string, name: string, type: i32): string =>
+  ctx.table.isFnRef(ctx.table.stripNull(type))
+    ? nestedCaptureMessage(name)
+    : `${lead}; \`${name}\` is \`${ctx.table.typeName(type)}\`, which is not a function`
+
+/**
  * The function a call gives the function-typed parameter at `index`, or
  * `null` once it has been refused: the name of a top-level function (or of a
  * function parameter of the body being checked, which passes its callee on),
@@ -2089,7 +2099,7 @@ const resolveFunctionArgument = (
     written.kind === N_MEMBER ||
     written.kind === N_INDEX
   ) {
-    const type = inLocal !== null ? inLocal.type : checkExpression(ctx, written, scope, -1)
+    const type = inLocal !== null ? scope.typeOf(inLocal) : checkExpression(ctx, written, scope, -1)
     if (type === T_ERROR) {
       return null
     }
@@ -2123,13 +2133,16 @@ const resolveFunctionArgument = (
   const name = written.text
   const inScope = scope.lookup(name)
   if (inScope !== null) {
-    refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`)
+    refuseOnce(ctx, arg, notFunctionLocal(ctx, lead, name, scope.typeOf(inScope)))
     return null
   }
   if (ctx.capturesOuter(name)) {
-    const local = ctx.arrowOuterScopes.length > 0 && ctx.arrowOuterScopes[0].lookup(name) !== null
-    if (local && !capturesNothing(ctx.arrowMode())) {
-      refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`)
+    let outer: Local | null = null
+    if (ctx.arrowOuterScopes.length > 0) {
+      outer = ctx.arrowOuterScopes[0].lookup(name)
+    }
+    if (outer !== null && !capturesNothing(ctx.arrowMode())) {
+      refuseOnce(ctx, arg, notFunctionLocal(ctx, lead, name, ctx.arrowOuterScopes[0].typeOf(outer)))
     } else {
       refuseOnce(ctx, arg, outerFunctionMessage(ctx, name))
     }
