@@ -23,6 +23,11 @@
  * `exec_paths` is the programs a dependency's `process.spawn=<program>`
  * grants name (WP40 §2a), and their interpreters, in the same shape: with
  * it, `EXECUTE` leaves the rule on `/` and each program gets a rule of its own.
+ * An interpreter the grants do not name themselves is written `//<path>`, the
+ * same file to the kernel, and is kept out of a spawn's reach (SBX-1): its
+ * identity is recorded before step 2, and `nish_spawn_target`, which
+ * runtime-os.c's spawn calls once it is set, refuses a target that is that
+ * file and hands back a descriptor of any other, which the child executes.
  *
  * What it does, in the order of the note's section 3, each step before the
  * next because each needs the one before it:
@@ -47,7 +52,9 @@
  * could not withhold, once, and runs. No environment variable, file or
  * argument is read that could widen any of it: step 1 reaches
  * `getenv("NISH_NUM_THREADS")` through `nish_cpu_online`, which can only
- * lower the pool's ceiling, and confines nothing. The one knob,
+ * lower the pool's ceiling, and confines nothing; a spawn reads `PATH` to
+ * find its program as `posix_spawnp` would, which can only refuse more. The
+ * one knob,
  * `-DNISH_SANDBOX_SIMULATE_ABI=<n>`, makes the ABI probe answer `n` in a
  * test-only build of this file; scripts/build.sh never passes it.
  *
@@ -473,26 +480,25 @@ static int nish_sb_spawn_open(const char *file, int low, char *proc) {
   for (;;) {
     const char *end = strchrnul(dir, ':'), *path = file;
     size_t len = (size_t)(end - dir);
+    /* A directory too long to join with `file` holds nothing it could run. */
+    int fd = -1;
     if (len && len + strlen(file) + 2 <= sizeof buf) {
       memcpy(buf, dir, len);
       buf[len] = '/';
       strcpy(buf + len + 1, file);
       path = buf;
     }
-    int fd = len && path == file ? -1 : open(path, O_PATH | O_CLOEXEC);
-    if (fd >= 0) {
-      if (!fstat(fd, &st) && S_ISREG(st.st_mode) && (st.st_mode & 0111)) {
-        int k = nish_sb_nrefused > NISH_SB_REFUSED ? 0 : nish_sb_nrefused;
-        while (k-- > 0 && (nish_sb_refused[k].dev != st.st_dev || nish_sb_refused[k].ino != st.st_ino)) {
-        }
-        int moved = k >= 0 || nish_sb_nrefused > NISH_SB_REFUSED ? -EACCES : fcntl(fd, F_DUPFD, low);
-        if (moved == -1) moved = -errno;
-        close(fd);
-        snprintf(proc, 32, "/proc/self/fd/%d", moved);
-        return moved;
-      }
+    if (!len || path == buf) fd = open(path, O_PATH | O_CLOEXEC);
+    if (fd >= 0 && !fstat(fd, &st) && S_ISREG(st.st_mode) && (st.st_mode & 0111)) {
+      int k = nish_sb_nrefused > NISH_SB_REFUSED ? -1 : nish_sb_nrefused;
+      while (k > 0 && (nish_sb_refused[k - 1].dev != st.st_dev || nish_sb_refused[k - 1].ino != st.st_ino)) k--;
+      int moved = k ? -EACCES : fcntl(fd, F_DUPFD, low);
+      if (moved == -1) moved = -errno;
       close(fd);
+      if (moved >= 0) snprintf(proc, 32, "/proc/self/fd/%d", moved);
+      return moved;
     }
+    if (fd >= 0) close(fd);
     if (!*end) return -ENOENT;
     dir = end + 1;
   }
