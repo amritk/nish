@@ -1986,6 +1986,13 @@ const NEWLINE: i32 = 10
 const CARRIAGE_RETURN: i32 = 13
 const SPACE: i32 = 32
 const TAB: i32 = 9
+const TO_FIXED_MAX_DIGITS: i32 = 100
+const TO_FIXED_LIMIT: f64 = 1e+21
+const TWO_TO_52: f64 = 4503599627370496
+const TWO_TO_53: f64 = 9007199254740992
+const ASCII_ZERO: i32 = 48
+const ASCII_DOT: i32 = 46
+const ASCII_MINUS: i32 = 45
 const INDEX_OF_ANY_MAX_SET: i32 = 16
 const NON_ASCII: i32 = 128
 const UTF8_TOP_BITS: i32 = 192
@@ -2051,6 +2058,54 @@ function split(text: string, sep: string): string[] -> @nish.split [exported]
   local +5:9 parts: string[] (const)
   local +6:7 start: i32 (let)
   local +10:11 at: i32 (const)
+function splitLimit(text: string, sep: string, limit: i32): string[] -> @nish.splitLimit [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow nish_panic nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:9 sepLength: i32 (const)
+  local +4:9 length: i32 (const)
+  local +5:9 parts: string[] (const)
+  local +9:7 start: i32 (let)
+  local +13:11 at: i32 (const)
+function fixedDigitsHalve(digits: i32[], count: i32): i32 -> @nish.fixedDigitsHalve
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_overflow
+  pointer digits: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -4:7 carry: i32 (let)
+  local -3:7 i: i32 (let)
+  local -1:11 value: i32 (const)
+function fixedDigitsAdd(digits: i32[], doubling: boolean, amount: i32): void -> @nish.fixedDigitsAdd
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: amount
+  calls: nish_array_grow nish_panic_overflow
+  pointer digits: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -5:7 carry: i32 (let)
+  local -4:7 i: i32 (let)
+  local -3:9 length: i32 (const)
+  local -1:11 value: i32 (const)
+function toFixed(x: f64, digits: i32): string -> @nish.toFixed [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: llvm.fptosi.sat.i32.f64 nish.fixedDigitsAdd nish.fixedDigitsHalve nish_array_grow nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_str_from_f64 nish_str_new
+  stackSites=2 stackLocals=2
+  local +0:9 negative: boolean (const)
+  local +3:7 m: f64 (let)
+  local +4:7 exponent: i32 (let)
+  local +19:9 decimal: i32[] (const)
+  local +20:7 i: i32 (let)
+  local +26:11 last: f64 (const)
+  callee +31:5 fixedDigitsAdd -> @nish.fixedDigitsAdd
+  local +38:7 count: i32 (let)
+  local +39:7 dropped: i32 (let)
+  callee +41:15 fixedDigitsHalve -> @nish.fixedDigitsHalve
+  callee +48:5 fixedDigitsAdd -> @nish.fixedDigitsAdd
+  local +57:7 at: i32 (let)
+  local +61:9 bytes: u8[] (const)
+  local +67:11 digit: i32 (const)
 function replaceAll(text: string, needle: string, replacement: string): string -> @nish.replaceAll [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
