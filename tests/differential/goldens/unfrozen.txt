@@ -202,6 +202,7 @@ cases/enum_loop_held_several added after R6: no rewriter to freeze it with
 cases/enum_loop_join_gap added after R6: no rewriter to freeze it with
 cases/enum_narrowing added after R6: no rewriter to freeze it with
 cases/explain_memory added after R6: no rewriter to freeze it with
+cases/explain_memory_calls added after R6: no rewriter to freeze it with
 cases/export_loader_names_no_storage added after R6: no rewriter to freeze it with
 cases/export_memory_native added after R6: no rewriter to freeze it with
 cases/f32_to_bits added after R6: no rewriter to freeze it with

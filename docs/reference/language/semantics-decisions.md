@@ -1377,9 +1377,17 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   can hold that count, or the listed lines, against a golden, as
   `tests/run.js` does with a case's `<name>.memory`
   (`tests/cases/explain_memory`).
-- **The program's own modules only**, as `--deny-retention` judges them; a
-  generic function is explained once, not per instantiation. Under
-  `--no-elision` every allocating loop and function is listed, for that reason.
+- **The program's own modules only**, as `--deny-retention` judges them. A
+  generic function, or one that takes a function parameter, is explained once,
+  through its first instantiation (`` `each<twice>` ``), after the functions
+  declared outright (`tests/cases/explain_memory_calls`).
+- **A function is judged by what it still holds when it returns.** One with
+  no scope of its own keeps nothing when every allocation it leaves is inside
+  a scoped pass or a `using a = arena()` block, so it is counted and not
+  listed; one that is listed names the line of the first allocation it holds.
+- **Under `--no-elision`** no automatic scope is taken, so every allocating
+  loop and function is listed except the passes and blocks the program
+  brackets itself with `using a = arena()`.
 - **What it does not promise.** It reports the scopes the compiler takes, not
   the bytes: a listed loop over three passes costs nothing, and memory the
   program keeps on purpose — an array it pushes onto for its whole run — is

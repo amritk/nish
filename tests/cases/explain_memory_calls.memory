@@ -1,0 +1,7 @@
+tests/cases/explain_memory_calls.ts:9:3: memory: `Leaky.constructor` keeps what it allocates until the memory of its caller is released, because what line 10 allocates is held where this analysis cannot prove it dead when the function returns
+tests/cases/explain_memory_calls.ts:41:1: memory: `plain` keeps what it allocates until the memory of its caller is released, because what line 44 allocates is held where this analysis cannot prove it dead when the function returns
+tests/cases/explain_memory_calls.ts:43:3: memory: this loop keeps what each pass allocates until the memory of `plain`'s caller is released, because line 44 grows `held`, an array older than the pass
+tests/cases/explain_memory_calls.ts:53:10: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `main` returns
+tests/cases/explain_memory_calls.ts:16:1: memory: `each<twice>` keeps what it allocates until the memory of its caller is released, because what line 19 allocates is held where this analysis cannot prove it dead when the function returns
+tests/cases/explain_memory_calls.ts:18:3: memory: this loop keeps what each pass allocates until the memory of `each<twice>`'s caller is released, because line 19 grows `held`, an array older than the pass
+explain-memory: 3 of 4 allocating loops keep what a pass allocates past the pass; 3 of 6 allocating functions with a scalar result keep what they allocate past the call
