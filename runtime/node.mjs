@@ -155,6 +155,13 @@ const FILE_ERRNO = {
 const fileErr = (e) => FILE_ERRNO[e.code] ?? -5;
 
 /**
+ * A negative descriptor is -9 (`EBADF`), as the kernel answers it natively:
+ * Node throws `ERR_OUT_OF_RANGE` for one before it asks, which `fileErr` would
+ * make -5.
+ */
+const EBADF = -9;
+
+/**
  * `fileOpen(path)` (WP44): a descriptor on a regular file opened read-only and
  * non-blocking, or a negative errno; a directory is -21 and any other kind -22,
  * closed again first. A path holding a NUL is -2, as `nish_cpath` answers it.
@@ -190,6 +197,7 @@ let fileScratch = Buffer.alloc(0);
 function fileReadAt(fd, buf, off, len, pos) {
   if (pos < 0n || BigInt(len) > 0x7fffffffffffffffn - pos) return -22;
   if (len === 0) return 0;
+  if (fd < 0) return EBADF;
   if (fileScratch.length < len) fileScratch = Buffer.alloc(len);
   let n;
   try {
@@ -203,6 +211,7 @@ function fileReadAt(fd, buf, off, len, pos) {
 
 /** `fileSize(fd)` (WP44): the size in bytes as a bigint, or a negative errno. */
 function fileSize(fd) {
+  if (fd < 0) return BigInt(EBADF);
   try {
     return fs.fstatSync(fd, { bigint: true }).size;
   } catch (e) {
@@ -212,6 +221,7 @@ function fileSize(fd) {
 
 /** `fileClose(fd)` (WP44): 0, or a negative errno. */
 function fileClose(fd) {
+  if (fd < 0) return EBADF;
   try {
     fs.closeSync(fd);
     return 0;

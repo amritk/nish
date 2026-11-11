@@ -13,3 +13,4 @@ function main(): i32 -> @nish_main [exported entry]
   local +9:9 negative: i64 (const)
   local +12:9 top: i64 (const)
   local +14:9 start: i64 (const)
+  local +20:9 bad: i32 (const)

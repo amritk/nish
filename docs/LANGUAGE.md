@@ -9687,7 +9687,8 @@ close the connection there.
 
 **`fileClose(fd: i32): i32`** closes the descriptor and answers `0` or a
 negative errno; either way the descriptor is gone. It is never retried. A
-call on a closed descriptor is `-9`, but nothing checks a use after close: the
+call on a closed descriptor is `-9`, as is one on a negative descriptor
+(under Node too, where `fs` would throw a range error), but nothing checks a use after close: the
 number may already name another file the program opened since (recorded
 open, [docs/security/runtime.md](security/runtime.md), RT-49).
 
@@ -12744,7 +12745,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `env` | `getenv`, `geteuid` (`caps_env`) |
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
 | `ffi` | any call to a `declare function` (`caps_ffi`) |
-| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
+| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync`, `fileOpen`, `fileReadAt`, `fileSize`, `fileClose` (`caps_fs_read`, `caps_file_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`), `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` (`caps_fs_mode`) |
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |

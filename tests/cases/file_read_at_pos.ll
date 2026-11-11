@@ -9,6 +9,9 @@
 @.str.6 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"read after close: \00" }, align 8
 @.str.7 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"size after close: \00" }, align 8
 @.str.8 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"closed again: \00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"read on -1: \00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"size of -1: \00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"close -1: \00" }, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare void @nish_free_arena() #1
@@ -40,6 +43,7 @@ entry:
   %negative.addr = alloca i64, align 8
   %top.addr = alloca i64, align 8
   %start.addr = alloca i64, align 8
+  %bad.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   store i8* bitcast ({ i64, [32 x i8] }* @.str.0 to i8*), i8** %path.addr, align 8
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
@@ -193,6 +197,37 @@ net.ok.3:
   %87 = call i8* @nish_str_from_i32(i32 %86)
   %88 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.8 to i8*), i8* %87)
   call void @nish_print(i8* %88)
+  store i32 -1, i32* %bad.addr, align 4
+  %89 = load i32, i32* %bad.addr, align 4
+  %90 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %91 = load i64, i64* %start.addr, align 8
+  %92 = add i64 0, 4
+  %93 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %90, i64 0, i32 0
+  %94 = load i64, i64* %93, align 8
+  %95 = icmp ule i64 0, %92
+  %96 = icmp ule i64 %92, %94
+  %97 = and i1 %95, %96
+  br i1 %97, label %net.ok.4, label %net.fail.4
+
+net.fail.4:
+  call void @nish_panic_slice(i64 0, i64 %92, i64 %94)
+  unreachable
+
+net.ok.4:
+  %98 = call i32 @nish_file_read_at(i32 %89, %struct.nish_array* %90, i64 0, i64 4, i64 %91)
+  %99 = call i8* @nish_str_from_i32(i32 %98)
+  %100 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.9 to i8*), i8* %99)
+  call void @nish_print(i8* %100)
+  %101 = load i32, i32* %bad.addr, align 4
+  %102 = call i64 @nish_file_size(i32 %101)
+  %103 = call i8* @nish_str_from_i64(i64 %102)
+  %104 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.10 to i8*), i8* %103)
+  call void @nish_print(i8* %104)
+  %105 = load i32, i32* %bad.addr, align 4
+  %106 = call i32 @nish_file_close(i32 %105)
+  %107 = call i8* @nish_str_from_i32(i32 %106)
+  %108 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.11 to i8*), i8* %107)
+  call void @nish_print(i8* %108)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

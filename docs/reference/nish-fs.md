@@ -314,8 +314,9 @@ The file to open.
 <scalar-field name="returns" type="i32">
 
 A descriptor (`>= 0`), or the negated Linux errno: `-2` ENOENT,
-  `-13` EACCES, `-21` EISDIR, `-22` for a FIFO or device, `-6` ENXIO for a
-  socket; anything outside the documented set is `-5` EIO.
+  `-13` EACCES, `-20` ENOTDIR, `-21` EISDIR, `-22` for a FIFO or device,
+  `-6` ENXIO for a socket, `-23` ENFILE, `-24` EMFILE, `-36` ENAMETOOLONG,
+  `-40` ELOOP; anything else is `-5` EIO.
 
 </scalar-field>
 
@@ -368,7 +369,8 @@ The file offset, an `i64`.
 <scalar-field name="returns" type="i32">
 
 The bytes read, `0` at end of file, or a negative errno: `-22`
-  for a negative or overflowing `pos`, `-9` for a closed descriptor.
+  for a negative or overflowing `pos`, `-9` for a closed or negative
+  descriptor, `-21` EISDIR, `-29` ESPIPE; anything else is `-5` EIO.
 
 </scalar-field>
 

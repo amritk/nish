@@ -719,13 +719,36 @@ const prepareFileCases = () => {
     fs.rmSync(file, { force: true })
   }
   // Through `sh`, which is the binary knip sees, so `mkfifo` needs no entry of its own in knip.json.
-  spawnSync("sh", ["-c", 'mkfifo "$0"', fifo])
-  spawnSync("node", ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => process.exit(0))`])
+  const made = spawnSync("sh", ["-c", 'mkfifo "$0"', fifo], { encoding: "utf8" })
+  const bound = spawnSync(
+    "node",
+    ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => process.exit(0))`],
+    { encoding: "utf8", timeout: 10000 }
+  )
   const large = path.join(buildDir, "file_size_large.bin")
   fs.closeSync(fs.openSync(large, "w"))
   fs.truncateSync(large, 2 ** 32 + 16)
+  // Without them file_open_errors would print other errnos and fail with a
+  // diff that does not say why, so a fixture that could not be made is named.
+  const kind = (file, test) => fs.existsSync(file) && test(fs.lstatSync(file))
+  check(
+    "file fixtures: the FIFO and the socket file_open_errors opens were made",
+    kind(fifo, (st) => st.isFIFO()) && kind(sock, (st) => st.isSocket()),
+    `mkfifo: ${made.status} ${made.stderr}\nsocket: ${bound.status} ${bound.stderr}`
+  )
 }
-prepareFileCases()
+// Only when a file case can run: no filter, a filter naming one, the wasi
+// section's (which builds the file cases whatever it matches), or a filter
+// naming no case at all, which is another section's and may run every case.
+const fileFixtureCases = ["file_open_errors", "file_size_large"]
+if (
+  !only ||
+  "wasi".includes(only) ||
+  selectedCases.length === 0 ||
+  selectedCases.some((name) => fileFixtureCases.includes(name))
+) {
+  prepareFileCases()
+}
 
 /**
  * The lane a case's native program runs in: one program at a time, whatever
@@ -3150,6 +3173,54 @@ if (!only || "file_".includes(only) || only.startsWith("file_") || "wasi".includ
     skip(
       `skipped: file_: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the file-window cases are not run`
     )
+  }
+}
+
+// WP44 §9 Q7: the checker refuses the four file builtins on a wasm32 target
+// (NL2718), but IR compiled for the host reaches `--profile wasm` unchecked.
+// runtime-wasm.c answers each -38 (`ENOSYS`), so such a module links, imports
+// nothing, and every call says there is no file system.
+if (!only || only.startsWith("file_") || "file_wasm_stubs".includes(only)) {
+  if (has("wasm-ld")) {
+    const stubsTs = path.join(buildDir, "file_wasm_stubs.ts")
+    const stubsLl = path.join(buildDir, "file_wasm_stubs.ll")
+    const stubsWasm = path.join(buildDir, "file_wasm_stubs.wasm")
+    fs.writeFileSync(
+      stubsTs,
+      [
+        'export function openProbe(): i32 { return fileOpen("missing"); }',
+        "export function readProbe(): i32 {",
+        "  const buf: u8[] = new Array<u8>(4);",
+        "  const pos: i64 = 0;",
+        "  return fileReadAt(3, buf, 0, 4, pos);",
+        "}",
+        "export function sizeProbe(): i64 { return fileSize(3); }",
+        "export function closeProbe(): i32 { return fileClose(3); }",
+        "",
+      ].join("\n")
+    )
+    const sc = spawnSync(NISH, [stubsTs, "-o", stubsLl], { cwd: root })
+    const sl =
+      sc.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", stubsLl, "runtime/runtime-wasm.c", "-o", stubsWasm, "--profile", "wasm"],
+            { cwd: root }
+          )
+        : sc
+    const stubsProbe = [
+      "const m = new WebAssembly.Module(require('fs').readFileSync(process.argv[1]))",
+      "const e = new WebAssembly.Instance(m, {}).exports",
+      "console.log([WebAssembly.Module.imports(m).length, e.openProbe(), e.readProbe(), e.sizeProbe(), e.closeProbe()].join(' '))",
+    ].join("\n")
+    const sr = sl.status === 0 ? spawnSync("node", ["-e", stubsProbe, stubsWasm], { cwd: root }) : null
+    check(
+      "wasm profile links host IR calling fileOpen, fileReadAt, fileSize and fileClose, and each answers -38",
+      sr !== null && String(sr.stdout).trim() === "0 -38 -38 -38 -38",
+      String(sc.stderr) + String(sl.stderr) + (sr ? String(sr.stdout) + String(sr.stderr) : "")
+    )
+  } else {
+    skip("skipped: file_wasm_stubs: no wasm-ld: the --profile wasm link of the file builtins is not checked")
   }
 }
 

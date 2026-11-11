@@ -554,7 +554,8 @@ nish_array *nish_readdir(const nish_str *path);
 nish_array *nish_read_file_bytes(const nish_str *path);
 /* `fileOpen(path)`, `fileReadAt(fd, buf, off, len, pos)`, `fileSize(fd)` and
  * `fileClose(fd)` (WP44): a regular file read a window at a time. `fileOpen`
- * answers a descriptor (`O_RDONLY | O_CLOEXEC`) or -21 for a directory and -22
+ * answers a descriptor (`O_RDONLY | O_CLOEXEC | O_NONBLOCK`, so a FIFO with
+ * no writer does not hang the open) or -21 for a directory and -22
  * for anything else that is not a regular file. `nish_file_read_at` reads at
  * most `len` bytes from byte `pos` into `buf[off, off + len)`, which the
  * compiled call has range-checked; it answers the count, 0 at or past the end

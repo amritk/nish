@@ -2,7 +2,8 @@
 // -22 (`EINVAL`) before the kernel is asked. Under Node `fs.readSync` would
 // take -1 to mean "from the current offset", so the shim refuses it first, as
 // the C does. A read after `fileClose` answers -9 (`EBADF`), and so does a
-// second close.
+// second close. A negative descriptor is -9 to each of the three, as the
+// kernel answers it, under Node too, where `fs` throws a range error for one.
 export function main(): number {
   const path = "build/test/file_read_at_pos.bin";
   const bytes: u8[] = [9, 8, 7];
@@ -24,5 +25,9 @@ export function main(): number {
   console.log(`read after close: ${fileReadAt(fd, buf, 0, 4, start)}`);
   console.log(`size after close: ${fileSize(fd)}`);
   console.log(`closed again: ${fileClose(fd)}`);
+  const bad: i32 = -1;
+  console.log(`read on -1: ${fileReadAt(bad, buf, 0, 4, start)}`);
+  console.log(`size of -1: ${fileSize(bad)}`);
+  console.log(`close -1: ${fileClose(bad)}`);
   return 0;
 }

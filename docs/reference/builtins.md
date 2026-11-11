@@ -1218,8 +1218,8 @@ the file to open; a NUL in it is refused as a missing path is.
 
 a descriptor (`>= 0`), or the negated Linux errno: `-2` ENOENT,
   `-13` EACCES, `-20` ENOTDIR, `-21` EISDIR, `-22` EINVAL for a FIFO or
-  device, `-6` ENXIO for a socket, `-24` EMFILE, `-36` ENAMETOOLONG, `-40`
-  ELOOP; anything else is `-5` EIO.
+  device, `-6` ENXIO for a socket, `-23` ENFILE, `-24` EMFILE, `-36`
+  ENAMETOOLONG, `-40` ELOOP; anything else is `-5` EIO.
 
 </scalar-field>
 
@@ -1274,7 +1274,8 @@ the file offset to read from, an `i64`.
 
 the bytes read, `0` at end of file, or a negative errno: `-22`
   EINVAL for a negative `pos` or one where `pos + len` overflows, `-9` EBADF
-  for a closed descriptor, `-5` EIO.
+  for a closed or negative descriptor, `-21` EISDIR, `-29` ESPIPE; anything
+  else is `-5` EIO.
 
 </scalar-field>
 
