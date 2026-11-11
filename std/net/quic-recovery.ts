@@ -111,11 +111,15 @@ export const QUIC_RECOVERY_PACKET_THRESHOLD: i64 = 3
 export const QUIC_RECOVERY_GRANULARITY: i64 = 1
 /** kInitialRtt (§6.2.2), in milliseconds: the round trip assumed before the first sample. */
 export const QUIC_RECOVERY_INITIAL_RTT: i64 = 333
-/** max_datagram_size (B.1): the 1200 bytes every datagram this server sends is at most. */
+/**
+ * max_datagram_size (B.1) on a path nothing has been learnt of: the 1200
+ * bytes every datagram is at most until path MTU discovery validates more
+ * (`QuicRecovery.datagramSize`).
+ */
 export const QUIC_RECOVERY_DATAGRAM_SIZE: i64 = 1200
-/** kInitialWindow (§7.2): min(10 × 1200, max(14720, 2 × 1200)), so 12000 bytes. */
+/** kInitialWindow (§7.2) at 1200 bytes: min(10 × 1200, max(14720, 2 × 1200)), so 12000 bytes. */
 export const QUIC_RECOVERY_INITIAL_WINDOW: i64 = 12000
-/** kMinimumWindow (§7.2): two datagrams, 2400 bytes. */
+/** kMinimumWindow (§7.2) at 1200 bytes: two datagrams, 2400 bytes. */
 export const QUIC_RECOVERY_MINIMUM_WINDOW: i64 = 2400
 /** kPersistentCongestionThreshold (§7.6.1): lost packets spanning three probe timeouts collapse the window. */
 export const QUIC_RECOVERY_PERSISTENT_THRESHOLD: i64 = 3
@@ -143,6 +147,10 @@ const QUIC_RECOVERY_LOST: i32 = 3
 const QUIC_RECOVERY_LOST_NOW: i32 = 4
 /** The bit of a slot's state byte that says its packet was sent marked ECT(0), kept beside the state so a slot costs no second byte. */
 const QUIC_RECOVERY_MARKED: i32 = 128
+/** The bit of a slot's state byte that says its packet was a path MTU probe, whose loss is not congestion (RFC 9000 §14.4). */
+const QUIC_RECOVERY_PROBE: i32 = 64
+/** The state bits of a slot's state byte, below the two flags. */
+const QUIC_RECOVERY_STATE_BITS: i32 = 63
 
 /** The ECT(0) codepoint (RFC 3168), the only one this module asks a caller to mark with. */
 export const QUIC_RECOVERY_ECT0: i32 = 2
@@ -270,7 +278,7 @@ export class QuicSentPackets {
     if (s < 0 || s >= toI32(this.state.length)) {
       return QUIC_RECOVERY_FREE
     }
-    return toI32(this.state[s]) & (QUIC_RECOVERY_MARKED - 1)
+    return toI32(this.state[s]) & QUIC_RECOVERY_STATE_BITS
   }
 
   /**
@@ -279,7 +287,7 @@ export class QuicSentPackets {
    */
   setState(s: i32, value: i32): void {
     if (s >= 0 && s < toI32(this.state.length)) {
-      this.state[s] = toU8((toI32(this.state[s]) & QUIC_RECOVERY_MARKED) | value)
+      this.state[s] = toU8((toI32(this.state[s]) & (QUIC_RECOVERY_MARKED | QUIC_RECOVERY_PROBE)) | value)
     }
   }
 
@@ -340,7 +348,30 @@ export class QuicSentPackets {
    */
   setMarked(s: i32, value: boolean): void {
     if (s >= 0 && s < toI32(this.state.length)) {
-      this.state[s] = toU8(this.stateAt(s) | (value ? QUIC_RECOVERY_MARKED : 0))
+      const kept: i32 = toI32(this.state[s]) & (QUIC_RECOVERY_STATE_BITS | QUIC_RECOVERY_PROBE)
+      this.state[s] = toU8(kept | (value ? QUIC_RECOVERY_MARKED : 0))
+    }
+  }
+
+  /**
+   * Whether the packet in slot `s` was a path MTU probe (RFC 8899), whose
+   * loss says nothing of congestion.
+   *
+   * @param s A ring slot, as `onPacketSent`, `ackedSlot` or `lostSlot` answers it; any other index is safe.
+   * @returns True when `onProbeSent` marked it; false for an index outside the ring.
+   */
+  probeAt(s: i32): boolean {
+    return s >= 0 && s < toI32(this.state.length) && (toI32(this.state[s]) & QUIC_RECOVERY_PROBE) !== 0
+  }
+
+  /**
+   * Sets whether the packet in slot `s` was a path MTU probe.
+   * @internal Read in quic-recovery.ts outside the class.
+   */
+  setProbe(s: i32, value: boolean): void {
+    if (s >= 0 && s < toI32(this.state.length)) {
+      const kept: i32 = toI32(this.state[s]) & (QUIC_RECOVERY_STATE_BITS | QUIC_RECOVERY_MARKED)
+      this.state[s] = toU8(kept | (value ? QUIC_RECOVERY_PROBE : 0))
     }
   }
 
@@ -530,6 +561,12 @@ export class QuicRecovery {
   ptoCount: i32 = 0
   /** The space the last `onTimeout` acted on, or -1. */
   timeoutSpace: i32 = -1
+  /**
+   * max_datagram_size (B.1): the largest datagram the connection sends on
+   * this path, 1200 until path MTU discovery validates more. The initial and
+   * minimum windows and congestion avoidance's step are counted in it.
+   */
+  datagramSize: i64 = QUIC_RECOVERY_DATAGRAM_SIZE
   /** How many congestion events reduced the window, and how many of them were persistent congestion. */
   congestionEvents: i32 = 0
   /**
@@ -599,6 +636,7 @@ export class QuicRecovery {
    * @internal Read by quic.ts.
    */
   resetPath(): void {
+    this.datagramSize = QUIC_RECOVERY_DATAGRAM_SIZE
     this.latestRtt = 0
     this.smoothedRtt = QUIC_RECOVERY_INITIAL_RTT
     this.rttVar = QUIC_RECOVERY_INITIAL_RTT / 2
@@ -610,6 +648,50 @@ export class QuicRecovery {
     this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
     this.pacerTime = -1
     this.pacerRtt = QUIC_RECOVERY_INITIAL_RTT * QUIC_RECOVERY_MICROS
+  }
+
+  /**
+   * kInitialWindow (§7.2) for the current datagram size: min(10 × size,
+   * max(14720, 2 × size)).
+   *
+   * @returns The initial window in bytes: 12000 at 1200 bytes.
+   */
+  initialWindow(): i64 {
+    const ten: i64 = 10 * this.datagramSize
+    const floor: i64 = quicRecoveryMax(14720, 2 * this.datagramSize)
+    return ten < floor ? ten : floor
+  }
+
+  /**
+   * kMinimumWindow (§7.2) for the current datagram size: two datagrams.
+   *
+   * @returns The minimum window in bytes: 2400 at 1200 bytes.
+   */
+  minimumWindow(): i64 {
+    return 2 * this.datagramSize
+  }
+
+  /**
+   * Sets max_datagram_size to `size` bytes, as path MTU discovery validates
+   * a larger path or falls back from one (RFC 9002 §7.2). A window still at
+   * the old initial window becomes the new one, so a connection that has
+   * learnt nothing of the path yet starts from what the new size allows; a
+   * window below the new minimum is raised to it. A smaller size keeps the
+   * window as it is, and the pacer's held credit is cut to the new burst.
+   *
+   * @param size The new datagram size in bytes; anything under 1200 is taken as 1200.
+   */
+  setDatagramSize(size: i64): void {
+    const next: i64 = quicRecoveryMax(size, QUIC_RECOVERY_DATAGRAM_SIZE)
+    const atInitial: boolean = this.congestionWindow === this.initialWindow()
+    this.datagramSize = next
+    if (atInitial) {
+      this.congestionWindow = this.initialWindow()
+    }
+    this.congestionWindow = quicRecoveryMax(this.congestionWindow, this.minimumWindow())
+    if (this.pacerBudget > this.initialWindow()) {
+      this.pacerBudget = this.initialWindow()
+    }
   }
 
   /**
@@ -664,10 +746,10 @@ export class QuicRecovery {
    * Whether the window has room for another full-sized datagram (B.4). The
    * caller sends nothing ack-eliciting while it has not, except a probe.
    *
-   * @returns True when the bytes in flight plus 1200 bytes fit the congestion window.
+   * @returns True when the bytes in flight plus `datagramSize` bytes fit the congestion window.
    */
   canSend(): boolean {
-    return this.bytesInFlight() + QUIC_RECOVERY_DATAGRAM_SIZE <= this.congestionWindow
+    return this.bytesInFlight() + this.datagramSize <= this.congestionWindow
   }
 
   /**
@@ -703,6 +785,7 @@ export class QuicRecovery {
     sp.fineSent[s] = this.fineNow(now)
     sp.size[s] = size
     sp.setMarked(s, false)
+    sp.setProbe(s, false)
     sp.setState(s, QUIC_RECOVERY_SENT)
     sp.count = sp.count + 1
     sp.inFlight = sp.inFlight + 1
@@ -710,6 +793,22 @@ export class QuicRecovery {
     sp.lastPn = pn
     sp.lastAckEliciting = now
     return s
+  }
+
+  /**
+   * Marks the packet in `space`'s slot `slot`, just recorded by
+   * `onPacketSent`, as a path MTU probe (RFC 8899): it counts in flight and
+   * its acknowledgement grows the window, but its loss is no congestion
+   * event and no part of persistent congestion (RFC 9000 §14.4).
+   *
+   * @param space The space's index, as given to `onPacketSent`.
+   * @param slot The slot `onPacketSent` answered; -1 or any other index outside the ring does nothing.
+   */
+  onProbeSent(space: i32, slot: i32): void {
+    const sp: QuicSentPackets | null = this.space(space)
+    if (sp !== null) {
+      sp.setProbe(slot, true)
+    }
   }
 
   /**
@@ -1068,7 +1167,9 @@ export class QuicRecovery {
     }
     let newest: i64 = -1
     for (let k: i32 = 0; k < sp.lostCount; k += 1) {
-      newest = quicRecoveryMax(newest, sp.timeAt(sp.lostSlot(k)))
+      if (!sp.probeAt(sp.lostSlot(k))) {
+        newest = quicRecoveryMax(newest, sp.timeAt(sp.lostSlot(k)))
+      }
       if (sp.markedAt(sp.lostSlot(k)) && this.ecnState !== QUIC_RECOVERY_ECN_CAPABLE) {
         this.ecnTestLost = this.ecnTestLost + 1
       }
@@ -1081,9 +1182,12 @@ export class QuicRecovery {
     ) {
       this.ecnState = QUIC_RECOVERY_ECN_FAILED
     }
-    this.congestionEvent(newest, now)
-    if (this.persistentCongestion(sp)) {
-      this.congestionWindow = QUIC_RECOVERY_MINIMUM_WINDOW
+    // A lost path MTU probe is no sign of congestion (RFC 9000 §14.4): only the others count.
+    if (newest >= 0) {
+      this.congestionEvent(newest, now)
+    }
+    if (newest >= 0 && this.persistentCongestion(sp)) {
+      this.congestionWindow = this.minimumWindow()
       this.recoveryStart = -1
       this.persistentCongestions = this.persistentCongestions + 1
     }
@@ -1109,6 +1213,9 @@ export class QuicRecovery {
     for (let k: i32 = 0; k < sp.count; k += 1) {
       const s: i32 = sp.slot(k)
       const state: i32 = sp.stateAt(s)
+      if (sp.probeAt(s)) {
+        continue
+      }
       const lost: boolean = state === QUIC_RECOVERY_LOST || state === QUIC_RECOVERY_LOST_NOW
       if (state === QUIC_RECOVERY_ACKED || (lost && sp.timeAt(s) < this.firstSampleTime)) {
         first = -1
@@ -1141,13 +1248,13 @@ export class QuicRecovery {
     }
     this.recoveryStart = now
     this.ssthresh = this.congestionWindow / 2
-    this.congestionWindow = quicRecoveryMax(this.ssthresh, QUIC_RECOVERY_MINIMUM_WINDOW)
+    this.congestionWindow = quicRecoveryMax(this.ssthresh, this.minimumWindow())
     this.congestionEvents = this.congestionEvents + 1
   }
 
   /**
    * OnPacketAcked (B.5) for slot `s`: in slow start the window grows by the
-   * packet's size, in congestion avoidance by 1200 × size / window; not at
+   * packet's size, in congestion avoidance by datagramSize × size / window; not at
    * all for a packet sent during recovery, or when `inUse` says the window
    * was not being used (§7.8).
    */
@@ -1160,7 +1267,7 @@ export class QuicRecovery {
       this.congestionWindow = this.congestionWindow + size
     } else {
       this.congestionWindow =
-        this.congestionWindow + (QUIC_RECOVERY_DATAGRAM_SIZE * size) / this.congestionWindow
+        this.congestionWindow + (this.datagramSize * size) / this.congestionWindow
     }
   }
 
@@ -1369,8 +1476,8 @@ export class QuicRecovery {
     const rtt: i64 = quicRecoveryMax(this.pacerRtt, 1)
     const earned: i64 = (elapsed * this.pacerWindow() * 5) / (rtt * 4)
     this.pacerBudget = this.pacerBudget + earned
-    if (this.pacerBudget > QUIC_RECOVERY_INITIAL_WINDOW) {
-      this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
+    if (this.pacerBudget > this.initialWindow()) {
+      this.pacerBudget = this.initialWindow()
     }
     this.pacerTime = at
   }
