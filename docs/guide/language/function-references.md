@@ -82,8 +82,8 @@ export const main = (): i32 => {
 
 A reference has no empty value, so a variable of a function type is
 initialised where it is declared, and an array of them is built from `[]` or
-a literal and `push`. `new Array<Op>(n)`, which would fill the array with
-zeros, is refused:
+a literal and `push` (`fill`, `unshift` and `splice` are not available on
+it). `new Array<Op>(n)`, which would fill the array with zeros, is refused:
 
 ```ts nish:err NL2730
 type Op = (x: i32) => i32;
@@ -148,8 +148,9 @@ It cannot be ordered with `<`, joined, encoded as JSON, or made nullable
 (`Op | null`); store an index or an enum beside it when you need one of
 those.
 
-It cannot be a `Map` value yet either (`NL2738`). Keep the references in an
-array and store each one's index in the `Map`:
+It cannot be a `Map` value yet either (`NL2738`), nor can an array of
+references (`Map<string, Op[]>`). Keep the references in an array and store
+each one's index in the `Map`:
 
 ```ts nish:err NL2738
 type Op = (x: i32) => i32;

@@ -52,7 +52,7 @@ import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
-import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
+import { analyzeFunctions, AnalysisUnit, FactsTable, PointerParamFacts } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
@@ -1104,12 +1104,7 @@ export class Compilation {
    * which package the file is in.
    */
   resolveBareSpecifier(dir: string, specifier: string): ResolvedModule {
-    const failed: ResolvedModule = {
-      path: "",
-      name: "",
-      packageName: "",
-      error: "",
-    }
+    const failed: ResolvedModule = { path: "", name: "", packageName: "", error: "" }
     const parsed = parseBareSpecifier(specifier)
     if (parsed === null) {
       // Pass 1 refuses a specifier that is neither relative nor a package name,
@@ -2637,8 +2632,13 @@ export class Compilation {
           const judged: FunctionSig[] = placed ? members : []
           let k = 0
           for (const member of judged) {
+            // The fact escape analysis reads of a callee (`calleeCaptures`):
+            // a pointer's `outlives` also holds when it is passed on to a
+            // function that keeps it, which `escaping` alone does not see.
             const f = facts.get(member.name)
-            const keeps = f !== null && f.escaping.has(member.paramNames[i])
+            const name = member.paramNames[i]
+            const pointer: PointerParamFacts | null = f !== null ? f.pointerParam(name) : null
+            const keeps = f !== null && (pointer !== null ? pointer.outlives : f.escaping.has(name))
             if (keeps && keeper < 0) {
               keeper = k
               keeperSig = member

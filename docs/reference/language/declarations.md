@@ -2048,7 +2048,10 @@ export const main = (): void => {
   where it is declared (`reject_fnarg_local`), and
   `new Array<(i32) => i32>(n)` is
   `` `new Array<(i32) => i32>(n)` would zero-fill with 0, which names no function; build it with `[]` and `push` instead ``
-  (NL2730, `reject_fnref_zero_fill`). A module constant may not hold one
+  (NL2730, `reject_fnref_zero_fill`). For the same reason an array of
+  references has no `fill`, `unshift` or `splice`: `fill` is refused as a
+  byte copy (`reject_fnref_row_fill`), the other two as an unknown method
+  (`reject_fnref_row_unshift`, `reject_fnref_row_splice`). A module constant may not hold one
   (`` Module constant `alias` must be a number, boolean, or string, not (i32) => i32; there is no top-level code to build anything else ``).
   An arrow argument may capture a `const` reference local like any other
   value (`fnref_capture`).
@@ -2105,6 +2108,8 @@ a `Map` value (a `Map` value is not yet a place the compiler tracks, so
 `` `Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map ``,
 NL2738, `reject_fnref_map`; keep the references in an array and the index in
 the `Map`), and a reference passed for an inline function parameter (NL2734).
+An array of references is refused as a `Map` value the same way
+(`Map<string, Op[]>`, `reject_fnref_map_array`).
 
 ## Async functions: `async` and `await`
 

@@ -214,8 +214,8 @@ function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeSc
   callee +1:5 shapeReferenceCalls -> @shapeReferenceCalls
   local +3:9 result: EmittedProgram (const)
   callee +3:18 emitModules -> @emitModules
-  local +4:14 unit: ModuleUnit (const)
-  callee +5:5 shapeReferenceCalls -> @shapeReferenceCalls
+  local +6:14 unit: ModuleUnit (const)
+  callee +7:5 shapeReferenceCalls -> @shapeReferenceCalls
 function emitModules(compilation: Compilation): EmittedProgram -> @emitModules
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via storageLayouts

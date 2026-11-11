@@ -187,8 +187,8 @@ function isCollectionTemplate(template: StructTemplateInfo): boolean -> @isColle
   stackSites=0 stackLocals=0
   callee +0:3 CheckedProgram.isCollections -> @CheckedProgram.isCollections
 function collectionArgumentRefusal(ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string -> @collectionArgumentRefusal
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.isFnRef TypeTable.typeName instanceDisplayName isCollectionKey isInterfaceType nish_panic_index nish_str_concat
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.isArray TypeTable.isFnRef TypeTable.refOf TypeTable.typeName instanceDisplayName isCollectionKey isInterfaceType nish_panic_index nish_str_concat
   pointer ctx: size=320 writesThrough=false captured=false passedTo=isCollectionKey#0 isInterfaceType#0
   pointer template: size=64 writesThrough=false captured=false
   pointer args: size=0 writesThrough=true captured=false passedTo=instanceDisplayName#2
@@ -200,9 +200,12 @@ function collectionArgumentRefusal(ctx: CheckContext, template: StructTemplateIn
   callee +3:27 isCollectionKey -> @isCollectionKey
   callee +5:12 TypeTable.typeName -> @TypeTable.typeName
   local +12:9 value: i32 (const)
-  callee +13:7 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +19:27 isInterfaceType -> @isInterfaceType
-  callee +21:12 TypeTable.typeName -> @TypeTable.typeName
+  local +15:7 held: i32 (let)
+  callee +16:23 TypeTable.isArray -> @TypeTable.isArray
+  callee +17:12 TypeTable.refOf -> @TypeTable.refOf
+  callee +19:20 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +25:27 isInterfaceType -> @isInterfaceType
+  callee +27:12 TypeTable.typeName -> @TypeTable.typeName
 function isCollectionKey(ctx: CheckContext, type: i32): boolean -> @isCollectionKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

@@ -12,6 +12,7 @@ import wideSetMessage from "./fnrefs" -> function @wideSetMessage
 import analyzeFunctions from "./attributes" -> function @analyzeFunctions
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import FactsTable from "./attributes" -> struct FactsTable
+import PointerParamFacts from "./attributes" -> struct PointerParamFacts
 import arenaBlockFindings from "./escape" -> function @arenaBlockFindings
 import arenaLoopFindings from "./escape" -> function @arenaLoopFindings
 import explainMemory from "./escape" -> function @explainMemory
@@ -594,7 +595,7 @@ function Compilation.resolveBareSpecifier(this: Compilation, dir: string, specif
   calls: Compilation.findPackageDir Compilation.identityOf PackageCopy.constructor StringMap.get StringMap.set columnOf describeVersion joinPath lineOf manifestEngineCheck manifestEngineRange manifestMalformedAt manifestVersion nishExportEntry nish_alloc_struct nish_array_grow nish_panic_index nish_read_file_or_null nish_str_at nish_str_concat nish_str_eq nish_str_from_i32 packageConditionFor parseBareSpecifier relativePath resolvePath
   pointer this: size=208 writesThrough=false captured=false passedTo=Compilation.findPackageDir#0 Compilation.identityOf#0
   stackSites=2 stackLocals=0
-  local -49:11 failed: ResolvedModule (const)
+  local -44:11 failed: ResolvedModule (const)
   local -43:11 parsed: BareSpecifier | null (const)
   callee -43:20 parseBareSpecifier -> @parseBareSpecifier
   local -34:11 foundDir: string | null (const)
@@ -1368,7 +1369,7 @@ function Compilation.checkParallel(this: Compilation): void -> @Compilation.chec
 function Compilation.checkReferenceSites(this: Compilation, facts: FactsTable): void -> @Compilation.checkReferenceSites [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
-  calls: DiagnosticSink.report DiagnosticSink.reportPerformance FactsTable.get FunctionSig.writtenArity StringSet.has TypeTable.isMaybe TypeTable.isNullable TypeTable.isPointer TypeTable.isRegion TypeTable.isResult TypeTable.isVector escapeJoinMessage nish_panic_index nish_panic_overflow wideSetMessage
+  calls: DiagnosticSink.report DiagnosticSink.reportPerformance FactsTable.get FunctionFacts.pointerParam FunctionSig.writtenArity StringSet.has TypeTable.isMaybe TypeTable.isNullable TypeTable.isPointer TypeTable.isRegion TypeTable.isResult TypeTable.isVector escapeJoinMessage nish_panic_index nish_panic_overflow wideSetMessage
   pointer this: size=208 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=1 stackLocals=0
@@ -1399,15 +1400,18 @@ function Compilation.checkReferenceSites(this: Compilation, facts: FactsTable): 
   local +29:17 judged: FunctionSig[] (const)
   local +30:15 k: i32 (let)
   local +31:22 member: FunctionSig (const)
-  local +32:19 f: FunctionFacts | null (const)
-  callee +32:23 FactsTable.get -> @FactsTable.get
-  local +33:19 keeps: boolean (const)
-  callee +33:41 StringSet.has -> @StringSet.has
-  local +44:19 message: string (const)
-  callee +44:29 escapeJoinMessage -> @escapeJoinMessage
-  callee +51:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +57:11 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
-  callee +61:13 wideSetMessage -> @wideSetMessage
+  local +35:19 f: FunctionFacts | null (const)
+  callee +35:23 FactsTable.get -> @FactsTable.get
+  local +36:19 name: string (const)
+  local +37:19 pointer: PointerParamFacts | null (const)
+  callee +37:68 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  local +38:19 keeps: boolean (const)
+  callee +38:80 StringSet.has -> @StringSet.has
+  local +49:19 message: string (const)
+  callee +49:29 escapeJoinMessage -> @escapeJoinMessage
+  callee +56:13 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +62:11 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
+  callee +66:13 wideSetMessage -> @wideSetMessage
 function Compilation.checkRegions(this: Compilation, facts: FactsTable): void -> @Compilation.checkRegions [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

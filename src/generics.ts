@@ -201,7 +201,7 @@ export const isCollectionTemplate = (template: StructTemplateInfo): boolean =>
  * identity, and an array, a nullable type and a `Result` wait for a program
  * that needs one. A value is stored as it is, so it is anything but `void` and
  * an interface, whose record would be copied in rather than shared. A function
- * reference is refused as a value until a `Map` value is a place the reference
+ * reference, or an array of them, is refused as a value until a `Map` value is a place the reference
  * pass tracks (WP51 stage 2); as a key it fails the key rule.
  */
 const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string => {
@@ -221,7 +221,13 @@ const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateIn
     return ""
   }
   const value = args[1]
-  if (table.isFnRef(value)) {
+  // An array of references is refused with them: a value the map hands out is
+  // a place the place pass does not follow, whatever the reference sits in.
+  let held = value
+  while (held >= 0 && table.isArray(held)) {
+    held = table.refOf(held)
+  }
+  if (held >= 0 && table.isFnRef(held)) {
     return (
       `\`${shown}\` cannot hold a function reference as its value: a \`Map\` value is not yet a place whose functions ` +
       "the compiler tracks; keep the references in an array and store the index in the map"

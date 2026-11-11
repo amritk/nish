@@ -242,17 +242,18 @@ function RefPass.elementPlace(this: RefPass, type: i32): i32 -> @RefPass.element
 function RefPass.localPlace(this: RefPass, local: Local, type: i32): i32 -> @RefPass.localPlace [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: type
-  calls: RefPass.localPlace RefPass.newPlace RefPass.paramPlace nish_panic_index nish_str_eq
-  pointer this: size=192 writesThrough=true captured=false passedTo=RefPass.localPlace#0 RefPass.paramPlace#0 RefPass.newPlace#0
-  pointer local: size=64 writesThrough=true captured=false
+  escaping: local type
+  calls: RefPass.newPlace RefPass.paramPlace nish_panic_index nish_panic_overflow nish_str_eq
+  pointer this: size=192 writesThrough=true captured=false passedTo=RefPass.paramPlace#0 RefPass.newPlace#0
+  pointer local: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local -15:11 outer: Local | null (const)
-  callee -13:14 RefPass.localPlace -> @RefPass.localPlace
-  local -11:11 sig: FunctionSig | null (const)
-  local -9:11 i: i32 (let)
-  callee -6:18 RefPass.paramPlace -> @RefPass.paramPlace
-  callee +0:21 RefPass.newPlace -> @RefPass.newPlace
+  local -24:9 source: Local (let)
+  local -23:9 sig: FunctionSig | null (let)
+  local -22:9 outer: Local | null (let)
+  local -12:15 written: i32 (const)
+  local -11:13 i: i32 (let)
+  callee -8:20 RefPass.paramPlace -> @RefPass.paramPlace
+  callee +0:22 RefPass.newPlace -> @RefPass.newPlace
 function RefPass.storeFrom(this: RefPass, target: i32, place: i32, node: Node): void -> @RefPass.storeFrom [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

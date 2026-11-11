@@ -970,9 +970,9 @@ export const main = (): i32 => {
   a function taking a `MutexGuard`, is only ever called by name (NL2739).
 - **No empty value.** `new Array<Op>(n)` (NL2730) and `Op | null` are
   refused; a module `const` cannot hold one either.
-- **Not a `Map` value.** `Map<K, Op>` is refused (NL2738): keep the
-  references in an array, `const ops: Op[] = [inc, dec]`, and store the index
-  in the `Map`.
+- **Not a `Map` value.** `Map<K, Op>` and `Map<K, Op[]>` are refused
+  (NL2738): keep the references in an array, `const ops: Op[] = [inc, dec]`,
+  and store the index in the `Map`.
 - **Called, compared, stored, passed — nothing else.** Not printed or
   interpolated (NL2737), ordered, joined or encoded as JSON.
 - **Not a function argument**: a variable holding a reference cannot fill an

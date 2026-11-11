@@ -123,10 +123,11 @@ export class FunctionSig {
   /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
   arrowCount: i32
   /**
-   * WP51: this function's tag as a function reference, its position plus one
-   * among the functions the program names in a value position, in module then
-   * source order; 0 when nothing refers to it. Tag 0 is kept for stage 2's
-   * `null` (docs/wp51-function-references.md §2.1).
+   * WP51: this function's tag as a function reference: its position plus one
+   * among the functions of its signature the program names in a value
+   * position, in module then source order, so each signature numbers from 1;
+   * 0 when nothing refers to it. Tag 0 is kept for stage 2's `null`
+   * (docs/wp51-function-references.md §2.1).
    */
   refTag: i32
   /**

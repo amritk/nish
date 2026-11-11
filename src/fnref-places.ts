@@ -225,26 +225,40 @@ class RefPass {
     return this.keyed(`e${type}`, type)
   }
 
-  /** A local's place: a parameter's is its function's, a capture's the local it was made from. */
+  /**
+   * A local's place: a parameter's is its function's, a capture's the local it
+   * was made from. A captured parameter belongs to a function around the arrow
+   * being walked, so it is looked up from the arrow's host outwards: the
+   * arrow's own copy of it is a parameter no store reaches.
+   */
   localPlace(local: Local, type: i32): i32 {
-    const outer = local.captureOf
-    if (outer !== null) {
-      return this.localPlace(outer, type)
-    }
-    const sig = this.sig
-    if (local.storage === STORAGE_PARAM && sig !== null) {
-      let i = 0
-      while (i < sig.paramNames.length) {
-        if (sig.paramNames[i] === local.name) {
-          return this.paramPlace(sig, i, type)
-        }
-        i = i + 1
+    let source = local
+    let sig = this.sig
+    let outer = local.captureOf
+    while (outer !== null) {
+      source = outer
+      outer = outer.captureOf
+      if (sig !== null) {
+        sig = sig.captureHost
       }
     }
-    if (local.place < 0) {
-      local.place = this.newPlace(type)
+    if (source.storage === STORAGE_PARAM) {
+      while (sig !== null) {
+        const written = sig.paramNames.length - sig.captures.length
+        let i = 0
+        while (i < written) {
+          if (sig.paramNames[i] === source.name) {
+            return this.paramPlace(sig, i, type)
+          }
+          i = i + 1
+        }
+        sig = sig.captureHost
+      }
     }
-    return local.place
+    if (source.place < 0) {
+      source.place = this.newPlace(type)
+    }
+    return source.place
   }
 
   storeFrom(target: i32, place: i32, node: Node): void {
@@ -957,11 +971,6 @@ const makeDispatcher = (
 }
 
 /**
- * A member another module defines is declared in this one, and one that
- * module does not export is given a symbol the link can reach (`refHidden`),
- * which keeps its entry facts, unlike a `hidden` instantiation's (§2.3).
- */
-/**
  * The dispatcher `key` names in `made`, made under `name` the first time the
  * key is asked for, with each member exposed to the module that calls it.
  */
@@ -988,6 +997,11 @@ const dispatcherFor = (
   return dispatcher
 }
 
+/**
+ * A member another module defines is declared in this one, and one that
+ * module does not export is given a symbol the link can reach (`refHidden`),
+ * which keeps its entry facts, unlike a `hidden` instantiation's (§2.3).
+ */
 const exposeMember = (module: RefModule, sig: FunctionSig): void => {
   if (sig.definedIn(module.program.source)) {
     return

@@ -240,6 +240,9 @@ cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
 cases/fnarg_named added after R6: no rewriter to freeze it with
 cases/fnref_array added after R6: no rewriter to freeze it with
 cases/fnref_capture added after R6: no rewriter to freeze it with
+cases/fnref_capture_ctor added after R6: no rewriter to freeze it with
+cases/fnref_capture_method added after R6: no rewriter to freeze it with
+cases/fnref_capture_param added after R6: no rewriter to freeze it with
 cases/fnref_debug_check added after R6: no rewriter to freeze it with
 cases/fnref_empty_set added after R6: no rewriter to freeze it with
 cases/fnref_eq added after R6: no rewriter to freeze it with

@@ -366,6 +366,8 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     shapeReferenceCalls(unit.checker.program, true)
   }
   const result = emitModules(compilation)
+  // No `try`/`finally` is needed, nor possible: Nish has no unwinding, so
+  // `emitModules` always returns here, and the shape is always put back.
   for (const unit of compilation.modules) {
     shapeReferenceCalls(unit.checker.program, false)
   }

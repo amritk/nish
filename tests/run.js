@@ -3791,6 +3791,10 @@ if (selects("fnref", "fnref_debug_check")) {
         "-ex",
         "step",
         "-ex",
+        "frame",
+        "-ex",
+        "echo -- second step --\\n",
+        "-ex",
         "step",
         "-ex",
         "frame",
@@ -3801,7 +3805,17 @@ if (selects("fnref", "fnref_debug_check")) {
     const said = `${gdb.stdout}${gdb.stderr}`
     check("fnref -g: gdb prints a reference as the function it holds", /\$1 = twice\b/.test(said), said)
     check("fnref -g: gdb compares a reference with a function", /\$2 = 1\b/.test(said), said)
-    check("fnref -g: gdb steps from the call into the member within two steps", /\btwice \(/.test(said), said)
+    const [firstStop, secondStop] = said.split("-- second step --")
+    check(
+      "fnref -g: gdb's first step from the call stops in the dispatcher",
+      secondStop !== undefined && /#0 .*\$ref\.[^ ]* \(/.test(firstStop),
+      said
+    )
+    check(
+      "fnref -g: gdb's second step reaches the member",
+      secondStop !== undefined && /#0 .*\btwice \(/.test(secondStop),
+      said
+    )
   } else skip("fnref -g: gdb is not installed")
   if (gRan.status === 0 && has("lldb")) {
     const lldb = spawnSync(
@@ -3820,6 +3834,11 @@ if (selects("fnref", "fnref_debug_check")) {
       { encoding: "utf8", timeout: 60000 }
     )
     const said = `${lldb.stdout}${lldb.stderr}`
+    check(
+      "fnref -g: lldb stops at the call's breakpoint",
+      /stop reason = breakpoint/.test(said) && /fnref_g\.ts:9\b/.test(said),
+      said
+    )
     check("fnref -g: lldb prints a reference as the function it holds", /\bh = twice\b/.test(said), said)
   } else if (gRan.status === 0) skip("fnref -g: lldb is not installed")
 }
