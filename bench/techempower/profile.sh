@@ -112,6 +112,19 @@ stop() {
   fi
 }
 
+# The db test's cluster, stopped with the server on any exit: the trap is set
+# before the first server starts, so a failure anywhere leaks neither.
+pgDir=$root/build/tfb/profile-pg
+pgPort=15433
+pgAs=()
+pgBin=""
+pgStop() {
+  if [ -n "$pgBin" ] && [ -f "$pgDir/data/postmaster.pid" ]; then
+    ${pgAs[@]+"${pgAs[@]}"} "$pgBin/pg_ctl" -D "$pgDir/data" -m immediate stop >/dev/null 2>&1 || true
+  fi
+}
+trap 'stop; pgStop' EXIT
+
 # Starts `$@` (the command, then its arguments, the port last) on CPU 0 with a
 # fresh port; false when it never says `listening`. Under valgrind the wait is
 # longer.
@@ -287,16 +300,6 @@ if wants json; then
 fi
 
 # The db test, against a cluster set up as run.sh sets its up.
-pgDir=$root/build/tfb/profile-pg
-pgPort=15433
-pgAs=()
-pgBin=""
-pgStop() {
-  if [ -n "$pgBin" ] && [ -f "$pgDir/data/postmaster.pid" ]; then
-    ${pgAs[@]+"${pgAs[@]}"} "$pgBin/pg_ctl" -D "$pgDir/data" -m immediate stop >/dev/null 2>&1 || true
-  fi
-}
-trap 'stop; pgStop' EXIT
 if wants db; then
   pgBin=${PG_BIN:-$(find /usr/lib/postgresql -maxdepth 2 -name bin -type d 2>/dev/null | sort -V | tail -n 1)}
   [ -n "$pgBin" ] && [ -x "$pgBin/initdb" ] || { echo "profile.sh: no Postgres binaries (set PG_BIN)" >&2; exit 1; }

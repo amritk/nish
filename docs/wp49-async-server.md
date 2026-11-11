@@ -389,8 +389,10 @@ then json's):
   5. `Router.match` and `Router.walk` (`std/net/router.ts`), which the explicit
      entry does not run, comparing the path a byte at a time: 789 and 562.
 - **`db`, for fix-pool** (3 and 4 are `serve`'s and go with fix-serve).
-  Net of the explicit carrier's 1,300, the five account for about 20,200 of
-  26,212, and cause 2 for most of the kernel time.
+  Causes 1, 3, 4 and 5 are ranked by Ir. Cause 2 is kernel time with no Ir
+  figure, so it is ranked by its system calls (strace) and CPU per request
+  (`/proc`). Net of the explicit carrier's 1,300, the four with Ir account for
+  about 20,200 of 26,212, and cause 2 accounts for most of the kernel time.
   1. `pgAsyncRead` (`std/net/postgres-async.ts`) zero-fills a fresh 8 KiB
      buffer (`PG_ASYNC_INPUT_SIZE`) per answer: `memset` is 8,360 Ir a request,
      22% of the async total. The answer is then copied twice a byte at a time,
@@ -398,7 +400,8 @@ then json's):
      About 9,800 in all.
   2. Two waits per statement: `pgAsyncPark` on the pool's wake pair (1.04 a
      request) and `pgAsyncTurn` on the Postgres socket (0.99), with `serveOn`'s
-     own (0.71). These account for most of the 22 extra system calls a
+     own (0.71). The Postgres socket is also waited on, through `readable(fd)`,
+     in `pgAsyncRead` when a read answers `EAGAIN`. These account for most of the 22 extra system calls a
      request: 6 `epoll_ctl`, 3 `fcntl`, 3 `close`, 2 `epoll_wait`, 3 more
      `sendto` and 4.9 more `recvfrom`, 1.9 of which answer `EAGAIN`. That is
      kernel time, most of 39.7 µs against 9.96, not Ir. What one wait costs was

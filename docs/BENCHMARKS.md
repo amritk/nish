@@ -1106,8 +1106,8 @@ taskset -c 1-3 wrk -t 3 -c 64 -d 3s -H "Host: tfb-server" http://127.0.0.1:<port
 | | |
 | --- | --- |
 | Date | 2026-11-11 |
-| Sources | `main` at `0e338d83`. Each table's header names the branch commit the script ran at, which adds only `profile.sh`. |
-| Build | `build/nish <entry> --link --profile speed -g`. The `-g` keeps the symbols; its text differs from the build without it by about 1% (72,687 against 73,535 bytes for the explicit plaintext entry, 137,260 against 137,996 for the async one) |
+| Sources | `main` at `0e338d83`. Each table's header names the branch commit the script ran at, which adds only `profile.sh`. `/plaintext` ran at `b26ed0b4` and `/json` and `/db` at `ddd1240c`. Between the two, the script changed only the `/db` cluster's setup, which also loads `fortune` because the entries prepare its statement at start. The method did not change. |
+| Build | `build/nish <entry> --link --profile speed -g`. The `-g` keeps the symbols. The `-g` build's text is within 1.2% of the build without it, by `size`: 72,687 bytes for the explicit plaintext entry against 73,535 without `-g` (1.2%), and 137,260 for the async one against 137,996 (0.5%) |
 | CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores (a cloud VM, no hardware performance counters) |
 | Load | `/plaintext` at 256 connections, 16 pipelined (`pipeline.lua`); `/json` at 64; `/db` at 64 against `run.sh`'s throwaway Postgres (port 15433), one worker and 4 Postgres connections on both sides |
 | Pinning | server on CPU 0; wrk on CPUs 1–3, or 2–3 with Postgres on CPU 1 for `/db` |
@@ -1125,7 +1125,7 @@ Each figure comes from one tool, run in its own phase so that no tool's overhead
 | `/json` (64) | 6,614 → 13,153 (+6,539, ×1.99) | 2.037 → 2.116 | 7.37 → 8.13 | 135k → 122k |
 | `/db` (64) | 11,017 → 37,229 (+26,212, ×3.38) | 2.100 → 24.008 | 9.96 → 39.70 | 81.3k → 24.5k |
 
-All six perf runs were clean (no wrk socket errors, no non-2xx answers). The codec's frames (`http1Next`, `http1TakeLine`, `http1WriteResponseHead`) cost the same on both sides of every test. The difference is in the layer the async entry puts between the codec and the handler, and on `/db` in the pool. The causes below are ranked by the Ir per request each accounts for, from the frames' self Ir (callgrind), with the source line where the count is a line's. [WP49 §6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#6-tfb-what-the-top-takes) carries the same ranking as the plan for the fixes.
+All six perf runs were clean (no wrk socket errors, no non-2xx answers). The codec's frames (`http1Next`, `http1TakeLine`, `http1WriteResponseHead`) cost the same on both sides of every test. The difference is in the layer the async entry puts between the codec and the handler, and on `/db` in the pool. The causes below are ranked by the Ir per request each accounts for, from the frames' self Ir (callgrind), with the source line where the count is a line's. The one exception is `/db`'s cause 2, which is kernel time with no Ir figure: it is placed by its system calls (strace) and CPU per request (`/proc`). [WP49 §6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#6-tfb-what-the-top-takes) carries the same ranking as the plan for the fixes.
 
 **`/plaintext` and `/json`** (fix-serve). The same functions make the gap on both. They are ranked by the two tests' Ir summed, and each function's self Ir per request is netted against the explicit side's (plaintext first, then json):
 
@@ -1137,15 +1137,15 @@ All six perf runs were clean (no wrk socket errors, no non-2xx answers). The cod
 
 Against these, the explicit loop's own dispatch (`TfbServer.resume` and `nish_main`, 655 and 919) has no async counterpart. Net of it, the five account for about 6,000 of plaintext's 6,243 and 6,270 of json's 6,539. On `/plaintext` the user-space path is most of a request, so the async entry's CPU per request is 1.7 times the explicit one's. On `/json` the kernel's share of a request (one receive and one send each) is large, so twice the instructions show as 10% more CPU, within the 2.5–17.1% of json's gap in the gate.
 
-**`/db`** (fix-pool; causes 3 and 4 are `serve`'s and go with fix-serve):
+**`/db`** (fix-pool; causes 3 and 4 are `serve`'s and go with fix-serve). Causes 1, 3, 4 and 5 are ranked by Ir. Cause 2 is ranked by system calls and CPU time, because its cost is in the kernel:
 
 1. **`pgAsyncRead` zero-fills a fresh 8 KiB buffer per answer** (`std/net/postgres-async.ts`, `new Array<u8>(… PG_ASYNC_INPUT_SIZE)`): `__memset_avx2_unaligned_erms` is 8,360 Ir a request, 22% of the async total, 8,211 of it called from `pgAsyncAnswer`. The answer is then copied twice, a byte at a time: into `carried` in `pgAsyncAnswer` and into that buffer in `pgAsyncRead`, about 1,400. About 9,800 in all.
-2. **Two waits per statement, and the system calls they cost.** Each request waits about 2.7 times in `nish_async_wait_fd`: once in `pgAsyncPark` on the pool's wake socket pair for its turn (1.04 a request), once in `pgAsyncTurn` on the Postgres socket (0.99), and `serveOn`'s own wait (0.71). That is where most of the 22 extra system calls a request go: 6.0 `epoll_ctl`, 3.0 `fcntl`, 3.0 `close`, 2.0 `epoll_wait`, 3.0 more `sendto` and 4.9 more `recvfrom`, 1.9 of which answer `EAGAIN`, against the explicit entry's one `sendto` and one `recvfrom`. The Ir is small; the cost is kernel time, most of the 39.7 µs against 9.96. What one wait costs was settled in #1374. What is open here is the number of waits the pool takes per statement.
+2. **Two waits per statement, and the system calls they cost.** Each request waits about 2.7 times in `nish_async_wait_fd`: once in `pgAsyncPark` on the pool's wake socket pair for its turn (1.04 a request), once in `pgAsyncTurn` on the Postgres socket (0.99), and `serveOn`'s own wait (0.71). The Postgres socket is also waited on, through `readable(fd)`, in `pgAsyncRead` when a read answers `EAGAIN`. That is where most of the 22 extra system calls a request go: 6.0 `epoll_ctl`, 3.0 `fcntl`, 3.0 `close`, 2.0 `epoll_wait`, 3.0 more `sendto` and 4.9 more `recvfrom`, 1.9 of which answer `EAGAIN`, against the explicit entry's one `sendto` and one `recvfrom`. The Ir is small; the cost is kernel time, most of the 39.7 µs against 9.96. What one wait costs was settled in #1374. What is open here is the number of waits the pool takes per statement.
 3. **`serveOn` scans every slot on each pass** (`std/net/serve.ts`), for fix-serve: 5,690 self here against 690 on `/plaintext`, because a request's task stays in flight across its Postgres round trip, so more slots are busy. The `busy && done` check costs about 980, the `busy && hungUp` check about 870, and the loop 640. The `hungUp` call into `HttpHandler.hungUp` and `Http1Server.holds` costs about 1,600. Together, about 4,100.
 4. **`serveTask`'s copies**, as on `/plaintext`: 3,988 self.
 5. **The seat bookkeeping**: `pgAsyncSkippable` (4 calls a request, each a loop over `PG_ASYNC_MAX_DEPTH`), `pgAsyncSeat`, `pgAsyncSend`, `pgAsyncReady`, `pgAsyncTurn`, `pgAsyncScan`, `pgAsyncSignal` and `pgAsyncPark`, about 3,600 self, against about 1,300 for the explicit carrier's `PgCarrier.next`, `PgCarrier.dispatch` and `TfbDb.turn`. So about 2,300 net.
 
-Net of the explicit carrier's 1,300, these five account for about 20,200 of the 26,212.
+Net of the explicit carrier's 1,300, the four with an Ir figure (1, 3, 4 and 5) account for about 20,200 of the 26,212.
 
 
 <details><summary><code>/plaintext, 256 connections, 16 pipelined</code>: the table and the top 12 frames of each side, as <code>profile.sh</code> wrote them</summary>
