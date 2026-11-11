@@ -708,10 +708,10 @@ function reachingPath(table: TypeTable, program: CheckedProgram, type: i32, elem
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachingPath
   escaping: element root type
-  calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.errOf TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf nish_str_concat reachingPath
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 reachingPath#0 TypeTable.refOf#0 TypeTable.refOf#0 reachingPath#0 reachingPath#0 TypeTable.okOf#0 reachingPath#0 TypeTable.errOf#0 TypeTable.nameOf#0 reachingPath#0
-  pointer program: size=728 writesThrough=false captured=false passedTo=reachingPath#1 reachingPath#1 reachingPath#1 reachingPath#1 CheckedProgram.struct#0 reachingPath#1
-  pointer seen: size=8 writesThrough=false captured=false passedTo=reachingPath#5 reachingPath#5 reachingPath#5 reachingPath#5 StringSet.has#0 StringSet.add#0 reachingPath#5
+  calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.errOf TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf isCollectionStruct nish_panic_index nish_str_concat reachingPath
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 reachingPath#0 TypeTable.refOf#0 TypeTable.refOf#0 reachingPath#0 reachingPath#0 TypeTable.okOf#0 reachingPath#0 TypeTable.errOf#0 TypeTable.nameOf#0 reachingPath#0 reachingPath#0 reachingPath#0
+  pointer program: size=728 writesThrough=false captured=false passedTo=reachingPath#1 reachingPath#1 reachingPath#1 reachingPath#1 CheckedProgram.struct#0 reachingPath#1 reachingPath#1 reachingPath#1
+  pointer seen: size=8 writesThrough=false captured=false passedTo=reachingPath#5 reachingPath#5 reachingPath#5 reachingPath#5 StringSet.has#0 StringSet.add#0 reachingPath#5 reachingPath#5 reachingPath#5
   stackSites=0 stackLocals=0
   local +0:9 kind: i32 (const)
   callee +0:16 TypeTable.kindOf -> @TypeTable.kindOf
@@ -731,9 +731,15 @@ function reachingPath(table: TypeTable, program: CheckedProgram, type: i32, elem
   callee +24:3 StringSet.add -> @StringSet.add
   local +25:9 info: StructInfo | null (const)
   callee +25:16 CheckedProgram.struct -> @CheckedProgram.struct
-  local +32:14 field: FieldInfo (const)
-  local +33:11 path: string (const)
-  callee +33:18 reachingPath -> @reachingPath
+  local +37:9 instance: StructInstantiation | null (const)
+  callee +38:28 isCollectionStruct -> @isCollectionStruct
+  local +39:11 args: i32[] (const)
+  local +40:11 key: string (const)
+  callee +40:17 reachingPath -> @reachingPath
+  callee +44:12 reachingPath -> @reachingPath
+  local +46:14 field: FieldInfo (const)
+  local +47:11 path: string (const)
+  callee +47:18 reachingPath -> @reachingPath
 function reachesDstMessage(table: TypeTable, program: CheckedProgram, sig: FunctionSig, fn: FunctionSig): string -> @reachesDstMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachingPath

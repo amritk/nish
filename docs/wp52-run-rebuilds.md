@@ -1,4 +1,4 @@
-# WP48: Fast rebuilds for `nish run`
+# WP52: Fast rebuilds for `nish run`
 
 **Status: built.** `nish run` keeps every module's object between links, so a
 rebuild compiles only the modules whose IR changed. The goal was a rebuild under
