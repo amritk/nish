@@ -279,10 +279,10 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 46 | Memory for programs that do not exit: regions | [wp46](wp46-long-running-memory.md) |
 | 47 | Shared work across cores: regions, atomics and rings | [wp47](wp47-shared-memory.md) |
 | 48 | Compressed 32-bit references: a whole-program mode against `i32` handles, measured | [wp48](wp48-compressed-references.md) |
-| 48 | Fast rebuilds for `nish run` | [wp48](wp48-run-rebuilds.md) |
 | 49 | `async`/`await` on the server, and the TechEmpower top | [wp49](wp49-async-server.md) |
 | 50 | A WebAssembly module a TypeScript page drives: imports, handles, shared memory, strings, determinism, size | [wp50](wp50-wasm-host.md) |
 | 51 | References to capture-free top-level functions: a tag and a `switch` over a closed set, measured | [wp51](wp51-function-references.md) |
+| 52 | Fast rebuilds for `nish run` | [wp52](wp52-run-rebuilds.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each

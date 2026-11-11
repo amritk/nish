@@ -114,8 +114,8 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP42: A multi-core server from pre-forked processes](wp42-multicore-server.md) | Landed | 1 of 1 |
 | [WP45: Name resolution: a DNS stub resolver](wp45-name-resolution.md) | Landed | 1 of 1 |
 | [WP47: Shared work across cores: regions, atomics and rings](wp47-shared-memory.md) | Landed | 1 of 2 |
-| [WP48: Fast rebuilds for `nish run`](wp48-run-rebuilds.md) | Landed | 1 of 2 |
 | [WP50: A WebAssembly module a TypeScript page drives](wp50-wasm-host.md) | Landed | 6 of 6 |
+| [WP52: Fast rebuilds for `nish run`](wp52-run-rebuilds.md) | Landed | 1 of 2 |
 | [WP24: `async`/`await`](wp24-async.md) | Superseded | 3 of 4 |
 | [WP41: A wide multiply](wp41-mul-wide.md) | Declined | 1 of 1 |
 
