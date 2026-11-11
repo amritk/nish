@@ -40,15 +40,17 @@ The stages can be named, and they are:
 **Neither stage needs a change to an existing carrier.** Both use only API
 the carriers already export:
 
-- `Http1Server`: `next`, `connection`, `respond`, `write`, `end`, `flush`,
-  `rearm` and `close`.
+- `Http1Server`: `accept`, `holds`, `fd`, `readable`, `writable`, `next`,
+  `connection`, `flush`, `rearm`, `expire` and `close`, with
+  `Http1Connection`'s `respond`, `write` and `end`.
 - `Http2Connection`: `feed`, `inputTail`, `received`, `endInput`, `next`,
   `respond`, `writeData`, `reset`, `consume`, `restart` and `rest`, plus
   `Http2Pools`.
 - `Http2TlsServer`: `accept`, `signP256`, `next`, `connection`, `flush` and
   `close`.
-- `Http3Server`: `receive`, `ready`, `connection`, `flush` and `timeout`,
-  with `Http3Connection`'s `respond`, `writeData` and `reset`.
+- `Http3Server`: `serve`, `receive`, `ready`, `connection`, `flush`,
+  `timeout`, `tick` and `stop`, with `Http3Connection`'s `respond`,
+  `writeData`, `reset` and `discardRequest`.
 
 `http1-server.ts`, `handler.ts` and `serve.ts` belong to in-flight runs
 (wp34-finish edits all three), and G7 edits none of them. The four places
@@ -86,16 +88,17 @@ server.listenH2c(tcpFd2, new Http2Config(), 64);
 server.listenHttp2Tls(tcpFd3, tlsConfig, new Http2Config(), 64);
 server.listenHttp3(udpFd, quicConfig, new Http3Config(), 64, entropy);
 
-while (!server.stopped()) {
+for (;;) {
   server.waitSigned(1000, key);           // wait(ms) when every listener is cleartext
-  while (server.ready() > 0) {
+  while (server.ready()) {
     const r: HttpServerRequest = server.take();
     if (r.route === HELLO) {
       server.send(r, 200, TEXT_PLAIN, HELLO_BODY, 0, HELLO_BODY.length);
     } else if (r.route === ECHO) {
       server.send(r, 200, TEXT_PLAIN, r.body, 0, r.bodyLength);
     } else if (r.route === USER) {
-      server.sendJson(r, 200, lookup(r.paramDecimal(0)));
+      lookup(server.json(), r.paramDecimal(0)); // fills the shared writer
+      server.sendJson(r, 200);
     } else {
       server.refuse(r);                   // 404, or 405 with Allow
     }
@@ -148,13 +151,16 @@ export class HttpServer {
   wait(timeoutMs: i32): i32;                         // panics with a TLS or QUIC listener
   waitSigned(timeoutMs: i32, key: Secret<u8[]>): i32; // TLS handshakes, QUIC packets
   watch(fd: i32, id: i32): void;
-  fired(): i32;                                      // the program's own fds that fired
-  ready(): i32;
+  fired(id: i32): boolean;                           // did the program's own fd `id` fire
+  ready(): boolean;
   take(): HttpServerRequest;
-  hungUp(r: HttpServerRequest): bool;
-  stop(): void;                                      // drain, as HttpHandler.drain
-  stopped(): bool;
+  hungUp(r: HttpServerRequest): boolean;
+  drain(): void;                                     // graceful stop, as HttpHandler.drain
+  connections(): i32;                                // falls to 0 once drained
 ```
+
+These are `HttpHandler`'s loop methods with the same signatures; only
+`waitSigned` is new.
 
 - `waitSigned` exists because the TLS and QUIC handshakes sign with the
   server's key, and the key travels as a `Secret`
@@ -168,8 +174,9 @@ export class HttpServer {
 
 ### 2.4 Answers
 
-The answer methods have the same names and the same return codes as
-`HttpHandler`. The codes are imported from `handler.ts`, not redefined:
+The answer methods have the same names, the same parameters and the same
+return codes as `HttpHandler`, with `HttpServerRequest` in place of
+`HttpRequest`. The codes are imported from `handler.ts`, not redefined:
 
 ```ts
   start(r, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32;
@@ -178,9 +185,9 @@ The answer methods have the same names and the same return codes as
   send(r, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32;
   sendFields(r, status, names, values, body, off, len): i32;
   empty(r, status: i32): i32;
-  json(r): JsonWriter;
-  sendJson(r, status: i32, w: JsonWriter): i32;
-  problem(r, status: i32, title: u8[]): i32;
+  json(): JsonWriter;                     // the shared writer, reset
+  sendJson(r, status: i32): i32;          // sends what json() was filled with
+  problem(r, status: i32, title: string, detail: string): i32;
   refuse(r): i32;
 ```
 
@@ -214,7 +221,8 @@ HttpHandler in this module". For the façade to fill them, `handler.ts` would
 need a contract change, and that file is in flight.
 
 So G7 adds `HttpServerRequest` in `http-server.ts`. It has the same accessor
-names, so a route body moves between the two by changing one type name.
+names, and §2.3 and §2.4 match `HttpHandler`'s signatures, so a route body
+moves between the two by changing one type name.
 Merging the two types into one is follow-up work, for after wp34-finish and
 wp49 land. That follow-up is also where `serve` (the async layer) would sit
 over the façade.
@@ -233,8 +241,9 @@ cannot be avoided on HTTP/2 or HTTP/3:
   lives in the connection's HPACK state and is overwritten by the next
   header block on any stream. The copy has a fixed order: `:method`, then
   `:path` as the target, then `:authority` as a `host` field, then each
-  regular field except `host` (§9.2). A request with no `:authority`
-  keeps its `host` field as sent.
+  regular field except `host`. A request with no `:authority` keeps its
+  `host` field as sent. A request whose `:authority` and `host` differ never
+  reaches the façade (§9.2).
 - **HTTP/3.** At `H3_REQUEST`, the request takes the same `HttpFields`
   layout. It is valid only until the next request or trailers on the
   connection, so it is copied the same way.
@@ -254,13 +263,23 @@ The request is whole, and queued, at these points:
 
 Body chunks (`H1_BODY`, `H2_DATA` and `H3_DATA`) are appended to `r.body` up
 to `maxBody`. Past that, the request is answered 413 and the rest of the
-body is not read. On h2 the stream is then reset with NO_ERROR, which RFC
-9113 §8.1 allows after a complete response. On h3 the rest of the body is
-read and discarded, not stored, until `H3_END`: `Http3Connection.reset`
-cannot touch a stream whose response is finished, and its `stopStream`
-serves WebTransport streams only. QUIC flow control still bounds what the
-peer sends. Sending STOP_SENDING on a finished request is a possible later
-change to `http3.ts`, by its owner; G7 does not need it. Request trailers
+body is not read. Each version already has the call for it:
+
+- **HTTP/1.1.** The carrier's own `Http1Config.maxBody` is set to the
+  façade's limit, as `HandlerLimits` does, so `Http1Server` answers 413
+  itself and ends the connection. The façade never sees the request.
+- **HTTP/2 and h2c.** After the 413 is written,
+  `Http2Connection.reset(id, H2_NO_ERROR)` stops the body (RFC 9113 §8.1
+  allows NO_ERROR after a complete response). On `H2_AGAIN` the reset is
+  tried again on the connection's next turn; until it fits, further
+  `H2_DATA` on the stream is consumed and dropped.
+- **HTTP/3.** After the 413, `Http3Connection.discardRequest(id,
+  H3_NO_ERROR)` sends STOP_SENDING and drops what the client still sends,
+  unseen, whether or not the response is finished. That is RFC 9114 §4.1's
+  "respond, then abort reading". `H3_CLOSED` (the stream is already gone)
+  needs nothing more.
+
+No carrier is changed for any of the three. Request trailers
 (`H2_TRAILERS`, `H3_TRAILERS`) are read and dropped.
 
 ### 3.2 Response side: at most one copy out
@@ -322,12 +341,17 @@ in `i32` and are widened.
 
 ### 3.4 Timeouts (finding F4)
 
-`Http1Server` has its own head and body deadlines. `Http2Connection` has
-none, and neither does the `http2-tls.ts` carrier. The façade enforces two
-deadlines itself, using its own clock and each carrier's `close(slot)`:
+`Http1Server` has two clocks, `headTimeout` and `idleTimeout`, run by its
+`expire(now)`; it has no body deadline. `HttpHandler` adds that one itself
+(`expireBodies`). `Http2Connection` has no clock at all, and neither does
+the `http2-tls.ts` carrier. The façade calls `Http1Server.expire` and runs
+two deadlines of its own, using its own clock and each carrier's
+`close(slot)`:
 
 - **`bodyTimeout`:** the time from a request's head to its last body byte,
-  for every version.
+  for every version, as `HttpHandler.expireBodies` does for HTTP/1.1. On
+  HTTP/1.1 it closes the slot; on h2 it resets the stream with CANCEL; on
+  h3 it calls `discardRequest` and resets the stream.
 - **`idleTimeout`:** how long an h2 or h2c connection may be open with no
   open stream.
 
@@ -446,7 +470,8 @@ listen time, or on first use and then kept:
 | What | Made | Per warmed request |
 | --- | --- | --- |
 | request pool (`HttpServerRequest` × `requests`) | constructor | none |
-| each request's `head`, `spans`, `params`, `body`, `pending` | grown to the largest seen, then kept | none |
+| each request's `head`, `spans`, `params`, `pending` | grown to the largest seen, then kept | none |
+| each request's `body` | grown to the largest seen, kept up to 64 KiB (see below) | none below 64 KiB |
 | HTTP/1.1 connections | `Http1Server`, reused per slot | none |
 | HTTP/2 connections and `Http2Pools` | first accept on a slot, then `restart` | none |
 | HPACK decoding | `Http2Connection` | none ([#473](https://github.com/amritk/nish/issues/473)) |
@@ -456,8 +481,24 @@ listen time, or on first use and then kept:
 | response field arrays, one pair per length | first use of each length | none |
 | Alt-Svc bytes | `listenHttp3` | none |
 | content-length digits | per-request scratch | none |
-| TLS random and ephemeral key buffers | listen time, filled in place | none |
+| TLS server random and ephemeral key, 32 bytes each | `listenHttp2Tls`, refilled with `crypto.getRandomValues` before each `accept` | none |
 | JSON writer | constructor | none |
+
+**The body ceiling.** A body kept at its high-water mark would let the pool
+reach `requests × maxBody` (1 GiB at the defaults) once a few large uploads
+have passed through every slot. So a body grown past 64 KiB is released when
+its request is freed, and the next request on that pool entry starts from
+64 KiB again. The ceiling of kept body memory is `requests × 64 KiB` (64 MiB
+at the defaults), plus `maxBody` for each request in flight with a large
+body. A request over 64 KiB allocates once; one at or under it allocates
+nothing, which is what the warmed pin measures.
+
+**TLS bytes.** `Http2TlsServer.accept(serverRandom, ephemeralPrivate)` needs
+32 fresh random bytes for each argument on every accept, and wipes
+`ephemeralPrivate` once copied. The façade fills its two listen-time buffers
+with `crypto.getRandomValues` just before each `accept`, as
+`tests/link/net_interop_server/h2.ts` does; no bytes are reused across
+handshakes.
 
 The rules that keep it true:
 
@@ -527,7 +568,14 @@ version.
 | a deferred answer (taken in one turn, answered in the next) | delivered |
 | the client resets the stream, or hangs up, before the answer | `hungUp` true, answer `HANDLER_DROPPED`, no bytes on a reused slot |
 | request pool full | h2: RST_STREAM REFUSED_STREAM; h3: H3_REQUEST_REJECTED; h1: back-pressure, then served |
-| body over `maxBody` | 413 on every version |
+| body over `maxBody` | 413 on every version; h1: connection ended by the carrier; h2: RST_STREAM NO_ERROR after the 413; h3: STOP_SENDING H3_NO_ERROR after the 413, the rest dropped |
+| one h2 connection opens more than `min(maxStreams, requests / 4)` streams | the excess get RST_STREAM REFUSED_STREAM; other connections still served |
+| a body that stalls past `bodyTimeout` | h1: slot closed; h2: RST_STREAM CANCEL; h3: STOP_SENDING and reset; the request never reaches `take` |
+| an h2 connection with no open stream past `idleTimeout` | closed; a connection with an open stream is not |
+| an h2c connection that sends the preface, then nothing | closed by `idleTimeout`, not `prefaceTimeout` |
+| `altSvcMaxAge = 0` | `alt-svc: h3=":<port>"; ma=0` exactly (the alternative is fresh for 0 seconds) |
+| `altSvcPort` set | that port in the field, not the QUIC socket's own |
+| a body of 1 MiB, then 100 small requests | `Arena.used()` flat over the small ones (the large body was released, §6) |
 | response over `maxResponseFields` | `HANDLER_DROPPED`, nothing written |
 | a window of 1 byte on h2 and h3 | the whole body arrives in order via `pending` |
 | negative: `wait` with a TLS or QUIC listener | panics |
@@ -566,10 +614,14 @@ in the same PR (`node scripts/security-scope.mjs`).
 - **Request smuggling across versions:** the façade carries spans and never
   re-parses (§7.2), so a downgrade-style smuggle has no second parser to
   disagree with.
-- **`:authority` and `host`:** if both are present and differ, the request
-  is answered 400 (RFC 9113 §8.3.1 and RFC 9114 §4.3.1 require them to
-  agree). When they agree, only `:authority` is copied into the view, as its
-  `host` field.
+- **`:authority` and `host`:** the façade does no check of its own. Both
+  carriers read the head through `HttpFields.readRequest`, which returns
+  `HTTP_FIELDS_AUTHORITY_MISMATCH` when the two differ, and turn that into
+  a stream error (PROTOCOL_ERROR on h2, H3_MESSAGE_ERROR on h3) before any
+  request event. RFC 9113 §8.3.1 and RFC 9114 §4.3.1 require them to
+  agree. When they agree, only `:authority` is copied into the view, as its
+  `host` field. The record cites the carriers' tests rather than adding a
+  façade path that cannot be reached.
 - **Cross-version starvation:** the request pool is shared, so one h2
   connection could hold up to `maxStreams` requests. A per-connection cap,
   `min(maxStreams, requests / 4)`, keeps one peer from taking the pool. The
