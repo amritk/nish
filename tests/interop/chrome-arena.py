@@ -75,8 +75,25 @@ WATCH = """
     return made;
   };
   WebAssembly.Instance.prototype = Real.prototype;
-  const watch = { frames: 0, moved: 0, length: -1, mark: -1, renderer: null, page: null };
+  const watch = { frames: 0, moved: 0, length: -1, mark: -1, renderer: null, page: null, gpu: "navigator.gpu is undefined" };
   globalThis.arenaWatch = watch;
+  // The adapter check reads the adapter the page itself was given. A second
+  // requestAdapter() of the harness's own, made while the page held a device,
+  // answered null in a run whose page drew 36000 WebGPU frames.
+  if (navigator.gpu !== undefined) {
+    watch.gpu = "the page never called requestAdapter()";
+    const request = navigator.gpu.requestAdapter.bind(navigator.gpu);
+    navigator.gpu.requestAdapter = async (options) => {
+      const adapter = await request(options);
+      if (adapter === null) {
+        watch.gpu = "requestAdapter() answered null";
+      } else {
+        const info = adapter.info ?? {};
+        watch.gpu = "adapter: " + [info.vendor, info.architecture, info.description].filter((s) => s).join(" / ");
+      }
+      return adapter;
+    };
+  }
   import("./page.js").then((page) => { watch.page = page; });
   globalThis.arenaAfterFrame = (arena) => {
     if (watch.length < 0) {
@@ -299,15 +316,7 @@ def soak(args, report, failures):
             page.goto(args["url"])
             report["userAgent"] = page.evaluate("navigator.userAgent")
             page.wait_for_function("globalThis.arenaWatch && globalThis.arenaWatch.frames > 0", timeout=30000)
-            report["gpu"] = page.evaluate(
-                """async () => {
-                  if (navigator.gpu === undefined) return "navigator.gpu is undefined";
-                  const adapter = await navigator.gpu.requestAdapter();
-                  if (adapter === null) return "requestAdapter() answered null";
-                  const info = adapter.info ?? {};
-                  return "adapter: " + [info.vendor, info.architecture, info.description].filter((s) => s).join(" / ");
-                }"""
-            )
+            report["gpu"] = page.evaluate("globalThis.arenaWatch.gpu")
             start = time.monotonic()
 
             page.wait_for_timeout(early * 1000)
