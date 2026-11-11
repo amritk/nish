@@ -660,7 +660,8 @@ const baseData = (emitter: Emitter, base: ArrayBase): string => {
  * what a hoisted `len` and `data` depend on, and what a compound element store
  * re-checks its slot against once its right side has run (CG-10).
  *
- * Three things can: a `push`, a `pop` or a `spawnPiped` written in it
+ * Three things can: a `push`, a `pop` or a `spawnPiped` (or
+ * `spawnPipedWithin`) written in it
  * (`isResizeCall`), a call to a user function the fixpoint says grows an array
  * (`FunctionFacts.resizesArray`), and a `new` of a class whose constructor it
  * says the same of (CG-11). No other builtin can -- those three are the only

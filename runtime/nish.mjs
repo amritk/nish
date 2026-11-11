@@ -104,6 +104,7 @@ provide("realpathSync", shim.realpathSync);
 provide("spawnSync", shim.spawnSync);
 provide("spawnSyncTo", shim.spawnSyncTo);
 provide("spawnPiped", shim.spawnPiped);
+provide("spawnPipedWithin", shim.spawnPipedWithin);
 // WP34 N12. `spawn`, `spawnWithFds` and `waitPid` throw, naming themselves: a
 // child is reaped by Node's event loop. `kill`, `availableParallelism` and
 // `totalMemory` answer.

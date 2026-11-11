@@ -243,6 +243,12 @@ function worse(a: i32, b: i32): i32 -> @worse
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   stackSites=0 stackLocals=0
+function isSpawnPipedArity(name: string, call: Node): boolean -> @isSpawnPipedArity
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_eq
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 count: i32 (const)
 function isAllocatingBuiltin(name: string): boolean -> @isAllocatingBuiltin
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -412,9 +418,9 @@ function EscapeAnalysis.visitCall(this: EscapeAnalysis, call: Node): void -> @Es
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: call
-  calls: EscapeAnalysis.isPointerResult FactsTable.get FunctionSig.foreign Site.constructor TypeTable.resultByValue builtinNameOf dottedName isAllocatingBuiltin isJoinCall isNumeric isPushCall isResultConstructorCall isStringAllocCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq resultMethodName
+  calls: EscapeAnalysis.isPointerResult FactsTable.get FunctionSig.foreign Site.constructor TypeTable.resultByValue builtinNameOf dottedName isAllocatingBuiltin isJoinCall isNumeric isPushCall isResultConstructorCall isSpawnPipedArity isStringAllocCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq resultMethodName
   pointer this: size=144 writesThrough=true captured=false passedTo=EscapeAnalysis.isPointerResult#0
-  pointer call: size=40 writesThrough=true captured=true passedTo=Site.constructor#1 Site.constructor#1 isPushCall#2 isStringAllocCall#1 isJoinCall#2 Site.constructor#1 resultMethodName#2 isResultConstructorCall#2 Site.constructor#1 builtinNameOf#1 Site.constructor#1
+  pointer call: size=40 writesThrough=true captured=true passedTo=Site.constructor#1 Site.constructor#1 isPushCall#2 isStringAllocCall#1 isJoinCall#2 Site.constructor#1 resultMethodName#2 isResultConstructorCall#2 Site.constructor#1 builtinNameOf#1 Site.constructor#1 isSpawnPipedArity#1
   stackSites=1 stackLocals=0
   local -5:11 program: CheckedProgram (const)
   local -4:11 callee: FunctionSig | null (const)
@@ -438,12 +444,13 @@ function EscapeAnalysis.visitCall(this: EscapeAnalysis, call: Node): void -> @Es
   callee +63:23 builtinNameOf -> @builtinNameOf
   callee +64:11 isAllocatingBuiltin -> @isAllocatingBuiltin
   callee +65:25 new Site -> @Site.constructor
-  local +70:20 k: i32 (const)
-  local +77:11 name: string (const)
-  callee +77:18 dottedName -> @dottedName
-  local +79:13 args: Node (const)
-  local +80:13 type: i32 (const)
-  callee +81:24 isNumeric -> @isNumeric
+  callee +70:11 isSpawnPipedArity -> @isSpawnPipedArity
+  local +71:20 k: i32 (const)
+  local +78:11 name: string (const)
+  callee +78:18 dottedName -> @dottedName
+  local +80:13 args: Node (const)
+  local +81:13 type: i32 (const)
+  callee +82:24 isNumeric -> @isNumeric
 function EscapeAnalysis.isPointerResult(this: EscapeAnalysis, type: i32): boolean -> @EscapeAnalysis.isPointerResult [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -1249,9 +1256,9 @@ function PassWalk.initialiserIsFresh(this: PassWalk, node: Node, local: Local): 
 function PassWalk.visit(this: PassWalk, node: Node): void -> @PassWalk.visit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: PassWalk.declaredInPass PassWalk.isOld PassWalk.isPassListing PassWalk.refuse PassWalk.visit PassWalk.visitCallee PassWalk.visitPush builtinNameOf constructorOf intrinsicType isAssignmentOperator isPushCall isScalarArgument nish_array_grow nish_panic_index nish_str_eq resultMethodName unwrapParens
+  calls: PassWalk.declaredInPass PassWalk.isOld PassWalk.isPassListing PassWalk.refuse PassWalk.visit PassWalk.visitCallee PassWalk.visitPush builtinNameOf constructorOf intrinsicType isAssignmentOperator isPushCall isScalarArgument isSpawnPipedArity nish_array_grow nish_panic_index nish_str_eq resultMethodName unwrapParens
   pointer this: size=80 writesThrough=true captured=false passedTo=PassWalk.isPassListing#0 PassWalk.visitCallee#0 PassWalk.visitPush#0 PassWalk.visitPush#0 PassWalk.visitPush#0 PassWalk.refuse#0 PassWalk.visitCallee#0 PassWalk.declaredInPass#0 PassWalk.isOld#0 PassWalk.refuse#0 PassWalk.declaredInPass#0 PassWalk.isPassListing#0 PassWalk.isOld#0 PassWalk.refuse#0 PassWalk.isOld#0 PassWalk.refuse#0 PassWalk.visit#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=PassWalk.visitCallee#2 isPushCall#2 PassWalk.visitPush#1 builtinNameOf#1 PassWalk.visitPush#1 PassWalk.visitPush#1 resultMethodName#2 PassWalk.refuse#2 intrinsicType#1 PassWalk.visitCallee#2 PassWalk.refuse#2 PassWalk.refuse#2 PassWalk.refuse#2
+  pointer node: size=40 writesThrough=true captured=true passedTo=PassWalk.visitCallee#2 isPushCall#2 PassWalk.visitPush#1 builtinNameOf#1 isSpawnPipedArity#1 PassWalk.visitPush#1 PassWalk.visitPush#1 resultMethodName#2 PassWalk.refuse#2 intrinsicType#1 PassWalk.visitCallee#2 PassWalk.refuse#2 PassWalk.refuse#2 PassWalk.refuse#2
   stackSites=0 stackLocals=0
   local -7:11 program: CheckedProgram (const)
   local -2:13 local: Local | null (const)
@@ -1261,7 +1268,8 @@ function PassWalk.visit(this: PassWalk, node: Node): void -> @PassWalk.visit [me
   callee +15:9 PassWalk.visitCallee -> @PassWalk.visitCallee
   callee +16:18 isPushCall -> @isPushCall
   callee +17:9 PassWalk.visitPush -> @PassWalk.visitPush
-  callee +18:18 builtinNameOf -> @builtinNameOf
+  callee +18:18 isSpawnPipedArity -> @isSpawnPipedArity
+  callee +18:36 builtinNameOf -> @builtinNameOf
   callee +19:9 PassWalk.visitPush -> @PassWalk.visitPush
   callee +20:9 PassWalk.visitPush -> @PassWalk.visitPush
   callee +21:18 resultMethodName -> @resultMethodName

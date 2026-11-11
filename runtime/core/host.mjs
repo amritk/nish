@@ -217,6 +217,17 @@ export function spawnPiped(argv, input, out, err) {
   return status;
 }
 
+/**
+ * `spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)`: `spawnPiped`
+ * with a deadline the host enforces, and -3 when it passed.
+ */
+export function spawnPipedWithin(argv, input, out, err, timeoutMs) {
+  const [status, outBytes, errBytes] = host.call("spawnPipedWithin", [argv, input, timeoutMs]);
+  for (const b of outBytes) out.push(b);
+  for (const b of errBytes) err.push(b);
+  return status;
+}
+
 export function kill(pid, sig) {
   return host.call("kill", [pid, sig]);
 }

@@ -168,19 +168,19 @@ function nishExport(specifier: string, name: string): BuiltinExport | null -> @n
   stackSites=0 stackLocals=0
   callee +0:14 new BuiltinExport -> @BuiltinExport.constructor
   callee +6:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +27:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +30:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +36:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +41:9 netOption -> @netOption
-  callee +42:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +44:12 isNetExport -> @isNetExport
-  callee +44:32 new BuiltinExport -> @BuiltinExport.constructor
-  callee +47:12 isTermExport -> @isTermExport
-  callee +47:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +50:12 isSimdExport -> @isSimdExport
-  callee +50:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +53:12 isAsyncExport -> @isAsyncExport
-  callee +53:34 new BuiltinExport -> @BuiltinExport.constructor
-  callee +55:21 unsafeModule -> @unsafeModule
-  callee +56:12 isUnsafeExport -> @isUnsafeExport
-  callee +56:35 new BuiltinExport -> @BuiltinExport.constructor
+  callee +28:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +31:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +37:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +42:9 netOption -> @netOption
+  callee +43:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +45:12 isNetExport -> @isNetExport
+  callee +45:32 new BuiltinExport -> @BuiltinExport.constructor
+  callee +48:12 isTermExport -> @isTermExport
+  callee +48:33 new BuiltinExport -> @BuiltinExport.constructor
+  callee +51:12 isSimdExport -> @isSimdExport
+  callee +51:33 new BuiltinExport -> @BuiltinExport.constructor
+  callee +54:12 isAsyncExport -> @isAsyncExport
+  callee +54:34 new BuiltinExport -> @BuiltinExport.constructor
+  callee +56:21 unsafeModule -> @unsafeModule
+  callee +57:12 isUnsafeExport -> @isUnsafeExport
+  callee +57:35 new BuiltinExport -> @BuiltinExport.constructor
