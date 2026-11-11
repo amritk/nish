@@ -648,7 +648,7 @@ What the rows say, read against that band:
 
 [WP49](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#6-tfb-what-the-top-takes)'s gate: the TechEmpower entry written in the `async` style must stay inside the noise band of the same entry written in the explicit style, on `plaintext`, `json` and `db`. Measured by `bash bench/techempower/run.sh`, which times `async-main.ts` beside `main.ts` and its byte-identical copy, and `async-db-main.ts` beside `db-main.ts` and its byte-identical copy on all five database tests, and copied here from `build/tfb/results.md`. The band is the gap between each pair of identical builds' medians, from the same run. Every contestant pair is started with the same arguments: one process, the same slots, one worker and 4 Postgres connections for the database entries.
 
-**This is a relative A/B on one machine, not a TechEmpower rank.** wrk, Postgres and the server share one 4-core VM, so the figures record their contention as well as the server; [D6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#9-decisions-for-the-owner) stands, and nothing here is a public number. The cells are req/s, median (minimum) of 3 interleaved rounds of 10 s, each contestant started afresh and warmed for 1 s. Peak RSS is the server's `VmHWM` from `/proc`, the largest over every round and concurrency of the test (for `/plaintext` that is 16384 connections' buffers). A `*` is a cell with non-2xx answers or socket errors in a round, listed after the tables. wrk counts a non-2xx answer in its rate, so a `*` figure may be inflated by fast failures; the verdict line marks it `*` and never calls it inside. The database is loaded once and not reset between contestants or rounds, so `/updates`, which rewrites `world` in place, leaves later measurements more dead tuples than earlier ones; the rotated order spreads that across the contestants, and the explicit entry, which makes more than twice as many updates, adds more of them.
+**This is a relative A/B on one machine, not a TechEmpower rank.** wrk, Postgres and the server share one 4-core VM, so the figures record their contention as well as the server; [D6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#9-decisions-for-the-owner) stands, and nothing here is a public number. The cells are req/s, median (minimum) of 3 interleaved rounds of 10 s, each contestant started afresh and warmed for 1 s. Peak RSS is the server's `VmHWM` from `/proc`, the largest over every round and concurrency of the test (for `/plaintext` that is 16384 connections' buffers). A `*` is a cell with non-2xx answers or socket errors in a round, listed after the tables. wrk counts a non-2xx answer in its rate, so a `*` figure may be inflated by fast failures; the verdict line marks it `*` and never calls it inside. The database is loaded once and not reset between contestants or rounds, so `/updates`, which rewrites `world` in place, leaves later measurements more dead tuples than earlier ones; the rotated order spreads that across the contestants, and the explicit entry, whose `/updates` rate is more than twice the async entry's, adds more of them. That count is inferred from the req/s figures; the updates were not counted.
 
 | | |
 | --- | --- |
@@ -688,6 +688,8 @@ async vs entry (median delta, inside or outside the band; * had failures, never 
 noise band (|entry - entry-copy| / entry, medians): 16: 1.2% 32: 0.3% 64: 0.1% 128: 0.6% 256: 10.2% 512: 8.0%
 
 async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -9.8% outside 32: -8.8% outside 64: -7.3% outside 128: -12.4% outside 256: -1.5% inside 512: -11.7% outside
+
+The one `inside` cell, 256 connections, rests on a 10.2% band whose two identical builds did not overlap: the copy's minimum (177,205) is above the entry's median (174,762). Like `/plaintext` at 256, that band is more likely a bias than noise, and against the 0.1–1.2% the other concurrencies give, −1.5% would not be read as inside. It was not re-run.
 
 **Database tests: server on CPU 0, Postgres on CPU 1, client on CPUs 2-3; client wrk -t 2; one worker and 4 Postgres connections each**
 
@@ -767,6 +769,8 @@ Why. The figures below come from `strace -c`, which slows both servers about 9 t
 
 ```bash
 taskset -c 0 build/tfb/<entry|async> <port> &
+# warm: the test's wrk command below, with -d 2s
+strace -c -f -p <pid> &   # attached for the one measured run, stopped with SIGINT after it
 taskset -c 1-3 wrk -t 3 -c 256 -d 3s -H "Host: tfb-server" http://127.0.0.1:<port>/plaintext -s bench/techempower/pipeline.lua -- 16
 taskset -c 1-3 wrk -t 3 -c 64 -d 3s -H "Host: tfb-server" http://127.0.0.1:<port>/json
 ```
