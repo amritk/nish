@@ -1,6 +1,6 @@
 // The TechEmpower json and plaintext entry's server: one `Http1Server` pool
-// and the handler for TFB's two tests, shared by `main.ts` and the verifier
-// checks in tests/link/tfb_entry.
+// and the handler for TFB's two tests, and `tfbMain`, the program around them,
+// shared by `main.ts` and the verifier checks in tests/link/tfb_entry.
 //
 //   GET /json       {"message":"Hello, World!"}, application/json, written by
 //                   a `JsonWriter` on every request: TFB forbids caching the
@@ -16,7 +16,8 @@
 // `respond` or `write` answers `H1_AGAIN`, the slot remembers which body it
 // owes and how much of it is written, and `H1_WRITE` resumes it once the
 // socket has drained.
-import { pollAdd, pollModify } from "nish:net"
+import { netLocalPort, pollAdd, pollCreate, pollModify, pollWait, tcpListenFlags } from "nish:net"
+import { getenv, signalFd } from "nish:process"
 import {
   H1_DONE,
   H1_AGAIN,
@@ -33,6 +34,7 @@ import {
 } from "nish/net/http1-server"
 import { Http1Parser } from "nish/net/http1-codec"
 import { JsonWriter } from "nish/json"
+import { PreforkConfig, preforkArgs, preforkIndex, preforkListener, preforkWith, preforkWorkerCount } from "nish/net/prefork"
 
 /** The listener's token in the loop; a connection's token is its slot. */
 export const TFB_LISTENER: i32 = -1
@@ -281,6 +283,87 @@ export class TfbServer {
     }
     if (this.server.rearm(slot, wants)) {
       pollModify(this.loop, this.server.fd(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), slot)
+    }
+  }
+}
+
+/** The `tcpListenFlags` bit the `nodelay` argument sets: `TCP_NODELAY` on every accepted socket. */
+const NODELAY_FLAG: i32 = 2
+/** The listen backlog. */
+const BACKLOG: i32 = 4096
+/** The signal descriptor's token in the loop: SIGINT or SIGTERM ends the program. */
+const SIGNAL: i32 = -2
+/** How many ready descriptors one `pollWait` answers, as token and event pairs. */
+const READY: i32 = 256
+
+const tfbArg = (args: string[], k: i32, fallback: string): string =>
+  toI32(args.length) > k ? args[k] : fallback
+
+/**
+ * The entry's program: `args[at ..]` are `<port> [nodelay] [host] [slots]
+ * [workers]`. `nodelay` is 1 (the default) or 0; `host` defaults to
+ * 127.0.0.1; `slots` to 16384, each worker's pool; `workers` to 0, one a core
+ * (`NISH_WORKERS` overrides it), and 1 is one process however `NISH_WORKERS`
+ * reads. With more than one, `nish/net/prefork` binds one `SO_REUSEPORT`
+ * listener a worker on the port, pins worker `k` to CPU `k` and steers each
+ * connection to the worker on the CPU that received it; port 0 binds any free
+ * one. Each process serving calls `listening(worker, port)` once its pool is
+ * built, `worker` being -1 for one process, and `stopped(worker, tfb)` on
+ * SIGINT or SIGTERM, then answers 0; the supervisor answers 0 once its
+ * workers are gone, and 1 when it or a listener could not start.
+ */
+export const tfbMain = (
+  args: string[],
+  at: i32,
+  listening: (worker: i32, port: i32) => void,
+  stopped: (worker: i32, tfb: TfbServer) => void
+): i32 => {
+  // A worker's own flags follow the program's arguments, and are left out.
+  const given: string[] = preforkArgs(args)
+  const port: i32 = parseInt(tfbArg(given, at, "8080"))
+  const nodelay: i32 = tfbArg(given, at + 1, "1") !== "0" ? NODELAY_FLAG : ZERO
+  const host: string = tfbArg(given, at + 2, "127.0.0.1")
+  const slots: i32 = parseInt(tfbArg(given, at + 3, "16384"))
+  const asked: i32 = parseInt(tfbArg(given, at + 4, "0"))
+  const workers: i32 = asked === 1 ? 1 : preforkWorkerCount(asked, getenv("NISH_WORKERS"))
+  let worker: i32 = -1
+  let listener: i32 = -1
+  // A worker's count is its supervisor's, but its flag is what makes it one.
+  if (workers > 1 || preforkIndex(args) >= 0) {
+    const config = new PreforkConfig()
+    config.workers = workers
+    config.listenPort = port
+    config.listenHost = host
+    config.listenBacklog = BACKLOG
+    config.listenFlags = nodelay
+    config.pin = true
+    worker = preforkWith(args, config)
+    if (worker < 0) {
+      return worker === -1 ? 0 : 1
+    }
+    listener = preforkListener(args)
+  } else {
+    listener = tcpListenFlags(host, port, BACKLOG, nodelay)
+  }
+  if (listener < 0) {
+    console.log(`listen failed ${listener}`)
+    return 1
+  }
+  const loop: i32 = pollCreate()
+  const tfb: TfbServer = new TfbServer(loop, listener, slots)
+  pollAdd(loop, signalFd(), 1, SIGNAL)
+  const ready: i32[] = new Array<i32>(2 * READY)
+  listening(worker, netLocalPort(listener))
+  while (true) {
+    const n: i32 = pollWait(loop, ready, tfb.waitMs())
+    // A paused listener is tried again after every wait, a timed-out one included.
+    tfb.unpause()
+    for (let k: i32 = 0; k < n; k++) {
+      if (ready[2 * k] === SIGNAL) {
+        stopped(worker, tfb)
+        return 0
+      }
+      tfb.dispatch(ready[2 * k], ready[2 * k + 1])
     }
   }
 }
