@@ -1016,7 +1016,8 @@ export const nullableOfChecked = (ctx: CheckContext, node: Node, inner: i32): i3
       "`Result<T, E> | null` is not supported: a `Result` already models absence through its error arm"
     )
   }
-  if (!ctx.table.isPointer(inner)) {
+  // WP51 stage 2: a function reference's tag 0 names no function, so it is `null`.
+  if (!ctx.table.isPointer(inner) && !ctx.table.isFnRef(inner)) {
     const spelled = ctx.table.typeName(inner)
     return ctx.errorType(
       node,
