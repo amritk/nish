@@ -1321,6 +1321,9 @@ const DECLARED = [
   ...[
     "tests/cases/fnref_array.ts",
     "tests/cases/fnref_capture.ts",
+    "tests/cases/fnref_capture_ctor.ts",
+    "tests/cases/fnref_capture_method.ts",
+    "tests/cases/fnref_capture_param.ts",
     "tests/cases/fnref_debug_check.ts",
     "tests/cases/fnref_empty_set.ts",
     "tests/cases/fnref_eq.ts",
