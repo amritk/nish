@@ -18,14 +18,14 @@ stages:
         status: pending
   - id: deflake-interop
     title: "ci(interop): fix the intermittent interop.yml failures"
-    goal: The tshark install, the server image build and the #926 Chrome and quic-interop-runner failures stop failing interop.yml without a code cause.
+    goal: The tshark install, the server image build and the issue-926 Chrome and quic-interop-runner failures stop failing interop.yml without a code cause.
     verification: npm run lint && shellcheck -S warning tests/interop/*.sh .github/*.sh, then interop.yml green on the PR head
     todos:
       - id: tshark-apt
         content: Install tshark through the repo's cached, retried apt-install action instead of a bare apt-get — see Deflake interop
         status: pending
       - id: interop-926
-        content: Find the root cause of the #926 Chrome soak ERR_CONNECTION_RESET and quic-interop-runner ngtcp2 failures and fix it, or record it on #926 with evidence — see Deflake interop
+        content: Find the root cause of the issue-926 Chrome soak ERR_CONNECTION_RESET and quic-interop-runner ngtcp2 failures and fix it, or record it on issue 926 with evidence — see Deflake interop
         status: pending
       - id: server-image
         content: Diagnose the server.dockerfile build failure in run 43058056453 and make the build tolerate a transient pull failure — see Deflake interop
