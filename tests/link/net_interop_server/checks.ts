@@ -141,7 +141,10 @@ const carrierChecks = (t: Suite): void => {
 
   // The WebSocket echo port, as Autobahn's fuzzingclient drives it.
   const ws = new WsClient(server);
-  t.ok("WebSocket: the opening handshake on any target is answered 101", ws.open("/runCase?case=1&agent=nish", key).indexOf("HTTP/1.1 101 ") === 0);
+  const upgraded: string = ws.open("/runCase?case=1&agent=nish", key);
+  t.ok("WebSocket: the opening handshake on any target is answered 101", upgraded.indexOf("HTTP/1.1 101 ") === 0);
+  // RFC 6455 §1.3's sample key and the accept value it gives.
+  t.ok("WebSocket: the 101 carries the key's Sec-WebSocket-Accept", upgraded.indexOf("\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n") > 0);
   const big: u8[] = [];
   for (let k: i32 = 0; k < 65536; k++) {
     big.push(toU8((k * 7) & 255));

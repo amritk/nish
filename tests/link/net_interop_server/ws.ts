@@ -9,11 +9,12 @@
 // readiness loop of its own, which `InteropServer` steps when that loop's
 // descriptor is ready, as it does `H1Loop`'s.
 import { netLocalPort, pollAdd, pollCreate, pollModify, pollWait, tcpListen } from "nish:net";
-import { WS_OP_CONTINUATION } from "nish/net/websocket";
+import { WS_CLOSE_INTERNAL_ERROR, WS_OP_CONTINUATION } from "nish/net/websocket";
 import {
   H1_AGAIN,
   H1_DONE,
   H1_ERROR,
+  H1_INVALID,
   H1_NEED_MORE,
   H1_POOL_FULL,
   H1_REQUEST,
@@ -144,7 +145,9 @@ export class InteropWs {
    * full; a full output holds the decoder, so `conn.data` is the same message
    * when `H1_WRITE` asks for the rest. The first frame carries the message's
    * opcode, the rest are continuations, and an empty message is one empty
-   * frame.
+   * frame. A frame refused outright drops the message: `H1_INVALID` closes
+   * the connection with 1011 rather than leave the peer waiting for the rest,
+   * and `H1_CLOSED` means it is already closing.
    */
   pump(conn: Http1Connection, echo: WsEcho): void {
     while (echo.busy) {
@@ -155,10 +158,17 @@ export class InteropWs {
       if (r === H1_AGAIN) {
         return;
       }
-      echo.sent = echo.sent + n;
-      if (r !== toI32(0) || echo.sent === conn.dataLength) {
+      if (r !== toI32(0)) {
         echo.busy = false;
-        this.echoed = this.echoed + (r === toI32(0) ? toI32(1) : toI32(0));
+        if (r === H1_INVALID) {
+          conn.closeWebSocket(WS_CLOSE_INTERNAL_ERROR);
+        }
+        return;
+      }
+      echo.sent = echo.sent + n;
+      if (echo.sent === conn.dataLength) {
+        echo.busy = false;
+        this.echoed = this.echoed + toI32(1);
       }
     }
   }

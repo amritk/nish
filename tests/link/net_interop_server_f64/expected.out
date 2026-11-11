@@ -25,6 +25,7 @@ PASS  3 for a certificate directory with nothing in it
 PASS  the server listens: QUIC, HTTP/1.1 plain and over TLS, HTTP/2, the WebSocket echo port
 PASS  HTTP/1.1: a GET of /hello
 PASS  WebSocket: the opening handshake on any target is answered 101
+PASS  WebSocket: the 101 carries the key's Sec-WebSocket-Accept
 PASS  a 64 KiB binary message, four fragments on the way back, is echoed whole and byte for byte
 PASS  a fragmented text message is echoed as text
 PASS  an empty text message is echoed empty
@@ -64,4 +65,4 @@ PASS  after one rotation turn, a ticket sealed under the first key resumes under
 PASS  and a full handshake after it is issued a ticket sealed under the second key
 PASS  after the second turn, a ticket sealed under the first key falls back to a full handshake
 PASS  and one sealed under the second key resumes under the previous one
-interop server: 62 passed, 0 failed, 0 skipped
+interop server: 63 passed, 0 failed, 0 skipped

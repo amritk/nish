@@ -128,8 +128,6 @@ env:
   H1_PORT: "8080"
   H1S_PORT: "8081"
   H2_PORT: "8443"
-  # The WebSocket echo port, which tests/interop/autobahn-fuzzingclient.json names.
-  WS_PORT: "9001"
   # serve's flags for those ports, expanded unquoted where the server starts.
   SERVE_PORTS: --port 4433 --h1-port 8080 --h1s-port 8081 --h2-port 8443
   # Every apt-get call's network bound, as in ci.yml: apt waits on a stalled
@@ -598,6 +596,9 @@ jobs:
         with:
           name: nish-interop-image
 
+      - name: The verdict script's own checks
+        run: python3 -I tests/interop/autobahn-verdict-test.py
+
       - name: Pull the Autobahn TestSuite
         timeout-minutes: 10
         run: docker pull "$AUTOBAHN"
@@ -605,12 +606,13 @@ jobs:
       - name: Start the server
         run: |
           docker load --input nish-interop.tar.gz
+          # 9001 is the port tests/interop/autobahn-fuzzingclient.json names, its one home.
           # shellcheck disable=SC2086 # $SERVE_PORTS is several words
           docker run -d --name nish --network host --entrypoint /interop-server nish-interop:ci \
-            serve $SERVE_PORTS --ws-port "$WS_PORT"
+            serve $SERVE_PORTS --ws-port 9001
           for _ in $(seq 1 100); do docker logs nish 2>&1 | grep -q '^ports ' && break; sleep 0.1; done
           docker logs nish
-          docker logs nish 2>&1 | grep -q " ws $WS_PORT\$"
+          docker logs nish 2>&1 | grep -q ' ws 9001$'
 
       # The cases take about three minutes, most of it 9.*'s messages of up to 16 MiB.
       - name: The fuzzingclient runs every case
