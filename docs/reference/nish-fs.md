@@ -368,7 +368,8 @@ The file offset, an `i64`.
 
 <scalar-field name="returns" type="i32">
 
-The bytes read, `0` at end of file, or a negative errno: `-22`
+The bytes read, `0` at end of file (and for a `len` of `0`, even
+  on a closed or negative descriptor), or a negative errno: `-22`
   for a negative or overflowing `pos`, `-9` for a closed or negative
   descriptor, `-21` EISDIR, `-29` ESPIPE; anything else is `-5` EIO.
 

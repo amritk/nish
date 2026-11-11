@@ -737,12 +737,15 @@ const prepareFileCases = () => {
     `mkfifo: ${made.status} ${made.stderr}\nsocket: ${bound.status} ${bound.stderr}`
   )
 }
-// Only when a file case can run: no filter, a filter naming one, the wasi
-// section's (which builds the file cases whatever it matches), or a filter
-// naming no case at all, which is another section's and may run every case.
+// Only when a file case can run: no filter, a filter naming one, the guard of
+// the file-window wasi section below (which builds the fixture cases whatever
+// it matches), or a filter naming no case at all, which is another section's
+// and may run every case.
 const fileFixtureCases = ["file_open_errors", "file_size_large"]
 if (
   !only ||
+  "file_".includes(only) ||
+  only.startsWith("file_") ||
   "wasi".includes(only) ||
   selectedCases.length === 0 ||
   selectedCases.some((name) => fileFixtureCases.includes(name))
@@ -3160,7 +3163,12 @@ if (!only || "file_".includes(only) || only.startsWith("file_") || "wasi".includ
       })
       const ran =
         built.status === 0
-          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], { cwd: root, encoding: "utf8" })
+          ? // A host that ignored O_NONBLOCK would block on the FIFO's open: fail, do not hang the shard.
+            spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], {
+              cwd: root,
+              encoding: "utf8",
+              timeout: 60000,
+            })
           : built
       const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
       check(

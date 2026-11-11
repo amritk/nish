@@ -1744,8 +1744,8 @@ negative errno. **A short read is allowed** before the end: loop until `0`, or
 until the size planned for is read. `len` of `0` answers `0`. A `pos` below
 `0`, or a `pos + len` past 2^63 − 1, is `-22` before the kernel is asked. The
 window is [checked](#bounds) as `netRead`'s is, and `buf` is written, so a
-`readonly u8[]` or another element type is refused as `netRead`'s is
-(NL2402).
+`readonly u8[]` is refused (`` Cannot `fileReadAt` through readonly u8[] ``)
+and another element type is NL2402, as `netRead`'s are.
 
 - *Tests:* `file_read_at`, `file_read_at_eof`, `file_read_at_pos`,
   `file_read_at_bounds`, `file_size_large`, `mem_file_stream_flat`;

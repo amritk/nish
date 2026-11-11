@@ -949,7 +949,8 @@ declare function fileOpen(path: string): i32;
  * @param off where in `buf` the first byte lands.
  * @param len the most bytes to read.
  * @param pos the file offset to read from, an `i64`.
- * @returns the bytes read, `0` at end of file, or a negative errno: `-22`
+ * @returns the bytes read, `0` at end of file (and for a `len` of `0`, even on
+ *   a closed or negative descriptor), or a negative errno: `-22`
  *   EINVAL for a negative `pos` or one where `pos + len` overflows, `-9` EBADF
  *   for a closed or negative descriptor, `-21` EISDIR, `-29` ESPIPE; anything
  *   else is `-5` EIO.
@@ -2404,7 +2405,8 @@ declare module "nish:fs" {
    * @param off Where in `buf` the first byte lands.
    * @param len The most bytes to read.
    * @param pos The file offset, an `i64`.
-   * @returns The bytes read, `0` at end of file, or a negative errno: `-22`
+   * @returns The bytes read, `0` at end of file (and for a `len` of `0`, even
+   *   on a closed or negative descriptor), or a negative errno: `-22`
    *   for a negative or overflowing `pos`, `-9` for a closed or negative
    *   descriptor, `-21` EISDIR, `-29` ESPIPE; anything else is `-5` EIO.
    */

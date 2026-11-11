@@ -198,9 +198,9 @@ function fileReadAt(fd, buf, off, len, pos) {
   if (pos < 0n || BigInt(len) > 0x7fffffffffffffffn - pos) return -22;
   if (len === 0) return 0;
   if (fd < 0) return EBADF;
-  if (fileScratch.length < len) fileScratch = Buffer.alloc(len);
   let n;
   try {
+    if (fileScratch.length < len) fileScratch = Buffer.alloc(len);
     n = fs.readSync(fd, fileScratch, 0, len, pos);
   } catch (e) {
     return fileErr(e);
