@@ -1,11 +1,11 @@
 ---
 name: HTTP/1 plaintext codec — cut the explicit TFB entry's instructions per request
-overview: Make the explicit TechEmpower entry (bench/techempower/main.ts + server.ts on Http1Server) faster on /plaintext by cutting the HTTP/1 codec's user-space instructions per request — the request parser (53% of 5,419 Ir) and the response-head writer (28%) — so its median at 256 and 1,024 connections reaches go-fasthttp's on the same machine, with the gap to uWS reported with its band. Every byte the server answers, its limits and its error answers stay as they are; the parser change is proven by a differential test against the frozen old parser.
+overview: Make the explicit TechEmpower entry (bench/techempower/main.ts + server.ts on Http1Server) faster on /plaintext by cutting the HTTP/1 codec's user-space instructions per request — the request parser (53% of 5,419 Ir) and the response-head writer (28%) — so its median at 256 and 1,024 connections reaches go-fasthttp's on the same machine, with the gap to uWS reported with its band. Every byte the server answers, its limits and its error answers stay as they are; the parser change is proven by a differential test against the frozen old parser. The gains must hold for real traffic, not only for TFB's request: every stage also measures bench/http1-request (browser, API, short, split and pipelined heads, JSON bodies of 1k–40k) and a non-pipelined wrk run with a browser-shaped head, and no code path is keyed on the benchmark's route, header set or request bytes.
 stages:
   - id: baseline
     title: "docs(runtime): profile the explicit TFB entry against uWS and go-fasthttp on plaintext and json"
     goal: docs/BENCHMARKS.md records, on main after #1407's fix-serve, the explicit entry's Ir per request and top user-space frames on /plaintext and /json (profile.sh), and run.sh medians with the entry vs entry-copy band for the explicit entry, the async entry, uWS and go-fasthttp on /plaintext at 256 and 1,024 connections and /json — the baseline every fix stage and the regate compare against.
-    verification: npm run lint && node docs/check-links.mjs && bash -n bench/techempower/profile.sh && bash bench/techempower/profile.sh --only plaintext && bash bench/techempower/run.sh (plaintext and json rows, entry, async, uws, go-fasthttp)
+    verification: npm run lint && node docs/check-links.mjs && bash -n bench/techempower/profile.sh && bash bench/techempower/profile.sh --only plaintext && bash bench/techempower/run.sh (plaintext and json rows, entry, async, uws, go-fasthttp) && node bench/http1-request/run.mjs --validate && node bench/http1-request/run.mjs --instructions && node bench/http1-parse/run.mjs
     status: pending
     todos:
       - id: baseline-tools
@@ -17,13 +17,16 @@ stages:
       - id: baseline-run
         content: Run run.sh in the foreground, interleaved, entry vs entry-copy band, on /plaintext at 256 and 1,024 connections and /json at the concurrencies run.sh uses, for the explicit entry, the async entry, uws and go-fasthttp; record medians, the band and RSS
         status: pending
+      - id: baseline-real
+        content: Take the real-world baseline on the same machine — `node bench/http1-request/run.mjs` (time, 11+ rounds) and `--instructions` (Ir per case), `node bench/http1-parse/run.mjs`, and a non-pipelined wrk run on the explicit entry's /plaintext and /json at c=256 with a browser-shaped head (User-Agent, Accept, Accept-Language, Accept-Encoding, a ~200-byte Cookie, ~750 bytes in all, sent with wrk -H). Add to bench/http1-request a `varied` case whose responses alternate status, fields and body length every request, so a head-reuse miss is measured, and pin its checksum
+        status: pending
       - id: baseline-publish
-        content: Add a "HTTP/1 codec baseline" section to docs/BENCHMARKS.md with the tables and exact commands, and the ranked per-frame targets for the codec and head stages; a harness bug found in run.sh or profile.sh is fixed here and said so in the PR (a missing twin or a profile.sh change goes in the README too)
+        content: Add a "HTTP/1 codec baseline" section to docs/BENCHMARKS.md with the tables and exact commands, the real-world table (http1-request ns and Ir per case, http1-parse, the browser-head wrk runs), and the ranked per-frame targets for the codec and head stages; a harness bug found in run.sh or profile.sh is fixed here and said so in the PR (a missing twin or a profile.sh change goes in the README too)
         status: pending
   - id: codec
     title: "perf(net): parse an HTTP/1 request head a vector at a time and write the response head in bulk"
     goal: profile.sh shows the explicit entry's parse frames (http1Next, http1TakeLine and their helpers) on /plaintext cut by at least half of the baseline's ~2,850 Ir per request, and the writer's byte loops replaced with bulk copies, with the new parser agreeing with the frozen old one on every input the differential test feeds it.
-    verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js net_http1 && node tests/run.js net_http1_parse_diff && node tests/run.js std_http1 && node tests/run.js net_serve && node tests/run.js tfb_entry && node tests/run.js tfb_async_entry && node tests/run.js fuzz && node tests/run.js simd && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && bash scripts/fetch-seed.sh --force && NISH_BOOTSTRAP=build/seed/bin/nish node tests/nish-cmp.js && bash bench/techempower/profile.sh --only plaintext (before on main, after on the branch) && bash bench/techempower/run.sh (plaintext and json rows)
+    verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js net_http1 && node tests/run.js net_http1_parse_diff && node tests/run.js std_http1 && node tests/run.js net_serve && node tests/run.js tfb_entry && node tests/run.js tfb_async_entry && node tests/run.js fuzz && node tests/run.js simd && node bench/http1-request/run.mjs --validate && node bench/http1-request/run.mjs --instructions --base <main> && node bench/http1-parse/run.mjs && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && bash scripts/fetch-seed.sh --force && NISH_BOOTSTRAP=build/seed/bin/nish node tests/nish-cmp.js && bash bench/techempower/profile.sh --only plaintext (before on main, after on the branch) && bash bench/techempower/run.sh (plaintext and json rows)
     status: pending
     todos:
       - id: codec-freeze
@@ -41,13 +44,16 @@ stages:
       - id: codec-security
         content: Update docs/security/http1-codec.md — what changed in the parser's scan, why the differential is the proof, any finding with a before/after test or recorded open
         status: pending
+      - id: codec-real
+        content: The scan's gain must come from a general mechanism, not TFB's shape — no branch on the target, a known header set or request length; heads with long Cookie and Authorization values, many fields, a split read and pipelining go through the same fast path. Measure `node bench/http1-request/run.mjs --instructions --base <main>` and the timed run, and `bench/http1-parse/run.mjs`: the browser and api cases must improve beyond their band and no case may get worse beyond it
+        status: pending
       - id: codec-measure
-        content: Put before/after Ir per request (total and parse/write frames) and run.sh medians with the band for /plaintext and /json in the PR body and a Measured trailer; regenerate tests/self/goldens/checked and docs/reference, and add DECLARED entries to tests/nish-cmp.js if any corpus program's IR moves
+        content: Put before/after Ir per request (total and parse/write frames), the http1-request and http1-parse tables, the browser-head wrk run, and run.sh medians with the band for /plaintext and /json in the PR body and a Measured trailer; regenerate tests/self/goldens/checked and docs/reference, and add DECLARED entries to tests/nish-cmp.js if any corpus program's IR moves
         status: pending
   - id: head
     title: "perf(net): build a repeated HTTP/1 response head once per Date tick"
     goal: profile.sh shows the explicit entry's response-head frames on /plaintext cut by at least two thirds of the baseline's ~1,500 Ir per request, because Http1Server reuses a response head that differs from the last one only in Date, rebuilt when HttpDate ticks (once a second), with every byte on the wire unchanged and every header TFB requires present.
-    verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js net_http1_server && node tests/run.js net_http_date && node tests/run.js tfb_entry && node tests/run.js tfb_async_entry && node tests/run.js net_serve && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && bash scripts/fetch-seed.sh --force && NISH_BOOTSTRAP=build/seed/bin/nish node tests/nish-cmp.js && bash bench/techempower/profile.sh --only plaintext (before on main, after on the branch) && bash bench/techempower/run.sh (plaintext and json rows)
+    verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js net_http1_server && node tests/run.js net_http_date && node tests/run.js tfb_entry && node tests/run.js tfb_async_entry && node tests/run.js net_serve && node bench/http1-request/run.mjs --validate && node bench/http1-request/run.mjs --instructions --base <main> && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && bash scripts/fetch-seed.sh --force && NISH_BOOTSTRAP=build/seed/bin/nish node tests/nish-cmp.js && bash bench/techempower/profile.sh --only plaintext (before on main, after on the branch) && bash bench/techempower/run.sh (plaintext and json rows)
     status: pending
     todos:
       - id: head-design
@@ -62,13 +68,16 @@ stages:
       - id: head-security
         content: Record in docs/security/http1-codec.md (it scopes http1-server.ts) that a reused head cannot carry one response's fields into another's, with the test that shows it — that file is codec's, so this entry is added after rebasing on codec's merge; until then, carry the text in the PR body
         status: pending
+      - id: head-real
+        content: Reuse must be generic — any status, fields and body length a handler repeats, not TFB's plaintext response — and a miss must cost next to nothing. Measure `node bench/http1-request/run.mjs --instructions --base <main>` and the timed run: the json* and short cases (repeated heads) must improve beyond their band, and `varied` (every request a miss) and browser/api may not get worse beyond it; also the browser-head wrk run on /plaintext and /json
+        status: pending
       - id: head-measure
-        content: Put before/after Ir per request (total and head-write frames) and run.sh medians with the band for /plaintext and /json in the PR body and a Measured trailer; regenerate tests/self/goldens/checked and docs/reference, and add DECLARED entries to tests/nish-cmp.js if any corpus program's IR moves
+        content: Put before/after Ir per request (total and head-write frames), the http1-request table, the browser-head wrk run, and run.sh medians with the band for /plaintext and /json in the PR body and a Measured trailer; regenerate tests/self/goldens/checked and docs/reference, and add DECLARED entries to tests/nish-cmp.js if any corpus program's IR moves
         status: pending
   - id: regate
     title: "docs(runtime): re-measure the explicit TFB entry against uWS and go-fasthttp after the codec work"
     goal: On main with codec and head merged, profile.sh and run.sh re-measure /plaintext and /json against the baseline and the twins, docs/BENCHMARKS.md and WP49 §6 item 3 carry the figures, and the acceptance criteria are answered with numbers, met or not.
-    verification: npm run lint && node docs/check-links.mjs && bash bench/techempower/profile.sh --only plaintext && bash bench/techempower/run.sh (plaintext and json rows, entry, async, uws, go-fasthttp)
+    verification: npm run lint && node docs/check-links.mjs && bash bench/techempower/profile.sh --only plaintext && bash bench/techempower/run.sh (plaintext and json rows, entry, async, uws, go-fasthttp) && node bench/http1-request/run.mjs --instructions --base <baseline SHA> && node bench/http1-parse/run.mjs
     status: pending
     todos:
       - id: regate-profile
@@ -76,6 +85,9 @@ stages:
         status: pending
       - id: regate-run
         content: Run run.sh in the foreground, interleaved, on /plaintext at 256 and 1,024 connections and /json, explicit entry, async entry, uws and go-fasthttp, with the entry vs entry-copy band and RSS
+        status: pending
+      - id: regate-real
+        content: Re-run the real-world set on main with codec and head merged — bench/http1-request (time and --instructions, --base at the baseline stage's SHA), bench/http1-parse, and the browser-head non-pipelined wrk runs — and put it beside the baseline's table, saying which real-world cases gained, by how much, and any that did not
         status: pending
       - id: regate-publish
         content: Add the re-measured section to docs/BENCHMARKS.md (with the baseline beside it), rewrite docs/wp49-async-server.md §6 item 3 (the plaintext gap to uWS) with the new standing, and put a Measured trailer in the commit; state plainly any acceptance figure that is not met rather than widening a band
@@ -116,7 +128,7 @@ bytes one at a time, although `http1TakeLine` already has a `u8x16` path.
 
 ### baseline
 
-**Owns:** `docs/BENCHMARKS.md` (a new section), `bench/techempower/README.md`, `bench/http-twins/README.md`, `bench/techempower/run.sh` and `bench/techempower/profile.sh` (harness bugs only)
+**Owns:** `docs/BENCHMARKS.md` (a new section), `bench/techempower/README.md`, `bench/http-twins/README.md`, `bench/techempower/run.sh` and `bench/techempower/profile.sh` (harness bugs only), `bench/http1-request/**` (the `varied` case)
 
 Measurement only, no source change. Benchmarks run in the foreground (an idle
 container is reclaimed with its background run). `docs/BENCHMARKS.md` is also
@@ -146,6 +158,22 @@ Candidate (b). TFB's rule check goes in the PR body.
 
 Depends on: codec and head (start and merge), and #1407's regate (merge —
 both edit BENCHMARKS.md and WP49 §6).
+
+## Real traffic, not just the benchmark
+
+The owner's rule: the gains must hold for real-world use. TFB's request is
+~170 bytes with a fixed header set, pipelined 16 deep; real clients send
+500–800-byte heads (Cookie, Authorization, User-Agent, Accept-*), mostly one
+request per read, and handlers answer with varying fields and lengths. So:
+
+- **No benchmark-shaped fast path.** No branch on `/plaintext`, a known header
+  set, a request length or the entry's response; a reviewer treats one as
+  blocking.
+- **The real-world gauges are measured in every stage**, before and after:
+  `bench/http1-request` (browser, api, short, pipelined, split, json1k–40k and
+  the new `varied` miss case; ns and Ir), `bench/http1-parse`, and a
+  non-pipelined wrk run with a ~750-byte browser head. A fix that wins TFB
+  but loses a real-world case outside its band is not done.
 
 ## Correctness and security
 
