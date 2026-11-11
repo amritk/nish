@@ -544,6 +544,9 @@ const poolPipeline = (why, filesByProgram) =>
 const MSS_UNSET = "explicitly set enc.mss wins over the socket MSS"
 const mssUnset = (why, moved) =>
   moved.map((program) => ({ program, file: "http-compress.ll", changelog: MSS_UNSET, why }))
+/** The changelog line of the stage that adds `spawnPipedWithin`. */
+const SPAWN_PIPED_WITHIN = "spawnPipedWithin, a captured run with a deadline"
+
 const DECLARED = [
   // The hygiene rules found a dead local in std/compress/deflate.ts.
   {
@@ -1738,6 +1741,24 @@ const DECLARED = [
     file: "exit",
     changelog: PIPELINED_WRITE,
     why: "the program calls HttpHandler.deferSends, which the 0.38.0 seed does not have, so only the candidate compiles it (WP49 stage 6, part 3)",
+  },
+  {
+    program: "tests/cases/caps_process_spawn_piped_within.ts",
+    file: "exit",
+    changelog: SPAWN_PIPED_WITHIN,
+    why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
+  },
+  {
+    program: "tests/cases/io_spawn_piped_within.ts",
+    file: "exit",
+    changelog: SPAWN_PIPED_WITHIN,
+    why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
+  },
+  {
+    program: "docs/cookbook/builtin-spawn-piped-within.ts",
+    file: "exit",
+    changelog: SPAWN_PIPED_WITHIN,
+    why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1387)',
   },
 ]
 

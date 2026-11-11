@@ -320,6 +320,18 @@ const PIPED_CAP = 16 * 1024 * 1024;
  * A child that exits without reading its stdin is not an error on either side.
  */
 function spawnPiped(argv, input) {
+  return spawnPipedWithin(argv, input, -1);
+}
+
+/**
+ * `spawnPipedWithin(argv, stdin, timeoutMs)`'s run: `spawnPiped`'s, with
+ * Node's `timeout` set when `timeoutMs` is not negative. Node kills the child
+ * with `SIGKILL` when it passes and reports `ETIMEDOUT`, which is -3 here as
+ * in the runtime, with the bytes Node read before the kill kept. Node reads a
+ * `timeout` of 0 as none, so a deadline of zero is passed as 1 ms: already
+ * past for any child that has to start a program.
+ */
+function spawnPipedWithin(argv, input, timeoutMs) {
   if (argv.length === 0) return [-1, [], []];
   let r;
   // Node throws, rather than reporting, for an empty command or a NUL in any
@@ -329,6 +341,7 @@ function spawnPiped(argv, input) {
       input: Uint8Array.from(input),
       maxBuffer: PIPED_CAP,
       killSignal: "SIGKILL",
+      ...(timeoutMs >= 0 ? { timeout: Math.max(timeoutMs, 1) } : {}),
     });
   } catch {
     return [-1, [], []];
@@ -338,6 +351,7 @@ function spawnPiped(argv, input) {
   const err = bytes(r.stderr);
   // `EPIPE` is the child closing its stdin unread, which Node reports with
   // the status it still waited for; the runtime ignores it the same way.
+  if (r.error !== undefined && r.error.code === "ETIMEDOUT") return [-3, out, err];
   if (r.error !== undefined && r.error.code !== "EPIPE") return [r.error.code === "ENOBUFS" ? -2 : -1, out, err];
   if (r.signal !== null && r.signal !== undefined) return [128 + (os.constants.signals[r.signal] ?? 0), out, err];
   return [r.status === null ? -1 : r.status, out, err];
@@ -482,6 +496,7 @@ const CALLS = {
   spawnSync,
   spawnSyncTo,
   spawnPiped,
+  spawnPipedWithin,
   kill,
   availableParallelism,
   totalMemory,

@@ -176,8 +176,17 @@ const RUNTIME_TEXT_UNIT_BUDGET = 1787
  * case, docs/security/runtime.md RT-40) and `nish_spawn_start` 365 to 380 for the base its
  * `dup2` actions count from. It is `spawn` with descriptors handed on, so it belongs beside
  * `nish_spawn_start`, which it reuses. The budget is the next 256-byte boundary, leaving 138.
+ *
+ * **Raised to 5,376 for `spawnPipedWithin`**, measured **5,225 bytes** on 2026-11-11 with
+ * clang 18.1.3 on linux-x64, from 4,858 on `main`: under `-ffunction-sections`, the
+ * capture loop moved into `nish_spawn_piped_within` at 1,444 (1,089 as
+ * `nish_spawn_piped`), the deadline read on the monotonic clock, the `poll` wait it
+ * bounds, the SIGKILL and the `WNOHANG` reap with its doubling nap that keep the final
+ * wait inside the deadline (docs/security/runtime.md RT-49), and `nish_spawn_piped` is a
+ * 9-byte call with no deadline. One loop serves both, so `spawnPiped` costs nothing
+ * twice. The budget is the next 256-byte boundary, leaving 151.
  */
-const RUNTIME_OS_TEXT_BUDGET = 4864
+const RUNTIME_OS_TEXT_BUDGET = 5376
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.

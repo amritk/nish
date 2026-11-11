@@ -3950,7 +3950,7 @@ class FactCollector {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet" || name === "store") {
       this.facts.effect = EFFECT_WRITE
-    } else if (name === "spawnPiped") {
+    } else if (name === "spawnPiped" || name === "spawnPipedWithin") {
       // The runtime appends to `stdout` and `stderr` as `push` does, moving
       // their `len` and perhaps their `data` (`isResizeCall`).
       this.facts.effect = EFFECT_WRITE
@@ -6822,23 +6822,22 @@ export const foreignBufferCountProven = (
 }
 
 /**
- * `a.push(v)`, `a.pop()` or `spawnPiped(...)`: the calls that move an array's
- * `len`, and so the ones a hoisted header has to be safe from. Every other
- * array method reads (`indexOf`, `join`), builds something new, or writes
- * elements and leaves the header alone (`set`, `fill`); `spawnPiped` appends
- * to its `stdout` and `stderr` in the runtime.
+ * `a.push(v)`, `a.pop()`, `spawnPiped(...)` or `spawnPipedWithin(...)`: the
+ * calls that move an array's `len`, and so the ones a hoisted header has to be
+ * safe from. Every other array method reads (`indexOf`, `join`), builds
+ * something new, or writes elements and leaves the header alone (`set`,
+ * `fill`); the two spawns append to their `stdout` and `stderr` in the runtime.
  */
 export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const method = arrayMethodName(program, table, node)
   if (method === "push" || method === "pop") {
     return true
   }
-  return (
-    node.kind === N_CALL &&
-    node.children[0].kind === N_IDENT &&
-    program.nodeCallees[node.id] === null &&
-    builtinNameOf(program, node) === "spawnPiped"
-  )
+  if (node.kind !== N_CALL || node.children[0].kind !== N_IDENT || program.nodeCallees[node.id] !== null) {
+    return false
+  }
+  const name = builtinNameOf(program, node)
+  return name === "spawnPiped" || name === "spawnPipedWithin"
 }
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */

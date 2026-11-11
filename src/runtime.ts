@@ -706,6 +706,16 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // The same run with a deadline in milliseconds, a negative one none: the
+    // same answers for the same reasons, and `nish_spawn_piped` is this with -1.
+    this.add(
+      new RuntimeFunction(
+        "nish_spawn_piped_within",
+        `declare noundef i32 @nish_spawn_piped_within(%struct.nish_array* noundef nonnull align 8, ${NET_BUFFER} readonly, ${NET_BUFFER}, ${NET_BUFFER}, i32 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // `nish_spawn_child` with descriptors handed to the child. The vector is
     // captured as there; the descriptor array is only read and kept by nothing.
     this.add(
