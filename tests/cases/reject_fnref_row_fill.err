@@ -1,0 +1,1 @@
+`fill` copies bytes, so it needs an array whose elements are numbers

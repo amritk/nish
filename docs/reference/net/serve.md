@@ -109,7 +109,7 @@ handler makes on the way — live in the task's region and go when it ends.
 The task copies the request's head and
 body out of the server's slot into its own memory before `handle` runs,
 and when `handle` answers it writes the status, the content type and the
-body back into the slot's fixed buffers, element by element, and wakes the
+body back into the slot's fixed buffers, in bulk, and wakes the
 loop. The loop then sends the answer and frees the slot. Nothing the task
 allocated outlives it, and the loop's arena does not grow per request once
 its slots are warm: `tests/link/net_serve_pipelined_flat` pins

@@ -77,6 +77,7 @@ import {
   isSortModule,
   SORT_LOCAL,
 } from "./std-modules"
+import { zeroFilledReferenceMessage } from "./fnrefs"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -935,6 +936,11 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
       expr,
       `\`new Array<${spelled}>(n)\` would zero-fill with 0, which is not the member \`${spelled}\`; build it with \`[]\` and \`push\` instead`
     )
+  }
+  // WP51 §2.1: a function reference is a tag in [1, |F(S)|], so zero is no
+  // function's, and a call through a zero-filled slot would reach none.
+  if (ctx.table.isFnRef(elem)) {
+    return ctx.errorType(expr, zeroFilledReferenceMessage(ctx.table.typeName(elem)))
   }
   if (args.children.length !== 1) {
     return ctx.errorType(

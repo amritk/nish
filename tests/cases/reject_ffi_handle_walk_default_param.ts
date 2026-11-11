@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d functions: a default value opens a handle outside a `using`.
+// WP53 H1.1, §4d functions: a default value opens a handle outside a `using`.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

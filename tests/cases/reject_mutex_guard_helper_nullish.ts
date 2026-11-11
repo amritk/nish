@@ -1,4 +1,4 @@
-// R3, a guard handed to a helper: the helper is reached through a `??` alias of two functions: a function is never a value, so the call names no function the guard's rule could follow.
+// R3, a guard handed to a helper: the helper is reached through a `??` of two functions, a function reference, and the guard's rule follows only a function named at the call, so neither may be named as a value.
 import { Channel, Mutex, MutexGuard, scope } from "nish/threads";
 
 class Counter {

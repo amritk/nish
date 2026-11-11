@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 13: a handle class may not `implements`, so it has no other
+// WP53 H1.1, Row 13: a handle class may not `implements`, so it has no other
 // type to widen to.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

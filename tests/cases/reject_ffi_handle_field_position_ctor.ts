@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 31: the pointer is read only in a method; in the constructor
+// WP53 H1.1, Row 31: the pointer is read only in a method; in the constructor
 // the object is half built.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

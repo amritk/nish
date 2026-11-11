@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 16b: the pointer may be bound only to a `const`.
+// WP53 H1.1, Row 16b: the pointer may be bound only to a `const`.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

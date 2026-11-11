@@ -1,4 +1,4 @@
-// WP40 H1.3, §6 row 15: a handle's method cannot keep `this` in another
+// WP53 H1.3, §6 row 15: a handle's method cannot keep `this` in another
 // object's field (`h.l = this`).
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

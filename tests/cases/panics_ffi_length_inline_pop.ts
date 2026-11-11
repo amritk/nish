@@ -1,4 +1,4 @@
-// WP40 B1.2: a `pop` written inline in a later argument shrinks the buffer
+// WP53 B1.2: a `pop` written inline in a later argument shrinks the buffer
 // after its length was read for the count; the check reads the length again
 // after every argument, compares 4 against 3, and fails.
 declare function pwrite(fd: i32, buf: readonly u8[], n: u64, off: i64): i64;

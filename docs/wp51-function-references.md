@@ -916,7 +916,7 @@ reference never crosses the boundary in either direction:
   mode added later is refused until `src/visibility.ts` says it is closed.
 
 A real C callback — a code pointer C can call — is
-[wp27-ffi.md](wp27-ffi.md)'s and [wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md)'s
+[wp27-ffi.md](wp27-ffi.md)'s and [wp53-ffi-buffers-handles.md](wp53-ffi-buffers-handles.md)'s
 question, and this note does not move it: it would need an exported
 trampoline per function, which is a different construct.
 
@@ -940,6 +940,23 @@ trampoline per function, which is a different construct.
   `$ref.S.p`; whether gdb and lldb step through an artificial line-0 frame
   into the member, or stop in it, was not tried, and is checked in stage 1
   with the `-g` test of §9.
+- **What stage 1 found** (`tests/run.js`, section `fnref`, "fnref -g", under
+  `--profile debug`, which keeps the symbols the speed profile strips; gdb
+  15 and lldb 18). gdb prints `h = twice`, `p h == twice` is `1`, and
+  `ptype h` is `enum (i32) => i32 {inc = 1, twice}`. The first `step` from
+  the call stops in `$ref.0.fr1.i32.i32.0 ($t=<optimized out>)` — gdb names
+  a line beside it, its display of a line-0 location, though the line table
+  gives the dispatcher none — and the second enters `twice`; `skip -rfu
+  '^\$ref\.'` makes it one step. A backtrace from inside the member shows no
+  dispatcher frame, because the dispatcher tail-calls its member, then the
+  caller at the call line. lldb prints `((i32) => i32) h = twice`, but
+  `expr h == twice` is refused ("reference to 'twice' is ambiguous": the
+  enumerator and the function share the name), and its `step` from the call
+  line steps out of the line-0 dispatcher and over the tail call to the next
+  line: in lldb, set a breakpoint in the member instead. The debug type
+  needed `src/debug.ts` to describe a reference at all (before, `-g` on any
+  reference local stopped with "no DWARF basic type"); the enumeration's
+  names come from `TypeTable.fnRefMembers`, filled where the tags are dealt.
 - **The optimised build** inlines the dispatcher into its callers (it is a few
   instructions); each inlined copy's locations then carry `inlinedAt` the
   call site, so in `--profile speed` the debugger attributes the switch to
@@ -987,15 +1004,15 @@ promises, module storage, classes or a parameter's own storage, not functions
 
 | Where | What it leans on | Verdict | What the compiler or the text would need |
 | --- | --- | --- | --- |
-| `src/codes.ts:274` (NL2336, `tests/wordings/nl2336_fnarg_arrow_returned`), `docs/LANGUAGE.md:3392`, `src/generics.ts:2398` | an arrow outside a function-typed argument is refused: "a function is never a value" | **broken** | the reason changes: a *capturing* arrow is refused; a capture-free one names a top-level function (stage 3 lifts it) |
-| `src/codes.ts:480` (NL2334, `tests/wordings/nl2334_fnarg_parameter_as_value`), `src/expressions.ts:984`–`993`, `docs/LANGUAGE.md:3337` | a function parameter can only be called or passed on | **broken** | a parameter holding a reference (the `$fn.ref.<set>` instantiation) may be stored; a parameter bound to a named callee stays as today |
+| `src/codes.ts:274` (NL2336, `tests/wordings/nl2336_fnarg_arrow_returned`), `docs/LANGUAGE.md:3392`, `src/generics.ts:2398` | an arrow outside a function-typed argument is refused: "a function is never a value" | **rewritten in stage 1** | NL2336 now reads `an arrow in value position is not yet a function reference: declare it as a top-level function and name it` (`reject_fnarg_arrow_value`), and a capturing arrow is NL2731, `` this arrow captures `k`: a function reference names a top-level function and carries no environment `` (`reject_arrow_as_value`, `reject_fnref_capture`); `docs/LANGUAGE.md` → "Function parameters" and "Function references". Stage 3 still lifts a capture-free arrow |
+| `src/codes.ts:480` (NL2334, `tests/wordings/nl2334_fnarg_parameter_as_value`), `src/expressions.ts:984`–`993`, `docs/LANGUAGE.md:3337` | a function parameter can only be called or passed on | **rewritten in stage 1** | a parameter typed through an alias is an ordinary reference parameter, of a function, a method or a constructor, and may be stored and returned (`fnref_stores`); a parameter whose function type is written inline stays a compile-time function parameter, and NL2334 names it: `` `f` is a function parameter and can only be called or passed on as a function argument: it names the callee each call is compiled for, not a value, so it cannot be stored, returned, compared or put in an array ``. `docs/LANGUAGE.md` → "Function parameters"; `docs/guide/language/functions.md`. No `$fn.ref.<set>` instantiation was needed for this |
 | `src/codes.ts:150`–`151` (NL2587, `tests/wordings/nl2587_fnarg_capture_function_param`), `docs/LANGUAGE.md:3358`–`3360` (`reject_fnarg_capture_function_param`) | an arrow argument may not name a function parameter of the function it is written in, which "is bound at instantiation and is no value" | intact | a function-typed parameter is still bound at instantiation, to a named callee or (stage 2) to a set's tag in `$fn.ref.<set>`, and the template is checked once from its source, so an arrow that names it is refused in every instantiation, `$fn.ref.<set>` included: one body is accepted or refused the same way whatever its argument. An arrow may capture a reference-typed *local* or field read: that is an `i32` tag, captured by copy like any `const` |
-| `src/generics.ts:2008`–`2010` | an argument for a function-typed parameter must be a name or an arrow: "a function is never a value computed at run time" | **broken** | a reference-typed expression is admitted and selects the `$fn.ref.<set>` instantiation (stage 2) |
-| `src/codes.ts:494` (NL2337, `tests/wordings/nl2337_fnarg_function_type_element`), `docs/LANGUAGE.md:3409`, `src/annotations.ts:224` | a function type annotates only a parameter | **broken** | the annotation resolver gives a function type in a field, local, element or return the `i32` tag representation |
+| `src/generics.ts:2008`–`2010` (now 2048) | an argument for a function-typed parameter must be a name or an arrow: "a function is never a value computed at run time" | **broken** in stage 2 | stage 1 keeps the rule and refuses a reference handed to an inline function parameter with NL2734 (`tests/wordings/nl2734_fnref_to_function_parameter`); a reference-typed expression is admitted and selects the `$fn.ref.<set>` instantiation in stage 2. Typing the parameter through an alias already takes a reference in stage 1 |
+| `src/codes.ts:494` (NL2337, `tests/wordings/nl2337_fnarg_function_type_element`), `docs/LANGUAGE.md:3409`, `src/annotations.ts:224` | a function type annotates only a parameter | **rewritten in stage 1** | NL2337 is retired (`tests/wordings/unreachable.txt`): a function type in a field, local, element or return is a reference type, an `i32` tag (`fnref_array`, `fnref_field`). An inline function type on a method or constructor parameter, or on a function type's own parameter, is refused: `` `f` cannot have a function type here: a function type may only annotate a parameter of a top-level function, which is monomorphised for each function it is given, and this is a parameter of a method or a constructor `` (`reject_fnarg_method`, `reject_fnarg_nested`) |
 | `src/nodes.ts:129` | an `N_ARROW` is never a value | intact until stage 3 | stage 3's lifted arrow is a reference, not an `N_ARROW` value |
 | `docs/LANGUAGE.md:12476`, `src/validator.ts:146` | `Function` as a type name is forbidden | intact | `Function` stays refused (§2.2) |
 | `docs/LANGUAGE.md:1708`–`1712` (`reject_param_rest_function_value`) | a function with a rest parameter is never passed as a function value | intact, extended | the rule covers a reference too, and widens to default and optional parameters (§2.2) |
-| `docs/ARCHITECTURE.md:393` (the call-site ranges row), `src/ranges.ts:355`–`360` (`takesEntryFacts`), 1019 | **the entry-facts soundness premise**: a function that is not `hostVisible` is entered with the join of its call sites' facts, which is sound because "a Nish function is never a value, so no other caller can exist" | **broken** as written; sound under either of §2.4's options | a member of a set is called from its dispatcher, a caller with no syntax of its own. Sound if the dispatcher is a checked function whose arm calls are in `program.nodeCallees`, which the ranges read at 1019, before the ranges run: the dispatcher is then one more caller, its sites joined like any other's. Otherwise `takesEntryFacts` must refuse every set member. The premise is reworded to "every caller of a function is a call the compiler recorded"; the same row's builtin summary ("with no function value a call reaches only what it is handed") holds while no builtin takes a reference (stage 1) |
+| `docs/ARCHITECTURE.md:393` (the call-site ranges row, now 410), `src/ranges.ts:355`–`360` (`takesEntryFacts`), 1019 | **the entry-facts soundness premise**: a function that is not `hostVisible` is entered with the join of its call sites' facts, which is sound because "a Nish function is never a value, so no other caller can exist" | **rewritten in stage 1** | the dispatcher is a checked function pushed into the module (`src/fnref-places.ts`), so its arm calls are call sites like any other and a set member is entered with their join. The row now says every other call is one the compiler recorded, a call through a reference included, and the builtin summary says "a call handed no function reference reaches only what it is handed" |
 | `src/attributes.ts:13`–`17`, 830, 4967, 5677 | the fact collector records direct callees; an unknown callee is `EFFECT_ANY` | weakened | none if §2.4's record holds: the dispatcher is an ordinary checked function, and its arm calls are direct calls recorded like any other; §4.2 is the evidence |
 | `src/attributes.ts:27`, `src/expressions.ts:4`–`10`, `src/emit.ts:24`, `src/emit-classes.ts:19` | "a table needs function values; D2 took a central `switch`" | weakened | a table becomes possible after the freeze (§5.4); the `switch` stays valid |
 | `src/emit-async.ts:27` | async state machines dispatch by `switch` | intact | — |
@@ -1010,7 +1027,7 @@ promises, module storage, classes or a parameter's own storage, not functions
 | `docs/LANGUAGE.md:8766`, `src/builtins.ts:1060` | a builtin or array method takes no function value | intact | no builtin takes a reference in stage 1 |
 | `src/arrays.ts:1068` | a compiler helper is "a class because Nish-0 has no closures (as `PerfWalk` is)": the compiler's own language, not the user's | intact | closures stay refused; the freeze keeps `src/` off references for a release (§5.4) |
 | `docs/LANGUAGE.md:9537`, `docs/IR_COOKBOOK.md:942`, 1236 | `sort`'s comparator is called directly, no pointer | weakened | a reference comparator gives one `switch` instantiation, inlined like §3's |
-| `docs/LANGUAGE.md:6267`, `docs/wp27-ffi.md:510`, `docs/wp40-ffi-buffers-handles.md:1270` (and 620, 679, 835, 869, 1389) | no C callbacks (`reject_ffi_callback`) | intact, extended | `reject_fnref_ffi` (§5.2) |
+| `docs/LANGUAGE.md:6267`, `docs/wp27-ffi.md:510`, `docs/wp53-ffi-buffers-handles.md:1270` (and 620, 679, 835, 869, 1389) | no C callbacks (`reject_ffi_callback`) | intact, extended | `reject_fnref_ffi` (§5.2) |
 | `docs/security/async.md:130` | a dispatch is a `switch` over known handlers | intact | a tag can only be made by naming a member; the `default` arm cannot reach outside the set |
 
 **The language reference and the user guide**
@@ -1020,12 +1037,12 @@ promises, module storage, classes or a parameter's own storage, not functions
 | `docs/LANGUAGE.md:3291`–`3292` | "There is no function pointer, no indirect call and no function value anywhere; the parameter has no LLVM parameter at all" | weakened | true of a parameter bound to a named callee; a parameter holding a reference has an `i32` parameter, and its calls go through the dispatcher, still no function pointer |
 | `docs/LANGUAGE.md:2305`–`2314` | the `--link` closed-world rule: every call to an exported function is one the compiler sees, which `ARCHITECTURE.md`'s call-site ranges row makes sound | intact, if | it rests on that row's premise, so it holds while every dispatcher's arm calls are recorded (§2.4); §5.2 keeps references out of every host-visible signature, so no host can hand one in |
 | `docs/LANGUAGE.md:3398`–`3402` (`reject_fnarg_not_name`) | a function argument must be the name of a top-level function or an arrow; a local, a member or any other expression is refused | **broken** in stage 2 | a reference-typed local, member or element is admitted as the argument and selects the `$fn.ref.<set>` instantiation; `reject_fnarg_not_name` keeps an expression of any other type (§9) |
-| `docs/LANGUAGE.md:12606` (`reject_fnarg_store`, `reject_fnarg_return`) | the summary row: a function parameter used as a value is refused | **broken** | a reference-typed parameter may be stored and returned; the row keeps a parameter bound to a named callee |
+| `docs/LANGUAGE.md:12606` (`reject_fnarg_store`, `reject_fnarg_return`) | the summary row: a function parameter used as a value is refused | **rewritten in stage 1** | the summary row keeps the refusal for a parameter whose function type is written inline; an alias-typed parameter is a reference and is not in the row |
 | `docs/LANGUAGE.md:12609` (`reject_fnarg_arrow_value`) | an arrow anywhere but as a function argument is refused | intact until stage 3 | stage 3 admits a capture-free arrow in value position by lifting it |
-| `docs/LANGUAGE.md:12610` | a function type anywhere but on a parameter of a top-level function is refused | **broken** | the row becomes §2.1's places |
-| `docs/LANGUAGE.md:1585`–`1590` (`reject_arrow_as_value`) | "A function is not a value": `const alias = double` is an unknown identifier; a function in a field, a local or an array does not exist | **broken** | the rule becomes §2.1's; `reject_arrow_as_value` keeps only a capturing arrow |
-| `docs/AI.md:178`, 421, 584, 827 | a stored or returned callback is refused; write a `switch` | **broken** (178, 584), weakened (421, 827) | the AI rows split: a stored capture-free function is admitted, a stored closure is not |
-| `docs/guide/language/functions.md:195` | "A function is not a value in Nish: you cannot store one" | **broken** | the guide page for references replaces it (stage 1, checklist item 10) |
+| `docs/LANGUAGE.md:12610` | a function type anywhere but on a parameter of a top-level function is refused | **rewritten in stage 1** | the summary row now names only an inline function type on a method, constructor or function-type parameter, and a new row lists the reference codes NL2725–NL2739 |
+| `docs/LANGUAGE.md:1585`–`1590` (`reject_arrow_as_value`) | "A function is not a value": `const alias = double` is an unknown identifier; a function in a field, a local or an array does not exist | **rewritten in stage 1** | the bullet is "A capture-free top-level function is a value", citing `fnref_field`, `fnref_array`, `fnref_eq` and `fnref_stores`; `reject_arrow_as_value` keeps only a capturing arrow (NL2731). The rules are the new "Function references" section |
+| `docs/AI.md:178`, 421, 584, 827 | a stored or returned callback is refused; write a `switch` | **rewritten in stage 1** (178, 584), weakened (421, 827) | the table row is now "a closure stored or returned" with the NL2731 and NL2336 wordings; the "A function is not a value" bullet became "A capture-free top-level function is a value", and AI.md has a "Function references" section. 421 and 827 do not lean on it and were left |
+| `docs/guide/language/functions.md:195` | "A function is not a value in Nish: you cannot store one" | **rewritten in stage 1** | the paragraph now points to `docs/guide/language/function-references.md`, the new page (route `/function-references`) |
 | `docs/guide/language/errors.md:236`–`237`, `docs/wp16-results.md:112`, `docs/LANGUAGE.md:1276` | no `map` / `andThen` / `orElse` on a `Result`, because they would take a function | weakened | the reason now holds for capturing callbacks only; a `map(r, double)` taking a reference becomes expressible |
 | `docs/guide/using-nish/http-router.md:9`, `std/net/router.ts:15` | "a route is not a handler": a route is the index `add` answered | weakened | the index can become a reference; the dispatcher is the same code. The page and the module change only if `std/` adopts it |
 | `std/cli-flags.ts:18` | "**No function values.**" | weakened | the reason becomes "no closures"; the API changes only if `std/` adopts references |
@@ -1036,8 +1053,8 @@ promises, module storage, classes or a parameter's own storage, not functions
 
 | Where | What it leans on | Verdict | What the text would need |
 | --- | --- | --- | --- |
-| `docs/wp22-arrow-functions.md:55`–`59` | a callback site in Node is monomorphic, because each callee is its own instantiation and "there are no function values" | **broken** for a reference site | a reference site is polymorphic under Node (§5.1); the native build pays §3 instead |
-| `docs/wp22-arrow-functions.md:65`, 82–85 (rule 2) | "Function values stay forbidden"; a name bound to a function appears only in call position, so `const g = double`, `[double]` and `obj.f = double` are refused | **broken** | reworded to "closures and `Function` stay forbidden"; rule 2's three examples become admitted |
+| `docs/wp22-arrow-functions.md:55`–`59` | a callback site in Node is monomorphic, because each callee is its own instantiation and "there are no function values" | **annotated in stage 1** | a dated note after the paragraph records that WP51 made capture-free top-level functions values and that a native reference call is a `switch` of direct calls; a reference site is polymorphic under Node (§5.1) |
+| `docs/wp22-arrow-functions.md:65`, 82–85 (rule 2) | "Function values stay forbidden"; a name bound to a function appears only in call position, so `const g = double`, `[double]` and `obj.f = double` are refused | **annotated in stage 1** | the note's text is kept as the record of that decision, and each place carries a pointer to this note saying stage 1 replaced rule 2 for capture-free top-level functions |
 | `docs/wp23-language-surface.md:21`–`23`, §6 (188–192, 205) | function values are refused and why; "a function is still never a value" | weakened | the pointer this PR adds; the text is replaced by this table when stage 1 ships |
 | `docs/wp28-compatibility-mode.md:141` (row), 183, 463 (C2b) | function values are a compat-tier construct: an indirect call and a lost fixpoint; the `NL9xxx` sort warning "passes a function value" | weakened | capture-free references leave this row for strict, as C2a did (§8), and need neither the indirect call nor a lost fixpoint; closures stay in C2b |
 | `docs/wp26-stdlib.md:93`–`95` (§3a), 149 (§3f), 162 | no `test(name, callback)`; `jsonFields` shares a step, not a loop; `std/` APIs avoid callbacks | weakened | a capture-free test body or field step could be a reference once stage 2 ships |
@@ -1062,7 +1079,7 @@ promises, module storage, classes or a parameter's own storage, not functions
 | `.claude/typescript.md:79` | `src/`'s own subset: "a function is never a value" | intact | the freeze keeps `src/` off references for one release (§5.4); after it, whether `src/` adopts them is its own change, and this line moves with it |
 | `.claude/selfhost.md:137`–`140` | Nish-0 has "no … function values" | intact | Nish-0's subset is a choice, held by the freeze; the line moves only if `src/` adopts references |
 | `.claude/testing.md:290` | "A function is not a value, so there is no `test(name, () => ...)`": the test harness is straight-line calls | weakened | the reason becomes "no closures"; a `test(name, f)` over a capture-free top-level `f` is expressible from stage 2 (as `docs/wp26-stdlib.md`'s row says), and the line changes only if `std/testing.ts` adopts it |
-| `docs/AI.md:3129` (checklist item 8) | "a stored or returned callback" is on the list of things a program must not use | **broken** | item 8 splits as the AI rows above do: a stored or returned *capture-free* function is admitted from stage 1, a stored or returned closure stays on the list |
+| `docs/AI.md:3129` (checklist item 8, now item 9) | "a stored or returned callback" is on the list of things a program must not use | **rewritten in stage 1** | the item now names "a stored or returned closure"; a capture-free function is admitted |
 
 ## 7. Not measured
 
@@ -1213,10 +1230,10 @@ program, do.
    zero-filled storage of §2.1 with new codes in `src/codes.ts`; `src/emit.ts`
    writes each generated dispatcher as `$ref.S.p` and lowers a reference
    call to a call of it; `===` lowers to `icmp eq`; `-g` gets the enumeration type and the
-   artificial dispatcher (§5.3). NL2336, NL2334 and NL2337's wordings change
+   artificial dispatcher (§5.3). NL2336's and NL2334's wordings change
    (§6), and their `tests/wordings/` programs with them
-   (`nl2336_fnarg_arrow_returned`, `nl2334_fnarg_parameter_as_value`,
-   `nl2337_fnarg_function_type_element`). `fnref_place_set` is case C
+   (`nl2336_fnarg_arrow_returned`, `nl2334_fnarg_parameter_as_value`);
+   NL2337 is retired (`tests/wordings/unreachable.txt`). `fnref_place_set` is case C
    (§4.1) written with references: a field or local holding `u0..u2` read at
    the hot call, `u3` stored into another place and called there. Its golden
    pins the dispatcher over `{u0, u1, u2}` with A's facts and `P` an
@@ -1274,7 +1291,7 @@ construct" and `CLAUDE.md`'s definition of done:
 | 2. Parser and validator | no new syntax: a function type and a bare name already parse; the validator keeps `Function` refused |
 | 3. Types | a function type outside a parameter: `llvmType` `i32`, `alignOf` 4, `assignable` by signature, the annotation resolver (`src/annotations.ts:224`); `src/interop-abi.ts`'s `cType` and `tsKeyword`, `src/interop-wasm.ts`'s `wasmType` and bridging decision, and `src/interop-napi.ts`'s readers and boxers each **refuse** it with `reject_fnref_ffi`'s code rather than leave it unmapped, since a type with no N-API row silently drops the function from the addon (§5.2); `src/debug.ts` the enumeration type (§5.3) |
 | 4. Checker | pass-1 signature sets; the post-pass-2 per-place sets; the generated dispatchers and their `nodeCallees` record (§2.4); value-position names; reference calls; the §2.2 refusals and §2.1's zero-fill refusals (`new Array<S>(n)`, module storage); the `hostVisible` refusal (§5.2) |
-| 5. Diagnostics | new NL codes in `src/codes.ts` for each §2.2 wording, the zero-fill refusals, `reject_fnref_ffi` and the escape-join refusal, each with a `tests/wordings/` program; the `performance`-class warning for a set past eight members; NL2336, NL2334 and NL2337 reworded with their wordings programs |
+| 5. Diagnostics | new NL codes in `src/codes.ts` for each §2.2 wording, the zero-fill refusals, `reject_fnref_ffi` and the escape-join refusal, each with a `tests/wordings/` program; the `performance`-class warning for a set past eight members; NL2336 and NL2334 reworded with their wordings programs, NL2337 retired |
 | 6. Emitter | the generated dispatcher written as `$ref.S.p`, and the call lowering; named blocks (`sw.case.N`, `sw.default`) |
 | 7. Runtime | none: no C symbol, so no `RuntimeTable` row and no budget move |
 | 8. Attributes | none expected: the dispatcher is a checker-generated function, ordinary to the fact collector, and its facts are the join of its place's set. `fnref_escape_join` pins §4.2's A and B facts; `fnref_place_set` pins C's |

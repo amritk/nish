@@ -192,9 +192,10 @@ statements at the top level, like a script, and they run as `main`
 
 ## Passing a function to a function
 
-A function is not a value in Nish: you cannot store one in a variable, a
-field or an array, or return one. What you *can* do is give a top-level
-function a **parameter of function type**, and pass it either a named
+A top-level function can be kept in a variable, a field or an array, and
+returned, as a [function reference](function-references.md). When a function
+only needs to call the one it is given, give it a **parameter of function
+type** written out in its parameter list instead, and pass it either a named
 top-level function or an arrow written right at the call:
 
 ```ts nish:ok
@@ -223,7 +224,9 @@ a copy of `countWhere` that calls it directly, so there is no function
 pointer and nothing to allocate at run time. That decides the rules:
 
 - **The parameter can only be called, or passed on** to another function
-  parameter.
+  parameter. It is not a value, so storing, returning or comparing it is
+  `NL2334`; type the parameter through an alias (`type F = (x: i32) => i32`,
+  then `f: F`) when you need a [function reference](function-references.md).
 - **An arrow may read the `const` locals and the parameters of the function
   it is written in.** The compiler hands each one to the copy as one more
   argument, so it is still a direct call with nothing allocated. A captured

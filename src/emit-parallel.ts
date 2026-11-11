@@ -789,7 +789,7 @@ const atomicRmwOperation = (name: string): string => {
  * are filed under, is read once here; every exit of the block is dominated by
  * the declaration, so each join can name the same value. A `using a = arena()`
  * goes on the same stack, as the mark its local holds, a guard as the address
- * of its lock word, and a handle (WP40 H1.2) as the object whose pointer it
+ * of its lock word, and a handle (WP53 H1.2) as the object whose pointer it
  * closes, so that every exit closes the four kinds in the reverse of the order
  * they opened in. What it allocates is the name of a value every exit of the
  * block reads, so it is kept on purpose.
@@ -851,7 +851,7 @@ const emitDropped = (emitter: Emitter, call: string, result: string): void => {
 }
 
 /**
- * WP40 H1.2: close the pointer the handle `object` owns, exactly as its
+ * WP53 H1.2: close the pointer the handle `object` owns, exactly as its
  * `[Symbol.dispose]` does: one call of the close it names on the field, behind
  * a `null` test only when the dispose writes one (§4b shape 2) and the field
  * may be `null`. Shape 1 passes the field as it is, `null` included. The

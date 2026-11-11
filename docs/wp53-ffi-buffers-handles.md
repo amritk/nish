@@ -1,4 +1,4 @@
-# WP40: byte buffers and owned handles across `declare function`
+# WP53: byte buffers and owned handles across `declare function`
 
 **Status: decided (owner, 2026-10-19), and built.** B1.1 is built: the
 `u8[]` parameter rule, the run-and-count rule and the refusals of §8. B1.2 is

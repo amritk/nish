@@ -1,4 +1,4 @@
-// WP40 H1.2: under `--deny ffi`, a `using` of a handle class is refused at the
+// WP53 H1.2: under `--deny ffi`, a `using` of a handle class is refused at the
 // `using`'s `new`, whose block calls the close, as well as at the constructor's
 // `fopen`.
 declare function fopen(path: string, mode: string): CPtr | null

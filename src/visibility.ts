@@ -62,11 +62,23 @@ export class BuildMode {
    * keeps the declared layout in such a build, for every class.
    */
   layoutsShared: boolean
+  /**
+   * Of those, the builds that hand out every class whether or not a signature
+   * a host sees names it: a header or an N-API shim lists them all. A wasm
+   * module or a declared C function is handed only what those signatures reach.
+   */
+  everyLayoutShared: boolean
 
-  constructor(closedWorld: boolean, everySymbolPublic: boolean, layoutsShared: boolean) {
+  constructor(
+    closedWorld: boolean,
+    everySymbolPublic: boolean,
+    layoutsShared: boolean,
+    everyLayoutShared: boolean
+  ) {
     this.closedWorld = closedWorld
     this.everySymbolPublic = everySymbolPublic
     this.layoutsShared = layoutsShared
+    this.everyLayoutShared = everyLayoutShared
   }
 }
 
@@ -127,7 +139,7 @@ export const buildModeOf = (opts: Options, programs: CheckedProgram[]): BuildMod
   const foreign = declaresForeign(programs)
   const wasm = isWasmBuild(opts)
   const closed = opts.link.length > 0 && !wasm && !sidecar && !foreign
-  return new BuildMode(closed, !opts.strictExports, sidecar || foreign || wasm)
+  return new BuildMode(closed, !opts.strictExports, sidecar || foreign || wasm, sidecar)
 }
 
 /**

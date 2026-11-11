@@ -1,4 +1,4 @@
-// WP40 H1.1, §4a F: a write in a nested block of the constructor is not at its
+// WP53 H1.1, §4a F: a write in a nested block of the constructor is not at its
 // top level.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

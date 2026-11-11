@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d: the general refusal of the type rule. The class name may be
+// WP53 H1.1, §4d: the general refusal of the type rule. The class name may be
 // written only as the type of a parameter that borrows one; a local's
 // annotation, as anywhere else, is refused by the one check.
 declare function fopen(path: string, mode: string): CPtr | null

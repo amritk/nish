@@ -210,6 +210,8 @@ export class DebugInfo {
   typeRefs: string[]
   /** The `DISubprogram` of the function being emitted: the scope of every location and variable. */
   subprogram: string
+  /** Whether that function is a reference's dispatcher, whose every location is line 0 (WP51 §5.3). */
+  synthetic: boolean
 
   constructor(module: IRModule, program: CheckedProgram, table: TypeTable) {
     this.module = module
@@ -221,6 +223,7 @@ export class DebugInfo {
     this.fileKeys = new StringMap()
     this.fileRefs = []
     this.subprogram = ""
+    this.synthetic = false
     this.cptr = ""
     // Every field carries a value before a method is called on `this`, which is
     // what the language asks of a constructor; the two that matter are filled
@@ -338,6 +341,10 @@ export class DebugInfo {
       ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)))
     } else if (this.table.isUnion(type)) {
       ref = this.pointerTo(this.unionComposite(type))
+    } else if (this.table.isFnRef(type)) {
+      // WP51 §5.3: a function reference is an `i32` tag naming one function
+      // of its signature, so a debugger prints `h = twice` rather than `2`.
+      ref = this.referenceEnumeration(type)
     } else if (this.table.isVector(type)) {
       // A `nish:simd` vector is a value, so DWARF's vector type: an array of
       // its lanes flagged `DIFlagVector`, which a debugger prints as `{1, 2, 3, 4}`.
@@ -459,6 +466,25 @@ export class DebugInfo {
     const elements = this.module.addMetadata(`!{${enumerators.join(", ")}}`)
     return this.module.addMetadata(
       `!DICompositeType(tag: DW_TAG_enumeration_type, name: ${quote(info.name)}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: 32, align: 32, elements: ${elements}, baseType: ${this.typeRef(T_I32)})`
+    )
+  }
+
+  /**
+   * A function reference type as DWARF sees it (WP51 §5.3): a 32-bit
+   * enumeration named for the signature, one enumerator per function a
+   * reference of it may hold, valued by its tag.
+   */
+  referenceEnumeration(type: i32): string {
+    const names = this.table.fnRefMembers[this.table.refOf(type)]
+    const enumerators: string[] = []
+    let i = 0
+    while (i < names.length) {
+      enumerators.push(this.module.addMetadata(`!DIEnumerator(name: ${quote(names[i])}, value: ${i + 1})`))
+      i = i + 1
+    }
+    const elements = this.module.addMetadata(`!{${enumerators.join(", ")}}`)
+    return this.module.addMetadata(
+      `!DICompositeType(tag: DW_TAG_enumeration_type, name: ${quote(this.table.typeName(type))}, file: ${this.file}, size: 32, align: 32, elements: ${elements}, baseType: ${this.typeRef(T_I32)})`
     )
   }
 
@@ -641,7 +667,11 @@ export class DebugInfo {
     name: string,
     privateAbi: boolean
   ): void {
-    const line = this.lineOf(this.source, sig.decl)
+    // WP51 §5.3: a reference's dispatcher is shared by every call whose set is
+    // the same, so it has no source line of its own: it is artificial, and its
+    // code carries line 0 in its own scope, the convention for generated code.
+    this.synthetic = sig.dispatcher
+    const line = sig.dispatcher ? 0 : this.lineOf(this.source, sig.decl)
     const types: string[] = []
     if (artificial) {
       types.push(this.typeRef(T_I32))
@@ -661,7 +691,7 @@ export class DebugInfo {
     )
     // A method's `sourceName` already reads `Owner.method`.
     const printed = name.length > 0 ? name : sig.sourceName
-    const flags = artificial ? "DIFlagPrototyped | DIFlagArtificial" : "DIFlagPrototyped"
+    const flags = artificial || sig.dispatcher ? "DIFlagPrototyped | DIFlagArtificial" : "DIFlagPrototyped"
     const spFlags =
       fn.linkage === "internal" ? "DISPFlagDefinition | DISPFlagLocalToUnit" : "DISPFlagDefinition"
     this.subprogram = this.module.addMetadata(
@@ -697,6 +727,9 @@ export class DebugInfo {
 
   /** `!N` of the `DILocation` for the start of `node` in the current function; identical positions share one. */
   locationOf(node: Node): string {
+    if (this.synthetic) {
+      return this.module.addMetadata(`!DILocation(line: 0, scope: ${this.subprogram})`)
+    }
     const line = this.source.lineOf(node.start)
     const column = this.source.byteColumnOf(node.start)
     return this.module.addMetadata(`!DILocation(line: ${line}, column: ${column}, scope: ${this.subprogram})`)

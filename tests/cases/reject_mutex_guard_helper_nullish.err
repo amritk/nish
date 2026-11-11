@@ -1,1 +1,1 @@
-Only direct calls to named functions are supported
+`bumpA` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name

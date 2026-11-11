@@ -26,7 +26,6 @@ import { Edit } from "./diagnostics"
 import { isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
 import { nullableOfChecked, resolveType } from "./annotations"
 import {
-  arrowElsewhereMessage,
   captureOuter,
   noCaptureMessage,
   checkGenericCall,
@@ -126,6 +125,13 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
+import {
+  checkReferenceCall,
+  functionReference,
+  opaqueReferenceMessage,
+  outerReference,
+  refuseValueArrow,
+} from "./fnrefs"
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
@@ -778,7 +784,7 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_ARROW:
       // WP29: an arrow is legal as the argument for a function-typed
       // parameter, which `checkGenericCall` resolves without coming here.
-      refuseOnce(ctx, expr, arrowElsewhereMessage())
+      refuseValueArrow(ctx, expr, scope)
       return T_ERROR
     case N_SUPER:
       // WP25. Every spelling of `super` lands here -- `super(...)` and
@@ -897,6 +903,11 @@ const fitsInI32 = (text: string, negated: boolean): boolean => {
   return numericLiteralValue(text) <= limit
 }
 
+/** A function reference in a template hole has no text to give. */
+const refuseReferenceHole = (ctx: CheckContext, part: Node): void => {
+  ctx.error(part, opaqueReferenceMessage(ctx.textOf(part)))
+}
+
 const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   for (const part of expr.children) {
     if (part.kind === N_TEMPLATE_TEXT) {
@@ -908,6 +919,10 @@ const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     }
     if (ctx.table.isSecret(hole)) {
       ctx.error(part, secretTemplateMessage())
+      continue
+    }
+    if (ctx.table.isFnRef(hole)) {
+      refuseReferenceHole(ctx, part)
       continue
     }
     if (!isNumeric(hole) && hole !== T_BOOL && hole !== T_STRING) {
@@ -991,8 +1006,8 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     refuseOnce(
       ctx,
       expr,
-      `\`${expr.text}\` is a function parameter and can only be called or passed on as a function argument: a ` +
-        `function is never a value in ${LANGUAGE}, so it cannot be stored, returned, compared or put in an array`
+      `\`${expr.text}\` is a function parameter and can only be called or passed on as a function argument: it ` +
+        "names the callee each call is compiled for, not a value, so it cannot be stored, returned, compared or put in an array"
     )
     return T_ERROR
   }
@@ -1002,6 +1017,11 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (constant !== null) {
     ctx.program.nodeConstants[expr.id] = constant
     return constant.type
+  }
+  // WP51: a top-level function named as a value is a reference to it.
+  const reference = functionReference(ctx, expr)
+  if (reference >= 0) {
+    return reference
   }
   // A `nish:` import of a property builtin (`argv`, `platform`) is read as a
   // value rather than called, so it lands here, and after the scope chain for
@@ -3302,14 +3322,33 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     return checkBuiltinCall(ctx, expr, scope)
   }
   if (callee.kind !== N_IDENT) {
+    // WP51: `hs[i](x)`, `pick()(x)`: a call through a reference the callee computes.
+    const computed = checkExpression(ctx, callee, scope, -1)
+    if (computed === T_ERROR) {
+      return T_ERROR
+    }
+    if (ctx.table.isFnRef(computed)) {
+      return checkReferenceCall(ctx, expr, computed, ctx.textOf(callee), scope)
+    }
     return ctx.errorType(expr, "Only direct calls to named functions are supported")
   }
   // WP29: a compile-time function parameter is a direct call to whichever
   // function this instantiation was given, and a function the arrow around
   // this call is written inside is one it cannot reach.
   const local = scope.lookup(callee.text)
+  // WP51: a local holding a function reference is called through it.
+  if (local !== null && ctx.table.isFnRef(scope.typeOf(local))) {
+    const held = checkExpression(ctx, callee, scope, -1)
+    return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, callee.text, scope)
+  }
   if (local === null) {
     if (ctx.capturesOuter(callee.text)) {
+      // WP51: a reference local of the function around the arrow is a value
+      // it captures like any other, so the call is through the capture.
+      if (outerReference(ctx, callee.text)) {
+        const held = checkExpression(ctx, callee, scope, -1)
+        return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, callee.text, scope)
+      }
       refuseOnce(ctx, callee, outerFunctionMessage(ctx, callee.text))
       return T_ERROR
     }

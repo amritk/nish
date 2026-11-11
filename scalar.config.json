@@ -71,6 +71,11 @@
                 "title": "Functions",
                 "filepath": "docs/guide/language/functions.md"
               },
+              "/function-references": {
+                "type": "page",
+                "title": "Function references",
+                "filepath": "docs/guide/language/function-references.md"
+              },
               "/control-flow": {
                 "type": "page",
                 "title": "Control flow",
@@ -1317,12 +1322,12 @@
                   "/wp35-capabilities": { "type": "page", "title": "WP35: The capability report", "filepath": "docs/roadmap/wp35-capabilities.md" },
                   "/wp36-capability-policy": { "type": "page", "title": "WP36: The capability policy", "filepath": "docs/roadmap/wp36-capability-policy.md" },
                   "/wp40-dependency-capabilities": { "type": "page", "title": "WP40: Dependency capabilities", "filepath": "docs/roadmap/wp40-dependency-capabilities.md" },
-                  "/wp40-ffi-buffers-handles": { "type": "page", "title": "WP40: Buffers and handles across declare function", "filepath": "docs/roadmap/wp40-ffi-buffers-handles.md" },
                   "/wp42-multicore-server": { "type": "page", "title": "WP42: A multi-core server from pre-forked processes", "filepath": "docs/roadmap/wp42-multicore-server.md" },
                   "/wp45-name-resolution": { "type": "page", "title": "WP45: Name resolution: a DNS stub resolver", "filepath": "docs/roadmap/wp45-name-resolution.md" },
                   "/wp47-shared-memory": { "type": "page", "title": "WP47: Shared work across cores: regions, atomics and rings", "filepath": "docs/roadmap/wp47-shared-memory.md" },
                   "/wp50-wasm-host": { "type": "page", "title": "WP50: A WebAssembly module a TypeScript page drives", "filepath": "docs/roadmap/wp50-wasm-host.md" },
                   "/wp52-run-rebuilds": { "type": "page", "title": "WP52: Fast rebuilds for nish run", "filepath": "docs/roadmap/wp52-run-rebuilds.md" },
+                  "/wp53-ffi-buffers-handles": { "type": "page", "title": "WP53: Buffers and handles across declare function", "filepath": "docs/roadmap/wp53-ffi-buffers-handles.md" },
                   "/wp24-async": { "type": "page", "title": "WP24: async/await", "filepath": "docs/roadmap/wp24-async.md" },
                   "/wp41-mul-wide": { "type": "page", "title": "WP41: A wide multiply", "filepath": "docs/roadmap/wp41-mul-wide.md" }
                 }

@@ -80,7 +80,7 @@ export const PANIC_FFI_NUL: i32 = 14
  */
 export const PANIC_FFI_NULL: i32 = 15
 /**
- * WP40 B1.2: a `u8[]` or `readonly u8[]` handed to a `declare function` is
+ * WP53 B1.2: a `u8[]` or `readonly u8[]` handed to a `declare function` is
  * counted by the `u64` after its run, and a count larger than the array's
  * length would let C read or write past it. Proven, with no check emitted, for
  * a count spelled `toU64(b.length)` of the buffer itself

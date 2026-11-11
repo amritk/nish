@@ -1,4 +1,4 @@
-// WP40 B1.2: a call to a buffer-taking `declare function` lowers wherever it
+// WP53 B1.2: a call to a buffer-taking `declare function` lowers wherever it
 // is written: in a plain function, in a constructor reached by `new`, in a
 // method, and through a compile-time function parameter bound to it: four of
 // the five places B1.1 refused (NL2554). The fifth, an arrow a scope spawns,

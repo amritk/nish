@@ -234,8 +234,9 @@ export const main = (): i32 => {
 ```
 
 There are no `map`, `andThen` or `orElse` methods on a `Result`, because they
-would take a function as an argument and Nish has no function values; a test
-and `orReturn()` cover what they are for.
+would take a callback, often one that captures a variable, which a
+[function reference](function-references.md) cannot hold; a test and
+`orReturn()` cover what they are for.
 
 ## It still type-checks as TypeScript
 

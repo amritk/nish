@@ -6,9 +6,8 @@ and the target as bytes, from an HTTP/1.1 request line or from an HTTP/2 or
 HTTP/3 `:path`, and it answers which route they reach. It is imported like any
 other library module ([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import)).
 
-Nish has no function values, so a route is not a handler. `add` answers a
-number, the route's index, and your program dispatches on that number with
-`switch`. A route's parameters are not copied out either: `match` writes each
+A route is not a handler. `add` answers a number, the route's index, and
+your program dispatches on that number with `switch`. A route's parameters are not copied out either: `match` writes each
 one as a pair of offsets into the target, in an `i32[]` you made once.
 
 ## A first table

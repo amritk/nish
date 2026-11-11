@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d non-null assertion: `f!.read()` never reaches the handle
+// WP53 H1.1, §4d non-null assertion: `f!.read()` never reaches the handle
 // pass. The parser refuses a postfix `!` on any expression, so the walk has
 // no non-null case and this pins the refusal that stands in for it.
 declare function fopen(path: string, mode: string): CPtr | null

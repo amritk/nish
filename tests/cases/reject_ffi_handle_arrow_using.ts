@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 2: a `using` opens a handle only in a function's own body, at
+// WP53 H1.1, Row 2: a `using` opens a handle only in a function's own body, at
 // depth 0. Inside an arrow the `new` is a handle value like any other, and so is
 // the name it binds, each refused where it stands.
 declare function fopen(path: string, mode: string): CPtr | null
