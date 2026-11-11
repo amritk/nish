@@ -69,6 +69,7 @@
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
+import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import { ROUTER_BAD_ESCAPE, Router } from "nish/net/router"
 import { cancel, cancelAfter, readable, sleep, spawn, taskId } from "nish:async"
@@ -363,6 +364,11 @@ class ServeState {
   types: u8[][]
   /** The bytes each task wrote into `types`, or -1 when the type was too long. */
   typeLengths: i32[]
+  /** Per slot: the index in `typeBytes` of the type its task answered, or -1 when the task copied it into `types`. */
+  typeIndex: i32[]
+  /** Each content type the server has sent, as bytes for the head and, beside it, as the text a task compares. */
+  typeBytes: u8[][]
+  typeTexts: string[]
   /** One byte, written to the wake socket. */
   one: u8[]
   /** The fields of an answer with no content type: `ServeLimits.server`'s, or none. */
@@ -393,6 +399,9 @@ class ServeState {
     this.bodies = []
     this.types = []
     this.typeLengths = []
+    this.typeIndex = []
+    this.typeBytes = []
+    this.typeTexts = []
     this.one = [toU8(1)]
     this.plainNames = []
     this.plainValues = []
@@ -442,6 +451,7 @@ const serveFreeSlot = (st: ServeState, limits: ServeLimits): i32 => {
   st.bodies.push(new Array<u8>(limits.responseBytes))
   st.types.push(new Array<u8>(SERVE_TYPE_BYTES))
   st.typeLengths.push(toI32(0))
+  st.typeIndex.push(toI32(-1))
   return n
 }
 
@@ -467,7 +477,7 @@ const serveAnyBusy = (st: ServeState): boolean => {
 }
 
 /** Sends slot `k`'s answer, as its task wrote it. */
-const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], stats: ServeStats): void => {
+const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, stats: ServeStats): void => {
   const r: HttpRequest = st.reqs[k]
   const status: i32 = st.status[k]
   if (status === SERVE_REFUSE) {
@@ -488,19 +498,20 @@ const serveAnswer = (h: HttpHandler, st: ServeState, k: i32, typeCache: u8[][], 
     }
     return
   }
-  const type: i32 = serveType(typeCache, st.types[k], st.typeLengths[k])
+  const type: i32 = st.typeIndex[k] >= 0 ? st.typeIndex[k] : serveType(st, st.types[k], st.typeLengths[k])
   if (type < 0) {
     stats.failed += 1
     h.problem(r, SERVE_FAILED, "Internal Server Error", "")
     return
   }
   const last: i32 = toI32(st.typedValues.length) - 1
-  st.typedValues[last] = typeCache[type]
+  st.typedValues[last] = st.typeBytes[type]
   h.sendFields(r, status, st.typedNames, st.typedValues, st.bodies[k], toI32(0), length)
 }
 
-/** The index in `cache` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full or when they hold a control byte. */
-const serveType = (cache: u8[][], type: u8[], len: i32): i32 => {
+/** The index in `st.typeBytes` of the bytes `type[0 .. len)`, adding them while there is room; -1 when full or when they hold a control byte. */
+const serveType = (st: ServeState, type: u8[], len: i32): i32 => {
+  const cache: u8[][] = st.typeBytes
   if (len < 0 || len > toI32(type.length)) {
     return -1
   }
@@ -531,6 +542,7 @@ const serveType = (cache: u8[][], type: u8[], len: i32): i32 => {
     copy[j] = type[j]
   }
   cache.push(copy)
+  st.typeTexts.push(String.fromBytes(copy, 0, len))
   return toI32(cache.length) - 1
 }
 
@@ -569,21 +581,13 @@ const serveTask = async (
     }
   }
   const head: u8[] = new Array<u8>(end)
-  for (let i: i32 = 0; i < end; i++) {
-    head[i] = src.head[i]
-  }
+  copyBytes(head, 0, src.head, 0, end)
   const spans: i32[] = new Array<i32>(4 * src.headerCount)
-  for (let i: i32 = 0; i < 4 * src.headerCount; i++) {
-    spans[i] = src.spans[i]
-  }
+  spans.set(src.spans.slice(0, 4 * src.headerCount))
   const params: i32[] = new Array<i32>(2 * src.paramCount)
-  for (let i: i32 = 0; i < 2 * src.paramCount; i++) {
-    params[i] = src.params[i]
-  }
+  params.set(src.params.slice(0, 2 * src.paramCount))
   const body: u8[] = new Array<u8>(src.bodyLength)
-  for (let i: i32 = 0; i < src.bodyLength; i++) {
-    body[i] = src.body[i]
-  }
+  copyBytes(body, 0, src.body, 0, src.bodyLength)
   r.head = head
   r.spans = spans
   r.params = params
@@ -603,17 +607,26 @@ const serveTask = async (
   if (res.length > toI32(out.length)) {
     st.lengths[k] = -1
   } else {
-    for (let i: i32 = 0; i < res.length; i++) {
-      out[i] = res.body[i]
-    }
+    out.set(res.length === toI32(res.body.length) ? res.body : res.body.slice(0, res.length))
     st.lengths[k] = res.length
   }
-  const type: u8[] = st.types[k]
+  // A type the server has sent before is found by its text, with no copy;
+  // the loop copies a new one's bytes into `typeBytes` as it sends it.
   const n: i32 = toI32(res.type.length)
-  if (n > toI32(type.length)) {
+  let known: i32 = -1
+  for (let i: i32 = 0; n > 0 && known < 0 && i < toI32(st.typeTexts.length); i++) {
+    if (st.typeTexts[i] === res.type) {
+      known = i
+    }
+  }
+  st.typeIndex[k] = known
+  const type: u8[] = st.types[k]
+  if (known >= 0) {
+    st.typeLengths[k] = n
+  } else if (n > toI32(type.length)) {
     st.typeLengths[k] = -1
   } else {
-    for (let i: i32 = 0; i < n; i++) {
+    for (let i: i32 = 0; i < n && i < toI32(type.length); i++) {
       type[i] = toU8(res.type.charCodeAt(i))
     }
     st.typeLengths[k] = n
@@ -679,7 +692,6 @@ export const serveOn = async (
   st.wakeFd = fds[1]
   h.watch(fds[0], SERVE_WAKE)
   const drained: u8[] = new Array<u8>(64)
-  const typeCache: u8[][] = []
   spawn(serveTick(st))
   let draining: boolean = false
   while (true) {
@@ -701,7 +713,7 @@ export const serveOn = async (
       st.fresh = false
       for (let k: i32 = 0; k < toI32(st.busy.length); k++) {
         if (st.busy[k] && st.done[k]) {
-          serveAnswer(h, st, k, typeCache, stats)
+          serveAnswer(h, st, k, stats)
           st.busy[k] = false
           st.done[k] = false
           st.cancelled[k] = false
