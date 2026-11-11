@@ -6,161 +6,161 @@ stages:
     title: R3a — the core and the Node adapter, behind the prelude unchanged
     goal: Move every host-agnostic export of runtime/shim.mjs into runtime/core/*.mjs behind runtime/core.mjs, every host-bound one into runtime/node.mjs, and turn shim.mjs and nish.mjs into thin layers so every existing prelude and frozen-rewrite check passes unmodified
     verification: npm run check and npm run lint green locally; every CI test shard green and undegraded; node tests/run.js runtime-hosts passes; the rule-6 guard in Verification prints nothing
-    status: pending
+    status: completed
     todos:
       - id: r3-core-modules
         content: Create runtime/core/{numbers,strings,arrays,result,host}.mjs and runtime/core.mjs re-exporting them, holding shim.mjs's host-agnostic exports with no node import and no process or Buffer — see R3a, The core
-        status: pending
+        status: completed
       - id: r3-host-interface
         content: Route output, exit, argv and every host-bound call through one installed host object in runtime/core/host.mjs, whose default answers without a host by throwing a NishNoHost error — see R3a, The host interface
-        status: pending
+        status: completed
       - id: r3-node-adapter
         content: Write runtime/node.mjs, which installs the Node host (fs, env, child_process, clock, stat, argv, exit) on import — see R3a, The Node adapter
-        status: pending
+        status: completed
       - id: r3-thin-layers
         content: Reduce runtime/shim.mjs to core plus the Node adapter with every export name it had, and runtime/nish.mjs to a layer over them — see R3a, The prelude and the shim
-        status: pending
+        status: completed
       - id: r3-split-tests
         content: Add the runtime-hosts section to tests/run.js (the export-name pin, the no-node-import scan of the core) — see R3a, Tests
-        status: pending
+        status: completed
       - id: r3-split-docs
         content: Update docs/RUN_UNDER_NODE.md for the new layout — see R3a, Docs
-        status: pending
+        status: completed
   - id: r3-browser
     title: R3b — the browser adapter, the package entry points and their types
     goal: Publish nish/runtime (the core, with declarations) and nish/runtime/node and /browser, with the core and the browser adapter proven to load and run in a context that has only web globals
     verification: npm run check and npm run lint green locally; every CI test shard green and undegraded; node tests/run.js runtime-hosts passes, including the web-globals-only check; npm pack --dry-run lists the new files; the rule-6 guard prints nothing
-    status: pending
+    status: completed
     todos:
       - id: r3b-browser-adapter
         content: Write runtime/browser.mjs — output to console, exit as a thrown NishExit, monotonicNanos from performance.now, getenv as null, every file-system and process call a panic naming the host — see R3b, The browser adapter
-        status: pending
+        status: completed
       - id: r3b-exports
         content: Add the ./runtime, ./runtime/node and ./runtime/browser entries with types conditions to package.json exports — see R3b, The entry points
-        status: pending
+        status: completed
       - id: r3b-declarations
         content: Write runtime/core.d.ts and runtime/core/*.d.ts, exporting the width types (i32 as number, i64 as bigint, …) and every helper's signature — see R3b, The declarations
-        status: pending
+        status: completed
       - id: r3b-web-context-test
         content: Add tests/runtime/web-context.mjs, which links core.mjs and browser.mjs in a node vm context holding only web globals and runs them, and wire it and the npm-pack list into tests/run.js — see R3b, Tests
-        status: pending
+        status: completed
       - id: r3b-guide
         content: Write docs/guide/using-nish/to-typescript.md (the runtime half) with its route in scalar.config.json, and the RUN_UNDER_NODE.md pointer — see R3b, Docs
-        status: pending
+        status: completed
   - id: r4-skeleton
     title: R4a — the --emit-ts driver, the edit composer, and the live differential
     goal: Ship `--emit-ts <dir>`, writing every root-package module and every std module it reaches as TypeScript at the same relative path plus entry.ts, with imports, specifiers, the entry and the refusals done, row hooks stubbed, and the live differential running every corpus program against its native binary under a generated known list
     verification: npm run check, npm run lint, node tests/run.js emit-ts, node tests/run.js wasi (read its skip line) and node tests/run.js performance green locally; every CI test shard green and undegraded; the checked goldens regenerated and read; the rule-6 guard prints nothing
-    status: pending
+    status: completed
     todos:
       - id: r4a-flag
         content: Parse --emit-ts <dir> in src/compile.ts as a product flag on the --emit-checked early-return path, with helpText and both advertised-flag lists — see R4a, The flag
-        status: pending
+        status: completed
       - id: r4a-composer
         content: Write src/emit-ts-edits.ts, the bottom-up composer that rebuilds a node's text from its children's rewritten texts so nested rewrites compose — see R4a, The composer
-        status: pending
+        status: completed
       - id: r4a-driver
         content: Write src/emit-ts.ts — the module walk (root package and reached std), output paths, relative specifiers to .ts, the runtime imports and type imports a module needs, entry.ts — see R4a, The driver
-        status: pending
+        status: completed
       - id: r4a-row-stubs
         content: Create src/emit-ts-numbers.ts, -strings.ts, -records.ts and -control.ts as empty row hooks the driver dispatches to — see R4a, The row hooks
-        status: pending
+        status: completed
       - id: r4a-refusals
         content: Register NL4010 (a module declaring C functions) and NL4011 (signals or nish:net, whose translation is not local) in src/codes.ts, each provoked by a tests/cases reject case — see R4a, Refusals
-        status: pending
+        status: completed
       - id: r4a-fixtures
         content: Add tests/emit-ts/ with the data-driven fixture layout and the class-A byte-identity fixtures, run by a new emit-ts section of tests/run.js — see R4a, Tests
-        status: pending
+        status: completed
       - id: r4a-live-differential
         content: Add tests/differential/emit-ts.js and its generated known list tests/differential/emit-ts-known.txt, run by the emit-ts section — see R4a, The live differential
-        status: pending
+        status: completed
       - id: r4a-docs
         content: Document --emit-ts in docs/guide/using-nish/cli.md, docs/LANGUAGE.md's flags section and .claude/selfhost.md's module map — see R4a, Docs
-        status: pending
+        status: completed
   - id: r4-numbers
     title: R4b — the number rows
     goal: Translate §3.1 — i32 and the unsigned widths, i64 and u64 as bigint, integer division, signed shift, the conversions and the Math helpers — so every number-row program leaves the known list
     verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no number-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; every CI test shard green and undegraded; the rule-6 guard prints nothing
-    status: pending
+    status: completed
     todos:
       - id: r4b-i32
         content: Rewrite i32 + - * as (a + b) | 0 and Math.imul where nodeProvenNoOverflow proves it or under --wrapping, and as the checked addI32, subI32, mulI32 helpers elsewhere — see R4b, Integers
-        status: pending
+        status: completed
       - id: r4b-unsigned-wide
         content: Rewrite the u8, u16, u32 wraps, the i64 and u64 operations as bigint, integer / as idiv and i32 >>> as (a >>> n) | 0 — see R4b, Integers
-        status: pending
+        status: completed
       - id: r4b-conversions
         content: Route toI32 and the other conversions and Math.min, max and round through the core's helpers — see R4b, Conversions and Math
-        status: pending
+        status: completed
       - id: r4b-helpers
         content: Add the checked arithmetic helpers to runtime/core/numbers.mjs and its .d.ts, panicking with the native words — see R4b, Integers
-        status: pending
+        status: completed
       - id: r4b-fixtures
         content: Add tests/emit-ts/numbers/ fixtures, one per translation — see R4b, Tests
-        status: pending
+        status: completed
   - id: r4-strings
     title: R4c — the string rows
     goal: Translate §3.2 — the UTF-8 offset methods, the checked slice, String.fromBytes and the parsers — so every string-row program leaves the known list
     verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no string-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; every CI test shard green and undegraded; the rule-6 guard prints nothing
-    status: pending
+    status: completed
     todos:
       - id: r4c-offsets
         content: Rewrite .length, charCodeAt, indexOf, slice and substring on strings to the core's UTF-8 helpers — see R4c, Offsets
-        status: pending
+        status: completed
       - id: r4c-builders-parsers
         content: Rewrite String.fromBytes, fromCharCode, parseInt, parseFloat and Number(s) to imported helpers, never the global — see R4c, Builders and parsers
-        status: pending
+        status: completed
       - id: r4c-fixtures
         content: Add tests/emit-ts/strings/ fixtures, a non-ASCII case per method — see R4c, Tests
-        status: pending
+        status: completed
   - id: r4-records
     title: R4d — the array and record rows
     goal: Translate §3.3 — record copies in, stores into a slot, zero-filled arrays, set, and every unproven index, pop and store through a checking helper — so every array-row program leaves the known list
     verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no array-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; every CI test shard green and undegraded; the rule-6 guard prints nothing
-    status: pending
+    status: completed
     todos:
       - id: r4d-copies
         content: Rewrite a record put into an array as a spread copy, and a store into a slot as a field-by-field write — see R4d, Records
-        status: pending
+        status: completed
       - id: r4d-arrays
         content: Rewrite new Array<T>(n) with its fill, dst.set to arraySet, and every index, pop and indexed store the checker did not prove to idx, pop, setIdx — see R4d, Arrays
-        status: pending
+        status: completed
       - id: r4d-fixtures
         content: Add tests/emit-ts/records/ fixtures, including the two aliasing shapes §3.3 reproduces — see R4d, Tests
-        status: pending
+        status: completed
   - id: r4-control
     title: R4e — control flow, Result and enums
     goal: Translate §3.4 and the enum row of §3.5 — orReturn hoisted to its statement, Result's names imported, enum as a const object and a type — so every control-row program leaves the known list
     verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no control-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; every CI test shard green and undegraded; the rule-6 guard prints nothing
-    status: pending
+    status: completed
     todos:
       - id: r4e-or-return
         content: Hoist x.orReturn() to a temporary, an isErr test and a return of Err before its statement — see R4e, orReturn
-        status: pending
+        status: completed
       - id: r4e-enum
         content: Rewrite enum declarations as a const object and a type of the same name, and their member reads unchanged — see R4e, Enums
-        status: pending
+        status: completed
       - id: r4e-fixtures
         content: Add tests/emit-ts/control/ fixtures — see R4e, Tests
-        status: pending
+        status: completed
   - id: r4-oracle
     title: R4f — the oracle closed, tsc --strict over the output, fuzz over --emit-ts, the docs
     goal: Hold the emitted corpus to tsc --strict, run the fuzz differential through --emit-ts, pin the known list to the libm, FFI and refused rows, and bring wp33, the guide, ARCHITECTURE and AI.md up to what was built
     verification: node tests/run.js emit-ts green with the strict typecheck and the known-list pin; node tests/differential/fuzz.js --emit-ts --count 50 agrees; npm run check, npm run lint and node docs/check-links.mjs green locally; every CI test shard green and undegraded; the rule-6 guard prints nothing
-    status: pending
+    status: completed
     todos:
       - id: r4f-tsc-strict
         content: Typecheck the emitted corpus with tsc --strict --noEmit against tests/emit-ts/tsconfig.json in the emit-ts section — see R4f, Strict TypeScript
-        status: pending
+        status: completed
       - id: r4f-known-pin
         content: Pin tests/differential/emit-ts-known.txt to the libm, FFI and refused rows, failing on any other reason — see R4f, The known list
-        status: pending
+        status: completed
       - id: r4f-fuzz
         content: Add an --emit-ts mode to tests/differential/fuzz.js and a step for it in .github/workflows/ci.yml — see R4f, Fuzz
-        status: pending
+        status: completed
       - id: r4f-docs
         content: Update docs/wp33-round-trip.md §3 and §9, docs/MASTER_PLAN.md, docs/ARCHITECTURE.md's checklist, docs/AI.md's loop and the guide page's translation table — see R4f, Docs
-        status: pending
+        status: completed
 ---
 
 ## Context

@@ -158,7 +158,8 @@ body, not just the type.
   the threads (§7).
 - **A race detector.** §1 says why the static rule replaces it.
 - **Atomics as a user-facing type.** An escape hatch from the sharing rule should
-  be designed after that rule has met real programs.
+  be designed after that rule has met real programs. *2026-11-08:* it was, and
+  `AtomicI32` and `AtomicI64` shipped under wp29's P3 (#654).
 
 ## 7. Sequencing
 

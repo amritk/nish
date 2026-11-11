@@ -198,6 +198,7 @@
         "docs/cookbook/**/*.ts",
         "!docs/cookbook/fn-add-function.ts",
         "!docs/cookbook/host/scale.ts",
+        "!examples/wasm-arena/host.ts",
         "bench/**/*.ts",
         "tests/self/**/*.ts",
         "tests/**/*.js",

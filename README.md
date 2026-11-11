@@ -594,7 +594,8 @@ rather than gaps, each with the message and the idiom to use instead
 Release engineering (`--version`, exit codes, npm packaging, tag-driven
 releases) landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
 [docs/wp12-release.md](docs/wp12-release.md). The plan itself is
-[docs/MASTER_PLAN.md](docs/MASTER_PLAN.md).
+[docs/MASTER_PLAN.md](docs/MASTER_PLAN.md), and what is built and what is next is
+the [roadmap](docs/roadmap/index.md).
 
 ---
 

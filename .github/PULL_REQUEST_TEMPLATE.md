@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What does this PR change and why? Which work package (docs/MASTER_PLAN.md §5) does it belong to? -->
+<!-- What does this PR change and why? Which work package (docs/MASTER_PLAN.md §5) does it belong to? If it lands a stage, tick its box on docs/roadmap/<the package's note name> and move that page's "Next" on. -->
 
 ## Changes
 
