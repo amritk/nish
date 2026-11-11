@@ -1,15 +1,15 @@
 # WP49: `async`/`await` on the server, and the TechEmpower top
 
 **Status: D1 accepted; stages 1 to 5 built (stage 5 in parts 1 to 8, part 8
-#1343), stage 6 open: its gate was measured on 2026-11-10 and is not met
-(§10).** The language half — `async`, `await`, `Promise<T>`, `spawn`,
+#1343), stage 6 measured, gate not met: re-measured on 2026-11-11 after the
+`serve` and pool fixes (#1378, #1379), and still outside the band (§6, §10).** The language half — `async`, `await`, `Promise<T>`, `spawn`,
 `awaitAll` and the frame lowering — compiles, and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
 tasks that share their spawner's objects (parts 3 and 8), `serve` (part 4), the
 async Postgres pool (part 5), async `fetch` over TLS (part 6) and
 cancellation (part 7). D1's condition does not hold yet: the async TFB entries
-are outside the explicit ones' noise band on `plaintext`, `json` and `db`
-([BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)). The anchors below
+are still outside the explicit ones' noise band on `plaintext`, `json` and `db`
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6)). The anchors below
 are at `a9fcb8d`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this
 note beyond what it states is a proposal and is not compiled by `npm test`. This note reopens
 [wp24-async.md](wp24-async.md)'s refusal (§1 says why), and its decisions are
@@ -316,6 +316,45 @@ Closing them starts with a batched or pipelined `serve` (more than one request
 of a connection in flight, its answers sent in one write), a profile of `json`'s
 per-request path, and a pipelined, wake-on-release pool.
 
+**The gate, re-measured (2026-11-11), after the fixes.** #1378 made `serve`
+answer a pipelined burst in one write, and #1379 made the async Postgres pool
+pipeline queries across tasks and wake a waiter on a release. The same `run.sh`
+on `main` at `e523e14`
+([BENCHMARKS.md](BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6))
+gives, per test of the gate, the async entry against the explicit one:
+
+| test | async vs entry (median) | band | verdict | 2026-11-10 |
+| --- | --- | --- | --- | --- |
+| `plaintext` | −33.3, −32.0, −38.3, −70.9%* at 256, 1,024, 4,096, 16,384 | 0.1–8.3% | outside at all four | −86.6 to −89.7% |
+| `json` | −2.5, −4.1, −6.2, −7.4, −6.3, −17.1% at 16 to 512 | 0.5–2.5% | outside at all six | −7.3 to −12.4%, and −1.5% at 256 on a 10.2% band |
+| `db` | −61.7, −74.2, −79.4% at 16, 64, 256 | 3.1–5.7% (58.3% at 16, bimodal) | outside at all three | −42.1 to −90.5% |
+
+So **stage 6 is measured and its gate is not met, and D1's condition does not
+hold yet.** Outside the gate, `updates` is now inside at all three
+concurrencies, `query` and `cached-query` at the lower ones, and `fortune`
+nowhere. What remains, per test, and what is known of its cause:
+
+- **`plaintext`: 32–38% at 256 to 4,096 connections, 71% at 16,384.** The
+  send gap is gone: async now makes about one `sendto` per pipelined burst, as
+  the explicit loop does (18,943 for 301,616 requests, against 20,440 for
+  326,288). The rest is CPU per request in user space, which was not profiled.
+  The 16,384 cell also had wrk read errors in every async round, cause not
+  looked into.
+- **`json`: 2.5–17.1%, outside at every concurrency.** About 0.07 more system
+  calls a request than the explicit entry, so the cause is most likely CPU per
+  request in user space, still not profiled. It is open.
+- **`db`: 62–79%.** The async entry falls as connections rise (27.8k → 21.6k
+  from 16 to 256) where the explicit entry climbs (72.5k → 105.0k). The
+  seated pool takes at most 8 statements per connection, each with its own
+  Sync. Whether that depth, the per-statement Sync or the task turns limit it
+  was not traced; the cause is open. `fortune` falls the same way
+  (32.1k → 17.2k), the regression #1379 had recorded at 64 connections and
+  more, cause open.
+
+The next steps are a user-space profile of one async request on `plaintext`
+and `json` against the explicit one, and a trace of the seated pool under
+`db` at 64 and 256 connections.
+
 ## 7. A non-blocking call from a handler today, without `async`
 
 Until §2 lands, a handler makes an outbound call in the explicit style,
@@ -434,7 +473,7 @@ page for anything a user sees.
 | 3 | TFB `db`, `query`, `update`, `cached-query` and `fortune` on stage 2 (WP39 E7, E8); prefork pinning and connection steering (§6 item 2) | 2 | yes |
 | 4 | The language: `async`, `await`, `Promise<T>` as a return type, `spawn`, `awaitAll`, the no-recursion rule, the frame lowering of §3, the emitted TypeScript, and the declared differences | WP46 stages 1–2 | yes |
 | 5 | The executor (`runtime-async.c`, `nish:async`), `serve`, async `fetch`, the async Postgres pool, cancellation | 4 | yes: the executor (part 1, #1283), async `fetch` (part 2, #1293), a task reaching its spawner's objects (part 3, #1307), `serve` (part 4, #1322), the async Postgres pool (part 5, #1321), `fetch` over TLS (part 6, #1314), cancellation (part 7) and a serve handler reaching its spawner's state (part 8, #1343) |
-| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | no: the entries are written (#1354 and before) and `run.sh` measures the gate, which is not met (§6; draft #1367) |
+| 6 | The TFB entry rewritten in the `async` style, held to §6's gate against stage 3's | 3, 5 | measured, gate not met: the entries are written (#1354 and before), `run.sh` measures the gate (#1367), and after the `serve` and pool fixes (#1378, #1379) the async entry is still outside the band on `plaintext`, `json` and `db` (§6, re-measured 2026-11-11) |
 
 `src/` may use none of this until a release ships it (CLAUDE.md, the rolling
 freeze), and the compiler has no reason to.

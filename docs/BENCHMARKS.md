@@ -661,6 +661,8 @@ What the rows say, read against that band:
 | Pinning | plaintext and json: server on CPU 0, wrk `-t 3` on CPUs 1-3. Database: server on CPU 0, Postgres on CPU 1, wrk `-t 2` on CPUs 2-3 |
 | Command | `npm run build && PG_BIN=/usr/lib/postgresql/16/bin bash bench/techempower/run.sh` |
 
+This is the first measurement, kept as the before; the [re-measurement after the serve and pool fixes](#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6) follows it.
+
 **Outcome: the gate is not met.** The async entry is outside the band at every `plaintext` concurrency (about 87–90% slower), at five of six `json` concurrencies (1.5–12.4% slower, inside only at 256), and on every database test except `cached-queries` at 256 connections (42–91% slower).
 
 ### /plaintext, req/s, median (min) of 3 round(s) of 10 s
@@ -863,6 +865,239 @@ taskset -c 1-3 wrk -t 3 -c 64 -d 3s -H "Host: tfb-server" http://127.0.0.1:<port
   - So the syscall count does not account for 7–12% either. The rest is CPU per request in user space (the task, its frame, the handler's path), which this run did not profile. The cause of `json`'s gap is open.
 - **`db`, `queries`, `updates`, `fortunes`:** `PgAsyncPool` sends one query per connection at a time, where the explicit pool pipelines every request's queries down its 4 connections. A task that finds every connection claimed sleeps 1 ms doubling to 16 ms rather than being woken by a release. The non-2xx answers at 64 and 256 connections are claims that waited out `claimWaitMs`. That is read from the code, not from a trace.
 - **`cached-queries`** reads Postgres only to fill the cache, so it is the one database test near the band. The async database entry's peak RSS is lower (12–21 MiB against 65–66 MiB): the explicit entry reserves its carrier's query room up front.
+
+## TechEmpower: the async entry re-measured after the serve and pool fixes (WP49 stage 6)
+
+The same gate as [the first measurement](#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6), which stays above as the before, run again on `main` once `serve` answered a pipelined burst in one write (#1378) and the async Postgres pool pipelined queries across tasks (#1379). The method, the pinning, the `*` rule and the caveats are the first measurement's: one 4-core VM shared by wrk, Postgres and the server, so a relative A/B and not a TechEmpower rank ([D6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#9-decisions-for-the-owner)). The cells are req/s, median (minimum) of 3 interleaved rounds of 10 s, and the band is the gap between each pair of identical builds' medians in this run. Peak RSS is the server's `VmHWM`, the largest over every round and concurrency of the test.
+
+| | |
+| --- | --- |
+| Date | 2026-11-11 |
+| nish | `build/nish` at `e523e14` (nish 0.38.0 sources), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 15 GiB |
+| OS | linux 6.18.44 (x64) |
+| Postgres | 16, a throwaway cluster in `build/tfb/pg`, `fsync=off`, TFB's `world` (10,000 rows) and `fortune` tables |
+| Client | wrk 4.1.0, TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
+| Pinning | plaintext and json: server on CPU 0, wrk `-t 3` on CPUs 1-3. Database: server on CPU 0, Postgres on CPU 1, wrk `-t 2` on CPUs 2-3 |
+| Command | `npm run build && PG_BIN=/usr/lib/postgresql/16/bin bash bench/techempower/run.sh` |
+
+**Outcome: the gate is still not met.** The fixes moved the async entry a long way, but it is outside the band on all three of the gate's tests:
+
+- **`plaintext`**: 32–38% below the explicit entry at 256, 1,024 and 4,096 connections (it was 87–90%), and 70.9% below at 16,384, a `*` cell.
+- **`json`**: 2.5–17.1% below at every concurrency, against bands of 0.5–2.5%. The first run's one `inside` cell, at 256 connections, is now outside at −6.3% against a 0.5% band.
+- **`db`**: 62–79% below at every concurrency (it was 42–91%).
+
+Of the database tests outside the gate, `/updates` is inside at all three concurrencies, `/queries` and `/cached-queries` are inside at 16 and 16–64 connections, and `/fortunes` is outside everywhere.
+
+| test | connections | band | async vs entry | verdict | first run (2026-11-10) |
+| --- | ---: | ---: | ---: | --- | ---: |
+| `/plaintext` | 256 | 2.6% | −33.3% | outside | −89.7% |
+| `/plaintext` | 1024 | 1.4% | −32.0% | outside | −87.1% |
+| `/plaintext` | 4096 | 0.1% | −38.3% | outside | −86.6% |
+| `/plaintext` | 16384 | 8.3% | −70.9% | outside* | −87.2%* |
+| `/json` | 16 | 1.1% | −2.5% | outside | −9.8% |
+| `/json` | 32 | 1.0% | −4.1% | outside | −8.8% |
+| `/json` | 64 | 0.9% | −6.2% | outside | −7.3% |
+| `/json` | 128 | 2.2% | −7.4% | outside | −12.4% |
+| `/json` | 256 | 0.5% | −6.3% | outside | −1.5% (see its note) |
+| `/json` | 512 | 2.5% | −17.1% | outside | −11.7% |
+| `/db` | 16 | 58.3% (see below) | −61.7% | outside | −42.1% |
+| `/db` | 64 | 3.1% | −74.2% | outside | −90.0% |
+| `/db` | 256 | 5.7% | −79.4% | outside | −90.5%* |
+| `/queries?queries=20` | 16 | 3.0% | +3.0% | inside | −65.3% |
+| `/queries?queries=20` | 64 | 3.4% | −10.6% | outside | −67.2% |
+| `/queries?queries=20` | 256 | 0.9% | −47.1% | outside | −74.7%* |
+| `/updates?queries=20` | 16 | 3.5% | +2.9% | inside | −54.9% |
+| `/updates?queries=20` | 64 | 3.3% | +4.4% | inside | −55.8%* |
+| `/updates?queries=20` | 256 | 2.5% | +4.8% | inside | −61.2%* |
+| `/fortunes` | 16 | 2.2% | −42.7% | outside | −59.5% |
+| `/fortunes` | 64 | 4.5% | −66.8% | outside | −66.2% |
+| `/fortunes` | 256 | 3.0% | −73.8% | outside | −70.1%* |
+| `/cached-queries?count=100` | 16 | 9.3% | +6.4% | inside | −12.0% |
+| `/cached-queries?count=100` | 64 | 2.5% | +1.1% | inside | −5.8% |
+| `/cached-queries?count=100` | 256 | 0.4% | −1.5% | outside | +0.0% |
+
+The `/db` band at 16 connections is not a usable one. Both explicit builds came out in one of two modes, about 23–30k or 72–75k req/s, from round to round (`db-entry` 28,234, 72,518 and 75,337; `db-entry-copy` 74,689, 30,208 and 22,957), so the band measures which mode each median landed in. The async entry gave 27.7–28.5k in every round, the low mode. The verdict `run.sh` prints is kept: outside, and by more than the band. The cause of the two modes was not looked into. `/cached-queries` at 16 connections has a 9.3% band from the same kind of spread, so its `inside` is a weak one.
+
+### /plaintext, req/s, median (min) of 3 rounds of 10 s, re-measured
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1204101 (1172640) | 1059054 (992161) | 880224 (850177) | 1055627 (747604) | 91.2 |
+| entry-copy | 1234846 (1215438) | 1044029 (896590) | 881446 (841335) | 968281 (926261)* | 91.2 |
+| async | 802852 (761485) | 719771 (686223) | 542753 (534766) | 307229 (293830)* | 95.8 |
+
+noise band (|entry - entry-copy| / entry, medians): 256: 2.6% 1024: 1.4% 4096: 0.1% 16384: 8.3%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 256: -33.3% outside 1024: -32.0% outside 4096: -38.3% outside 16384: -70.9% outside*
+
+### /json, req/s, median (min) of 3 rounds of 10 s, re-measured
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 102798 (101503) | 127092 (124352) | 140167 (134367) | 165899 (163881) | 177846 (161172) | 181928 (163661) | 3.1 |
+| entry-copy | 103975 (99645) | 125833 (119857) | 141396 (138863) | 162254 (156184) | 178795 (146870) | 186457 (180583) | 3.1 |
+| async | 100264 (98126) | 121847 (121472) | 131489 (128084) | 153656 (149006) | 166652 (159560) | 150806 (140936) | 7.6 |
+
+noise band (|entry - entry-copy| / entry, medians): 16: 1.1% 32: 1.0% 64: 0.9% 128: 2.2% 256: 0.5% 512: 2.5%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -2.5% outside 32: -4.1% outside 64: -6.2% outside 128: -7.4% outside 256: -6.3% outside 512: -17.1% outside
+
+### /db, req/s, median (min) of 3 rounds of 10 s, re-measured
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 72518 (28234) | 101671 (33837) | 105023 (102444) | 65.6 |
+| db-entry-copy | 30208 (22957) | 98495 (96230) | 110978 (101251) | 65.6 |
+| async-db | 27775 (27737) | 26228 (26180) | 21642 (20455) | 22.6 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 58.3% 64: 3.1% 256: 5.7%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: -61.7% outside 64: -74.2% outside 256: -79.4% outside
+
+### /queries?queries=20, req/s, median (min) of 3 rounds of 10 s, re-measured
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 24081 (23777) | 25508 (25297) | 35982 (35381) | 66.1 |
+| db-entry-copy | 23358 (23239) | 24652 (23706) | 35647 (34140) | 66.1 |
+| async-db | 24797 (24552) | 22805 (22273) | 19029 (17990) | 24.4 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 3.0% 64: 3.4% 256: 0.9%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +3.0% inside 64: -10.6% outside 256: -47.1% outside
+
+### /updates?queries=20, req/s, median (min) of 3 rounds of 10 s, re-measured
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 6495 (6441) | 6922 (6639) | 7411 (6528) | 66.1 |
+| db-entry-copy | 6720 (6510) | 6693 (6477) | 7227 (6539) | 66.1 |
+| async-db | 6687 (6590) | 7228 (7045) | 7766 (7738) | 29.5 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 3.5% 64: 3.3% 256: 2.5%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +2.9% inside 64: +4.4% inside 256: +4.8% inside
+
+### /fortunes, req/s, median (min) of 3 rounds of 10 s, re-measured
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 55926 (54291) | 66683 (66674) | 65773 (62826) | 65.5 |
+| db-entry-copy | 54699 (52963) | 69651 (67101) | 63816 (63776) | 65.5 |
+| async-db | 32068 (31763) | 22122 (20784) | 17227 (16411) | 24.5 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 2.2% 64: 4.5% 256: 3.0%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: -42.7% outside 64: -66.8% outside 256: -73.8% outside
+
+### /cached-queries?count=100, req/s, median (min) of 3 rounds of 10 s, re-measured
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 55846 (54174) | 64787 (60459) | 67372 (65461) | 65.3 |
+| db-entry-copy | 61022 (57024) | 66397 (62252) | 67634 (59247) | 65.4 |
+| async-db | 59423 (56138) | 65517 (64454) | 66345 (63481) | 18.3 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 9.3% 64: 2.5% 256: 0.4%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +6.4% inside 64: +1.1% inside 256: -1.5% outside
+
+- /plaintext c=16384 round 1: entry-copy had 0 Non-2xx responses and socket errors c/r/w/t 0/9141/0/0
+- /plaintext c=16384 round 1: async had 0 Non-2xx responses and socket errors c/r/w/t 0/4259/0/0
+- /plaintext c=16384 round 2: async had 0 Non-2xx responses and socket errors c/r/w/t 0/2683/0/0
+- /plaintext c=16384 round 3: async had 0 Non-2xx responses and socket errors c/r/w/t 0/2491/0/0
+
+No database cell has a `*` this time; the first run had eleven, all the async entry's waits for a connection.
+
+**Memory.** The async entry's peak RSS is above the explicit entry's on `plaintext` (95.8 against 91.2 MiB, at 16,384 connections) and on `json` (7.6 against 3.1 MiB). On the database tests it is below (18.3–29.5 against 65.3–66.1 MiB), because the explicit entry reserves its carrier's query room up front. Against the first run, the async entry's peak rose on every test (`plaintext` 91.5 → 95.8, `json` 3.3 → 7.6, database 12.1–20.8 → 18.3–29.5 MiB).
+
+**Why, as far as this run goes.** The `strace -c` counts were taken the same way as the first run's, on 2026-11-11 at `e523e14`. They slow both servers several times, so read them as calls per request, not throughput:
+
+```bash
+taskset -c 0 build/tfb/<entry|async> <port> &
+# warm: the test's wrk command below, with -d 2s
+strace -c -f -p <pid> &   # attached for the one measured run, stopped with SIGINT after it
+taskset -c 1-3 wrk -t 3 -c 256 -d 3s -H "Host: tfb-server" http://127.0.0.1:<port>/plaintext -s bench/techempower/pipeline.lua -- 16
+taskset -c 1-3 wrk -t 3 -c 64 -d 3s -H "Host: tfb-server" http://127.0.0.1:<port>/json
+```
+
+<details><summary>The four <code>strace -c</code> tables, re-measured</summary>
+
+`entry`, `/plaintext`, 256 connections (326288 requests in 3.05s, 40.14MB read):
+
+```text
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 64.48    0.453139          22     20440           sendto
+ 31.67    0.222573          10     20441           recvfrom
+  1.70    0.011916          37       321           epoll_wait
+  0.70    0.004947           9       512           getsockopt
+  0.41    0.002856          11       257         1 accept4
+  0.37    0.002586          10       256           epoll_ctl
+  0.33    0.002345           9       256           setsockopt
+  0.33    0.002290           8       256           getpeername
+  0.01    0.000073          73         1           close
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.702725          16     42740         1 total
+```
+
+`async`, `/plaintext`, 256 connections (301616 requests in 3.06s, 37.11MB read):
+
+```text
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 59.15    0.367425          19     18943           sendto
+ 33.38    0.207367          10     18990         3 recvfrom
+  2.43    0.015114          17       851           epoll_ctl
+  1.92    0.011951          20       596           epoll_wait
+  0.92    0.005705          11       512           getsockopt
+  0.49    0.003017          11       257         1 accept4
+  0.46    0.002849           9       299           close
+  0.45    0.002804           9       297           fcntl
+  0.40    0.002485           9       256           getpeername
+  0.40    0.002479           9       256           setsockopt
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.621196          15     41257         4 total
+```
+
+`entry`, `/json`, 64 connections (23239 requests in 3.03s, 3.30MB read):
+
+```text
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 65.52    0.502779          21     23286           sendto
+ 32.62    0.250341          10     23287           recvfrom
+  1.33    0.010187          27       372           epoll_wait
+  0.17    0.001322          10       128           getsockopt
+  0.10    0.000784          12        65         1 accept4
+  0.09    0.000679          10        64           epoll_ctl
+  0.08    0.000619           9        64           getpeername
+  0.08    0.000618           9        64           setsockopt
+  0.01    0.000057          57         1           close
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.767386          16     47331         1 total
+```
+
+`async`, `/json`, 64 connections (21584 requests in 3.02s, 3.07MB read):
+
+```text
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 64.75    0.476769          22     21612           sendto
+ 30.52    0.224764          10     21654         3 recvfrom
+  1.67    0.012283          17       692           epoll_wait
+  1.55    0.011377          15       755           epoll_ctl
+  0.51    0.003735          10       347           close
+  0.47    0.003447           9       345           fcntl
+  0.20    0.001463          11       128           getsockopt
+  0.14    0.001031          15        65         1 accept4
+  0.11    0.000786          12        64           setsockopt
+  0.09    0.000696          10        64           getpeername
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.736351          16     45726         4 total
+```
+
+</details>
+
+- **`plaintext`.** #1378 removed the send gap: the async entry now makes one `sendto` per pipelined burst, as the explicit loop does (18,943 for 301,616 requests, against 20,440 for 326,288). Its extra calls per executor turn (297 `fcntl`, 299 `close`, 851 `epoll_ctl`) are about 0.005 a request. So system calls no longer account for the remaining 32–38%. What is left is CPU per request in user space: the async entry still runs one task turn per request where the explicit loop answers a burst inside one read. That was not profiled. At 16,384 connections the async entry also had wrk read errors in every round, which the explicit entry had in one copy's round; their cause was not looked into.
+- **`json`** is unchanged in kind from the first run: one `sendto` per answer on both sides (23,286 for 23,239; 21,612 for 21,584), and about 345 executor turns' `fcntl`/`close`/`epoll_ctl`, about 0.07 calls a request. The 2.5–17.1% is CPU per request in user space, and it was not profiled. #1378's `json` figures were already mixed and recorded open; the cause is still open.
+- **`db`, `queries`, `fortunes`.** The async entry now gains less, or loses, as connections rise, where the explicit entry gains: `/db` 27.8k → 21.6k from 16 to 256 connections against 72.5k → 105.0k; `/queries` 24.8k → 19.0k against 24.1k → 36.0k; `/fortunes` 32.1k → 17.2k against 55.9k → 65.8k. With #1379 a connection takes at most 8 seated statements (its default depth), each sent with its own Sync, and a task queues for a seat when all 4 connections are full; the explicit carrier pipelines every in-flight request's query. Whether the depth, the per-statement Sync or the task turns limit it was not traced, so the cause is open. #1379 already recorded `/fortunes` at 64 and more connections as slower than the previous async pool, cause unmeasured; this run agrees (22.1k and 17.2k against the first run's 25.0k and 22.9k).
+- **`updates`** is inside the band at every concurrency. Its 20 updates per request are sent as one statement by both entries, which suggests Postgres's write path, not the pool, sets the rate there; that is inferred from the figures, not traced.
+
 
 <!-- syscall-cost:begin -->
 ## Syscall cost
