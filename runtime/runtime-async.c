@@ -87,7 +87,10 @@ typedef int nish_async_unused_in_wasm;
 #include <time.h>
 #include <unistd.h>
 #if defined(__linux__)
+#include <linux/kcmp.h>
 #include <sys/epoll.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
 #else
 #include <sys/event.h>
 #include <sys/stat.h>
@@ -138,6 +141,7 @@ typedef struct nish_wait {
   uint64_t seq;      /* a timer's place among equal deadlines */
   int32_t heap_at;   /* its place in the timer heap, or -1 */
   int32_t cancels;   /* a task's deadline: firing cancels the task, waking nothing */
+  int32_t kept;      /* the original descriptor + 1 when `fd` is its kept duplicate, else 0 */
 } nish_wait;
 
 static nish_task nish_async_main_task = {NULL, -1, 1, 0, 0, 0};
@@ -170,6 +174,17 @@ static uint32_t nish_async_deadline_cap;
 
 static int nish_async_poller = -1;
 static uint32_t nish_async_fd_waits;
+
+#if defined(__linux__)
+/* Per descriptor number, the duplicate + 1 kept registered (disabled, one
+   shot) since its last wait fired, or 0; and whether a wait has it armed. */
+typedef struct nish_kept {
+  int32_t dup;
+  int32_t busy;
+} nish_kept;
+static nish_kept *nish_async_kept;
+static uint32_t nish_async_kept_cap;
+#endif
 
 static int32_t nish_async_allocated;
 static int32_t nish_async_late;
@@ -361,6 +376,7 @@ static uint32_t nish_async_wait_new(void) {
   w->seq = 0;
   w->heap_at = -1;
   w->cancels = 0;
+  w->kept = 0;
   return slot;
 }
 
@@ -448,15 +464,30 @@ static void nish_async_cancel_task(nish_task *t);
 /* The wait in `slot` completed with `answer`: queue its task, or drop it when
    the task it was made for has finished. A task's deadline cancels the task
    instead. */
-static void nish_async_fire(uint32_t slot, int32_t answer) {
+static void nish_async_fire(uint32_t slot, int32_t answer, int by_event) {
   nish_wait *w = &nish_async_waits[slot];
   if (w->state != NISH_WAIT_PENDING) return;
   nish_async_heap_remove(slot);
   if (w->fd >= 0) {
 #if defined(__linux__)
-    epoll_ctl(nish_async_poller, EPOLL_CTL_DEL, w->fd, NULL);
-#endif
+    if (w->kept) {
+      nish_kept *k = &nish_async_kept[w->kept - 1];
+      k->busy = 0;
+      /* The kernel's own event disabled the one-shot registration; anything
+         else (a cancel, a deadline) leaves it armed, so it goes. */
+      if (!by_event) {
+        epoll_ctl(nish_async_poller, EPOLL_CTL_DEL, w->fd, NULL);
+        close(w->fd);
+        k->dup = 0;
+      }
+      w->kept = 0;
+    } else {
+      epoll_ctl(nish_async_poller, EPOLL_CTL_DEL, w->fd, NULL);
+      close(w->fd);
+    }
+#else
     close(w->fd);
+#endif
     w->fd = -1;
     nish_async_fd_waits--;
   }
@@ -480,7 +511,7 @@ static void nish_async_fire(uint32_t slot, int32_t answer) {
 /* A timer came due: a sleep is over (true), a descriptor wait's deadline
    passed first (false), a task's deadline cancels it. */
 static void nish_async_expire(uint32_t slot) {
-  nish_async_fire(slot, nish_async_waits[slot].fd >= 0 ? 0 : 1);
+  nish_async_fire(slot, nish_async_waits[slot].fd >= 0 ? 0 : 1, 0);
 }
 
 /* ---- Cancellation -------------------------------------------------------- */
@@ -493,7 +524,7 @@ static void nish_async_cancel_task(nish_task *t) {
   for (uint32_t slot = 0; slot < nish_async_wait_count; slot++) {
     nish_wait *w = &nish_async_waits[slot];
     if (w->state == NISH_WAIT_PENDING && !w->cancels && w->task == t->index && w->task_gen == t->gen)
-      nish_async_fire(slot, 0);
+      nish_async_fire(slot, 0, 0);
   }
 }
 
@@ -557,6 +588,71 @@ int32_t nish_async_cancel_after(int64_t handle, int32_t ms) {
   return 1;
 }
 
+#if defined(__linux__)
+/* Registering an epoll descriptor in the poller makes the kernel walk every
+   descriptor that epoll watches (its loop and wake-path checks), so a server
+   that parks on its connection loop each turn would pay for every open
+   connection on every turn. Such a duplicate is therefore kept registered
+   once its wait fires -- the one-shot event leaves it disabled -- and the
+   next wait on the same descriptor re-arms it (EPOLL_CTL_MOD, which checks
+   nothing), provided kcmp says the descriptor still names the same open file.
+   Only anonymous-inode descriptors (epoll, eventfd, timerfd) are kept: a kept
+   socket would hold the connection open after the program closed it. */
+
+static uint32_t nish_async_keep_events(int32_t dir) {
+  return (dir ? EPOLLOUT : EPOLLIN) | EPOLLONESHOT;
+}
+
+/* Drop the kept duplicate `k` holds. */
+static void nish_async_unkeep(nish_kept *k) {
+  epoll_ctl(nish_async_poller, EPOLL_CTL_DEL, k->dup - 1, NULL);
+  close(k->dup - 1);
+  k->dup = 0;
+}
+
+/* Re-arm the duplicate kept for `fd` for the wait in `slot`: true when there
+   was one, idle, still naming the open file `fd` names. */
+static int nish_async_rearm(uint32_t slot, int32_t fd, int32_t dir) {
+  if ((uint32_t)fd >= nish_async_kept_cap) return 0;
+  nish_kept *k = &nish_async_kept[fd];
+  if (!k->dup || k->busy) return 0;
+  pid_t me = getpid();
+  if (syscall(SYS_kcmp, me, me, KCMP_FILE, fd, k->dup - 1) != 0) {
+    nish_async_unkeep(k);
+    return 0;
+  }
+  struct epoll_event ev;
+  memset(&ev, 0, sizeof ev);
+  ev.events = nish_async_keep_events(dir);
+  ev.data.u64 = nish_async_token(slot);
+  if (epoll_ctl(nish_async_poller, EPOLL_CTL_MOD, k->dup - 1, &ev) < 0) {
+    nish_async_unkeep(k);
+    return 0;
+  }
+  k->busy = 1;
+  nish_async_waits[slot].fd = k->dup - 1;
+  nish_async_waits[slot].kept = fd + 1;
+  nish_async_fd_waits++;
+  return 1;
+}
+
+/* Keep `dup`, just registered for `fd` by the wait in `slot`, when `fd` is an
+   anonymous inode and has no kept duplicate already. */
+static void nish_async_keep(uint32_t slot, int32_t fd, int dup) {
+  if ((uint32_t)fd < nish_async_kept_cap && nish_async_kept[fd].dup) return;
+  struct stat st;
+  if (fstat(dup, &st) != 0 || (st.st_mode & S_IFMT) != 0) return;
+  while ((uint32_t)fd >= nish_async_kept_cap) {
+    uint32_t had = nish_async_kept_cap;
+    nish_async_kept = nish_async_grow(nish_async_kept, &nish_async_kept_cap, sizeof *nish_async_kept);
+    memset(nish_async_kept + had, 0, (size_t)(nish_async_kept_cap - had) * sizeof *nish_async_kept);
+  }
+  nish_async_kept[fd].dup = dup + 1;
+  nish_async_kept[fd].busy = 1;
+  nish_async_waits[slot].kept = fd + 1;
+}
+#endif
+
 /* A wait for `fd` to be readable (`dir` 0) or writable (`dir` 1). */
 uint64_t nish_async_wait_fd(int32_t fd, int32_t dir) {
   uint32_t slot = nish_async_wait_new();
@@ -570,6 +666,9 @@ uint64_t nish_async_wait_fd(int32_t fd, int32_t dir) {
 #endif
     if (nish_async_poller < 0) nish_async_die(NISH_ASYNC_POLLER);
   }
+#if defined(__linux__)
+  if (nish_async_rearm(slot, fd, dir)) return nish_async_token(slot);
+#endif
   int dup = fcntl(fd, F_DUPFD_CLOEXEC, 0);
   if (dup < 0) return nish_async_fired_now(slot, 0);
 #if !defined(__linux__)
@@ -586,7 +685,7 @@ uint64_t nish_async_wait_fd(int32_t fd, int32_t dir) {
 #if defined(__linux__)
   struct epoll_event ev;
   memset(&ev, 0, sizeof ev);
-  ev.events = (dir ? EPOLLOUT : EPOLLIN) | EPOLLONESHOT;
+  ev.events = nish_async_keep_events(dir);
   ev.data.u64 = token;
   int rc = epoll_ctl(nish_async_poller, EPOLL_CTL_ADD, dup, &ev);
 #else
@@ -603,6 +702,9 @@ uint64_t nish_async_wait_fd(int32_t fd, int32_t dir) {
   }
   nish_async_waits[slot].fd = dup;
   nish_async_fd_waits++;
+#if defined(__linux__)
+  nish_async_keep(slot, fd, dup);
+#endif
   return token;
 }
 
@@ -669,7 +771,7 @@ static void nish_async_block(void) {
         nish_async_late++;
         continue;
       }
-      nish_async_fire((uint32_t)slot, 1);
+      nish_async_fire((uint32_t)slot, 1, 1);
     }
 #else
     struct kevent evs[64];
@@ -688,7 +790,7 @@ static void nish_async_block(void) {
         nish_async_late++;
         continue;
       }
-      nish_async_fire((uint32_t)slot, 1);
+      nish_async_fire((uint32_t)slot, 1, 1);
     }
 #endif
   } else if (wait_ns > 0) {
