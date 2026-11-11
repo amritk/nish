@@ -2407,11 +2407,11 @@ const decidePass = (
 ): void => {
   const walk = new PassWalk(unit, table, facts, scope)
   walk.returnsByValue = returnsByValue
-  const body = scope.body
   if (f.managesArena) {
     walk.refuse(LOOP_CONTROL, null, "")
     return
   }
+  const body = scope.body
   for (const node of f.escapingNodes) {
     if (within(body, node)) {
       walk.refuse(LOOP_STORED, node, "")
@@ -3050,6 +3050,10 @@ const ownLeak = (facts: FactsTable, f: FunctionFacts, seen: FunctionFacts[]): Fu
     const g = facts.get(f.callees.at(c))
     if (g !== null && g !== f && g.allocLeaks) {
       leaksBelow = true
+      // A leak of its own is where the doubt starts, whatever its callees do.
+      if (g.leaksItself) {
+        return g
+      }
       if (!holdsFacts(seen, g)) {
         seen.push(g)
         const found = ownLeak(facts, g, seen)
@@ -3308,6 +3312,15 @@ const keptReason = (
   }
   const program = unit.program
   const line = program.source.lineOf(kept.start)
+  // A leak of its own is the one to fix first: a callee's would not
+  // give this function its scope back while its own remains.
+  if (f.leaksItself) {
+    return (
+      "an allocation it makes is held where this analysis does not prove it dead when it returns (a local " +
+      "assigned more than once, an array of its own, or a callee that keeps its argument); the first " +
+      `allocation it holds is on line ${line}`
+    )
+  }
   // What a callee leaves behind is the caller's to release, and with no
   // scope of its own this function releases none of it.
   // A `new` of the function's own whose constructor leaves nothing is the
@@ -3319,19 +3332,11 @@ const keptReason = (
     const what = facts.get(callee.name) === null ? ", which this analysis cannot see into," : ""
     return `\`${callee.sourceName}\`${what} called on line ${line}, leaves memory behind that no scope of this function takes back`
   }
-  // A leak of its own is the one to fix first: a callee's would not
-  // give this function its scope back while its own remains.
-  const root: FunctionFacts | null = f.allocLeaks && !f.leaksItself ? leakRoot(facts, f) : null
+  const root: FunctionFacts | null = f.allocLeaks ? leakRoot(facts, f) : null
   if (root !== null) {
     return (
       `it calls into \`${root.sourceName}\`, which holds an allocation this analysis does not prove dead, and ` +
       `that doubt passes to every caller, so it does not prove dead what line ${line} allocates either`
-    )
-  }
-  if (f.allocLeaks) {
-    return (
-      "an allocation it makes is held in a local assigned more than once or in an array of its own, which this " +
-      `analysis does not prove dead when it returns; the first it keeps is on line ${line}`
     )
   }
   return `what line ${line} allocates is held where this analysis cannot prove it dead when the function returns`

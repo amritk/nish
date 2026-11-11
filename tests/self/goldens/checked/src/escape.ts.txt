@@ -1353,8 +1353,8 @@ function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, fact
   stackSites=1 stackLocals=1
   local -19:9 walk: PassWalk (const)
   callee -19:16 new PassWalk -> @PassWalk.constructor
-  local -17:9 body: Node (const)
-  callee -15:5 PassWalk.refuse -> @PassWalk.refuse
+  callee -16:5 PassWalk.refuse -> @PassWalk.refuse
+  local -13:9 body: Node (const)
   local -12:14 node: Node (const)
   callee -11:9 within -> @within
   callee -10:7 PassWalk.refuse -> @PassWalk.refuse
@@ -1675,12 +1675,12 @@ function ownLeak(facts: FactsTable, f: FunctionFacts, seen: FunctionFacts[]): Fu
   pointer f: size=416 writesThrough=true captured=true
   pointer seen: size=0 writesThrough=true captured=false passedTo=holdsFacts#0 ownLeak#2
   stackSites=0 stackLocals=0
-  local -7:7 leaksBelow: boolean (let)
-  local -6:7 c: i32 (let)
-  callee -5:14 StringSet.size -> @StringSet.size
-  local -4:11 g: FunctionFacts | null (const)
-  callee -4:15 FactsTable.get -> @FactsTable.get
-  callee -4:25 StringSet.at -> @StringSet.at
+  local -11:7 leaksBelow: boolean (let)
+  local -10:7 c: i32 (let)
+  callee -9:14 StringSet.size -> @StringSet.size
+  local -8:11 g: FunctionFacts | null (const)
+  callee -8:15 FactsTable.get -> @FactsTable.get
+  callee -8:25 StringSet.at -> @StringSet.at
   callee -1:12 holdsFacts -> @holdsFacts
   local +1:15 found: FunctionFacts | null (const)
   callee +1:23 ownLeak -> @ownLeak
@@ -1809,13 +1809,13 @@ function keptReason(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f: 
   local +10:9 program: CheckedProgram (const)
   local +11:9 line: i32 (const)
   callee +11:16 SourceFile.lineOf -> @SourceFile.lineOf
-  local +16:9 callee: FunctionSig | null (const)
-  callee +16:38 leavesMemory -> @leavesMemory
-  callee +17:7 calleeAt -> @calleeAt
-  local +20:11 what: string (const)
-  callee +20:18 FactsTable.get -> @FactsTable.get
-  local +25:9 root: FunctionFacts | null (const)
-  callee +25:71 leakRoot -> @leakRoot
+  local +25:9 callee: FunctionSig | null (const)
+  callee +25:38 leavesMemory -> @leavesMemory
+  callee +26:7 calleeAt -> @calleeAt
+  local +29:11 what: string (const)
+  callee +29:18 FactsTable.get -> @FactsTable.get
+  local +32:9 root: FunctionFacts | null (const)
+  callee +32:53 leakRoot -> @leakRoot
 function explainLoops(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, f: FunctionFacts, noElision: boolean, isMain: boolean, node: Node, pass: LoopScope | null, block: Node | null, out: MemoryReport): void -> @explainLoops
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

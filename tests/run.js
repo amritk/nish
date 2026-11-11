@@ -20652,6 +20652,29 @@ if (dealtHere("cliChecks")) {
         explainBare.stderr.includes("explain-memory: 8 of 10 allocating loops"),
       shown(explainBare)
     )
+    // A build `--deny-retention` refuses still prints the report, which says
+    // why each refused loop keeps its memory.
+    const deniedDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-explain-"))
+    const denied = spawnSync(
+      NISH,
+      [
+        path.join(root, "tests", "cases", "reject_deny_retention_pass_drop.ts"),
+        "-o",
+        path.join(deniedDir, "denied.ll"),
+        "--deny-retention",
+        "--explain-memory",
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    fs.rmSync(deniedDir, { recursive: true, force: true })
+    check(
+      "explain memory: a build --deny-retention refuses still prints the report",
+      denied.status === 1 &&
+        denied.stderr.includes("error: `--deny-retention` refuses") &&
+        denied.stderr.includes(": memory: this loop keeps what each pass allocates") &&
+        denied.stderr.includes("explain-memory: "),
+      shown(denied)
+    )
     // `--deny-retention` turns the arena-retention warnings into errors (NL2462),
     // and those are found by the body checks and the whole-program facts, which
     // `--emit-ast` never reaches (docs/LANGUAGE.md, "Retention as an error").

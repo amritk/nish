@@ -514,6 +514,11 @@ export class Compilation {
    */
   capabilityLockPath: string
   capabilityLockText: string
+  /**
+   * The check got as far as the whole-program facts, so `explainMemoryText`
+   * can read them even when a later refusal (`--deny-retention`) fails it.
+   */
+  factsSettled: boolean
 
   constructor(opts: Options) {
     this.opts = opts
@@ -545,6 +550,7 @@ export class Compilation {
     this.grantArgTexts = []
     this.capabilityLockPath = ""
     this.capabilityLockText = ""
+    this.factsSettled = false
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -1441,6 +1447,7 @@ export class Compilation {
       layoutInlineArrays(contexts, mode)
       proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     }
+    this.factsSettled = true
     this.reportArenaLoops()
     this.denyRetention()
     this.checkParallel()

@@ -1293,6 +1293,11 @@ export const main = (): number => {
   }
   if (!compilation.check()) {
     report(compilation, json)
+    // A refusal on the facts, `--deny-retention`'s, is when the report is
+    // wanted most: it says why each refused loop keeps its memory.
+    if (opts.explainMemory && compilation.factsSettled) {
+      console.error(compilation.explainMemoryText())
+    }
     return 1
   }
   const warningStyle = new WarningStyle()
