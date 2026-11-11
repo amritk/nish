@@ -110,10 +110,10 @@ export const main = async (): Promise<i32> => {
   const db = new TfbAsyncDb(pool)
   spawn(exitOnSignal(signalFd()))
   console.log(`listening ${port}`)
-  const [code, redialled] = await awaitAll(
+  const [code, _redialled] = await awaitAll(
     tfbServeDbUntil(listener, db, tfbDbLimits(SLOTS), new ServeStats()),
     tfbKeepPool(db, config, password, target, REDIAL_MS)
   )
   wipe(password)
-  return redialled < 0 ? 1 : code
+  return code
 }

@@ -2,8 +2,9 @@
 // (bench/techempower/async-db-server.ts), in the same process as the pool it
 // serves. `standIn` accepts connections one after another, the pool having
 // one, answers each startup as a `trust` server, then each Parse, Bind,
-// Execute and Sync by the statement's text, which it pins as the literals
-// the entry must send:
+// Execute and Sync by the statement's text, a Bind naming a statement a
+// Parse on the same connection prepared, which it pins as the literals the
+// entry must send:
 //
 //   WORLD_SQL    one row (id, randomNumber) per id of the `int8[]`
 //                parameter, in its order, repeats included
@@ -13,7 +14,9 @@
 //   anything else  an ErrorResponse, counted in `other`
 //
 // The table's flags make the next such answer go wrong in one way: refused,
-// held, cut off mid-answer, ended out of step, or too long to fit. The table
+// held, cut off mid-answer, ended out of step, or too long to fit. A
+// connection that sends nothing is kept until the client is `finished`,
+// however long it idles, as a server's is. The table
 // is the one object the stand-in shares with the test's client; the
 // stand-in's task body writes it, and its helpers only read it.
 import { readableWithin, sleep, writableWithin } from "nish:async"
@@ -61,12 +64,21 @@ export class Table {
   cacheHeld: boolean = false
   /** Whether the next World read is cut off after its first row, the connection closed. */
   dropWorld: boolean = false
-  /** Whether the next World read ends with ReadyForQuery 'T', in a transaction, so the connection is out of step. */
+  /**
+   * Whether the next World read ends with ReadyForQuery 'T', in a transaction,
+   * so the connection is out of step.
+   */
   busyWorld: boolean = false
   /** Whether the next fortunes read answers more rows than a page holds. */
   crowdFortunes: boolean = false
   /** Connections accepted. */
   accepted: i32 = 0
+  /** Parses received: each statement's first time on a connection. */
+  parses: i32 = 0
+  /** Parses of a name the same connection had already prepared. */
+  reparsed: i32 = 0
+  /** Set once the client is done: an idle connection then waits no longer. */
+  finished: boolean = false
 
   constructor() {
     this.world = new Array<i32>(ROWS + 1)
@@ -124,8 +136,12 @@ const standInAccept = async (listen: i32): Promise<i32> => {
   return -1
 }
 
-/** The next message into `w` (its type, 0 for the untyped startup), or -1 when the peer left. */
-const standInMessage = async (fd: i32, w: Wire, typed: boolean): Promise<i32> => {
+/**
+ * The next message into `w` (its type, 0 for the untyped startup), or -1
+ * when the peer left. Between messages (`idle`) it waits until the table is
+ * `finished`; within one, at most `WAIT_MS` at a time.
+ */
+const standInMessage = async (fd: i32, w: Wire, typed: boolean, idle: boolean, table: Table): Promise<i32> => {
   w.start = w.stop
   while (true) {
     const total: i32 = w.whole(typed)
@@ -138,7 +154,7 @@ const standInMessage = async (fd: i32, w: Wire, typed: boolean): Promise<i32> =>
     const n: i32 = netRead(fd, w.buf, w.end, toI32(w.buf.length) - w.end)
     if (n === -11) {
       const ok: boolean = await readableWithin(fd, WAIT_MS)
-      if (!ok) {
+      if (!ok && !(idle && w.end === w.start && !table.finished)) {
         return -1
       }
     } else if (n <= 0) {
@@ -210,7 +226,10 @@ export const standIn = async (listen: i32, table: Table, connections: i32): Prom
     const o = new Out()
     const ids: i32[] = new Array<i32>(1024)
     const numbers: i32[] = new Array<i32>(1024)
-    const startup: i32 = await standInMessage(fd, w, false)
+    // The statements this connection's Parses named, and their text.
+    const names: string[] = []
+    const texts: string[] = []
+    const startup: i32 = await standInMessage(fd, w, false, false, table)
     let live: boolean = startup >= 0
     if (live) {
       o.begin(82)
@@ -231,8 +250,11 @@ export const standIn = async (listen: i32, table: Table, connections: i32): Prom
       let sql: string = ""
       const values: string[] = []
       let synced: boolean = false
+      let parsed: boolean = false
+      let first: boolean = true
       while (!synced && live) {
-        const type: i32 = await standInMessage(fd, w, true)
+        const type: i32 = await standInMessage(fd, w, true, first, table)
+        first = false
         if (type < 0 || type === 88) {
           live = false
         } else if (type === 80) {
@@ -242,6 +264,16 @@ export const standIn = async (listen: i32, table: Table, connections: i32): Prom
             p += 1
           }
           sql = w.cstr(p + 1)
+          const named: string = w.cstr(w.body)
+          for (let i: i32 = 0; i < toI32(names.length); i++) {
+            if (names[i] === named) {
+              table.reparsed += 1
+            }
+          }
+          names.push(named)
+          texts.push(sql)
+          parsed = true
+          table.parses += 1
         } else if (type === 66) {
           // Bind: portal, statement, format codes, then the values, none NULL.
           let p: i32 = w.body
@@ -249,6 +281,13 @@ export const standIn = async (listen: i32, table: Table, connections: i32): Prom
             p += 1
           }
           p += 1
+          const name: string = w.cstr(p)
+          for (let i: i32 = toI32(names.length) - 1; i >= 0 && !parsed; i--) {
+            if (names[i] === name) {
+              sql = texts[i]
+              break
+            }
+          }
           while (toI32(w.buf[p]) !== 0) {
             p += 1
           }
@@ -269,8 +308,10 @@ export const standIn = async (listen: i32, table: Table, connections: i32): Prom
       if (!live) {
         break
       }
-      o.begin(49)
-      o.finish()
+      if (parsed) {
+        o.begin(49)
+        o.finish()
+      }
       o.begin(50)
       o.finish()
       let status: i32 = 73
