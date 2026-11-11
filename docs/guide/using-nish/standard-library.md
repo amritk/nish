@@ -158,7 +158,8 @@ export function main(): number {
 ```
 
 A read may come back short, so loop on the count rather than on
-`fileSize(fd)`. All four need `fs.read`, work natively, under Node and under
+`fileSize(fd)`. [Serving a file](networking.md#serving-a-file) sends one over
+HTTP this way. All four need `fs.read`, work natively, under Node and under
 `--profile wasi`, and are refused on freestanding `wasm32` (NL2718); see
 [File I/O](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-file-a-window-at-a-time).
 

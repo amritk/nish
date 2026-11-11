@@ -1759,6 +1759,7 @@ const DEALT_SECTIONS = {
   },
   runtimeCache: { name: "the runtime cache section", selected: selects("runtime-cache") },
   sqliteLink: { name: "the SQLite link section", selected: selects("sqlite-link") },
+  fileServer: { name: "the file-server example's flat-memory check", selected: selects("file-server") },
   differential: { name: "the WP13 differential section", selected: selects("differential") },
   p256Seams: { name: "the p256 seam programs and the generated tables", selected: true, tail: true },
   netStartup: { name: "the net servers' startup links", selected: true, tail: true },
@@ -10549,6 +10550,163 @@ if (dealtHere("sqliteLink")) {
           "sqlite-link: the napi addon exports no `sqlite3_` symbol",
           b.status === 0 && dynamic.status === 0 && !dynamic.stdout.includes("sqlite3_"),
           b.stderr + dynamic.stderr + dynamic.stdout.slice(0, 2000)
+        )
+      }
+    }
+  }
+}
+
+// ---- WP44: the file-server example's flat memory ----------------------------------------
+// examples/file-server.ts streams one file through a fixed 64 KiB window with
+// `fileReadAt` and `Http1Connection.write`, so its peak resident set must not
+// follow the file. It serves (a) a file one window long and (b) one 1,024
+// windows long (64 MiB), each from a fresh process, since VmHWM only rises,
+// to a reader that stalls 250 ms after its first MiB and 5 ms after each MiB
+// after it, so the kernel's socket buffers fill and the server answers
+// H1_AGAIN and a partial take; the body must hash to the file's, and (b)'s
+// VmHWM must stay within `FILE_SERVER_HWM_BAND` of (a)'s.
+//
+// The band. Ten runs of each file (Linux x64, `--profile speed`) read VmHWM at
+// 1,888 to 1,896 kB for both: no difference between the files beyond a spread
+// of 8 kB, two pages. The band is 256 KiB, 32 times that spread and four
+// windows, so a server that held four more windows than it does, or any part
+// of the file proportional to its size, fails; the same program with an 8 MiB
+// window read 10,024 kB on (b).
+if (dealtHere("fileServer")) {
+  const FILE_SERVER_HWM_BAND = 256
+  if (process.platform !== "linux") {
+    skip("file-server: VmHWM is read from /proc, which only Linux has")
+  } else if (!HAS_CLANG) {
+    skip("file-server: clang not on PATH, so nothing can be linked")
+  } else {
+    const fsDir = path.join(buildDir, "file-server")
+    fs.rmSync(fsDir, { recursive: true, force: true })
+    fs.mkdirSync(fsDir, { recursive: true })
+    const exe = path.join(fsDir, "file-server")
+    const built = spawnSync(
+      NISH,
+      [path.join(root, "examples", "file-server.ts"), "-o", fsDir + path.sep, "--link", exe, "--profile", "speed"],
+      { cwd: root, encoding: "utf8", timeout: 300_000, killSignal: "SIGKILL" }
+    )
+    // One fetch from a fresh server: the response head, the body's length and
+    // SHA-256, and the server's VmHWM in kB once the body is in. The server is
+    // killed whatever happens, and the whole exchange has a deadline.
+    const serveOnce = (file, method) =>
+      new Promise((resolve) => {
+        const server = spawn(exe, [file, "0"], {
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 90_000,
+          killSignal: "SIGKILL",
+        })
+        let out = ""
+        let fetching = false
+        let settled = false
+        const finish = (r) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          server.kill("SIGKILL")
+          resolve({ ...r, out })
+        }
+        const timer = setTimeout(() => finish({ error: "timed out after 60 s" }), 60_000)
+        server.on("error", (e) => finish({ error: String(e) }))
+        server.on("exit", (code, signal) => finish({ error: `the server exited (${code ?? signal})` }))
+        server.stderr.on("data", (d) => (out += d))
+        server.stdout.on("data", (d) => {
+          out += d
+          const port = /http:\/\/127\.0\.0\.1:(\d+)\//.exec(out)
+          if (port === null || fetching) return
+          fetching = true
+          const socket = net.connect(Number(port[1]), "127.0.0.1")
+          const hash = crypto.createHash("sha256")
+          let head = Buffer.alloc(0)
+          let inBody = false
+          let got = 0
+          let sincePause = 0
+          let pauses = 0
+          socket.on("connect", () => socket.write(`${method} / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`))
+          socket.on("data", (chunk) => {
+            if (!inBody) {
+              head = Buffer.concat([head, chunk])
+              const end = head.indexOf("\r\n\r\n")
+              if (end < 0) return
+              inBody = true
+              chunk = head.subarray(end + 4)
+              head = head.subarray(0, end)
+            }
+            hash.update(chunk)
+            got += chunk.length
+            sincePause += chunk.length
+            if (sincePause >= 1 << 20) {
+              sincePause = 0
+              socket.pause()
+              setTimeout(() => socket.resume(), pauses++ === 0 ? 250 : 5)
+            }
+          })
+          socket.on("error", (e) => finish({ error: String(e) }))
+          socket.on("close", () => {
+            let hwm = -1
+            try {
+              const status = fs.readFileSync(`/proc/${server.pid}/status`, "utf8")
+              hwm = Number(/VmHWM:\s+(\d+) kB/.exec(status)?.[1] ?? -1)
+            } catch {
+              // The server is gone; `hwm` stays -1 and the check says so.
+            }
+            finish({ head: head.toString("latin1"), got, sha: hash.digest("hex"), hwm })
+          })
+        })
+      })
+    if (check("file-server: examples/file-server.ts links", built.status === 0, shown(built))) {
+      const window = path.join(fsDir, "window.bin")
+      const large = path.join(fsDir, "large.bin")
+      let written = true
+      try {
+        fs.writeFileSync(window, crypto.randomBytes(1 << 16))
+        const fd = fs.openSync(large, "w")
+        for (let k = 0; k < 64; k++) {
+          fs.writeSync(fd, crypto.randomBytes(1 << 20))
+        }
+        fs.closeSync(fd)
+      } catch (e) {
+        written = false
+        check("file-server: the window-sized and 64 MiB files are written", false, String(e))
+      }
+      if (written) {
+        const peaks = {}
+        for (const [name, file] of [
+          ["window-sized", window],
+          ["64 MiB", large],
+        ]) {
+          const size = fs.statSync(file).size
+          const want = crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")
+          const r = await serveOnce(file, "GET")
+          check(
+            `file-server: the ${name} file arrives whole to a stalling reader`,
+            r.error === undefined &&
+              r.head.startsWith("HTTP/1.1 200 ") &&
+              r.head.includes(`Content-Length: ${size}`) &&
+              r.got === size &&
+              r.sha === want &&
+              r.hwm > 0,
+            JSON.stringify({ ...r, size, want })
+          )
+          peaks[name] = r.hwm
+        }
+        check(
+          `file-server: the 64 MiB file's peak RSS is within ${FILE_SERVER_HWM_BAND} kB of the window-sized one's`,
+          peaks["window-sized"] > 0 &&
+            peaks["64 MiB"] > 0 &&
+            Math.abs(peaks["64 MiB"] - peaks["window-sized"]) <= FILE_SERVER_HWM_BAND,
+          `VmHWM ${peaks["window-sized"]} kB serving 64 KiB, ${peaks["64 MiB"]} kB serving 64 MiB`
+        )
+        const headOnly = await serveOnce(large, "HEAD")
+        check(
+          "file-server: HEAD answers the length and no body",
+          headOnly.error === undefined &&
+            headOnly.head.startsWith("HTTP/1.1 200 ") &&
+            headOnly.head.includes(`Content-Length: ${1 << 26}`) &&
+            headOnly.got === 0,
+          JSON.stringify(headOnly)
         )
       }
     }

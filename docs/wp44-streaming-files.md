@@ -1,6 +1,6 @@
 # WP44: Streaming file reads — a descriptor, a positional read, a size and a close
 
-**Status: decided on 2026-11-11 (§9); F1 and F2 built, F3 to come.** This note answers
+**Status: decided on 2026-11-11 (§9); done: F1, F2 and F3 built.** This note answers
 [#710](https://github.com/amritk/nish/issues/710). Today a Nish program reads a
 file only whole. `readFileSync`, `readFileSyncOrNull` and `readFileBytesSync`
 each return the entire file as one arena value, and refuse a file past
@@ -429,6 +429,9 @@ rolling freeze), and nothing in this package needs it to.
    a stated band, against a file the size of the window. Then `bun-http-framework-benchmark`'s
    `/video` route can be met. Submitting to it is the owner's call, as
    TechEmpower is in WP39 §4.
+   Built as `examples/file-server.ts`; the check is `tests/run.js`'s
+   `file-server` section, which serves 64 KiB and 64 MiB and holds the two
+   peaks within 256 kB.
 
 **The bar.** F1 lands when the native and Node runs print the same bytes for
 every positive case and `mem_file_stream_flat` holds the arena flat. F3 lands
