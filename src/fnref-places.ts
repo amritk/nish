@@ -960,6 +960,42 @@ const exposeMember = (module: RefModule, sig: FunctionSig): void => {
  * `$ref.<module>.<signature>.<n>(h, x)` with the dispatcher as its callee in
  * every table the call was checked into. Answers whether anything changed.
  */
+/**
+ * Puts every reference call of `program` back in the shape it was written in
+ * (`written`), with the reference as its callee, or in the shape the emitter
+ * reads, with the dispatcher as its callee and the reference as its first
+ * argument. `--emit-ts` writes the program as written, so it reads the calls
+ * in the first shape and leaves them in the second. A generic body's call is
+ * one node listed once per instance, so each node moves only from the shape
+ * it is in.
+ */
+export const shapeReferenceCalls = (program: CheckedProgram, written: boolean): void => {
+  let s = 0
+  while (s < program.refSites.length) {
+    const call = program.refSites[s]
+    const dispatcher = program.refSiteCallees[s]
+    const list = call.children[1]
+    if (written && call.children[0] === dispatcher) {
+      call.children[0] = list.children[0]
+      const args: Node[] = []
+      let i = 1
+      while (i < list.children.length) {
+        args.push(list.children[i])
+        i = i + 1
+      }
+      list.children = args
+    } else if (!written && call.children[0] !== dispatcher) {
+      const args: Node[] = [call.children[0]]
+      for (const arg of list.children) {
+        args.push(arg)
+      }
+      call.children[0] = dispatcher
+      list.children = args
+    }
+    s = s + 1
+  }
+}
+
 export const resolveReferences = (table: TypeTable, modules: RefModule[]): boolean => {
   let any = false
   for (const module of modules) {
@@ -1051,6 +1087,7 @@ export const resolveReferences = (table: TypeTable, modules: RefModule[]): boole
     }
     const shown = call.children[1].children[0]
     module.program.refSites.push(call)
+    module.program.refSiteCallees.push(call.children[0])
     module.program.refSiteDispatchers.push(dispatcher)
     module.program.refSiteShown.push(module.program.source.text.substring(shown.start, shown.end))
     module.program.refSiteVia.push(via)

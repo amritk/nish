@@ -26,6 +26,7 @@
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
+import { shapeReferenceCalls } from "./fnref-places"
 import { internalErrorFor } from "./ice"
 import {
   applyModuleEdits,
@@ -358,6 +359,21 @@ const hasAsync = (node: Node): boolean => {
  * program refused twice says so twice.
  */
 export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
+  // A call through a function reference was given its dispatcher (WP51), which
+  // TypeScript has no use for: the program is written with the reference as the
+  // callee, as it was written, and handed back to the emitter that way round.
+  for (const unit of compilation.modules) {
+    shapeReferenceCalls(unit.checker.program, true)
+  }
+  const result = emitModules(compilation)
+  for (const unit of compilation.modules) {
+    shapeReferenceCalls(unit.checker.program, false)
+  }
+  return result
+}
+
+/** `emitTypeScript`, with every reference call in its written shape. */
+const emitModules = (compilation: Compilation): EmittedProgram => {
   const result = new EmittedProgram()
   const modules = compilation.modules
   const entry = compilation.entry()

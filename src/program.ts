@@ -1794,9 +1794,12 @@ export class CheckedProgram {
    * callee as written and, beside each of the dispatcher's members, where it
    * came into the callee's place (`` `k.f = u3` (main.ts:12) ``, or "" when it
    * came in only by widening). The escape-join refusal and the wide-set
-   * warning read them after the attribute fixpoint.
+   * warning read them after the attribute fixpoint. `refSiteCallees` is the
+   * dispatcher identifier each site's call was given, which `--emit-ts` swaps
+   * back out while it reads the call as written (`writtenReferenceCalls`).
    */
   refSites: Node[]
+  refSiteCallees: Node[]
   refSiteDispatchers: FunctionSig[]
   refSiteShown: string[]
   refSiteVia: string[][]
@@ -2014,6 +2017,7 @@ export class CheckedProgram {
     this.refCallTables = []
     this.refCallTypes = []
     this.refSites = []
+    this.refSiteCallees = []
     this.refSiteDispatchers = []
     this.refSiteShown = []
     this.refSiteVia = []
