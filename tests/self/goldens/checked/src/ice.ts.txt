@@ -8,6 +8,7 @@ const EXIT_INTERNAL: i32 = 70
 const ENV_DEBUG: string = "NISH_DEBUG"
 const ENV_SIMULATE_ICE: string = "NISH_SIMULATE_ICE"
 const UNLABELLED_PREFIX: string = "unlabelled:"
+const NOSTANCE_PREFIX: string = "nostance:"
 const HEX_DIGITS: string = "0123456789abcdef"
 function simulatedInternalError(): boolean -> @simulatedInternalError [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
@@ -16,6 +17,12 @@ function simulatedInternalError(): boolean -> @simulatedInternalError [exported]
   stackSites=0 stackLocals=0
   local +0:9 value: string | null (const)
 function simulatedUnlabelledBuiltin(): string -> @simulatedUnlabelledBuiltin [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_getenv
+  calls: nish_getenv nish_str_at nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:9 value: string | null (const)
+function simulatedStatelessInstance(): string -> @simulatedStatelessInstance [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
   calls: nish_getenv nish_str_at nish_str_new
