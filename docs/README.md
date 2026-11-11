@@ -101,7 +101,11 @@ who write programs in Nish. A page there follows these rules:
   and `node tests/run.js guide` compiles it. Every page but
   `installation.md` carries at least one once it is more than a stub (its
   title and one paragraph). A fragment that cannot compile on its own is a
-  plain ` ```ts ` block, and short.
+  plain ` ```ts ` block, and short. An example of several files tags each
+  fence `file=<path>` (` ```ts nish:ok file=geometry.ts `, or
+  ` ```json nish:ok file=node_modules/hash/package.json ` for a package): the
+  `file=` fences of one section are written out together, each at its path,
+  and the last is compiled with its marker, so only it may be `nish:err`.
 - **The reference is normative.** Each page links the
   [LANGUAGE.md](LANGUAGE.md) section that governs it and describes nothing
   that section does not say; where the two disagree, the guide is wrong.
