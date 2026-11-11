@@ -2292,6 +2292,9 @@ bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 `spawnPiped(argv, stdin, stdout, stderr)` (stdin from a `u8[]`, both outputs
 appended to `u8[]`s, the status; `-2` past 16 MiB; the way to hand a child a
 secret, never argv or the environment),
+`spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)` (the same with a
+deadline in milliseconds, negative for none: `-3` when it passes, the child
+killed and its bytes so far kept; only the child's pid is killed),
 `getenv(name)` (`string | null` — unset and empty are different answers),
 `realpathSync(path)` (`string | null`; symbolic links resolved, absolute, and
 `null` when it does not resolve),

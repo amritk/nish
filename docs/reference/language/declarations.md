@@ -2095,8 +2095,8 @@ async function run(): Promise<void> {
   other (`reject_async_spawn_store_string_callee`,
   `reject_async_spawn_store_string_method`,
   `reject_async_spawn_store_copied`), and growing a shared array, `Map` or
-  `Set` — `push`, `set`, `add`, `spawnPiped` appending to its output
-  arrays, on the argument or on what a method answers out of it — is NL2615
+  `Set` — `push`, `set`, `add`, `spawnPiped` or `spawnPipedWithin`
+  appending to its output arrays, on the argument or on what a method answers out of it — is NL2615
   (`reject_async_spawn_grow`, `reject_async_spawn_grow_method`,
   `reject_async_spawn_grow_map`, `reject_async_spawn_grow_piped`), and so
   is a builtin with no body of its own that does either, `reserve` on a

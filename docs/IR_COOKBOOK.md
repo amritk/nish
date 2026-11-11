@@ -28778,7 +28778,7 @@ deadline passes answers -3: the runtime kills the child's pid with `SIGKILL`,
 reaps it, and keeps the bytes it read in `stdout` and `stderr`. The deadline
 bounds the whole run, the final wait for the child included, so a child that
 closes its output and keeps running is -3 too; a negative one is no deadline
-([LANGUAGE.md](LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory)).
+([LANGUAGE.md](LANGUAGE.md#directories-and-subprocesses)).
 
 <!-- cookbook:begin builtin-spawn-piped-within -->
 ```ts

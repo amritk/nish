@@ -1679,19 +1679,19 @@ const DECLARED = [
     program: "tests/cases/caps_process_spawn_piped_within.ts",
     file: "exit",
     changelog: SPAWN_PIPED_WITHIN,
-    why: "`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1381)",
+    why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1381)',
   },
   {
     program: "tests/cases/io_spawn_piped_within.ts",
     file: "exit",
     changelog: SPAWN_PIPED_WITHIN,
-    why: "`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1381)",
+    why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1381)',
   },
   {
     program: "docs/cookbook/builtin-spawn-piped-within.ts",
     file: "exit",
     changelog: SPAWN_PIPED_WITHIN,
-    why: "`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1381)",
+    why: '`spawnPipedWithin` is new in this release, so the 0.38.0 seed refuses it with "Unknown function" (#1381)',
   },
   {
     program: "docs/cookbook/runtime-prelude.ts",

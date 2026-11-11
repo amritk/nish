@@ -23,7 +23,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | [`nish:fs`](../nish-fs.md) | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`, `mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| [`nish:process`](../nish-process.md) | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `setCpuAffinity`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| [`nish:process`](../nish-process.md) | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawnPipedWithin`, `spawn`, `spawnWithFds`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `setCpuAffinity`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | [`nish:io`](../nish-io.md) | `write`, `writeError`, `writeBytes`, `panic` |
 | [`nish:secret`](../nish-secret.md) | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | [`nish:region`](../nish-region.md) | `Region`, `region`, `regionWith`, `enter`, `enterWith`, `free` — source behind it too ([Regions](#regions-nishregion)) |
@@ -1193,6 +1193,7 @@ Reference: [`nish:fs`](../nish-fs.md), [`nish:process`](../nish-process.md).
 | `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, and wait for it: its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` for an **empty** vector, a child that cannot be started or waited for, and always on WASI, which has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
 | `spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number` | the same run, with each stream sent to a file created or truncated at `0644`; an **empty** path leaves that stream inherited, and a symbolic link as a path's last component is refused, which answers `-1`. The two paths must not name one file; capture them apart and concatenate | write | `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`, `reject_spawn_to_type` |
 | `spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32` | the same run, with every stream a pipe: the child reads `stdin` and then end of file, and its stdout and stderr are **appended** to `stdout` and `stderr`. The status, `128 + n`, or `-1` as for `spawnSync` (and for a failed pipe or `poll`); a stream past **16 MiB** (`NISH_PIPED_CAP`) kills the child with `SIGKILL` and answers `-2`. The child holds no descriptor of the program but its three streams, and the program's SIGPIPE from a child that stopped reading is absorbed. The two output arrays are grown by the runtime, so they are push receivers to the arena analysis, and `readonly` is refused for them, as is a typed-array spelling (`Int32Array`, ...), whose length is fixed | write | `io_spawn_piped`, `mem_spawn_piped_scope`; `reject_spawn_piped_arity`, `reject_spawn_piped_element_type`, `reject_spawn_piped_stdin_type`, `reject_spawn_piped_output`, `reject_spawn_piped_typed_output`, `reject_spawn_piped_wasm`, `reject_using_arena_spawn_piped` |
+| `spawnPipedWithin(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[], timeoutMs: i32): i32` | `spawnPiped`'s run with a deadline `timeoutMs` milliseconds after the call, on the monotonic clock; a **negative** `timeoutMs` is none, and the run is `spawnPiped`'s. Every answer `spawnPiped` gives, and **`-3`** when the deadline passes first: the child's pid is killed with `SIGKILL` and reaped, and the bytes read before then stay in `stdout` and `stderr`. The deadline covers the **whole** run, the wait for the child after its streams close included, so a child that closes its output and keeps running is `-3` too. Only the child's own pid is killed, never a process group: a grandchild still holding an output pipe keeps the run going until the deadline, which turns an exit 0 into `-3`, and is left running. The arguments are checked as `spawnPiped`'s, the fifth as an `i32` | write | `io_spawn_piped_within`; `reject_spawn_piped_within_arity`, `reject_spawn_piped_within_element_type`, `reject_spawn_piped_within_timeout_type`, `reject_spawn_piped_within_output`, `reject_spawn_piped_within_typed_output`, `reject_spawn_piped_within_wasm`, `reject_using_arena_spawn_piped_within` |
 | `readdirSync(path: string): string[] \| null` | the directory's entries, **sorted ascending by bytes**, without `.` and `..`. `null` when the directory cannot be read at all, a *different* answer from the empty array of an empty directory. A WASI build always answers `null`: `fd_readdir` lists a preopened directory rather than a path, which is a different contract and not a port of this one | write | `io_readdir`, `io_readdir_null`; `reject_readdir_arity`, `reject_readdir_type`, `reject_readdir_unchecked` |
 | `realpathSync(path: string): string \| null` | `path` resolved to an **absolute** path with no symbolic link, `.`, `..` or repeated separator, or `null` when it does not resolve. POSIX `realpath` needs every component but the last to exist, so "does not resolve" is one answer rather than several, and the answer the caller asked for rather than an error. Copied into the arena and narrowed with `if (p !== null)` like any other nullable (WP19 §5a item 4) | write | `io_realpath`; `reject_realpath_arity`, `reject_realpath_type` |
 
@@ -1239,6 +1240,20 @@ waits on another cannot deadlock it, and the 16 MiB cap is the answer to the
 reason `spawnSyncTo` gave for refusing to buffer: a child that prints more
 than memory holds is stopped, with a code no exit status can be, rather than
 followed (`docs/security/runtime.md`, RT-27 to RT-31).
+
+`spawnPipedWithin` is the same run for a child that may never answer: a
+credential helper waiting on a prompt nobody sees, or a tool hung on the
+network. It is a fifth argument on a second builtin rather than an optional
+one on `spawnPiped`, so `spawnPiped`'s IR and every program that calls it are
+unchanged; `-3` is a code of its own because a caller tells a slow child from
+a failed one (the deadline was the program's choice, so it may retry with a
+longer one). The deadline is a point in time rather than a budget per wait:
+the poll loop's waits and the final wait for the child all end at it, so the
+whole call returns within `timeoutMs` plus the time a kill and a reap take.
+It kills the pid and not a process group, because putting the child in a
+group of its own would take it out of the terminal's job control, and the
+program cannot know the child would not mind (`docs/security/runtime.md`,
+RT-49).
 
 `spawnWithFds` numbers the descriptors from 3 rather than taking a target
 for each, because 3 onward is where a child that is handed descriptors looks
@@ -3402,7 +3417,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`), `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` (`caps_fs_mode`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawnPipedWithin` (`caps_process_spawn_piped_within`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
