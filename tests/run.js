@@ -1624,6 +1624,9 @@ const TEXT_REFUSALS = [
   ["std_text_split_empty_separator", "split: an empty separator"],
   ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
   ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
+  ["std_text_split_limit_empty_separator", "splitLimit: an empty separator"],
+  ["std_text_to_fixed_negative_digits", "toFixed: digits must be 0 to 100"],
+  ["std_text_to_fixed_too_many_digits", "toFixed: digits must be 0 to 100"],
 ]
 
 /**
@@ -20489,6 +20492,70 @@ if (dealtHere("cliChecks")) {
     )
   }
 
+  // ---- #1328: every bodiless instance states its write facts ------------------------------
+  // `tests/bodiless-stance.js` reads `src/attributes.ts`: every `mark*` helper
+  // answers a stance, nothing else sets those facts, no call drops the answer,
+  // and every body the emitter writes is on `needsStance`'s list. Its
+  // self-test mutates the source once per rule and has each mutant refused.
+  // What gets past the text fails closed in the compiler: an instance on the
+  // list that stated no stance is given the unknown one, and
+  // `NISH_SIMULATE_ICE=nostance:<name>` drops `<name>`'s stated stance, so a
+  // spawned task that encodes into shared memory, accepted as stated, has to
+  // be refused without it.
+  if (!only || "bodiless".includes(only)) {
+    for (const args of [[], ["--self-test"]]) {
+      const r = spawnSync("node", [path.join(root, "tests", "bodiless-stance.js"), ...args], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `bodiless: the stance check${args.length > 0 ? " refuses each of its mutants" : " passes"} (${r.stdout.trim()})`,
+        r.status === 0,
+        r.stdout + r.stderr
+      )
+    }
+    const bodilessDir = path.join(buildDir, "bodiless")
+    fs.rmSync(bodilessDir, { recursive: true, force: true })
+    fs.mkdirSync(bodilessDir, { recursive: true })
+    const encodeTs = path.join(bodilessDir, "encode.ts")
+    fs.writeFileSync(
+      encodeTs,
+      [
+        'import { sleep, spawn } from "nish:async"',
+        'import { JsonWriter } from "nish/json"',
+        'import { jsonEncode } from "nish/json-typed"',
+        "class Tally { name: string = \"\"; hits: i32 = 0 }",
+        "async function work(tally: Tally, ms: i32): Promise<void> {",
+        "  await sleep(ms)",
+        "  const w = new JsonWriter(new Array<u8>(64), 0)",
+        "  jsonEncode(w, tally)",
+        "}",
+        "export async function main(): Promise<i32> {",
+        "  const tally = new Tally()",
+        "  spawn(work(tally, 1))",
+        "  await sleep(10)",
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const stated = spawnSync(NISH, [encodeTs, "-o", path.join(bodilessDir, "stated") + path.sep], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("bodiless: a task that encodes shared memory to JSON compiles", stated.status === 0, shown(stated))
+    const forgotten = spawnSync(NISH, [encodeTs, "-o", path.join(bodilessDir, "forgotten") + path.sep], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_SIMULATE_ICE: "nostance:jsonEncode<Tally>" },
+    })
+    check(
+      "bodiless: the same task is refused once `jsonEncode`'s stance is missing",
+      forgotten.status === 1 && forgotten.stderr.includes("hands `tally` to `jsonEncode<Tally>`, which stores into it"),
+      shown(forgotten)
+    )
+  }
+
   // ---- WP35: the capability report ---------------------------------------------------
   // The golden reports are the `caps_*` cases' `.caps.json` and the `tests/link/caps_*`
   // programs' `expected.caps.json`; what is checked here is everything around them:
@@ -28705,6 +28772,36 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
       divergent.stdout === "built from bytes: 2\nstray continuation byte: 1\njoined halves: 1, length 2\n",
     shown(divergent)
   )
+  // `toFixed` and `splitLimit` are held to JavaScript itself: each line of
+  // expected.out names its arguments, Node answers `Number(x).toFixed(n)` and
+  // `text.split(sep, limit)` for them, and the run under the prelude prints
+  // expected.out too, so the native answers, the prelude's and Node's agree.
+  for (const name of ["std_text_to_fixed", "std_text_split_limit"]) {
+    const dir = path.join(linkDir, name)
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [], "main", { timeout: 60000 })
+    check(
+      `link/${name}: under the Node prelude it exits 0 and prints expected.out`,
+      run.status === 0 && run.stdout === out,
+      `--- native (expected.out)\n${out}--- node\n${shown(run)}`
+    )
+    const wrong = []
+    for (const line of out.trimEnd().split("\n")) {
+      const fixed = /^toFixed\((.*), (-?\d+)\) = (.*)$/.exec(line)
+      const split = /^"(.*)" "(.*)" (-?\d+) -> (\d+): (.*)$/.exec(line)
+      if (fixed) {
+        if (Number(fixed[1]).toFixed(Number(fixed[2])) !== fixed[3]) wrong.push(line)
+      } else if (split) {
+        const pieces = split[1].split(split[2], Number(split[3]))
+        if (`${pieces.length}: ${pieces.join("|")}` !== `${split[4]}: ${split[5]}`) wrong.push(line)
+      } else if (line !== '-0 gives "0": true' && line !== "same as split: true") {
+        // Each program ends with one line of its own, which the checks above
+        // cannot read; any other line is one they would silently pass.
+        wrong.push(`not checked: ${line}`)
+      }
+    }
+    check(`link/${name}: every line is JavaScript's own answer`, wrong.length === 0, wrong.join("\n"))
+  }
   // The pads count `text` in the platform's units: natively é is two bytes
   // and 😀 four, under Node one and two UTF-16 units, so each pad is a unit or
   // two longer there. expected.out holds the native answers; these are Node's.

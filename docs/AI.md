@@ -172,6 +172,7 @@ rejects. This table is the highest-value part of the page.
 | `xs.reduce(f)`, `.forEach`, `.shift` | `` Unknown method `reduce` on i32[] (supported: push, pop, indexOf, join, set, fill, sort, map, filter, some, every, findIndex, slice) `` | a `for` loop; `map`, `filter`, `some`, `every`, `findIndex` and `slice` work, with a one- or two-parameter callback |
 | `xs.find(f)` | `` `find` is not supported: TypeScript types its answer `T \| undefined` … `` (NL2697) | `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }` |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
+| `x.toFixed(2)`, `s.split(sep, limit)` | `` Unknown method `toFixed` on f64 `` | `toFixed(x, 2)` and `splitLimit(s, sep, limit)` from `nish/text` |
 | `a?.b`, `a ?? b` | `?.` only in a chain that ends in `??`; `??` only on a `T \| null`, a chain or `m.get(k)` | `a?.b ?? d`, `a ?? d`, or `if (a !== null)` first |
 | `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |
 | `typeof x`, `x instanceof C`, `"k" in o`, `delete o.k`, `void 0`, `a, b` | each refused by name (`` `typeof` is forbidden ``, …) | there is no runtime type information: a value's type is its declared one |
@@ -2971,6 +2972,16 @@ bytes at a time, so prefer it to a `charCodeAt` loop over a long text — and
 never call it on secret data, because its time says where the match is.
 (No block: a program importing `nish/text` writes two `.ll` files;
 `tests/link/std_text_index_of_any` is its program.)
+
+**Format a number with fixed digits, or split with a limit** — there are no
+methods on a number and no optional parameters, so `x.toFixed(n)` is
+`toFixed(x, n)` and `text.split(sep, limit)` is `splitLimit(text, sep, limit)`,
+both from `nish/text` and both answering what JavaScript does. `toFixed`
+rounds the exact binary value (`toFixed(1.005, 2)` is `"1.00"`) and panics
+outside 0 to 100 digits; `splitLimit` keeps the first `limit` pieces, a
+negative limit keeps all of them, and an empty separator panics.
+(No block, as for `nish/text`; `tests/link/std_text_to_fixed` and
+`tests/link/std_text_split_limit` are its programs.)
 
 **Match a pattern** — there is no `RegExp` and no `/re/` literal:
 `regexCompile(pattern, flags)` from `nish/regex` answers a

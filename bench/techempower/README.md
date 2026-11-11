@@ -88,8 +88,10 @@ rest. Each server's peak RSS is recorded beside its figures, and the report
 says, per concurrency, whether the async twin is inside the band: WP49 stage
 6's gate. Its header says the rest of the method. The recorded figures are in
 [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext)
-and, for the gate,
-[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6).
+and, for the gate, its
+[first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)
+and its
+[re-measurement after the `serve` and pool fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6).
 
 ## The database entry
 

@@ -4125,6 +4125,44 @@ On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
 with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
 
+## Fixed digits and a split limit: `toFixed` and `splitLimit` in `nish/text`
+
+Nish has no methods on a number and no optional parameters, so JavaScript's
+`x.toFixed(n)` and `text.split(sep, limit)` are two functions of `nish/text`.
+Each is the method it stands for, read as TypeScript: under Node the module
+runs as written and answers what the method answers, and natively it answers
+the same bytes (`tests/link/std_text_to_fixed`, `tests/link/std_text_split_limit`,
+whose every line `tests/run.js` also holds to Node's own method).
+
+```typescript
+import { splitLimit, toFixed } from "nish/text";
+
+export const main = (): i32 => {
+  console.log(toFixed(1.005, 2));                     // 1.00: 1.005 is stored a little below
+  console.log(toFixed(2.5, 0));                       // 3: a tie goes away from zero
+  console.log(splitLimit("a,b,c", ",", 2).join("|")); // a|b: the rest is dropped
+  return 0;
+};
+```
+
+- **`toFixed(x, digits)` rounds the exact binary value**, as ECMA-262 does:
+  `1.005` is stored as 1.00499999999999989…, so it gives `"1.00"`, while
+  `8.345` is stored a little above and gives `"8.35"`; an exact tie rounds
+  away from zero, so `toFixed(-2.5, 0)` is `"-3"`. `digits` is 0 to 100, and
+  any other count panics (`toFixed: digits must be 0 to 100`) where JavaScript
+  throws a `RangeError`. `NaN`, the infinities and any `x` of magnitude 1e21 or
+  more answer `${x}`, as JavaScript does; `-0` gives `"0.00"`, and a negative
+  `x` that rounds to zero keeps its sign (`toFixed(-0.0001, 2)` is `"-0.00"`).
+  It is written in Nish over an array of decimal digits, so it is exact for
+  every `f64`, the subnormals included, and it needs no runtime C.
+- **`splitLimit(text, sep, limit)` keeps the first `limit` pieces** of
+  `split(text, sep)` and drops the rest, rather than joining them into the
+  last; a limit of 0 gives `[]`. A negative limit keeps every piece, because
+  JavaScript reads the limit through `ToUint32` and -1 becomes 4294967295;
+  that makes `splitLimit(text, sep, -1)` the same as `split(text, sep)`. An
+  empty separator panics (`splitLimit: an empty separator`) whatever the
+  limit, as `split`'s does, even where JavaScript would answer `[]`.
+
 ## Byte runs: `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` in `nish/bytes`
 
 The four runs answer the first index in `[from, to)` of a `u8[]` whose byte

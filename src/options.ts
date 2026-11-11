@@ -161,6 +161,14 @@ export class Options {
    */
   unlabelledBuiltin: string
   /**
+   * #1328: the source name of a bodiless instance whose stated stance is to be
+   * treated as missing, so the suite can reach the unknown stance a dropped
+   * one falls back to (`collectFacts` in `src/attributes.ts`). A test hook read
+   * from `NISH_SIMULATE_ICE=nostance:<name>` (`src/ice.ts`), never a flag; `""`
+   * otherwise.
+   */
+  statelessInstance: string
+  /**
    * `--warn-portability` (WP33, docs/wp33-round-trip.md §5.2): run the
    * portability pass after checking and report the sites where the program's
    * TypeScript reading answers differently. It changes no byte of the IR; it
@@ -290,6 +298,7 @@ export class Options {
     this.rangeReference = false
     this.noElision = false
     this.unlabelledBuiltin = ""
+    this.statelessInstance = ""
     this.warnPortability = false
     this.emitPanics = ""
     this.denyPanics = false
