@@ -77,7 +77,15 @@ import {
 } from "./parallel"
 import { isRegionSource, isRegionTemplate } from "./region-check"
 import { recordRegionCall, regionNewMessage } from "./region-rules"
-import { EnumInfo, FieldInfo, FunctionSig, ROLE_CONSTRUCTOR, SpreadCopy, STRUCT_CLASS, StructInfo } from "./program"
+import {
+  EnumInfo,
+  FieldInfo,
+  FunctionSig,
+  ROLE_CONSTRUCTOR,
+  SpreadCopy,
+  STRUCT_CLASS,
+  StructInfo,
+} from "./program"
 import { simdCompareMessage } from "./simd"
 import { refuseStorageLength } from "./module-storage"
 import { Scope } from "./symbols"
