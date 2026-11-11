@@ -8,6 +8,8 @@ import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import FactsTable from "./attributes" -> struct FactsTable
 import arenaBlockFindings from "./escape" -> function @arenaBlockFindings
 import arenaLoopFindings from "./escape" -> function @arenaLoopFindings
+import explainMemory from "./escape" -> function @explainMemory
+import MemoryReport from "./escape" -> struct MemoryReport
 import portabilityFindings from "./portability" -> function @portabilityFindings
 import liftScript from "./script" -> function @liftScript
 import Checker from "./checker" -> struct Checker
@@ -161,6 +163,7 @@ import FreshResults from "./secret" -> struct FreshResults
 import secretNeedMessage from "./secret" -> function @secretNeedMessage
 import jsonQuote from "./strings" -> function @jsonQuote
 import splitByte from "./strings" -> function @splitByte
+import StringBuilder from "./strings" -> struct StringBuilder
 import TypeTable from "./types" -> struct TypeTable
 import columnOf from "./lexer" -> function @columnOf
 import lineOf from "./lexer" -> function @lineOf
@@ -231,20 +234,21 @@ struct Compilation (class) size=208 align=8 exported
   field validationErrors: i32 index=12 offset=96
   field dumpOnly: boolean index=13 offset=100
   field hostRefused: boolean index=14 offset=101
-  field analysisUnits: AnalysisUnit[] index=15 offset=104
-  field rootPackageDir: string index=16 offset=112
-  field panicScope: boolean[] index=17 offset=120
-  field manifestAllow: i32 index=18 offset=128
-  field manifestDeny: i32 index=19 offset=132
-  field grantNames: string[] index=20 offset=136
-  field grantMasks: i32[] index=21 offset=144
-  field grantScoped: i32[] index=22 offset=152
-  field grantArgOwners: i32[] index=23 offset=160
-  field grantArgCaps: i32[] index=24 offset=168
-  field grantArgValues: string[] index=25 offset=176
-  field grantArgTexts: string[] index=26 offset=184
-  field capabilityLockPath: string index=27 offset=192
-  field capabilityLockText: string index=28 offset=200
+  field factsSettled: boolean index=15 offset=102
+  field analysisUnits: AnalysisUnit[] index=16 offset=104
+  field rootPackageDir: string index=17 offset=112
+  field panicScope: boolean[] index=18 offset=120
+  field manifestAllow: i32 index=19 offset=128
+  field manifestDeny: i32 index=20 offset=132
+  field grantNames: string[] index=21 offset=136
+  field grantMasks: i32[] index=22 offset=144
+  field grantScoped: i32[] index=23 offset=152
+  field grantArgOwners: i32[] index=24 offset=160
+  field grantArgCaps: i32[] index=25 offset=168
+  field grantArgValues: string[] index=26 offset=176
+  field grantArgTexts: string[] index=27 offset=184
+  field capabilityLockPath: string index=28 offset=192
+  field capabilityLockText: string index=29 offset=200
   constructor -> @Compilation.constructor
   method entry -> @Compilation.entry
   method packageOf -> @Compilation.packageOf
@@ -313,6 +317,7 @@ struct Compilation (class) size=208 align=8 exported
   method analyze -> @Compilation.analyze
   method panicsText -> @Compilation.panicsText
   method arenaText -> @Compilation.arenaText
+  method explainMemoryText -> @Compilation.explainMemoryText
   method libraryRoot -> @Compilation.libraryRoot
   method libraryUnits -> @Compilation.libraryUnits
   method writesOutput -> @Compilation.writesOutput
@@ -726,24 +731,24 @@ function Compilation.check(this: Compilation): boolean -> @Compilation.check [ex
   callee +105:9 forgetProofs -> @forgetProofs
   callee +108:7 layoutInlineArrays -> @layoutInlineArrays
   callee +109:7 proveCallSiteRanges -> @proveCallSiteRanges
-  callee +111:5 Compilation.reportArenaLoops -> @Compilation.reportArenaLoops
-  callee +112:5 Compilation.denyRetention -> @Compilation.denyRetention
-  callee +113:5 Compilation.checkParallel -> @Compilation.checkParallel
-  callee +114:5 Compilation.keyEnumsBySymbol -> @Compilation.keyEnumsBySymbol
-  callee +115:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +120:9 Options.recordsPanics -> @Options.recordsPanics
-  local +121:13 facts: FactsTable (const)
-  callee +121:21 Compilation.analyze -> @Compilation.analyze
-  callee +122:7 resolvePanicSites -> @resolvePanicSites
-  callee +123:7 Compilation.denyPanicSites -> @Compilation.denyPanicSites
-  callee +124:11 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +128:5 Compilation.refuseCapabilities -> @Compilation.refuseCapabilities
-  callee +129:5 Compilation.refuseDependencyCapabilities -> @Compilation.refuseDependencyCapabilities
-  callee +130:5 Compilation.refuseNarrowGrants -> @Compilation.refuseNarrowGrants
-  callee +131:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +134:5 Compilation.checkCapabilityLock -> @Compilation.checkCapabilityLock
-  callee +135:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +139:7 Compilation.reportPortability -> @Compilation.reportPortability
+  callee +112:5 Compilation.reportArenaLoops -> @Compilation.reportArenaLoops
+  callee +113:5 Compilation.denyRetention -> @Compilation.denyRetention
+  callee +114:5 Compilation.checkParallel -> @Compilation.checkParallel
+  callee +115:5 Compilation.keyEnumsBySymbol -> @Compilation.keyEnumsBySymbol
+  callee +116:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +121:9 Options.recordsPanics -> @Options.recordsPanics
+  local +122:13 facts: FactsTable (const)
+  callee +122:21 Compilation.analyze -> @Compilation.analyze
+  callee +123:7 resolvePanicSites -> @resolvePanicSites
+  callee +124:7 Compilation.denyPanicSites -> @Compilation.denyPanicSites
+  callee +125:11 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +129:5 Compilation.refuseCapabilities -> @Compilation.refuseCapabilities
+  callee +130:5 Compilation.refuseDependencyCapabilities -> @Compilation.refuseDependencyCapabilities
+  callee +131:5 Compilation.refuseNarrowGrants -> @Compilation.refuseNarrowGrants
+  callee +132:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +135:5 Compilation.checkCapabilityLock -> @Compilation.checkCapabilityLock
+  callee +136:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +140:7 Compilation.reportPortability -> @Compilation.reportPortability
 function Compilation.readNoPanic(this: Compilation, source: SourceFile | null, nish: NishManifest | null): void -> @Compilation.readNoPanic [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1819,6 +1824,31 @@ function Compilation.arenaText(this: Compilation): string -> @Compilation.arenaT
   local +0:11 facts: FactsTable (const)
   callee +0:19 Compilation.analyze -> @Compilation.analyze
   callee +1:12 arenaJson -> @arenaJson
+function Compilation.explainMemoryText(this: Compilation): string -> @Compilation.explainMemoryText [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Compilation.analyze
+  calls: Compilation.analyze Compilation.inRootPackage MemoryReport.constructor SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText explainMemory nish_str_concat nish_str_from_i32
+  pointer this: size=208 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.inRootPackage#0
+  stackSites=2 stackLocals=2
+  local +0:11 facts: FactsTable (const)
+  callee +0:19 Compilation.analyze -> @Compilation.analyze
+  local +1:11 report: MemoryReport (const)
+  callee +1:20 new MemoryReport -> @MemoryReport.constructor
+  local +2:11 lines: StringBuilder (const)
+  callee +2:19 new StringBuilder -> @StringBuilder.constructor
+  local +3:16 unit: AnalysisUnit (const)
+  local +4:13 source: SourceFile (const)
+  callee +5:12 Compilation.inRootPackage -> @Compilation.inRootPackage
+  local +8:13 from: i32 (const)
+  callee +9:7 explainMemory -> @explainMemory
+  local +10:11 i: i32 (let)
+  local +12:15 note: ArenaFinding (const)
+  callee +13:9 StringBuilder.add -> @StringBuilder.add
+  callee +14:29 SourceFile.lineOf -> @SourceFile.lineOf
+  callee +14:63 SourceFile.columnOf -> @SourceFile.columnOf
+  callee +16:9 StringBuilder.add -> @StringBuilder.add
+  callee +20:5 StringBuilder.add -> @StringBuilder.add
+  callee +24:12 StringBuilder.toText -> @StringBuilder.toText
 function Compilation.libraryRoot(this: Compilation): string -> @Compilation.libraryRoot [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=208 writesThrough=false captured=false

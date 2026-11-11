@@ -29,18 +29,19 @@ struct Options (class) size=208 align=8 exported
   field denyPanics: boolean index=23 offset=128
   field denyRetention: boolean index=24 offset=129
   field emitArena: string index=25 offset=136
-  field noPanicListed: boolean index=26 offset=144
-  field capabilityReport: boolean index=27 offset=145
-  field allowCapabilities: i32 index=28 offset=148
-  field denyCapabilities: i32 index=29 offset=152
-  field deterministic: boolean index=30 offset=156
-  field sandbox: i32 index=31 offset=160
-  field sandboxCapabilities: i32 index=32 offset=164
-  field panicSites: boolean index=33 offset=168
-  field sandboxRead: string[] index=34 offset=176
-  field sandboxWrite: string[] index=35 offset=184
-  field sandboxExec: string[] index=36 offset=192
-  field updateCapabilityLock: boolean index=37 offset=200
+  field explainMemory: boolean index=26 offset=144
+  field noPanicListed: boolean index=27 offset=145
+  field capabilityReport: boolean index=28 offset=146
+  field allowCapabilities: i32 index=29 offset=148
+  field denyCapabilities: i32 index=30 offset=152
+  field deterministic: boolean index=31 offset=156
+  field sandbox: i32 index=32 offset=160
+  field sandboxCapabilities: i32 index=33 offset=164
+  field panicSites: boolean index=34 offset=168
+  field sandboxRead: string[] index=35 offset=176
+  field sandboxWrite: string[] index=36 offset=184
+  field sandboxExec: string[] index=37 offset=192
+  field updateCapabilityLock: boolean index=38 offset=200
   constructor -> @Options.constructor
   method recordsPanics -> @Options.recordsPanics
 function Options.constructor(this: Options): void -> @Options.constructor [exported constructor]

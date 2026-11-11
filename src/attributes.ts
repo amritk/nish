@@ -359,11 +359,19 @@ export class LoopScope {
    * arena-loop diagnostic has no rewrite to offer and says nothing.
    */
   handsBack: boolean
+  /**
+   * A pass bumps the arena, itself or through a callee that leaves memory
+   * behind: whether there is anything for a scope to release, which is what
+   * `--explain-memory` reads to tell a loop that keeps memory from one that
+   * has none to give back.
+   */
+  allocates: boolean
 
   constructor(loop: Node, body: Node) {
     this.loop = loop
     this.body = body
     this.scoped = false
+    this.allocates = false
     this.why = 0
     this.at = null
     this.name = ""
@@ -783,6 +791,11 @@ export class FunctionFacts {
   /** An allocation may survive the call other than through the return value. */
   allocLeaks: boolean
   /**
+   * `allocLeaks` for an allocation of the function's own, before any callee's
+   * flows up: which of the two `--explain-memory` names as the reason.
+   */
+  leaksItself: boolean
+  /**
    * WP9: an allocation is reachable *by the caller* after the call, other than
    * through the return value (fixpoint over callees). Refines `allocLeaks`,
    * which also counts a value assigned to a local of the frame; see the header
@@ -971,6 +984,7 @@ export class FunctionFacts {
     this.allocates = false
     this.directArena = false
     this.allocLeaks = false
+    this.leaksItself = false
     this.allocEscapes = false
     this.returnsAllocation = false
     this.returnsFreshElements = false
@@ -3985,6 +3999,7 @@ const collectFacts = (
     facts.directArena = memory.directArena
     facts.allocates = memory.directArena
     facts.allocLeaks = memory.allocLeaks
+    facts.leaksItself = memory.allocLeaks
     facts.allocEscapes = memory.allocEscapes
     facts.returnsAllocation = memory.returnsAllocation
     facts.returnsFreshElements = memory.returnsFreshElements
@@ -4471,6 +4486,7 @@ const markJsonRoute = (
     facts.allocates = true
     facts.allocatesItself = true
     facts.allocLeaks = true
+    facts.leaksItself = true
     facts.allocEscapes = true
     facts.resizesArray = true
     facts.callees.add("nish_array_grow")
@@ -5356,6 +5372,9 @@ const differsFrom = (f: FunctionFacts, g: FunctionFacts): string => {
   if (!sameParams(f, g)) {
     return "pointer parameters"
   }
+  if (f.leaksItself !== g.leaksItself) {
+    return "leaksItself"
+  }
   return ""
 }
 
@@ -5398,9 +5417,12 @@ const visitFacts = (graph: FactGraph, fi: i32, f: FunctionFacts): boolean => {
     } else if (site.flow === FLOW_RETURNED && !f.returnsAllocation) {
       f.returnsAllocation = true
       changed = true
-    } else if (site.flow === FLOW_LEAKS && !f.allocLeaks) {
-      f.allocLeaks = true
-      changed = true
+    } else if (site.flow === FLOW_LEAKS) {
+      f.leaksItself = true
+      if (!f.allocLeaks) {
+        f.allocLeaks = true
+        changed = true
+      }
     }
   }
   // A pointer inherits what every callee it is passed to does with the

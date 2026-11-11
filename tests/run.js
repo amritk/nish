@@ -19,6 +19,8 @@
  *                    per line (WP33: the case is compiled a second time with the flag)
  *       <name>.caps.json  the `--emit-capabilities` report, byte for byte (WP35: the
  *                    case is compiled a second time with the flag)
+ *       <name>.memory  the `--explain-memory` report, its lines from stderr
+ *                    (the case is compiled a second time with the flag)
  *     Every successfully compiled case is also assembled with llvm-as.
  *     Every case is compiled by stage1 -- `src/` built by the seed into
  *     `build/nish-test` once per run -- then compared, assembled, linked and
@@ -1023,6 +1025,36 @@ const runCase = async (name) => {
         got === want,
         `--- expected\n${want}\n--- actual\n${got}`
       )
+    }
+  }
+
+  // `--explain-memory`: a case with a `<name>.memory` golden compiles once
+  // more with the flag, which must change no byte of the IR, and the report's
+  // lines on stderr (each `memory:` line and the summary) are held against
+  // the golden, paths taken back to the repository's.
+  if (fs.existsSync(side("memory"))) {
+    const memoryLl = path.join(buildDir, `${name}.memory.ll`)
+    const explained = await spawnAsync(NISH, [src, "-o", memoryLl, ...args, "--explain-memory"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (explained.status !== 0 || !fs.existsSync(memoryLl)) {
+      expect(`${name}: --explain-memory compiles`, false, `exit ${explained.status}\n${explained.stderr}`)
+    } else {
+      expect(
+        `${name}: --explain-memory changes no byte of the IR`,
+        fs.readFileSync(memoryLl, "utf8") === fs.readFileSync(outLl, "utf8"),
+        "the two .ll files differ"
+      )
+      const want = fs.readFileSync(side("memory"), "utf8").trim()
+      const got = explained.stderr
+        .split("\n")
+        .filter((line) => line.includes(": memory: ") || line.startsWith("explain-memory: "))
+        .join("\n")
+        .split(`${root}/`)
+        .join("")
+        .trim()
+      expect(`${name}: --explain-memory matches .memory`, got === want, `--- expected\n${want}\n--- actual\n${got}`)
     }
   }
 
@@ -19786,6 +19818,7 @@ if (dealtHere("cliChecks")) {
       "--deny-panics",
       "--deny-retention",
       "--emit-arena",
+      "--explain-memory",
       "--target",
       "--cpu",
       "--profile",
@@ -20558,6 +20591,90 @@ if (dealtHere("cliChecks")) {
         shown(refused)
       )
     }
+    // `--explain-memory` reads the same facts, so it is refused where they do
+    // not exist, under `--fix`, which writes no IR, and under `--json`, whose
+    // stderr is diagnostic objects only (docs/LANGUAGE.md, "Explaining kept memory").
+    const explainSource = path.join(root, "tests", "cases", "explain_memory.ts")
+    for (const [flag, refusal] of [
+      ["--emit-ast", "`--explain-memory` reports on a checked program, and --emit-ast stops before the check"],
+      ["--fix", "`--explain-memory` cannot be used with --fix"],
+      ["--json", "`--explain-memory` prints a report for people, and --json keeps stderr to diagnostics"],
+    ]) {
+      // A copy, so a `--fix` that stopped refusing rewrites no case of the suite.
+      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "nish-explain-"))
+      const copy = path.join(scratch, "explain_memory.ts")
+      fs.copyFileSync(explainSource, copy)
+      const refused = spawnSync(NISH, [copy, flag, "--explain-memory"], { cwd: root, encoding: "utf8" })
+      fs.rmSync(scratch, { recursive: true, force: true })
+      check(
+        `explain memory: --explain-memory with ${flag} is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes(refusal),
+        shown(refused)
+      )
+    }
+    // `nish run` takes it: the report is printed before the program runs.
+    const explainRun = spawnSync(NISH, ["run", "--explain-memory", explainSource], { cwd: root, encoding: "utf8" })
+    check(
+      "explain memory: `nish run --explain-memory` prints the report and runs the program",
+      explainRun.status === 0 &&
+        explainRun.stdout === "item 2 3 24 12 n2 10 28\n" &&
+        explainRun.stderr.includes("explain-memory: 7 of 9 allocating loops"),
+      shown(explainRun)
+    )
+    // The capability line stays the last thing on stderr before the program's
+    // own output (WP35): the report is printed ahead of it.
+    const explainCaps = spawnSync(NISH, ["run", "--capabilities", "--explain-memory", explainSource], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const explainCapsLines = explainCaps.stderr.trimEnd().split("\n")
+    check(
+      "explain memory: under `nish run --capabilities` the capability line still comes last",
+      explainCaps.status === 0 &&
+        explainCaps.stderr.includes("explain-memory: ") &&
+        explainCapsLines[explainCapsLines.length - 1].startsWith("capabilities: "),
+      shown(explainCaps)
+    )
+    // `--no-elision` takes every scope away, so a loop whose only allocation is
+    // a call into a function a scope had emptied (`counted`'s, through `width`)
+    // allocates again and is listed.
+    const bareDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-explain-"))
+    const explainBare = spawnSync(
+      NISH,
+      [explainSource, "-o", path.join(bareDir, "explain_memory.ll"), "--no-elision", "--explain-memory"],
+      { cwd: root, encoding: "utf8" }
+    )
+    fs.rmSync(bareDir, { recursive: true, force: true })
+    check(
+      "explain memory: under `--no-elision` a loop that calls an emptied function is listed",
+      explainBare.status === 0 &&
+        explainBare.stderr.includes("explain_memory.ts:30:3: memory: this loop keeps what each pass allocates") &&
+        explainBare.stderr.includes("explain-memory: 8 of 10 allocating loops"),
+      shown(explainBare)
+    )
+    // A build `--deny-retention` refuses still prints the report, which says
+    // why each refused loop keeps its memory.
+    const deniedDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-explain-"))
+    const denied = spawnSync(
+      NISH,
+      [
+        path.join(root, "tests", "cases", "reject_deny_retention_pass_drop.ts"),
+        "-o",
+        path.join(deniedDir, "denied.ll"),
+        "--deny-retention",
+        "--explain-memory",
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    fs.rmSync(deniedDir, { recursive: true, force: true })
+    check(
+      "explain memory: a build --deny-retention refuses still prints the report",
+      denied.status === 1 &&
+        denied.stderr.includes("error: `--deny-retention` refuses") &&
+        denied.stderr.includes(": memory: this loop keeps what each pass allocates") &&
+        denied.stderr.includes("explain-memory: "),
+      shown(denied)
+    )
     // `--deny-retention` turns the arena-retention warnings into errors (NL2462),
     // and those are found by the body checks and the whole-program facts, which
     // `--emit-ast` never reaches (docs/LANGUAGE.md, "Retention as an error").

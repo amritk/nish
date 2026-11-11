@@ -92,6 +92,21 @@ The warnings catch the shapes the compiler can name, not every possible
 leak: an array you keep pushing onto for the whole run is memory you meant
 to keep, and nothing warns about it.
 
+To see every loop and function that keeps its memory, whether or not a warning
+names it, compile with `--explain-memory`. It prints one line for each loop
+whose passes keep what they allocate, and for each function that keeps memory
+after it returns, with the reason and where the memory is finally released:
+
+```
+app.ts:12:3: memory: this loop keeps what each pass allocates until `main` returns, because line 13 grows `seen`, an array older than the pass
+explain-memory: 1 of 4 allocating loops keep what a pass allocates past the pass; 0 of 2 allocating functions with a scalar result keep what they allocate past the call
+```
+
+Read it before you deploy a long-running program: a loop listed here
+allocates on every pass and gives nothing back until the line says it does.
+The flag does not change the program it builds. The rules are in
+[Explaining kept memory](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#explaining-kept-memory).
+
 <a id="freeing-a-batch-yourself-using-a--arena" style="scroll-margin-top: 65px"></a>
 
 ## Freeing a batch yourself: `using a = arena()`
