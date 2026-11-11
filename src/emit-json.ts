@@ -1315,8 +1315,10 @@ const emitJsonDecodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
  * An array of a union's objects: each element decoded by the union's part
  * into the object the array has at its index, which answers that object or
  * a new variant to put there, or into none past the end, where what it
- * answers is pushed. A failed element past the end answers `null`, which is
- * not pushed, so the array holds no `null`. Whatever is left over is dropped.
+ * answers is pushed. An element that fails before its variant is picked
+ * answers `null`, which is not pushed, so the array holds no `null`; one that
+ * fails inside its fields answers its object, partly read, as a failed slot
+ * does. Whatever is left over is dropped.
  */
 const emitJsonDecodeUnionArrayBody = (emitter: Emitter, part: JsonPart, f: JsonField): void => {
   const fn = emitter.fn
@@ -1755,7 +1757,8 @@ const emitJsonEncodeArrayBody = (emitter: Emitter, part: JsonPart): void => {
  * A union's object: a `switch` on the tag every variant keeps first, to the
  * variant's own encoding. Every value of the union is one of its variants,
  * whose tags are the `switch`'s labels, so its default is never taken; it
- * returns rather than being `unreachable`, which no proof here backs.
+ * writes `null`, so the key already written still has a value, and returns
+ * rather than being `unreachable`, which no proof here backs.
  */
 const emitJsonEncodeUnionBody = (emitter: Emitter, part: JsonPart): void => {
   const fn = emitter.fn
@@ -1793,6 +1796,7 @@ const emitJsonEncodeUnionBody = (emitter: Emitter, part: JsonPart): void => {
     fn.emit("ret void")
   }
   fn.placeBlock(other)
+  jsonCallMethod(emitter, part.receiver, "nullValue", "%r", [])
   fn.emit("ret void")
 }
 

@@ -319,7 +319,7 @@ function jsonScalar(type: i32): i32 -> @jsonScalar
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   stackSites=0 stackLocals=0
-function jsonClassOf(program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null -> @jsonClassOf [exported]
+function jsonClassOf(program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null -> @jsonClassOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf
@@ -380,14 +380,25 @@ function jsonRootsOf(program: CheckedProgram, table: TypeTable, type: i32): Stru
   local +5:9 out: StructInfo[] (const)
   local +6:9 cls: StructInfo | null (const)
   callee +6:15 jsonClassOf -> @jsonClassOf
-function jsonWireTag(table: TypeTable, info: StructInfo, field: FieldInfo): string -> @jsonWireTag [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.nameOf
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.nameOf#0
+function jsonTagsVariant(table: TypeTable, info: StructInfo, field: FieldInfo): boolean -> @jsonTagsVariant
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer table: size=96 writesThrough=false captured=false
   pointer info: size=176 writesThrough=false captured=false
   pointer field: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:44 TypeTable.nameOf -> @TypeTable.nameOf
+  local +0:7 u: i32 (let)
+  local +2:11 variants: i32[] (const)
+  local +3:11 tags: i32[] (const)
+  local +5:11 k: i32 (const)
+function jsonWireTag(table: TypeTable, info: StructInfo, field: FieldInfo): string -> @jsonWireTag [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.nameOf jsonTagsVariant
+  pointer table: size=96 writesThrough=false captured=false passedTo=jsonTagsVariant#0 TypeTable.nameOf#0
+  pointer info: size=176 writesThrough=false captured=false passedTo=jsonTagsVariant#1
+  pointer field: size=72 writesThrough=false captured=false passedTo=jsonTagsVariant#2
+  stackSites=0 stackLocals=0
+  callee +0:30 jsonTagsVariant -> @jsonTagsVariant
+  callee +0:83 TypeTable.nameOf -> @TypeTable.nameOf
 function jsonValueOf(program: CheckedProgram, table: TypeTable, field: FieldInfo | null, type: i32): JsonField | null -> @jsonValueOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type

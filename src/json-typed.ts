@@ -656,7 +656,7 @@ const jsonScalar = (type: i32): i32 => {
 }
 
 /** The class `type` is, when it is one the route can read and write: declared, not generic. */
-export const jsonClassOf = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
+const jsonClassOf = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
   if (!table.isStruct(type)) {
     return null
   }
@@ -736,13 +736,29 @@ export const jsonRootsOf = (program: CheckedProgram, table: TypeTable, type: i32
   return out
 }
 
+/** Whether `field` holds the tag `info` is a variant of some union by: a union pairs the two. */
+const jsonTagsVariant = (table: TypeTable, info: StructInfo, field: FieldInfo): boolean => {
+  let u = 0
+  while (u < table.unions.length && u < table.unionTags.length) {
+    const variants = table.unions[u]
+    const tags = table.unionTags[u]
+    u = u + 1
+    const k = variants.indexOf(info.type)
+    if (k >= 0 && k < tags.length && tags[k] === field.type) {
+      return true
+    }
+  }
+  return false
+}
+
 /**
  * The string the variant `info` writes its tag, the field `field`, as: the
  * `tag` of its options, or else the name of the enum member the field's type
- * is.
+ * is. The `tag` names only the field a union tags `info` by, so another
+ * enum-member field keeps its member's name.
  */
 export const jsonWireTag = (table: TypeTable, info: StructInfo, field: FieldInfo): string =>
-  info.jsonTag.length > 0 ? info.jsonTag : table.nameOf(field.type)
+  info.jsonTag.length > 0 && jsonTagsVariant(table, info, field) ? info.jsonTag : table.nameOf(field.type)
 
 /** A value of `type` as the route reads and writes it, held in `field` (`null` for a `Map`'s value), or `null` when it cannot. */
 const jsonValueOf = (

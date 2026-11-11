@@ -1,5 +1,5 @@
 define internal %union.tagged* @.json.decode.union.union.Num.Neg.Add(%struct.JsonDecoder* %r, %union.tagged* %v) "probe-stack"="inline-asm" {
-%0 = call i1 @nish.JsonDecoder.unionTag(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.39 to i8*))
+%0 = call i1 @nish.JsonDecoder.unionTag(%struct.JsonDecoder* %r, i8* bitcast ({ i64, [5 x i8] }* @.str.41 to i8*))
 %1 = call i32 @nish.JsonDecoder.keyLength(%struct.JsonDecoder* %r)
 %10 = call %struct.Num* @.json.new.Num()
 %12 = call i1 @nish.JsonDecoder.enterUnion(%struct.JsonDecoder* %r)

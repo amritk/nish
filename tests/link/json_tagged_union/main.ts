@@ -6,7 +6,7 @@
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode, jsonDecodeUnion, jsonEncode } from "nish/json-typed";
-import { event } from "./events.ts";
+import { Left, event, hand } from "./events.ts";
 
 enum Kind {
   Num,
@@ -149,5 +149,8 @@ export const main = (): i32 => {
   event(`{"type":"Close"}`);
   event(`{"kind":"Close"}`);
   event(`{"type":"open","type":"open"}`);
+  event(`{"type":"open","hand":"Left","path":"/b"}`);
+  event(`{"type":"open","hand":"open"}`);
+  hand(new Left());
   return 0;
 };

@@ -10400,6 +10400,7 @@ json.variant.1:
   ret void
 
 json.other:
+  call void @nish.JsonWriter.nullValue(%struct.JsonWriter* %r)
   ret void
 }
 

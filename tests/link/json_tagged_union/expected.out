@@ -14,7 +14,10 @@ env 0 -1 {"list":[{"kind":"Num","value":9}],"maybe":{"kind":"Num","value":3}}
 null 0 false
 deep 15 0 -1 15
 deep 16 -9 112 0
-event 0 -1 {"type":"open","path":"/a"}
+event 0 -1 {"type":"open","hand":"Left","path":"/a"}
 event 0 -1 {"type":"Close","code":0}
 event -26 0 {"type":"Close","code":0}
 event -23 15 {"type":"Close","code":0}
+event 0 -1 {"type":"open","hand":"Left","path":"/b"}
+event -26 22 {"type":"Close","code":0}
+hand {"side":"Left"}

@@ -29114,7 +29114,7 @@ if (!only || "std_json_typed".includes(only)) {
     "link/std_json_typed: under Node, jsonDecode panics naming the erased types (class C)",
     run.status === 1 &&
       run.stderr.includes(
-        "nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
+        "nish/json-typed: jsonDecode, jsonDecodeUnion and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased"
       ),
     shown(run)
   )
