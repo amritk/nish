@@ -908,6 +908,27 @@ const runJobs = (filter: string, compiler: string, shard: i32, shards: i32, jobs
   return failed + broken > 0 ? 1 : 0;
 };
 
+/**
+ * Make the files the WP44 file cases open and cannot make themselves, as
+ * `tests/run.js`'s `prepareFileCases` does: a FIFO and a socket for
+ * `file_open_errors` and a sparse file of 2^32 + 16 bytes for
+ * `file_size_large`. The language has no `mkfifo`, so `sh` makes the FIFO, and
+ * Node binds the socket and sizes the file; a server that exits without closing
+ * leaves the socket file behind, which is all `fileOpen` needs.
+ *
+ * @param work where the command's output goes.
+ * @returns `""`, or what went wrong, for a check to name.
+ */
+const prepareFileCases = (work: string): string => {
+  const script = `cd "$0" && rm -f file_open_errors.fifo file_open_errors.sock && mkfifo file_open_errors.fifo && node -e 'require("net").createServer().listen("file_open_errors.sock", () => process.exit(0))' && node -e 'const fs = require("fs"); fs.closeSync(fs.openSync("file_size_large.bin", "w")); fs.truncateSync("file_size_large.bin", 2 ** 32 + 16)' && test -p file_open_errors.fifo && test -S file_open_errors.sock`;
+  const err = `${work}/file-fixtures.err`;
+  if (spawnSyncTo(["sh", "-c", script, CASE_WORK], `${work}/file-fixtures.out`, err) === 0) {
+    return "";
+  }
+  const said = readFileSyncOrNull(err);
+  return said === null ? "sh failed and wrote nothing" : said;
+};
+
 export const main = (): number => {
   // One filter argument, matched as a substring, the way `node tests/run.js <sub>` does,
   // and `--compiler <nish>` anywhere around it.
@@ -973,6 +994,19 @@ export const main = (): number => {
   if (jobs > 1 && workGiven) {
     panic(`--work names one process's directory; pass --jobs 1 with it (--jobs ${jobs} keeps each under ${JOB_WORK})`);
   }
+  // Made once, by the process that deals the slices (a `--jobs` child is given
+  // `--work`), so no child removes a fixture another is opening.
+  let fixtures = "";
+  if (!workGiven) {
+    if (!mkdirSync(CASE_WORK)) {
+      panic(`cannot create ${CASE_WORK}`);
+    }
+    fixtures = prepareFileCases("build");
+    if (jobs > 1 && fixtures.length > 0) {
+      // The children count the cases; this names why two of them fail.
+      console.log(`FAIL  file fixtures: the FIFO, socket and sparse file the file cases open were not made: ${fixtures}`);
+    }
+  }
   if (jobs > 1) {
     return runJobs(filter, compiler, shard, shards, jobs);
   }
@@ -1018,6 +1052,9 @@ export const main = (): number => {
   }
   if (!tools.opt) {
     t.skip("opt -passes=verify accepts the emitted IR", "opt not found");
+  }
+  if (fixtures.length > 0) {
+    t.fail("file fixtures: the FIFO, socket and sparse file the file cases open were made", fixtures);
   }
 
   const slow = new Slowest();
