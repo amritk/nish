@@ -536,6 +536,11 @@ const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
   )
+const TAGGED_UNIONS = "Typed JSON decodes and encodes tagged unions"
+const taggedUnions = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: TAGGED_UNIONS, why }))
+  )
 const MSS_UNSET = "explicitly set enc.mss wins over the socket MSS"
 const mssUnset = (why, moved) =>
   moved.map((program) => ({ program, file: "http-compress.ll", changelog: MSS_UNSET, why }))
@@ -1678,6 +1683,27 @@ const DECLARED = [
     changelog: PIPELINED_WRITE,
     why: "the program calls HttpHandler.deferSends, which the 0.38.0 seed does not have, so only the candidate compiles it (WP49 stage 6, part 3)",
   },
+  ...taggedUnions(
+    "JsonTokenizer gains rewindObject and JsonDecoder a trailing i32 field (`unionStart`, where a read-ahead union object began), so every program that links nish/json-tokenizer or nish/json-typed declares one more function and lays the decoder out 4 bytes wider; a program reading the tokenizer's header re-declares it",
+    {
+      "bench/http-app-carrier.ts": ["http-app-carrier.h", "json-tokenizer.ll", "json-typed.ll"],
+      "docs/cookbook/json-presence.ts": [
+        "json-presence.h",
+        "json-presence.ll",
+        "json-tokenizer.ll",
+        "json-typed.ll",
+      ],
+      "docs/cookbook/json-tokenizer.ts": ["json-tokenizer.ll", "std_json-tokenizer.ll"],
+      "docs/cookbook/json-typed.ts": [
+        "json-tokenizer.ll",
+        "json-typed.h",
+        "json-typed.ll",
+        "std_json-typed.ll",
+      ],
+      "docs/cookbook/json-value.ts": ["json-tokenizer.ll", "json-value.ll", "std_json-value.ll"],
+      "examples/merge-patch.ts": ["json-tokenizer.ll", "json-typed.ll", "merge-patch.h", "merge-patch.ll"],
+    }
+  ),
 ]
 
 /**
