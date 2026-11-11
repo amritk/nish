@@ -146,6 +146,7 @@ cases/caps_env added after R6: no rewriter to freeze it with
 cases/caps_exit added after R6: no rewriter to freeze it with
 cases/caps_ffi added after R6: no rewriter to freeze it with
 cases/caps_ffi_handle added after R6: no rewriter to freeze it with
+cases/caps_file_read added after R6: no rewriter to freeze it with
 cases/caps_fnarg added after R6: no rewriter to freeze it with
 cases/caps_fs_mode added after R6: no rewriter to freeze it with
 cases/caps_fs_read added after R6: no rewriter to freeze it with

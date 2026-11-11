@@ -76,7 +76,7 @@ export const main = (): i32 => {
   an array of numbers, booleans or enums** (a reduce's `f` only the first
   three; see below). It may
   look keys up in a `Map` or `Set` its element reaches (`get`, `has`, `size`),
-  and it may `panic`: if several elements panic at once, only the first
+  but not change or iterate one, and it may `panic`: if several elements panic at once, only the first
   prints its message, and the program exits 1.
 
   It may
@@ -108,6 +108,33 @@ export const main = (): i32 => {
   sixty-four. For that to be the fold you meant, `f` must be associative and
   `identity` its identity: `(a, b) => a - b`, or `+` with an identity of `1`,
   is refused.
+
+An element may carry a `Map` or a `Set` for `f` to look keys up in. `f` may
+not reach an array `dst` could be, but a table's own arrays are private to it:
+a `Map<string, i32>` beside an `i32[]` `dst` is fine, and a
+`Map<string, i32[]>` is refused, because one of its values could be `dst`.
+
+```ts nish:ok
+import { parallelMapInto } from "nish/threads";
+
+class Doc {
+  index: Map<string, i32>;
+  constructor() {
+    this.index = new Map<string, i32>();
+  }
+}
+
+const score = (d: Doc): i32 => (d.index.get("a") ?? 0) + d.index.size;
+
+export const main = (): i32 => {
+  const docs: Doc[] = [new Doc(), new Doc()];
+  docs[0].index.set("a", 10);
+  const out: i32[] = [0, 0];
+  parallelMapInto(docs, out, score);
+  console.log(`${out[0]} ${out[1]}`); // 11 0
+  return 0;
+};
+```
 
 A `string | null` field shared through a `Mutex` takes a string or `null`.
 The `Mutex` keeps its own copy of a stored string, and storing `null` frees it;
