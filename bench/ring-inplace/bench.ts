@@ -148,6 +148,27 @@ const render = (w: JsonWriter, id: i32, size: i32): i32 => {
  */
 const knownMode = (mode: string): boolean => mode === "copy" || mode === "inplace" || mode === "consumer"
 
+/**
+ * `text` as a whole number from 1 to 999,999,999, or -1 for anything else:
+ * a sign, a fraction, an exponent, a blank or a stray character. `Number`
+ * alone would take "1.5" as 1 and "abc" as 0.
+ */
+const wholeArg = (text: string): i32 => {
+  const len: i32 = toI32(text.length)
+  if (len < 1 || len > 9) {
+    return -1
+  }
+  let v: i32 = 0
+  for (let k: i32 = 0; k < len; k++) {
+    const c: i32 = toI32(text.charCodeAt(k))
+    if (c < 48 || c > 57) {
+      return -1
+    }
+    v = v * 10 + c - 48
+  }
+  return v >= 1 ? v : -1
+}
+
 /** Whether `cap` is a ring capacity `size`-byte records can be reserved and pushed in. */
 const ringFits = (cap: i32, size: i32): boolean =>
   cap >= 8 && (cap & (cap - 1)) === 0 && size >= 1 && size <= cap / 2 - 4
@@ -573,7 +594,7 @@ export const main = (): i32 => {
     )
   }
   if (args.length > 3 && args[1] === "reader") {
-    return reader(openRegion(args[2]).expect("open"), toI32(Number(args[3])))
+    return reader(openRegion(args[2]).expect("open"), wholeArg(args[3]))
   }
   if (args.length < 6) {
     console.log("usage: bench <copy|inplace|consumer> <size> <n> <producer-cpu> <reader-cpu> [ring-bytes]")
@@ -584,12 +605,18 @@ export const main = (): i32 => {
     console.log(`bench/ring-inplace: unknown mode ${mode}; the modes are copy, inplace and consumer`)
     return 2
   }
-  const size: i32 = toI32(Number(args[2]))
-  const n: i32 = toI32(Number(args[3]))
-  const cap: i32 = args.length > 6 ? toI32(Number(args[6])) : DEFAULT_RING_BYTES
-  if (n < 1 || !ringFits(cap, size)) {
+  const size: i32 = wholeArg(args[2])
+  const n: i32 = wholeArg(args[3])
+  const cap: i32 = args.length > 6 ? wholeArg(args[6]) : DEFAULT_RING_BYTES
+  if (size < 1 || n < 1 || cap < 1) {
     console.log(
-      `bench/ring-inplace: ${n} records of ${size} bytes in a ring of ${cap}: the ring is a power of two of at least twice the record and 8 more, and n at least 1`
+      `bench/ring-inplace: size ${args[2]}, n ${args[3]} and ring-bytes ${args.length > 6 ? args[6] : `${DEFAULT_RING_BYTES}`} must each be a whole number from 1`
+    )
+    return 2
+  }
+  if (!ringFits(cap, size)) {
+    console.log(
+      `bench/ring-inplace: records of ${size} bytes in a ring of ${cap}: the ring is a power of two of at least twice the record and 8 more`
     )
     return 2
   }
