@@ -123,6 +123,31 @@ export class FunctionSig {
   /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
   arrowCount: i32
   /**
+   * WP51: this function's tag as a function reference: its position plus one
+   * among the functions of its signature the program names in a value
+   * position, in module then source order, so each signature numbers from 1;
+   * 0 when nothing refers to it. Tag 0 is kept for stage 2's `null`
+   * (docs/wp51-function-references.md §2.1).
+   */
+  refTag: i32
+  /**
+   * WP51: a member of a dispatcher another module generates (§2.3). It is
+   * called from there, so it cannot be `internal`; it takes `hidden` linkage.
+   * Kept apart from `hidden`, which also says every caller is unseen, so the
+   * call-site ranges still enter it with the facts its callers meet.
+   */
+  refHidden: boolean
+  /**
+   * WP51: a dispatcher, `$ref.<S>.<place>`, which the checker generates for
+   * every place a call reads a reference from (§2.3). It is artificial: no
+   * line of the program is its own.
+   */
+  dispatcher: boolean
+  /** WP51: a dispatcher's members, in tag order: the arm for tag `members[k].refTag`. */
+  refMembers: FunctionSig[]
+  /** WP51: this function's number among the places of `src/fnref-places.ts`, or -1 before it has one. */
+  refPlace: i32
+  /**
    * WP49: the async functions this one's body awaits or awaits all of, each
    * beside the call that does it — the await graph, which may not have a
    * cycle (`src/async-check.ts`, `rejectAwaitCycles`). A `spawn` is not an
@@ -312,6 +337,11 @@ export class FunctionSig {
     this.compileTime = []
     this.hidden = false
     this.lifted = false
+    this.refTag = 0
+    this.refHidden = false
+    this.dispatcher = false
+    this.refMembers = []
+    this.refPlace = -1
     this.arrowCount = 0
     this.awaits = []
     this.awaitMark = 0
@@ -870,6 +900,33 @@ export class Instantiation {
   }
 
   /**
+   * WP51: lengthen every table to `nodeCount`, as `CheckedProgram.growTables`
+   * does, for the nodes a dispatcher's call adds after this body was checked.
+   * Idempotent, so a table shared with an outer instantiation grows once.
+   */
+  growTables(nodeCount: i32): void {
+    const zero: i64 = 0
+    const noLocal: Local | null = null
+    const noConstant: ConstInfo | null = null
+    const noSig: FunctionSig | null = null
+    const noCopy: SpreadCopy | null = null
+    while (this.nodeTypes.length < nodeCount) {
+      this.nodeTypes.push(-1)
+      this.nodeLocals.push(noLocal)
+      this.nodeConstants.push(noConstant)
+      this.nodeCallees.push(noSig)
+      this.nodeCoercions.push(-1)
+      this.nodeCaseValues.push(zero)
+      this.nodeProvenIndex.push(false)
+      this.nodeProvenClamp.push(false)
+      this.nodeProvenRange.push(false)
+      this.nodeProvenNoOverflow.push(false)
+      this.nodeDisjointCopy.push(false)
+      this.nodeSpreadCopies.push(noCopy)
+    }
+  }
+
+  /**
    * WP29: read and write `outer`'s side tables rather than tables of this
    * instantiation's own. An arrow lifted out of an instantiation's body is
    * checked where it was written, in the middle of that body, so its nodes'
@@ -1077,7 +1134,7 @@ export class StructInfo {
    */
   jsonTag: string
   /**
-   * WP40 §4a. A class with one `CPtr` field is an owned foreign handle: the
+   * WP53 §4a. A class with one `CPtr` field is an owned foreign handle: the
    * field is the C resource it owns, its `[Symbol.dispose]` closes it, and
    * `src/handles.ts` keeps every value of the class where that close is the only
    * one. Set in `declareStruct`, before a field is collected.
@@ -1086,7 +1143,7 @@ export class StructInfo {
   /** The handle's `CPtr` field, or `""` for any other struct. */
   handleField: string
   /**
-   * WP40 H1.2: the C function the handle's `[Symbol.dispose]` calls, once
+   * WP53 H1.2: the C function the handle's `[Symbol.dispose]` calls, once
    * `src/handles.ts` has found it sound; what every exit of a `using` block
    * calls on the field. `null` for any other struct.
    */
@@ -1731,6 +1788,36 @@ export class CheckedProgram {
   /** Call node id -> the callee, free functions and methods alike. */
   nodeCallees: (FunctionSig | null)[]
   /**
+   * WP51: identifier node id -> the top-level function it names in a value
+   * position, a function reference. One table for every instantiation, since
+   * a reference names one non-generic function whatever the body's types.
+   */
+  nodeFnRefs: (FunctionSig | null)[]
+  /**
+   * WP51: every call through a reference this module's bodies make, and the
+   * `nodeCallees` table that was installed when it was checked (the module's
+   * own, or an instantiation's), so the dispatcher it is given is recorded
+   * where every later pass reads it.
+   */
+  refCalls: Node[]
+  refCallTables: (FunctionSig | null)[][]
+  /** WP51: beside each of `refCalls`, the reference type it calls through. */
+  refCallTypes: i32[]
+  /**
+   * WP51: every call through a reference once it has its dispatcher, with the
+   * callee as written and, beside each of the dispatcher's members, where it
+   * came into the callee's place (`` `k.f = u3` (main.ts:12) ``, or "" when it
+   * came in only by widening). The escape-join refusal and the wide-set
+   * warning read them after the attribute fixpoint. `refSiteCallees` is the
+   * dispatcher identifier each site's call was given, which `--emit-ts` swaps
+   * back out while it reads the call as written (`writtenReferenceCalls`).
+   */
+  refSites: Node[]
+  refSiteCallees: Node[]
+  refSiteDispatchers: FunctionSig[]
+  refSiteShown: string[]
+  refSiteVia: string[][]
+  /**
    * Call or identifier node id -> the canonical builtin it resolved to, for
    * the names a `nish:` import brought in, and `""` for every other node. The
    * emitter dispatches builtins on the identifier's own text, which under an
@@ -1939,6 +2026,15 @@ export class CheckedProgram {
     this.nodeLocals = new Array<Local | null>(nodeCount)
     this.nodeConstants = new Array<ConstInfo | null>(nodeCount)
     this.nodeCallees = new Array<FunctionSig | null>(nodeCount)
+    this.nodeFnRefs = new Array<FunctionSig | null>(nodeCount)
+    this.refCalls = []
+    this.refCallTables = []
+    this.refCallTypes = []
+    this.refSites = []
+    this.refSiteCallees = []
+    this.refSiteDispatchers = []
+    this.refSiteShown = []
+    this.refSiteVia = []
     this.floatRemainder = null
     this.nodeBuiltins = []
     this.builtinImports = new StringMap()
@@ -1967,6 +2063,39 @@ export class CheckedProgram {
       // strings — so the empty name every node starts at is pushed instead.
       this.nodeBuiltins.push("")
       i = i + 1
+    }
+  }
+
+  /**
+   * Extend every per-node table to `nodeCount` entries, each at the value the
+   * constructor gives a node, for the nodes of a dispatcher the checker
+   * generates after the module was parsed (WP51, `src/fnrefs.ts`).
+   */
+  growTables(nodeCount: i32): void {
+    const zero: i64 = 0
+    const noLocal: Local | null = null
+    const noConstant: ConstInfo | null = null
+    const noSig: FunctionSig | null = null
+    const noCopy: SpreadCopy | null = null
+    while (this.nodeTypes.length < nodeCount) {
+      this.nodeTypes.push(-1)
+      this.nodeLocals.push(noLocal)
+      this.nodeConstants.push(noConstant)
+      this.nodeCallees.push(noSig)
+      this.nodeFnRefs.push(noSig)
+      this.nodeBuiltins.push("")
+      this.nodeCoercions.push(-1)
+      this.nodeCaseValues.push(zero)
+      this.nodeEnumValues.push(0)
+      this.nodeProvenIndex.push(false)
+      this.nodeNullTests.push(false)
+      this.switchCoverage.push(0)
+      this.nodeProvenClamp.push(false)
+      this.nodeProvenRange.push(false)
+      this.nodeProvenNoOverflow.push(false)
+      this.nodeDisjointCopy.push(false)
+      this.nodeSpreadCopies.push(noCopy)
+      this.memberSets.push(-1)
     }
   }
 

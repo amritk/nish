@@ -3588,6 +3588,261 @@ if (!only || "net_loop".includes(only)) {
   )
 }
 
+// ---- WP51 function references under the debug profile --------------------------
+//
+// The golden loop links the speed profile. Each `fnref_*` case links here under
+// `--profile debug` too, whose dispatchers check the tag on entry, and must
+// print its `.out` all the same. `fnref_debug_check` then has a tag outside
+// its place's set forged into its debug IR: `g` can hold only `twice`, and the
+// forged call hands `g`'s dispatcher `dec`'s tag, a tag of the right signature
+// that the place pass proves `g` never holds. The debug binary must panic with
+// the set message; the speed IR, its golden, has no check to reach.
+if (selects("fnref", "fnref_debug_check")) {
+  const fnrefDir = path.join(buildDir, "fnref-debug")
+  fs.mkdirSync(fnrefDir, { recursive: true })
+  const cases = fs
+    .readdirSync(casesDir)
+    .filter((f) => /^fnref_.*\.ts$/.test(f))
+    .map((f) => f.slice(0, -3))
+  for (const name of cases) {
+    const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
+    const exe = path.join(fnrefDir, name)
+    const linked = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--link", exe, "--profile", "debug"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran = linked.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : linked
+    check(`${name}: --profile debug prints its .out`, ran.status === 0 && ran.stdout === want, shown(ran))
+  }
+
+  const ll = path.join(fnrefDir, "fnref_debug_check.ll")
+  const emitted = spawnSync(
+    NISH,
+    [path.join(casesDir, "fnref_debug_check.ts"), "--profile", "debug", "-o", ll],
+    { cwd: root, encoding: "utf8" }
+  )
+  const ir = emitted.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+  const tags = /define internal [^@]*@\$ref\.0\.fr1\.i32\.i32\.0\([^]*?switch i32 %\$t, label %ref\.outside \[ i32 (\d+), label %ref\.inside i32 (\d+),/.exec(ir)
+  const single = /call i32 @(\$ref\.0\.fr1\.i32\.i32\.1)\(i32 (%\d+), i32 3\)/.exec(ir)
+  check(
+    "fnref_debug_check: the debug dispatchers check their tags, by a switch and by a compare",
+    tags !== null && single !== null && ir.includes("icmp eq i32 %$t,"),
+    emitted.stderr + ir.split("\n").filter((l) => l.includes("$ref")).join("\n")
+  )
+  if (tags !== null && single !== null) {
+    // `dec`'s tag, the second member of the array's set, handed to `g`'s dispatcher.
+    const forged = ir.replace(single[0], `call i32 @${single[1]}(i32 ${tags[2]}, i32 3)`)
+    const forgedLl = path.join(fnrefDir, "fnref_debug_forged.ll")
+    fs.writeFileSync(forgedLl, forged)
+    const exe = path.join(fnrefDir, "fnref_debug_forged")
+    const built = spawnSync(
+      "bash",
+      [path.join(root, "scripts", "build.sh"), forgedLl, path.join(root, "runtime", "runtime.c"), "-o", exe, "--profile", "debug"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran = built.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : built
+    check(
+      "fnref_debug_check: a forged tag outside the place's set panics under --profile debug",
+      built.status === 0 &&
+        ran.status !== 0 &&
+        ran.stderr.includes("function reference holds a function outside its place's set"),
+      shown(ran)
+    )
+  }
+  // §4.4: no reference call leaks. Each program runs at 1000x and 10000x its
+  // loop length (`new P(i % 8)` keeps its sums in range) for its peak resident
+  // set. `fnref_place_set` and the half of `fnref_escape_join` that calls
+  // through the set that keeps nothing must peak alike; the half that calls
+  // `slot.use`, whose set keeps `p`, grows the arena as a direct call of
+  // `keepIt` does, so it is pinned to that direct call instead. The tolerance
+  // is under one arena chunk (128 KB), the smallest step a leak can take.
+  const rssExe = path.join(fnrefDir, "rss")
+  const rssBuilt = spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+  const peakOf = (label, source) => {
+    const ts = path.join(fnrefDir, `${label}.ts`)
+    const exe = path.join(fnrefDir, label)
+    fs.writeFileSync(ts, source)
+    const linked = spawnSync(NISH, [ts, "--link", exe], { cwd: root, encoding: "utf8" })
+    const r = linked.status === 0 ? spawnSync(rssExe, [exe], { encoding: "utf8" }) : linked
+    return { kb: r.status === 0 ? Number(r.stdout.trim()) : -1, detail: shown(r) }
+  }
+  const scaled = (name, bound, times, edit = (t) => t) =>
+    edit(fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8"))
+      .replace(`while (i < ${bound})`, `while (i < ${bound * times})`)
+      .replaceAll("new P(i)", "new P(i % 8)")
+  const flat = (label, few, many) =>
+    check(
+      label,
+      rssBuilt.status === 0 && few.kb > 0 && many.kb > 0 && Math.abs(many.kb - few.kb) < 128,
+      `peak ${few.kb} KB and ${many.kb} KB\n${rssBuilt.stderr}${few.detail}\n${many.detail}`
+    )
+  flat(
+    "fnref_place_set: 10x the loop peaks where 1x does",
+    peakOf("place_set_1x", scaled("fnref_place_set", 9, 1000)),
+    peakOf("place_set_10x", scaled("fnref_place_set", 9, 10000))
+  )
+  const keepless = (t) => t.replace(/\n\s*sum = sum \+ slot\.use\(new P\(i\), k\)/, "")
+  flat(
+    "fnref_escape_join: 10x the loop through the set that keeps nothing peaks where 1x does",
+    peakOf("escape_join_1x", scaled("fnref_escape_join", 4, 1000, keepless)),
+    peakOf("escape_join_10x", scaled("fnref_escape_join", 4, 10000, keepless))
+  )
+  const direct = (t) => t.replace("slot.use(new P(i), k)", "keepIt(new P(i), k)")
+  flat(
+    "fnref_escape_join: at 10x, the call through the keeping set peaks where a direct call of `keepIt` does",
+    peakOf("escape_join_direct", scaled("fnref_escape_join", 4, 10000, direct)),
+    peakOf("escape_join_10x_keep", scaled("fnref_escape_join", 4, 10000))
+  )
+
+  const speedLl = path.join(casesDir, "fnref_debug_check.ll")
+  const speed = fs.existsSync(speedLl) ? fs.readFileSync(speedLl, "utf8") : "ref.outside: no golden"
+  check(
+    "fnref_debug_check: the speed golden checks no tag",
+    !speed.includes("ref.outside") && !speed.includes("outside its place's set"),
+    speed.split("\n").filter((l) => l.includes("$ref")).join("\n")
+  )
+
+  // `-g` (§5.3 of docs/wp51-function-references.md): a reference is described
+  // as an enumeration of its signature's members, each named for its function
+  // with its tag as the value, so a debugger prints the function a reference
+  // holds. A dispatcher is artificial and every location in it is line 0, so a
+  // debugger's `step` treats it as code with no source. The program is linked
+  // under `--profile debug`, whose symbols the speed profile strips, and asked
+  // of gdb and lldb where they are installed.
+  const gSrc = path.join(fnrefDir, "fnref_g.ts")
+  fs.writeFileSync(
+    gSrc,
+    [
+      "type Op = (x: i32) => i32",
+      "const inc = (x: i32): i32 => x + 1",
+      "const twice = (x: i32): i32 => x * 2",
+      "export const main = (): number => {",
+      "  let h: Op = inc",
+      "  if (Date.now() > 0) {",
+      "    h = twice",
+      "  }",
+      "  const r = h(3)",
+      "  console.log(`${r}`)",
+      "  return 0",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const gOut = path.join(fnrefDir, "g-ir") + path.sep
+  const gIr = spawnSync(NISH, [gSrc, "-g", "-o", gOut], { cwd: root, encoding: "utf8" })
+  const gLlPath = path.join(gOut, "fnref_g.ll")
+  const gLl = gIr.status === 0 && fs.existsSync(gLlPath) ? fs.readFileSync(gLlPath, "utf8") : shown(gIr)
+  const enumTag = /!DICompositeType\(tag: DW_TAG_enumeration_type, name: "\(i32\) => i32",[^\n]*size: 32/
+  check(
+    "fnref -g: a reference's DWARF type is an enumeration of its members, valued by tag",
+    gLl.includes('!DIEnumerator(name: "inc", value: 1)') &&
+      gLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
+      enumTag.test(gLl),
+    gLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gLl.slice(0, 2000)
+  )
+  const dispatcherSp = gLl
+    .split("\n")
+    .find((l) => l.includes("DISubprogram(") && l.includes('name: "$ref.'))
+  const dispatcherId = gLl.match(/^!(\d+) = distinct !DISubprogram\(name: "\$ref\./m)
+  const dispatcherScope = dispatcherId === null ? "none" : dispatcherId[1]
+  const dispatcherLocs = gLl
+    .split("\n")
+    .filter((l) => l.includes("!DILocation(") && l.includes(`scope: !${dispatcherScope})`))
+  check(
+    "fnref -g: the dispatcher is artificial, at line 0, and every location in it is line 0",
+    dispatcherSp !== undefined &&
+      dispatcherSp.includes("line: 0,") &&
+      dispatcherSp.includes("DIFlagArtificial") &&
+      dispatcherLocs.length > 0 &&
+      dispatcherLocs.every((l) => l.includes("line: 0,")),
+    [dispatcherSp ?? "no $ref DISubprogram", ...dispatcherLocs].join("\n")
+  )
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [gLlPath, "-o", "/dev/null"], { encoding: "utf8" })
+    check("fnref -g: the IR passes llvm-as", as.status === 0, shown(as))
+  } else skip("fnref -g: llvm-as is not installed")
+
+  const gExe = path.join(fnrefDir, "fnref_g")
+  const gLinked = spawnSync(NISH, [gSrc, "-g", "--link", gExe, "--profile", "debug"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const gRan = gLinked.status === 0 ? spawnSync(gExe, { encoding: "utf8" }) : gLinked
+  check("fnref -g: the debug build prints 6", gRan.status === 0 && gRan.stdout === "6\n", shown(gRan))
+  if (gRan.status !== 0) {
+    // Nothing to debug.
+  } else if (has("gdb")) {
+    // At the call, `h` prints as the function it holds and compares equal to
+    // it; two steps from the call reach the member, the first stopping in the
+    // dispatcher.
+    const gdb = spawnSync(
+      "gdb",
+      [
+        "-batch",
+        "-nx",
+        "-ex",
+        "break fnref_g.ts:9",
+        "-ex",
+        "run",
+        "-ex",
+        "print h",
+        "-ex",
+        "print h == twice",
+        "-ex",
+        "step",
+        "-ex",
+        "frame",
+        "-ex",
+        "echo -- second step --\\n",
+        "-ex",
+        "step",
+        "-ex",
+        "frame",
+        gExe,
+      ],
+      { encoding: "utf8", timeout: 60000 }
+    )
+    const said = `${gdb.stdout}${gdb.stderr}`
+    check("fnref -g: gdb prints a reference as the function it holds", /\$1 = twice\b/.test(said), said)
+    check("fnref -g: gdb compares a reference with a function", /\$2 = 1\b/.test(said), said)
+    const [firstStop, secondStop] = said.split("-- second step --")
+    check(
+      "fnref -g: gdb's first step from the call stops in the dispatcher",
+      secondStop !== undefined && /#0 .*\$ref\.[^ ]* \(/.test(firstStop),
+      said
+    )
+    check(
+      "fnref -g: gdb's second step reaches the member",
+      secondStop !== undefined && /#0 .*\btwice \(/.test(secondStop),
+      said
+    )
+  } else skip("fnref -g: gdb is not installed")
+  if (gRan.status === 0 && has("lldb")) {
+    const lldb = spawnSync(
+      "lldb",
+      [
+        "--batch",
+        "--no-lldbinit",
+        "-o",
+        "breakpoint set --file fnref_g.ts --line 9",
+        "-o",
+        "run",
+        "-o",
+        "frame variable h",
+        gExe,
+      ],
+      { encoding: "utf8", timeout: 60000 }
+    )
+    const said = `${lldb.stdout}${lldb.stderr}`
+    check(
+      "fnref -g: lldb stops at the call's breakpoint",
+      /stop reason = breakpoint/.test(said) && /fnref_g\.ts:9\b/.test(said),
+      said
+    )
+    check("fnref -g: lldb prints a reference as the function it holds", /\bh = twice\b/.test(said), said)
+  } else if (gRan.status === 0) skip("fnref -g: lldb is not installed")
+}
+
 // ---- The link profile of a `tests/link` program (WP5) -------------------------
 //
 // A program links under `--profile debug` unless it is on `SPEED_LINK` or its args
@@ -4180,7 +4435,7 @@ for (const name of ["reject_hygiene_held"]) {
   )
 }
 
-// ---- A handle case reports exactly its own refusals (WP40 H1.1) -----------------------
+// ---- A handle case reports exactly its own refusals (WP53 H1.1) -----------------------
 // The same blind spot for the handle pass: each `.err` line names one refusal,
 // and the count says nothing else was found, so a check that starts firing
 // twice, or on a body it should skip (an arrow lifted out of its method), fails.
@@ -6496,7 +6751,11 @@ const runLinkProgram = async (name) => {
     // Named after the program, like `outDir`.
     fs.rmSync(panicsDir, { recursive: true, force: true })
     const panicsFile = path.join(panicsDir, "panics.json")
-    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
+    // A program with a `closed-world` file is one only a `--link` build may
+    // compile (a function reference crosses an exported signature, which an
+    // open build hands a host: WP51 §5.2), so its listing links too.
+    const closedWorld = fs.existsSync(side("closed-world")) ? ["--link", path.join(panicsDir, "exe")] : []
+    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...args, "--emit-panics", panicsFile], {
       cwd: root,
       encoding: "utf8",
     })
@@ -21962,7 +22221,7 @@ if (dealtHere("releaseChecks")) {
       ],
       [
         "ffi_buffer_late_load.ts",
-        // WP40 B1.2: the late load is pinned against a `pop` written inline in
+        // WP53 B1.2: the late load is pinned against a `pop` written inline in
         // a later argument, which shrinks the buffer after its length was read
         // for the count; its value is the argument, the `pop` divergence above.
         "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",

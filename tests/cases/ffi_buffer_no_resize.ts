@@ -1,4 +1,4 @@
-// WP40 B1.3: a foreign call does not resize an array. No array header crosses
+// WP53 B1.3: a foreign call does not resize an array. No array header crosses
 // to C -- a `u8[]` is lent as its data pointer only -- so `read` can write the
 // buffer's bytes but cannot move its length or its block. Three lowerings that
 // assumed otherwise now trust what they proved before the call:

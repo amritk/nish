@@ -1,4 +1,4 @@
-// WP40 H1.2: the close a `using` emits is the one its dispose spells (§4b).
+// WP53 H1.2: the close a `using` emits is the one its dispose spells (§4b).
 // The driver (`ffi_handle_shapes.c`) hands out numbered handles, prints ` oN`
 // for each open and ` cN` for each close (` vN` for the close that returns
 // `void`, ` c-null` for a close given `null`), and prints a handle still open

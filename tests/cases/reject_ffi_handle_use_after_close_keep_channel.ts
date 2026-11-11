@@ -1,4 +1,4 @@
-// WP40 H1.3, §6 row 15: a Channel cannot carry a lent handle to a reader that
+// WP53 H1.3, §6 row 15: a Channel cannot carry a lent handle to a reader that
 // outlives the lender's `using` block.
 import { Channel } from "nish/threads"
 declare function fopen(path: string, mode: string): CPtr | null

@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 35: each class's dispose breaks one rule of the two shapes
+// WP53 H1.1, Row 35: each class's dispose breaks one rule of the two shapes
 // (§4b), so the `using` block would run something besides the one close.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function opendir(path: string): CPtr

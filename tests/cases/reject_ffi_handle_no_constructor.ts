@@ -1,4 +1,4 @@
-// WP40 H1.1, D2: the pointer is written once, by the constructor, so a handle
+// WP53 H1.1, D2: the pointer is written once, by the constructor, so a handle
 // class with no constructor leaves it unset, which the field rules refuse.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

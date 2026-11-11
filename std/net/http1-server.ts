@@ -2136,7 +2136,9 @@ export class Http1Server {
   /**
    * Sends what `slot`'s connection holds until the socket would block, and
    * answers the interest: `H1_DONE` once the connection is over and sent,
-   * otherwise read while it has room and write while it holds bytes. It ends
+   * otherwise read while it has room and write while it holds bytes or a
+   * write is held back (its `H1_WRITE` comes from `next` once the socket is
+   * writable, even when this send emptied the output). It ends
    * the serve call, so a response written after it reads the clock anew.
    *
    * @param slot the slot `accept` answered
@@ -2162,7 +2164,12 @@ export class Http1Server {
     if (conn.inputRoom() > 0) {
       wants = wants | H1_WANT_READ
     }
-    if (conn.wantsWrite()) {
+    if (conn.wantsWrite() || conn.writeHeld) {
+      // A held write's `H1_WRITE` comes only from `next`. A send here that
+      // emptied the output, because the peer read between `next` and
+      // `flush`, leaves no byte to wait on, and a held write reads nothing,
+      // so without the write bit the slot would be armed for nothing and the
+      // response would never finish. The empty socket is writable at once.
       wants = wants | H1_WANT_WRITE
     }
     return wants
@@ -2546,7 +2553,7 @@ export class Http1TlsServer {
    * Writes what `slot`'s connection holds into TLS, as far as TLS takes it,
    * and sends it; shuts TLS down once the connection is over or ALPN chose
    * another protocol. Answers TLS's interest, with the write bit while the
-   * connection still holds bytes.
+   * connection still holds bytes or a write is held back.
    *
    * @param slot the slot `accept` answered
    * @returns the TLS interest bits the slot now waits for (`H1_WANT_` values), with `TLS_RECORD_DONE` once it should be closed
@@ -2565,7 +2572,10 @@ export class Http1TlsServer {
     }
     conn.park()
     const wants: i32 = this.tls.interest(slot)
-    return conn.wantsWrite() && (wants & TLS_RECORD_DONE) === 0 ? wants | TLS_RECORD_WANT_WRITE : wants
+    // A held write waits on the write bit even with nothing queued, as `Http1Server.flush` explains.
+    return (conn.wantsWrite() || conn.writeHeld) && (wants & TLS_RECORD_DONE) === 0
+      ? wants | TLS_RECORD_WANT_WRITE
+      : wants
   }
 
   /**

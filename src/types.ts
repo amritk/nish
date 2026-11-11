@@ -91,9 +91,9 @@ export const isForeignType = (table: TypeTable, t: i32): boolean =>
   isForeignScalar(t) || table.stripNull(t) === T_CPTR
 
 /**
- * A buffer a `declare function` takes (WP40 B1.1): a `u8[]` or a `readonly
+ * A buffer a `declare function` takes (WP53 B1.1): a `u8[]` or a `readonly
  * u8[]`, which C sees as a pointer to its bytes and whose length is held to
- * the `u64` after it (`docs/wp40-ffi-buffers-handles.md` §3a). It is kept out
+ * the `u64` after it (`docs/wp53-ffi-buffers-handles.md` §3a). It is kept out
  * of `isForeignType` because it is not one value with nothing to be wrong
  * about: it is valid only in a run that a count closes, which is a rule about
  * the parameter list rather than about one type.
@@ -225,6 +225,16 @@ const K_MASK: i32 = 24
  * the program stores and compares and hands back, never one it computes with.
  */
 const K_HOST_HANDLE: i32 = 25
+/**
+ * A function reference (WP51 S1, `docs/wp51-function-references.md` §2): a
+ * `(a: A, b: B) => R` written outside a parameter of a top-level function. It
+ * is an `i32` tag naming one capture-free top-level function of that
+ * signature, numbered from 1 in declaration order; 0 is kept for stage 2's
+ * `null`. `refs[type]` indexes `fnRefParams`, the parameter types, and
+ * `errs[type]` is the return type. It is interned by its signature, so two
+ * spellings of one signature are one type and assignable both ways.
+ */
+const K_FNREF: i32 = 26
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -356,11 +366,21 @@ export class TypeTable {
   unions: i32[][]
   /** Each union's tags, parallel to `unions`. */
   unionTags: i32[][]
+  /** The parameter types of each function reference type; its `refs` entry indexes this. */
+  fnRefParams: i32[][]
+  /**
+   * Parallel to `fnRefParams`: the names of the functions a reference of that
+   * type may hold, in tag order (tag `k + 1` is `fnRefMembers[..][k]`), once
+   * `resolveReferences` has numbered them. `-g` names its enumerators from it.
+   */
+  fnRefMembers: string[][]
 
   constructor() {
     this.json = false
     this.unions = []
     this.unionTags = []
+    this.fnRefParams = []
+    this.fnRefMembers = []
     this.kinds = []
     this.refs = []
     this.names = []
@@ -750,6 +770,71 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_HOST_HANDLE
   }
 
+  // ---- Function references (WP51) ------------------------------------------
+
+  /**
+   * The function reference type of the signature `(params) => result`,
+   * interned by the signature, so every spelling of it is one id.
+   */
+  fnRefOf(params: i32[], result: i32): i32 {
+    const parts: string[] = [`${K_FNREF}:f`]
+    for (const param of params) {
+      parts.push(`${param}`)
+    }
+    parts.push(`>${result}`)
+    const key = parts.join(":")
+    const existing = this.index.get(key, -1)
+    if (existing >= 0) {
+      return existing
+    }
+    const copy: i32[] = []
+    for (const param of params) {
+      copy.push(param)
+    }
+    this.fnRefParams.push(copy)
+    const named: string[] = []
+    this.fnRefMembers.push(named)
+    const id = this.intern(K_FNREF, this.fnRefParams.length - 1, "")
+    this.errs[id] = result
+    this.index.set(key, id)
+    return id
+  }
+
+  /** Whether `type` is a function reference; -1 is not. */
+  isFnRef(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_FNREF
+  }
+
+  /** A function reference's parameter types, in order. */
+  fnRefParamsOf(type: i32): i32[] {
+    return this.fnRefParams[this.refs[type]]
+  }
+
+  /** A function reference's return type. */
+  fnRefResultOf(type: i32): i32 {
+    return this.errs[type]
+  }
+
+  /** `(i32, string) => boolean`: a function reference's signature as a diagnostic spells it. */
+  fnRefName(type: i32): string {
+    const parts: string[] = []
+    for (const param of this.fnRefParamsOf(type)) {
+      parts.push(this.typeName(param))
+    }
+    return `(${parts.join(", ")}) => ${this.typeName(this.fnRefResultOf(type))}`
+  }
+
+  /** `fr2.i32.str.bool`: a function reference's mangle, its arity first so it reads one way. */
+  fnRefMangle(type: i32): string {
+    const params = this.fnRefParamsOf(type)
+    const parts: string[] = [`fr${params.length}`]
+    for (const param of params) {
+      parts.push(this.mangle(param))
+    }
+    parts.push(this.mangle(this.fnRefResultOf(type)))
+    return parts.join(".")
+  }
+
   /** A vector's or a mask's lane count: sixteen bytes over its lane's width. */
   laneCount(type: i32): i32 {
     return 16 / this.alignOf(this.refs[type])
@@ -927,6 +1012,8 @@ export class TypeTable {
         return `rgn.${this.mangle(this.refs[type])}`
       case K_HOST_HANDLE:
         return `hh.${this.names[type]}`
+      case K_FNREF:
+        return this.fnRefMangle(type)
       default:
         return this.scalarName(type)
     }
@@ -952,10 +1039,11 @@ export class TypeTable {
     return `${this.joinedMangles(variants, from, mid)}${this.joinedMangles(variants, mid, to)}`
   }
 
-  /** An array's element as its type spells it: a union in parentheses, `(A | B)[]`. */
+  /** An array's element as its type spells it: a union or a function in parentheses, `(A | B)[]`, `((i32) => i32)[]`. */
   elementName(element: i32): string {
     const name = this.typeName(element)
-    return this.isUnion(this.stripNull(element)) ? `(${name})` : name
+    const inner = this.stripNull(element)
+    return this.isUnion(inner) || this.isFnRef(inner) ? `(${name})` : name
   }
 
   /** The variant names joined as the source joins them, ascending by id. */
@@ -1194,6 +1282,8 @@ export class TypeTable {
         return "i64"
       case K_HOST_HANDLE:
         return "i32"
+      case K_FNREF:
+        return "i32" // the tag its dispatcher switches on (WP51 §2.4)
       default:
         process.exit(internalErrorFor(`internal error: llvmType of kind ${this.kinds[type]}`, this.json))
     }
@@ -1224,6 +1314,8 @@ export class TypeTable {
         return 4 // an i32 (WP31 §5)
       case K_HOST_HANDLE:
         return 4 // an i32
+      case K_FNREF:
+        return 4 // an i32 tag
       case K_VECTOR:
         return 16 // and sixteen bytes in size, as clang's `vector_size(16)` is
       default:
@@ -1268,6 +1360,8 @@ export class TypeTable {
         return `Region<${this.typeName(this.refs[type])}>`
       case K_HOST_HANDLE:
         return `HostHandle<"${this.names[type]}">`
+      case K_FNREF:
+        return this.fnRefName(type)
       default:
         return this.scalarName(type)
     }

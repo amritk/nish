@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 15: a `const` copy of a borrowed handle is a second name for
+// WP53 H1.1, Row 15: a `const` copy of a borrowed handle is a second name for
 // it.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

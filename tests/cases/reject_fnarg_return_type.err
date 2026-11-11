@@ -1,1 +1,1 @@
-`(x: i32) => i32` is a function type, which may only annotate a parameter of a top-level function
+Return type mismatch: function returns (i32) => i32 but expression is i32

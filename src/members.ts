@@ -67,6 +67,7 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
+import { checkReferenceCall, methodReferenceMessage, opaqueReferenceMessage } from "./fnrefs"
 import { ParentTable } from "./parents"
 import {
   channelCapacityMessage,
@@ -217,6 +218,9 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
   if (ctx.table.isUnion(receiver)) {
     return checkUnionTag(ctx, expr, receiver)
   }
+  if (ctx.table.isFnRef(receiver)) {
+    return ctx.errorType(expr, opaqueReferenceMessage(ctx.textOf(receiverExpr)))
+  }
   ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`)
   return T_ERROR
 }
@@ -270,12 +274,14 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
   }
   const field = info.field(expr.text)
   if (field === null) {
-    const isMethod = info.method(expr.text) !== null || info.methodTemplate(expr.text) !== null
-    const hint = isMethod ? " (it is a method; call it)" : ""
+    if (info.method(expr.text) !== null || info.methodTemplate(expr.text) !== null) {
+      ctx.errorAtProperty(expr, methodReferenceMessage(ctx.textOf(expr)))
+      return T_ERROR
+    }
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface"
     ctx.errorAtProperty(
       expr,
-      `Unknown field \`${expr.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\`${hint}`
+      `Unknown field \`${expr.text}\` on ${kind} \`${ctx.table.typeName(info.type)}\``
     )
     return T_ERROR
   }
@@ -385,6 +391,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     }
     return checkArrayMethod(ctx, expr, access, args, receiver, scope)
   }
+  if (ctx.table.isFnRef(receiver)) {
+    return ctx.errorType(expr, opaqueReferenceMessage(ctx.textOf(receiverExpr)))
+  }
   if (!ctx.table.isStruct(receiver)) {
     // Against the method name, as `errorAtProperty` reports it, so that the
     // fix can carry the whole call.
@@ -424,7 +433,13 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
       }
       return type
     }
-    const hint = info.field(access.text) !== null ? " (it is a field, not a method)" : ""
+    // WP51: a field holding a function reference is called through it.
+    const field = info.field(access.text)
+    if (field !== null && ctx.table.isFnRef(field.type)) {
+      const held = checkExpression(ctx, access, scope, -1)
+      return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, ctx.textOf(access), scope)
+    }
+    const hint = field !== null ? " (it is a field, not a method)" : ""
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface"
     ctx.errorAtProperty(
       access,

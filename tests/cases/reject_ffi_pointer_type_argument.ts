@@ -3,7 +3,7 @@
 // argument is refused where the class is instantiated, as it is for a generic
 // function, so a template that never mentions `T` in a member
 // (`class Empty<T> { n: i32 = 0; }`) is refused too, and `Box<CPtr>` never
-// reaches the handle class rules of WP40 §4a.
+// reaches the handle class rules of WP53 §4a.
 class Box<T> {
   value: T;
 }

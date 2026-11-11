@@ -19,8 +19,9 @@ including the evidence traced line by line, is this file at commit `2b2eb95c`.
 function may read the `const` locals and the parameters of the function it is
 written in, each lowered as one more parameter of the direct call: no
 environment struct, no indirect call
-([LANGUAGE.md](LANGUAGE.md#function-parameters)). §6's compile-time function parameters gain it; a function is
-still never a value.
+([LANGUAGE.md](LANGUAGE.md#function-parameters)). §6's compile-time function parameters gain it. A capture-free top-level
+function has since become a value (WP51 stage 1,
+[function references](LANGUAGE.md#function-references)).
 
 ## 1. Where these came from, and the rule they are judged by
 

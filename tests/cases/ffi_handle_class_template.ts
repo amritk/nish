@@ -1,4 +1,4 @@
-// WP40 H1.1, §6 row 5: the class-template check. A generic class is now
+// WP53 H1.1, §6 row 5: the class-template check. A generic class is now
 // checked where it is instantiated, as a generic function always was, so
 // `new Box<CPtr>()` and `new Box<File>()` are refused there
 // (`reject_ffi_pointer_type_argument`, `reject_ffi_handle_type_argument`). The

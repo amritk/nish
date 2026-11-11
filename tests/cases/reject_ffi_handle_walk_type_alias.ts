@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d: a type alias of a handle class names it outside a borrowing
+// WP53 H1.1, §4d: a type alias of a handle class names it outside a borrowing
 // parameter.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

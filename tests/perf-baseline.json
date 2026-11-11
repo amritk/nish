@@ -49,13 +49,10 @@
       "NL9011": 4
     },
     "src/emit.ts": {
-      "NL9011": 3
+      "NL9011": 2
     },
     "src/emit-arrays.ts": {
       "NL9007": 1
-    },
-    "src/emit-classes.ts": {
-      "NL9011": 1
     },
     "src/emit-control.ts": {
       "NL9007": 2
@@ -69,7 +66,7 @@
     "src/generics.ts": {
       "NL9002": 1,
       "NL9007": 5,
-      "NL9011": 9
+      "NL9011": 8
     },
     "src/ice.ts": {
       "NL9009": 1

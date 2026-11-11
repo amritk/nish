@@ -1,4 +1,4 @@
-// WP40 H1.3, §4c: a `using` written directly in a `case` clause would be in
+// WP53 H1.3, §4c: a `using` written directly in a `case` clause would be in
 // scope in the clauses after it, which a fall-through skips the open of; the
 // clause rule refuses the declaration before the handle rules see it.
 declare function fopen(path: string, mode: string): CPtr | null

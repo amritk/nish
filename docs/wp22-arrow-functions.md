@@ -57,6 +57,9 @@ site, the two forms were within noise. A first measurement said arrows were
 7.6x slower. It passed both forms through one helper, which made the call site
 polymorphic. What costs 7x in JavaScript is a polymorphic call site, and Nish
 cannot have one, because there are no function values.
+(WP51 has since made a capture-free top-level function a value, a function
+reference. A call through one is a `switch` over the functions it can hold,
+each a direct call, so the call site still names every target.)
 
 ## 3. What is not changing
 
@@ -65,7 +68,8 @@ cannot have one, because there are no function values.
 - **Function values stay forbidden.** `Function` is a Phase 0 error, and
   §5's second rule exists to keep it so. A compile-time function *parameter*
   ([wp23-language-surface.md](wp23-language-surface.md) §6) is not a function
-  value.
+  value. (WP51 relaxed this for capture-free top-level functions:
+  [wp51-function-references.md](wp51-function-references.md).)
 - **Constructors** are unaffected.
 
 ## 4. What is genuinely new: the concise body
@@ -82,7 +86,10 @@ the declaration kinds stop agreeing, and §8a is what that cost.
 2. **A name bound to a function may appear only in call position**, or as the
    argument to a function-typed parameter (wp23 §6). `const g = double`,
    `[double]` and `obj.f = double` are refused. This is what keeps rule 1 from
-   introducing first-class functions.
+   introducing first-class functions. WP51 stage 1 replaced it: a capture-free
+   top-level function may be named as a value of a function type written
+   through an alias, and an arrow inside a function still may not
+   ([wp51-function-references.md](wp51-function-references.md)).
 
 ## 6. Where the removal rule lives
 

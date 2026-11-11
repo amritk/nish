@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 31: the pointer is read directly in a method's body, never in
+// WP53 H1.1, Row 31: the pointer is read directly in a method's body, never in
 // a closure there. An arrow argument cannot read `this`, so the capture rule
 // refuses it before the handle rules are asked.
 declare function fopen(path: string, mode: string): CPtr | null

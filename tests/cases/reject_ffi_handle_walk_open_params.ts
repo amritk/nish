@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 5: a parameter borrows a handle only where this module alone
+// WP53 H1.1, Row 5: a parameter borrows a handle only where this module alone
 // calls it, with one type: not on an exported class, a generic class, a
 // generic function or a generic method, and a `File | null` parameter is not
 // a `File` one, so `f` may not be lent to it.

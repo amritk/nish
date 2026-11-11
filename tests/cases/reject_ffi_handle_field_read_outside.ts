@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 16: the pointer is read only in a method of its class.
+// WP53 H1.1, Row 16: the pointer is read only in a method of its class.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

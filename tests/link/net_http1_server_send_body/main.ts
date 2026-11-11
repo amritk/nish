@@ -402,6 +402,40 @@ export const main = (): i32 => {
   gone.server.close(gone.slot);
   netClose(gone.listener);
 
+  // A held write whose output a `flush` empties: the peer reads between `next`
+  // and `flush`, so `next` finds no room and `flush` sends everything. The
+  // write is still held and a held write reads nothing, so `flush` must ask
+  // for the write bit, or the slot is armed for nothing and `H1_WRITE` never
+  // comes (examples/file-server.ts hung on a 64 MiB file this way).
+  const held = new Pair(config);
+  held.ask("GET / HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n");
+  const heldConn = held.conn();
+  const heldFd: i32 = held.server.fd(held.slot);
+  let filled: i32 = 1;
+  while (filled > 0) {
+    filled = netWrite(heldFd, junk, ZERO, toI32(junk.length));
+  }
+  held.until(H1_REQUEST);
+  heldConn.respond(200, none, none, 4194304);
+  const heldTook: i32 = heldConn.write(big, ZERO, 4194304);
+  t.ok("a write into a full socket is taken short and held", heldTook > 0 && heldTook < 4194304 && heldConn.writeHeld);
+  t.eqI32("next finds the socket full and waits", held.server.next(held.slot), H1_NEED_MORE);
+  let heldWants: i32 = 0;
+  let tries: i32 = 0;
+  while (tries === 0 || (heldConn.wantsWrite() && tries < 64)) {
+    tries = tries + 1;
+    held.drain();
+    ready(held.client, 1);
+    held.drain();
+    heldWants = held.server.flush(held.slot);
+  }
+  t.ok("the peer reads, and flush empties the output with the write still held", !heldConn.wantsWrite() && heldConn.writeHeld);
+  t.eqI32("flush answers the write bit for it", heldWants & H1_WANT_WRITE, H1_WANT_WRITE);
+  t.eqI32("and on the writable socket next answers H1_WRITE", held.server.next(held.slot), H1_WRITE);
+  held.server.close(held.slot);
+  netClose(held.client);
+  netClose(held.listener);
+
   // No socket (a sans-IO carrier, or Http1TlsServer's): `write` exactly.
   const get: string = "GET / HTTP/1.1\r\nHost: a\r\n\r\n";
   const viaWrite = socketless(get);

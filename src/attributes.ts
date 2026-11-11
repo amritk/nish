@@ -771,6 +771,19 @@ export class FunctionFacts {
   callsNoReturn: boolean
   /** Parameter names that escape; decides `nocapture` for strings. */
   escaping: StringSet
+  /**
+   * The `escaping` names that escape other than by being handed to a user
+   * function under the conservative rule in `noteUse`: returned, stored,
+   * aliased, or given to a runtime entry.
+   */
+  keptOutright: StringSet
+  /**
+   * Pairs, name then callee as the source spells it: a parameter that
+   * escapes because it is handed to that user function, the first such call
+   * only. The escape-join refusal names the callee when this is the only
+   * reason (`keptOutright` lacks the name).
+   */
+  passedOn: string[]
   /** User functions and runtime symbols called directly, by LLVM symbol. */
   callees: StringSet
   /** Parameter names in signature order (`this` first for methods). */
@@ -974,6 +987,8 @@ export class FunctionFacts {
     this.willReturn = true
     this.callsNoReturn = false
     this.escaping = new StringSet()
+    this.keptOutright = new StringSet()
+    this.passedOn = []
     this.callees = new StringSet()
     this.paramNames = paramNames
     this.pointerParams = []
@@ -2164,6 +2179,7 @@ class FactCollector {
 
   escapeParam(name: string): void {
     this.facts.escaping.add(name)
+    this.facts.keptOutright.add(name)
     const pointer = this.facts.pointerParam(name)
     if (pointer !== null) {
       pointer.captured = true
@@ -2190,8 +2206,11 @@ class FactCollector {
       if (pointer !== null && callee !== null) {
         pointer.passedToCallees.push(callee.name)
         pointer.passedToIndices.push(found.index)
-      } else {
-        this.facts.escaping.add(name)
+      } else if (this.facts.escaping.add(name) && callee !== null) {
+        this.facts.passedOn.push(name)
+        this.facts.passedOn.push(callee.sourceName)
+      } else if (callee === null) {
+        this.facts.keptOutright.add(name)
       }
       return
     }
@@ -3252,7 +3271,7 @@ class FactCollector {
   }
 
   /**
-   * WP40 H1.2: a `new` of a handle class is a `using`'s initialiser, and every
+   * WP53 H1.2: a `new` of a handle class is a `using`'s initialiser, and every
    * exit of its block calls the close the class's dispose names, which is C's:
    * `ffi` is exercised there, named at the `using`, as a call written there
    * would be (`addCallee`).
@@ -3305,7 +3324,7 @@ class FactCollector {
       }
       i = i + 1
     }
-    // WP40 B1.2: C writes into a `u8[]` it is handed, which is a store into
+    // WP53 B1.2: C writes into a `u8[]` it is handed, which is a store into
     // the array's own slots here, and a count that may be larger than a
     // buffer's length is held against it before the call
     // (`emitForeignBuffers`).
@@ -4113,7 +4132,7 @@ const collectStatedFacts = (
   // worst of everything it cannot be seen to avoid, and the fixpoint carries
   // that outward exactly as it carries any other impurity. `escaping` stays
   // empty: a `string` argument (S3.1) and a `u8[]` or `readonly u8[]` one
-  // (WP40 B1.2) are borrowed for the call and never kept, by the rule
+  // (WP53 B1.2) are borrowed for the call and never kept, by the rule
   // `docs/wp27-ffi.md` §8b decides rather than proves. A buffer is a pointer
   // parameter, so the borrow is written as its facts: `captured` stays
   // `false`, and a `u8[]` one is `writesThrough`, because C fills it. The
@@ -4139,11 +4158,11 @@ const collectStatedFacts = (
     facts.worldVia = `the C function \`${sig.sourceName}\`` // `nish:secret`: nothing about C is proved
     facts.willReturn = false
     facts.readsMemory = true
-    // WP40 B1.3: no array header crosses to C. A `u8[]` argument is lent as
+    // WP53 B1.3: no array header crosses to C. A `u8[]` argument is lent as
     // `buf->data` for the call and a `string` as `s->data`; `len`, `cap` and
     // the header's own address never leave Nish, and a `CPtr` only ever comes
     // from C. So a C body can write bytes but cannot move a length or the
-    // block (docs/wp40-ffi-buffers-handles.md §3c), unlike the worst cases
+    // block (docs/wp53-ffi-buffers-handles.md §3c), unlike the worst cases
     // above, which stay. Nor can C re-enter Nish to do it: an exported function
     // it calls back reaches no array the caller holds, because a module has no
     // `let` and no `static` field to keep one in, and its one array `const`,
@@ -4191,6 +4210,16 @@ const collectStatedFacts = (
   // tail (`emitParamRangeChecks`). Its callers keep the tail they recorded for
   // the entry they no longer check, which is sound and costs nothing: they call
   // this function, and it calls the same two.
+  // WP51: a dispatcher whose set is empty traps (`emitEmptyDispatcher`), and
+  // a debug build checks a dispatcher's tag on entry, which may panic
+  // (`emitTagCheck`). Its body, a `switch` of direct calls, says neither.
+  if (sig.dispatcher && sig.refMembers.length === 0) {
+    facts.hasTrap = true
+  } else if (sig.dispatcher && opts.profile === "debug") {
+    const tail: string[] = []
+    panicTailCallees(tail)
+    collector.addCallees(tail)
+  }
   if (checksRangesInPrologue(table, opts, sig)) {
     const tail: string[] = []
     panicTailCallees(tail)
@@ -4481,6 +4510,7 @@ const handsParamsTo = (facts: FunctionFacts, runtime: string): void => {
   facts.callees.add(runtime)
   for (const name of facts.paramNames) {
     facts.escaping.add(name)
+    facts.keptOutright.add(name)
   }
 }
 
@@ -6733,7 +6763,7 @@ export const hostFunction = (sig: FunctionSig): boolean => {
 
 /**
  * Whether parameter `i` of the foreign function `sig` is a buffer lent for
- * the call: a C function's `u8[]` (WP40 B1) or a host function's window
+ * the call: a C function's `u8[]` (WP53 B1) or a host function's window
  * (WP50 S3, `isHostWindow`). Either crosses as its data pointer.
  */
 export const lentBuffer = (table: TypeTable, sig: FunctionSig, i: i32): boolean =>
@@ -6763,7 +6793,7 @@ export const hostWindowProven = (
 /**
  * The parameter that counts buffer parameter `index` of the `declare function`
  * `sig`: the `u64` that closes its run, the first parameter after it that is
- * not a buffer (WP40 §3a; `checkForeignSignature` refuses every other shape).
+ * not a buffer (WP53 §3a; `checkForeignSignature` refuses every other shape).
  */
 export const foreignBufferCount = (table: TypeTable, sig: FunctionSig, index: i32): i32 => {
   let at = index + 1
@@ -6776,7 +6806,7 @@ export const foreignBufferCount = (table: TypeTable, sig: FunctionSig, index: i3
 /**
  * Whether the `ffi-length` check of buffer argument `index` of the foreign
  * call `call` is proven, so that neither the attribute pass records it as a
- * panic nor the emitter writes it (WP40 B1.2, §3a). The count is spelled
+ * panic nor the emitter writes it (WP53 B1.2, §3a). The count is spelled
  * `toU64(x.length)` in the call, where `x` is the buffer argument itself, a
  * `const` local or a parameter named alone, so the count is the length it was
  * when the count ran; and no argument after the count can move an array's

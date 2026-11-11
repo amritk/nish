@@ -1,4 +1,4 @@
-// WP40 B1.2's checks (docs/wp40-ffi-buffers-handles.md): a `u8[]` handed to a
+// WP53 B1.2's checks (docs/wp53-ffi-buffers-handles.md): a `u8[]` handed to a
 // `declare function`, its `ffi-length` site, its `--target wasm32-wasi` build,
 // its refusal in a freestanding `--target wasm32` build (NL2666), and a
 // freestanding `--profile wasm` link of host IR. They live beside `tests/run.js`, which calls
@@ -13,9 +13,9 @@ import { spawnSync } from "node:child_process"
  * matched against a group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, buildDir }) => {
-  // WP40 B1.2: a `u8[]` handed to a `declare function` is lowered as its data
+  // WP53 B1.2: a `u8[]` handed to a `declare function` is lowered as its data
   // pointer, and its length is checked against the count after every argument
-  // is evaluated (`ffi-length`, docs/wp40-ffi-buffers-handles.md §3a). Only
+  // is evaluated (`ffi-length`, docs/wp53-ffi-buffers-handles.md §3a). Only
   // `toU64(b.length)` of the buffer itself is proved. C writes through a `u8[]`
   // it is passed, so an exported function that hands its parameter to such a C
   // function writes that parameter: its header drops the `const`, its glue
@@ -327,7 +327,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
     }
   }
 
-  // WP40 B1.2 on wasm (docs/wp40-ffi-buffers-handles.md §5). A `--target
+  // WP53 B1.2 on wasm (docs/wp53-ffi-buffers-handles.md §5). A `--target
   // wasm32-wasi` build of ffi_buffer_write assembles, and llc reads its data
   // pointer as a 32-bit load at the header's offset 16 and its `n <= len` as an
   // i64 compare: the header is `{i64 len, i64 cap, i8* data}` on both targets.

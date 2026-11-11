@@ -1,4 +1,4 @@
-// WP40 B1.2: the length is loaded after every argument is evaluated, so a
+// WP53 B1.2: the length is loaded after every argument is evaluated, so a
 // later argument that shrinks the buffer is seen. `toU64(buf.length)` reads 4,
 // `shrink` and the `Popper` constructor pop a byte, and the check compares 4
 // against 3. The count is not credited as proven, because a later argument

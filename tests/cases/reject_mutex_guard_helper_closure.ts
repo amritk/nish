@@ -1,4 +1,4 @@
-// R3, a guard handed to a helper: the helper closes an arrow over the guard: a function is never a value, and the arrow would carry the guard out with it.
+// R3, a guard handed to a helper: the helper closes an arrow over the guard: an arrow that captures is no function reference, and this one would carry the guard out with it.
 import { Channel, Mutex, MutexGuard, scope } from "nish/threads";
 
 class Counter {

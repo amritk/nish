@@ -270,7 +270,6 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 38 | SIMD | [wp38](wp38-simd.md) |
 | 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | [wp39](wp39-http-server.md) |
 | 40 | Dependency capabilities: per-dependency grants in the root manifest | [wp40](wp40-dependency-capabilities.md) |
-| 40 | Buffers and handles across `declare function` | [wp40](wp40-ffi-buffers-handles.md) |
 | 41 | A wide multiply, measured and declined | [wp41](wp41-mul-wide.md) |
 | 42 | A multi-core server from pre-forked processes | [wp42](wp42-multicore-server.md) |
 | 43 | The HTTP application layer: router, handler interface, static files, compression | [wp43](wp43-http-app-layer.md) |
@@ -283,6 +282,7 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 50 | A WebAssembly module a TypeScript page drives: imports, handles, shared memory, strings, determinism, size | [wp50](wp50-wasm-host.md) |
 | 51 | References to capture-free top-level functions: a tag and a `switch` over a closed set, measured | [wp51](wp51-function-references.md) |
 | 52 | Fast rebuilds for `nish run` | [wp52](wp52-run-rebuilds.md) |
+| 53 | Buffers and handles across `declare function` | [wp53](wp53-ffi-buffers-handles.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each

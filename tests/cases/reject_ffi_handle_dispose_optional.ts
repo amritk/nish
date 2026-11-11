@@ -1,4 +1,4 @@
-// WP40 H1.1, D5: the `[Symbol.dispose]` of a handle class is always there, so
+// WP53 H1.1, D5: the `[Symbol.dispose]` of a handle class is always there, so
 // it cannot be optional. The parser refuses a `?` after a computed name, so
 // the refusal is its own.
 declare function fopen(path: string, mode: string): CPtr | null
