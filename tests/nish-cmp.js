@@ -1182,6 +1182,12 @@ const DECLARED = [
     why: "the case is compiled with --deterministic, a flag the seed does not know",
   },
   {
+    program: "examples/file-server.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
     program: "docs/cookbook/builtin-file-window.ts",
     file: "exit",
     changelog: "fileOpen, fileReadAt, fileSize and fileClose",
