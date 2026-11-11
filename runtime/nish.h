@@ -636,6 +636,14 @@ int32_t nish_spawn_child(const nish_array *argv);
  * copied; SIGPIPE is blocked on the calling thread for the call, a SIGPIPE the
  * call raised is consumed, and the thread's mask is restored after it. */
 int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err);
+/* `spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)`: `nish_spawn_piped`
+ * with a deadline of `timeout_ms` milliseconds on CLOCK_MONOTONIC, a negative
+ * one none (`nish_spawn_piped` is this with -1). The same answers, plus -3 for
+ * a run the deadline ended: the child, its pid alone, is killed with SIGKILL
+ * and reaped, and both arrays keep the bytes read before the kill. The wait for
+ * the child's exit is bounded by the same deadline. -1 always under WASI. */
+int32_t nish_spawn_piped_within(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err,
+                                int32_t timeout_ms);
 /* `spawnWithFds(argv, fds)`: `nish_spawn_child` with the child holding
  * `fds[i]` (element type `int32_t`) as descriptor `3 + i`, close-on-exec
  * cleared there. More than 64 descriptors or a negative one is -EINVAL before

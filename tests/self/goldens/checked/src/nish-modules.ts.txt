@@ -174,19 +174,19 @@ function nishExport(specifier: string, name: string): BuiltinExport | null -> @n
   callee +0:7 isFileStreamExport -> @isFileStreamExport
   callee +2:14 new BuiltinExport -> @BuiltinExport.constructor
   callee +8:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +29:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +32:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +38:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +43:9 netOption -> @netOption
-  callee +44:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +46:12 isNetExport -> @isNetExport
-  callee +46:32 new BuiltinExport -> @BuiltinExport.constructor
-  callee +49:12 isTermExport -> @isTermExport
-  callee +49:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +52:12 isSimdExport -> @isSimdExport
-  callee +52:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +55:12 isAsyncExport -> @isAsyncExport
-  callee +55:34 new BuiltinExport -> @BuiltinExport.constructor
-  callee +57:21 unsafeModule -> @unsafeModule
-  callee +58:12 isUnsafeExport -> @isUnsafeExport
-  callee +58:35 new BuiltinExport -> @BuiltinExport.constructor
+  callee +30:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +33:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +39:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +44:9 netOption -> @netOption
+  callee +45:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +47:12 isNetExport -> @isNetExport
+  callee +47:32 new BuiltinExport -> @BuiltinExport.constructor
+  callee +50:12 isTermExport -> @isTermExport
+  callee +50:33 new BuiltinExport -> @BuiltinExport.constructor
+  callee +53:12 isSimdExport -> @isSimdExport
+  callee +53:33 new BuiltinExport -> @BuiltinExport.constructor
+  callee +56:12 isAsyncExport -> @isAsyncExport
+  callee +56:34 new BuiltinExport -> @BuiltinExport.constructor
+  callee +58:21 unsafeModule -> @unsafeModule
+  callee +59:12 isUnsafeExport -> @isUnsafeExport
+  callee +59:35 new BuiltinExport -> @BuiltinExport.constructor

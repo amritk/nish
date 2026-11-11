@@ -881,33 +881,33 @@ function RegionWalk.visitBuiltin(this: RegionWalk, node: Node, handed: Node[]): 
   local +2:11 receiver: Node | null (const)
   callee +2:22 methodReceiver -> @methodReceiver
   callee +3:30 isResizeCall -> @isResizeCall
-  local +6:13 args: Node[] (const)
-  local +7:11 grown: i32 (let)
-  local +8:16 i: i32 (let)
-  callee +9:45 mayBeOuter -> @mayBeOuter
-  callee +9:56 RegionWalk.origin -> @RegionWalk.origin
-  local +14:15 name: string (const)
-  callee +14:22 builtinNameOf -> @builtinNameOf
-  local +15:15 text: string (const)
-  callee +15:22 textOf -> @textOf
-  callee +16:9 RegionWalk.report -> @RegionWalk.report
-  callee +16:27 growthMessage -> @growthMessage
-  local +20:11 method: string (const)
-  callee +20:20 arrayMethodName -> @arrayMethodName
-  local +24:11 holder: i32 (const)
-  callee +24:20 RegionWalk.origin -> @RegionWalk.origin
-  callee +26:11 mayBeOuter -> @mayBeOuter
-  callee +27:9 RegionWalk.report -> @RegionWalk.report
-  callee +29:11 growthMessage -> @growthMessage
-  callee +29:46 textOf -> @textOf
-  local +35:18 arg: Node (const)
-  callee +36:14 isCopied -> @isCopied
-  callee +36:35 RegionWalk.typeOf -> @RegionWalk.typeOf
-  callee +37:11 RegionWalk.noteAlias -> @RegionWalk.noteAlias
-  callee +37:31 RegionWalk.origin -> @RegionWalk.origin
-  callee +38:11 RegionWalk.store -> @RegionWalk.store
-  callee +38:30 RegionWalk.origin -> @RegionWalk.origin
-  callee +38:54 storesText -> @storesText
+  local +7:13 args: Node[] (const)
+  local +8:11 grown: i32 (let)
+  local +9:16 i: i32 (let)
+  callee +13:11 mayBeOuter -> @mayBeOuter
+  callee +13:22 RegionWalk.origin -> @RegionWalk.origin
+  local +19:15 name: string (const)
+  callee +19:22 builtinNameOf -> @builtinNameOf
+  local +20:15 text: string (const)
+  callee +20:22 textOf -> @textOf
+  callee +21:9 RegionWalk.report -> @RegionWalk.report
+  callee +21:27 growthMessage -> @growthMessage
+  local +25:11 method: string (const)
+  callee +25:20 arrayMethodName -> @arrayMethodName
+  local +29:11 holder: i32 (const)
+  callee +29:20 RegionWalk.origin -> @RegionWalk.origin
+  callee +31:11 mayBeOuter -> @mayBeOuter
+  callee +32:9 RegionWalk.report -> @RegionWalk.report
+  callee +34:11 growthMessage -> @growthMessage
+  callee +34:46 textOf -> @textOf
+  local +40:18 arg: Node (const)
+  callee +41:14 isCopied -> @isCopied
+  callee +41:35 RegionWalk.typeOf -> @RegionWalk.typeOf
+  callee +42:11 RegionWalk.noteAlias -> @RegionWalk.noteAlias
+  callee +42:31 RegionWalk.origin -> @RegionWalk.origin
+  callee +43:11 RegionWalk.store -> @RegionWalk.store
+  callee +43:30 RegionWalk.origin -> @RegionWalk.origin
+  callee +43:54 storesText -> @storesText
 function RegionWalk.judgeCallee(this: RegionWalk, node: Node, callee: FunctionSig, isNew: boolean): void -> @RegionWalk.judgeCallee [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.report

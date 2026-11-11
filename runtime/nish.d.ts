@@ -1209,6 +1209,40 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  */
 declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
 /**
+ * `spawnPiped` with a deadline: the same captured run, killed once `timeoutMs`
+ * milliseconds have passed since it started. A negative `timeoutMs` is no
+ * deadline, as `pollWait`'s is, so `spawnPipedWithin(argv, stdin, stdout,
+ * stderr, -1)` is `spawnPiped(argv, stdin, stdout, stderr)`. When the deadline
+ * passes the child is killed with `SIGKILL` and reaped, the answer is `-3`, and
+ * `stdout` and `stderr` keep every byte read before the kill.
+ *
+ * The deadline covers the whole run, the wait for the child's exit included,
+ * and is measured on the monotonic clock. Only the child's own pid is killed:
+ * a grandchild it started is not, and one that keeps an output pipe open makes
+ * the run wait for it, so a child that exited 0 can still answer `-3`. The
+ * rest is `spawnPiped`'s: the same environment, descriptors, SIGPIPE handling
+ * and 16 MiB cap, `readonly` and typed-array spellings refused for the two
+ * output arrays, refused by a `wasm32` build (NL2404). Capability:
+ * process.spawn.
+ *
+ * @param argv the program and its arguments.
+ * @param stdin the bytes the child reads.
+ * @param stdout receives what the child prints on stdout.
+ * @param stderr receives what the child prints on stderr.
+ * @param timeoutMs the milliseconds the run may take, or a negative number for
+ *   no deadline.
+ * @returns the status as `spawnPiped` answers it (the exit code, `128 + n`,
+ *   `-1` for a child that cannot be started or a WASI build, `-2` when a stream
+ *   passed 16 MiB), or `-3` when the deadline passed and the child was killed.
+ */
+declare function spawnPipedWithin(
+  argv: string[],
+  stdin: readonly u8[],
+  stdout: u8[],
+  stderr: u8[],
+  timeoutMs: i32
+): i32;
+/**
  * `spawn` with the child holding `fds[i]` as descriptor `3 + i`, close-on-exec
  * cleared there. Its streams 0 to 2 are this process's, and no other descriptor
  * of this process reaches it but one opened without close-on-exec, which nothing
@@ -2712,6 +2746,32 @@ declare module "nish:process" {
    *   16 MiB.
    */
   export function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
+  /**
+   * `spawnPiped` with a deadline: the same captured run, killed with `SIGKILL`
+   * and reaped once `timeoutMs` milliseconds have passed since it started, and
+   * a negative `timeoutMs` is no deadline, so `-1` makes it `spawnPiped`. The
+   * deadline covers the whole run, the wait for the child's exit included, on
+   * the monotonic clock. Only the child's pid is killed, never a grandchild,
+   * and a grandchild that keeps an output pipe open makes the run wait for it
+   * until the deadline.
+   *
+   * @param argv The program and its arguments.
+   * @param stdin The bytes the child reads.
+   * @param stdout Grows by the child's stdout, the bytes read before a kill
+   *   included; neither `readonly` nor a typed array.
+   * @param stderr Grows by the child's stderr, under the same rule.
+   * @param timeoutMs The milliseconds the run may take; negative for none.
+   * @returns `spawnPiped`'s answer (the status or `128 + n`, `-1`, or `-2` for
+   *   a stream past 16 MiB), or `-3` when the deadline passed and the child was
+   *   killed.
+   */
+  export function spawnPipedWithin(
+    argv: string[],
+    stdin: readonly u8[],
+    stdout: u8[],
+    stderr: u8[],
+    timeoutMs: i32
+  ): i32;
   /**
    * Start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does (the same
    * vector, environment, streams and working directory), without waiting. The

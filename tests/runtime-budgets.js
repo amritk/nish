@@ -177,9 +177,18 @@ const RUNTIME_TEXT_UNIT_BUDGET = 1787
  * `dup2` actions count from. It is `spawn` with descriptors handed on, so it belongs beside
  * `nish_spawn_start`, which it reuses. The budget is the next 256-byte boundary, leaving 138.
  *
- * **Raised to 5,376 for WP44's streaming reads** (`fileOpen`, `fileReadAt`, `fileSize`,
- * `fileClose`, docs/wp44-streaming-files.md), measured **5,338 bytes** on 2026-11-11 with
- * clang 18.1.3 on linux-x64, from 4,858 at the head it started from: under
+ * **Raised to 5,376 for `spawnPipedWithin`**, measured **5,225 bytes** on 2026-11-11 with
+ * clang 18.1.3 on linux-x64, from 4,858 on `main`: under `-ffunction-sections`, the
+ * capture loop moved into `nish_spawn_piped_within` at 1,444 (1,089 as
+ * `nish_spawn_piped`), the deadline read on the monotonic clock, the `poll` wait it
+ * bounds, the SIGKILL and the `WNOHANG` reap with its doubling nap that keep the final
+ * wait inside the deadline (docs/security/runtime.md RT-49), and `nish_spawn_piped` is a
+ * 9-byte call with no deadline. One loop serves both, so `spawnPiped` costs nothing
+ * twice. The budget is the next 256-byte boundary, leaving 151.
+ *
+ * **Raised to 5,888 for WP44's streaming reads** (`fileOpen`, `fileReadAt`, `fileSize`,
+ * `fileClose`, docs/wp44-streaming-files.md), measured **5,705 bytes** on 2026-11-11 with
+ * clang 18.1.3 on linux-x64, from 5,225 with `spawnPipedWithin` in: under
  * `-ffunction-sections`, `nish_file_open` 169 (the empty-or-NUL path refusal, the `fstat`
  * regular-file test and the close of what it refuses), `nish_file_read_at` 115 (the `pos` refusal and the `EINTR` retry),
  * `nish_file_size` 50, `nish_file_close` 27 (each before the refusal of a negative descriptor,
@@ -187,9 +196,10 @@ const RUNTIME_TEXT_UNIT_BUDGET = 1787
  * that gives Darwin and WASI Linux's numbers (its 76-byte jump table is `.rodata`). They
  * are file reads beside `nish_read_file_or_null`, and §7 links them into a WASI build
  * through this file, so they are here rather than in a unit of their own. The budget is the
- * next 256-byte boundary, leaving 38.
+ * next 256-byte boundary, leaving 183. The 480 bytes are the same before and after
+ * `spawnPipedWithin` (5,338 from 4,858 without it).
  */
-const RUNTIME_OS_TEXT_BUDGET = 5376
+const RUNTIME_OS_TEXT_BUDGET = 5888
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.

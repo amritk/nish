@@ -277,7 +277,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync, writeFileSyncMode, createFileExclusiveSync, mkdirSyncMode, fileOpen, fileReadAt, fileSize, fileClose"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
-    return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, setCpuAffinity, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
+    return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, spawnPipedWithin, spawnWithFds, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, setCpuAffinity, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netWrite2, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, netMss, unixListen, unixListenMode, unixConnect, unixAccept, unixSocketPair, sendFd, recvFd, peerCredentials, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF, NET_UNIX_UNLINK_STALE, NET_UNIX_STREAM, NET_UNIX_SEQPACKET"
@@ -572,6 +572,7 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "spawnSyncTo" ||
       name === "spawn" ||
       name === "spawnPiped" ||
+      name === "spawnPipedWithin" ||
       name === "spawnWithFds" ||
       name === "kill" ||
       name === "waitPid" ||

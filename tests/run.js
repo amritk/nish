@@ -20603,6 +20603,70 @@ if (dealtHere("cliChecks")) {
     )
   }
 
+  // ---- #1328: every bodiless instance states its write facts ------------------------------
+  // `tests/bodiless-stance.js` reads `src/attributes.ts`: every `mark*` helper
+  // answers a stance, nothing else sets those facts, no call drops the answer,
+  // and every body the emitter writes is on `needsStance`'s list. Its
+  // self-test mutates the source once per rule and has each mutant refused.
+  // What gets past the text fails closed in the compiler: an instance on the
+  // list that stated no stance is given the unknown one, and
+  // `NISH_SIMULATE_ICE=nostance:<name>` drops `<name>`'s stated stance, so a
+  // spawned task that encodes into shared memory, accepted as stated, has to
+  // be refused without it.
+  if (!only || "bodiless".includes(only)) {
+    for (const args of [[], ["--self-test"]]) {
+      const r = spawnSync("node", [path.join(root, "tests", "bodiless-stance.js"), ...args], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `bodiless: the stance check${args.length > 0 ? " refuses each of its mutants" : " passes"} (${r.stdout.trim()})`,
+        r.status === 0,
+        r.stdout + r.stderr
+      )
+    }
+    const bodilessDir = path.join(buildDir, "bodiless")
+    fs.rmSync(bodilessDir, { recursive: true, force: true })
+    fs.mkdirSync(bodilessDir, { recursive: true })
+    const encodeTs = path.join(bodilessDir, "encode.ts")
+    fs.writeFileSync(
+      encodeTs,
+      [
+        'import { sleep, spawn } from "nish:async"',
+        'import { JsonWriter } from "nish/json"',
+        'import { jsonEncode } from "nish/json-typed"',
+        "class Tally { name: string = \"\"; hits: i32 = 0 }",
+        "async function work(tally: Tally, ms: i32): Promise<void> {",
+        "  await sleep(ms)",
+        "  const w = new JsonWriter(new Array<u8>(64), 0)",
+        "  jsonEncode(w, tally)",
+        "}",
+        "export async function main(): Promise<i32> {",
+        "  const tally = new Tally()",
+        "  spawn(work(tally, 1))",
+        "  await sleep(10)",
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const stated = spawnSync(NISH, [encodeTs, "-o", path.join(bodilessDir, "stated") + path.sep], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("bodiless: a task that encodes shared memory to JSON compiles", stated.status === 0, shown(stated))
+    const forgotten = spawnSync(NISH, [encodeTs, "-o", path.join(bodilessDir, "forgotten") + path.sep], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_SIMULATE_ICE: "nostance:jsonEncode<Tally>" },
+    })
+    check(
+      "bodiless: the same task is refused once `jsonEncode`'s stance is missing",
+      forgotten.status === 1 && forgotten.stderr.includes("hands `tally` to `jsonEncode<Tally>`, which stores into it"),
+      shown(forgotten)
+    )
+  }
+
   // ---- WP35: the capability report ---------------------------------------------------
   // The golden reports are the `caps_*` cases' `.caps.json` and the `tests/link/caps_*`
   // programs' `expected.caps.json`; what is checked here is everything around them:

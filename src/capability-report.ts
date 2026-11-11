@@ -404,6 +404,7 @@ const reachArguments = (name: string, c: i32): i32 => {
       name === "spawnSyncTo" ||
       name === "spawn" ||
       name === "spawnPiped" ||
+      name === "spawnPipedWithin" ||
       name === "spawnWithFds"
       ? 1
       : 0

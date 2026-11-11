@@ -61,8 +61,26 @@ if (status !== 0) {
 }
 ```
 
-It is `process.spawn` in the capability report, and refused when compiling for
-WebAssembly. See
+`spawnPipedWithin(argv, stdin, stdout, stderr, timeoutMs)` is the same run
+with a deadline, for a child that may never answer. When `timeoutMs`
+milliseconds pass before the child exits it answers -3, kills the child, and
+keeps what the child printed so far in `stdout` and `stderr`. A negative
+`timeoutMs` means no deadline. Only the child itself is killed: a process it
+started that still holds its output keeps the run going until the deadline,
+so a child that leaves one behind answers -3 even when it exited 0.
+
+```ts
+const out: u8[] = []
+const err: u8[] = []
+const none: u8[] = []
+const status = spawnPipedWithin(["git", "ls-remote", "origin"], none, out, err, 10000)
+if (status === -3) {
+  console.log("git ls-remote took longer than 10 seconds")
+}
+```
+
+Both are `process.spawn` in the capability report, and refused when compiling
+for WebAssembly. See
 [Directories and subprocesses](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#directories-and-subprocesses).
 
 `spawnWithFds(argv, fds)` starts a child as `spawn` does and hands it the

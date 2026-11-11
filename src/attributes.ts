@@ -624,6 +624,13 @@ export class FunctionFacts {
    */
   resizesArray: boolean
   /**
+   * #1328: a `BodilessStance` was applied to these facts (`applyStance`). An
+   * instance that `needsStance` and has none is given the unknown stance
+   * (`assumeUnknownStance`), so a helper or a route that forgets to state one
+   * fails closed rather than leaving the pure defaults.
+   */
+  stanceStated: boolean
+  /**
    * WP29 P1: the function writes memory its caller could observe, directly or
    * through a callee (fixpoint over the call graph). `effect` is the wrong
    * question for that, because it is about what LLVM may reorder: a panic, a
@@ -940,6 +947,7 @@ export class FunctionFacts {
     this.loopsBounded = true
     this.hasTrap = false
     this.resizesArray = false
+    this.stanceStated = false
     this.sharedWrite = false
     this.atomic = false
     this.writesPastParams = false
@@ -3942,7 +3950,7 @@ class FactCollector {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet" || name === "store") {
       this.facts.effect = EFFECT_WRITE
-    } else if (name === "spawnPiped") {
+    } else if (name === "spawnPiped" || name === "spawnPipedWithin") {
       // The runtime appends to `stdout` and `stderr` as `push` does, moving
       // their `len` and perhaps their `data` (`isResizeCall`).
       this.facts.effect = EFFECT_WRITE
@@ -3967,11 +3975,38 @@ const initialisesFields = (sig: FunctionSig): boolean => {
 }
 
 /**
- * Per-function facts from one walk of the body. `memory` (round 2, see
+ * One function's facts, before the fixpoint. An instance that `needsStance`
+ * and stated none (a `mark*` helper's answer dropped, or a route that calls
+ * none) is given the unknown stance here, once, whichever way the build
+ * returned (#1328).
+ */
+const collectFacts = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  opts: Options,
+  sig: FunctionSig,
+  memory: EscapeResult | null,
+  nodeCount: i32,
+  known: FactsTable | null
+): FunctionFacts => {
+  const facts = collectStatedFacts(unit, table, opts, sig, memory, nodeCount, known)
+  // `NISH_SIMULATE_ICE=nostance:<name>` forgets one instance's stance. Stances
+  // only add, and the unknown one adds everything, so applying it over the
+  // stated one is what a missing stance would have given.
+  const forgotten = opts.statelessInstance !== "" && sig.sourceName === opts.statelessInstance
+  if ((!facts.stanceStated || forgotten) && needsStance(unit.program, sig)) {
+    assumeUnknownStance(facts)
+  }
+  return facts
+}
+
+/**
+ * Per-function facts from one walk of the body and the stated stances,
+ * without `collectFacts`' unknown-stance fallback. `memory` (round 2, see
  * `analyzeFunctions`) tells the collectors which allocations are allocas and
  * which locals hold them, and carries the allocation facts into the result.
  */
-const collectFacts = (
+const collectStatedFacts = (
   unit: AnalysisUnit,
   table: TypeTable,
   opts: Options,
@@ -4038,25 +4073,25 @@ const collectFacts = (
 
   // Typed JSON: a call of `jsonDecode` or `jsonEncode`, whose code the emitter writes at the call.
   if (jsonRouteOf(sig) !== JSON_NONE) {
-    markJsonRoute(program, table, sig, facts)
+    applyStance(facts, markJsonRoute(program, table, sig, facts))
     return facts
   }
 
   // WP29 P3: a channel's `send`, whose body the emitter writes.
   if (isChannelSend(sig)) {
-    markChannelSend(facts)
+    applyStance(facts, markChannelSend(facts))
     return facts
   }
 
   // An atomic's method, whose body the emitter writes.
   if (isAtomicMethod(sig)) {
-    markAtomic(facts)
+    applyStance(facts, markAtomic(facts))
     return facts
   }
 
   // WP46: one of `nish:region`'s intrinsics, whose body the emitter writes.
   if (isRegionIntrinsic(program, sig)) {
-    markRegionIntrinsic(facts)
+    applyStance(facts, markRegionIntrinsic(facts))
     if (opts.recordsPanics()) {
       facts.panicSites.push(new PanicSite(sig.decl, program.source, PANIC_REGION, sig.name, false, ""))
     }
@@ -4065,7 +4100,7 @@ const collectFacts = (
 
   // One of `std/sync/shm.ts`'s window intrinsics, whose body the emitter writes.
   if (isShmWindowIntrinsic(program, sig)) {
-    markShmWindow(facts)
+    applyStance(facts, markShmWindow(facts))
     return facts
   }
 
@@ -4172,13 +4207,13 @@ const collectFacts = (
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
   if (isRegionEntry(sig)) {
-    markParallelEntry(facts, "nish_parallel_range", true)
+    applyStance(facts, markParallelEntry(facts, "nish_parallel_range", true))
   }
   if (isSpawnEntry(sig)) {
-    markParallelEntry(facts, "nish_scope_spawn", false) // WP29 P2: the payload is kept until the join
+    applyStance(facts, markParallelEntry(facts, "nish_scope_spawn", false)) // WP29 P2: the payload is kept until the join
   }
   if (isMapRoute(sig)) {
-    markMapRoute(table, sig, facts)
+    applyStance(facts, markMapRoute(table, sig, facts))
     // WP35: the routed code runs in place of the body, so its capabilities
     // are this instance's, arriving at the declaration (no call names them).
     if (known !== null) {
@@ -4188,10 +4223,10 @@ const collectFacts = (
     }
   }
   if (secretRoleOf(sig) === SECRET_WIPE) {
-    markWipe(facts)
+    applyStance(facts, markWipe(facts))
   }
   if (isLockMethod(sig)) {
-    markLock(facts)
+    applyStance(facts, markLock(facts))
   }
 
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used")
@@ -4212,6 +4247,190 @@ const collectFacts = (
     facts.willReturn = false
   }
   return facts
+}
+
+// ---- What a bodiless instance states --------------------------------------------------------
+
+/*
+ * #1328: an instance whose code is not its walked source body (a routed `nish/map`
+ * method, a typed-JSON route, a channel's `send`, an atomic, a lock, a wipe,
+ * a region or shm intrinsic, a parallel or spawn entry) has its facts written
+ * by hand, by one `mark*` helper each. The facts start from the pure defaults,
+ * so a helper that forgets a write leaves the instance writing nothing, and a
+ * task that calls it on memory its spawner shares is let through: #1307's
+ * fourth round found `reserve` and `jsonDecode` doing exactly that. So every
+ * such helper answers a `BodilessStance`, whose fields are all constructor
+ * arguments: a helper that states no write, keep or growth stance does not
+ * compile, under `tsc` or under the seed, and "writes nothing" is a word
+ * (`STANCE_WRITES_NONE`) its author had to type. `applyStance` is the one
+ * place those facts are set for such an instance, and it records that it ran
+ * (`FunctionFacts.stanceStated`).
+ *
+ * What the type cannot refuse is an answer dropped at the call, or a new
+ * routed instance that calls no helper at all. So the instances that need a
+ * stance are one list (`needsStance`), and `collectFacts` gives any of them
+ * that stated none the unknown stance (`assumeUnknownStance`): every
+ * parameter written deep, kept past the call and polluted, and arrays grown.
+ * That is `jsonDecode`'s stance, which a task handed shared memory is refused
+ * for, so a forgotten stance fails closed. `tests/bodiless-stance.js` checks
+ * the text around it: every helper's answer is applied, and every predicate
+ * the emitter's body dispatch asks is on the list.
+ *
+ * A bodiless helper is named `mark*` and declared in this section, which is
+ * how that check finds it.
+ */
+
+/** Adds no write to the parameter: it is only read, or what writes it is a routed callee the fixpoint resolves. */
+const STANCE_WRITES_NONE: i32 = 0
+/** Stores into the parameter's own slots: `writesThrough` and `writesShared`. */
+const STANCE_WRITES_SLOTS: i32 = 1
+/** As `STANCE_WRITES_SLOTS`, and the write is one a task holding the parameter sees: `writesReach`. */
+const STANCE_WRITES_REACH: i32 = 2
+/** As `STANCE_WRITES_REACH`, and the write lands below the parameter's own slots: `writesDeep`. */
+const STANCE_WRITES_DEEP: i32 = 3
+
+/** Keeps nothing of the parameter past the call, or what keeps it is a routed callee. */
+const STANCE_KEEPS_NONE: i32 = 0
+/** Holds the parameter until a join inside the call: `captured`, and `outlives` as the walk found it. */
+const STANCE_KEEPS_JOINED: i32 = 1
+/** Holds the parameter past the call: `captured` and `outlives`. */
+const STANCE_KEEPS_PAST: i32 = 2
+
+/** What a bodiless instance's emitted code does with one pointer parameter. */
+class ParamStance {
+  /** A `STANCE_WRITES_*`. */
+  writes: i32
+  /** A `STANCE_KEEPS_*`. */
+  keeps: i32
+  /** Memory that may not be the caller's is stored below the parameter: `polluted`. */
+  pollutes: boolean
+
+  constructor(writes: i32, keeps: i32, pollutes: boolean) {
+    this.writes = writes
+    this.keeps = keeps
+    this.pollutes = pollutes
+  }
+}
+
+/**
+ * A bodiless instance's write, keep and growth stance: one for its first
+ * pointer parameter (the receiver, where it has one) and one for the rest.
+ * Each only adds to what the facts already hold, so for an instance whose
+ * source body is walked as well (a spawn, a region entry, a map route, a
+ * lock, a wipe) the walk's facts stand beside it.
+ */
+class BodilessStance {
+  first: ParamStance
+  rest: ParamStance
+  /** Moves an array's length or storage: `resizesArray`. */
+  grows: boolean
+
+  constructor(first: ParamStance, rest: ParamStance, grows: boolean) {
+    this.first = first
+    this.rest = rest
+    this.grows = grows
+  }
+}
+
+/** A stance that adds nothing to any parameter, for an instance that writes and keeps none of them. */
+const statesNothing = (): ParamStance => new ParamStance(STANCE_WRITES_NONE, STANCE_KEEPS_NONE, false)
+
+/** Set one pointer parameter's facts from its stance; never clears one. */
+const applyParamStance = (pp: PointerParamFacts, stance: ParamStance): void => {
+  // The levels are compared by order, so a value outside them would silently
+  // read as the nearest end; it is a broken invariant instead.
+  if (
+    stance.writes < STANCE_WRITES_NONE ||
+    stance.writes > STANCE_WRITES_DEEP ||
+    stance.keeps < STANCE_KEEPS_NONE ||
+    stance.keeps > STANCE_KEEPS_PAST
+  ) {
+    process.exit(
+      internalError(`attributes: a stance for \`${pp.name}\` has no level ${stance.writes}/${stance.keeps}`)
+    )
+  }
+  if (stance.writes >= STANCE_WRITES_SLOTS) {
+    pp.writesThrough = true
+    pp.writesShared = true
+  }
+  if (stance.writes >= STANCE_WRITES_REACH) {
+    pp.writesReach = true
+  }
+  if (stance.writes >= STANCE_WRITES_DEEP) {
+    pp.writesDeep = true
+  }
+  if (stance.keeps >= STANCE_KEEPS_JOINED) {
+    pp.captured = true
+  }
+  if (stance.keeps >= STANCE_KEEPS_PAST) {
+    pp.outlives = true
+  }
+  if (stance.pollutes) {
+    pp.polluted = true
+  }
+}
+
+/**
+ * The one writer of a bodiless instance's parameter write, keep and pollute
+ * facts and of its `resizesArray` (#1328). It owns only those: the
+ * function-level facts a helper also sets (`effect`, `sharedWrite`,
+ * `writesPastParams`, `writesElsewhere`, `atomic`, `callees`) stay the
+ * helper's, because the pure defaults of those are not what lets a task
+ * through.
+ */
+const applyStance = (facts: FunctionFacts, stance: BodilessStance): void => {
+  facts.stanceStated = true
+  let i = 0
+  while (i < facts.pointerParams.length) {
+    applyParamStance(facts.pointerParams[i], i === 0 ? stance.first : stance.rest)
+    i = i + 1
+  }
+  if (stance.grows) {
+    facts.resizesArray = true
+  }
+}
+
+/**
+ * Every instance whose code is not, or not only, its walked source body: the
+ * ones the emitter writes or wraps (`emitFunction`'s body dispatch, the JSON
+ * route at the call, `src/emit-map.ts`, `src/emit-parallel.ts`). Each states
+ * its stance through a `mark*` helper; one that states none is given the
+ * unknown stance. A new such instance joins this list, and
+ * `tests/bodiless-stance.js` refuses an emitter body dispatch that asks a
+ * predicate this does not.
+ */
+const needsStance = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  jsonRouteOf(sig) !== JSON_NONE ||
+  isChannelSend(sig) ||
+  isAtomicMethod(sig) ||
+  isRegionIntrinsic(program, sig) ||
+  isShmWindowIntrinsic(program, sig) ||
+  isRegionEntry(sig) ||
+  isSpawnEntry(sig) ||
+  isMapRoute(sig) ||
+  secretRoleOf(sig) === SECRET_WIPE ||
+  isLockMethod(sig)
+
+/**
+ * What an instance that `needsStance` and stated none is taken to do: the
+ * worst of everything, as a `declare function` is (`collectFacts`). Every
+ * pointer parameter is written deep, kept past the call and polluted, arrays
+ * grow, and the instance writes and reads memory past its parameters and may
+ * not return. Inside a task that is a refusal wherever the task hands it
+ * memory its spawner shares.
+ */
+const assumeUnknownStance = (facts: FunctionFacts): void => {
+  const unknown = new ParamStance(STANCE_WRITES_DEEP, STANCE_KEEPS_PAST, true)
+  applyStance(facts, new BodilessStance(unknown, unknown, true))
+  facts.effect = EFFECT_WRITE
+  facts.sharedWrite = true
+  facts.writesPastParams = true
+  facts.writesElsewhere = true
+  facts.readsMemory = true
+  facts.willReturn = false
+  if (facts.worldVia.length === 0) {
+    facts.worldVia = `\`${facts.sourceName}\`, whose emitted code states no stance`
+  }
 }
 
 /**
@@ -4250,16 +4469,17 @@ const collectFacts = (
  * of a stack slot a later pass of a loop would reuse and out of a loop pass
  * the arena would release before the join.
  */
-const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolean): void => {
+const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolean): BodilessStance => {
+  handsParamsTo(facts, runtime)
+  const each = new ParamStance(STANCE_WRITES_SLOTS, joined ? STANCE_KEEPS_JOINED : STANCE_KEEPS_PAST, false)
+  return new BodilessStance(each, each, false)
+}
+
+/** What a runtime entry that is handed every parameter adds besides the stance: the callee, and every parameter escaping. */
+const handsParamsTo = (facts: FunctionFacts, runtime: string): void => {
   facts.callees.add(runtime)
   for (const name of facts.paramNames) {
     facts.escaping.add(name)
-  }
-  for (const pp of facts.pointerParams) {
-    pp.captured = true
-    pp.outlives = pp.outlives || !joined
-    pp.writesThrough = true
-    pp.writesShared = true
   }
 }
 
@@ -4275,8 +4495,10 @@ const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolea
  * receiver, which the fixpoint resolves against their own parameter facts.
  * `getOrInsert`'s body already reads, writes and keeps what its routed code
  * does, so for it this changes nothing but the order the facts are found in.
+ * The stance adds nothing of its own: every write, keep and growth of the
+ * table is a routed callee's, and reaches the receiver through them.
  */
-const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts): void => {
+const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts): BodilessStance => {
   const routed = routeCalleesOf(table, sig)
   facts.routed = true
   const receiver: PointerParamFacts | null =
@@ -4290,6 +4512,7 @@ const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
       receiver.passedToIndices.push(0)
     }
   }
+  return new BodilessStance(statesNothing(), statesNothing(), false)
 }
 
 /**
@@ -4312,19 +4535,17 @@ const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
  * does (`composeArguments`): a fresh array of its own stays private, and a
  * parameter, a field or anything it does not know is written as before.
  */
-const markWipe = (facts: FunctionFacts): void => {
+const markWipe = (facts: FunctionFacts): BodilessStance => {
   facts.effect = EFFECT_WRITE
   facts.readsMemory = true
   facts.sharedWrite = true
   facts.callees.add(WIPE_MEMSET)
   facts.writeVia = WIPE_MEMSET // the reason is the memset still, though `writesShared` skips it
-  if (facts.pointerParams.length > 0) {
-    const pp = facts.pointerParams[0]
-    pp.writesThrough = true
-    pp.writesShared = true
-    pp.writesReach = true
-    pp.writesDeep = true
-  }
+  return new BodilessStance(
+    new ParamStance(STANCE_WRITES_DEEP, STANCE_KEEPS_NONE, false),
+    statesNothing(),
+    false
+  )
 }
 
 /**
@@ -4340,10 +4561,11 @@ const markWipe = (facts: FunctionFacts): void => {
  * guard the `Mutex` holds rather than through `this`, so `this` keeps its own
  * facts, and the write is not a shared one: it is the lock itself (R6).
  */
-const markLock = (facts: FunctionFacts): void => {
+const markLock = (facts: FunctionFacts): BodilessStance => {
   facts.effect = EFFECT_WRITE
   facts.readsMemory = true
   facts.callees.add("nish_mutex_wait")
+  return new BodilessStance(statesNothing(), statesNothing(), false)
 }
 
 /**
@@ -4357,17 +4579,18 @@ const markLock = (facts: FunctionFacts): void => {
  * write is not a shared one: a send is what R6 admits in a task beside a
  * guarded store.
  */
-const markChannelSend = (facts: FunctionFacts): void => {
+const markChannelSend = (facts: FunctionFacts): BodilessStance => {
   facts.effect = EFFECT_WRITE
   facts.readsMemory = true
   facts.willReturn = false
   facts.contained = true
   facts.returnsScalar = true
   facts.callees.add("nish_channel_send")
-  if (facts.pointerParams.length > 0) {
-    facts.pointerParams[0].writesThrough = true
-    facts.pointerParams[0].writesShared = true
-  }
+  return new BodilessStance(
+    new ParamStance(STANCE_WRITES_SLOTS, STANCE_KEEPS_NONE, false),
+    statesNothing(),
+    false
+  )
 }
 
 /**
@@ -4380,16 +4603,17 @@ const markChannelSend = (facts: FunctionFacts): void => {
  * atomic update is what a task and a data-parallel body may make beside the
  * guarded store and the send.
  */
-const markAtomic = (facts: FunctionFacts): void => {
+const markAtomic = (facts: FunctionFacts): BodilessStance => {
   facts.atomic = true
   facts.effect = EFFECT_WRITE
   facts.readsMemory = true
   facts.contained = true
   facts.returnsScalar = true
-  if (facts.pointerParams.length > 0) {
-    facts.pointerParams[0].writesThrough = true
-    facts.pointerParams[0].writesShared = true
-  }
+  return new BodilessStance(
+    new ParamStance(STANCE_WRITES_SLOTS, STANCE_KEEPS_NONE, false),
+    statesNothing(),
+    false
+  )
 }
 
 /**
@@ -4402,7 +4626,7 @@ const markAtomic = (facts: FunctionFacts): void => {
  * arena scope around the call may not release it, and no caller may put it on
  * the stack.
  */
-const markRegionIntrinsic = (facts: FunctionFacts): void => {
+const markRegionIntrinsic = (facts: FunctionFacts): BodilessStance => {
   facts.usesRegion = true
   facts.effect = EFFECT_WRITE
   facts.readsMemory = true
@@ -4410,10 +4634,8 @@ const markRegionIntrinsic = (facts: FunctionFacts): void => {
   facts.sharedWrite = true
   facts.writesPastParams = true
   facts.writesElsewhere = true
-  for (const pp of facts.pointerParams) {
-    pp.captured = true
-    pp.outlives = true
-  }
+  const each = new ParamStance(STANCE_WRITES_NONE, STANCE_KEEPS_PAST, false)
+  return new BodilessStance(each, each, false)
 }
 
 /**
@@ -4424,21 +4646,15 @@ const markRegionIntrinsic = (facts: FunctionFacts): void => {
  * every pointer they take, which the region holds past the call. Either stops
  * the program on a bad handle, range or window, so neither is `willreturn`.
  */
-const markShmWindow = (facts: FunctionFacts): void => {
+const markShmWindow = (facts: FunctionFacts): BodilessStance => {
   facts.effect = EFFECT_WRITE
   facts.readsMemory = true
   facts.willReturn = false
   facts.sharedWrite = true
   facts.writesPastParams = true
   facts.writesElsewhere = true
-  facts.resizesArray = true
-  for (const pp of facts.pointerParams) {
-    pp.writesThrough = true
-    pp.writesShared = true
-    pp.writesReach = true
-    pp.captured = true
-    pp.outlives = true
-  }
+  const each = new ParamStance(STANCE_WRITES_REACH, STANCE_KEEPS_PAST, false)
+  return new BodilessStance(each, each, true)
 }
 
 /**
@@ -4466,7 +4682,7 @@ const markJsonRoute = (
   table: TypeTable,
   sig: FunctionSig,
   facts: FunctionFacts
-): void => {
+): BodilessStance => {
   facts.readsMemory = true
   facts.hasLoops = true
   facts.loopsBounded = false
@@ -4480,26 +4696,23 @@ const markJsonRoute = (
       receiver.passedToIndices.push(0)
     }
   }
-  if (jsonRouteOf(sig) === JSON_DECODE) {
-    facts.effect = EFFECT_WRITE
-    facts.sharedWrite = true
-    facts.allocates = true
-    facts.allocatesItself = true
-    facts.allocLeaks = true
-    facts.leaksItself = true
-    facts.allocEscapes = true
-    facts.resizesArray = true
-    facts.callees.add("nish_array_grow")
-    markParallelEntry(facts, "nish_alloc_struct", false)
-    // What it makes is stored below `out`: a region or a task that hands it
-    // an object of another's is told so (`judgeCallee`), as for a body that
-    // stores a fresh allocation there.
-    for (const pp of facts.pointerParams) {
-      pp.writesReach = true
-      pp.writesDeep = true
-      pp.polluted = true
-    }
+  if (jsonRouteOf(sig) !== JSON_DECODE) {
+    return new BodilessStance(statesNothing(), statesNothing(), false)
   }
+  facts.effect = EFFECT_WRITE
+  facts.sharedWrite = true
+  facts.allocates = true
+  facts.allocatesItself = true
+  facts.allocLeaks = true
+  facts.leaksItself = true
+  facts.allocEscapes = true
+  facts.callees.add("nish_array_grow")
+  handsParamsTo(facts, "nish_alloc_struct")
+  // What it makes is stored below `out`: a region or a task that hands it
+  // an object of another's is told so (`judgeCallee`), as for a body that
+  // stores a fresh allocation there. And it is kept there past the call.
+  const each = new ParamStance(STANCE_WRITES_DEEP, STANCE_KEEPS_PAST, true)
+  return new BodilessStance(each, each, true)
 }
 
 // ---- The fixpoint ------------------------------------------------------------------------
@@ -6609,23 +6822,22 @@ export const foreignBufferCountProven = (
 }
 
 /**
- * `a.push(v)`, `a.pop()` or `spawnPiped(...)`: the calls that move an array's
- * `len`, and so the ones a hoisted header has to be safe from. Every other
- * array method reads (`indexOf`, `join`), builds something new, or writes
- * elements and leaves the header alone (`set`, `fill`); `spawnPiped` appends
- * to its `stdout` and `stderr` in the runtime.
+ * `a.push(v)`, `a.pop()`, `spawnPiped(...)` or `spawnPipedWithin(...)`: the
+ * calls that move an array's `len`, and so the ones a hoisted header has to be
+ * safe from. Every other array method reads (`indexOf`, `join`), builds
+ * something new, or writes elements and leaves the header alone (`set`,
+ * `fill`); the two spawns append to their `stdout` and `stderr` in the runtime.
  */
 export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const method = arrayMethodName(program, table, node)
   if (method === "push" || method === "pop") {
     return true
   }
-  return (
-    node.kind === N_CALL &&
-    node.children[0].kind === N_IDENT &&
-    program.nodeCallees[node.id] === null &&
-    builtinNameOf(program, node) === "spawnPiped"
-  )
+  if (node.kind !== N_CALL || node.children[0].kind !== N_IDENT || program.nodeCallees[node.id] !== null) {
+    return false
+  }
+  const name = builtinNameOf(program, node)
+  return name === "spawnPiped" || name === "spawnPipedWithin"
 }
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */

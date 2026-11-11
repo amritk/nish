@@ -64,6 +64,13 @@ export declare function getenv(name: string): string | null;
 export declare function spawnSync(argv: string[]): number;
 export declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
 export declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
+export declare function spawnPipedWithin(
+  argv: string[],
+  stdin: readonly u8[],
+  stdout: u8[],
+  stderr: u8[],
+  timeoutMs: i32
+): i32;
 export declare function kill(pid: i32, sig: i32): i32;
 export declare function availableParallelism(): i32;
 export declare function totalMemory(): i64;

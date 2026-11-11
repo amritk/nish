@@ -975,6 +975,19 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
       `call i32 ${emitter.useRuntime("nish_spawn_piped")}(${ARRAY_STRUCT}* ${argv}, ${ARRAY_STRUCT}* ${input}, ${ARRAY_STRUCT}* ${out}, ${ARRAY_STRUCT}* ${err})`
     )
   }
+  // The same four, then the deadline, an `i32` of milliseconds.
+  if (name === "spawnPipedWithin") {
+    emitter.declareType(ARRAY_TYPE)
+    const args = expr.children[1].children
+    const argv = emitter.emitExpression(args[0])
+    const input = emitter.emitExpression(args[1])
+    const out = emitter.emitExpression(args[2])
+    const err = emitter.emitExpression(args[3])
+    const timeout = emitter.emitExpression(args[4])
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_spawn_piped_within")}(${ARRAY_STRUCT}* ${argv}, ${ARRAY_STRUCT}* ${input}, ${ARRAY_STRUCT}* ${out}, ${ARRAY_STRUCT}* ${err}, i32 ${timeout})`
+    )
+  }
   // The vector and the descriptors, left to right; the runtime only reads both.
   if (name === "spawnWithFds") {
     emitter.declareType(ARRAY_TYPE)
@@ -1166,12 +1179,12 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
 
 /** The other half of the pair above, in the same order. */
 /**
- * A call of the `spawnSync`, `spawnSyncTo`, `spawn`, `spawnPiped` or `spawnWithFds` builtin (not of a user
- * function that happens to be called any of them, which wins the name as every
+ * A call of the `spawnSync`, `spawnSyncTo`, `spawn`, `spawnPiped`, `spawnPipedWithin` or `spawnWithFds`
+ * builtin (not of a user function that happens to be called any of them, which wins the name as every
  * identifier builtin loses it). `attributes.ts` asks, because the argument escapes into
  * the runtime: the spawn path copies each element's bytes pointer into an arena
- * vector that outlives the call. It answers for all five names, because all
- * five reach that same C.
+ * vector that outlives the call. It answers for all six names, because all
+ * six reach that same C.
  */
 export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   const callee = call.children[0]
@@ -1184,6 +1197,7 @@ export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
     name === "spawnSyncTo" ||
     name === "spawn" ||
     name === "spawnPiped" ||
+    name === "spawnPipedWithin" ||
     name === "spawnWithFds"
   )
 }
@@ -1312,6 +1326,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "spawnPiped") {
     out.push("nish_spawn_piped")
+    return out
+  }
+  if (name === "spawnPipedWithin") {
+    out.push("nish_spawn_piped_within")
     return out
   }
   if (name === "spawnWithFds") {
