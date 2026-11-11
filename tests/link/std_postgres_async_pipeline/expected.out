@@ -1,0 +1,87 @@
+statements 0 1 2 3 4 5 6; a NUL: -1
+connected 1 of 1
+gate: ok=true failure=0 socket=0 rows=1 reusable=true first=g
+sent before the gate was answered: 6
+echo 0: ok=true failure=0 socket=0 rows=1 reusable=true first=e0
+echo 1: ok=true failure=0 socket=0 rows=1 reusable=true first=e1
+echo 2: ok=true failure=0 socket=0 rows=1 reusable=true first=e2
+echo 3: ok=true failure=0 socket=0 rows=1 reusable=true first=e3
+echo 4: ok=true failure=0 socket=0 rows=1 reusable=true first=e4
+parses: 2, waits: 0
+echo nul: ok=false failure=8 socket=0 rows=0 reusable=true first=
+gate: ok=true failure=0 socket=0 rows=1 reusable=true first=g
+sent before the gate was answered: 5
+badparse first: ok=false failure=0 socket=0 rows=0 reusable=true first= error=42601
+badparse behind: ok=false failure=0 socket=0 rows=0 reusable=true first= error=26000
+echo behind: ok=true failure=0 socket=0 rows=1 reusable=true first=z
+badparse again: ok=false failure=0 socket=0 rows=0 reusable=true first= error=42601
+live: 1, dropped: 0, parses: 4
+gate: ok=true failure=0 socket=0 rows=1 reusable=true first=g
+sent before the gate was answered: 3
+large: ok=true failure=0 socket=0 rows=2 reusable=true first=20000 bytes
+echo after: ok=true failure=0 socket=0 rows=1 reusable=true first=after
+live: 1, dropped: 0
+wait: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+quick: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+waits for the held seat: 1
+holder: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+parked: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+holder again: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+crowd holder: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+a crowd of 150 behind the held seat: 150 answered, 0 failed
+a seat with the one seat held: -2 after 1 wait
+wait: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+cancelled: ok=false failure=9 socket=-3 rows=0 reusable=false first=
+behind the cancelled: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+live: 1, dropped: 0
+cancelled waiter: ok=false failure=9 socket=-3 rows=0 reusable=false first=
+ahead of the waiter: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+behind the waiter: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+live: 1, dropped: 0
+lone: ok=false failure=9 socket=-3 rows=0 reusable=false first=
+after the lone: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+live: 1, dropped: 0
+begin: ok=false failure=9 socket=-3 rows=0 reusable=false first=
+ahead of the begin: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+behind the begin: ok=false failure=9 socket=0 rows=0 reusable=false first=
+live: 0, dropped: 1
+connected 1 of 1
+gate: ok=true failure=0 socket=0 rows=1 reusable=true first=g
+sent before the gate was answered: 3
+die: ok=false failure=9 socket=0 rows=0 reusable=false first=
+behind the die: ok=false failure=9 socket=0 rows=0 reusable=false first=
+live: 0, dropped: 2
+connected 1 of 1
+gate: ok=true failure=0 socket=0 rows=1 reusable=true first=g
+sent before the gate was answered: 3
+big: ok=false failure=2 socket=0 rows=0 reusable=false first=
+behind the big: ok=false failure=9 socket=0 rows=0 reusable=false first=
+live: 0, dropped: 3
+connected 1 of 1
+ahead: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+gate: ok=true failure=0 socket=0 rows=1 reusable=true first=g
+sent before the gate was answered: 4
+behind 1: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind 2: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+waits while the gate's answer was held: at most 3
+live: 1, dropped: 3
+queued middle: no seat (-3)
+queued head: no seat (-3)
+queued after the cancels: 1
+queue holder: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+queued last: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+queued at the end: 0, live: 1
+set: ok=false failure=9 socket=-3 rows=0 reusable=false first=
+ahead of the set: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+behind the set: ok=false failure=9 socket=0 rows=0 reusable=false first=
+live: 0, dropped: 4
+connected 1 of 1
+ahead of the turn: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+turn: ok=true failure=0 socket=0 rows=1 reusable=true first=g
+behind the turn: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn, late: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn, late: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn, late: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+waits while the turn's answer was held: at most 64
