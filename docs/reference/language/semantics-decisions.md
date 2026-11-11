@@ -965,6 +965,12 @@ by the caller.
   deprecated call, which is the field a tool filters on; `code` is the stable
   identifier for the rule (`NL1013`, `NL2231`, ...) and is the field to key on,
   because the prose may improve between releases and the code may not. A
+  diagnostic in a dependency's source — a module resolved into a package
+  other than the root and the standard library — adds `"package"`, the
+  package's name, after `message` (and before a `fix`), and its human report
+  adds a line under the excerpt, `` = note: this is in the dependency
+  `pkg_broken` 0.3.1, not in this program's own source `` (WP21 S3,
+  `tests/link/package_dependency_error`). A
   failure with no source position — an unusable C toolchain, an internal
   compiler error, a bad `-o` layout — is `{"severity","code","message"}`. The
   bands and the registry are in

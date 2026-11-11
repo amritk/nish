@@ -557,6 +557,14 @@ const heldWrite = (why, moved) =>
   moved.map((program) => ({ program, file: "http1-server.ll", changelog: HELD_WRITE, why }))
 
 const DECLARED = [
+  // WP21 S3: a freestanding wasm32 build that reaches a hostless builtin is
+  // refused by reachability, after every module is checked.
+  ...["tests/link/package_wasm_hostless/main.ts", "tests/link/wasm_hostless_own/main.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "Attribute dependency diagnostics and refuse hostless builtins on wasm32",
+    why: "the program reaches getenv from a --target wasm32 build, which the 0.38.0 seed compiles and then fails to link, and the candidate refuses with NL2404 naming the chain, so only the reference compiles it",
+  })),
   // The hygiene rules found a dead local in std/compress/deflate.ts.
   {
     file: "deflate.ll",
