@@ -20,13 +20,17 @@
 #   full hit died at `apt-get update`. If that install fails (the index names
 #   a .deb the cache lacks), the step takes the network path instead; an
 #   exact hit is never saved again, so that entry stays as it is until the
-#   key moves. A restored index is not checked against its signature again:
-#   what apt trusts is what `apt-get update` verified in the run that saved
-#   the entry. That rests on the cache's write scope: a run writes only to
-#   its own ref's scope, so a pull request's entries are read only by that
-#   pull request's runs, and the entries every branch reads are written only
-#   by runs on main. Whoever could plant an index there already runs code in
-#   that ref's CI.
+#   key moves. So on an exact hit the index and .debs are frozen for the
+#   life of the runner image's ImageVersion in the key: a security update
+#   published after the save arrives when the image rolls, not before. A
+#   restored index is not checked against its signature again: what apt
+#   trusts is what `apt-get update` verified in the run that saved the
+#   entry. That rests on the cache's write scope: a run writes only to its
+#   own ref's scope, so a pull request's entries are read only by that pull
+#   request's runs, and the entries every branch reads are written only by
+#   runs on main, of any workflow and any event (push, schedule or
+#   dispatch). Whoever could plant an index there already runs code in that
+#   ref's CI.
 # - The bound: on the network path each download attempt is cut at a minute
 #   and retried, since apt has no deadline of its own for a transfer that
 #   trickles.

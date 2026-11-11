@@ -26,10 +26,14 @@
 #      mirrors on networks of their own;
 #   4. mirror.leaseweb.com, a European one, should the US ones fail too.
 #
-# Each was shown serving noble, noble-updates and noble-security (InRelease
-# and binary-arm64) from an arm64 runner (PR #1415, run 43078069287).
-# kernel.org, mirror.kumi.systems and two German university mirrors answered
-# 404 at the ubuntu-ports paths tried, so they are not in the list.
+# A probe from an arm64 runner (PR #1415, run 43078069287) sent HEAD for
+# InRelease and main/binary-arm64/ of noble, noble-updates and noble-security
+# to eleven candidates. The four above answered 200 for all six, as did
+# ftp.tu-chemnitz.de and mirrors.dotsrc.org, left out as four are enough;
+# mirrors.edge.kernel.org, mirror.kumi.systems, ftp.halifax.rwth-aachen.de
+# and ftp.uni-stuttgart.de answered 404 for all six. universe and backports
+# were not probed, but ports.ubuntu.com comes first, so a gap at a later
+# entry matters only while it is down.
 #
 # A mirror that lags behind the index apt fetched first is no harm: apt asks
 # for each index file by its hash (by-hash), which a lagging mirror does not
