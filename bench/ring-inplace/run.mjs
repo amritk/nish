@@ -19,11 +19,13 @@
 // one inside it is not one. Every run must deliver what it sent, byte for
 // byte (the reader's FNV-1a over the bodies equals the producer's), or the
 // whole run fails. `--ring-bytes` is a power of two from 32,768 (which
-// `reserve` needs for a 10 KB record) to 2^30. The consumer runs under
+// `reserve` needs for a 10 KB record) to 2^29: a shared region holds at most
+// 2^30 bytes, headers included. The consumer runs under
 // `taskset -c <first cpu>`, the producer and the reader on the second and
 // third. `--quick` sends 3,000 messages a run rather than 50,000 and
 // finishes in seconds; `--n` sends that many instead, and `--modes` runs only
-// the modes it names. An option out of range exits 2 before anything builds.
+// the modes it names. An unknown option, or one out of range, exits 2 before
+// anything builds.
 //
 // The waiting column is the consumer's time a message before the ring held
 // the record: time the producer set the pace, not the consumer. Set against
@@ -34,6 +36,9 @@ import { execFileSync } from "node:child_process"
 import { mkdirSync } from "node:fs"
 
 const args = process.argv.slice(2)
+/** The options that take a value, and the one that does not. */
+const valued = ["--rounds", "--n", "--modes", "--cpus", "--ring-bytes"]
+const flags = ["--quick"]
 const opt = (name, fallback) => {
   const at = args.indexOf(name)
   return at >= 0 ? args[at + 1] : fallback
@@ -43,10 +48,17 @@ const refuse = (why) => {
   console.error(`bench/ring-inplace: ${why}`)
   process.exit(2)
 }
-/** `text` as a whole number of at least 1, or refuses `name`: no sign, fraction or exponent. */
+for (let k = 0; k < args.length; k++) {
+  if (valued.includes(args[k])) {
+    k++
+  } else if (!flags.includes(args[k])) {
+    refuse(`unknown option ${args[k]}; the options are ${[...flags, ...valued].join(", ")}`)
+  }
+}
+/** `text` as a whole number from 1 to 2^30, or refuses `name`: no sign, fraction or exponent. */
 const whole = (name, text) => {
-  if (text === undefined || !/^[1-9]\d{0,8}$/.test(text)) {
-    refuse(`${name} wants a whole number from 1 to 999,999,999, not ${text}`)
+  if (text === undefined || !/^[1-9]\d{0,9}$/.test(text) || Number(text) > 2 ** 30) {
+    refuse(`${name} wants a whole number from 1 to 1,073,741,824, not ${text}`)
   }
   return Number(text)
 }
@@ -73,8 +85,10 @@ let leastRing = 8
 while (leastRing / 2 - 4 < Math.max(...sizes)) {
   leastRing *= 2
 }
-if (ringBytes < leastRing || ringBytes > 2 ** 30 || (ringBytes & (ringBytes - 1)) !== 0) {
-  refuse(`--ring-bytes wants a power of two from ${leastRing} to 2^30, not ${opt("--ring-bytes")}`)
+// A shared region holds at most 2^30 bytes, the ring's header included, so
+// the largest ring is 2^29.
+if (ringBytes < leastRing || ringBytes > 2 ** 29 || (ringBytes & (ringBytes - 1)) !== 0) {
+  refuse(`--ring-bytes wants a power of two from ${leastRing} to 2^29, not ${opt("--ring-bytes")}`)
 }
 const out = "build/ring-inplace"
 mkdirSync(out, { recursive: true })

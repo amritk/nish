@@ -64,7 +64,7 @@ export const main = (): i32 => {
   // so the consumer is at 12 and 24 bytes are queued, up to 36.
   for (let k = 0; k < 3; k++) {
     fill(src, 8, 10 + k)
-    ring.tryPush(src, 0, 8)
+    t.ok(`record ${k + 1} of 8 bytes is pushed`, ring.tryPush(src, 0, 8))
   }
   t.eqI32("the consumer takes the first record", back.tryPop(dst, 0), 8)
 
@@ -114,8 +114,8 @@ export const main = (): i32 => {
   // The ring is empty with both at 24 in the lap; one more record of 8 moves
   // them to 36, where the largest reservation, 28 (32 bytes), does not fit
   // the 28 left and must wrap behind a marker.
-  ring.tryPush(src, 0, 8)
-  back.tryPop(dst, 0)
+  t.ok("a record of 8 is pushed into the empty ring", ring.tryPush(src, 0, 8))
+  t.eqI32("and taken", back.tryPop(dst, 0), 8)
   const most: u8[] = ring.reserve(28)
   t.eqI32("an empty ring has room for the largest reservation where it must wrap", toI32(most.length), 28)
   fill(most, 28, 30)
