@@ -39,15 +39,16 @@ serving its other connections.
   a 1000-deep one whose answers overrun the output (a reply held back by a
   full output resumes on `H1_WRITE`), one serialization per `/json`, and an `Arena.used()` that does not move over
   200 warmed requests.
-- `main.ts` is the program: one process, one thread, one `pollWait` loop. It
-  takes `main <port> [nodelay] [host] [slots]`, prints `listening <port>`, and
-  exits 0 on SIGINT or SIGTERM.
+- `main.ts` is the program, `tfbMain` of `server.ts`: one worker a core under
+  `nish/net/prefork`, each one `pollWait` loop on its CPU's `SO_REUSEPORT`
+  listener. It takes `main <port> [nodelay] [host] [slots] [workers]`, where
+  `workers` is 0 (one a core, the default), 1 (one process, no supervisor) or
+  the count; each worker prints `listening <port>`, and SIGINT or SIGTERM stops
+  them all with exit 0. `tfb_entry` runs it with two workers and checks that
+  both answer on the one port.
 
 The approach is `Realistic`: the handler uses the standard library's server as
-any program would, with nothing of HTTP stripped out. It is one core: the
-prefork supervisor of #719 (`nish/net/prefork`) has landed and the database
-entry below runs on it, but `main.ts` does not yet, which is WP39's
-follow-up for multi-core.
+any program would, with nothing of HTTP stripped out.
 
 ## Building and running it
 

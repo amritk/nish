@@ -9,6 +9,11 @@
 #   bash bench/techempower/run.sh --rounds 3 --duration 10 --only plaintext
 #   bash bench/techempower/run.sh --nodelay-compare   adds `entry-nodelay0`,
 #                                            the entry with its nodelay argument 0
+#   bash bench/techempower/run.sh --cores-compare   plaintext and json only:
+#                                            the entry as one process (`entry`,
+#                                            `entry-copy`) against one worker a
+#                                            server CPU (`entry-cores`), the server
+#                                            on the first half of the CPUs
 #
 # The method is bench/http.mjs's. The server runs on CPU 0 and the client on
 # every other CPU, so on a 4-core box the figures are client-shared: wrk and
@@ -73,6 +78,7 @@ duration=10
 quick=0
 only=""
 compare=0
+cores=0
 while [ $# -gt 0 ]; do
   case $1 in
     --quick) quick=1 ;;
@@ -87,6 +93,7 @@ while [ $# -gt 0 ]; do
       case $only in plaintext | json | db) ;; *) echo "run.sh: --only takes plaintext, json or db, not $only" >&2; exit 2 ;; esac
       ;;
     --nodelay-compare) compare=1 ;;
+    --cores-compare) cores=1 ;;
     -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echo "run.sh: unknown argument $1" >&2; exit 2 ;;
   esac
@@ -127,6 +134,14 @@ if [ "$cpus" -ge 2 ]; then
   # wrk needs a connection per thread, and the fewest connections measured is 16.
   threads=$((cpus - 1 > 16 ? 16 : cpus - 1))
   pinning="server on CPU 0, client on CPUs 1-$((cpus - 1)) (client-shared: $cpus cores)"
+  if [ "$cores" = 1 ]; then
+    # Half the CPUs serve, the other half drive them.
+    half=$((cpus / 2))
+    serverCpu=(taskset -c "0-$((half - 1))")
+    clientCpu=(taskset -c "$half-$((cpus - 1))")
+    threads=$((cpus - half > 16 ? 16 : cpus - half))
+    pinning="server on CPUs 0-$((half - 1)), client on CPUs $half-$((cpus - 1))"
+  fi
 else
   serverCpu=()
   clientCpu=()
@@ -171,7 +186,12 @@ fi
 # name=command, the command taking the port as its first argument.
 contestants=("entry=build/tfb/entry" "entry-copy=build/tfb/entry-copy" "async=build/tfb/async")
 [ "$compare" = 1 ] && contestants+=("entry-nodelay0=build/tfb/entry @0")
-for name in node-http uws bun bun-elysia bun-hono go-nethttp go-fasthttp rust-hyper rust-actix nginx; do
+if [ "$cores" = 1 ]; then
+  # The last argument is main.ts's workers: 1 one process, 0 one a CPU.
+  contestants=("entry=build/tfb/entry @1 127.0.0.1 16384 1" "entry-copy=build/tfb/entry-copy @1 127.0.0.1 16384 1"
+    "entry-cores=build/tfb/entry @1 127.0.0.1 16384 0")
+fi
+[ "$cores" = 1 ] || for name in node-http uws bun bun-elysia bun-hono go-nethttp go-fasthttp rust-hyper rust-actix nginx; do
   contestants+=("$name=build/http-twins/$name/serve")
 done
 
@@ -201,7 +221,7 @@ trap stop EXIT
 start() {
   local cmd=${1#*=} extra=()
   if [[ $cmd == *" @"* ]]; then
-    extra=("${cmd#* @}")
+    read -ra extra <<<"${cmd#* @}"
     cmd=${cmd%% @*}
   fi
   port=$((port + 1))
@@ -257,6 +277,7 @@ measure() {
 results=build/tfb/results.tsv
 : >"$results"
 notes=()
+[ "$cores" = 1 ] && notes+=("entry-cores's peak RSS is its supervisor's alone, not its workers'")
 
 # One test: $1 the path, then its concurrencies.
 run() {
@@ -325,7 +346,7 @@ pgStop() {
 trap 'stop; pgStop' EXIT
 pgSql() { ${pgAs[@]+"${pgAs[@]}"} "$pgBin/psql" -h "$pgDir" -p "$pgPort" -U postgres -qAt -v ON_ERROR_STOP=1 "$@"; }
 dbRan=0
-if wants db; then
+if [ "$cores" = 0 ] && wants db; then
   pgBin=${PG_BIN:-$(find /usr/lib/postgresql -maxdepth 2 -name bin -type d 2>/dev/null | sort -V | tail -n 1)}
   if [ -z "$pgBin" ] || [ ! -x "$pgBin/initdb" ]; then
     notes+=("the database tests were skipped: no Postgres binaries (set PG_BIN)")
@@ -466,9 +487,11 @@ report() {
   echo "$pinning; client $client -t $httpThreads"
   echo "A relative A/B on one machine, not a TechEmpower rank."
   lineup=(${contestants[@]+"${contestants[@]}"})
-  if wants plaintext; then report /plaintext entry entry-copy async "${plainLevels[@]}"; fi
+  twin=async
+  [ "$cores" = 1 ] && twin=entry-cores
+  if wants plaintext; then report /plaintext entry entry-copy "$twin" "${plainLevels[@]}"; fi
   if wants json; then
-    report /json entry entry-copy async "${jsonLevels[@]}"
+    report /json entry entry-copy "$twin" "${jsonLevels[@]}"
     echo 'The twins answer /json with {"message":"Hello, World!","n":<n>}: 8 bytes more than the entry, and a counter.'
   fi
   if [ "$dbRan" = 1 ]; then

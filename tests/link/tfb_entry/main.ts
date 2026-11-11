@@ -21,8 +21,17 @@
 //   8. A paused listener, as one out of descriptors is, accepts nothing and
 //      bounds the loop's wait; unpaused, it accepts the connection that
 //      waited and answers it.
+//   9. (Linux, two CPUs or more) `tfbMain`, the program main.ts runs, asked for
+//      two workers, serves both on one port: the test runs itself as `serve`,
+//      a supervisor whose two workers each report their port and pid over
+//      UDP, then as two `client`s pinned to CPUs 0 and 1, whose connections
+//      the steered listeners hand to worker 0 and worker 1. SIGTERM to the
+//      supervisor stops both, each reporting how many requests it answered:
+//      two pids, each of which answered, and the supervisor exits 0.
 //
 // Every wait is bounded: five seconds without a wake is a failure, never a hang.
+// The supervisor runs under `timeout`, so it outlives a driver that died by a
+// minute at most.
 import {
   connectResult,
   netAddress,
@@ -37,9 +46,14 @@ import {
   pollWait,
   tcpConnect,
   tcpListen,
+  udpBind,
+  udpRecvFrom,
+  udpSendTo,
 } from "nish:net";
+import { availableParallelism, kill, platform, setCpuAffinity, spawn, waitPid } from "nish:process";
+import { preforkArgs } from "nish/net/prefork";
 import { Suite } from "nish/testing";
-import { TFB_LISTENER, TfbServer } from "../../../bench/techempower/server";
+import { TFB_LISTENER, TfbServer, tfbMain } from "../../../bench/techempower/server";
 import { ZERO, ascii, range } from "../net_tls_record_common/bytes";
 import { Peer } from "../net_tls_record_tcp/harness";
 
@@ -394,6 +408,171 @@ class TfbLoop {
 
 const get = (path: string): u8[] => ascii(`GET ${path} HTTP/1.1\r\nHost: tfb\r\n\r\n`);
 
+/** This program's path, for running it again. */
+const selfPath = (): string => {
+  const exe: string | null = platform === "linux" ? realpathSync("/proc/self/exe") : null;
+  return exe !== null ? exe : process.argv[0];
+};
+
+/** This process's pid on Linux, from `/proc/self`; 0 elsewhere. */
+const selfPid = (): i32 => {
+  const self = realpathSync("/proc/self");
+  return self !== null ? parseInt(self.substring(6)) : 0;
+};
+
+/** Send `text` to the driver's UDP `port`. */
+const tell = (port: i32, text: string): void => {
+  const fd: i32 = udpBind("127.0.0.1", ZERO, ZERO);
+  const to: u8[] = new Array<u8>(18);
+  netAddress(to, "127.0.0.1", port);
+  const out: u8[] = ascii(text);
+  udpSendTo(fd, out, ZERO, toI32(out.length), to, ZERO, ZERO);
+  netClose(fd);
+};
+
+/** The next UDP message on `fd` within five seconds, split on spaces; empty when none comes. */
+const message = (fd: i32, loop: i32): string[] => {
+  const buf: u8[] = new Array<u8>(64);
+  const from: u8[] = new Array<u8>(18);
+  const meta: i32[] = new Array<i32>(2);
+  const ready: i32[] = new Array<i32>(2);
+  let n: i32 = udpRecvFrom(fd, buf, ZERO, toI32(64), from, meta);
+  if (n <= 0 && pollWait(loop, ready, 5000) > 0) {
+    n = udpRecvFrom(fd, buf, ZERO, toI32(64), from, meta);
+  }
+  const words: string[] = [];
+  let start: i32 = 0;
+  for (let i: i32 = 0; i <= n; i++) {
+    if (i === n || buf[i] === 32) {
+      words.push(text(buf, start, i));
+      start = i + 1;
+    }
+  }
+  return n > 0 ? words : [];
+};
+
+/** Wait `ms` milliseconds. */
+const pause = (ms: i32): void => {
+  const loop: i32 = pollCreate();
+  const ready: i32[] = new Array<i32>(2);
+  pollWait(loop, ready, ms);
+  netClose(loop);
+};
+
+/**
+ * True when child `pid` exits 0 within five seconds. A WNOHANG loop, never on
+ * a pid that is not positive; past the deadline the child gets SIGKILL and a
+ * second more to be reaped.
+ */
+const exitsZero = (pid: i32): boolean => {
+  if (pid <= 0) {
+    return false;
+  }
+  for (let k: i32 = 0; k < 600; k++) {
+    const status: i32[] = waitPid(pid, 1);
+    if (status[0] !== 0) {
+      return status[0] === pid && status[1] === 0 && k < 500;
+    }
+    if (k === 500) {
+      kill(pid, 9);
+    }
+    pause(10);
+  }
+  return false;
+};
+
+/**
+ * `serve <udp port> <port> <nodelay> <host> <slots> <workers>`: main.ts's
+ * program, each worker telling the driver `ready <index> <port> <pid>` once it
+ * listens and `done <index> <pid> <answered>` once SIGTERM stops it.
+ */
+const serve = (argv: string[]): i32 => {
+  const driver: i32 = parseInt(preforkArgs(argv)[2]);
+  return tfbMain(
+    argv,
+    3,
+    (worker: i32, port: i32): void => {
+      tell(driver, `ready ${worker} ${port} ${selfPid()}`);
+    },
+    (worker: i32, tfb: TfbServer): void => {
+      tell(driver, `done ${worker} ${selfPid()} ${tfb.answered}`);
+    }
+  );
+};
+
+/** `client <port> <cpu>`: on CPU `cpu` alone, one /plaintext request to `port`; 0 when it is answered as section 2's was. */
+const client = (args: string[]): i32 => {
+  if (setCpuAffinity(parseInt(args[3])) !== 0) {
+    return 2;
+  }
+  const lb = new TfbLoop(1);
+  lb.port = parseInt(args[2]);
+  const c: i32 = lb.connect();
+  if (c < 0) {
+    return 3;
+  }
+  lb.send(c, get("/plaintext"));
+  const r: Response = lb.response(c);
+  return r.status === 200 && r.body === "Hello, World!" && imfFixdate(r.field("Date")) ? 0 : 1;
+};
+
+/** Section 9: two workers of `tfbMain` on one port, each answering. */
+const workers = (t: Suite): void => {
+  const names: string[] = [
+    "tfbMain with two workers starts both on one port",
+    "a connection made on CPU 0 is answered",
+    "a connection made on CPU 1 is answered",
+    "two worker processes answered on the one port",
+    "SIGTERM stops both and the supervisor exits 0",
+  ];
+  if (platform !== "linux" || availableParallelism() < 2) {
+    for (const name of names) {
+      t.pass(name);
+    }
+    return;
+  }
+  const fd: i32 = udpBind("127.0.0.1", ZERO, ZERO);
+  const loop: i32 = pollCreate();
+  pollAdd(loop, fd, 1, ZERO);
+  const self: string = selfPath();
+  const sup: i32 = spawn(["timeout", "60", self, "serve", `${netLocalPort(fd)}`, "0", "1", "127.0.0.1", "64", "2"]);
+  // Each worker's `ready`: its index, its port and its pid, by index.
+  const ports: i32[] = [0, 0];
+  const pids: i32[] = [0, 0];
+  for (let k: i32 = 0; k < 2 && sup > 0; k++) {
+    const m: string[] = message(fd, loop);
+    if (m.length === 4 && m[0] === "ready") {
+      const at: i32 = parseInt(m[1]) === 1 ? 1 : 0;
+      ports[at] = parseInt(m[2]);
+      pids[at] = parseInt(m[3]);
+    }
+  }
+  const up: boolean = ports[0] > 0 && ports[0] === ports[1] && pids[0] > 0 && pids[1] > 0;
+  t.ok(names[0], up);
+  for (let cpu: i32 = 0; cpu < 2; cpu++) {
+    t.ok(names[1 + cpu], up && exitsZero(spawn([self, "client", `${ports[0]}`, `${cpu}`])));
+  }
+  // Each worker's `done`: its pid and how many requests it answered, by index.
+  const answered: i32[] = [0, 0];
+  const stopped: i32[] = [0, 0];
+  if (sup > 0) {
+    kill(sup, 15);
+    for (let k: i32 = 0; k < 2; k++) {
+      const m: string[] = message(fd, loop);
+      if (m.length === 4 && m[0] === "done") {
+        const at: i32 = parseInt(m[1]) === 1 ? 1 : 0;
+        stopped[at] = parseInt(m[2]);
+        answered[at] = parseInt(m[3]);
+      }
+    }
+  }
+  const both: boolean = up && pids[0] !== pids[1] && stopped[0] === pids[0] && stopped[1] === pids[1];
+  t.ok(names[3], both && answered[0] > 0 && answered[1] > 0);
+  t.ok(names[4], exitsZero(sup));
+  netClose(loop);
+  netClose(fd);
+};
+
 /** Every rule the verifier applies to one answer, as checks named after `what`. */
 const verify = (t: Suite, what: string, r: Response, body: string, type: string): void => {
   t.eqI32(`${what}: status 200`, r.status, toI32(200));
@@ -406,6 +585,13 @@ const verify = (t: Suite, what: string, r: Response, body: string, type: string)
 };
 
 export const main = (): i32 => {
+  const args: string[] = preforkArgs(process.argv);
+  if (args.length > 1 && args[1] === "serve") {
+    return serve(process.argv);
+  }
+  if (args.length > 3 && args[1] === "client") {
+    return client(args);
+  }
   const t = new Suite("tfb entry");
   const json: string = '{"message":"Hello, World!"}';
   const plain: string = "Hello, World!";
@@ -566,5 +752,8 @@ export const main = (): i32 => {
     t.fail("the paused loop", held.failure);
   }
   held.shutdown();
+
+  // --- 9. Two workers on one port ---------------------------------------------------------------
+  workers(t);
   return t.done();
 };
