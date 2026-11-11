@@ -1339,6 +1339,7 @@ const DECLARED = [
     why: "the 0.38.0 seed refuses a function type outside a parameter, so only the candidate compiles the program (WP51 stage 1)",
   })),
   ...[
+    "tests/cases/fnref_arg_capture.ts",
     "tests/cases/fnref_map.ts",
     "tests/cases/fnref_map_array.ts",
     "tests/cases/fnref_map_nullable.ts",

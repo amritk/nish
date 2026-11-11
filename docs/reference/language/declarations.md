@@ -1941,7 +1941,9 @@ export const main = (): i32 => {
   `` Argument 1 of `apply`: `widen` is `(x: i32) => i64`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type ``
   (`tests/cases/reject_fnarg_mismatch`). The argument must be the name of a
   top-level function, an arrow, or a local, field or element that holds a
-  [function reference](#function-references) (`tests/cases/fnref_arg`); any
+  [function reference](#function-references) (`tests/cases/fnref_arg`), and
+  an arrow passed there may call a reference it captures, narrowed first if
+  it is nullable (`fnref_arg_capture`); any
   other value is refused and named by its type,
   `` `n` is `i32`, which is not a function `` (`reject_fnarg_not_name`). The
   builtins that check the body they are handed — `parallelMap`,
@@ -2062,7 +2064,8 @@ export const main = (): void => {
   `new Array<(i32) => i32>(n)` is
   `` `new Array<(i32) => i32>(n)` would zero-fill with 0, which names no function; build it with `[]` and `push` instead ``
   (NL2730, `reject_fnref_zero_fill`); `new Array<F | null>(n)` fills with
-  `null` and is allowed. For the same reason an array of
+  `null` and is allowed, except as module storage, which holds no `| null`
+  (NL2686, `reject_fnref_storage_nullable`). For the same reason an array of
   references has no `fill`, `unshift` or `splice`: `fill` is refused as a
   byte copy (`reject_fnref_row_fill`), the other two as an unknown method
   (`reject_fnref_row_unshift`, `reject_fnref_row_splice`). A module constant may not hold one
