@@ -1524,6 +1524,18 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end fnref-field -->
 
+### A nullable function reference passed as an argument
+
+`Op | null` is the same `i32` tag, with `null` as tag 0, which no function
+has: `return null` returns `i32 0`, and `h !== null` is `icmp ne i32 %h, 0`.
+A reference passed for an inline function parameter is wrapped in an arrow
+that calls it, so `apply` is instantiated for the call, and that copy calls
+through `h`'s dispatcher, a `switch` over the functions `pick` can return,
+with no indirect call (docs/LANGUAGE.md, "Function references").
+
+<!-- cookbook:begin fnref-arg-nullable -->
+<!-- cookbook:end fnref-arg-nullable -->
+
 ### Default and rest parameters, filled at the call
 
 A default and a rest parameter are both the **caller's** work

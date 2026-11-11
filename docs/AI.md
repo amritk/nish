@@ -919,7 +919,8 @@ export const main = (): i32 => {
   method or constructor parameter an inline function type is refused; type it
   through an alias and it is an ordinary [function reference](#function-references)
   parameter. A local, field or element holding a reference is a function
-  argument too; only the `nish/threads` runners refuse one (NL2734).
+  argument too; the runners that check their body (`parallelMap`,
+  `parallelReduce`, `spawn`, `expose`, `region`, ...) refuse one (NL2734).
 
 ```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
@@ -978,8 +979,9 @@ export const main = (): i32 => {
 - **Called, compared, stored, passed — nothing else.** Not printed or
   interpolated (NL2737), ordered, joined or encoded as JSON.
 - **A function argument**: a local, field or element holding one fills an
-  inline function-typed parameter (`apply(ops[0], 3)`); the `nish/threads`
-  runners take only a named function or arrow (NL2734).
+  inline function-typed parameter (`apply(ops[0], 3)`); `parallelMap`,
+  `spawn`, `expose`, `region` and the other runners that check their body take
+  only a named function or arrow (NL2734).
 - **It stays in the program**: a `-o` library cannot export it in a
   signature or an exported class's field (NL2733); `--link` can.
 

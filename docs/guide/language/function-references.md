@@ -230,8 +230,9 @@ export const main = (): i32 => {
 };
 ```
 
-What runs on other threads, `parallelMap` and the other `nish/threads`
-runners, takes only a function's name or an arrow (`NL2734`).
+The builtins that check the body they are handed, such as `parallelMap`, a
+scope's `spawn`, `expose` and `region`, take only a function's name or an
+arrow (`NL2734`).
 
 ## Calls through a reference
 

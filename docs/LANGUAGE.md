@@ -3529,9 +3529,11 @@ export const main = (): i32 => {
   top-level function, an arrow, or a local, field or element that holds a
   [function reference](#function-references) (`tests/cases/fnref_arg`); any
   other value is refused and named by its type,
-  `` `n` is `i32`, which is not a function `` (`reject_fnarg_not_name`). What
-  runs on other threads (`parallelMap` and the other runners of `nish/threads`)
-  takes only a function or an arrow named at the call, so a reference there is
+  `` `n` is `i32`, which is not a function `` (`reject_fnarg_not_name`). The
+  builtins that check the body they are handed — `parallelMap`,
+  `parallelMapInto`, `parallelReduce`, a scope's `spawn`, `expose`,
+  `exposeWith`, `region` and `enterWith` — take only a function or an arrow
+  named at the call, so a reference there is
   `` `h` is a function reference: `parallelMap` takes a top-level function or an arrow named at the call ``
   (NL2734, `tests/wordings/nl2734_fnref_to_function_parameter`). A generic function names no one function
   and is refused with the arrow to write instead (`reject_fnarg_generic_name`),
