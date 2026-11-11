@@ -12986,7 +12986,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` may spread `null`, which under Node copies no field at all: narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)
+…: a child region's parent is the region entered when it is made, so `child` and `childWith` are called only in the function `enter` or `enterWith` runs, and that function only by them
 ```
 
 ## NL2703
@@ -12994,7 +12994,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…: a child region's parent is the region entered when it is made, so `child` and `childWith` are called only in the function `enter` or `enterWith` runs, and that function only by them
+…` may spread `null`, which under Node copies no field at all: narrow it first, taking a member into a local to do so (`const s = o.f; if (s !== null) { ... { ...s } ... }`)
 ```
 
 [`nl2703_object_spread_nullable.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2703_object_spread_nullable.ts):
