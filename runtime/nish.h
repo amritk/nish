@@ -13,7 +13,8 @@
  * time), runtime-aes.c (AES-GCM on the CPU's AES instructions),
  * runtime-sha256.c (SHA-256 on the CPU's SHA instructions), runtime-chacha20.c
  * (ChaCha20's keystream on AVX2 or NEON vectors), runtime-checksum.c
- * (CRC-32 on its carry-less multiply or CRC instructions) and runtime-term.c
+ * (CRC-32 on its carry-less multiply or CRC instructions, Adler-32 on SSSE3 or
+ * NEON) and runtime-term.c
  * (stdin and the terminal, `nish:term`) split off
  * the same way since. They are separate so that each carries its own measured
  * code-size ceiling (docs/wp7-runtime.md, "Runtime additions and budget"); a
@@ -490,6 +491,21 @@ int32_t nish_crc32_hw(void);
    (u8[]), conditioned as zlib's crc32(): 0 starts a message, and the answer
    continues one. The caller has checked 0 <= off <= off + len <= buf.len. */
 uint32_t nish_crc32_update(uint32_t crc, const nish_array *buf, int32_t off, int32_t len);
+/* ---- Adler-32 on SSSE3 or NEON vectors ------------------------------------
+ * runtime/runtime-checksum.c as well: the compiler calls the kernel in place
+ * of std/compress/checksum.ts's private `adler32Walk`, behind
+ * `nish_adler32_hw`, and calls the Nish loop itself when that answers 0. */
+/* 1 when this process runs the kernel, 0 when it runs the Nish loop. Resolved
+   on the first call and fixed from then on: `NISH_ADLER32=soft` pins 0; unset
+   or any other value is the best this machine has, CPUID leaf 1's SSSE3 bit on
+   x86-64 and always the kernel on a little-endian AArch64, where NEON is
+   baseline. Always 0 on other targets, wasm32 among them. */
+int32_t nish_adler32_hw(void);
+/* The Adler-32 (RFC 1950) `adler` extended over buf[off..off+len) (u8[]):
+   1 starts a message. An empty window answers `adler` as it came; any other
+   answer is reduced mod 65521 in both halves. The caller has checked
+   0 <= off <= off + len <= buf.len. */
+uint32_t nish_adler32_update(uint32_t adler, const nish_array *buf, int32_t off, int32_t len);
 
 /* `secureZero(bytes)` (#385): sets every byte of `bytes` to zero through
  * `volatile` stores, out of line, so that neither `-O2` nor `-flto` can drop

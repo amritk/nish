@@ -16,7 +16,8 @@
 # <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions,
 # <dir>/runtime-sha256.c, SHA-256 on the CPU's SHA instructions,
 # <dir>/runtime-chacha20.c, ChaCha20's keystream on AVX2 or NEON vectors,
-# <dir>/runtime-checksum.c, CRC-32 on its carry-less multiply or CRC instructions,
+# <dir>/runtime-checksum.c, CRC-32 on its carry-less multiply or CRC instructions
+#   and Adler-32 on SSSE3 or NEON,
 # <dir>/runtime-term.c, stdin and the terminal of `nish:term`,
 # <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`,
 # <dir>/runtime-sandbox.c, the confinement `--sandbox` applies,
@@ -780,15 +781,16 @@ case "$profile" in
     # IR compiled for the host rather than with `--target wasm32` calls std/crypto/aes.ts's
     # AES kernels behind `nish_aes_hw`, std/crypto/sha256.ts's block function behind
     # `nish_sha256_hw`, std/crypto/chacha20poly1305.ts's keystream loop behind
-    # `nish_chacha20_hw` and std/compress/checksum.ts's CRC-32 kernel behind
-    # `nish_crc32_hw` (src/kernels.ts). runtime-aes.c's, runtime-sha256.c's,
+    # `nish_chacha20_hw` and std/compress/checksum.ts's CRC-32 and Adler-32
+    # kernels behind `nish_crc32_hw` and `nish_adler32_hw` (src/kernels.ts). runtime-aes.c's, runtime-sha256.c's,
     # runtime-chacha20.c's and runtime-checksum.c's wasm32 builds answer 0 there,
     # so the Nish code runs, and
     # each is added only for such IR: every other module links the bytes it always did.
-    # Each pair is a unit and the kernel its probe names.
+    # Each pair is a unit and the kernel its probe names; checksum has two, and
+    # its second pair sees the unit the first added, so it is added once.
     # A caller that names the unit itself is left alone, as `halves` leaves it:
     # one object named twice is a duplicate-symbol error.
-    for pair in aes:aes sha256:sha256 chacha20:chacha20 checksum:crc32; do
+    for pair in aes:aes sha256:sha256 chacha20:chacha20 checksum:crc32 checksum:adler32; do
       unit=${pair%%:*}
       kernel=${pair#*:}
       named=0
