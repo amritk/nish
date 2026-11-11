@@ -75,3 +75,13 @@ set: ok=false failure=9 socket=-3 rows=0 reusable=false first=
 ahead of the set: ok=true failure=0 socket=0 rows=1 reusable=true first=w
 behind the set: ok=false failure=9 socket=0 rows=0 reusable=false first=
 live: 0, dropped: 4
+connected 1 of 1
+ahead of the turn: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+turn: ok=true failure=0 socket=0 rows=1 reusable=true first=g
+behind the turn: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn, late: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn, late: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+behind the turn, late: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+waits while the turn's answer was held: at most 64

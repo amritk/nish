@@ -757,7 +757,14 @@ export const main = async (): Promise<i32> => {
   t.eqI32("every statement was one of the entry's four", table.other, toI32(0))
   t.eqI32("three connections were dialled", table.accepted, toI32(3))
   // Each statement is parsed the first time a connection runs it: seven
-  // first uses across the three connections, and none parsed twice.
+  // first uses across the three connections, and none parsed twice. The
+  // count is fixed: the pool has one slot, so every seat, a request's
+  // pipelined reads included, is on the one live connection, and the client
+  // sends each request once the last is answered. The first connection runs
+  // all four statements before section 9 cuts it; the second, the World read
+  // (9's /db) before section 10 closes it; the third, the World read and the
+  // update (10's last /updates). A pool of more slots may spread one
+  // request's seats over its connections, and each parse the statement.
   t.eqI32("each was prepared once a connection: seven Parses", table.parses, toI32(7))
   t.eqI32("no connection was sent a Parse twice", table.reparsed, toI32(0))
   t.eqI32("limits asked for 0 slots have one connection", tfbDbLimits(0).connections, toI32(1))

@@ -56,6 +56,18 @@
 //  11. An abandoned answer with a frame it may not have: a ParameterStatus
 //      in the answer of a cancelled `set` is not read past; the connection
 //      is lost from it on, and the statement behind it fails.
+//  12. The wake, rung for a turn while seats behind it wait: `turn` is
+//      seated behind `wait`, with six seats behind it; three wait for their
+//      turns before it and three after, so it is neither the first nor the
+//      last woken when `wait` is answered. It has its turn, but its `gate`
+//      answer is held, so the seats behind it are not answered next and wait
+//      on the wake again. Each waits once or twice: the last of them woken
+//      reads the wake's byte back (the drain in pgAsyncTurn's loop); without
+//      it they wait thousands of times while the answer is held. And each is
+//      woken when its own turn comes: a ring while the byte is unread counts
+//      its waiters again (pgAsyncSignal); without that, a seat that waited
+//      again after the first ring sees the byte read back before it is
+//      polled, and is still waiting at the 3 s watchdog.
 import { cancel, sleep, spawn, taskId } from "nish:async"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
@@ -144,6 +156,42 @@ async function again(pool: PgAsyncPool, board: Board, first: i32, then: i32): Pr
     board.done += 1
     statement = then
   }
+}
+
+/** The tasks of section 12, for `main` to cancel if one is never woken. */
+class Spinners {
+  tasks: i64[]
+  constructor() {
+    this.tasks = []
+    for (let i: i32 = 0; i < 7; i++) {
+      this.tasks.push(toI64(0))
+    }
+  }
+}
+
+/**
+ * As `pipe` with no argument, but sleeps `ms` after it sends and before it
+ * waits for its turn, so a task seated behind it may wait on the wake first.
+ */
+async function turnLate(
+  pool: PgAsyncPool,
+  board: Board,
+  spinners: Spinners,
+  index: i32,
+  statement: i32,
+  ms: i32,
+  label: string,
+): Promise<void> {
+  spinners.tasks[index] = taskId()
+  const ticket: i32 = await pgAsyncSeat(pool, statement)
+  const sent: i32 = await pgAsyncSend(pool, ticket, new PgAsyncParams())
+  board.sent += 1
+  await sleep(ms)
+  const turn: i32 = await pgAsyncTurn(pool, ticket, sent)
+  const r = await pgAsyncAnswer(pool, ticket, turn)
+  pgAsyncDone(pool, ticket, turn, r.reusable)
+  console.log(describe(label, r))
+  board.done += 1
 }
 
 /** What the crowd's tasks were answered. */
@@ -428,6 +476,47 @@ export async function main(): Promise<i32> {
   await until(board, 199)
   board.open = 0
   console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
+
+  // 12. The wake rung for a turn, with seats waiting behind it.
+  live = await fill(pool, board, listen, port)
+  console.log(`connected ${live} of 1`)
+  board.sent = 0
+  board.want = 1000
+  spawn(pipe(pool, board, handles, wait, "", "ahead of the turn"))
+  const spinners = new Spinners()
+  spawn(turnLate(pool, board, spinners, 0, gate, 10, "turn"))
+  for (let i: i32 = 0; i < 3; i++) {
+    spawn(turnLate(pool, board, spinners, 1 + i, quick, 0, "behind the turn"))
+  }
+  for (let i: i32 = 0; i < 3; i++) {
+    spawn(turnLate(pool, board, spinners, 4 + i, quick, 15, "behind the turn, late"))
+  }
+  await sleep(20)
+  const before12: i32 = pool.turnWaits
+  board.open = 1
+  await sleep(50)
+  board.want = 0
+  let waited12: i32 = 0
+  while (board.done < 207 && waited12 < 3000) {
+    await sleep(1)
+    waited12 += 1
+  }
+  const spun: i32 = pool.turnWaits - before12
+  if (board.done < 207) {
+    // A lost wake: a seat behind the turn was not woken when its turn came.
+    console.log(`${207 - board.done} of 8 still waiting after 3 s`)
+    for (let i: i32 = 0; i < spinners.tasks.length; i++) {
+      cancel(spinners.tasks[i])
+    }
+    await until(board, 207)
+    pool.close()
+    return 0
+  }
+  board.open = 0
+  // Seven waiters, each woken once or twice: a spinning one waits thousands of times.
+  const shown: string = spun <= 64 ? "at most 64" : `${spun}`
+  console.log(`waits while the turn's answer was held: ${shown}`)
+
   pool.close()
   return 0
 }

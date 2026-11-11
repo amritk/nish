@@ -396,9 +396,10 @@ export class PgAsyncPool {
   readonly wakeUnseen: i32[]
 
   /**
-   * A pool of `size` slots, none connected yet. It opens a socket pair per
-   * slot, one for the pool and one per queue lane, the wakes a waiting task
-   * waits on; `close()` closes them.
+   * A pool of `size` slots, none connected yet. A waiting task waits on a
+   * wake: one per slot, one for the pool and one per queue lane. Each opens
+   * its socket pair the first time a task waits on it; `close()` closes the
+   * pairs opened.
    * @param size The number of connections, 1 to `PG_ASYNC_MAX_SIZE`; any
    *   other panics.
    */
@@ -1399,6 +1400,8 @@ const pgAsyncPlain = (pool: PgAsyncPool, s: i32): boolean => {
   while (at >= 0 && at + 5 < toI32(input.length) && at + 5 <= stop && stop <= toI32(input.length)) {
     const type: i32 = toI32(input[at])
     const next: i32 = at + 1 + getI32BE(input, at + 1)
+    // Not reached: `pgAsyncScan` refused a length under 4 before this answer
+    // could be read past. Kept so this walk does not rest on that.
     if (next < at + 5) {
       return false
     }

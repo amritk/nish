@@ -777,7 +777,7 @@ class PgAsyncPool
 
 | Member | |
 | --- | --- |
-| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. It opens a socket pair per slot, one for the pool and one per queue lane, the wakes a waiting task waits on; `close()` closes them. |
+| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. A waiting task waits on a wake: one per slot, one for the pool and one per queue lane. Each opens its socket pair the first time a task waits on it; `close()` closes the pairs opened. |
 | `readonly claimed: u8[]` | Each slot's state: 0 free, 1 claimed by a ticket. |
 | `readonly claims: i32[]` | Each slot's claim count, the high part of its current ticket. |
 | `claimWaitMs: i32` | The most milliseconds `pgAsyncClaim` or `pgAsyncSeat` waits for a free connection before it answers `PG_CARRIER_FULL`. |
