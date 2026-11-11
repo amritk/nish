@@ -763,6 +763,7 @@ const numberMembers = (pass: RefPass, modules: RefModule[]): void => {
       j = j + 1
     }
     pass.members[k].refTag = tag
+    pass.table.fnRefMembers[pass.table.refOf(pass.memberTypes[k])].push(pass.members[k].sourceName)
     k = k + 1
   }
 }

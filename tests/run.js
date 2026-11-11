@@ -3545,6 +3545,127 @@ if (selects("fnref", "fnref_debug_check")) {
     !speed.includes("ref.outside") && !speed.includes("outside its place's set"),
     speed.split("\n").filter((l) => l.includes("$ref")).join("\n")
   )
+
+  // `-g` (§5.3 of docs/wp51-function-references.md): a reference is described
+  // as an enumeration of its signature's members, each named for its function
+  // with its tag as the value, so a debugger prints the function a reference
+  // holds. A dispatcher is artificial and every location in it is line 0, so a
+  // debugger's `step` treats it as code with no source. The program is linked
+  // under `--profile debug`, whose symbols the speed profile strips, and asked
+  // of gdb and lldb where they are installed.
+  const gSrc = path.join(fnrefDir, "fnref_g.ts")
+  fs.writeFileSync(
+    gSrc,
+    [
+      "type Op = (x: i32) => i32",
+      "const inc = (x: i32): i32 => x + 1",
+      "const twice = (x: i32): i32 => x * 2",
+      "export const main = (): number => {",
+      "  let h: Op = inc",
+      "  if (Date.now() > 0) {",
+      "    h = twice",
+      "  }",
+      "  const r = h(3)",
+      "  console.log(`${r}`)",
+      "  return 0",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const gOut = path.join(fnrefDir, "g-ir") + path.sep
+  const gIr = spawnSync(NISH, [gSrc, "-g", "-o", gOut], { cwd: root, encoding: "utf8" })
+  const gLlPath = path.join(gOut, "fnref_g.ll")
+  const gLl = gIr.status === 0 && fs.existsSync(gLlPath) ? fs.readFileSync(gLlPath, "utf8") : shown(gIr)
+  const enumTag = /!DICompositeType\(tag: DW_TAG_enumeration_type, name: "\(i32\) => i32",[^\n]*size: 32/
+  check(
+    "fnref -g: a reference's DWARF type is an enumeration of its members, valued by tag",
+    gLl.includes('!DIEnumerator(name: "inc", value: 1)') &&
+      gLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
+      enumTag.test(gLl),
+    gLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gLl.slice(0, 2000)
+  )
+  const dispatcherSp = gLl
+    .split("\n")
+    .find((l) => l.includes("DISubprogram(") && l.includes('name: "$ref.'))
+  const dispatcherId = gLl.match(/^!(\d+) = distinct !DISubprogram\(name: "\$ref\./m)
+  const dispatcherScope = dispatcherId === null ? "none" : dispatcherId[1]
+  const dispatcherLocs = gLl
+    .split("\n")
+    .filter((l) => l.includes("!DILocation(") && l.includes(`scope: !${dispatcherScope})`))
+  check(
+    "fnref -g: the dispatcher is artificial, at line 0, and every location in it is line 0",
+    dispatcherSp !== undefined &&
+      dispatcherSp.includes("line: 0,") &&
+      dispatcherSp.includes("DIFlagArtificial") &&
+      dispatcherLocs.length > 0 &&
+      dispatcherLocs.every((l) => l.includes("line: 0,")),
+    [dispatcherSp ?? "no $ref DISubprogram", ...dispatcherLocs].join("\n")
+  )
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [gLlPath, "-o", "/dev/null"], { encoding: "utf8" })
+    check("fnref -g: the IR passes llvm-as", as.status === 0, shown(as))
+  } else skip("fnref -g: llvm-as is not installed")
+
+  const gExe = path.join(fnrefDir, "fnref_g")
+  const gLinked = spawnSync(NISH, [gSrc, "-g", "--link", gExe, "--profile", "debug"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const gRan = gLinked.status === 0 ? spawnSync(gExe, { encoding: "utf8" }) : gLinked
+  check("fnref -g: the debug build prints 6", gRan.status === 0 && gRan.stdout === "6\n", shown(gRan))
+  if (gRan.status !== 0) {
+    // Nothing to debug.
+  } else if (has("gdb")) {
+    // At the call, `h` prints as the function it holds and compares equal to
+    // it; two steps from the call reach the member, the first stopping in the
+    // dispatcher.
+    const gdb = spawnSync(
+      "gdb",
+      [
+        "-batch",
+        "-nx",
+        "-ex",
+        "break fnref_g.ts:9",
+        "-ex",
+        "run",
+        "-ex",
+        "print h",
+        "-ex",
+        "print h == twice",
+        "-ex",
+        "step",
+        "-ex",
+        "step",
+        "-ex",
+        "frame",
+        gExe,
+      ],
+      { encoding: "utf8", timeout: 60000 }
+    )
+    const said = `${gdb.stdout}${gdb.stderr}`
+    check("fnref -g: gdb prints a reference as the function it holds", /\$1 = twice\b/.test(said), said)
+    check("fnref -g: gdb compares a reference with a function", /\$2 = 1\b/.test(said), said)
+    check("fnref -g: gdb steps from the call into the member within two steps", /\btwice \(/.test(said), said)
+  } else skip("fnref -g: gdb is not installed")
+  if (gRan.status === 0 && has("lldb")) {
+    const lldb = spawnSync(
+      "lldb",
+      [
+        "--batch",
+        "--no-lldbinit",
+        "-o",
+        "breakpoint set --file fnref_g.ts --line 9",
+        "-o",
+        "run",
+        "-o",
+        "frame variable h",
+        gExe,
+      ],
+      { encoding: "utf8", timeout: 60000 }
+    )
+    const said = `${lldb.stdout}${lldb.stderr}`
+    check("fnref -g: lldb prints a reference as the function it holds", /\bh = twice\b/.test(said), said)
+  } else if (gRan.status === 0) skip("fnref -g: lldb is not installed")
 }
 
 // ---- The link profile of a `tests/link` program (WP5) -------------------------

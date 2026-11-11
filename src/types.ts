@@ -368,12 +368,19 @@ export class TypeTable {
   unionTags: i32[][]
   /** The parameter types of each function reference type; its `refs` entry indexes this. */
   fnRefParams: i32[][]
+  /**
+   * Parallel to `fnRefParams`: the names of the functions a reference of that
+   * type may hold, in tag order (tag `k + 1` is `fnRefMembers[..][k]`), once
+   * `resolveReferences` has numbered them. `-g` names its enumerators from it.
+   */
+  fnRefMembers: string[][]
 
   constructor() {
     this.json = false
     this.unions = []
     this.unionTags = []
     this.fnRefParams = []
+    this.fnRefMembers = []
     this.kinds = []
     this.refs = []
     this.names = []
@@ -785,6 +792,8 @@ export class TypeTable {
       copy.push(param)
     }
     this.fnRefParams.push(copy)
+    const named: string[] = []
+    this.fnRefMembers.push(named)
     const id = this.intern(K_FNREF, this.fnRefParams.length - 1, "")
     this.errs[id] = result
     this.index.set(key, id)
