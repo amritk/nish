@@ -62,9 +62,27 @@ stages:
       - id: pool-docs
         content: Update docs/security/postgres.md (the async pool's findings), docs/guide/using-nish/postgres.md if a user-visible pool option changes (async-server.md is fix-serve's; describe a change it needs in the PR and regate makes it), regenerate tests/self/goldens/checked and docs/reference, and add DECLARED entries to tests/nish-cmp.js in the PR title's words if any corpus program's IR moves
         status: pending
+  - id: trim
+    title: "perf(runtime): trim the async request path's instructions per request (WP49 stage 6)"
+    goal: With fix-serve and fix-pool merged, profile.sh shows the async entry's instructions per request on plaintext, json and /db cut further toward the explicit entry's, with every byte answered unchanged and the explicit entry's figures unmoved.
+    verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js net_serve && node tests/run.js net_router && node tests/run.js tfb_async_entry && node tests/run.js tfb_entry && node tests/run.js std_postgres && node tests/run.js tfb_async_db && node tests/run.js async && node tests/postgres/live/run.mjs && node scripts/security-scope.mjs && node scripts/gen-reference.mjs --check && bash scripts/fetch-seed.sh --force && NISH_BOOTSTRAP=build/seed/bin/nish node tests/nish-cmp.js && bash bench/techempower/profile.sh (before on main, after on the branch)
+    status: pending
+    todos:
+      - id: trim-profile
+        content: Re-run profile.sh on main with both fixes merged and list what is left of the async entry's extra Ir per request on plaintext, json and /db, frame by frame
+        status: pending
+      - id: trim-cut
+        content: Cut the largest remaining async-only costs in the async request path (serve, handler, router, the async pool, the task machinery), each change measured by its Ir delta; shared code both entries run (the HTTP codec, the JSON writer, the explicit carrier) is out of scope
+        status: pending
+      - id: trim-tests
+        content: Keep tfb_async_entry's byte-for-byte answers, the five TFB db tests and RSS flat; pin any behaviour a change could alter with a test that fails without it
+        status: pending
+      - id: trim-measure
+        content: Put before/after Ir per request and run.sh medians with the band in the PR body and a Measured trailer
+        status: pending
   - id: regate
     title: "docs(runtime): re-measure WP49 stage 6's gate after the serve and pool fixes"
-    goal: run.sh re-measures every gated test on main with both fixes merged, BENCHMARKS.md and WP49 §6 carry the figures, and §10 and the status line read stage 6 built if and only if async is inside the band on plaintext, json and db.
+    goal: run.sh re-measures every gated test on main with both fixes and the trim pass merged, BENCHMARKS.md and WP49 §6 carry the figures, and §10 and the status line read stage 6 built if and only if async is inside the band on plaintext, json and db.
     verification: npm run lint && node docs/check-links.mjs && bash bench/techempower/run.sh (all rows, on main at the merge of fix-serve and fix-pool)
     status: pending
     todos:
@@ -165,19 +183,30 @@ Starts after `profile` merges. `std/net/postgres.ts` (the explicit pool) and
 cause sits in `serve` or the executor (fix-serve's files), the worker says so
 in the PR and stops rather than editing them.
 
+## trim
+
+**Owns:** the union of fix-serve's and fix-pool's Owns (both have merged
+before it starts), except `src/**` beyond `src/emit-async.ts`.
+
+Added at the owner's request on 2026-11-11 after sign-off: a pass on
+reducing instructions after the two fixes, on the async path only, before
+regate so that regate measures the final state once. It starts after
+fix-serve and fix-pool merge, from a fresh profile on `main`. Shared code
+both entries run is out of scope, so the explicit baseline does not move.
+
 ## regate
 
 **Owns:** `docs/BENCHMARKS.md`, `docs/wp49-async-server.md`,
 `bench/techempower/README.md`, `docs/guide/using-nish/async-server.md` (only what fix-pool asked for), `bench/techempower/run.sh` (only a harness
 bug, never the band rule)
 
-Starts after fix-serve and fix-pool merge. This stage changes no code: if the
+Starts after trim merges. This stage changes no code: if the
 gate still fails, it records the figures and leaves §10 at "measured, gate not
 met", and the run's acceptance escalates.
 
 ## Merge order
 
-`profile` → (`fix-serve` ∥ `fix-pool`, developed concurrently) → `regate`.
+`profile` → (`fix-serve` ∥ `fix-pool`, developed concurrently) → `trim` → `regate`.
 `fix-serve` and `fix-pool` share only `tests/nish-cmp.js` (append-only
 DECLARED entries) and the generated `tests/self/goldens/checked/**` and
 `docs/reference/**`; `fix-serve` merges first and `fix-pool` updates from
