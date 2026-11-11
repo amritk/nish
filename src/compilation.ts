@@ -1398,7 +1398,7 @@ export class Compilation {
         unit.parents.link(unit.file)
       }
     }
-    // WP40 §4: the handle rules read the checked tables, so they run once
+    // WP53 §4: the handle rules read the checked tables, so they run once
     // every body, every instance's included, has checked clean.
     for (const unit of this.modules) {
       const program = unit.checker.program

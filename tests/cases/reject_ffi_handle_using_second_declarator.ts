@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 2: every declarator of a `using` is checked on its own, so a
+// WP53 H1.1, Row 2: every declarator of a `using` is checked on its own, so a
 // second one that names the first is refused at it, by position in the `.err`,
 // while the first, a `new` of the class, is admitted.
 declare function fopen(path: string, mode: string): CPtr | null

@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 28: an interface field is not a borrowing parameter, so it may
+// WP53 H1.1, Row 28: an interface field is not a borrowing parameter, so it may
 // not have a handle's type.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

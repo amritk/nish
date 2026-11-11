@@ -1,4 +1,4 @@
-// WP40 B1.2: the count is a `u64` and the check compares it unsigned, so a
+// WP53 B1.2: the count is a `u64` and the check compares it unsigned, so a
 // count that wrapped below zero is the largest count there is, not a negative
 // one under the length: `icmp ule`, and the check fails.
 declare function read(fd: i32, buf: u8[], n: u64): i64;

@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 5: a handle class as a type argument names it outside a
+// WP53 H1.1, Row 5: a handle class as a type argument names it outside a
 // borrowing parameter, on the function-template path and the class-template
 // path alike.
 declare function fopen(path: string, mode: string): CPtr | null

@@ -1,4 +1,4 @@
-// WP40 B1.3 widens B1.2's proof: a later argument that is itself a foreign
+// WP53 B1.3 widens B1.2's proof: a later argument that is itself a foreign
 // call cannot resize an array (C is lent `buf->data`, never the header), so
 // `credited` proves `toU64(buf.length)` and carries no `ffi-length` check.
 // `rewound` calls C *and* pops, so it resizes: `uncredited` keeps the check,

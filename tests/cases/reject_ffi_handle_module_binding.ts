@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 15: a handle opened at module level would never reach a
+// WP53 H1.1, Row 15: a handle opened at module level would never reach a
 // `using` block's close.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

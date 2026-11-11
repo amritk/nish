@@ -1,4 +1,4 @@
-// WP40 H1.3, #566: in its own constructor `this` is not a receiver either: a
+// WP53 H1.3, #566: in its own constructor `this` is not a receiver either: a
 // method called on the half-built object would see it before the constructor
 // returns. Only the constructor branch of the value rule refuses it.
 declare function fopen(path: string, mode: string): CPtr | null

@@ -1,4 +1,4 @@
-// WP40 H1.1, D5: the `[Symbol.dispose]` of a handle class is an instance
+// WP53 H1.1, D5: the `[Symbol.dispose]` of a handle class is an instance
 // method, so `static` is refused on it as on any other method.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32

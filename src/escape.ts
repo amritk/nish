@@ -882,10 +882,10 @@ class EscapeAnalysis {
     ) {
       return new Outcome(FLOW_LOCAL, true, false)
     }
-    // WP27 S3.1 and WP40 B1.2: a `string` or a `u8[]` handed to a `declare
+    // WP27 S3.1 and WP53 B1.2: a `string` or a `u8[]` handed to a `declare
     // function` is borrowed for the length of the call, and the C function
     // may not keep its address (`docs/wp27-ffi.md` §8b,
-    // `docs/wp40-ffi-buffers-handles.md` §5). Nothing about a C body can be
+    // `docs/wp53-ffi-buffers-handles.md` §5). Nothing about a C body can be
     // proved, so this is the decision read as a fact: the argument does not
     // escape, and the arena scope may release once the call has returned.
     // What C writes through a `u8[]` is recorded as a write by the foreign
@@ -1818,8 +1818,8 @@ export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
  *    pointers this compiler allocated that cross the C boundary are a
  *    `string`'s bytes and a `u8[]`'s data block, each lent to a `declare
  *    function` for the length of that call, and the C function may keep
- *    neither (WP27 S3.1, `docs/wp27-ffi.md` §8b; WP40 B1.2,
- *    `docs/wp40-ffi-buffers-handles.md` §3a). A `u8[]` C writes through is
+ *    neither (WP27 S3.1, `docs/wp27-ffi.md` §8b; WP53 B1.2,
+ *    `docs/wp53-ffi-buffers-handles.md` §3a). A `u8[]` C writes through is
  *    written by the call, and holds bytes, not pointers.
  *  - **None of that memory has a slot a pointer fits in.** A pointer outlives
  *    a call only by being stored, and a scalar field has no room for one. A

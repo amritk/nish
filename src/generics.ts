@@ -1083,7 +1083,7 @@ const instantiateStructHere = (
   }
   // WP27 S2, as `instantiate` below has it for a function template: a class
   // at `CPtr` would hold a foreign address however its members spell `T`,
-  // `class Empty<T> { n: i32 = 0; }` included. WP40 §4d: and a handle class
+  // `class Empty<T> { n: i32 = 0; }` included. WP53 §4d: and a handle class
   // is never a type argument, which would name it outside a parameter.
   for (const arg of args) {
     if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {

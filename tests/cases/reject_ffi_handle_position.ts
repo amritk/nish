@@ -1,4 +1,4 @@
-// WP40 H1.1, §4d: the general refusal of the position allow-list. A handle
+// WP53 H1.1, §4d: the general refusal of the position allow-list. A handle
 // value may be opened by `using`, called, or lent to a parameter of its type
 // (H1-H3, U1, U2); any form not on that list is refused by the one check, here
 // an element of an array literal that a callee never sees.

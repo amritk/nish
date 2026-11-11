@@ -1,4 +1,4 @@
-// WP40 H1.1, Row 4: a closure capturing a borrowed handle could be called after
+// WP53 H1.1, Row 4: a closure capturing a borrowed handle could be called after
 // the `using` block closes it. An arrow argument may read its function's
 // `const` locals, but never one that holds a handle: the capture rule refuses
 // it by type before the handle rules are asked.

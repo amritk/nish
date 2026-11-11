@@ -6350,7 +6350,7 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
 
 **A class with a `CPtr` or `CPtr | null` field is a handle class: it owns the C
 resource the pointer names, and its `[Symbol.dispose]` names the C function
-that closes it** (`tests/cases/ffi_handle_positions`, `docs/wp40-ffi-buffers-handles.md`
+that closes it** (`tests/cases/ffi_handle_positions`, `docs/wp53-ffi-buffers-handles.md`
 §4a–§4d).
 
 ```ts
