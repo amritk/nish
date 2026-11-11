@@ -84,6 +84,7 @@ struct RefPass (class) size=200 align=8
   field module: i32 index=23 offset=184
   field sig: FunctionSig | null index=24 offset=192
   constructor -> @RefPass.constructor
+  method refType -> @RefPass.refType
   method isRef -> @RefPass.isRef
   method typeOf -> @RefPass.typeOf
   method newPlace -> @RefPass.newPlace
@@ -134,13 +135,28 @@ function RefPass.constructor(this: RefPass, table: TypeTable, first: CheckedProg
   pointer first: size=800 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:17 new StringMap -> @StringMap.constructor
-function RefPass.isRef(this: RefPass, node: Node): boolean -> @RefPass.isRef [method]
+function RefPass.refType(this: RefPass, node: Node): i32 -> @RefPass.refType [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.isFnRef nish_panic_index
-  pointer this: size=200 writesThrough=false captured=false
-  pointer node: size=40 writesThrough=false captured=false
+  calls: RefPass.typeOf TypeTable.isFnRef TypeTable.isMaybe TypeTable.isNullable TypeTable.refOf
+  pointer this: size=200 writesThrough=false captured=false passedTo=RefPass.typeOf#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=RefPass.typeOf#1
   stackSites=0 stackLocals=0
-  callee +0:59 TypeTable.isFnRef -> @TypeTable.isFnRef
+  local +0:11 type: i32 (const)
+  callee +0:18 RefPass.typeOf -> @RefPass.typeOf
+  callee +1:9 TypeTable.isFnRef -> @TypeTable.isFnRef
+  local +4:11 holder: boolean (const)
+  callee +4:20 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +4:51 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee +5:19 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +5:38 TypeTable.refOf -> @TypeTable.refOf
+  callee +6:14 TypeTable.refOf -> @TypeTable.refOf
+function RefPass.isRef(this: RefPass, node: Node): boolean -> @RefPass.isRef [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: RefPass.refType
+  pointer this: size=200 writesThrough=false captured=false passedTo=RefPass.refType#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=RefPass.refType#1
+  stackSites=0 stackLocals=0
+  callee +0:12 RefPass.refType -> @RefPass.refType
 function RefPass.typeOf(this: RefPass, node: Node): i32 -> @RefPass.typeOf [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
@@ -258,37 +274,37 @@ function RefPass.flow(this: RefPass, node: Node, target: i32): void -> @RefPass.
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: target
-  calls: RefPass.arrayMethod RefPass.elementPlace RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.localPlace RefPass.returnPlace RefPass.scan RefPass.scanCall RefPass.storeFrom RefPass.storeOne RefPass.typeOf nish_panic_index nish_str_eq
-  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.scan#0 RefPass.typeOf#0 RefPass.flow#0 RefPass.scan#0 RefPass.flow#0 RefPass.flow#0 RefPass.flow#0 RefPass.flow#0 RefPass.scan#0 RefPass.flow#0 RefPass.storeOne#0 RefPass.storeFrom#0 RefPass.localPlace#0 RefPass.scan#0 RefPass.storeFrom#0 RefPass.fieldPlace#0 RefPass.scan#0 RefPass.scan#0 RefPass.storeFrom#0 RefPass.elementPlace#0 RefPass.scanCall#0 RefPass.storeFrom#0 RefPass.returnPlace#0 RefPass.arrayMethod#0 RefPass.storeFrom#0 RefPass.elementPlace#0 RefPass.scan#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=RefPass.isRef#1 RefPass.scan#1 RefPass.typeOf#1 RefPass.scan#1 RefPass.storeOne#3 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.scanCall#1 RefPass.storeFrom#3 RefPass.arrayMethod#1 RefPass.storeFrom#3 RefPass.scan#1
+  calls: RefPass.arrayMethod RefPass.elementPlace RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.localPlace RefPass.refType RefPass.returnPlace RefPass.scan RefPass.scanCall RefPass.storeFrom RefPass.storeOne nish_panic_index nish_str_eq
+  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.scan#0 RefPass.refType#0 RefPass.flow#0 RefPass.scan#0 RefPass.flow#0 RefPass.flow#0 RefPass.flow#0 RefPass.flow#0 RefPass.scan#0 RefPass.flow#0 RefPass.storeOne#0 RefPass.storeFrom#0 RefPass.localPlace#0 RefPass.scan#0 RefPass.storeFrom#0 RefPass.fieldPlace#0 RefPass.scan#0 RefPass.scan#0 RefPass.storeFrom#0 RefPass.elementPlace#0 RefPass.scanCall#0 RefPass.storeFrom#0 RefPass.returnPlace#0 RefPass.arrayMethod#0 RefPass.storeFrom#0 RefPass.elementPlace#0 RefPass.scan#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RefPass.isRef#1 RefPass.scan#1 RefPass.refType#1 RefPass.scan#1 RefPass.storeOne#3 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.scanCall#1 RefPass.storeFrom#3 RefPass.arrayMethod#1 RefPass.storeFrom#3 RefPass.scan#1
   stackSites=0 stackLocals=0
-  callee -64:24 RefPass.isRef -> @RefPass.isRef
-  callee -63:7 RefPass.scan -> @RefPass.scan
-  local -60:11 type: i32 (const)
-  callee -60:18 RefPass.typeOf -> @RefPass.typeOf
-  callee -56:9 RefPass.flow -> @RefPass.flow
-  callee -53:9 RefPass.scan -> @RefPass.scan
-  callee -52:9 RefPass.flow -> @RefPass.flow
-  callee -51:9 RefPass.flow -> @RefPass.flow
-  callee -47:11 RefPass.flow -> @RefPass.flow
-  callee -46:11 RefPass.flow -> @RefPass.flow
-  callee -42:11 RefPass.scan -> @RefPass.scan
-  callee -41:11 RefPass.flow -> @RefPass.flow
-  local -34:15 named: FunctionSig | null (const)
-  callee -32:11 RefPass.storeOne -> @RefPass.storeOne
-  local -29:15 local: Local | null (const)
-  callee -27:11 RefPass.storeFrom -> @RefPass.storeFrom
-  callee -27:34 RefPass.localPlace -> @RefPass.localPlace
-  callee -21:9 RefPass.scan -> @RefPass.scan
-  callee -20:9 RefPass.storeFrom -> @RefPass.storeFrom
-  callee -20:32 RefPass.fieldPlace -> @RefPass.fieldPlace
-  callee -17:9 RefPass.scan -> @RefPass.scan
-  callee -16:9 RefPass.scan -> @RefPass.scan
-  callee -15:9 RefPass.storeFrom -> @RefPass.storeFrom
-  callee -15:32 RefPass.elementPlace -> @RefPass.elementPlace
-  local -12:15 site: boolean (const)
-  callee -12:22 RefPass.scanCall -> @RefPass.scanCall
-  local -10:17 callee: FunctionSig | null (const)
+  callee -66:24 RefPass.isRef -> @RefPass.isRef
+  callee -65:7 RefPass.scan -> @RefPass.scan
+  local -62:11 type: i32 (const)
+  callee -62:18 RefPass.refType -> @RefPass.refType
+  callee -58:9 RefPass.flow -> @RefPass.flow
+  callee -55:9 RefPass.scan -> @RefPass.scan
+  callee -54:9 RefPass.flow -> @RefPass.flow
+  callee -53:9 RefPass.flow -> @RefPass.flow
+  callee -49:11 RefPass.flow -> @RefPass.flow
+  callee -48:11 RefPass.flow -> @RefPass.flow
+  callee -44:11 RefPass.scan -> @RefPass.scan
+  callee -43:11 RefPass.flow -> @RefPass.flow
+  local -36:15 named: FunctionSig | null (const)
+  callee -34:11 RefPass.storeOne -> @RefPass.storeOne
+  local -31:15 local: Local | null (const)
+  callee -29:11 RefPass.storeFrom -> @RefPass.storeFrom
+  callee -29:34 RefPass.localPlace -> @RefPass.localPlace
+  callee -23:9 RefPass.scan -> @RefPass.scan
+  callee -22:9 RefPass.storeFrom -> @RefPass.storeFrom
+  callee -22:32 RefPass.fieldPlace -> @RefPass.fieldPlace
+  callee -19:9 RefPass.scan -> @RefPass.scan
+  callee -18:9 RefPass.scan -> @RefPass.scan
+  callee -17:9 RefPass.storeFrom -> @RefPass.storeFrom
+  callee -17:32 RefPass.elementPlace -> @RefPass.elementPlace
+  local -14:15 site: boolean (const)
+  callee -14:22 RefPass.scanCall -> @RefPass.scanCall
+  local -12:17 callee: FunctionSig | null (const)
   callee -8:13 RefPass.storeFrom -> @RefPass.storeFrom
   callee -8:36 RefPass.returnPlace -> @RefPass.returnPlace
   callee -5:15 RefPass.arrayMethod -> @RefPass.arrayMethod
@@ -333,8 +349,8 @@ function RefPass.scanCall(this: RefPass, call: Node): boolean -> @RefPass.scanCa
 function RefPass.scanRefArgs(this: RefPass, type: i32, args: Node): void -> @RefPass.scanRefArgs [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefPass.newPlace
-  calls: FunctionSig.writtenArity RefPass.flow RefPass.isRef RefPass.newPlace RefPass.paramPlace RefPass.scan RefPass.storeFrom RefPass.typeOf nish_panic_index
-  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.newPlace#0 RefPass.typeOf#0 RefPass.flow#0 RefPass.storeFrom#0 RefPass.paramPlace#0 RefPass.typeOf#0 RefPass.scan#0
+  calls: FunctionSig.writtenArity RefPass.flow RefPass.isRef RefPass.newPlace RefPass.paramPlace RefPass.refType RefPass.scan RefPass.storeFrom nish_panic_index
+  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.newPlace#0 RefPass.refType#0 RefPass.flow#0 RefPass.storeFrom#0 RefPass.paramPlace#0 RefPass.refType#0 RefPass.scan#0
   pointer args: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
@@ -342,21 +358,21 @@ function RefPass.scanRefArgs(this: RefPass, type: i32, args: Node): void -> @Ref
   callee +3:11 RefPass.isRef -> @RefPass.isRef
   local +4:15 from: i32 (const)
   callee +4:22 RefPass.newPlace -> @RefPass.newPlace
-  callee +4:36 RefPass.typeOf -> @RefPass.typeOf
+  callee +4:36 RefPass.refType -> @RefPass.refType
   callee +5:9 RefPass.flow -> @RefPass.flow
   local +6:13 k: i32 (let)
   local +8:17 member: FunctionSig (const)
   callee +9:51 FunctionSig.writtenArity -> @FunctionSig.writtenArity
   callee +10:13 RefPass.storeFrom -> @RefPass.storeFrom
   callee +10:28 RefPass.paramPlace -> @RefPass.paramPlace
-  callee +10:55 RefPass.typeOf -> @RefPass.typeOf
+  callee +10:55 RefPass.refType -> @RefPass.refType
   callee +15:9 RefPass.scan -> @RefPass.scan
 function RefPass.scanArgs(this: RefPass, sig: FunctionSig | null, args: Node, element: i32): void -> @RefPass.scanArgs [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefPass.flow
   escaping: element
-  calls: FunctionSig.isCompileTime FunctionSig.writtenArity RefPass.elementPlace RefPass.flow RefPass.isRef RefPass.paramPlace RefPass.scan RefPass.typeOf
-  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.flow#0 RefPass.paramPlace#0 RefPass.typeOf#0 RefPass.flow#0 RefPass.elementPlace#0 RefPass.scan#0 RefPass.scan#0
+  calls: FunctionSig.isCompileTime FunctionSig.writtenArity RefPass.elementPlace RefPass.flow RefPass.isRef RefPass.paramPlace RefPass.refType RefPass.scan
+  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.flow#0 RefPass.paramPlace#0 RefPass.refType#0 RefPass.flow#0 RefPass.elementPlace#0 RefPass.scan#0 RefPass.scan#0
   pointer sig: size=200 writesThrough=true captured=false passedTo=FunctionSig.writtenArity#0 FunctionSig.isCompileTime#0 RefPass.paramPlace#1
   pointer args: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -369,7 +385,7 @@ function RefPass.scanArgs(this: RefPass, sig: FunctionSig | null, args: Node, el
   callee +9:76 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
   callee +10:11 RefPass.flow -> @RefPass.flow
   callee +10:26 RefPass.paramPlace -> @RefPass.paramPlace
-  callee +10:51 RefPass.typeOf -> @RefPass.typeOf
+  callee +10:51 RefPass.refType -> @RefPass.refType
   callee +12:11 RefPass.flow -> @RefPass.flow
   callee +12:26 RefPass.elementPlace -> @RefPass.elementPlace
   callee +14:11 RefPass.scan -> @RefPass.scan
@@ -395,8 +411,8 @@ function RefPass.scan(this: RefPass, node: Node): void -> @RefPass.scan [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefPass.flow
   escaping: node
-  calls: RefPass.elementPlace RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.localPlace RefPass.returnPlace RefPass.scan RefPass.scanArgs RefPass.scanCall RefPass.storeFrom RefPass.target RefPass.typeOf TypeTable.isFnRef nish_panic_index nish_str_eq
-  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.flow#0 RefPass.localPlace#0 RefPass.scan#0 RefPass.isRef#0 RefPass.target#0 RefPass.typeOf#0 RefPass.flow#0 RefPass.scanCall#0 RefPass.scan#0 RefPass.scanArgs#0 RefPass.isRef#0 RefPass.flow#0 RefPass.returnPlace#0 RefPass.typeOf#0 RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.elementPlace#0 RefPass.typeOf#0 RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.fieldPlace#0 RefPass.typeOf#0 RefPass.storeFrom#0 RefPass.localPlace#0 RefPass.elementPlace#0 RefPass.scan#0 RefPass.scan#0 RefPass.scan#0
+  calls: RefPass.elementPlace RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.localPlace RefPass.refType RefPass.returnPlace RefPass.scan RefPass.scanArgs RefPass.scanCall RefPass.storeFrom RefPass.target TypeTable.isFnRef nish_panic_index nish_str_eq
+  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.flow#0 RefPass.localPlace#0 RefPass.refType#0 RefPass.scan#0 RefPass.isRef#0 RefPass.target#0 RefPass.refType#0 RefPass.flow#0 RefPass.scanCall#0 RefPass.scan#0 RefPass.scanArgs#0 RefPass.isRef#0 RefPass.flow#0 RefPass.returnPlace#0 RefPass.refType#0 RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.elementPlace#0 RefPass.refType#0 RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.fieldPlace#0 RefPass.refType#0 RefPass.storeFrom#0 RefPass.localPlace#0 RefPass.elementPlace#0 RefPass.scan#0 RefPass.scan#0 RefPass.scan#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RefPass.scanCall#1 RefPass.storeFrom#3
   stackSites=0 stackLocals=0
   local +0:15 init: Node (const)
@@ -404,12 +420,13 @@ function RefPass.scan(this: RefPass, node: Node): void -> @RefPass.scan [method]
   callee +2:56 RefPass.isRef -> @RefPass.isRef
   callee +3:11 RefPass.flow -> @RefPass.flow
   callee +3:27 RefPass.localPlace -> @RefPass.localPlace
+  callee +3:50 RefPass.refType -> @RefPass.refType
   callee +5:11 RefPass.scan -> @RefPass.scan
   local +10:15 op: string (const)
   callee +11:77 RefPass.isRef -> @RefPass.isRef
   local +12:17 place: i32 (const)
   callee +12:25 RefPass.target -> @RefPass.target
-  callee +12:55 RefPass.typeOf -> @RefPass.typeOf
+  callee +12:55 RefPass.refType -> @RefPass.refType
   callee +13:11 RefPass.flow -> @RefPass.flow
   callee +19:9 RefPass.scanCall -> @RefPass.scanCall
   callee +22:9 RefPass.scan -> @RefPass.scan
@@ -419,18 +436,18 @@ function RefPass.scan(this: RefPass, node: Node): void -> @RefPass.scan [method]
   callee +28:47 RefPass.isRef -> @RefPass.isRef
   callee +29:11 RefPass.flow -> @RefPass.flow
   callee +29:28 RefPass.returnPlace -> @RefPass.returnPlace
-  callee +29:50 RefPass.typeOf -> @RefPass.typeOf
+  callee +29:50 RefPass.refType -> @RefPass.refType
   local +35:20 element: Node (const)
   callee +37:13 RefPass.scan -> @RefPass.scan
   callee +38:22 RefPass.isRef -> @RefPass.isRef
   callee +39:13 RefPass.flow -> @RefPass.flow
   callee +39:32 RefPass.elementPlace -> @RefPass.elementPlace
-  callee +39:50 RefPass.typeOf -> @RefPass.typeOf
+  callee +39:50 RefPass.refType -> @RefPass.refType
   callee +41:13 RefPass.scan -> @RefPass.scan
   callee +46:41 RefPass.isRef -> @RefPass.isRef
   callee +47:11 RefPass.flow -> @RefPass.flow
   callee +47:39 RefPass.fieldPlace -> @RefPass.fieldPlace
-  callee +47:66 RefPass.typeOf -> @RefPass.typeOf
+  callee +47:66 RefPass.refType -> @RefPass.refType
   local +52:15 head: Node (const)
   local +54:17 decl: Node (const)
   local +55:17 local: Local | null (const)
@@ -454,8 +471,8 @@ function RefPass.enter(this: RefPass, program: CheckedProgram, module: i32, sig:
 function RefPass.walkModule(this: RefPass, file: Node): void -> @RefPass.walkModule [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefPass.scan
-  calls: RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.scan RefPass.typeOf nish_panic_index
-  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.fieldPlace#0 RefPass.typeOf#0 RefPass.scan#0
+  calls: RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.refType RefPass.scan nish_panic_index
+  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.fieldPlace#0 RefPass.refType#0 RefPass.scan#0
   pointer file: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 decl: Node (const)
@@ -465,13 +482,13 @@ function RefPass.walkModule(this: RefPass, file: Node): void -> @RefPass.walkMod
   callee +7:17 RefPass.isRef -> @RefPass.isRef
   callee +8:15 RefPass.flow -> @RefPass.flow
   callee +8:31 RefPass.fieldPlace -> @RefPass.fieldPlace
-  callee +8:72 RefPass.typeOf -> @RefPass.typeOf
+  callee +8:72 RefPass.refType -> @RefPass.refType
   callee +10:15 RefPass.scan -> @RefPass.scan
 function RefPass.walkFunction(this: RefPass, sig: FunctionSig): void -> @RefPass.walkFunction [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefPass.scan
-  calls: FunctionSig.body RefPass.flow RefPass.isRef RefPass.returnPlace RefPass.scan RefPass.typeOf
-  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.returnPlace#0 RefPass.typeOf#0 RefPass.scan#0
+  calls: FunctionSig.body RefPass.flow RefPass.isRef RefPass.refType RefPass.returnPlace RefPass.scan
+  pointer this: size=200 writesThrough=true captured=false passedTo=RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.returnPlace#0 RefPass.refType#0 RefPass.scan#0
   pointer sig: size=200 writesThrough=true captured=false passedTo=FunctionSig.body#0 RefPass.returnPlace#1
   stackSites=0 stackLocals=0
   local +0:11 body: Node | null (const)
@@ -480,7 +497,7 @@ function RefPass.walkFunction(this: RefPass, sig: FunctionSig): void -> @RefPass
   callee +6:16 RefPass.isRef -> @RefPass.isRef
   callee +7:7 RefPass.flow -> @RefPass.flow
   callee +7:23 RefPass.returnPlace -> @RefPass.returnPlace
-  callee +7:45 RefPass.typeOf -> @RefPass.typeOf
+  callee +7:45 RefPass.refType -> @RefPass.refType
   callee +9:7 RefPass.scan -> @RefPass.scan
 function RefPass.solve(this: RefPass): void -> @RefPass.solve [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
