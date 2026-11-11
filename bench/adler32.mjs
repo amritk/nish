@@ -134,7 +134,10 @@ const shipped = [
   { label: "default (copy)", bin: copy, args: [], env: unset },
   { label: "soft", bin: exe, args: [], env: soft },
 ]
-const columns = check ? [...bench, shipped[0]] : self ? shipped : bench
+let columns = self ? shipped : bench
+if (check) {
+  columns = [...bench, shipped[0]]
+}
 
 /** One run of a column at `scale`: `{ answer, times }`, times a Map from workload to `{ ns, bytes, ops }`. */
 const runOnce = (c, scale) => {

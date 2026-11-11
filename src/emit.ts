@@ -2004,7 +2004,12 @@ export class Emitter {
     let sumKernel: string[] = []
     if (!isWasmBuild(this.opts)) {
       if (isCrc32Seam(this.program, sig)) {
-        sumKernel = this.emitSumKernelArm(CRC32_HW, CRC32_KERNEL, "crc32", [operands[2], operands[3], operands[4], operands[5]])
+        sumKernel = this.emitSumKernelArm(CRC32_HW, CRC32_KERNEL, "crc32", [
+          operands[2],
+          operands[3],
+          operands[4],
+          operands[5],
+        ])
       } else if (isAdler32Seam(this.program, sig)) {
         sumKernel = this.emitSumKernelArm(ADLER32_HW, ADLER32_KERNEL, "adler32", operands)
       }
