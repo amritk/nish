@@ -169,6 +169,11 @@ const PG_ERR_SERVER: i32 = 7 [exported]
 const PG_ERR_ENCODING: i32 = 8 [exported]
 const PG_ERR_CLOSED: i32 = 9 [exported]
 const PG_ERR_SETTING: i32 = 10 [exported]
+const PG_ERR_TLS: i32 = 11 [exported]
+const PG_TLS_DISABLE: i32 = 0 [exported]
+const PG_TLS_REQUIRE: i32 = 1 [exported]
+const PG_TLS_VERIFY_FULL: i32 = 2 [exported]
+const PG_SSL_REQUEST_CODE: i32 = 80877103 [exported]
 const PG_ARRAY_ELEMENT: i32 = 0 [exported]
 const PG_ARRAY_NULL: i32 = -1 [exported]
 const PG_ARRAY_END: i32 = -2 [exported]
@@ -255,7 +260,7 @@ const PG_TARGET_BAD_PORT: i32 = 4 [exported]
 const PG_TARGET_TOO_LONG: i32 = 5 [exported]
 const PG_DEFAULT_PORT: i32 = 5432
 const PG_SOCKET_PATH_MAX: i32 = 107
-struct PgConfig (class) size=64 align=8 exported
+struct PgConfig (class) size=88 align=8 exported
   field user: string index=0 offset=0 initialized
   field database: string index=1 offset=8 initialized
   field applicationName: string index=2 offset=16 initialized
@@ -268,6 +273,9 @@ struct PgConfig (class) size=64 align=8 exported
   field minIterations: i32 index=9 offset=52 initialized
   field maxIterations: i32 index=10 offset=56 initialized
   field maxOutput: i32 index=11 offset=60 initialized
+  field tls: i32 index=12 offset=64 initialized
+  field tlsRootsPath: string index=13 offset=72 initialized
+  field tlsServerName: string index=14 offset=80 initialized
 struct PgError (class) size=56 align=8 exported
   field severity: string index=0 offset=0 readonly
   field code: string index=1 offset=8 readonly
@@ -384,6 +392,7 @@ struct PgConnection (class) size=216 align=8 exported
   method outputEnd -> @nish.PgConnection.outputEnd
   method sent -> @nish.PgConnection.sent
   method closed -> @nish.PgConnection.closed
+  method tlsFailed -> @nish.PgConnection.tlsFailed
   method passwordWiped -> @nish.PgConnection.passwordWiped
   method dispose -> @nish.PgConnection.dispose
   method next -> @nish.PgConnection.next
@@ -491,6 +500,7 @@ struct PgPool (class) size=88 align=8 exported
   field sqls: string[] index=12 offset=72 readonly
   field types: i32[][] index=13 offset=80 readonly
   constructor -> @nish.PgPool.constructor
+  method settings -> @nish.PgPool.settings
   method register -> @nish.PgPool.register
   method request -> @nish.PgPool.request
   method waiting -> @nish.PgPool.waiting
@@ -639,6 +649,13 @@ struct PgTarget (class) size=32 align=8 exported
   field host: string index=2 offset=8 initialized
   field port: i32 index=3 offset=16 initialized
   field path: string index=4 offset=24 initialized
+function pgSslRequest(): u8[] -> @nish.pgSslRequest [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.setI32BE
+  stackSites=0 stackLocals=0
+  local +0:9 out: u8[] (const)
+  callee +1:3 setI32BE -> @nish.setI32BE
+  callee +2:3 setI32BE -> @nish.setI32BE
 function PgError.constructor(this: PgError, severity: string, code: string, message: string, detail: string, hint: string, constraint: string, position: string): void -> @nish.PgError.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: code constraint detail hint message position severity
@@ -679,7 +696,7 @@ function PgPassword.wiped(this: PgPassword): boolean -> @nish.PgPassword.wiped [
 function pgCheckConfig(config: PgConfig): void -> @nish.pgCheckConfig
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.pgHasNul nish_panic
-  pointer config: size=64 writesThrough=false captured=false
+  pointer config: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 pgHasNul -> @nish.pgHasNul
   callee +1:5 pgHasNul -> @nish.pgHasNul
@@ -1046,7 +1063,7 @@ function PgConnection.constructor(this: PgConnection, config: PgConfig, password
   escaping: config
   calls: nish.PgConnection.putByte nish.PgConnection.putI32 nish.PgConnection.putParam nish.PgPassword.constructor nish.base64StdPadEncode nish.pgCheckConfig nish.setI32BE nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow
   pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.putI32#0 nish.PgConnection.putI32#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putParam#0 nish.PgConnection.putByte#0
-  pointer config: size=64 writesThrough=true captured=true passedTo=nish.pgCheckConfig#0
+  pointer config: size=88 writesThrough=true captured=true passedTo=nish.pgCheckConfig#0
   pointer password: size=8 writesThrough=false captured=false passedTo=nish.PgPassword.constructor#1
   pointer nonce: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -1123,6 +1140,13 @@ function PgConnection.sent(this: PgConnection, n: i32): void -> @nish.PgConnecti
   callee -3:22 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
   callee +5:7 PgConnection.compactOutput -> @nish.PgConnection.compactOutput
 function PgConnection.closed(this: PgConnection): i32 -> @nish.PgConnection.closed [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.PgConnection.fail
+  calls: nish.PgConnection.fail
+  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.fail#0
+  stackSites=0 stackLocals=0
+  callee +0:14 PgConnection.fail -> @nish.PgConnection.fail
+function PgConnection.tlsFailed(this: PgConnection): i32 -> @nish.PgConnection.tlsFailed [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.fail
   calls: nish.PgConnection.fail
@@ -2117,13 +2141,17 @@ function PgPool.constructor(this: PgPool, config: PgConfig, password: Secret<u8[
   escaping: config queueSize size
   calls: nish.PgPassword.constructor nish.PgPoolSlot.constructor nish.pgCheckConfig nish_alloc_struct nish_array_grow nish_panic
   pointer this: size=88 writesThrough=true captured=false
-  pointer config: size=64 writesThrough=true captured=true passedTo=nish.pgCheckConfig#0
+  pointer config: size=88 writesThrough=true captured=true passedTo=nish.pgCheckConfig#0
   pointer password: size=8 writesThrough=false captured=false passedTo=nish.PgPassword.constructor#1
   stackSites=0 stackLocals=0
   callee +0:5 pgCheckConfig -> @nish.pgCheckConfig
   callee +11:21 new PgPassword -> @nish.PgPassword.constructor
   local +14:14 i: i32 (let)
   callee +15:23 new PgPoolSlot -> @nish.PgPoolSlot.constructor
+function PgPool.settings(this: PgPool): PgConfig -> @nish.PgPool.settings [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=88
+  pointer this: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function PgPool.register(this: PgPool, name: string, sql: string, paramTypes: i32[]): boolean -> @nish.PgPool.register [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
