@@ -145,7 +145,10 @@ const isConverted = (walk: PortabilityWalk, node: Node, type: i32): boolean => {
     arg = up
     up = walk.parents.parentOf(arg)
   }
-  const call = up === null ? null : walk.parents.parentOf(up)
+  if (up === null) {
+    return false
+  }
+  const call = walk.parents.parentOf(up)
   return call !== null && call.kind === N_CALL && call.children[1] === up && isBuiltinConversion(walk.program, call, name)
 }
 
