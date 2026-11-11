@@ -158,18 +158,15 @@ class RefPass {
    * The reference type `node`'s value holds: its own, or the one under a
    * nullable or a maybe such as `Map.get`'s `Op | undefined`; -1 for any
    * other value. A nullable reference is followed as the reference it holds,
-   * so a place it reaches is not left empty.
+   * so a place it reaches is not left empty, through every layer: a
+   * `Map<K, F | null>`'s `get` gives `(F | null) | undefined` (WP51 stage 2).
    */
   refType(node: Node): i32 {
-    const type = this.typeOf(node)
-    if (this.table.isFnRef(type)) {
-      return type
+    let type = this.typeOf(node)
+    while (this.table.isNullable(type) || this.table.isMaybe(type)) {
+      type = this.table.refOf(type)
     }
-    const holder = this.table.isNullable(type) || this.table.isMaybe(type)
-    if (holder && this.table.isFnRef(this.table.refOf(type))) {
-      return this.table.refOf(type)
-    }
-    return -1
+    return this.table.isFnRef(type) ? type : -1
   }
 
   isRef(node: Node): boolean {
