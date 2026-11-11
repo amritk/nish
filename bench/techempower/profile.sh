@@ -12,7 +12,8 @@
 #   bash bench/techempower/profile.sh --seconds 10 --callgrind-seconds 20 --top 30
 #
 # Each test runs three phases, and each phase runs the explicit entry and then
-# the async one, a fresh server each time, pinned and warmed as run.sh does:
+# the async one, interleaved, a fresh server each time, pinned and warmed as
+# run.sh does:
 #
 #   perf       `perf record -e cpu-clock:u` (the software clock; this VM has no
 #              hardware counters) while wrk runs at full speed: the top user-space
@@ -30,7 +31,8 @@
 # plaintext, 64 for json and db), the same bound on both entries.
 #
 # Output goes to build/tfb/profile/: one directory per test with each phase's
-# raw files, and summary.md, the tables the report quotes. The server runs on
+# raw files and its summary.md, and summary.md, every test's tables; a run with
+# --only replaces that test's directory and keeps the others. The server runs on
 # CPU 0, Postgres on CPU 1, wrk on the rest. Needs wrk, strace, valgrind and
 # perf (`perf` on PATH, $PERF, or /usr/lib/linux-tools-*/perf); the db test
 # needs Postgres binaries (newest /usr/lib/postgresql/*/bin, or $PG_BIN).
@@ -79,8 +81,10 @@ cpus=$(nproc)
 ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
 
 out=build/tfb/profile
-rm -rf "$out"
 mkdir -p "$out"
+for test in plaintext json db; do
+  if wants "$test"; then rm -rf "${out:?}/$test"; fi
+done
 # The builds, as run.sh makes them plus `-g`, which keeps the symbols the
 # speed profile strips; they go to build/tfb/profile, not over run.sh's.
 nish=${NISH:-build/nish}
@@ -143,73 +147,91 @@ clean() { ! grep -qE 'Non-2xx|Socket errors' "$1"; }
 # The server's user and system CPU ticks so far, summed.
 ticks() { awk '{ print $14 + $15 }' "/proc/$1/stat"; }
 
-# One side of one test: $1 test, $2 side (explicit or async), $3 path, $4
-# connections, then the command without its port.
-profileSide() {
-  local test=$1 side=$2 path=$3 conns=$4
-  shift 4
+# One phase (perf, strace or callgrind) of one side of one test: $1 phase, $2
+# test, $3 side (explicit or async), $4 path, $5 connections, then the command
+# without its port.
+profilePhase() {
+  local phase=$1 test=$2 side=$3 path=$4 conns=$5
+  shift 5
   local dir=$out/$test/$side
   mkdir -p "$dir"
-  local hz
+  local hz reqs
   hz=$(getconf CLK_TCK)
 
-  # perf, at full speed.
-  port=$((port + 1))
-  start "$@" "$port" || { echo "profile.sh: $test $side did not start" >&2; exit 1; }
-  drive "$path" "$conns" 1 >/dev/null
-  local t0
-  t0=$(ticks "$pid")
-  "$perf" record -q -e cpu-clock:u -F 2999 -g -p "$pid" -o "$dir/perf.data" -- sleep $((seconds + 1)) 2>/dev/null &
-  local recorder=$!
-  drive "$path" "$conns" "$seconds" >"$dir/perf.wrk"
-  local t1
-  t1=$(ticks "$pid")
-  wait "$recorder" || true
-  stop
-  "$perf" report -i "$dir/perf.data" --no-children --fields overhead,dso,sym --stdio -g none 2>/dev/null |
-    awk -v top="$top" '!/^#/ && NF && k++ < top' >"$dir/perf.top"
-  local reqs
-  reqs=$(answered "$dir/perf.wrk")
-  printf '%s\t%s\t%s\t%s\n' "$reqs" "$(awk '/^Requests\/sec:/ { print $2 }' "$dir/perf.wrk")" \
-    "$(awk -v a="$t0" -v b="$t1" -v hz="$hz" -v n="$reqs" 'BEGIN { printf "%.2f", (b - a) / hz * 1e6 / n }')" \
-    "$(clean "$dir/perf.wrk" && echo clean || echo errors)" >"$dir/perf.tsv"
+  case $phase in
+    # Samples and CPU time, at full speed.
+    perf)
+      port=$((port + 1))
+      start "$@" "$port" || { echo "profile.sh: $test $side did not start" >&2; exit 1; }
+      drive "$path" "$conns" 1 >/dev/null
+      local t0
+      t0=$(ticks "$pid")
+      "$perf" record -q -e cpu-clock:u -F 2999 -g -p "$pid" -o "$dir/perf.data" -- sleep $((seconds + 1)) 2>/dev/null &
+      local recorder=$!
+      drive "$path" "$conns" "$seconds" >"$dir/perf.wrk"
+      local t1
+      t1=$(ticks "$pid")
+      wait "$recorder" || true
+      stop
+      "$perf" report -i "$dir/perf.data" --no-children --fields overhead,dso,sym --stdio -g none 2>/dev/null |
+        awk -v top="$top" '!/^#/ && NF && k++ < top' >"$dir/perf.top"
+      reqs=$(answered "$dir/perf.wrk")
+      printf '%s\t%s\t%s\t%s\n' "$reqs" "$(awk '/^Requests\/sec:/ { print $2 }' "$dir/perf.wrk")" \
+        "$(awk -v a="$t0" -v b="$t1" -v hz="$hz" -v n="$reqs" 'BEGIN { printf "%.2f", (b - a) / hz * 1e6 / n }')" \
+        "$(clean "$dir/perf.wrk" && echo clean || echo errors)" >"$dir/perf.tsv"
+      ;;
 
-  # strace: system calls per request.
-  port=$((port + 1))
-  start "$@" "$port" || exit 1
-  drive "$path" "$conns" 1 >/dev/null
-  strace -c -f -p "$pid" -o "$dir/strace.txt" &
-  local tracer=$!
-  sleep 0.5
-  drive "$path" "$conns" "$seconds" >"$dir/strace.wrk"
-  kill -INT "$tracer"
-  wait "$tracer" || true
-  stop
-  awk -v n="$(answered "$dir/strace.wrk")" '
-    $NF == "total" { printf "%.3f\n", $(NF - 2) / n; exit }' "$dir/strace.txt" >"$dir/strace.per-request"
+    # System calls per request.
+    strace)
+      port=$((port + 1))
+      start "$@" "$port" || exit 1
+      drive "$path" "$conns" 1 >/dev/null
+      strace -c -f -p "$pid" -o "$dir/strace.txt" &
+      local tracer=$!
+      sleep 0.5
+      drive "$path" "$conns" "$seconds" >"$dir/strace.wrk"
+      kill -INT "$tracer"
+      wait "$tracer" || true
+      stop
+      awk -v n="$(answered "$dir/strace.wrk")" '
+        $NF == "total" { printf "%.3f\n", $(NF - 2) / n; exit }' "$dir/strace.txt" >"$dir/strace.per-request"
+      ;;
 
-  # callgrind: instructions per request.
-  port=$((port + 1))
-  start valgrind --tool=callgrind --instr-atstart=no --callgrind-out-file="$dir/callgrind.out" "$@" "$port" ||
-    exit 1
-  drive "$path" "$conns" 2 >/dev/null
-  callgrind_control -i on "$pid" >/dev/null
-  drive "$path" "$conns" "$cgSeconds" >"$dir/callgrind.wrk"
-  callgrind_control -i off "$pid" >/dev/null
-  stop
-  reqs=$(answered "$dir/callgrind.wrk")
-  callgrind_annotate --inclusive=no --threshold=100 "$dir/callgrind.out" 2>/dev/null >"$dir/callgrind.self"
-  callgrind_annotate --inclusive=yes --threshold=100 "$dir/callgrind.out" 2>/dev/null >"$dir/callgrind.inclusive"
-  awk -v n="$reqs" '/PROGRAM TOTALS/ { gsub(",", "", $1); printf "%.0f\n", $1 / n; exit }' \
-    "$dir/callgrind.self" >"$dir/callgrind.per-request"
-  echo "$reqs" >"$dir/callgrind.requests"
+    # Instructions per request.
+    callgrind)
+      port=$((port + 1))
+      start valgrind --tool=callgrind --instr-atstart=no --callgrind-out-file="$dir/callgrind.out" "$@" "$port" ||
+        exit 1
+      drive "$path" "$conns" 2 >/dev/null
+      callgrind_control -i on "$pid" >/dev/null
+      drive "$path" "$conns" "$cgSeconds" >"$dir/callgrind.wrk"
+      callgrind_control -i off "$pid" >/dev/null
+      stop
+      reqs=$(answered "$dir/callgrind.wrk")
+      callgrind_annotate --auto=no --inclusive=no --threshold=100 "$dir/callgrind.out" 2>/dev/null >"$dir/callgrind.self"
+      callgrind_annotate --auto=no --inclusive=yes --threshold=100 "$dir/callgrind.out" 2>/dev/null >"$dir/callgrind.inclusive"
+      awk -v n="$reqs" '/PROGRAM TOTALS/ { gsub(",", "", $1); printf "%.0f\n", $1 / n; exit }' \
+        "$dir/callgrind.self" >"$dir/callgrind.per-request"
+      echo "$reqs" >"$dir/callgrind.requests"
+      ;;
+  esac
+}
+
+# Every phase of one test, the explicit side then the async one in each: $1
+# test, $2 path, $3 connections; the commands are in explicitCmd and asyncCmd.
+profileTest() {
+  local phase
+  for phase in perf strace callgrind; do
+    profilePhase "$phase" "$1" explicit "$2" "$3" "${explicitCmd[@]}"
+    profilePhase "$phase" "$1" async "$2" "$3" "${asyncCmd[@]}"
+  done
 }
 
 # summary.md's rows for one test.
 report() {
   local test=$1 title=$2
   {
-    printf '\n### %s\n\n' "$title"
+    printf '\n### %s\n\n%s\n\n' "$title" "$machine"
     printf '| | explicit | async |\n| --- | ---: | ---: |\n'
     local row
     for row in "Ir per request (callgrind)|callgrind.per-request|1" \
@@ -226,42 +248,41 @@ report() {
       printf '\n%s, top %s frames by self Ir per request (callgrind):\n\n```text\n' "$side" "$top"
       local n
       n=$(cat "$out/$test/$side/callgrind.requests")
-      awk -v n="$n" -v top="$top" '
-        /^-+$/ && seen { body = 1; next }
-        /file:function/ { seen = 1; next }
-        body && NF >= 2 && k < top {
-          ir = $1; gsub(",", "", ir); sub(/^[^ ]+ +\([^)]*\) +/, ""); sub(/^[^ ]+ +/, "")
-          printf "%10.1f  %s\n", ir / n, $0; k++
-        }' "$out/$test/$side/callgrind.self"
+      # callgrind_annotate splits a function across the files its inlined
+      # lines came from; sum them back under the function's name.
+      awk -v n="$n" '
+        /^ *[0-9,]+ +\( *[0-9.]+%\) +/ && !/PROGRAM TOTALS/ {
+          ir = $1; gsub(",", "", ir)
+          fn = $0; sub(/^[^)]*\) +/, "", fn); sub(/ \[[^]]*\]$/, "", fn); sub(/^[^:]*:/, "", fn)
+          sum[fn] += ir
+        }
+        END { for (fn in sum) printf "%10.1f  %s\n", sum[fn] / n, fn }' "$out/$test/$side/callgrind.self" |
+        sort -rn | awk -v top="$top" 'k++ < top'
       printf '```\n\n%s, top %s user-space frames by self samples (perf, cpu-clock:u):\n\n```text\n' "$side" "$top"
       cat "$out/$test/$side/perf.top"
       printf '```\n'
     done
-  } >>"$out/summary.md"
+  } >"$out/$test/summary.md"
 }
 
-{
-  echo "# The async TFB entries against the explicit ones, profiled"
-  echo
-  echo "$(lscpu | awk -F: '/Model name/ { gsub(/^ +/, "", $2); print $2; exit }'), $cpus CPUs, $(date -u +%Y-%m-%d), $(git rev-parse --short HEAD)"
-  echo "perf: $("$perf" --version), $(valgrind --version), wrk $(wrk -v 2>&1 | awk 'NR == 1 { print $2 }')"
-  echo "phases of $seconds s (perf, strace) and $cgSeconds s (callgrind)"
-} >"$out/summary.md"
+machine="$(lscpu | awk -F: '/Model name/ { gsub(/^ +/, "", $2); print $2; exit }'), $cpus CPUs, $(date -u +%Y-%m-%d), $(git rev-parse --short HEAD)"
+machine+="; $("$perf" --version), $(valgrind --version), wrk $({ wrk -v 2>&1 || true; } | awk 'NR == 1 { print $2 }')"
+machine+="; phases of $seconds s (perf, strace) and $cgSeconds s (callgrind)"
 
 threads=$((cpus - 1 > 16 ? 16 : cpus - 1))
 clientCpus="1-$((cpus - 1))"
 if wants plaintext || wants json; then
   build main.ts entry
   build async-main.ts async
+  explicitCmd=("$out/entry")
+  asyncCmd=("$out/async")
 fi
 if wants plaintext; then
-  profileSide plaintext explicit /plaintext 256 "$out/entry"
-  profileSide plaintext async /plaintext 256 "$out/async"
+  profileTest plaintext /plaintext 256
   report plaintext "/plaintext, 256 connections, 16 pipelined"
 fi
 if wants json; then
-  profileSide json explicit /json 64 "$out/entry"
-  profileSide json async /json 64 "$out/async"
+  profileTest json /json 64
   report json "/json, 64 connections"
 fi
 
@@ -301,11 +322,15 @@ SQL
   threads=$((cpus - 2 > 16 ? 16 : cpus - 2))
   clientCpus="2-$((cpus - 1))"
   # One worker and four Postgres connections, the port last, as run.sh's wrappers.
-  for side in explicit async; do
-    bin=db-entry
-    [ "$side" = async ] && bin=async-db
-    profileSide db "$side" /db 64 "$out/$bin" "$pgPort" nish_tfb nish-tfb nish_tfb
-  done
+  explicitCmd=("$out/db-entry" "$pgPort" nish_tfb nish-tfb nish_tfb)
+  asyncCmd=("$out/async-db" "$pgPort" nish_tfb nish-tfb nish_tfb)
+  profileTest db /db 64
   report db "/db, 64 connections, one worker and 4 Postgres connections"
 fi
+{
+  echo "# The async TFB entries against the explicit ones, profiled"
+  for test in plaintext json db; do
+    if [ -f "$out/$test/summary.md" ]; then cat "$out/$test/summary.md"; fi
+  done
+} >"$out/summary.md"
 echo "profile.sh: wrote $out/summary.md" >&2
