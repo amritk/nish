@@ -142,8 +142,26 @@ class RefPass {
     this.sig = null
   }
 
+  /**
+   * The reference type `node`'s value holds: its own, or the one under a
+   * nullable or a maybe such as `Map.get`'s `Op | undefined`; -1 for any other value. A
+   * nullable reference is followed as the reference it holds, so a place it
+   * reaches is not left empty.
+   */
+  refType(node: Node): i32 {
+    const type = this.typeOf(node)
+    if (this.table.isFnRef(type)) {
+      return type
+    }
+    const holder = this.table.isNullable(type) || this.table.isMaybe(type)
+    if (holder && this.table.isFnRef(this.table.refOf(type))) {
+      return this.table.refOf(type)
+    }
+    return -1
+  }
+
   isRef(node: Node): boolean {
-    return node.id >= 0 && node.id < this.types.length && this.table.isFnRef(this.types[node.id])
+    return this.refType(node) >= 0
   }
 
   typeOf(node: Node): i32 {
@@ -279,7 +297,7 @@ class RefPass {
       this.scan(node)
       return
     }
-    const type = this.typeOf(node)
+    const type = this.refType(node)
     switch (node.kind) {
       case N_PAREN:
       case N_AS:
@@ -330,7 +348,9 @@ class RefPass {
         const site = this.scanCall(node)
         if (!site) {
           const callee = this.callees[node.id]
-          if (callee !== null && !callee.dispatcher) {
+          // A call whose callee returns something else, such as the probe
+          // `Map.get` lowers to, has no return place to read: it widens.
+          if (callee !== null && !callee.dispatcher && callee.returnType === type) {
             this.storeFrom(target, this.returnPlace(callee, type), node)
             return
           }
@@ -420,13 +440,13 @@ class RefPass {
     while (i < args.children.length) {
       const arg = args.children[i]
       if (this.isRef(arg)) {
-        const from = this.newPlace(this.typeOf(arg))
+        const from = this.newPlace(this.refType(arg))
         this.flow(arg, from)
         let k = 0
         while (k < this.members.length) {
           const member = this.members[k]
           if (this.memberTypes[k] === type && i < member.writtenArity()) {
-            this.storeFrom(this.paramPlace(member, i, this.typeOf(arg)), from, arg)
+            this.storeFrom(this.paramPlace(member, i, this.refType(arg)), from, arg)
           }
           k = k + 1
         }
@@ -449,7 +469,7 @@ class RefPass {
       const at = i + self
       if (this.isRef(arg)) {
         if (sig !== null && !sig.dispatcher && at < sig.writtenArity() && !sig.isCompileTime(at)) {
-          this.flow(arg, this.paramPlace(sig, at, this.typeOf(arg)))
+          this.flow(arg, this.paramPlace(sig, at, this.refType(arg)))
         } else if (element >= 0) {
           this.flow(arg, this.elementPlace(element))
         } else {
@@ -494,7 +514,7 @@ class RefPass {
         const init = node.children[2]
         const local = this.locals[node.id]
         if (init.kind !== N_EMPTY && local !== null && this.isRef(init)) {
-          this.flow(init, this.localPlace(local, local.type))
+          this.flow(init, this.localPlace(local, this.refType(init)))
         } else {
           this.scan(init)
         }
@@ -503,7 +523,7 @@ class RefPass {
       case N_BINARY: {
         const op = node.text
         if ((op === "=" || op === "??=" || op === "||=" || op === "&&=") && this.isRef(node.children[1])) {
-          const place = this.target(node.children[0], this.typeOf(node.children[1]))
+          const place = this.target(node.children[0], this.refType(node.children[1]))
           this.flow(node.children[1], place)
           return
         }
@@ -520,7 +540,7 @@ class RefPass {
         const sig = this.sig
         const value = node.children.length > 0 ? node.children[0] : node
         if (sig !== null && value !== node && this.isRef(value)) {
-          this.flow(value, this.returnPlace(sig, this.typeOf(value)))
+          this.flow(value, this.returnPlace(sig, this.refType(value)))
           return
         }
         break
@@ -530,7 +550,7 @@ class RefPass {
           if (element.kind === N_SPREAD) {
             this.scan(element)
           } else if (this.isRef(element)) {
-            this.flow(element, this.elementPlace(this.typeOf(element)))
+            this.flow(element, this.elementPlace(this.refType(element)))
           } else {
             this.scan(element)
           }
@@ -538,7 +558,7 @@ class RefPass {
         return
       case N_PROPERTY:
         if (node.children.length > 0 && this.isRef(node.children[0])) {
-          this.flow(node.children[0], this.fieldPlace(node.text, this.typeOf(node.children[0])))
+          this.flow(node.children[0], this.fieldPlace(node.text, this.refType(node.children[0])))
           return
         }
         break
@@ -596,7 +616,7 @@ class RefPass {
           if (member.kind === N_FIELD && member.children[2].kind !== N_EMPTY) {
             const init = member.children[2]
             if (this.isRef(init)) {
-              this.flow(init, this.fieldPlace(member.children[0].text, this.typeOf(init)))
+              this.flow(init, this.fieldPlace(member.children[0].text, this.refType(init)))
             } else {
               this.scan(init)
             }
@@ -614,7 +634,7 @@ class RefPass {
     if (body.kind === N_BLOCK) {
       this.scan(body)
     } else if (this.isRef(body)) {
-      this.flow(body, this.returnPlace(sig, this.typeOf(body)))
+      this.flow(body, this.returnPlace(sig, this.refType(body)))
     } else {
       this.scan(body)
     }
