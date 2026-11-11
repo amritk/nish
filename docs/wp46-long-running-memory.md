@@ -417,13 +417,11 @@ it; the grant is the relay's one reused `RelayGrant`, outer memory, so
 `gameFromGrant` copies the host byte by byte as in §2.1:
 
 ```ts
-/** The heap's root: a game per slot, and whether the slot has one. */
+/** The heap's root: a game per slot, null for a slot with none. */
 class Games {
-  games: Game[]
-  has: boolean[]
+  games: (Game | null)[]
   constructor(slots: i32) {
-    this.games = new Array<Game>(slots)
-    this.has = new Array<boolean>(slots)
+    this.games = new Array<Game | null>(slots) // a nullable element fills with null
   }
 }
 
@@ -438,12 +436,11 @@ class Seat {
 
 const seatGame = (t: Games, s: Seat): i32 => {
   t.games[s.slot] = gameFromGrant(s.grant) // allocates in the heap
-  t.has[s.slot] = true
   return 0
 }
 
 const unseatGame = (t: Games, slot: i32): i32 => {
-  t.has[slot] = false // the game's bytes go at the next evacuation
+  t.games[slot] = null // the game's bytes go at the next evacuation
   return 0
 }
 
@@ -465,9 +462,10 @@ if (bumped(this.games) > 2 * copied(this.games) + 65536) {
 }
 ```
 
-`unseatGame` leaves `games[slot]` pointing at the old game until
-`seatGame` overwrites it, so the evacuation copies that game until then. A program that
-wants it gone sooner stores a shared empty `Game` made with the root.
+`new Array<Game>(slots)` would be refused today: `new Array<T>(n)` zero-fills,
+so `T` must be a scalar, a vector or a `U | null` (`docs/LANGUAGE.md` →
+"`new`"). The root holds `(Game | null)[]`, and `unseatGame`'s `null` is what
+drops the game: the next evacuation no longer reaches it.
 
 **Checker rules.** Inside `f` the heap is the arena, and the rule follows two
 kinds of value, as §2.1's does: heap memory (the root and whatever `f`
@@ -495,6 +493,12 @@ number then, as stage 2 renumbered §2.1's.
 | a call the analysis has no facts for | NL2616, widened |
 | `Arena.mark` or `Arena.used` inside `f` | NL2617, widened |
 | any of `heap`, `heapWith`, `enter`, `enterWith`, `evacuate`, `free` in a parallel body or a task's function, directly or through a callee | NL2351, its message gaining the six names |
+
+`nish:evacuate`'s `enter`, `enterWith` and `free` share their names with
+`nish:region`'s. A file that imports both renames one on import
+(`import { free as freeHeap } from "nish:evacuate"`), and NL2351's widened
+message names each with its module, as `` `enter` (`nish:evacuate`) ``, so the
+diagnostic says which was called.
 
 `using a = arena()` inside `f` is allowed, as in a region: it marks and
 releases inside the heap, and nothing it allocated survives the block for
@@ -543,8 +547,11 @@ reason a region does not have. A buffer lent to a pending send, or a
 `BufferPool` buffer whose address a connection holds between turns, must
 not move; an evacuation would move it. NL2780 and NL2781 keep the two
 apart: a session reads a request by copying bytes in through `arg`, as
-`serve` copies them out, and `BufferPool.take` inside `f` would grow the
-pool's outer free list (NL2615).
+`serve` copies them out, and `BufferPool` inside `f` meets two rules. `take` there
+pops a buffer off the pool's outer free list, or, with the list empty, makes a
+fresh one in the heap, and that one stored into a connection outside the heap
+is NL2780. `give` there pushes onto the outer free list: NL2615, and NL2780 for
+a fresh buffer it pushes.
 
 ### 2.3 Opt-in reference counting, `Rc<T>`
 
@@ -637,10 +644,13 @@ hasGame: boolean[]
 this.games[slot] = rcWith(g, gameFromGrant)
 this.hasGame[slot] = true
 
-// watch(), a second slot following `host`'s game: count 2
-retain(this.games[host])
-this.games[slot] = this.games[host]
-this.hasGame[slot] = true
+// watch(), a second slot following `host`'s game: count 2. A host slot
+// that never got past hello() holds the zero handle, so it is checked first
+if (this.hasGame[host]) {
+  retain(this.games[host])
+  this.games[slot] = this.games[host]
+  this.hasGame[slot] = true
+}
 
 // release(): whichever of the two lets go last frees the game
 if (this.hasGame[slot]) {
@@ -716,9 +726,11 @@ copies a payload out.
 **Semantics.** Each object, array and string carries a count in a header
 word. A store of a pointer retains the new value and releases the old one,
 and leaving a scope releases its locals. A value is freed when its count
-reaches zero, and freeing it releases what it points at. There is no API:
-the program is the program it is today, and the arena no longer frees
-anything.
+reaches zero, and freeing it releases what it points at. There is no API,
+and the arena no longer frees anything. The program is the one it is today
+less its `using a = arena()` blocks: `std/` has about a hundred (crypto, TLS,
+JSON), and each becomes a plain block, whose locals' releases at its end free
+what it allocated and nothing a count still holds. One left behind is NL2790.
 
 ```ts
 class Cache {
@@ -783,9 +795,16 @@ codes are proposals.
 | Route | Code |
 | --- | --- |
 | `using a = arena()`, `Arena.mark` or `Arena.used`, and `nish:region`'s `region`, `regionWith`, `free` and their kin: each frees or measures memory by position, not by count, and a release would free objects whose counts are not zero | **NL2790** (proposed) |
-| counted memory passed to a `declare function`, or stored into memory a `CPtr` names: C may keep the pointer, and keeping it retains nothing. A string is copied for the call, as it is today | **NL2791** (proposed) |
 
 What it does not refuse, and why:
+
+- *Foreign calls.* A `string` or `u8[]` argument to a `declare function` is
+  borrowed today, not copied: C reads the bytes until it returns and may not
+  keep the address (`docs/LANGUAGE.md` → "A `string` parameter: borrowed for
+  the length of the call", "A `u8[]` parameter"). A function that keeps one
+  takes a `CPtr` C made instead. So the caller's reference holds the argument
+  through the call, a temporary's release falls after the call returns as an
+  arena scope's does today, and nothing needs a code.
 
 - *Cycles.* A parent and child that point at each other keep each other
   alive, and are never freed. A rule on types (a field whose type reaches its
@@ -837,7 +856,7 @@ calls gain retains. `giveSecret`'s zeroing stays as it is.
 | Time a request, 100,000 live, vs today | 0.97x (`rs`) | 0.93x (`s`) | 0.84x (`c`), 0.95x atomic (`ca`) | 0.89x (`g`) |
 | Pause | none | 20.0 ms a flip at 100,000 live | none | none (a long chain of releases at once) |
 | New API | `nish:region` | `nish:evacuate` | `nish:rc` | none |
-| Rules (codes) | NL2609–NL2618, shipped | NL2780–NL2787, with NL2612 and NL2615–NL2617 widened | NL2788–NL2789, with NL2609–NL2612 and NL2614–NL2617 widened | NL2790–NL2791 |
+| Rules (codes) | NL2609–NL2618, shipped | NL2780–NL2787, with NL2612, NL2615–NL2617 and NL2351's message widened | NL2788–NL2789, with NL2609–NL2612, NL2614–NL2617 and NL2351's message widened | NL2790 |
 | Across threads | refused (NL2613) | refused (NL2786) | `AtomicRc` only (NL2788) | atomic counts for what crosses |
 | Programs that do not use it | `.ll` unchanged | `.ll` unchanged | `.ll` unchanged | every golden with a pointer store moves |
 | Runtime needs | a slot table, a chunk size | a slot table and type layouts at runtime | a slot table and a count | a header word on every allocation |
