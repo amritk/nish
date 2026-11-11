@@ -72,8 +72,8 @@ int main(void) {
   hush(ev1);
   nish_async_leave(next, prev);
 
-  close(inner);
   int ev2 = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+  close(inner);
   int fresh = poller(ev2);
   int number = fresh;
   if (fresh != inner) {
