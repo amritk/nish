@@ -198,6 +198,12 @@ export class Options {
    */
   emitArena: string
   /**
+   * `--explain-memory`: print, for the program's own modules, every loop and
+   * function that keeps the memory it allocates past its arena scope, and
+   * why (`Compilation.explainMemoryText`). It changes no byte of the IR.
+   */
+  explainMemory: boolean
+  /**
    * The root package's `"nish".noPanic` named at least one module, which puts
    * those modules in the scope `--deny-panics` puts all of them in. Set by
    * `Compilation` once it has read the manifest, before anything records.
@@ -289,6 +295,7 @@ export class Options {
     this.denyPanics = false
     this.denyRetention = false
     this.emitArena = ""
+    this.explainMemory = false
     this.noPanicListed = false
     this.capabilityReport = false
     this.allowCapabilities = -1

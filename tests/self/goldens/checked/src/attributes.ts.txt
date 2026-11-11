@@ -236,6 +236,7 @@ struct LoopScope (class) size=40 align=8 exported
   field why: i32 index=4 offset=32
   field scoped: boolean index=5 offset=36
   field handsBack: boolean index=6 offset=37
+  field allocates: boolean index=7 offset=38
   constructor -> @LoopScope.constructor
 struct HoistedHeader (class) size=40 align=8 exported
   field root: Local index=0 offset=0
@@ -338,40 +339,41 @@ struct FunctionFacts (class) size=416 align=8 exported
   field allocates: boolean index=40 offset=225
   field directArena: boolean index=41 offset=226
   field allocLeaks: boolean index=42 offset=227
-  field allocEscapes: boolean index=43 offset=228
-  field returnsAllocation: boolean index=44 offset=229
-  field returnsFreshElements: boolean index=45 offset=230
-  field fillsParam: i32 index=46 offset=232
-  field readsArenaState: boolean index=47 offset=236
-  field opensArena: boolean index=48 offset=237
-  field usesRegion: boolean index=49 offset=238
-  field feedsTasks: boolean index=50 offset=239
-  field callSites: CallSite[] index=51 offset=240
-  field escapingNodes: Node[] index=52 offset=248
-  field carriedStores: Node[] index=53 offset=256
-  field carriers: Local[] index=54 offset=264
-  field arenaNodes: Node[] index=55 offset=272
-  field arenaFlows: i32[] index=56 offset=280
-  field loopScopes: LoopScope[] index=57 offset=288
-  field contained: boolean index=58 offset=296
-  field escapeSite: Node | null index=59 offset=304
-  field returnsScalar: boolean index=60 offset=312
-  field sourceName: string index=61 offset=320
-  field allocatesItself: boolean index=62 offset=328
-  field managesArena: boolean index=63 offset=329
-  field netAllocates: boolean index=64 offset=330
-  field hoistedHeaders: HoistedHeader[] index=65 offset=336
-  field hoistedScopeStarts: i32[] index=66 offset=344
-  field panicSites: PanicSite[] index=67 offset=352
-  field cycleOrder: i32 index=68 offset=360
-  field cycleLow: i32 index=69 offset=364
-  field onCycleStack: boolean index=70 offset=368
-  field caps: i32 index=71 offset=372
-  field capVia: string[] index=72 offset=376
-  field capSite: Node | null[] index=73 offset=384
-  field capDist: i32[] index=74 offset=392
-  field capCallees: string[] index=75 offset=400
-  field capSites: Node[] index=76 offset=408
+  field leaksItself: boolean index=43 offset=228
+  field allocEscapes: boolean index=44 offset=229
+  field returnsAllocation: boolean index=45 offset=230
+  field returnsFreshElements: boolean index=46 offset=231
+  field fillsParam: i32 index=47 offset=232
+  field readsArenaState: boolean index=48 offset=236
+  field opensArena: boolean index=49 offset=237
+  field usesRegion: boolean index=50 offset=238
+  field feedsTasks: boolean index=51 offset=239
+  field callSites: CallSite[] index=52 offset=240
+  field escapingNodes: Node[] index=53 offset=248
+  field carriedStores: Node[] index=54 offset=256
+  field carriers: Local[] index=55 offset=264
+  field arenaNodes: Node[] index=56 offset=272
+  field arenaFlows: i32[] index=57 offset=280
+  field loopScopes: LoopScope[] index=58 offset=288
+  field contained: boolean index=59 offset=296
+  field escapeSite: Node | null index=60 offset=304
+  field returnsScalar: boolean index=61 offset=312
+  field sourceName: string index=62 offset=320
+  field allocatesItself: boolean index=63 offset=328
+  field managesArena: boolean index=64 offset=329
+  field netAllocates: boolean index=65 offset=330
+  field hoistedHeaders: HoistedHeader[] index=66 offset=336
+  field hoistedScopeStarts: i32[] index=67 offset=344
+  field panicSites: PanicSite[] index=68 offset=352
+  field cycleOrder: i32 index=69 offset=360
+  field cycleLow: i32 index=70 offset=364
+  field onCycleStack: boolean index=71 offset=368
+  field caps: i32 index=72 offset=372
+  field capVia: string[] index=73 offset=376
+  field capSite: Node | null[] index=74 offset=384
+  field capDist: i32[] index=75 offset=392
+  field capCallees: string[] index=76 offset=400
+  field capSites: Node[] index=77 offset=408
   constructor -> @FunctionFacts.constructor
   method offerCapability -> @FunctionFacts.offerCapability
   method pointerParam -> @FunctionFacts.pointerParam
@@ -2385,14 +2387,14 @@ function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: 
   pointer memory: size=104 writesThrough=false captured=false
   pointer known: size=24 writesThrough=true captured=true passedTo=FactCollector.constructor#6
   stackSites=2 stackLocals=2
-  local -166:9 program: CheckedProgram (const)
-  local -163:9 ownMemory: boolean (const)
-  callee -163:41 isChannelSend -> @isChannelSend
-  callee -163:63 jsonRouteOf -> @jsonRouteOf
-  local -158:9 facts: FunctionFacts (const)
-  callee -158:17 new FunctionFacts -> @FunctionFacts.constructor
-  callee -156:23 structSize -> @structSize
-  callee -155:23 pointerAlign -> @pointerAlign
+  local -167:9 program: CheckedProgram (const)
+  local -164:9 ownMemory: boolean (const)
+  callee -164:41 isChannelSend -> @isChannelSend
+  callee -164:63 jsonRouteOf -> @jsonRouteOf
+  local -159:9 facts: FunctionFacts (const)
+  callee -159:17 new FunctionFacts -> @FunctionFacts.constructor
+  callee -157:23 structSize -> @structSize
+  callee -156:23 pointerAlign -> @pointerAlign
   callee -135:23 rootsHoldNoPointer -> @rootsHoldNoPointer
   callee -127:54 isScalarArgument -> @isScalarArgument
   local -126:7 i: i32 (let)
@@ -2536,9 +2538,9 @@ function markJsonRoute(program: CheckedProgram, table: TypeTable, sig: FunctionS
   callee +6:24 jsonRouteCallees -> @jsonRouteCallees
   callee +7:5 StringSet.add -> @StringSet.add
   callee +13:7 jsonRouteOf -> @jsonRouteOf
-  callee +21:5 StringSet.add -> @StringSet.add
-  callee +22:5 markParallelEntry -> @markParallelEntry
-  local +26:16 pp: PointerParamFacts (const)
+  callee +22:5 StringSet.add -> @StringSet.add
+  callee +23:5 markParallelEntry -> @markParallelEntry
+  local +27:16 pp: PointerParamFacts (const)
 function analyzeInstanceEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, known: FactsTable, opts: Options): EscapeResult -> @analyzeInstanceEscapes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=104
   sharedWrite: via CheckedProgram.enterInstance
@@ -2982,17 +2984,17 @@ function visitFacts(graph: FactGraph, fi: i32, f: FunctionFacts): boolean -> @vi
   callee -11:7 settleKeeps -> @settleKeeps
   local -7:14 site: CallSite (const)
   local -6:11 callee: FunctionFacts | null (const)
-  local +16:14 pp: PointerParamFacts (const)
-  local +17:9 i: i32 (let)
-  local +19:13 g: FunctionFacts | null (const)
-  local +20:11 writes: boolean (let)
-  local +21:11 shared: boolean (let)
-  local +22:11 captures: boolean (let)
-  local +23:11 outlives: boolean (let)
-  local +24:11 reach: boolean (let)
-  local +25:11 deep: boolean (let)
-  local +27:15 target: PointerParamFacts | null (const)
-  callee +27:24 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
+  local +19:14 pp: PointerParamFacts (const)
+  local +20:9 i: i32 (let)
+  local +22:13 g: FunctionFacts | null (const)
+  local +23:11 writes: boolean (let)
+  local +24:11 shared: boolean (let)
+  local +25:11 captures: boolean (let)
+  local +26:11 outlives: boolean (let)
+  local +27:11 reach: boolean (let)
+  local +28:11 deep: boolean (let)
+  local +30:15 target: PointerParamFacts | null (const)
+  callee +30:24 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
 function propagateCallee(f: FunctionFacts, calleeFacts: FunctionFacts | null, rt: RuntimeFunction | null, callee: string, whole: boolean): boolean -> @propagateCallee
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5

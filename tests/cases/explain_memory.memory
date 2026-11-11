@@ -1,0 +1,11 @@
+tests/cases/explain_memory.ts:21:1: memory: `remember` keeps what it allocates until the memory of its caller is released, because the allocation on line 22 is stored into memory, where this analysis stops following it
+tests/cases/explain_memory.ts:43:20: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `extra` returns
+tests/cases/explain_memory.ts:43:40: memory: this loop's update allocates on every pass, outside the scope a pass takes, and keeps it until `extra` returns
+tests/cases/explain_memory.ts:48:3: memory: this loop keeps what each pass allocates until `extra` returns, because line 50 grows `held`, an array older than the pass
+tests/cases/explain_memory.ts:49:5: memory: this loop keeps what each pass allocates until `extra` returns, because line 50 grows `held`, an array older than the pass
+tests/cases/explain_memory.ts:53:12: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `extra` returns
+tests/cases/explain_memory.ts:60:3: memory: this loop keeps what each pass allocates until `main` returns, because line 61 keeps what the pass allocated in `last`, which is declared outside the loop
+tests/cases/explain_memory.ts:64:3: memory: this loop keeps what each pass allocates until `main` returns, because line 65 grows `seen`, an array older than the pass
+tests/cases/explain_memory.ts:68:3: memory: this loop keeps what each pass allocates until `main` returns, because it calls `remember`, which stores an allocation into memory, where this analysis stops following it
+tests/cases/explain_memory.ts:76:10: memory: this loop's condition allocates on every pass, outside the scope a pass takes, and keeps it until `main` returns
+explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass; 1 of 4 allocating functions with a scalar result keep what they allocate past the call

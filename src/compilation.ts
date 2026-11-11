@@ -51,7 +51,7 @@
 import { REGION_STD_SPECIFIER } from "./region"
 import { handleFindings } from "./handles"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
-import { arenaBlockFindings, arenaLoopFindings } from "./escape"
+import { arenaBlockFindings, arenaLoopFindings, explainMemory, MemoryReport } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
 import { Checker } from "./checker"
@@ -202,7 +202,7 @@ import { ChildSites, crossingMessage, holdsRegion, regionCallFindings, taskFindi
 import { isChildMaker, regionRoleOf } from "./region-check"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
-import { jsonQuote, splitByte } from "./strings"
+import { jsonQuote, splitByte, StringBuilder } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
@@ -466,6 +466,11 @@ export class Compilation {
   dumpOnly: boolean
   /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
   hostRefused: boolean
+  /**
+   * The check got as far as the whole-program facts, so `explainMemoryText`
+   * can read them even when a later refusal (`--deny-retention`) fails it.
+   */
+  factsSettled: boolean
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[]
   /**
@@ -547,6 +552,7 @@ export class Compilation {
     this.grantArgTexts = []
     this.capabilityLockPath = ""
     this.capabilityLockText = ""
+    this.factsSettled = false
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -1444,6 +1450,7 @@ export class Compilation {
       layoutInlineArrays(contexts, mode)
       proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     }
+    this.factsSettled = true
     this.reportArenaLoops()
     this.denyRetention()
     this.checkParallel()
@@ -3513,6 +3520,42 @@ export class Compilation {
   arenaText(): string {
     const facts = this.analyze()
     return arenaJson(this.analysisUnits, facts)
+  }
+
+  /**
+   * The `--explain-memory` report: one line per loop whose passes keep what
+   * they allocate and per function that keeps what it allocates past its
+   * return, each with the first thing that refused its scope, and a summary.
+   * The program's own modules only, as `--deny-retention` judges them: a
+   * dependency's memory is its author's to explain. It reads the facts `emit`
+   * reads, memoised by `analyze`, and changes no byte of the IR.
+   */
+  explainMemoryText(): string {
+    const facts = this.analyze()
+    const report = new MemoryReport()
+    const lines = new StringBuilder()
+    for (const unit of this.analysisUnits) {
+      const source = unit.program.source
+      if (!this.inRootPackage(source)) {
+        continue
+      }
+      const from = report.notes.length
+      explainMemory(unit, this.table, facts, report)
+      let i = from
+      while (i < report.notes.length) {
+        const note = report.notes[i]
+        lines.add(
+          `${source.path}:${source.lineOf(note.node.start)}:${source.columnOf(note.node.start)}: memory: `
+        )
+        lines.add(`${note.message}\n`)
+        i = i + 1
+      }
+    }
+    lines.add(
+      `explain-memory: ${report.loopsKept} of ${report.loops} allocating loops keep what a pass allocates past the pass; ` +
+        `${report.functionsKept} of ${report.functions} allocating functions with a scalar result keep what they allocate past the call`
+    )
+    return lines.toText()
   }
 
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */
