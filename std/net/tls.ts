@@ -91,7 +91,14 @@ import { HkdfScratch } from "nish/crypto/hkdf"
 import { hmacSha256, hmacSha384 } from "nish/crypto/hmac"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
-import { P256SignScratch, P256_SIGNATURE_SIZE, p256SignSha256, p256SignSha256Into } from "nish/crypto/p256"
+import {
+  P256SignScratch,
+  P256_SIGNATURE_SIZE,
+  p256Ecdh,
+  p256PublicKey,
+  p256SignSha256,
+  p256SignSha256Into,
+} from "nish/crypto/p256"
 import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct"
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519"
 import {
@@ -104,11 +111,13 @@ import {
   TLS_ALERT_NO_APPLICATION_PROTOCOL,
   TLS_ALERT_PROTOCOL_VERSION,
   TLS_ALERT_UNEXPECTED_MESSAGE,
+  TLS_GROUP_SECP256R1,
   TLS_GROUP_X25519,
   TLS_HANDSHAKE_CLIENT_HELLO,
   TLS_HANDSHAKE_FINISHED,
   TLS_RANDOM_SIZE,
   TLS_VERSION_13,
+  TLS_P256_SHARE_SIZE,
   TLS_X25519_SHARE_SIZE,
   TlsClientHelloView,
   tlsHexInto,
@@ -517,10 +526,12 @@ export const tlsHeldCopyOver = (from: u8[], to: Secret<u8[]>): i32 => exposeWith
 // ---- The exchange, in a scope of its own --------------------------------------
 
 /**
- * The x25519 exchange's inputs and answers as big-endian 64-bit words: the
- * ephemeral private key and the client's share in, the server's public key
- * and the handshake secret out, and the alert. It is a class of numbers and
- * nothing else on purpose. `x25519` answers its shared secret as a `Secret`,
+ * The ECDHE exchange's inputs and answers as big-endian 64-bit words: the
+ * group, the ephemeral private key and the client's share in (32 bytes for
+ * x25519, a 65-byte point for secp256r1, so nine share words), the server's
+ * public key and the handshake secret out, and the alert. It is a class of
+ * numbers and nothing else on purpose. `x25519` and `p256Ecdh` answer their
+ * shared secret as a `Secret`,
  * which is an allocation it stores, so neither an automatic arena scope nor a
  * `using a = arena()` block may be put around a call to it (NL2424). A
  * function whose every parameter is an object of numbers can be handed no
@@ -538,6 +549,8 @@ export const tlsHeldCopyOver = (from: u8[], to: Secret<u8[]>): i32 => exposeWith
  * the failure path too (TLS-1 in `docs/security/tls.md`).
  */
 class TlsExchangeWords {
+  /** `TLS_GROUP_X25519` or `TLS_GROUP_SECP256R1`: which exchange to run. */
+  group: i32 = 0
   key0: u64 = 0
   key1: u64 = 0
   key2: u64 = 0
@@ -546,10 +559,20 @@ class TlsExchangeWords {
   share1: u64 = 0
   share2: u64 = 0
   share3: u64 = 0
+  share4: u64 = 0
+  share5: u64 = 0
+  share6: u64 = 0
+  share7: u64 = 0
+  share8: u64 = 0
   public0: u64 = 0
   public1: u64 = 0
   public2: u64 = 0
   public3: u64 = 0
+  public4: u64 = 0
+  public5: u64 = 0
+  public6: u64 = 0
+  public7: u64 = 0
+  public8: u64 = 0
   secret0: u64 = 0
   secret1: u64 = 0
   secret2: u64 = 0
@@ -610,11 +633,14 @@ const tlsHandshakeFromWords = (held: u8[], w: TlsExchangeWords): i32 => {
 }
 
 /**
- * The exchange of RFC 8446 §7.4.2 on `w`: the server's public key and the
- * handshake secret from the ephemeral key and the client's share, both
- * written back as words; the caller wipes the words. Answers 0,
- * `illegal_parameter` for a share whose shared secret is all zeros (§7.4.2,
- * RFC 7748 §6.1), or `internal_error` when the exchange answers nothing. The
+ * The exchange of RFC 8446 §7.4.2 on `w`, in `w.group`: the server's public
+ * key and the handshake secret from the ephemeral key and the client's share,
+ * both written back as words; the caller wipes the words. Answers 0;
+ * `illegal_parameter` for an x25519 share whose shared secret is all zeros
+ * (§7.4.2, RFC 7748 §6.1) or a secp256r1 share that is not a point on the
+ * curve (§4.2.8.2, which `p256Ecdh` checks); or `internal_error` when the
+ * server's own public key cannot be made. A secp256r1 key is the same 32
+ * bytes with the top bit cleared, so the scalar is below the group order. The
  * copy of the key and the ECDHE secret are `Secret`s wiped on every path, and
  * the handshake secret's bytes with `secureZero` once they are words. The
  * compiler brackets this function with an arena scope of its own (see
@@ -629,30 +655,43 @@ const tlsExchange = (w: TlsExchangeWords): i32 => {
   tlsWordInto(salt, 24, w.salt3)
   tlsWordInto(salt, 32, w.salt4)
   tlsWordInto(salt, 40, w.salt5)
+  const p256: boolean = w.group === TLS_GROUP_SECP256R1
   const raw: u8[] = new Array<u8>(X25519_SIZE)
   tlsWordInto(raw, 0, w.key0)
   tlsWordInto(raw, 8, w.key1)
   tlsWordInto(raw, 16, w.key2)
   tlsWordInto(raw, 24, w.key3)
-  const share: u8[] = new Array<u8>(X25519_SIZE)
+  if (p256) {
+    // Below 2^255, so below the order n: only all zeros is refused.
+    raw[0] = raw[0] & toU8(0x7f)
+  }
+  const share: u8[] = new Array<u8>(p256 ? TLS_P256_SHARE_SIZE : X25519_SIZE)
   tlsWordInto(share, 0, w.share0)
   tlsWordInto(share, 8, w.share1)
   tlsWordInto(share, 16, w.share2)
   tlsWordInto(share, 24, w.share3)
+  tlsWordInto(share, 32, w.share4)
+  tlsWordInto(share, 40, w.share5)
+  tlsWordInto(share, 48, w.share6)
+  tlsWordInto(share, 56, w.share7)
+  tlsWordInto(share, 64, w.share8)
   const key: Secret<u8[]> = secret(raw)
-  const serverPublic: u8[] | null = x25519Base(key)
-  const shared: Secret<u8[]> | null = x25519(key, share)
+  const serverPublic: u8[] | null = p256 ? p256PublicKey(key) : x25519Base(key)
+  const shared: Secret<u8[]> | null = p256 ? p256Ecdh(key, share) : x25519(key, share)
   wipe(key)
   let alert: i32 = 0
   if (shared === null) {
-    alert = TLS_ALERT_INTERNAL_ERROR
+    // x25519 answers for every share; `p256Ecdh` refuses a point off the
+    // curve (§4.2.8.2), or a key `p256PublicKey` refused too.
+    alert = p256 && serverPublic !== null ? TLS_ALERT_ILLEGAL_PARAMETER : TLS_ALERT_INTERNAL_ERROR
   } else {
     // RFC 7748 §6.1 leaves the all-zero check to the protocol, and RFC 8446
     // §7.4.2 makes it: a low-order client share gives the zero secret, which
     // anybody can compute. The secret is secret, so the compare reads it all.
+    // RFC 8446 asks it of x25519 alone: a secp256r1 share is checked as a point.
     if (serverPublic === null) {
       alert = TLS_ALERT_INTERNAL_ERROR
-    } else if (expose(shared, tlsIsZeroSecret)) {
+    } else if (!p256 && expose(shared, tlsIsZeroSecret)) {
       alert = TLS_ALERT_ILLEGAL_PARAMETER
     } else {
       const handshake: u8[] =
@@ -663,6 +702,11 @@ const tlsExchange = (w: TlsExchangeWords): i32 => {
       w.public1 = tlsWordAt(serverPublic, 8)
       w.public2 = tlsWordAt(serverPublic, 16)
       w.public3 = tlsWordAt(serverPublic, 24)
+      w.public4 = tlsWordAt(serverPublic, 32)
+      w.public5 = tlsWordAt(serverPublic, 40)
+      w.public6 = tlsWordAt(serverPublic, 48)
+      w.public7 = tlsWordAt(serverPublic, 56)
+      w.public8 = tlsWordAt(serverPublic, 64)
       w.secret0 = tlsWordAt(handshake, 0)
       w.secret1 = tlsWordAt(handshake, 8)
       w.secret2 = tlsWordAt(handshake, 16)
@@ -997,8 +1041,15 @@ export class TlsServer {
   private kdf: HkdfScratch
   /** The exchange's words (`tlsExchange`). */
   exchange: TlsExchangeWords
-  /** The server's x25519 public key, unpacked from the exchange's words for the ServerHello. */
+  /**
+   * The server's public key for the ServerHello, unpacked from the
+   * exchange's words: `publicX25519` or `publicP256`, whichever `group` names.
+   */
   private serverPublic: u8[]
+  /** Room for an x25519 public key, 32 bytes, made once. */
+  private publicX25519: u8[]
+  /** Room for a secp256r1 public key, a 65-byte uncompressed point, made once. */
+  private publicP256: u8[]
   /** A transcript hash on its way into the schedule: HashLen bytes of it. */
   private hashes: u8[]
   /**
@@ -1050,6 +1101,11 @@ export class TlsServer {
   outputApplicationLength: i32 = 0
   /** Whether a HelloRetryRequest was sent, so a second miss is fatal. */
   retried: boolean = false
+  /**
+   * The key exchange group: `TLS_GROUP_X25519` or `TLS_GROUP_SECP256R1` once
+   * the ClientHello chose it or a HelloRetryRequest asked for it, 0 before.
+   */
+  group: i32 = 0
   /** Whether `config` passed `tlsConfigFits`, decided once by the constructor. */
   private configFits: boolean = false
   /** Whether the carrier turned resumption on with `enableTickets`; kept across `restart`. */
@@ -1100,7 +1156,9 @@ export class TlsServer {
     this.hello = new TlsClientHelloView()
     this.kdf = new HkdfScratch()
     this.exchange = new TlsExchangeWords()
-    this.serverPublic = new Array<u8>(X25519_SIZE)
+    this.publicX25519 = new Array<u8>(X25519_SIZE)
+    this.publicP256 = new Array<u8>(TLS_P256_SHARE_SIZE)
+    this.serverPublic = this.publicX25519
     this.hashes = new Array<u8>(SHA384_SIZE)
     this.salt = new Array<u8>(SHA384_SIZE)
     this.binderHash = new Array<u8>(SHA384_SIZE)
@@ -1138,6 +1196,7 @@ export class TlsServer {
     this.suite = 0
     this.hashLength = 0
     this.retried = false
+    this.group = 0
     this.serverName = ""
     this.alpn = ""
     this.clientTransportParameters = this.none
@@ -1525,7 +1584,11 @@ export class TlsServer {
     if (this.config.quic && !hello.hasQuicTransportParameters) {
       return TLS_ALERT_MISSING_EXTENSION
     }
-    if (!tlsWindowHasU16(data, hello.groupsAt, hello.groupsLength, TLS_GROUP_X25519)) {
+    // x25519 first, then secp256r1: a client that lists neither shares no
+    // group with this server (§4.1.1).
+    const offersX25519: boolean = tlsWindowHasU16(data, hello.groupsAt, hello.groupsLength, TLS_GROUP_X25519)
+    const offersP256: boolean = tlsWindowHasU16(data, hello.groupsAt, hello.groupsLength, TLS_GROUP_SECP256R1)
+    if (!offersX25519 && !offersP256) {
       return TLS_ALERT_HANDSHAKE_FAILURE
     }
     if (
@@ -1549,13 +1612,20 @@ export class TlsServer {
     } else {
       this.transcript.update(data, TLS_FROM, 4 + length)
     }
-    if (!hello.hasX25519Share) {
-      // §4.1.4: one HelloRetryRequest; a second ClientHello without the share
-      // the first one asked for is `illegal_parameter`.
+    // The group is the server's choice, not the client's: x25519 whenever the
+    // client lists it, secp256r1 only for a client that does not. A hello
+    // without a share of that group gets one HelloRetryRequest asking for it
+    // (§4.1.4), and the second hello must carry that share or is
+    // `illegal_parameter`; after a retry `group` is fixed already.
+    const group: i32 = this.retried ? this.group : offersX25519 ? TLS_GROUP_X25519 : TLS_GROUP_SECP256R1
+    const p256Group: boolean = group === TLS_GROUP_SECP256R1
+    const hasShare: boolean = p256Group ? offersP256 && hello.hasP256Share : offersX25519 && hello.hasX25519Share
+    if (!hasShare) {
       if (this.retried) {
         return TLS_ALERT_ILLEGAL_PARAMETER
       }
       this.retried = true
+      this.group = group
       const none: u8[] = []
       this.reserveOutput(
         TLS_LEVEL_INITIAL,
@@ -1566,7 +1636,7 @@ export class TlsServer {
           hello.sessionIdAt,
           hello.sessionIdLength,
           suite,
-          TLS_GROUP_X25519
+          this.group
         )
       )
       using _scope = arena()
@@ -1579,12 +1649,14 @@ export class TlsServer {
         hello.sessionIdAt,
         hello.sessionIdLength,
         this.suite,
-        TLS_GROUP_X25519
+        this.group
       )
       this.sent(TLS_LEVEL_INITIAL, at, end)
       return 0
     }
-    if (hello.x25519ShareLength !== TLS_X25519_SHARE_SIZE) {
+    this.group = group
+    const shareLength: i32 = p256Group ? hello.p256ShareLength : hello.x25519ShareLength
+    if (shareLength !== (p256Group ? TLS_P256_SHARE_SIZE : TLS_X25519_SHARE_SIZE)) {
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
     const alpnAlert: i32 = this.chooseAlpn(hello)
@@ -1930,8 +2002,8 @@ export class TlsServer {
   }
 
   /**
-   * Runs the x25519 exchange on the caller's ephemeral key and the client's
-   * share (`tlsExchange`), outside any arena block since its scope is its
+   * Runs the exchange in `group` on the caller's ephemeral key and the
+   * client's share (`tlsExchange`), outside any arena block since its scope is its
    * own, and unpacks the server's public key and the handshake secret from
    * the words. The words, the ephemeral key's and the handshake secret's
    * among them, are wiped with one `wipe` after the branch on the alert, so
@@ -1943,7 +2015,11 @@ export class TlsServer {
   private exchangeKeys(): i32 {
     const w: TlsExchangeWords = this.exchange
     const share: u8[] = this.input
-    const at: i32 = this.hello.x25519ShareAt
+    const p256: boolean = this.group === TLS_GROUP_SECP256R1
+    const at: i32 = p256 ? this.hello.p256ShareAt : this.hello.x25519ShareAt
+    // A 65-byte secp256r1 point fills nine words, an x25519 share four; the
+    // rest stay zero from the last `wipe`.
+    w.group = this.group
     w.key0 = exposeWith(this.ephemeral, TLS_FROM, tlsWordAt)
     w.key1 = exposeWith(this.ephemeral, TLS_FROM + 8, tlsWordAt)
     w.key2 = exposeWith(this.ephemeral, TLS_FROM + 16, tlsWordAt)
@@ -1952,6 +2028,13 @@ export class TlsServer {
     w.share1 = tlsWordAt(share, at + 8)
     w.share2 = tlsWordAt(share, at + 16)
     w.share3 = tlsWordAt(share, at + 24)
+    if (p256) {
+      w.share4 = tlsWordAt(share, at + 32)
+      w.share5 = tlsWordAt(share, at + 40)
+      w.share6 = tlsWordAt(share, at + 48)
+      w.share7 = tlsWordAt(share, at + 56)
+      w.share8 = tlsWordAt(share, at + 64)
+    }
     w.hashLength = this.hashLength
     w.salt0 = tlsWordAt(this.salt, 0)
     w.salt1 = tlsWordAt(this.salt, 8)
@@ -1962,11 +2045,17 @@ export class TlsServer {
     secureZero(this.salt)
     const alert: i32 = tlsExchange(w)
     if (alert === 0) {
-      const pub: u8[] = this.serverPublic
+      const pub: u8[] = p256 ? this.publicP256 : this.publicX25519
       tlsWordInto(pub, 0, w.public0)
       tlsWordInto(pub, 8, w.public1)
       tlsWordInto(pub, 16, w.public2)
       tlsWordInto(pub, 24, w.public3)
+      tlsWordInto(pub, 32, w.public4)
+      tlsWordInto(pub, 40, w.public5)
+      tlsWordInto(pub, 48, w.public6)
+      tlsWordInto(pub, 56, w.public7)
+      tlsWordInto(pub, 64, w.public8)
+      this.serverPublic = pub
       exposeWith(this.secrets().handshake, w, tlsHandshakeFromWords)
       this.held = this.held | (1 << TLS_SECRET_HANDSHAKE)
     }

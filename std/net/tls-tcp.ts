@@ -96,7 +96,7 @@
  *  A connection that failed, whose client sent its own `close_notify` (it writes
  *  nothing after it, RFC 8446 §6.1) or whose client's stream had already ended,
  *  is done at once. A client that never hangs up keeps its slot, as one that
- *  never sends does: how long a slot may wait is the program's
+ *  never sends does, until `expire` finds it idle past `idleTimeout`
  *  (`docs/security/tls.md`, TLS-6 and TLS-4).
  *
  * Written from RFC 8446 and docs/LANGUAGE.md's `nish:net`, not ported from
@@ -209,6 +209,21 @@ export class TlsTcpServer {
    */
   private lingered: i32[]
   /**
+   * Each slot's last activity beside `fds`, in `monotonicNanos()`: its
+   * accept, and each time its socket was readable or writable while it was
+   * not lingering. `expire` judges `idleTimeout` against it.
+   */
+  private lastActive: i64[]
+  /**
+   * How long, in milliseconds, a slot may go without activity before
+   * `expire` closes it: a client that opens a connection and sends nothing,
+   * stalls its handshake, or never hangs up after the close holds its slot
+   * this long and no longer (`docs/security/tls.md`, TLS-4). 60 seconds by
+   * default, as `nish/net/http1-server`'s `idleTimeout`; 0 or less turns the
+   * timeout off.
+   */
+  idleTimeout: i32 = 60000
+  /**
    * The slots closed since they were used, a stack whose top `accept` takes
    * before it builds a slot past the high-water mark, so finding one costs
    * the same with every slot free as with all but one busy.
@@ -268,6 +283,7 @@ export class TlsTcpServer {
     this.connections = []
     this.fds = []
     this.lingered = []
+    this.lastActive = []
     this.free = []
     this.randoms = []
     this.slots = size < 1 ? 1 : size
@@ -420,6 +436,7 @@ export class TlsTcpServer {
       slot = toI32(this.fds.length)
       this.fds.push(TLS_TCP_FREE)
       this.lingered.push(TLS_TCP_LIVE)
+      this.lastActive.push(toI64(0))
     }
     if (slot < 0 || slot >= toI32(this.fds.length)) {
       netClose(fd)
@@ -429,6 +446,7 @@ export class TlsTcpServer {
       slot < toI32(this.connections.length) ? this.connections[slot] : this.build()
     this.fds[slot] = fd
     this.lingered[slot] = TLS_TCP_LIVE
+    this.lastActive[slot] = monotonicNanos()
     const random: u8[] = this.randoms[slot]
     for (
       let k: i32 = 0;
@@ -460,6 +478,7 @@ export class TlsTcpServer {
     if (this.lingered[slot] !== TLS_TCP_LIVE) {
       return this.drain(slot)
     }
+    this.lastActive[slot] = monotonicNanos()
     const fd: i32 = this.fds[slot]
     const conn: TlsRecordServer = this.connections[slot]
     while (true) {
@@ -491,6 +510,11 @@ export class TlsTcpServer {
   writable(slot: i32): i32 {
     if (!this.holds(slot)) {
       return TLS_RECORD_DONE
+    }
+    // What a lingering slot drains is not activity, so `idleTimeout` bounds
+    // how long a client that never hangs up can hold it.
+    if (this.lingered[slot] === TLS_TCP_LIVE) {
+      this.lastActive[slot] = monotonicNanos()
     }
     return this.flush(slot)
   }
@@ -831,9 +855,35 @@ export class TlsTcpServer {
     this.fds[slot] = TLS_TCP_FREE
     this.lingered[slot] = TLS_TCP_LIVE
     this.free.push(slot)
+    this.lastActive[slot] = toI64(0)
     conn.wipeKeys()
     // Whatever the last flush could not send is dropped with its buffer.
     conn.release()
+  }
+
+  /**
+   * Closes, as `close` does, every slot that has had no activity for longer
+   * than `idleTimeout` at `now`, and answers how many it closed. The pool
+   * reads no clock of its own for this: a program calls it from its loop,
+   * between `pollWait`s whose timeout is at most `idleTimeout`, so a slot
+   * idles out within about twice the timeout.
+   *
+   * @param now The time now, in `monotonicNanos()`, which each slot's last activity is judged against.
+   * @returns How many slots this call closed; 0 while `idleTimeout` is 0 or less.
+   */
+  expire(now: i64): i32 {
+    if (this.idleTimeout <= 0) {
+      return 0
+    }
+    const limit: i64 = toI64(this.idleTimeout) * TLS_TCP_NANOS_PER_MS
+    let n: i32 = 0
+    for (let k: i32 = 0; k < toI32(this.fds.length); k++) {
+      if (this.holds(k) && now - this.lastActive[k] > limit) {
+        this.close(k)
+        n = n + 1
+      }
+    }
+    return n
   }
 }
 

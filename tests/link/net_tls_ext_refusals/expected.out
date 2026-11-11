@@ -53,7 +53,7 @@ PASS  no suite in common is handshake_failure
 PASS  no signature_algorithms is missing_extension
 PASS  no supported_groups is missing_extension
 PASS  no key_share is missing_extension
-PASS  supported_groups without x25519 is handshake_failure
+PASS  supported_groups with neither x25519 nor secp256r1 is handshake_failure
 PASS  a client that cannot verify ecdsa_secp256r1_sha256 is handshake_failure
 PASS  a 31-byte x25519 share is illegal_parameter
 PASS  a low-order share, whose shared secret is all zeros, is illegal_parameter (RFC 8446 §7.4.2)
