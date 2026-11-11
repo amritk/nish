@@ -186,7 +186,8 @@ const RUNTIME_TEXT_UNIT_BUDGET = 1787
  * that gives Darwin and WASI Linux's numbers (its 76-byte jump table is `.rodata`). They
  * are file reads beside `nish_read_file_or_null`, and §7 links them into a WASI build
  * through this file, so they are here rather than in a unit of their own. The budget is the
- * next 256-byte boundary, leaving 64.
+ * next 256-byte boundary, leaving 64. The refusal of a negative descriptor in the last three
+ * (-9 before the call, which WASI would otherwise answer -22) took it to **5,338**, leaving 38.
  */
 const RUNTIME_OS_TEXT_BUDGET = 5376
 /**

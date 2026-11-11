@@ -303,11 +303,14 @@ int32_t nish_file_open(const nish_str *path) {
    which the compiled call has range-checked as `netRead`'s. A `pos` below 0 or
    a `pos + len` past 2^63 - 1 is -22 before the kernel is asked, as Linux
    would answer the second and Node could not be trusted to answer the first;
-   `len` 0 is 0. An `EINTR` before a byte moves is retried (RT-13), and the
+   `len` 0 is 0. A negative `fd` is -9 (`EBADF`) here and in the two calls
+   below, before the kernel is asked: WASI's descriptor is unsigned, so -1
+   would reach the host as 2^32 - 1, which uvwasi answers -22. An `EINTR` before a byte moves is retried (RT-13), and the
    count may still be short of `len` before the end. */
 int32_t nish_file_read_at(int32_t fd, nish_array *buf, int64_t off, int64_t len, int64_t pos) {
   if (pos < 0 || len > INT64_MAX - pos) return -22;
   if (len == 0) return 0;
+  if (fd < 0) return -9;
   ssize_t n;
   while ((n = pread(fd, buf->data + off, (size_t)len, (off_t)pos)) < 0 && errno == EINTR) {
   }
@@ -316,13 +319,14 @@ int32_t nish_file_read_at(int32_t fd, nish_array *buf, int64_t off, int64_t len,
 
 /* `fileSize(fd)`: `fstat`'s size now, which a later read may find changed. */
 int64_t nish_file_size(int32_t fd) {
+  if (fd < 0) return -9;
   struct stat st;
   return fstat(fd, &st) == 0 ? (int64_t)st.st_size : nish_fs_err(errno);
 }
 
 /* `fileClose(fd)`: never retried on `EINTR`, because Linux has released the
    number by then and a retry could close a descriptor opened since. */
-int32_t nish_file_close(int32_t fd) { return close(fd) == 0 ? 0 : nish_fs_err(errno); }
+int32_t nish_file_close(int32_t fd) { return fd < 0 ? -9 : close(fd) == 0 ? 0 : nish_fs_err(errno); }
 
 /* ---- Files and directories with an explicit mode (docs/security/runtime.md,
    RT-24 to RT-26): `writeFileSyncMode`, `createFileExclusiveSync` and

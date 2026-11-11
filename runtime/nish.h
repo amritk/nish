@@ -560,7 +560,8 @@ nish_array *nish_read_file_bytes(const nish_str *path);
  * most `len` bytes from byte `pos` into `buf[off, off + len)`, which the
  * compiled call has range-checked; it answers the count, 0 at or past the end
  * and for `len` 0, and -22 for a `pos` below 0 or a `pos + len` past
- * 2^63 - 1. `nish_file_size` answers `st_size` now; `nish_file_close` closes
+ * 2^63 - 1. A negative `fd` is -9 to the three that take one, before any
+ * call. `nish_file_size` answers `st_size` now; `nish_file_close` closes
  * and is never retried. None allocates. Every failure is a negated errno in
  * Linux's numbering on every platform (-2, -6, -9, -13, -20, -21, -22, -23,
  * -24, -29, -36, -40), and any other is -5; a path holding a NUL is -2. */
