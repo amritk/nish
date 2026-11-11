@@ -313,10 +313,26 @@ if wants db; then
     start >>"$pgDir.log" 2>&1
   psql=("$pgBin/psql" -h "$pgDir" -p "$pgPort" -U postgres -qAt -v ON_ERROR_STOP=1)
   ${pgAs[@]+"${pgAs[@]}"} "${psql[@]}" -c "create role nish_tfb login password 'nish-tfb'" -c "create database nish_tfb owner nish_tfb"
-  # /db reads only world.
+  # TFB's tables, as run.sh loads them: the entries prepare every statement at
+  # start, fortune's included, though /db reads only world.
   ${pgAs[@]+"${pgAs[@]}"} "${psql[@]}" -d nish_tfb <<'SQL'
 create table world (id integer primary key, randomnumber integer not null default 0);
 insert into world select g, floor(random() * 10000 + 1)::integer from generate_series(1, 10000) g;
+create table fortune (id integer primary key, message varchar(2048) not null);
+insert into fortune values
+  (1, 'fortune: No such file or directory'),
+  (2, 'A computer scientist is someone who fixes things that aren''t broken.'),
+  (3, 'After enough decimal places, nobody gives a damn.'),
+  (4, 'A bad random number generator: 1, 1, 1, 1, 1, 4.33e+67, 1, 1, 1'),
+  (5, 'A computer program does what you tell it to do, not what you want it to do.'),
+  (6, 'Emacs is a nice operating system, but I prefer UNIX. — Tom Christaensen'),
+  (7, 'Any program that runs right is obsolete.'),
+  (8, 'A list is only as strong as its weakest link. — Donald Knuth'),
+  (9, 'Feature: A bug with seniority.'),
+  (10, 'Computers make very fast, very accurate mistakes.'),
+  (11, '<script>alert("This should not be displayed in a browser alert box.");</script>'),
+  (12, 'フレームワークのベンチマーク');
+alter table fortune owner to nish_tfb;
 alter table world owner to nish_tfb;
 SQL
   threads=$((cpus - 2 > 16 ? 16 : cpus - 2))
