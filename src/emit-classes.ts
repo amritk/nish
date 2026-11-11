@@ -149,7 +149,8 @@ export const initializerConstant = (emitter: Emitter, field: FieldInfo): string 
     return "false"
   }
   if (literal.kind === N_NULL) {
-    return "null"
+    // A nullable function reference is an `i32` tag whose `null` is 0 (WP51 stage 2).
+    return emitter.table.isFnRef(emitter.table.stripNull(field.type)) ? "0" : "null"
   }
   if (literal.kind === N_STRING) {
     return emitter.stringConstant(literal.text)
