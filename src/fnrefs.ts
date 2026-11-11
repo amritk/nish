@@ -30,6 +30,10 @@ export const templateReferenceMessage = (name: string): string =>
 export const asyncReferenceMessage = (name: string): string =>
   `\`${name}\` is async: a function reference cannot hold it, because its call is a promise`
 
+/** The refusal for printing a reference or reading a property of one: Node prints the function, native holds a tag. */
+export const opaqueReferenceMessage = (shown: string): string =>
+  `\`${shown}\` is a function reference: it can be called, compared, stored and passed, nothing else`
+
 /** The refusal for a `declare function` named in a value position. */
 export const foreignReferenceMessage = (name: string): string =>
   `\`${name}\` is declared in C: a function reference names a function this program defines`

@@ -125,7 +125,13 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
-import { checkReferenceCall, functionReference, outerReference, refuseValueArrow } from "./fnrefs"
+import {
+  checkReferenceCall,
+  functionReference,
+  opaqueReferenceMessage,
+  outerReference,
+  refuseValueArrow,
+} from "./fnrefs"
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
@@ -908,6 +914,10 @@ const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     }
     if (ctx.table.isSecret(hole)) {
       ctx.error(part, secretTemplateMessage())
+      continue
+    }
+    if (ctx.table.isFnRef(hole)) {
+      ctx.error(part, opaqueReferenceMessage(ctx.textOf(part)))
       continue
     }
     if (!isNumeric(hole) && hole !== T_BOOL && hole !== T_STRING) {

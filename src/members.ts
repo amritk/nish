@@ -67,7 +67,7 @@ import {
   Node,
 } from "./nodes"
 import { fitArguments } from "./declarations"
-import { checkReferenceCall, methodReferenceMessage } from "./fnrefs"
+import { checkReferenceCall, methodReferenceMessage, opaqueReferenceMessage } from "./fnrefs"
 import { ParentTable } from "./parents"
 import {
   channelCapacityMessage,
@@ -217,6 +217,9 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
   }
   if (ctx.table.isUnion(receiver)) {
     return checkUnionTag(ctx, expr, receiver)
+  }
+  if (ctx.table.isFnRef(receiver)) {
+    return ctx.errorType(expr, opaqueReferenceMessage(ctx.textOf(receiverExpr)))
   }
   ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`)
   return T_ERROR
@@ -387,6 +390,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
       return T_ERROR
     }
     return checkArrayMethod(ctx, expr, access, args, receiver, scope)
+  }
+  if (ctx.table.isFnRef(receiver)) {
+    return ctx.errorType(expr, opaqueReferenceMessage(ctx.textOf(receiverExpr)))
   }
   if (!ctx.table.isStruct(receiver)) {
     // Against the method name, as `errorAtProperty` reports it, so that the

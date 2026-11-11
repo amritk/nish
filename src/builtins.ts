@@ -34,6 +34,7 @@ import {
 } from "./nish-modules"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { checkSimdCall } from "./simd"
+import { opaqueReferenceMessage } from "./fnrefs"
 import { routedBuiltinLocal } from "./std-modules"
 import { Scope } from "./symbols"
 import {
@@ -583,7 +584,9 @@ const checkConsole = (
     return ctx.errorType(call, `\`${name}\` expects exactly 1 argument, got ${args.children.length}`)
   }
   const got = checkExpression(ctx, args.children[0], scope, -1)
-  if (got !== T_ERROR && !isStringifiable(got)) {
+  if (got !== T_ERROR && ctx.table.isFnRef(got)) {
+    ctx.error(args.children[0], opaqueReferenceMessage(ctx.textOf(args.children[0])))
+  } else if (got !== T_ERROR && !isStringifiable(got)) {
     ctx.error(
       args.children[0],
       `\`${name}\` accepts string, number, or boolean, got ${ctx.table.typeName(got)}`

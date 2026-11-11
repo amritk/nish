@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 887
+export const RULE_COUNT: i32 = 888
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -731,6 +731,8 @@ const diagnosticRules = (): string[] => [
   "NL2226",
   ": a shift by the width or more moves every bit out, and a rotate by it is a rotate by ",
   "NL2631",
+  "` is a function reference: it can be called, compared, stored and passed, nothing else",
+  "NL2730",
   "` must be relative (`./x`, `../x`), a package name (`hash`, `@scope/hash`), or one of ",
   "NL2320",
   "` must be the name of a top-level function or an arrow written at the call, because `",
