@@ -75,11 +75,14 @@
  * comes, so one read often brings several. Each connection parses a
  * statement once, named, and sends only Bind and Execute after; a Parse the
  * server refused is sent again next time. Each statement has its own Sync, so
- * a statement the server refuses fails alone. A connection is out of step
- * when an answer behind which others wait is lost (a socket error, a frame
- * this module does not expect, a task cancelled with its answer unread, an
- * answer that left a transaction open): every statement behind it fails
- * `PG_ERR_CLOSED`, and the connection closes once the last is answered.
+ * a statement the server refuses fails alone. A pipelined statement whose
+ * task is cancelled before its answer is read fails alone too: its seat is
+ * abandoned, and the next task to read the connection reads past that
+ * answer. A connection is out of step when an answer behind which others
+ * wait is lost (a socket error, a frame this module does not expect, an
+ * abandoned answer that left a transaction open or changed a setting): every
+ * statement behind it fails `PG_ERR_CLOSED`, and the connection closes once
+ * the last is answered.
  *
  * **Its own encoder and framer.** A query is encoded and its answer framed
  * here (`pgAsyncEncode`, `pgAsyncRead`), not by `PgConnection` or
@@ -123,9 +126,12 @@
  * query cut off mid-answer fails with `PG_ERR_CLOSED`, `socketError`
  * `PG_ASYNC_CANCELLED` and `reusable` false, so the task's
  * `pgAsyncRelease` closes the connection, whose unread answer would put the
- * next task out of step. A pipelined statement cancelled before its turn
- * fails the same way and fails the statements behind it. No CancelRequest is sent: the server runs the
- * statement on until it sees the socket closed.
+ * next task out of step. A pipelined statement (`pgAsyncSeat`) cancelled
+ * after it was sent fails the same way but alone: its seat is abandoned, and
+ * the task behind it, or the next to ask for a seat, reads its answer and
+ * drops it, so the connection stays when that answer is a plain one. No
+ * CancelRequest is sent: the server runs the statement on to its end (or,
+ * for a released connection, until it sees the socket closed).
  *
  * **Memory.** Run each query in a spawned task, as `title` does above: the
  * task's region, and every buffer, row and string the query built in it,
@@ -337,6 +343,14 @@ export class PgAsyncPool {
   /** Per seat: its claim count, the high part of its current ticket. */
   readonly seatClaims: i32[]
   /**
+   * Per seat: 0, or how far a seat whose task was cancelled with its answer
+   * unread has gone: 1 abandoned, 2 abandoned and its ticket spent, 3 its
+   * answer read past and its ticket not yet spent.
+   */
+  readonly seatAbandoned: u8[]
+  /** Per slot: 1 while a task reads past an abandoned seat's answer. */
+  readonly skipping: u8[]
+  /**
    * Per slot, then one for the pool, then one per queue lane: a socket pair
    * whose read end a waiting task waits on, or -1.
    */
@@ -385,6 +399,8 @@ export class PgAsyncPool {
     this.seatParse = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
     this.seatWaiting = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
     this.seatClaims = new Array<i32>(size * PG_ASYNC_MAX_DEPTH)
+    this.seatAbandoned = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
+    this.skipping = new Array<u8>(size)
     const wakes: i32 = size + 1 + PG_ASYNC_LANES
     this.wakes = new Array<i32>(wakes * 2)
     this.wakePending = new Array<u8>(wakes)
@@ -444,6 +460,7 @@ export class PgAsyncPool {
         const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
         this.seatUsed[seat] = 0
         this.seatWaiting[seat] = 0
+        this.seatAbandoned[seat] = 0
         this.seatClaims[seat] = (this.seatClaims[seat] + 1) % PG_ASYNC_SEAT_WRAP
       }
       pgAsyncForget(this, s)
@@ -468,6 +485,7 @@ const pgAsyncForget = (pool: PgAsyncPool, s: i32): void => {
   pool.inEnd[s] = 0
   pool.inAnswer[s] = -1
   pool.inParsed[s] = 0
+  pool.skipping[s] = 0
   for (let q: i32 = 0; q < PG_ASYNC_MAX_STATEMENTS; q++) {
     pool.prepared[s * PG_ASYNC_MAX_STATEMENTS + q] = 0
   }
@@ -903,6 +921,10 @@ export const pgAsyncClaim = async (pool: PgAsyncPool): Promise<i32> => {
     if (left <= 0) {
       return PG_CARRIER_FULL
     }
+    const skipped: boolean = await pgAsyncSkipAny(pool)
+    if (skipped) {
+      continue
+    }
     pool.waits += 1
     waited = true
     await pgAsyncPark(pool, pool.size, left)
@@ -1071,6 +1093,10 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
       queued = pool.seatTail
       pool.seatTail = (pool.seatTail + 1) % PG_ASYNC_QUEUE_WRAP
     }
+    const skipped: boolean = await pgAsyncSkipAny(pool)
+    if (skipped) {
+      continue
+    }
     const w: i32 = queued >= 0 ? pool.size + 1 + (queued % PG_ASYNC_LANES) : pool.size
     pool.waits += 1
     await pgAsyncPark(pool, w, left)
@@ -1154,8 +1180,13 @@ const pgAsyncLostSeat = (pool: PgAsyncPool, seat: i32): boolean => {
   return at >= 0 && pgAsyncAhead(pool, s, pool.seatSeq[seat]) >= pgAsyncAhead(pool, s, at)
 }
 
-/** Whether a task waiting on slot `s`, other than `except`'s, may go on: its turn came or its answer is lost. */
+/**
+ * Whether a task waiting on slot `s`, other than `except`'s, may go on: its
+ * turn came, its answer is lost, or an abandoned answer ahead of it waits to
+ * be read past.
+ */
 const pgAsyncReady = (pool: PgAsyncPool, s: i32, except: i32): boolean => {
+  let waiting: boolean = false
   for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
     const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
     if (seat === except || toI32(pool.seatWaiting[seat]) === 0) {
@@ -1164,18 +1195,202 @@ const pgAsyncReady = (pool: PgAsyncPool, s: i32, except: i32): boolean => {
     if (pool.seatSeq[seat] === pool.served[s] || pgAsyncLostSeat(pool, seat)) {
       return true
     }
+    waiting = true
   }
-  return false
+  return waiting && pgAsyncSkippable(pool, s) >= 0
 }
 
-/** Marks slot `s` lost from sequence number `seq` on, and wakes those it fails. */
+/**
+ * Marks slot `s` lost from sequence number `seq` on, settles the abandoned
+ * seats it loses, and wakes those it fails.
+ */
 const pgAsyncDoom = (pool: PgAsyncPool, s: i32, seq: i32): void => {
   if (pool.doomAt[s] < 0 || pgAsyncAhead(pool, s, seq) < pgAsyncAhead(pool, s, pool.doomAt[s])) {
     pool.doomAt[s] = seq
   }
+  // A seat freed here closes the connection only once no seat is left on it;
+  // the one being read past is settled by its reader.
+  for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
+    const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
+    const state: i32 = toI32(pool.seatAbandoned[seat])
+    const reading: boolean = toI32(pool.skipping[s]) === 1 && pool.seatSeq[seat] === pool.served[s]
+    if (
+      toI32(pool.seatUsed[seat]) === 1 &&
+      (state === 1 || state === 2) &&
+      !reading &&
+      pgAsyncLostSeat(pool, seat)
+    ) {
+      pgAsyncSettle(pool, seat)
+    }
+  }
   if (pgAsyncReady(pool, s, -1)) {
     pgAsyncSignal(pool, s)
   }
+}
+
+/**
+ * Leaves seat `seat` to the pool: its task was cancelled with its answer
+ * unread, so the next task to wait on the connection, or for a seat on it,
+ * reads past that answer instead of the connection being closed.
+ */
+const pgAsyncAbandon = (pool: PgAsyncPool, seat: i32): void => {
+  const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
+  pool.seatAbandoned[seat] = 1
+  if (pgAsyncReady(pool, s, seat)) {
+    pgAsyncSignal(pool, s)
+  }
+  pgAsyncWakePool(pool)
+}
+
+/** An abandoned seat whose answer is read past or lost: freed once its ticket is spent, else marked so `pgAsyncDone` frees it. */
+const pgAsyncSettle = (pool: PgAsyncPool, seat: i32): void => {
+  if (toI32(pool.seatAbandoned[seat]) === 2) {
+    pgAsyncFree(pool, seat)
+  } else {
+    pool.seatAbandoned[seat] = 3
+  }
+}
+
+/** The abandoned seat in turn on slot `s` when no task reads past it yet, or -1. */
+const pgAsyncSkippable = (pool: PgAsyncPool, s: i32): i32 => {
+  if (pool.fds[s] < 0 || toI32(pool.skipping[s]) !== 0) {
+    return -1
+  }
+  for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
+    const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
+    const state: i32 = toI32(pool.seatAbandoned[seat])
+    if (
+      toI32(pool.seatUsed[seat]) === 1 &&
+      (state === 1 || state === 2) &&
+      pool.seatSeq[seat] === pool.served[s] &&
+      !pgAsyncLostSeat(pool, seat)
+    ) {
+      return seat
+    }
+  }
+  return -1
+}
+
+/**
+ * Reads past the answer of `seat`, an abandoned seat in turn on slot `s`,
+ * and serves the next. An answer that is not a plain one ending idle (a
+ * frame this module does not expect, a transaction left open, a setting
+ * changed) or larger than the pool's input loses the connection from it on,
+ * as does a socket error. A cancelled reader stops and leaves the bytes read
+ * for the next.
+ */
+const pgAsyncSkip = async (pool: PgAsyncPool, s: i32, seat: i32): Promise<void> => {
+  const seq: i32 = pool.served[s]
+  const fd: i32 = pool.fds[s]
+  const input: u8[] = pool.inputs[s]
+  pool.skipping[s] = 1
+  let fit: boolean = true
+  while (!pgAsyncScan(pool, s)) {
+    if (pool.inStart[s] > 0) {
+      copyBytes(input, 0, input, pool.inStart[s], pool.inEnd[s] - pool.inStart[s])
+      pool.inEnd[s] -= pool.inStart[s]
+      pool.inStart[s] = 0
+    }
+    if (pool.inEnd[s] >= toI32(input.length)) {
+      fit = false
+      break
+    }
+    const got: i32 = netRead(fd, input, pool.inEnd[s], toI32(input.length) - pool.inEnd[s])
+    if (got === PG_ASYNC_AGAIN) {
+      const waited: boolean = await readable(fd)
+      if (pgAsyncLostSeat(pool, seat)) {
+        pool.skipping[s] = 0
+        pgAsyncSettle(pool, seat)
+        return
+      }
+      if (!waited && cancelled()) {
+        // Another task reads on from where this one stopped.
+        pool.skipping[s] = 0
+        if (pgAsyncReady(pool, s, -1)) {
+          pgAsyncSignal(pool, s)
+        }
+        pgAsyncWakePool(pool)
+        return
+      }
+      if (!waited) {
+        fit = false
+        break
+      }
+    } else if (got <= 0) {
+      fit = false
+      break
+    } else {
+      pool.inEnd[s] += got
+    }
+  }
+  pool.skipping[s] = 0
+  if (!fit || pool.inAnswer[s] < 0 || !pgAsyncPlain(pool, s)) {
+    pgAsyncDoom(pool, s, seq)
+    return
+  }
+  pool.inStart[s] = pool.inAnswer[s]
+  if (pool.inStart[s] === pool.inEnd[s]) {
+    pool.inStart[s] = 0
+    pool.inEnd[s] = 0
+  }
+  pool.served[s] = (seq + 1) % PG_ASYNC_SEQ_WRAP
+  if (toI32(pool.seatParse[seat]) === 1 && toI32(pool.inParsed[s]) === 0) {
+    pool.prepared[s * PG_ASYNC_MAX_STATEMENTS + pool.seatStatement[seat]] = 0
+  }
+  pgAsyncSettle(pool, seat)
+  if (pgAsyncReady(pool, s, -1)) {
+    pgAsyncSignal(pool, s)
+  }
+  pgAsyncWakePool(pool)
+}
+
+/**
+ * Whether the answer in turn on slot `s`, at `[inStart, inAnswer)`, leaves
+ * the connection as it found it: only the frames a statement's answer has,
+ * ending with a ReadyForQuery that is idle.
+ */
+const pgAsyncPlain = (pool: PgAsyncPool, s: i32): boolean => {
+  const input: u8[] = pool.inputs[s]
+  const stop: i32 = pool.inAnswer[s]
+  let at: i32 = pool.inStart[s]
+  while (at >= 0 && at + 5 <= stop && stop <= toI32(input.length)) {
+    const type: i32 = toI32(input[at])
+    const next: i32 = at + 1 + getI32BE(input, at + 1)
+    if (type === 90) {
+      return next === stop && next - at === 6 && toI32(input[at + 5]) === PG_ASYNC_IDLE
+    }
+    if (
+      type !== 49 &&
+      type !== 50 &&
+      type !== 68 &&
+      type !== 67 &&
+      type !== 69 &&
+      type !== 73 &&
+      type !== 78 &&
+      type !== 65
+    ) {
+      return false
+    }
+    at = next
+  }
+  return false
+}
+
+/**
+ * Reads past one abandoned answer, on any connection where no task reads past
+ * it yet, for a task waiting for room: the seats of a connection whose tasks
+ * were all cancelled are otherwise never given back.
+ * @returns Whether it read past one, or tried to.
+ */
+const pgAsyncSkipAny = async (pool: PgAsyncPool): Promise<boolean> => {
+  for (let s: i32 = 0; s < pool.size; s++) {
+    const seat: i32 = pgAsyncSkippable(pool, s)
+    if (seat >= 0) {
+      await pgAsyncSkip(pool, s, seat)
+      return true
+    }
+  }
+  return false
 }
 
 /**
@@ -1186,6 +1401,7 @@ const pgAsyncFree = (pool: PgAsyncPool, seat: i32): void => {
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
   pool.seatUsed[seat] = 0
   pool.seatWaiting[seat] = 0
+  pool.seatAbandoned[seat] = 0
   pool.seatClaims[seat] = (pool.seatClaims[seat] + 1) % PG_ASYNC_SEAT_WRAP
   pool.seated[s] -= 1
   if (pool.doomAt[s] >= 0 && pool.seated[s] === 0) {
@@ -1236,9 +1452,12 @@ const pgAsyncScan = (pool: PgAsyncPool, s: i32): boolean => {
  * statements seated before it are answered first, to their own tasks, and
  * what they read past their own answers begins this one. One read takes what
  * the socket holds, up to the pool's input, so the answers behind this one
- * often arrive with it. A lost connection (a socket error, or a task
- * cancelled with its answer unread) fails this statement and every one behind
- * it. It writes only numbers into the pool, so a spawned task may call it;
+ * often arrive with it. A lost connection (a socket error) fails this
+ * statement and every one behind it. A task cancelled with its answer unread
+ * fails alone: its seat is abandoned, and the next task to wait on the
+ * connection reads past that answer, or loses the connection from it on when
+ * the answer is not a plain one ending idle or is larger than the pool's
+ * input. It writes only numbers into the pool, so a spawned task may call it;
  * `pgAsyncAnswer` then builds the answer in the task's memory.
  * @param pool The pool the ticket came from; a cap out of its range panics.
  * @param ticket The ticket `pgAsyncSeat` answered and `pgAsyncSend` used;
@@ -1264,13 +1483,18 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
     return sent <= PG_ASYNC_BROKEN ? sent : PG_ASYNC_BROKEN
   }
   pool.seatWaiting[seat] = 1
+  let gaveUp: boolean = false
   while (pool.served[s] !== seq && !pgAsyncLostSeat(pool, seat)) {
     if (cancelled()) {
-      // Its answer is on its way and nobody will read it: the connection is out of step.
-      pgAsyncDoom(pool, s, seq)
+      gaveUp = true
       break
     }
-    await pgAsyncPark(pool, s, -1)
+    const ahead: i32 = pgAsyncSkippable(pool, s)
+    if (ahead >= 0) {
+      await pgAsyncSkip(pool, s, ahead)
+    } else {
+      await pgAsyncPark(pool, s, -1)
+    }
   }
   pool.seatWaiting[seat] = 0
   if (!pgAsyncReady(pool, s, seat)) {
@@ -1278,6 +1502,11 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
   }
   if (pgAsyncLostSeat(pool, seat)) {
     return PG_ASYNC_BROKEN + (cancelled() ? PG_ASYNC_CANCELLED : 0)
+  }
+  if (gaveUp) {
+    // Its answer is on its way and this task will not read it: the next one does.
+    pgAsyncAbandon(pool, seat)
+    return PG_ASYNC_BROKEN + PG_ASYNC_CANCELLED
   }
   const fd: i32 = pool.fds[s]
   const input: u8[] = pool.inputs[s]
@@ -1296,6 +1525,11 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
     if (got === PG_ASYNC_AGAIN) {
       const waited: boolean = await readable(fd)
       const failed: i32 = pgAsyncWaitFailure(waited)
+      if (failed === PG_ASYNC_CANCELLED) {
+        // The bytes read stay in the input for the task that reads past the rest.
+        pgAsyncAbandon(pool, seat)
+        return PG_ASYNC_BROKEN + failed
+      }
       if (failed !== 0) {
         pgAsyncDoom(pool, s, seq)
         return PG_ASYNC_BROKEN + failed
@@ -1386,6 +1620,17 @@ export const pgAsyncDone = (pool: PgAsyncPool, ticket: i32, turn: i32, reusable:
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
   const seq: i32 = pool.seatSeq[seat]
   const statement: i32 = s * PG_ASYNC_MAX_STATEMENTS + pool.seatStatement[seat]
+  const abandoned: i32 = toI32(pool.seatAbandoned[seat])
+  if (abandoned === 1) {
+    // Its answer is not read past yet: the ticket is spent, the seat stays until it is.
+    pool.seatAbandoned[seat] = 2
+    pool.seatClaims[seat] = (pool.seatClaims[seat] + 1) % PG_ASYNC_SEAT_WRAP
+    return
+  }
+  if (abandoned === 3) {
+    pgAsyncFree(pool, seat)
+    return
+  }
   if (turn === PG_ASYNC_UNSENT || turn === PG_ASYNC_UNSENT_CANCELLED) {
     // No other seat was taken here while it was being written, so its place
     // in the order is handed back.

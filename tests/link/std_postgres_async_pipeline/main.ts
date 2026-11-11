@@ -27,10 +27,18 @@
 //      its turn, and all 150 are answered, none timed out.
 //   5. A bounded wait: the same with `claimWaitMs` at 30 answers -2 after one
 //      wait.
-//   6. Cancelled with its answer unread: the task's answer fails with
-//      socketError PG_ASYNC_CANCELLED, the statement seated behind it fails
-//      PG_ERR_CLOSED, and the connection, out of step, is closed once both
-//      are answered.
+//   6. Cancelled with its answer unread, while reading it: the task's
+//      answer fails with socketError PG_ASYNC_CANCELLED; its seat is
+//      abandoned, the statement seated behind it reads past that answer and
+//      is answered, and the connection stays.
+//   6b. Cancelled while waiting its turn: the same, for a task seated
+//      between two others.
+//   6c. Cancelled with nobody behind it, with `depth` 1: the task asking for
+//      the seat next reads past the abandoned answer and is seated, rather
+//      than wait until `claimWaitMs` fails it.
+//   6d. An abandoned answer that leaves a transaction open: read past, it
+//      fails the statement behind it with PG_ERR_CLOSED and the connection
+//      is closed.
 //   7. Lost mid-pipeline: a connection that ends under `die` fails it and the
 //      statement behind it with PG_ERR_CLOSED and is closed.
 //   8. Hostile mid-pipeline: a frame past `maxMessage` fails `big` with
@@ -250,17 +258,63 @@ export async function main(): Promise<i32> {
   pool.claimWaitMs = 5000
   pool.depth = 8
 
-  // 6. Cancelled with its answer unread.
+  // 6. Cancelled while reading its answer.
   spawn(pipe(pool, board, handles, wait, "", "cancelled"))
   await sleep(5)
-  const held: i64 = handles.task
+  let held: i64 = handles.task
   spawn(pipe(pool, board, handles, quick, "", "behind the cancelled"))
   await sleep(5)
   cancel(held)
-  await until(board, 174)
+  await sleep(5)
   board.open = 1
-  console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
+  await until(board, 174)
   board.open = 0
+  console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
+
+  // 6b. Cancelled while waiting its turn.
+  spawn(pipe(pool, board, handles, wait, "", "ahead of the waiter"))
+  await sleep(5)
+  spawn(pipe(pool, board, handles, quick, "", "cancelled waiter"))
+  await sleep(5)
+  held = handles.task
+  spawn(pipe(pool, board, handles, quick, "", "behind the waiter"))
+  await sleep(5)
+  cancel(held)
+  await sleep(5)
+  board.open = 1
+  await until(board, 177)
+  board.open = 0
+  console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
+
+  // 6c. Cancelled with nobody behind it.
+  pool.depth = 1
+  spawn(pipe(pool, board, handles, wait, "", "lone"))
+  await sleep(5)
+  cancel(handles.task)
+  await sleep(5)
+  board.open = 1
+  await sleep(5)
+  board.open = 0
+  spawn(pipe(pool, board, handles, quick, "", "after the lone"))
+  await until(board, 179)
+  pool.depth = 8
+  console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
+
+  // 6d. An abandoned answer that leaves a transaction open.
+  const begin: i32 = pgAsyncPrepare(pool, "begin")
+  spawn(pipe(pool, board, handles, wait, "", "ahead of the begin"))
+  await sleep(5)
+  spawn(pipe(pool, board, handles, begin, "", "begin"))
+  await sleep(5)
+  held = handles.task
+  spawn(pipe(pool, board, handles, quick, "", "behind the begin"))
+  await sleep(5)
+  cancel(held)
+  await sleep(5)
+  board.open = 1
+  await until(board, 182)
+  board.open = 0
+  console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
 
   // 7. Lost mid-pipeline.
   live = await fill(pool, board, listen, port)
@@ -270,7 +324,7 @@ export async function main(): Promise<i32> {
   spawn(pipe(pool, board, handles, gate, "", "gate"))
   spawn(pipe(pool, board, handles, die, "", "die"))
   spawn(pipe(pool, board, handles, quick, "", "behind the die"))
-  await until(board, 177)
+  await until(board, 185)
   console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
 
   // 8. Hostile mid-pipeline.
@@ -282,7 +336,7 @@ export async function main(): Promise<i32> {
   spawn(pipe(pool, board, handles, gate, "", "gate"))
   spawn(pipe(pool, board, handles, big, "", "big"))
   spawn(pipe(pool, board, handles, quick, "", "behind the big"))
-  await until(board, 180)
+  await until(board, 188)
   console.log(`live: ${pool.live()}, dropped: ${pool.dropped}`)
   pool.close()
   return 0

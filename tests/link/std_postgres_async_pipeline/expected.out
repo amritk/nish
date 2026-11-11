@@ -32,7 +32,18 @@ a crowd of 150 behind the held seat: 150 answered, 0 failed
 a seat with the one seat held: -2 after 1 wait
 wait: ok=true failure=0 socket=0 rows=1 reusable=true first=w
 cancelled: ok=false failure=9 socket=-3 rows=0 reusable=false first=
-behind the cancelled: ok=false failure=9 socket=0 rows=0 reusable=false first=
+behind the cancelled: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+live: 1, dropped: 0
+cancelled waiter: ok=false failure=9 socket=-3 rows=0 reusable=false first=
+ahead of the waiter: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+behind the waiter: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+live: 1, dropped: 0
+lone: ok=false failure=9 socket=-3 rows=0 reusable=false first=
+after the lone: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+live: 1, dropped: 0
+begin: ok=false failure=9 socket=-3 rows=0 reusable=false first=
+ahead of the begin: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+behind the begin: ok=false failure=9 socket=0 rows=0 reusable=false first=
 live: 0, dropped: 1
 connected 1 of 1
 gate: ok=true failure=0 socket=0 rows=1 reusable=true first=g

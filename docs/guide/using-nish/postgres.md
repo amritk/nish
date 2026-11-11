@@ -1093,9 +1093,12 @@ export async function main(): Promise<i32> {
   `pgAsyncDone` spends the ticket; a ticket used after it, or a statement
   number `pgAsyncPrepare` did not give, panics.
 - **Answers come back in order.** A statement the server refuses fails
-  alone and the ones behind it are answered. A connection lost, sent a frame
-  past a cap, or left out of step by a cancelled task fails every statement
-  in flight on it with `PG_ERR_CLOSED` and is closed, so a slow statement
+  alone and the ones behind it are answered. A task cancelled before its
+  answer is read fails alone too (`socketError` -3): the next task reads past
+  that answer. A connection lost, sent a frame past a cap, or left out of
+  step (a cancelled task's answer that left a transaction open or changed a
+  setting) fails every statement in flight on it with `PG_ERR_CLOSED` and is
+  closed. A slow statement
   delays the ones seated behind it: keep long or transactional work on
   `pgAsyncClaim`.
 - **Waiting for a seat.** When every connection has `depth` in flight,

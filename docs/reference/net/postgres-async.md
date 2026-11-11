@@ -206,11 +206,14 @@ answers before its own on the pool's wake and reads its own when its turn
 comes, so one read often brings several. Each connection parses a
 statement once, named, and sends only Bind and Execute after; a Parse the
 server refused is sent again next time. Each statement has its own Sync, so
-a statement the server refuses fails alone. A connection is out of step
-when an answer behind which others wait is lost (a socket error, a frame
-this module does not expect, a task cancelled with its answer unread, an
-answer that left a transaction open): every statement behind it fails
-`PG_ERR_CLOSED`, and the connection closes once the last is answered.
+a statement the server refuses fails alone. A pipelined statement whose
+task is cancelled before its answer is read fails alone too: its seat is
+abandoned, and the next task to read the connection reads past that
+answer. A connection is out of step when an answer behind which others
+wait is lost (a socket error, a frame this module does not expect, an
+abandoned answer that left a transaction open or changed a setting): every
+statement behind it fails `PG_ERR_CLOSED`, and the connection closes once
+the last is answered.
 
 <scalar-detail title="Its own encoder and framer">
 
@@ -272,9 +275,12 @@ not yet sent fails with nothing written and its connection reusable; a
 query cut off mid-answer fails with `PG_ERR_CLOSED`, `socketError`
 `PG_ASYNC_CANCELLED` and `reusable` false, so the task's
 `pgAsyncRelease` closes the connection, whose unread answer would put the
-next task out of step. A pipelined statement cancelled before its turn
-fails the same way and fails the statements behind it. No CancelRequest is sent: the server runs the
-statement on until it sees the socket closed.
+next task out of step. A pipelined statement (`pgAsyncSeat`) cancelled
+after it was sent fails the same way but alone: its seat is abandoned, and
+the task behind it, or the next to ask for a seat, reads its answer and
+drops it, so the connection stays when that answer is a plain one. No
+CancelRequest is sent: the server runs the statement on to its end (or,
+for a released connection, until it sees the socket closed).
 
 </scalar-detail>
 
@@ -693,9 +699,12 @@ Waits for the seat's turn and reads its answer off the connection: the
 statements seated before it are answered first, to their own tasks, and
 what they read past their own answers begins this one. One read takes what
 the socket holds, up to the pool's input, so the answers behind this one
-often arrive with it. A lost connection (a socket error, or a task
-cancelled with its answer unread) fails this statement and every one behind
-it. It writes only numbers into the pool, so a spawned task may call it;
+often arrive with it. A lost connection (a socket error) fails this
+statement and every one behind it. A task cancelled with its answer unread
+fails alone: its seat is abandoned, and the next task to wait on the
+connection reads past that answer, or loses the connection from it on when
+the answer is not a plain one ending idle or is larger than the pool's
+input. It writes only numbers into the pool, so a spawned task may call it;
 `pgAsyncAnswer` then builds the answer in the task's memory.
 
 ```ts
@@ -789,6 +798,7 @@ class PgAsyncPool
 | `maxRows: i32` | The most rows a query keeps, 1 to 2^24; later rows are read and dropped, and the query fails with `PG_ERR_TOO_BIG`. |
 | `readonly nextSeq: i32[]` | Per slot: the sequence number the next seated statement takes. |
 | `readonly prepared: u8[]` | Per slot and statement (`slot * PG_ASYNC_MAX_STATEMENTS + statement`): 1 once a Parse for it was sent on that connection. |
+| `readonly seatAbandoned: u8[]` | Per seat: 0, or how far a seat whose task was cancelled with its answer unread has gone: 1 abandoned, 2 abandoned and its ticket spent, 3 its answer read past and its ticket not yet spent. |
 | `readonly seatClaims: i32[]` | Per seat: its claim count, the high part of its current ticket. |
 | `readonly seated: i32[]` | Per slot: the seats in use. |
 | `readonly seatGone: u8[]` | Per queue number, modulo its length: 1 when its task stopped waiting before its turn. |
@@ -801,6 +811,7 @@ class PgAsyncPool
 | `readonly seatWaiting: u8[]` | Per seat: 1 while its task waits for its answer's turn. |
 | `readonly served: i32[]` | Per slot: the sequence number whose answer is read next. |
 | `readonly size: i32` | The number of connection slots, fixed at construction. |
+| `readonly skipping: u8[]` | Per slot: 1 while a task reads past an abandoned seat's answer. |
 | `readonly statements: u8[][]` | Each statement `pgAsyncPrepare` registered: its SQL as UTF-8. |
 | `readonly waiters: i32[]` | Per wake: the tasks waiting on it. |
 | `waits: i32` | How many times `pgAsyncClaim` or `pgAsyncSeat` waited because no live connection had room. |
