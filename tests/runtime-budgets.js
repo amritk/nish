@@ -1001,6 +1001,16 @@ export const WASM_HOST_SIZE_BUDGETS = [
  * on linux-x64 and no wasm-opt; the `wasm-size` block of tests/run.js holds
  * every build to them. A change that moves one is a change to every plain program's
  * bytes: it updates the digest here and says why in its commit.
+ *
+ * WP44 stage "files" moved the `--profile wasm` digest of arrays.ts and label.ts
+ * (105 bytes raw each; `--profile wasm-host`, the `.d.ts` and the loader are
+ * unchanged). runtime-wasm.c defines nish_file_open, nish_file_read_at,
+ * nish_file_size and nish_file_close, each answering -38, so a program that calls
+ * them still links on freestanding wasm (docs/wp44-streaming-files.md §9 Q7). That profile
+ * links with `--export-all`, which exports every defined symbol whatever its
+ * visibility, and an exported symbol survives `--gc-sections`, so the four stubs
+ * are in every module that links runtime-wasm.c. Keeping them out of a program
+ * that never calls them is a change to scripts/build.sh's link line.
  */
 export const WASM_PLAIN_DIGESTS = [
   {
@@ -1014,7 +1024,7 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/arrays.ts",
     dts: "e01467ab59357645168a86b4defe2aa137a0c2395e1b211993379957899154b7",
     loader: "894b7789a0be7f7fb39bdcd252d58dd321e6912cb425db7e459f0cbc11c2500a",
-    wasm: "04188e4288db9a287591844b1d1d8f8fc20f0c406f91625d15ac7189c2902d24",
+    wasm: "96d30c5e34923c2c601a84c2840b24900592957e2c5936d97b40502b574f9576",
     host: "93a7dc1238aa9f6548de14593dd1fe0f99b6b732a5e2ec5b31543799ab5dd548",
   },
   {
@@ -1030,7 +1040,7 @@ export const WASM_PLAIN_DIGESTS = [
     src: "examples/label.ts",
     dts: "2908a99c7f6fbfdb2f974459751e1ef424fc31651f3d90905199af43572f7458",
     loader: "8c8c983e487e7fce8d39053ce902bf0ad83851e4263f5f177de7438bb25c755b",
-    wasm: "b0154ccf6e275cc7beb7dac812784c47bcf5ee2d54aaa82d3fc9b3142e7c3578",
+    wasm: "217f03032659ab60e8b67dfaaa0e14625a2f67cedbac18acb3b6178f9c149692",
     host: "ef8d59319dfcc282e9db6017e616dc07c6c65c913f388d00bdc9e0fe83a0b65f",
   },
 ]
