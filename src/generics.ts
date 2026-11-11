@@ -223,22 +223,6 @@ const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateIn
     return ""
   }
   const value = args[1]
-  // An array, a nullable, a maybe or a `Result` of references is refused with
-  // them: a value the map hands out is a place the place pass does not
-  // follow, whatever the reference sits in.
-  let held = value
-  while (
-    held >= 0 &&
-    (table.isArray(held) || table.isNullable(held) || table.isMaybe(held) || table.isResult(held))
-  ) {
-    held = table.refOf(held)
-  }
-  if (held >= 0 && table.isFnRef(held)) {
-    return (
-      `\`${shown}\` cannot hold a function reference as its value: a \`Map\` value is not yet a place whose functions ` +
-      "the compiler tracks; keep the references in an array and store the index in the map"
-    )
-  }
   if (value === T_VOID || isInterfaceType(ctx, value)) {
     return (
       `\`${table.typeName(value)}\` cannot be the value type of \`${shown}\`: a value is stored in the table as it is, ` +
