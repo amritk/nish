@@ -32,14 +32,14 @@ stages:
     verification: node docs/check-links.mjs && npm run lint
     todos:
       - id: g7-note-write
-        content: Write docs/wp39-g7-one-handler.md naming the module std/net/http-server.ts and the h2c carrier std/net/http2-cleartext.ts — see G7 design note
+        content: Write docs/http-one-handler.md naming the module std/net/http-server.ts and the h2c carrier std/net/http2-cleartext.ts — see G7 design note
   - id: g6-note
     title: "docs: design note for QUIC on more than one core (WP39 G6)"
     goal: A design note picks between SO_ATTACH_REUSEPORT_EBPF and forwarding between processes, with the connection-ID layout and measurements that decide it
     verification: node docs/check-links.mjs && npm run lint
     todos:
       - id: g6-note-write
-        content: Write docs/wp39-g6-quic-multicore.md with the CID encoding, the steering choice and its security surface — see G6 design note
+        content: Write docs/h3-multicore.md with the CID encoding, the steering choice and its security surface — see G6 design note
   - id: g8-figures
     title: "docs(bench): HTTP/2 and HTTP/3 figures from the h2load harness (WP39 G8)"
     goal: docs/BENCHMARKS.md carries HTTP/2 and HTTP/3 requests per second from bench/h2load.mjs, with the noise band and the machine named
@@ -152,8 +152,8 @@ Not in this plan: **E9** (submitting to TechEmpower is the owner's decision, D1)
 | --- | --- | --- | --- |
 | e5-prefork | `bench/techempower/main.ts`, `server.ts`, `nish.dockerfile`, `benchmark-config.json`, `run.sh`, `README.md`, `tests/link/tfb_entry/**`, `docs/BENCHMARKS.md` (TechEmpower json/plaintext section) | lead | — |
 | e6-pg-tls | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/tls/client.ts` (only if the carrier needs a nonblocking entry), `tests/link/std_postgres_tls*/**`, `tests/postgres/live/**`, `.github/workflows/ci.yml` (postgres-live job only), `docs/security/postgres.md`, `docs/guide/using-nish/postgres.md` | lead | — |
-| g7-note | `docs/wp39-g7-one-handler.md` | lead | — |
-| g6-note | `docs/wp39-g6-quic-multicore.md` | lead | — |
+| g7-note | `docs/http-one-handler.md` | lead | — |
+| g6-note | `docs/h3-multicore.md` | lead | — |
 | g8-figures | `bench/h2load.mjs`, `docs/BENCHMARKS.md` (new HTTP/2 and HTTP/3 section) | sonnet | — (merges after e5-prefork) |
 | g7-h2c | `std/net/http2-cleartext.ts`, `tests/link/net_http2_cleartext*/**`, `docs/security/http2-cleartext.md` | lead | g7-note |
 | g7-facade | `std/net/http-server.ts`, `tests/link/net_http_server*/**`, `docs/guide/using-nish/http-server.md`, `scalar.config.json`, `docs/security/http-server.md` | lead | g7-note (merges after g7-h2c) |
