@@ -456,7 +456,7 @@ report() {
   local verdict=""
   for level in "$@"; do
     local line
-    line=$(awk -F'\t' -v p="$path" -v l="$level" -v b="$base" -v cp="$copy" -v t="$twin" '
+    line=$(awk -F'\t' -v p="$path" -v l="$level" -v b="$base" -v cp="$copy" -v t="$twin" -v up="$cores" '
       function med(a, c,   i, j, t) {
         for (i = 0; i < c; i++) for (j = i + 1; j < c; j++) if (a[j] < a[i]) { t = a[i]; a[i] = a[j]; a[j] = t }
         return c % 2 ? a[(c - 1) / 2] : (a[c / 2 - 1] + a[c / 2]) / 2
@@ -474,7 +474,8 @@ report() {
         d = (med(g, cg) - a) * 100 / a
         # wrk counts a non-2xx answer in its rate, so a cell with failures
         # can be fast for the wrong reason: it is never called inside.
-        printf "%s: %.1f%%\t%s: %+.1f%% %s", l, band, l, d, (flagged ? (d >= -band ? "unknown*" : "outside*") : (d >= -band ? "inside" : "outside"))
+        # Under --cores-compare the question is a gain, so above the band is `faster`.
+        printf "%s: %.1f%%\t%s: %+.1f%% %s", l, band, l, d, (flagged ? (d >= -band ? "unknown*" : "outside*") : (up && d > band ? "faster" : d >= -band ? "inside" : "outside"))
       }' "$results")
     printf ' %s' "${line%%	*}"
     verdict+=" ${line#*	}"
@@ -492,7 +493,7 @@ report() {
   if wants plaintext; then report /plaintext entry entry-copy "$twin" "${plainLevels[@]}"; fi
   if wants json; then
     report /json entry entry-copy "$twin" "${jsonLevels[@]}"
-    echo 'The twins answer /json with {"message":"Hello, World!","n":<n>}: 8 bytes more than the entry, and a counter.'
+    [ "$cores" = 1 ] || echo 'The twins answer /json with {"message":"Hello, World!","n":<n>}: 8 bytes more than the entry, and a counter.'
   fi
   if [ "$dbRan" = 1 ]; then
     echo
