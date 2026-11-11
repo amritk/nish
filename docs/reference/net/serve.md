@@ -128,6 +128,18 @@ is answered, so it can never finish first.
 
 </scalar-detail>
 
+<scalar-detail title="A pipelined burst goes out in one write">
+
+The loop answers what the
+tasks wrote and takes what the handler queued until neither moves, so a
+handler that answers without waiting serves a whole burst in one turn.
+The handler holds each answer's send while the next request on its
+connection is queued and the output has room, and the loop flushes once
+before it parks: one write per connection per turn, and no wake byte for a
+task that answers while the loop runs.
+
+</scalar-detail>
+
 <scalar-callout type="warning">
 
 **Every cap answers.** `ServeLimits` bounds the connections, the requests
@@ -345,6 +357,7 @@ class ServeStats
 | `answered: i32` | Requests answered, by a task or by the server itself. |
 | `busy: i32` | Requests answered 503 because `inFlight` tasks were already running. |
 | `failed: i32` | Answers a task wrote that broke a cap or a rule, answered 500 instead. |
+| `sends: i64` | The writes the server began to send answers, counted at the end of each loop turn: a pipelined burst that fits the output is one. |
 | `slots: i32` | How many slots the server made: the most requests ever in flight at once. |
 | `usedEnd: i64` | `Arena.used()` in the server's loop once `maxRequests` were answered, before draining. |
 | `usedWarm: i64` | `Arena.used()` in the server's loop once `warmAfter` requests were answered. |

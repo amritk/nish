@@ -1,0 +1,8 @@
+burst of 16: 16 answered in order
+burst of 16: 1 write(s)
+big burst: fewer than 128 answered while unread: true
+big burst: 128 of 128 answered whole and in order
+before the hang-up: 200 [text/plain; charset=utf-8] item 1
+the parked task: its await answered false, cancelled true
+after the hang-up: 4 answered on that connection
+serve: 0, answered 152, failed 0
