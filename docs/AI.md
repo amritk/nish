@@ -286,7 +286,7 @@ compatible only when their types are identical.
 | `class C`, `interface I` | a struct, fields in declaration order | no header, no vtable |
 | `enum K` | a **distinct** type represented as `i32` | never interchangeable with `i32` |
 | `K.M` | an enum member type: the one member `K.M`, as `i32` | holds only that member; a read is a `K` |
-| `T \| null` | `T` a class, interface, array, or string | a scalar can never be nullable |
+| `T \| null` | `T` a class, interface, array, string or function reference | a scalar can never be nullable |
 | `A \| B` of tagged variants | a pointer to the variant; its first field is the tag | [Discriminated unions](#discriminated-unions); only the tag is read until a test of it narrows |
 | `Result<T, E>` | the only way to report failure | `E` may not be `void` |
 | `void` | return type only | |
@@ -918,8 +918,8 @@ export const main = (): i32 => {
 - **Only a top-level function's parameter, written inline**, is one. On a
   method or constructor parameter an inline function type is refused; type it
   through an alias and it is an ordinary [function reference](#function-references)
-  parameter. A variable holding a reference is not a function argument
-  (NL2734): type the parameter through an alias to take one.
+  parameter. A local, field or element holding a reference is a function
+  argument too; only the `nish/threads` runners refuse one (NL2734).
 
 ```ts nish:err NL2585
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
@@ -968,16 +968,18 @@ export const main = (): i32 => {
   (NL2732). A written function type has no rest, optional or defaulted
   parameter either: `(x: i32, y?: i32) => i32` is NL2729. A guard helper,
   a function taking a `MutexGuard`, is only ever called by name (NL2739).
-- **No empty value.** `new Array<Op>(n)` (NL2730) and `Op | null` are
-  refused; a module `const` cannot hold one either.
-- **Not a `Map` value.** `Map<K, Op>` and `Map<K, Op[]>` are refused
-  (NL2738): keep the references in an array, `const ops: Op[] = [inc, dec]`,
-  and store the index in the `Map`.
+- **No empty value but `null`.** `new Array<Op>(n)` is refused (NL2730);
+  `Op | null` is allowed and `new Array<Op | null>(n)` fills with `null`. A
+  call needs a `!== null` test first (NL2740); read a nullable field into a
+  `const` and test that. A module `const` cannot hold a reference.
+- **A `Map` value, not a key.** `Map<K, Op>`, `Map<K, Op[]>` and
+  `Map<K, Op | null>` work; a call through what `get` returns dispatches over
+  every function of the type. A function-type key is refused.
 - **Called, compared, stored, passed — nothing else.** Not printed or
   interpolated (NL2737), ordered, joined or encoded as JSON.
-- **Not a function argument**: a variable holding a reference cannot fill an
-  inline function-typed parameter (NL2734); type that parameter through the
-  alias.
+- **A function argument**: a local, field or element holding one fills an
+  inline function-typed parameter (`apply(ops[0], 3)`); the `nish/threads`
+  runners take only a named function or arrow (NL2734).
 - **It stays in the program**: a `-o` library cannot export it in a
   signature or an exported class's field (NL2733); `--link` can.
 

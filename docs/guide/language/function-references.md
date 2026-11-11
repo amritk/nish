@@ -144,26 +144,51 @@ export const main = (): i32 => {
 };
 ```
 
-It cannot be ordered with `<`, joined, encoded as JSON, or made nullable
-(`Op | null`); store an index or an enum beside it when you need one of
-those.
+It cannot be ordered with `<`, joined or encoded as JSON; store an index or
+an enum beside it when you need one of those.
 
-It cannot be a `Map` value yet either (`NL2738`), nor can a value that holds
-one, such as an array of references (`Map<string, Op[]>`) or a nullable one
-(`Map<string, Op[] | null>`). Keep the references in an array and store each
-one's index in the `Map`:
+## A reference that may be `null`
 
-```ts nish:err NL2738
+`Op | null` holds a function or nothing. A field of that type starts as
+`null`, and `new Array<Op | null>(n)` holds `n` of them. Call it only after a
+test proves it holds a function; a nullable field is read into a `const`
+first, and the test is on the `const`:
+
+```ts nish:ok
 type Op = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
 
+class Slot {
+  op: Op | null = null;
+}
+
 export const main = (): i32 => {
-  const byName = new Map<string, Op>();
-  byName.set("inc", inc);
-  return byName.size;
+  const s = new Slot();
+  s.op = inc;
+  const h = s.op;
+  if (h !== null) {
+    console.log(`${h(4)}`);              // 5
+  }
+  return 0;
 };
 ```
+
+A call with no test before it is refused (`NL2740`):
+
+```ts nish:err NL2740
+type Op = (x: i32) => i32;
+
+export const run = (h: Op | null): i32 => h(1);
+
+export const main = (): i32 => run(null);
+```
+
+## In a `Map`
+
+A `Map` value can be a reference, an array of them, or a nullable of either.
+A call through what `get` returns can reach every function of that type the
+program stores anywhere, so it is a choice among all of them:
 
 ```ts nish:ok
 type Op = (x: i32) => i32;
@@ -172,21 +197,27 @@ const inc = (x: i32): i32 => x + 1;
 const dec = (x: i32): i32 => x - 1;
 
 export const main = (): i32 => {
-  const ops: Op[] = [inc, dec];
-  const byName = new Map<string, i32>();
-  byName.set("inc", 0);
-  byName.set("dec", 1);
-  const at = byName.get("dec") ?? 0;
-  return ops[at](5);
+  const byName = new Map<string, Op>();
+  byName.set("inc", inc);
+  byName.set("dec", dec);
+  const f = byName.get("dec");
+  if (f !== undefined) {
+    console.log(`${f(5)}`);              // 4
+  }
+  return 0;
 };
 ```
 
-A reference is not a function argument either. A parameter whose function
-type is written out in the parameter list, as in `apply` below, is filled in
-when the call is compiled, so it takes a function's name or an arrow, never
-a variable holding one (`NL2734`):
+A reference cannot be a `Map` key.
 
-```ts nish:err NL2734
+## As a function argument
+
+A parameter whose function type is written out in the parameter list, as in
+`apply` below, takes a function's name, an arrow, or a variable, field or
+array element holding a reference. The call passes an arrow that calls the
+reference:
+
+```ts nish:ok
 type F = (x: i32) => i32;
 
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
@@ -194,12 +225,13 @@ const inc = (x: i32): i32 => x + 1;
 
 export const main = (): i32 => {
   const h: F = inc;
-  return apply(h, 1);
+  console.log(`${apply(h, 1)}`);         // 2
+  return 0;
 };
 ```
 
-Write the parameter's type as the alias, `f: F`, and `apply` takes a
-reference instead.
+What runs on other threads, `parallelMap` and the other `nish/threads`
+runners, takes only a function's name or an arrow (`NL2734`).
 
 ## Calls through a reference
 

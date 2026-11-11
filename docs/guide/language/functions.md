@@ -195,8 +195,9 @@ statements at the top level, like a script, and they run as `main`
 A top-level function can be kept in a variable, a field or an array, and
 returned, as a [function reference](function-references.md). When a function
 only needs to call the one it is given, give it a **parameter of function
-type** written out in its parameter list instead, and pass it either a named
-top-level function or an arrow written right at the call:
+type** written out in its parameter list instead, and pass it a named
+top-level function, an arrow written right at the call, or a variable, field
+or element that holds a function reference:
 
 ```ts nish:ok
 const countWhere = (xs: i32[], keep: (x: i32) => boolean): i32 => {

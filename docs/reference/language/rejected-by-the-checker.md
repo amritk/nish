@@ -64,10 +64,10 @@ messages are exact for the cases cited; other entries quote the checker
   `reject_fnarg_nested`)
 - **a function reference to a function it cannot hold, or used other than
   called, compared, stored or passed**: NL2725, NL2726, NL2727, NL2728,
-  NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736, NL2737, NL2738 and
-  NL2739 (`reject_fnref_generic`, `_async`, `_ffi`, `_rest`, `_zero_fill`,
+  NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736, NL2737, NL2739 and
+  NL2740 (`reject_fnref_generic`, `_async`, `_ffi`, `_rest`, `_zero_fill`,
   `_host`, `_host_field`, `_no_strict`, `_escape_join`,
-  `_escape_join_transitive`, `_print`, `_json`, `_map`, `_map_array`, `reject_fnarg_alias`,
+  `_escape_join_transitive`, `_print`, `_json`, `_map_key`, `_nullable_call`, `reject_fnarg_alias`,
   `reject_mutex_guard_helper_*`; [Function references](declarations.md#function-references))
 - **a function argument that is not a function's name or an arrow, or does not
   match**:

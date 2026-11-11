@@ -169,7 +169,7 @@ interned, and two types are the same type exactly when they are the same
   the operator only before a type on its own line, so a class a program names
   `keyof` is still a type everywhere else (`tests/parser/names-declarations.ts`).
   `T | null` (or `null | T`) is accepted when `T` is a class, interface,
-  array, or string; a scalar is
+  array, string or [function reference](declarations.md#function-references) type; a scalar is
   `` `i32 | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value) ``
   (`tests/cases/reject_nullable_scalar`). A type may be **parenthesised**, and
   `(T | null)[]` is where it matters: `T | null[]` groups the other way and
@@ -525,7 +525,10 @@ the IR; only a computed count costs the mask
 `T | null` is available for `T` a class, interface, array, or string
 (`tests/cases/mem_nullable`; [wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md#4-t--null)). It
 is the same LLVM pointer type as `T` with the constant `null` as one more
-value, so nothing is boxed; `null` takes its type from context.
+value, so nothing is boxed; `null` takes its type from context. A
+[function reference](declarations.md#function-references) may be nullable too: it is an
+`i32` tag, and `null` is tag 0, which names no function
+(`tests/cases/fnref_nullable`).
 
 - **Where `null` may appear**: an annotated initializer
   (`let p: Node | null = null`), a field initializer (`next: Node | null = null`),

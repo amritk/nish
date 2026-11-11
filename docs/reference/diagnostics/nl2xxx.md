@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 731 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 732 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -13771,6 +13771,24 @@ The message of an error contains:
 …: a function reference names a function whose every parameter the caller passes
 ```
 
+[`nl2729_fnref_default.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2729_fnref_default.ts):
+
+```ts
+// NL2729: a function with a defaulted parameter named as a value. A call
+// through a reference passes every parameter, so the function must take
+// exactly those.
+const scale = (x: i32, by: i32 = 2): i32 => x * by;
+
+export const main = (): i32 => {
+  const f = scale;
+  return 0;
+};
+```
+
+```text
+`scale` has a parameter with a default: a function reference names a function whose every parameter the caller passes
+```
+
 [`nl2729_fnref_rest.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2729_fnref_rest.ts):
 
 ```ts
@@ -13902,21 +13920,22 @@ The message of an error contains:
 [`nl2734_fnref_to_function_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2734_fnref_to_function_parameter.ts):
 
 ```ts
-// NL2734: a reference passed where a function parameter is. The parameter
-// names the callee a call is compiled for, and a reference is known only at
-// run time; passing one is the next stage of function references.
+// NL2734: a reference passed where a function parameter of `parallelMap` is.
+// An ordinary function takes a reference as the arrow that calls it; what runs
+// on other threads takes only a function or an arrow named at the call.
+import { parallelMap } from "nish/threads";
+
+type F = (x: i32) => i32;
 const double = (x: i32): i32 => x * 2;
 
-const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
-
 export const main = (): i32 => {
-  const h = double;
-  return apply(h, 2);
+  const h: F = double;
+  return parallelMap([1, 2], h).length;
 };
 ```
 
 ```text
-`h` is a function reference: `apply` takes a top-level function or an arrow named at the call
+`h` is a function reference: `parallelMap` takes a top-level function or an arrow named at the call
 ```
 
 ## NL2735
@@ -14008,22 +14027,7 @@ The message of an error contains:
 … cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map
 ```
 
-[`nl2738_fnref_map_value.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2738_fnref_map_value.ts):
-
-```ts
-// NL2738: a function reference as a `Map` value is refused until a `Map`
-// value is a place the reference pass tracks.
-type Op = (x: i32) => i32
-
-export const main = (): void => {
-  const m = new Map<string, Op>()
-  console.log(`${m.size}`)
-}
-```
-
-```text
-`Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map
-```
+**Retired**: `... cannot hold a function reference as its value: a `Map` value is not yet a place ...`; WP51 stage 2 made a `Map` value a place, so a reference, an array of them or a nullable of either is a value now (tests/cases/fnref_map*)
 
 ## NL2739
 
@@ -14055,4 +14059,27 @@ export const main = (): i32 => {
 
 ```text
 `bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name
+```
+
+## NL2740
+
+The message of an error contains:
+
+```text
+…` may be `null`: a nullable function reference is called only after a test such as `…
+```
+
+[`nl2740_fnref_nullable_call.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2740_fnref_nullable_call.ts):
+
+```ts
+// NL2740: a call through a nullable function reference no test has narrowed.
+type F = (x: i32) => i32
+
+export const run = (h: F | null): i32 => h(1)
+
+export const main = (): i32 => run(null)
+```
+
+```text
+`h` may be `null`: a nullable function reference is called only after a test such as `h !== null` proves it holds a function
 ```
