@@ -472,6 +472,11 @@ $ nish bad.ts --json
   `"deprecation"`. Only errors fail a compile.
 - Failures with no source position — no usable `clang`, an internal error —
   are JSON objects too, so under `--json` you never need to read stderr.
+- **`review`**, after `fix`, is on some portability warnings
+  ([`--warn-portability`](to-typescript.md)): the same kind of edit list, for
+  a rewrite that makes the line mean the same under Node and compiles to the
+  same native code, but changes what your source says. `nish --fix` never
+  applies it; see [below](#--fix).
 - The standard library has a reader for these objects:
   [`nish/json`](standard-library.md#nishjson).
 
@@ -496,6 +501,21 @@ It never edits a standard-library module or anything under `node_modules`,
 and it writes no IR, so `-o` and `--link` are usage errors beside it. **It
 rewrites your files in place with no backup**, so run it on a tree you have
 committed.
+
+`--fix` applies `fix` and nothing else. A portability warning's `review` is
+a suggestion for you, or the agent driving `nish`, to read and apply by hand:
+an integer division wrapped in its own type's conversion, which truncates
+under Node as it does natively and adds no instruction:
+
+```console
+$ nish half.ts --warn-portability --json
+{"file":"half.ts","line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this `/` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}
+```
+
+Applied, `a / b` reads `toI32(a / b)`, and the warning is gone. Wrapping
+arithmetic (`NL8007`) and `>>>` on an `i32` (`NL8008`) get no `review`: no
+spelling of them reads the same under Node without costing an instruction
+here.
 
 ## Colour, and when an agent runs `nish`
 

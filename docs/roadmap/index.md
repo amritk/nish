@@ -26,9 +26,8 @@ and where it is specified.
 3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
 4. [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md): stage 3, the soak.
 5. [WP21: Packages](wp21-packages.md): S3's two diagnostics.
-6. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
-7. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
-8. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
+6. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
+7. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
 
 [WP34: Hosting cs: the network stack](wp34-hosting-cs.md)'s remaining waves are in the cs repository.
 
@@ -37,7 +36,7 @@ and where it is specified.
 - M4: when to declare 1.0.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
 - [WP27: Calling C](wp27-ffi.md): whether S4 (C structs) and S5 (`errno`) happen at all.
-- [WP28: Compatibility mode](wp28-compatibility-mode.md): whether to accept compatibility mode, and its open questions.
+- [WP28: Compatibility mode](wp28-compatibility-mode.md): whether to accept compatibility mode, and its open questions. [WP33: The round trip to TypeScript](wp33-round-trip.md)'s R6 is that mode, so it waits here too.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
 
 ## Picking up a work package
@@ -59,7 +58,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP21: Packages](wp21-packages.md) | In progress | 3 of 7 |
 | [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 3 of 5 |
 | [WP27: Calling C](wp27-ffi.md) | In progress | 3 of 5 |
-| [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 6 of 9 |
+| [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |
 | [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 9 of 18 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 3 of 8 |
 | [WP38: SIMD](wp38-simd.md) | In progress | 8 of 10 |

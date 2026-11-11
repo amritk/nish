@@ -5952,6 +5952,36 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       many.stderr.includes("\n...and 5 more portability warnings\n25 portability warnings"),
     many.stderr
   )
+
+  // WP33 R5's review tier, one `--json` line per row it covers. An NL8006
+  // whose rewrite compiles to the same IR carries `review` after `message`, in
+  // `fix`'s edit shape; NL8007 and NL8008 have no such rewrite (their
+  // conversions saturate under Node, or add an instruction here), so their
+  // lines are what they were before the tier, byte for byte.
+  const reviewSrc = path.join(buildDir, "port_class_review.ts")
+  fs.writeFileSync(
+    reviewSrc,
+    "const half = (a: i32): i32 => a / 2;\n" +
+      "const twice = (b: u8): u8 => b + b;\n" +
+      "const shifted = (k: i32, n: i32): i32 => k >>> n;\n\n" +
+      "export const main = (): number => {\n" +
+      "  console.log(half(7) + toI32(twice(250)) + shifted(-8, 0));\n" +
+      "  return 0;\n" +
+      "};\n"
+  )
+  const review = compile(reviewSrc, "port_class_review.ll", ["--warn-portability", "--json"])
+  const head = `{"file":${JSON.stringify(reviewSrc)},`
+  check(
+    "portability: --json carries `review` on NL8006 alone, after `message`, and NL8007 and NL8008 lines are unchanged",
+    review.status === 0 &&
+      objects(review.stdout).join("\n") ===
+        [
+          `${head}"line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this \`/\` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}`,
+          `${head}"line":2,"column":30,"endLine":2,"endColumn":35,"severity":"portability","code":"NL8007","message":"this \`+\` on u8 wraps here, and TypeScript keeps counting past the range"}`,
+          `${head}"line":3,"column":42,"endLine":3,"endColumn":49,"severity":"portability","code":"NL8008","message":"this \`>>>\` on i32 reads back signed here, and unsigned in TypeScript"}`,
+        ].join("\n"),
+    review.stdout + review.stderr
+  )
 }
 
 // ---- WP33 R4: `--emit-ts` ------------------------------------------------------------
