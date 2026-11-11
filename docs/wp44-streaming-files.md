@@ -173,8 +173,8 @@ part of this package.
   `ESPIPE` is `-29` and `EIO` is `-5`. Any other errno is `-5`.
 - **The window.** It is checked as `netRead`'s is. `0 <= off <= off + len <=
   buf.length` holds once all five arguments are evaluated, or the call panics
-  with `slice out of range: [off, off + len) of length n`.
-  `--unchecked-indexing` drops the check
+  with `slice out of range: [off, off + len) of length n`. No flag drops
+  the check: `--unchecked-indexing` was removed before 1.0
   ([LANGUAGE.md](LANGUAGE.md#bounds)). A `readonly u8[]` or any other
   element type is refused, as `reject_net_readonly` and `reject_net_element`
   refuse them.
@@ -414,7 +414,7 @@ rolling freeze), and nothing in this package needs it to.
    - `file_read_at_pos`: a negative `pos` and a `pos + len` past 2^63 − 1, both `-22`
    - `file_size_large`: a sparse file past 2^31 bytes, which `tests/run.js`
      makes with `fs.truncateSync`, sized and read at its end
-   - `file_read_at_bounds`, `file_read_at_unchecked`
+   - `file_read_at_bounds` (no `_unchecked` twin: no flag drops the check)
    - `mem_file_stream_flat`: 10,000 windows, with the arena checked unchanged
    - `reject_file_read_readonly`, `reject_file_read_element`,
      `reject_file_fd_type`, `reject_file_read_task`

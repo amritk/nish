@@ -702,6 +702,31 @@ const caseEnv = (file) => {
 const selectedCases = cases.filter((name) => !only || name.includes(only))
 
 /**
+ * The files the WP44 file cases open and cannot make themselves, made once
+ * before any section runs, because the cases run natively here and under Node
+ * in the differential section, which may be another shard: a FIFO and a
+ * socket for `file_open_errors` (the language has no `mkfifo`, and a socket
+ * bound by the program would not run under Node), and a sparse file of
+ * 2^32 + 16 bytes for `file_size_large`, made with `fs.truncateSync`, so it
+ * costs no disk. A process that exits without closing its server leaves the
+ * socket file behind, which is all `fileOpen` needs.
+ */
+const prepareFileCases = () => {
+  fs.mkdirSync(buildDir, { recursive: true })
+  const fifo = path.join(buildDir, "file_open_errors.fifo")
+  const sock = path.join(buildDir, "file_open_errors.sock")
+  for (const file of [fifo, sock]) {
+    fs.rmSync(file, { force: true })
+  }
+  spawnSync("mkfifo", [fifo])
+  spawnSync("node", ["-e", `require("net").createServer().listen(${JSON.stringify(sock)}, () => process.exit(0))`])
+  const large = path.join(buildDir, "file_size_large.bin")
+  fs.closeSync(fs.openSync(large, "w"))
+  fs.truncateSync(large, 2 ** 32 + 16)
+}
+prepareFileCases()
+
+/**
  * The lane a case's native program runs in: one program at a time, whatever
  * else section A has in flight.
  *
@@ -3076,6 +3101,53 @@ if (!only || "net_mss".includes(only) || "wasi".includes(only)) {
   } else {
     skip(
       `skipped: net_mss: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of netMss is not run`
+    )
+  }
+}
+
+// ---- The file-window builtins under WASI (WP44 F2) --------------------------------
+//
+// `fileOpen`, `fileReadAt`, `fileSize` and `fileClose` are `open`, `pread`,
+// `fstat` and `close` through wasi-libc, so each case that reads a file is
+// built with `--profile wasi`, run by examples/wasi-host.mjs (which preopens
+// the repository root, where the cases' relative paths start) and held to the
+// same `.out` as its native run. `file_open_errors` is the one that showed a
+// gap: WASI resolves "" to the preopened directory, so the runtime refuses an
+// empty path, and a path holding a NUL, before it asks.
+if (!only || "file_".includes(only) || only.startsWith("file_") || "wasi".includes(only)) {
+  const fileCases = [
+    "file_read_at",
+    "file_read_at_eof",
+    "file_read_at_pos",
+    "file_open_errors",
+    "file_size_large",
+    "mem_file_stream_flat",
+  ]
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const fileDir = path.join(buildDir, "file-wasi")
+    fs.rmSync(fileDir, { recursive: true, force: true })
+    fs.mkdirSync(fileDir, { recursive: true })
+    for (const name of fileCases) {
+      const module = path.join(fileDir, `${name}.wasm`)
+      const source = path.join(casesDir, `${name}.ts`)
+      const built = spawnSync(NISH, [source, "-o", fileDir + path.sep, "--link", module, "--profile", "wasi"], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const ran =
+        built.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", module], { cwd: root, encoding: "utf8" })
+          : built
+      const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
+      check(
+        `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints its .out`,
+        ran.status === 0 && ran.stdout.trim() === want.trim(),
+        shown(ran)
+      )
+    }
+  } else {
+    skip(
+      `skipped: file_: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the file-window cases are not run`
     )
   }
 }

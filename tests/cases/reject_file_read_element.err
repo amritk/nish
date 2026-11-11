@@ -1,0 +1,2 @@
+reject_file_read_element.ts:5:25
+error: `fileReadAt` fills a `u8[]`, got i32[]

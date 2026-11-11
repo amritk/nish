@@ -1,0 +1,2 @@
+reject_file_open_wasm.ts:3:32
+error: `fileOpen` reads a file, and a freestanding wasm32 build has no file system to read (build with `--profile wasi`)

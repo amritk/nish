@@ -1,0 +1,2 @@
+reject_file_fd_type.ts:3:45
+error: `fileClose` expects an argument of type i32, got string
