@@ -27,7 +27,12 @@
 //      frame split across two reads are read whole; rows past
 //      `maxResultBytes` fail PG_ERR_TOO_BIG, the connection still reusable.
 //   6. A bounded wait: with the one live connection held and `claimWaitMs`
-//      at 40, a claim sleeps 1, 2, 4, 8, 16 and 16 ms and answers -2.
+//      at 40, a claim waits once on the pool's wake, which no release rings,
+//      and answers -2.
+//   7. A bounded connect: a listener that takes the connection but never
+//      answers its startup, with `connectWaitMs` at 50, leaves the pool
+//      empty instead of holding `pgAsyncConnect` for good; `connects`
+//      counts only the connections made.
 import { sleep, spawn } from "nish:async"
 import { netLocalPort, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
@@ -203,9 +208,22 @@ export async function main(): Promise<i32> {
   const held: i32 = await pgAsyncClaim(pool)
   const before: i32 = pool.waits
   const late: i32 = await pgAsyncClaim(pool)
-  console.log(`a claim with every connection held: ${late} after ${pool.waits - before} sleeps`)
+  console.log(`a claim with every connection held: ${late} after ${pool.waits - before} wait`)
   pgAsyncRelease(pool, held, true)
   console.log(`statements seen: ${board.seen}`)
+  console.log(`connections made: ${pool.connects}`)
   pool.close()
+
+  const mute: i32 = tcpListen("127.0.0.1", 0, 16)
+  const silent = new PgAsyncPool(1)
+  silent.connectWaitMs = 50
+  const config = new PgConfig()
+  config.user = "app"
+  const pw: u8[] = [112, 119]
+  const password = secret(pw)
+  const none: i32 = await pgAsyncConnect(silent, config, password, pgTarget("127.0.0.1", netLocalPort(mute)))
+  wipe(password)
+  console.log(`a server that never answers its startup: ${none} live, ${silent.connects} made`)
+  silent.close()
   return 0
 }

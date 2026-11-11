@@ -273,6 +273,13 @@ aside.t-doc__toc .container {
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+/* Inline code paints its own background over the clipped gradient, so it
+   inherits a transparent fill with nothing behind it to show: its text would
+   vanish into the chip. It takes a solid colour instead. */
+.t-editor__heading[data-level="1"] code {
+  color: var(--scalar-color-1);
+  -webkit-text-fill-color: currentColor;
+}
 
 /* Blocks rise into place as they scroll into view. Text does not: a
    paragraph that fades in under the eye is harder to read, not nicer. Only

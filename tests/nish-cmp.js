@@ -536,6 +536,11 @@ const dateSingleton = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DATE_SINGLETON, why }))
   )
+const POOL_PIPELINE = "async Postgres pool pipelines queries across tasks"
+const poolPipeline = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: POOL_PIPELINE, why }))
+  )
 const MSS_UNSET = "explicitly set enc.mss wins over the socket MSS"
 const mssUnset = (why, moved) =>
   moved.map((program) => ({ program, file: "http-compress.ll", changelog: MSS_UNSET, why }))
@@ -558,6 +563,20 @@ const DECLARED = [
     changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "the program imports asciiLower, asciiUpper and split from nish/text, which the 0.37.0 seed's std/text.ts does not export, so only the candidate compiles it",
   },
+  // #1362: std/regex.ts makes its tables through regexZeros/regexZeroBytes,
+  // which moves regex.ll in the five corpus programs importing nish/regex.
+  ...[
+    "bench/regex/main.ts",
+    "tests/link/caps_dep_std_not_refused/main.ts",
+    "tests/link/std_json_format/main.ts",
+    "tests/link/std_regex_node/main.ts",
+    "tests/link/std_text_camel_case/main.ts",
+  ].map((program) => ({
+    program,
+    file: "regex.ll",
+    changelog: "regex no longer hangs under Node",
+    why: "std/regex.ts zero-fills every table it reads before writing through two new helpers, regexZeros and regexZeroBytes, so the program's nish/regex module has new functions and calls; its own module does not move",
+  })),
   // Stage 5a: an --emit-dts compile is a page module, so Math.sin, cos, exp,
   // log, pow and a float % in it call std/math.ts's copies (`@nish.<name>F64`)
   // instead of an intrinsic or `frem` a page could not link.
@@ -1666,6 +1685,36 @@ const DECLARED = [
     "tests/link/tfb_db/main.ts",
     "tests/link/tfb_entry/main.ts",
   ]),
+  ...poolPipeline(
+    "the pool's slots gain a send queue, a parse cache and abandoned-seat state, so every program that links `std/net/postgres-async.ts` lays out and walks the pool differently (WP49 stage 6, part 5)",
+    {
+      "tests/link/net_serve_pg/main.ts": ["main.h", "main.ll", "postgres-async.ll", "serve.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": [
+        "main.h",
+        "main.ll",
+        "postgres-async.ll",
+      ],
+      "tests/link/std_postgres_async_flat/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": [
+        "main.h",
+        "main.ll",
+        "postgres-async.ll",
+      ],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["main.h", "main.ll", "postgres-async.ll"],
+    }
+  ),
+  ...poolPipeline(
+    "the program calls the pipelined API (`pgAsyncPrepare`, `pgAsyncSeat`, `pgAsyncAnswer`) the 0.38.0 seed's std does not export, so only the candidate compiles it (WP49 stage 6, part 5)",
+    {
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["exit"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["exit"],
+    }
+  ),
   // WP49 stage 6, part 3: `HttpHandler` holds owed sends (`flush`, `sends`),
   // so every program that reaches std/net/handler.ts lays it out again.
   ...pipelinedWrite(

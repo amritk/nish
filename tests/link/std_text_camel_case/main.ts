@@ -1,7 +1,7 @@
 // The snake_case → camelCase example on the guide's `nish/text` section
 // (docs/guide/using-nish/standard-library.md), kept compiling and pinned here:
-// natively by the link loop. (Under the Node prelude its regex does not finish,
-// #1362; it joins the Node run in tests/run.js when that is fixed.)
+// natively by the link loop, and under the Node prelude by tests/run.js's
+// `std_text` section.
 import { asciiLower, asciiUpper, split } from "nish/text";
 import { Regex, regexCompile } from "nish/regex";
 

@@ -7,6 +7,10 @@ Nish and get it accepted on the first try**. It is a digest, not the authority:
 This page exists because LANGUAGE.md is 2,300 lines written to be *read*, and
 what an author needs is the rules in one pass with the traps first.
 
+> Its short form, published to agents by the docs site, is the
+> [`writing-nish` skill](../skills/writing-nish/SKILL.md): a change here to the
+> loop, the unlearn table or the checklist below moves it too.
+
 > Working **on the compiler** rather than **in the language**? That is a
 > different document: [`AGENTS.md`](../AGENTS.md) and [`.claude/`](../.claude/).
 
@@ -1686,6 +1690,108 @@ export const main = (): i32 => {
   ps.push({ x: 2 });
   ps[0].x = 3;
   console.log(`${ps[0].x}`);
+  return 0;
+};
+```
+
+### A tree links first child and next sibling
+
+A tree node keeps `first` and `next` links, **not a `kids: Node[]` per
+node**. Every `kids` is a 24-byte header plus a block that doubles as it
+grows, and the blocks it outgrows stay in the arena; a walk over `kids`
+follows two pointers per child where the links follow one. On a 4M-node
+tree the links took 0.52x the memory and 0.68x the time of `kids`.
+
+```ts nish:ok
+class Node {
+  kind: i32;
+  parent: Node | null;
+  first: Node | null = null;
+  next: Node | null = null;
+
+  constructor(kind: i32, parent: Node | null) {
+    this.kind = kind;
+    this.parent = parent;
+  }
+}
+
+// `last` is the parent's last child so far, or null before the first.
+const add = (parent: Node, last: Node | null, kind: i32): Node => {
+  const kid = new Node(kind, parent);
+  if (last === null) {
+    parent.first = kid;
+  } else {
+    last.next = kid;
+  }
+  return kid;
+};
+
+const sum = (n: Node): i32 => {
+  let s = n.kind;
+  let kid = n.first;
+  while (kid !== null) {
+    s = s + sum(kid);
+    kid = kid.next;
+  }
+  return s;
+};
+
+export const main = (): i32 => {
+  const root = new Node(1, null);
+  const a = add(root, null, 2);
+  add(root, a, 3);
+  add(a, null, 4);
+  console.log(`${sum(root)}`);
+  return 0;
+};
+```
+
+- Where a pass needs a node's children by index, keep a child count and a
+  `Node[]` filled once, when the node is complete, not pushed to as each child
+  arrives. `new Array<Node>(n)` is refused for a class, so fill it with `push`
+  in one go.
+- A **hot, closed table** (a token stream, a type or symbol table) uses
+  **columns**: one `i32[]` per field, each `new Array<i32>(n)` at its final
+  length, a row an `i32` index, `-1` for none. Write one out per type; no
+  generic `Pool<T>`. Measured: 0.32x the memory and 0.63x the time of `kids`.
+- `uncheckedGet` / `uncheckedSet` belong in that table's code only: an index
+  out of range there is undefined behaviour, not a panic.
+
+```ts nish:ok
+import { uncheckedGet, uncheckedSet } from "nish:unsafe";
+
+// One column per field, each allocated once at its final length.
+class Tokens {
+  kind: i32[];
+  start: i32[];
+  count: i32 = 0;
+
+  constructor(capacity: i32) {
+    this.kind = new Array<i32>(capacity);
+    this.start = new Array<i32>(capacity);
+  }
+
+  add(kind: i32, start: i32): i32 {
+    if (this.count >= this.kind.length) {
+      return -1;
+    }
+    const id = this.count;
+    uncheckedSet(this.kind, id, kind);
+    uncheckedSet(this.start, id, start);
+    this.count = id + 1;
+    return id;
+  }
+}
+
+export const main = (): i32 => {
+  const t = new Tokens(3);
+  t.add(7, 0);
+  t.add(9, 4);
+  let s = 0;
+  for (let i = 0; i < t.count; i++) {
+    s = s + uncheckedGet(t.kind, i) * uncheckedGet(t.start, i);
+  }
+  console.log(`${s}`);
   return 0;
 };
 ```
