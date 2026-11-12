@@ -22418,7 +22418,13 @@ if (dealtHere("releaseChecks")) {
   //   ```ts nish:err NL2231         must be rejected, with that code among the errors
   //   ```ts nish:err-body NL2188    the same, wrapped in a `main` body
   //
-  // Anything after the code is passed to the CLI as flags (`--number-mode f64`).
+  // Anything after the code is passed to the CLI as flags (`--number-mode f64`),
+  // except `file=<path>`, which makes the fence one file of a program of several:
+  // a run of `file=` fences in one section (no heading between them) is written
+  // out as one directory, each at its path (a `json` fence may be one, for a
+  // package's `package.json`), and the last of them is compiled with its marker
+  // and flags. The fences before it are files the program imports, so they are
+  // `nish:ok` with no flags.
   // A plain ```ts block is prose and is not compiled, which is what lets the doc
   // show a fragment. The expectation is the *code* rather than the message,
   // because that is what the doc tells its reader to key on (`AGENTS.md`,
@@ -22453,28 +22459,65 @@ if (dealtHere("releaseChecks")) {
     const markedSnippets = (text) => {
       const found = []
       const lines = text.split("\n")
+      let section = 0
+      let inFence = false
       for (let i = 0; i < lines.length; i++) {
-        const m = /^```ts\s+nish:(ok|err)(-body)?\s*(.*)$/.exec(lines[i])
+        const m = /^```(ts|json)\s+nish:(ok|err)(-body)?\s*(.*)$/.exec(lines[i])
         if (!m) {
+          // A `#` line inside an unmarked fence, a shell comment, is not a heading.
+          if (lines[i].startsWith("```")) {
+            inFence = !inFence
+          } else if (!inFence && /^#{1,6} /.test(lines[i])) {
+            section++
+          }
           continue
         }
-        const rest = m[3].trim().split(/\s+/).filter(Boolean)
-        const code = m[1] === "err" ? rest.shift() : null
+        const rest = m[4].trim().split(/\s+/).filter(Boolean)
+        const code = m[2] === "err" ? rest.shift() : null
+        const fileArg = rest.findIndex((a) => a.startsWith("file="))
+        const file = fileArg < 0 ? null : rest.splice(fileArg, 1)[0].slice("file=".length)
         let end = i + 1
         while (end < lines.length && lines[end] !== "```") {
           end++
         }
         found.push({
-          kind: m[1],
-          wrap: m[2] === "-body",
+          lang: m[1],
+          kind: m[2],
+          wrap: m[3] === "-body",
           code,
           args: rest,
+          file,
+          section,
           line: i + 1,
           source: lines.slice(i + 1, end).join("\n"),
         })
         i = end
       }
       return found
+    }
+
+    /**
+     * The programs a page's marked fences make: a fence alone, or a run of `file=`
+     * fences in one section, compiled at its last.
+     */
+    const programsOf = (snippets) => {
+      const programs = []
+      let run = null
+      for (const s of snippets) {
+        if (s.file === null) {
+          run = null
+          programs.push({ entry: s, files: [] })
+          continue
+        }
+        if (run === null || run.entry.section !== s.section) {
+          run = { entry: s, files: [] }
+          programs.push(run)
+        } else {
+          run.files.push(run.entry)
+          run.entry = s
+        }
+      }
+      return programs
     }
 
     /** A stub is the page's title and a single paragraph saying what it will cover. */
@@ -22610,6 +22653,148 @@ if (dealtHere("releaseChecks")) {
       return foreign
     }
 
+    /** The source a fence holds, wrapped in a `main` body for a `-body` marker. */
+    const fenceBody = (s) =>
+      s.wrap ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n` : `${s.source}\n`
+
+    /**
+     * Writes a program's fences out and compiles its entry, the last of them. A
+     * program of `file=` fences gets a directory of its own, each fence at its path;
+     * `misplaced` lists the lines of the fences before the entry that carry
+     * `nish:err` or flags, which nothing would check, a path outside that
+     * directory, which is not written, or a `.ts` that does not compile alone, which
+     * the entry might never import. A `json` fence is only ever a file of a program;
+     * alone it fails.
+     */
+    const compileProgram = (program, stem) => {
+      const s = program.entry
+      if (s.lang === "json" && s.file === null) {
+        const run = { status: 1, stdout: "", stderr: "a json fence is checked only as a file= of a program" }
+        return { run, errors: [], detail: "", body: s.source, misplaced: [] }
+      }
+      let file = path.join(snippetDir, `${stem}.ts`)
+      const misplaced = []
+      if (s.file !== null) {
+        const dir = path.join(snippetDir, `${stem}.src`)
+        for (const f of [...program.files, s]) {
+          const target = path.resolve(dir, f.file)
+          if (!target.startsWith(dir + path.sep)) {
+            misplaced.push(f.line)
+            continue
+          }
+          fs.mkdirSync(path.dirname(target), { recursive: true })
+          fs.writeFileSync(target, fenceBody(f))
+          if (f !== s && (f.kind !== "ok" || f.args.length > 0)) {
+            misplaced.push(f.line)
+          }
+        }
+        for (const f of program.files) {
+          const target = path.resolve(dir, f.file)
+          if (f.lang === "ts" && !misplaced.includes(f.line)) {
+            const out = `${path.join(snippetDir, stem)}_${f.line}${path.sep}`
+            const alone = spawnSync(NISH, [target, "-o", out], { encoding: "utf8" })
+            if (alone.status !== 0) {
+              misplaced.push(f.line)
+            }
+          }
+        }
+        file = path.join(dir, s.file)
+      } else {
+        fs.writeFileSync(file, fenceBody(s))
+      }
+      // A directory, because a snippet that imports `nish/threads` writes one module per file.
+      const out = `${path.join(snippetDir, stem)}${path.sep}`
+      const run = spawnSync(NISH, [file, "--json", "-o", out, ...s.args], { encoding: "utf8" })
+      const errors = run.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+        .filter((d) => d.severity === "error")
+      const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
+      return { run, errors, detail, body: fenceBody(s), misplaced }
+    }
+
+    // A program of several files is compiled as one: the same two files, with the
+    // export the import names taken off, are refused with NL2045. Were each fence
+    // compiled alone, or the files not written beside each other, this would compile
+    // (the module alone) or fail for another reason (no `./geometry` at all).
+    {
+      const page = [
+        "## A program of two files",
+        "```ts nish:ok file=geometry.ts",
+        "const half = (x: i32): i32 => x / 2;",
+        "```",
+        "```ts nish:ok file=main.ts",
+        'import { half } from "./geometry";',
+        "export const main = (): i32 => half(4);",
+        "```",
+      ].join("\n")
+      const programs = programsOf(markedSnippets(page))
+      check(
+        "docs: consecutive file= fences of a section are one program",
+        programs.length === 1 && programs[0].files.length === 1 && programs[0].entry.file === "main.ts",
+        JSON.stringify(programs)
+      )
+      const broken = compileProgram(programs[0], "file_fences_broken")
+      check(
+        "docs: a file= program whose import names an unexported function fails the check, with NL2045",
+        broken.run.status !== 0 && broken.errors.some((e) => e.code === "NL2045"),
+        broken.run.status === 0 ? "it compiled" : broken.detail || broken.run.stderr
+      )
+      const exported = programsOf(markedSnippets(page.replace("const half", "export const half")))
+      const fixed = compileProgram(exported[0], "file_fences_fixed")
+      check(
+        "docs: the same file= program with the export compiles",
+        fixed.run.status === 0,
+        fixed.detail || fixed.run.stderr
+      )
+      const headed = page.replace("```ts nish:ok file=main.ts", "## Another\n```ts nish:ok file=main.ts")
+      const split = programsOf(markedSnippets(headed))
+      const shell = page.replace("```ts nish:ok file=main.ts", "```sh\n# a comment\n```\n$&")
+      check(
+        "docs: a `#` line in an unmarked fence between file= fences is not a heading",
+        programsOf(markedSnippets(shell)).length === 1,
+        "the program was split"
+      )
+      check(
+        "docs: a heading between file= fences starts another program",
+        split.length === 2,
+        JSON.stringify(split)
+      )
+      const errFirst = page.replace("nish:ok file=geometry", "nish:err NL2045 file=geometry")
+      const misplaced = compileProgram(programsOf(markedSnippets(errFirst))[0], "file_fences_misplaced")
+      check(
+        "docs: a nish:err before a program's last fence is reported",
+        misplaced.misplaced.length === 1,
+        JSON.stringify(misplaced.misplaced)
+      )
+      const unimported = exported[0].entry.source.replace(/^import .*\n/, "").replace("half(4)", "2")
+      const strayPage = page
+        .replace("const half", "export const half")
+        .replace("x / 2;", "x / 2 + undefinedName;")
+        .replace(exported[0].entry.source, unimported)
+      const stray = compileProgram(programsOf(markedSnippets(strayPage))[0], "file_fences_unimported")
+      check(
+        "docs: a broken file= fence the entry never imports is reported",
+        stray.run.status === 0 && stray.misplaced.length === 1,
+        `${stray.run.status} ${JSON.stringify(stray.misplaced)}`
+      )
+      const escape = compileProgram(
+        programsOf(markedSnippets(page.replace("file=geometry.ts", "file=../geometry.ts")))[0],
+        "file_fences_escape"
+      )
+      check(
+        "docs: a file= path outside the program's directory is reported",
+        escape.misplaced.length === 1,
+        JSON.stringify(escape.misplaced)
+      )
+      const loneJson = compileProgram(
+        programsOf(markedSnippets('## Alone\n```json nish:ok\n{"name": "hash"}\n```'))[0],
+        "file_fences_json"
+      )
+      check("docs: a json fence without file= fails", loneJson.run.status !== 0, "it passed")
+    }
+
     for (const page of docPages) {
       const rel = path.relative(root, page).split(path.sep).join("/")
       const text = fs.readFileSync(page, "utf8")
@@ -22625,27 +22810,16 @@ if (dealtHere("releaseChecks")) {
         check(`${rel} marks an example for compilation`, snippets.length > 0, "no ```ts nish: fence")
       }
       const prefix = rel.slice(0, -3).replace(/[/-]/g, "_")
-      for (const s of snippets) {
-        const stem = `${prefix}_${s.line}`
-        const file = path.join(snippetDir, `${stem}.ts`)
-        const body = s.wrap
-          ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n`
-          : `${s.source}\n`
-        fs.writeFileSync(file, body)
-        // A directory, because a snippet that imports `nish/threads` writes one module per file.
-        const run = spawnSync(
-          NISH,
-          [file, "--json", "-o", `${path.join(snippetDir, stem)}${path.sep}`, ...s.args],
-          {
-            encoding: "utf8",
-          }
-        )
-        const diagnostics = run.stdout
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => JSON.parse(line))
-        const errors = diagnostics.filter((d) => d.severity === "error")
-        const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
+      for (const program of programsOf(snippets)) {
+        const s = program.entry
+        const { run, errors, detail, body, misplaced } = compileProgram(program, `${prefix}_${s.line}`)
+        if (s.file !== null) {
+          check(
+            `${rel}:${s.line}: its program's other files are plain nish:ok, inside its directory`,
+            misplaced.length === 0,
+            `line ${misplaced.join(", ")}`
+          )
+        }
         if (rel === threadsPage && s.kind === "err") {
           const refused = errors.find((e) => e.code === s.code)
           if (refused && !threadRefusals.has(s.code)) {

@@ -17,6 +17,11 @@
 //     json1k, json4k, json16k, json40k
 //               the short GET answered with up to that much JSON: 1,008,
 //               3,943, 16,193 and 40,760 bytes in the first iteration
+//     varied    three short GETs, one a read, whose answers take turns
+//               between three heads: 200 with one field and a JSON body,
+//               201 with three fields and a longer JSON body, and 404 with
+//               a text body, so no answer's status, fields or length is the
+//               one before it
 //
 // Each iteration feeds the case's reads, takes every request they hold to
 // its end, answers it, and drains the output. On each request the program
@@ -137,6 +142,7 @@ class Case {
   reads: u8[][]
   requests: i32
   jsonBytes: i32
+  varied: boolean = false
   constructor(reads: u8[][], requests: i32, jsonBytes: i32) {
     this.reads = reads
     this.requests = requests
@@ -175,6 +181,11 @@ const caseNamed = (name: string): Case | null => {
   if (name === "json40k") {
     return new Case([ascii(SHORT)], 1, 40960)
   }
+  if (name === "varied") {
+    const c: Case = new Case([ascii(SHORT), ascii(SHORT), ascii(SHORT)], 3, 0)
+    c.varied = true
+    return c
+  }
   return null
 }
 
@@ -187,6 +198,11 @@ class Bench {
   c: Case
   names: u8[][]
   values: u8[][]
+  createdNames: u8[][]
+  createdValues: u8[][]
+  missingNames: u8[][]
+  missingValues: u8[][]
+  missingBody: u8[]
   json: u8[]
   out: JsonWriter
   slug: u8[]
@@ -205,6 +221,15 @@ class Bench {
     this.c = c
     this.names = [ascii("content-type")]
     this.values = [ascii("application/json")]
+    this.createdNames = [ascii("content-type"), ascii("location"), ascii("cache-control")]
+    this.createdValues = [
+      ascii("application/json"),
+      ascii("/api/articles/how-to-train-your-dragon"),
+      ascii("no-store"),
+    ]
+    this.missingNames = [ascii("content-type")]
+    this.missingValues = [ascii("text/plain; charset=utf-8")]
+    this.missingBody = ascii("no article is called that\n")
     this.json = new Array<u8>(c.jsonBytes + 1024)
     this.out = new JsonWriter(this.json, 0)
     this.slug = ascii("how-to-train-your-dragon")
@@ -293,15 +318,13 @@ class Bench {
             this.sum = mix(this.sum, toU32(conn.data[conn.dataStart + i]))
           }
         } else if (event === H1_END) {
-          const body: i32 = this.c.jsonBytes > 0 ? this.answer(n) : 0
-          const len2: i32 = body > 0 ? body : this.small(n)
-          if (
-            conn.respond(200, this.names, this.values, len2) !== 0 ||
-            conn.write(this.json, 0, len2) !== len2
-          ) {
-            panic("bench: the response was refused")
+          if (this.c.varied) {
+            this.answerVaried(n, served)
+          } else {
+            const body: i32 = this.c.jsonBytes > 0 ? this.answer(n) : 0
+            const len2: i32 = body > 0 ? body : this.small(n)
+            this.respond(200, this.names, this.values, len2)
           }
-          conn.end()
           served += 1
         } else {
           panic(`bench: unexpected event ${event}`)
@@ -329,6 +352,44 @@ class Bench {
     conn.park()
     if (conn.inputRoom() <= 0 || conn.wantsWrite()) {
       panic("bench: the connection does not want to read")
+    }
+  }
+
+  /** Answers the request with `len` bytes of `json` as its body, and ends it. */
+  respond(status: i32, names: u8[][], values: u8[][], len: i32): void {
+    const conn: Http1Connection = this.conn
+    if (conn.respond(status, names, values, len) !== 0 || conn.write(this.json, 0, len) !== len) {
+      panic("bench: the response was refused")
+    }
+    conn.end()
+  }
+
+  /**
+   * The `varied` case's answer to request `k` of iteration `n`: the three
+   * heads in turn, so each differs from the one before it in status, fields
+   * and Content-Length.
+   */
+  answerVaried(n: i32, k: i32): void {
+    if (k === 0) {
+      this.respond(200, this.names, this.values, this.small(n))
+    } else if (k === 1) {
+      const w: JsonWriter = this.out
+      w.reset(this.json, 0)
+      w.beginObject()
+      w.key("slug")
+      w.stringBytes(this.slug, 0, toI32(this.slug.length))
+      w.key("id")
+      w.i32(n)
+      w.key("created")
+      w.boolean(true)
+      w.endObject()
+      this.respond(201, this.createdNames, this.createdValues, w.written())
+    } else {
+      const body: u8[] = this.missingBody
+      for (let i: i32 = 0; i < toI32(body.length); i += 1) {
+        this.json[i] = body[i]
+      }
+      this.respond(404, this.missingNames, this.missingValues, toI32(body.length))
     }
   }
 

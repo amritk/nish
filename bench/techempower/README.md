@@ -73,6 +73,7 @@ docker run --rm -p 8080:8080 nish-tfb
 bash bench/http-twins/build.sh       # the twins, into build/http-twins/
 bash bench/techempower/run.sh        # 3 interleaved rounds of 10 s
 bash bench/techempower/run.sh --quick
+bash bench/techempower/run.sh --browser-head --only plaintext   # and --only json
 ```
 
 `run.sh` times the entry, a byte-identical copy of it (the noise band), its
@@ -86,7 +87,11 @@ it starts in `build/tfb/pg` (`PG_BIN` names its binaries; `--only db` runs
 these alone). The server is pinned to CPU 0, Postgres to CPU 1 and `wrk` to the
 rest. Each server's peak RSS is recorded beside its figures, and the report
 says, per concurrency, whether the async twin is inside the band: WP49 stage
-6's gate. Its header says the rest of the method. The recorded figures are in
+6's gate. Its header says the rest of the method. `--browser-head` swaps
+TFB's three request headers for a browser's 759-byte head, sends one request at
+a time on `/plaintext` too, and times only the entry, its copy, `uws` and
+`go-fasthttp` at 256 connections: the browser-shaped table of
+[the HTTP/1 codec baseline](../../docs/BENCHMARKS.md#http1-codec-baseline). The recorded figures are in
 [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext)
 and, for the gate, its
 [first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)
@@ -114,8 +119,14 @@ pipelined), `/json` (64) and `/db` (64), and records three phases per entry:
   window, for instructions per request (Ir) and the top frames by self Ir.
 
 It needs `perf`, `valgrind` and `strace` beside `wrk`, and writes
-`summary.md` per test and for the run. The recorded profile is in
-[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-where-the-async-entrys-time-goes-a-profile-wp49-stage-6).
+`summary.md` per test and for the run. On Ubuntu,
+`apt-get update && apt-get install -y wrk linux-tools-generic valgrind strace`
+installs them; a fresh cloud image needs the `update` first, and its `perf`
+is under `/usr/lib/linux-tools-*/` when the running kernel has no matching
+`linux-tools` package, where `profile.sh` looks for it. The recorded profiles are in
+[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-where-the-async-entrys-time-goes-a-profile-wp49-stage-6),
+and the explicit entry's, against `uws` and `go-fasthttp`, in
+[the HTTP/1 codec baseline](../../docs/BENCHMARKS.md#http1-codec-baseline).
 
 ## The database entry
 
