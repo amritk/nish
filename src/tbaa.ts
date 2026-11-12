@@ -124,13 +124,17 @@ const buildStructNode = (emitter: Emitter, info: StructInfo): string => {
 /**
  * `, !tbaa !N` for a load or store of `field`, or `""` where the access must
  * stay conservative: under `--no-optimize-attributes`, and for an interface or
- * a class that implements one, whose layouts really do overlap.
+ * a class that implements one, whose layouts really do overlap, and a
+ * `declare class` layout.
  */
 export const fieldTbaa = (emitter: Emitter, info: StructInfo, field: FieldInfo): string => {
   if (!emitter.opts.optimizeAttributes) {
     return ""
   }
-  if (info.kind === STRUCT_INTERFACE || info.implementsNames.length > 0) {
+  // A layout class (WP27 S4.1) is C's memory as much as ours: foreign code
+  // writes it through a pointer, and a nested layout's fields are reached
+  // through the inner class's path, so its accesses carry no tag.
+  if (info.kind === STRUCT_INTERFACE || info.implementsNames.length > 0 || info.layout) {
     return ""
   }
   const base = structNode(emitter, info)

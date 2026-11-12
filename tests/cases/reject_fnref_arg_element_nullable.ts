@@ -1,5 +1,5 @@
 // WP51 stage 2: an element of nullable reference type, passed for a function
-// parameter, is refused like a non-null one (NL2741): read it into a `const`,
+// parameter, is refused like a non-null one (NL2759): read it into a `const`,
 // narrow the `const`, and pass it.
 type F = (x: i32) => i32
 

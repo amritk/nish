@@ -1,4 +1,4 @@
-// NL2744: a function reference directly in a `Result` arm, which is not a
+// NL2762: a function reference directly in a `Result` arm, which is not a
 // place a reference's set is built from.
 type F = (x: i32) => i32;
 

@@ -1,4 +1,4 @@
-// NL2742: a nullable function reference passed for a function parameter
+// NL2760: a nullable function reference passed for a function parameter
 // before a test has narrowed it.
 type F = (x: i32) => i32;
 

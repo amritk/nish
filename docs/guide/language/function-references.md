@@ -176,9 +176,9 @@ export const main = (): i32 => {
 
 `??` gives a function in place of `null`, as in `const f: Op = s.op ?? inc`.
 
-A call with no test before it is refused (`NL2740`):
+A call with no test before it is refused (`NL2758`):
 
-```ts nish:err NL2740
+```ts nish:err NL2758
 type Op = (x: i32) => i32;
 
 export const run = (h: Op | null): i32 => h(1);
@@ -220,7 +220,7 @@ A reference cannot be a `Map` key.
 ## Not in a `Result`
 
 A reference cannot sit directly in a `Result`, in either arm, nullable or not:
-`Result<Op, string>` is refused (`NL2744`). Return an array of references
+`Result<Op, string>` is refused (`NL2762`). Return an array of references
 (`Result<Op[], string>`), or a class with a reference field, instead:
 
 ```ts nish:ok
@@ -258,13 +258,13 @@ export const main = (): i32 => {
 };
 ```
 
-A field or array element is refused (`NL2741`): the arrow would read it
+A field or array element is refused (`NL2759`): the arrow would read it
 again each time the callee calls it, where JavaScript reads it once. Read it
 into a `const` first and pass the `const`, as in `const op = ops[0]` then
 `apply(op, 1)`. A variable that may be `null` is passed once a test such as
-`h !== null` has narrowed it (`NL2742`). And a variable that a later
+`h !== null` has narrowed it (`NL2760`). And a variable that a later
 argument of the same call assigns, as in `apply(h, k((h = inc)))`, is
-refused (`NL2743`): the call would read it after that assignment, where
+refused (`NL2761`): the call would read it after that assignment, where
 JavaScript reads it before; read it into a `const` first.
 
 The builtins that check the body they are handed, such as `parallelMap`, a

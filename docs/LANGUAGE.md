@@ -2982,7 +2982,10 @@ class Point {
   (`` Index signatures are not supported in class `Point` (object layout is fixed) ``,
   `reject_cls_index_signature`), `!` assertions, `abstract` on the class or a
   member (`Abstract classes are not supported`, `reject_generic_abstract`),
-  `declare class` (`` `declare class` is not supported ``, `reject_cls_declare`),
+  a `declare class` that is not a C struct layout (a method, accessor,
+  constructor or initializer in one is refused as the
+  [`declare class` section](#a-declare-class-a-c-struct-lent-by-pointer) lists,
+  `reject_cls_declare`, `reject_ffi_struct_*`),
   a class with no name — `export default class { }` or a class expression —
   (`Classes must be named`, `reject_cls_anonymous`; a named class expression is
   `Unsupported expression in Phase 1: ClassExpression`), a member named by a
@@ -3262,9 +3265,11 @@ export const main = (): i32 => {
   (`tests/cases/reject_generic_type_param_args`).
 - **A template obeys every rule a declared class obeys.** Type parameters
   change what a declaration *means*, not what it may be written with, so
-  `declare class Box<T>`, `export default class Box<T>`, `abstract class
-  Box<T>` and `interface Box<T> extends Base` are refused in the same words as
-  their non-generic spellings (`tests/cases/reject_generic_declare_class`,
+  `export default class Box<T>`, `abstract class Box<T>` and `interface
+  Box<T> extends Base` are refused in the same words as their non-generic
+  spellings, and `declare class Box<T>` is
+  `` A generic `declare class` is not supported `` (a C struct has one layout;
+  `tests/cases/reject_generic_declare_class`,
   `reject_generic_export_default`, `reject_generic_abstract`,
   `reject_generic_interface_extends`).
 - **A template claims its name in the one declaration namespace.** `class
@@ -3565,15 +3570,15 @@ export const main = (): i32 => {
   each call the callee makes, where JavaScript reads it once, so it is
   refused, `ops[next(b)]` and `b.op` alike:
   `` `ops[next(b)]` is read again at each call `twice` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const` ``
-  (NL2741, `reject_fnref_arg_effect`, `reject_fnref_arg_field`,
+  (NL2759, `reject_fnref_arg_effect`, `reject_fnref_arg_field`,
   `reject_fnref_arg_element_nullable`). A nullable local is passed once a
   test has narrowed it:
   `` `h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it ``
-  (NL2742, `tests/wordings/nl2742_fnarg_nullable_reference`). A local that a
+  (NL2760, `tests/wordings/nl2760_fnarg_nullable_reference`). A local that a
   later argument of the same call assigns is refused, since the call reads it
   after its arguments where JavaScript reads it before them:
   `` `h` is assigned by a later argument of `apply`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const` ``
-  (NL2743, `reject_fnarg_ref_assigned_later`). A reference of
+  (NL2761, `reject_fnarg_ref_assigned_later`). A reference of
   another signature is refused as any other function argument is (NL2340,
   `tests/wordings/nl2340_fnarg_reference_arity`); any
   other value is refused and named by its type,
@@ -3726,7 +3731,7 @@ export const main = (): void => {
   through it only once a test proves it holds a function, `h !== null` or an
   early `return` on `h === null`; a call before one is
   `` `h` may be `null`: a nullable function reference is called only after a test such as `h !== null` proves it holds a function ``
-  (NL2740, `reject_fnref_nullable_call`). A field is not narrowed: read it
+  (NL2758, `reject_fnref_nullable_call`). A field is not narrowed: read it
   into a `const` and test that (`reject_fnref_nullable_field_call`). A
   number is no reference, so a nullable field initialised with one is
   refused as a non-null one is (NL2013, `reject_fnref_nullable_field_literal`,
@@ -3759,7 +3764,7 @@ export const main = (): void => {
   so a reference directly in one — `Result<F, E>`, `Result<F | null, E>`,
   `Result<T, F>`, including through a generic's type parameter — is refused,
   `` `Result<(i32) => i32, string>` cannot hold a function reference in an arm: ... ``
-  (NL2744, `reject_fnref_result`, `reject_fnref_result_generic`); an array of references in an arm holds the
+  (NL2762, `reject_fnref_result`, `reject_fnref_result_generic`); an array of references in an arm holds the
   element place and compiles (`fnref_result_array`). An assignment used as a value,
   `k((r = inc))`, stores into its target and hands the same function on
   (`fnref_assign_value`). A set past
@@ -6268,14 +6273,17 @@ declare i32 @abs(i32)
 The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
-**A parameter is a scalar, a `CPtr`, a borrowed `string` or a `u8[]` buffer
-with its count; a return is a scalar, a `CPtr` or a copied `string`** — `i32`,
+**A parameter is a scalar, a `CPtr`, a borrowed `string`, a `u8[]` buffer
+with its count or a borrowed `declare class`; a return is a scalar, a `CPtr` or
+a copied `string`** — `i32`,
 `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `boolean`, `void`, the foreign
 pointer below, `string` and `string | null` in either position, and
-[a buffer](#a-u8-parameter-a-buffer-and-its-count) as a parameter. A class
-or an interface is rejected with
+[a buffer](#a-u8-parameter-a-buffer-and-its-count) and
+[a C struct](#a-declare-class-a-c-struct-lent-by-pointer) as a parameter. Any
+other class or an interface is rejected with
 `` and a declared C function takes scalars, `CPtr`, a `string` it borrows as
-`const char *` and a `u8[]` buffer followed by its `u64` count `` in a
+`const char *` and a `u8[]` buffer followed by its `u64` count, or a `declare
+class` it borrows by pointer `` in a
 parameter (`reject_ffi_class_param`), any other array with
 `` the only array a declared C function takes is a `u8[]` or a `readonly u8[]` ``
 (`tests/cases/reject_ffi_string_array_param`: a `string[]` too, which would be
@@ -6416,8 +6424,8 @@ declare function free(block: CPtr): void;
   for an address whose provenance and lifetime are unknown. The type-argument
   clause is stated where a generic function or class is instantiated
   (`reject_ffi_pointer_type_argument`), so `new Empty<CPtr>()` is refused even
-  when no member of `Empty<T>` names `T`. The one field that may hold a `CPtr`
-  is a handle class's, below.
+  when no member of `Empty<T>` names `T`. The fields that may hold a `CPtr`
+  are a handle class's and a [`declare class`](#a-declare-class-a-c-struct-lent-by-pointer)'s, below.
 - **A `null` reaches C only as the literal.** A `declare function` may return
   `CPtr | null` and may take one, and a call passes a `CPtr | null` parameter
   either the literal `null` — `realpath(path, null)`, `getcwd(null, 0)`, the
@@ -6734,6 +6742,128 @@ another name, `close(fileno(p))`, or a C function returning its argument are
 not seen by the rules above. And the constructor's foreign call returns a
 pointer the object owns: two objects built from one shared pointer would both
 close it.
+
+#### A `declare class`: a C struct, lent by pointer
+
+**A `declare class` is a C struct: its fields are laid out in declaration order,
+each at its natural alignment, and the size is rounded up to the widest
+alignment, as a C compiler lays out the same fields. `new Name()` takes no
+arguments and zero-fills it, and a `declare function` parameter typed `Name`
+borrows it as a `struct Name *`** (`tests/cases/ffi_struct_param`,
+`ffi_struct_layout`, [cookbook](IR_COOKBOOK.md#declare-class-a-c-struct-lent-by-pointer),
+`docs/wp27-ffi.md` §9b):
+
+```ts
+declare class Timespec {
+  sec: i64
+  nsec: i64
+}
+declare function clock_gettime(clock: i32, ts: Timespec): i32
+
+const now = new Timespec()
+clock_gettime(1, now)
+console.log(now.sec)
+```
+
+```llvm
+%struct.Timespec = type { i64, i64 }
+declare i32 @clock_gettime(i32, %struct.Timespec*)
+  %Timespec.obj = alloca %struct.Timespec, align 8
+  %0 = bitcast %struct.Timespec* %Timespec.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 16, i1 false)
+  store %struct.Timespec* %Timespec.obj, %struct.Timespec** %now.addr, align 8
+  %1 = load %struct.Timespec*, %struct.Timespec** %now.addr, align 8
+  %2 = call i32 @clock_gettime(i32 1, %struct.Timespec* %1)
+```
+
+- **`new` zero-fills every byte, padding included**, with one `llvm.memset` of
+  the struct's size: C may compare or hash the whole struct, and a
+  `zeroinitializer` store need not write the padding (`ffi_struct_layout`).
+- **A `CPtr` field is the target's `void *`**: eight bytes natively, four under
+  `--profile wasi` (wasm32), where the struct's size and offsets are the ones
+  clang gives the same C struct for that target (`tests/ffi-struct.js`).
+- **A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
+  `CPtr | null`, or another `declare class`, embedded by value** — C's
+  `struct timespec it_value;`, not a pointer to one. A `number` field is
+  refused whatever the mode and however it is spelled — in parentheses, through a
+  `type` alias or a chain of them, imported or not — since `--number-mode` picks
+  its width and a C struct has one layout. The resolver decides it where it meets
+  `number`, so no spelling escapes; an alias of `i32` stays a field: `` has type
+  `number`, whose width `--number-mode` chooses `` (NL2755,
+  `reject_ffi_struct_field_number`, `_paren`, `_alias`, `_alias_paren`,
+  `_alias_chain`; `tests/ffi-struct.js`: the imported alias, the `i32` alias). Any other type is
+  `` Field `ok` of `declare class Flags` has type `boolean`, which has no C
+  layout `` (NL2752, `reject_ffi_struct_field_type`, `reject_cls_declare`,
+  `reject_ffi_struct_field_array`, `reject_ffi_struct_field_class`): a
+  `boolean`, a `string`, an array and a Nish class have no C spelling the
+  compiler could promise. A struct cannot embed
+  itself, directly or through another (NL2749, `reject_ffi_struct_self`,
+  `reject_ffi_struct_cycle`).
+- **A field is plain and has no initializer, and the class has nothing but
+  fields**: no `readonly`, `static` or optional field (NL2747), no initializer,
+  because `new` zero-fills (NL2748), no constructor, method, accessor or other
+  member such as an index signature (NL2751, `reject_ffi_struct_index_signature`), no type parameter (NL2741, `reject_generic_declare_class`), no `extends` or `implements` (NL2750),
+  and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
+- **It stays in its module.** It cannot be a parameter or the return type of an
+  exported function or an exported class's method, or a field of an exported
+  class or interface: `` `declare class Point` cannot be a parameter of an
+  exported function `` (`reject_ffi_struct_export_param`, `_return`, `_method`,
+  `_field`, `_interface`). A type that holds one is refused there too, however deep —
+  through `Result`, `T | null`, an array, a generic instance or a class of
+  this program: `` `Wrap` holds a `declare class Point` and cannot be a
+  parameter of an exported function `` (NL2756,
+  `reject_ffi_struct_export_result`, `_generic`, `_holder`, `_holder_nullable`). So no `.d.ts`
+  or N-API binding ever describes one, and `--emit-header`, which lists every
+  class of the program, declares a class that holds one only as an opaque
+  `typedef struct Holder Holder;` (`tests/ffi-struct.js`, `docs/wp27-ffi.md`
+  §9g).
+- **It is a native build's.** A wasm module a page loads — freestanding wasm,
+  or any build that writes `--emit-dts` — links no C to lend a struct to, and
+  its IR is laid out for wasm32 later: `` `declare class Point` declares a C
+  struct, and a wasm module a page loads links no C to lend it to `` (NL2757,
+  `tests/wordings/nl2757_declare_class_emit_dts`, `nl2757_declare_class_wasm32`).
+  A `--profile wasi` build is wasm32 from the start and keeps it.
+- **It is built with `new` and nothing else.** `new Point(1)` is refused as for
+  any class without a constructor (`reject_ffi_struct_new_args`), and an object
+  literal typed as one is
+  `` an object literal cannot lay out a C struct `` (NL2744,
+  `reject_ffi_struct_literal`).
+- **C borrows it for the length of the call**, as it borrows a `string`: it may
+  read and write the fields until it returns, and may not keep the address. The
+  escape analysis treats the argument as a read, so an instance that does not
+  otherwise escape stays in the caller's stack frame; a C function that keeps
+  the pointer (an `aio_read` control block, a struct handed to a thread) is
+  outside the contract. Its accesses carry no TBAA tag, so a field read after
+  the call sees what C wrote, and a function of this program that passes its
+  parameter on to C writes through that parameter, so the parameter is not
+  `readonly` and its caller's read sees the write too (`ffi_struct_param`).
+- **`Name | null` passes `NULL` for `null`**, under the rule a `CPtr | null`
+  parameter follows: the literal `null`, or a value narrowed with `!== null`
+  (NL2539, `reject_ffi_struct_nullable_held`).
+- **An embedded struct is part of its owner.** `stamp.at.sec` reads and writes a
+  field in place, and `clock_gettime(1, stamp.at)` lends C the address inside
+  `stamp`; those are the only two uses. Holding it — `const at = stamp.at`, or
+  passing it to a function this program defines — is
+  `` cannot be held as a value `` (NL2743, `reject_ffi_struct_nested_bind`,
+  `reject_ffi_struct_nested_nish_arg`), and replacing it is
+  `` a `declare class` embedded in its object is written field by field ``
+  (NL2745, `reject_ffi_struct_nested_assign`).
+- **It is not a return type or an array element.** C returning a struct by
+  value, or a pointer into memory it owns, leaves the copy with no owner on
+  this side: `` a C struct is only lent to C by pointer: take a `Point`
+  parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); an array of
+  them would be a C array the program lays out element by element, and is
+  `` cannot be an array element `` (NL2740, `reject_ffi_struct_array`,
+  `reject_ffi_struct_array_literal`, `reject_ffi_struct_array_new`), however
+  the array's type is spelled.
+- **Its fields are C's to fill.** Typed JSON does not decode into one or
+  encode one: `` a `declare class`: C reads and writes its fields `` (NL2753,
+  `reject_ffi_struct_json`). A spread copies a flat one's fields into a class
+  of this program, but not one that embeds another, whose embedded struct is
+  not a value: `` which a spread cannot copy `` (NL2754,
+  `reject_ffi_struct_spread`).
+- **`--emit-ts` refuses a module that declares one**, with the same message as
+  for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
 
 #### What a declaration cannot say
 
@@ -15369,7 +15499,7 @@ messages are exact for the cases cited; other entries quote the checker
 - **a function reference to a function it cannot hold, or used other than
   called, compared, stored or passed**: NL2725, NL2726, NL2727, NL2728,
   NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736, NL2737, NL2739,
-  NL2740, NL2741, NL2742, NL2743 and NL2744 (`reject_fnref_generic`, `_async`, `_ffi`,
+  NL2758, NL2759, NL2760, NL2761 and NL2762 (`reject_fnref_generic`, `_async`, `_ffi`,
   `_rest`, `_zero_fill`, `_host`, `_host_field`, `_no_strict`, `_escape_join`,
   `_escape_join_transitive`, `_print`, `_json`, `_map_key`, `_nullable_call`,
   `_arg_effect`, `_arg_field`, `_arg_element_nullable`, `_result`, `_result_generic`, `reject_fnarg_alias`,
@@ -15501,8 +15631,10 @@ messages are exact for the cases cited; other entries quote the checker
   `Classes must be named` (a named class expression:
   `Unsupported expression in Phase 1: ClassExpression`)
   (`reject_cls_anonymous`, `nl2018_anonymous_class`)
-- **`declare class`, `declare interface`; `abstract` on a class or a member**:
-  `` `declare class` is not supported `` /
+- **a `declare class` that is not a C struct layout, a generic one, `declare
+  interface`; `abstract` on a class or a member**: the refusals the
+  [`declare class` section](#a-declare-class-a-c-struct-lent-by-pointer) lists /
+  `` A generic `declare class` is not supported `` /
   `Abstract classes are not supported` (`reject_cls_declare`,
   `reject_generic_declare_class`, `reject_generic_abstract`)
 - **a method or a constructor with no body, a constructor's return type**:

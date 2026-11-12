@@ -1,4 +1,4 @@
-// NL2743: a reference local passed for a function parameter that a later
+// NL2761: a reference local passed for a function parameter that a later
 // argument of the same call assigns.
 type F = (x: i32) => i32;
 

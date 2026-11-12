@@ -203,7 +203,7 @@ rejects. This table is the highest-value part of the page.
 | `const [a, b] = xs`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
 | `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body |
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
-| `abstract class`, `declare class`, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class` is not supported `` / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
+| `abstract class`, a `declare class` with methods, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class Point` cannot have a method or accessor `` (a `declare class` is a C struct: fields only) / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
 | `{ m() { … } }`, `{ "a": 1 }`, `const C = class { }` | ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` / `Object literal keys must be plain identifiers` / `Classes must be named` | fields with identifier keys, a top-level function over the interface, a named top-level class |
 | `const o = { ...base }` with no annotation; `{ ...maybe }` for a `T \| null`; `{ ...base }` copying a field the target lacks | ``An object literal with a spread needs a contextual class or interface type…`` / ``Spread of `T \| null` into `T` may spread `null`…`` / ``Spread of `Point3` into `Point` copies field `z`, which `Point` does not declare…`` | annotate the literal's type (`const p: Point = { ...base, x: 1 }`); narrow the source first; spread a value whose fields the target declares, or set the fields by name |
 | `{ [k]: v }`, `[k]: i32` in a class or interface | `Computed property names are forbidden in Nish (member names are fixed at compile time)` | a `Map` for a keyed table |
@@ -803,10 +803,11 @@ export const main = (): i32 => {
 - **A type parameter takes no type arguments of its own.** `T` is whatever the
   instantiation bound it to, so `const y: T<i32>` is
   `` Unsupported type reference `T<i32>` ``.
-- **A template obeys every rule a declared class obeys**: `declare class
-  Box<T>`, `export default class Box<T>`, `abstract class Box<T>` and
-  `interface Box<T> extends Base` are refused in the words their non-generic
-  spellings are refused in.
+- **A template obeys every rule a declared class obeys**: `export default
+  class Box<T>`, `abstract class Box<T>` and `interface Box<T> extends Base`
+  are refused in the words their non-generic spellings are refused in, and
+  `declare class Box<T>` (a C struct has one layout) is
+  `` A generic `declare class` is not supported ``.
 - **A template claims its name.** `class Box<T>` is a declaration of `Box`, so
   a function, constant, alias, enum or second class of that name is refused
   whichever was written first: `` `Box` is already declared in this module ``,
@@ -928,7 +929,7 @@ export const main = (): i32 => {
   method or constructor parameter an inline function type is refused; type it
   through an alias and it is an ordinary [function reference](#function-references)
   parameter. A local holding a reference is a function argument too (a field
-  or element is refused, NL2741: read it into a `const`); the runners that check their body (`parallelMap`,
+  or element is refused, NL2759: read it into a `const`); the runners that check their body (`parallelMap`,
   `parallelReduce`, `spawn`, `expose`, `region`, ...) refuse one (NL2734).
 
 ```ts nish:err NL2585
@@ -980,21 +981,21 @@ export const main = (): i32 => {
   a function taking a `MutexGuard`, is only ever called by name (NL2739).
 - **No empty value but `null`.** `new Array<Op>(n)` is refused (NL2730);
   `Op | null` is allowed and `new Array<Op | null>(n)` fills with `null`. A
-  call needs a `!== null` test first (NL2740); read a nullable field into a
+  call needs a `!== null` test first (NL2758); read a nullable field into a
   `const` and test that. A module `const` cannot hold a reference.
 - **A `Map` value, not a key.** `Map<K, Op>`, `Map<K, Op[]>` and
   `Map<K, Op | null>` work; a call through what `get` returns dispatches over
   the functions stored into any `Map` value or array of that type. A
   function-type key is refused.
 - **Not in a `Result` arm.** `Result<Op, E>`, `Result<Op | null, E>` and
-  `Result<T, Op>` are refused (NL2744); `Result<Op[], E>` works, or return a
+  `Result<T, Op>` are refused (NL2762); `Result<Op[], E>` works, or return a
   class that holds the reference.
 - **Called, compared, stored, passed — nothing else.** Not printed or
   interpolated (NL2737), ordered, joined or encoded as JSON.
 - **A function argument**: a local holding one fills an inline
   function-typed parameter (`const op = ops[0]; apply(op, 3)`); a field or
-  element passed directly is refused (NL2741), a nullable local until it is
-  narrowed (NL2742); `parallelMap`,
+  element passed directly is refused (NL2759), a nullable local until it is
+  narrowed (NL2760); `parallelMap`,
   `spawn`, `expose`, `region` and the other runners that check their body take
   only a named function or arrow (NL2734).
 - **It stays in the program**: a `-o` library cannot export it in a
@@ -1516,10 +1517,49 @@ export const main = (): i32 => {
 };
 ```
 
-- **A parameter is a scalar, a `CPtr`, a borrowed `string` or a `u8[]` buffer
-  with its count; a return is a scalar, a `CPtr` or a copied `string`.** The
-  scalars are the integer and float widths, `boolean` and `void`. Any other
-  array, a class or an interface is rejected, in either position.
+- **A parameter is a scalar, a `CPtr`, a borrowed `string`, a `u8[]` buffer
+  with its count or a borrowed `declare class`; a return is a scalar, a `CPtr`
+  or a copied `string`.** The scalars are the integer and float widths,
+  `boolean` and `void`. Any other array, a Nish class or an interface is
+  rejected, in either position, and a `declare class` is never a return.
+- **A `declare class` is a C struct, lent by pointer.** Its fields are laid out
+  in declaration order at C's alignment, and `new Name()` zero-fills it. A
+  field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
+  `CPtr | null` or another `declare class`, embedded by value. `number` is
+  refused by any spelling, parentheses or an alias included, because `--number-mode` picks
+  its width; spell `i32` or `f64`. Fields only: no initializer, `readonly`,
+  method or constructor. C borrows it for the call, may write its fields, and
+  may not keep the address. It stays in its module: no exported signature
+  holds one, however deep (NL2746, NL2756), and a page module (freestanding
+  wasm, `--emit-dts`) refuses one (NL2757).
+
+```ts nish:ok
+declare class Timespec {
+  sec: i64;
+  nsec: i64;
+}
+declare function clock_gettime(clock: i32, ts: Timespec): i32;
+
+export const main = (): i32 => {
+  const now = new Timespec();
+  clock_gettime(1, now);
+  console.log(`${now.sec >= 0}`);
+  return 0;
+};
+```
+
+```ts nish:err NL2755
+type Coord = number;
+
+declare class Point {
+  x: Coord;
+}
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
 - **A run of `u8[]` / `readonly u8[]` parameters is followed by exactly one
   `u64`**, the byte count C may touch in each (`memcpy(dst: u8[], src:
   readonly u8[], n: u64)`). `readonly` is C's `const`. A run without its count

@@ -65,7 +65,7 @@ messages are exact for the cases cited; other entries quote the checker
 - **a function reference to a function it cannot hold, or used other than
   called, compared, stored or passed**: NL2725, NL2726, NL2727, NL2728,
   NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736, NL2737, NL2739,
-  NL2740, NL2741, NL2742, NL2743 and NL2744 (`reject_fnref_generic`, `_async`, `_ffi`,
+  NL2758, NL2759, NL2760, NL2761 and NL2762 (`reject_fnref_generic`, `_async`, `_ffi`,
   `_rest`, `_zero_fill`, `_host`, `_host_field`, `_no_strict`, `_escape_join`,
   `_escape_join_transitive`, `_print`, `_json`, `_map_key`, `_nullable_call`,
   `_arg_effect`, `_arg_field`, `_arg_element_nullable`, `_result`, `_result_generic`, `reject_fnarg_alias`,
@@ -197,8 +197,10 @@ messages are exact for the cases cited; other entries quote the checker
   `Classes must be named` (a named class expression:
   `Unsupported expression in Phase 1: ClassExpression`)
   (`reject_cls_anonymous`, `nl2018_anonymous_class`)
-- **`declare class`, `declare interface`; `abstract` on a class or a member**:
-  `` `declare class` is not supported `` /
+- **a `declare class` that is not a C struct layout, a generic one, `declare
+  interface`; `abstract` on a class or a member**: the refusals the
+  [`declare class` section](declarations.md#a-declare-class-a-c-struct-lent-by-pointer) lists /
+  `` A generic `declare class` is not supported `` /
   `Abstract classes are not supported` (`reject_cls_declare`,
   `reject_generic_declare_class`, `reject_generic_abstract`)
 - **a method or a constructor with no body, a constructor's return type**:

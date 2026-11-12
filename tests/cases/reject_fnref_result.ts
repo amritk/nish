@@ -1,7 +1,7 @@
 // WP51 stage 2: a `Result` arm is not a reference place, so `Ok(f)` would
 // store a tag no dispatcher's set was built from (natively the call printed 9
 // where Node prints 11). A reference in either arm, bare or nullable, is
-// refused (NL2744); `reject_fnref_result_generic` reaches one through a
+// refused (NL2762); `reject_fnref_result_generic` reaches one through a
 // generic's type parameter.
 type F = (x: i32) => i32
 

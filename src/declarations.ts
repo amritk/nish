@@ -17,7 +17,13 @@ import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
 import { rejectStoredMask } from "./simd"
 import { hostTypeProblem } from "./host-module"
-import { ASYNC_RETURN_MESSAGE, promiseArgument, rejectForeignPointer, resolveType } from "./annotations"
+import {
+  ASYNC_RETURN_MESSAGE,
+  promiseArgument,
+  deferExportedLayout,
+  rejectForeignPointer,
+  resolveType,
+} from "./annotations"
 import { annotationSpelling } from "./arrays"
 import { functionTypeHereMessage, isContextualLiteral, isFunctionParameter } from "./generics"
 import { isScalarArgument } from "./escape"
@@ -39,7 +45,7 @@ import {
   Node,
 } from "./nodes"
 import { FieldInfo, FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
-import { checkLiteralInitializer } from "./structs"
+import { checkLiteralInitializer, layoutClass } from "./structs"
 import {
   isForeignBuffer,
   isHostWindow,
@@ -138,6 +144,11 @@ export const collectParams = (
     if (sig.exported || owner >= 0) {
       const where = sig.exported ? "a parameter of an exported function" : "a parameter of a method"
       rejectStoredMask(ctx, type, where, param.children[1])
+    }
+    if (sig.exported) {
+      const where =
+        owner >= 0 ? "a parameter of an exported class's method" : "a parameter of an exported function"
+      deferExportedLayout(ctx, type, where, param.children[1])
     }
     sig.paramNames.push(name)
     sig.paramTypes.push(type)
@@ -501,6 +512,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
     )
     if (sig.exported) {
       rejectStoredMask(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
+      deferExportedLayout(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
     }
   }
   return sig
@@ -614,6 +626,10 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       // §8b), and `string | null` passes `NULL`. Unlike a `CPtr`'s, this null
       // is the program's to give: it names no address, so there is no
       // provenance for C to be wrong about.
+    } else if (layoutClass(ctx.program, ctx.table, bare) !== null) {
+      // S4.1: a C struct, lent by pointer for the call (`docs/wp27-ffi.md`
+      // §9d); `Name | null` passes `NULL`, held at the call to the literal or a
+      // narrowed value as a `CPtr | null` is.
     } else if (ctx.table.isRanged(sig.paramTypes[i])) {
       refuseForeignRange(ctx, decl, name, `takes \`${sig.paramNames[i]}\` as`, sig.paramTypes[i])
     } else if (bare >= 0 && ctx.table.kindOf(bare) === K_ARRAY) {
@@ -625,7 +641,7 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       // `docs/wp27-ffi.md` §8g): the declaration cannot tell `realpath(p, null)`
       // from handing C back a null it gave out.
       rule =
-        "a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count"
+        "a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count, or a `declare class` it borrows by pointer"
     }
     if (rule !== "") {
       ctx.error(
@@ -648,7 +664,14 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
     // `string` panics on one (`ffi-null`).
     return
   }
-  if (ctx.table.isRanged(sig.returnType)) {
+  if (layoutClass(ctx.program, ctx.table, ctx.table.stripNull(sig.returnType)) !== null) {
+    // S4.1: C returning a struct by value, or a pointer into memory it owns,
+    // has no owner on this side; S4.2's `readStruct` copies one out of a `CPtr`.
+    ctx.error(
+      decl.children[2],
+      `\`declare function ${name}\` returns the \`declare class\` ${ctx.table.typeName(sig.returnType)}, and a C struct is only lent to C by pointer: take a \`${ctx.table.typeName(ctx.table.stripNull(sig.returnType))}\` parameter for C to fill`
+    )
+  } else if (ctx.table.isRanged(sig.returnType)) {
     refuseForeignRange(ctx, decl.children[2], name, "returns", sig.returnType)
   } else if (!isForeignType(ctx.table, sig.returnType)) {
     const spelled = ctx.table.typeName(sig.returnType)

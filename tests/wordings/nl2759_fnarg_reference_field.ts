@@ -1,4 +1,4 @@
-// NL2741: a field of function reference type passed for a function parameter
+// NL2759: a field of function reference type passed for a function parameter
 // would be read again at each call the callee makes; pass a `const` instead.
 type F = (x: i32) => i32;
 

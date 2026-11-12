@@ -1,5 +1,5 @@
 // WP51 stage 2: a generic's `Result<T, E>` instantiated at a reference type
-// is a reference in a `Result` arm, refused like a written one (NL2744).
+// is a reference in a `Result` arm, refused like a written one (NL2762).
 type F = (x: i32) => i32
 
 const plus1 = (x: i32): i32 => x + 1

@@ -1,5 +1,5 @@
 // WP51 stage 2: an element passed for a function parameter would be read
-// again at each call the callee makes, so it is refused (NL2741), here where
+// again at each call the callee makes, so it is refused (NL2759), here where
 // reading it also calls a function.
 type F = (x: i32) => i32;
 
