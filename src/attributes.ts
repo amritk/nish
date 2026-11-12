@@ -3986,7 +3986,13 @@ class FactCollector {
     // `nish:simd`'s load reads elements and its store writes them, as an
     // element access does, through a bounds check (`isSimdAccess`).
     // `cErrno` reads the slot the foreign calls write (WP27 S5).
-    if (name === "uncheckedGet" || name === "readCString" || name === "readStruct" || name === "cErrno" || isSimdLoad(name)) {
+    if (
+      name === "uncheckedGet" ||
+      name === "readCString" ||
+      name === "readStruct" ||
+      name === "cErrno" ||
+      isSimdLoad(name)
+    ) {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet" || name === "store") {
       this.facts.effect = EFFECT_WRITE
