@@ -54,8 +54,10 @@ PASS  a name that takes in a colon of the kept value is refused
 PASS  nothing is queued by either
 PASS  a head of over 1 KiB twice
 PASS  written both times
+PASS  a head of over 1 KiB, then a short one with its field three times
+PASS  the short one is copied twice
 PASS  seventeen fields twice
 PASS  written both times
 PASS  two hundred answers, each byte for byte
 PASS  two heads written, 198 copied
-http1 head reuse: 60 passed, 0 failed, 0 skipped
+http1 head reuse: 62 passed, 0 failed, 0 skipped

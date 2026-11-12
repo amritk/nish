@@ -301,6 +301,19 @@ export const main = (): i32 => {
   t.eqStr("a head of over 1 KiB twice", drained(long), times(`${bigHead}${body}`, 2));
   t.ok("written both times", long.headCopies === 0);
 
+  // A long head, then short ones with its status and field count: the first
+  // short one is the first kept, the second its first copy.
+  const after = fed(times(GET, 4));
+  nextRequest(after);
+  answer(after, 200, fields(["X-Big"]), fields([big]), body);
+  for (let k: i32 = 0; k < 3; k++) {
+    nextRequest(after);
+    answer(after, 200, fields(["X-Big"]), fields(["v"]), body);
+  }
+  const shortHead: string = head(200, "OK", fields(["X-Big"]), fields(["v"]), 13, "", date);
+  t.eqStr("a head of over 1 KiB, then a short one with its field three times", drained(after), `${bigHead}${body}${times(`${shortHead}${body}`, 3)}`);
+  t.ok("the short one is copied twice", after.headCopies === 2);
+
   // More fields than are kept: written every time.
   const many: string[] = [];
   const manyValues: string[] = [];
