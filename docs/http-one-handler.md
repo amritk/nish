@@ -46,8 +46,17 @@ the carriers already export:
 - `Http2Connection`: `feed`, `inputTail`, `received`, `endInput`, `next`,
   `respond`, `writeData`, `reset`, `consume`, `restart` and `rest`, plus
   `Http2Pools`.
-- `Http2TlsServer`: `accept`, `signP256`, `next`, `connection`, `flush` and
-  `close`.
+- `Http2TlsServer`: `accept`, `holds`, `fd`, `readable`, `writable`,
+  `signP256`, `next`, `connection`, `flush` and `close`.
+
+`inputTail`, `received` and `endInput` are `@internal` in `http2.ts`
+("read by `http2-tls.ts`'s server loop; not for callers"). The h2c carrier
+is the second server loop in `std/net` and relies on them exactly as
+`http2-tls.ts` does; its own doc comment says so. Like `Http2TlsServer`, it
+sets each slot's `Http2Connection.pools` (one shared `Http2Pools`) and
+`Http2Connection.date` (from one `HttpDate`), and offers the same slot
+surface to the façade: `holds`, `fd`, `readable`, `writable`, `next`,
+`connection`, `flush` and `close`.
 - `Http3Server`: `serve`, `receive`, `ready`, `connection`, `flush`,
   `timeout`, `tick` and `stop`, with `Http3Connection`'s `respond`,
   `writeData`, `reset` and `discardRequest`.
@@ -72,7 +81,19 @@ loops on `wait`, `ready` and `take`, switching on `r.route`.
 ```ts
 import { Router } from "nish/net/router";
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server";
-import { HANDLER_DROPPED } from "nish/net/handler";
+import { Http1Config } from "nish/net/http1-server";
+import { Http2Config } from "nish/net/http2";
+import { Http3Config } from "nish/net/http3";
+import { TlsServerConfig } from "nish/net/tls";
+import { QuicServerConfig } from "nish/net/quic";
+
+// Declared elsewhere in the program: the four sockets (tcpFd1..3, udpFd),
+// tlsConfig: TlsServerConfig and quicConfig: QuicServerConfig (built as
+// tests/link/net_interop_server builds them), entropy: u8[] of
+// QUIC_LISTENER_ENTROPY_SIZE random bytes, key: Secret<u8[]>, and
+// lookup(w: JsonWriter, id: i64): void.
+const TEXT_PLAIN: u8[] = [/* "text/plain" */];
+const HELLO_BODY: u8[] = [/* "hello" */];
 
 const router = new Router();
 const HELLO = router.add("GET", "/hello");
@@ -247,6 +268,21 @@ cannot be avoided on HTTP/2 or HTTP/3:
 - **HTTP/3.** At `H3_REQUEST`, the request takes the same `HttpFields`
   layout. It is valid only until the next request or trailers on the
   connection, so it is copied the same way.
+
+**Targets the router cannot match.** Routes start with `/`, so the router
+matches neither the authority form of a plain `CONNECT` (which passes
+`readRequest` on h2 and h3 with no `:path`) nor the `*` of `OPTIONS *`
+([router.ts](../std/net/router.ts) leaves both to the program). The façade
+answers both itself, the same way on every version, and never hands them to
+`take`:
+
+- **A plain `CONNECT`** is answered 501 with no body: the façade is an
+  origin server and has no tunnel to offer (RFC 9110 §9.3.6, §15.6.2). On
+  h2 and h3 the stream then ends; on HTTP/1.1 the connection is closed, as
+  a tunnel request's bytes after the head are not HTTP.
+- **`OPTIONS *`** is answered 204 with no body and no `Allow` field: a
+  request about the server as a whole, which has no single method set
+  (RFC 9110 §9.3.7).
 
 A zero-copy view of the head is therefore not possible for h2 or h3. "Without
 copying" means one copy in, made once, into a buffer that is reused. No head
@@ -433,7 +469,11 @@ alt-svc: h3=":<port>"; ma=<altSvcMaxAge>
 
 - **`ma` defaults to 86400 seconds.** That is RFC 7838's own default of 24
   hours, written out so that the value is visible. A deployment that moves
-  its QUIC port lowers it, and `0` is allowed.
+  its QUIC port lowers it.
+- **`altSvcMaxAge = 0` sends no Alt-Svc.** Under RFC 7838 §3.1 `ma=0` makes
+  the alternative stale at once, so advertising it would cost bytes for
+  nothing. Zero is how a server with an HTTP/3 listener turns the
+  advertisement off.
 - **The port** is the QUIC socket's own (`netLocalPort(fd)`), unless
   `altSvcPort` is nonzero. That covers a NAT or a load balancer in front of
   the server.
@@ -470,8 +510,7 @@ listen time, or on first use and then kept:
 | What | Made | Per warmed request |
 | --- | --- | --- |
 | request pool (`HttpServerRequest` × `requests`) | constructor | none |
-| each request's `head`, `spans`, `params`, `pending` | grown to the largest seen, then kept | none |
-| each request's `body` | grown to the largest seen, kept up to 64 KiB (see below) | none below 64 KiB |
+| each request's `head`, `spans`, `params`, `body`, `pending` | grown to the largest seen, then kept | none |
 | HTTP/1.1 connections | `Http1Server`, reused per slot | none |
 | HTTP/2 connections and `Http2Pools` | first accept on a slot, then `restart` | none |
 | HPACK decoding | `Http2Connection` | none ([#473](https://github.com/amritk/nish/issues/473)) |
@@ -484,14 +523,27 @@ listen time, or on first use and then kept:
 | TLS server random and ephemeral key, 32 bytes each | `listenHttp2Tls`, refilled with `crypto.getRandomValues` before each `accept` | none |
 | JSON writer | constructor | none |
 
-**The body ceiling.** A body kept at its high-water mark would let the pool
-reach `requests × maxBody` (1 GiB at the defaults) once a few large uploads
-have passed through every slot. So a body grown past 64 KiB is released when
-its request is freed, and the next request on that pool entry starts from
-64 KiB again. The ceiling of kept body memory is `requests × 64 KiB` (64 MiB
-at the defaults), plus `maxBody` for each request in flight with a large
-body. A request over 64 KiB allocates once; one at or under it allocates
-nothing, which is what the warmed pin measures.
+**The body ceiling.** Memory is a bump arena: `Arena` has no `release` and
+no `reset` (`runtime/nish.d.ts`), so a body array once grown cannot be given
+back, and replacing it with a smaller one would leak the old one. The façade
+therefore keeps `HttpHandler`'s model (`handler.ts`, "The body cap"): each
+pool entry's `body` grows to the largest body it has held and is kept at
+that size. The bound is stated, not hidden:
+
+- **Bodies can reach `requests × maxBody`**, 1 GiB at the defaults
+  (1024 × 1 MiB), after enough large uploads have passed through every
+  pool entry. No request field moves it past that: a body over `maxBody`
+  is answered 413 (§3.1) before its array grows further.
+- **A deployment sets the bound** with `requests` and `maxBody`. One that
+  takes large uploads and cannot afford the product lowers `requests`.
+  The guide page states the product beside both limits.
+- **The warmed pin is honest about it:** `Arena.used()` is flat over a run
+  whose bodies are no larger than ones already seen; the growth to the
+  high-water mark is the "first use" the table above allows.
+
+A tighter bound, such as a few large-body buffers made once and a 503 or
+REFUSED_STREAM when all are taken, is possible later without an API change;
+G7 does not need it.
 
 **TLS bytes.** `Http2TlsServer.accept(serverRandom, ephemeralPrivate)` needs
 32 fresh random bytes for each argument on every accept, and wipes
@@ -573,9 +625,10 @@ version.
 | a body that stalls past `bodyTimeout` | h1: slot closed; h2: RST_STREAM CANCEL; h3: STOP_SENDING and reset; the request never reaches `take` |
 | an h2 connection with no open stream past `idleTimeout` | closed; a connection with an open stream is not |
 | an h2c connection that sends the preface, then nothing | closed by `idleTimeout`, not `prefaceTimeout` |
-| `altSvcMaxAge = 0` | `alt-svc: h3=":<port>"; ma=0` exactly (the alternative is fresh for 0 seconds) |
+| `altSvcMaxAge = 0` with an HTTP/3 listener | no `alt-svc` field on any version |
 | `altSvcPort` set | that port in the field, not the QUIC socket's own |
-| a body of 1 MiB, then 100 small requests | `Arena.used()` flat over the small ones (the large body was released, §6) |
+| a body of 1 MiB on every pool entry, then 1 MiB bodies again | `Arena.used()` grows by no more than `requests × maxBody` in the first pass and is flat in the second (§6) |
+| a plain `CONNECT`, and `OPTIONS *`, on each version | 501, and 204 with no `Allow`; neither reaches `take` |
 | response over `maxResponseFields` | `HANDLER_DROPPED`, nothing written |
 | a window of 1 byte on h2 and h3 | the whole body arrives in order via `pending` |
 | negative: `wait` with a TLS or QUIC listener | panics |
