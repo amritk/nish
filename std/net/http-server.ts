@@ -705,6 +705,13 @@ export class HttpServer {
   /** Slots that stopped reading for want of a free request, `starved`, and whether each is in it. */
   private starved: i32[]
   private h1Starved: boolean[]
+  /**
+   * Per slot: 0 while no `drive` of it runs, 1 while one does, 2 once a call
+   * inside it (an answer screened while it reads) asked for another pass.
+   * The nested call only marks it, so the depth stays one however many
+   * screened requests one write pipelines.
+   */
+  private h1Driving: i32[]
 
   /** The response fields `start` hands the carrier, set for each response. */
   private outNames: u8[][]
@@ -849,6 +856,7 @@ export class HttpServer {
     this.h1Open = []
     this.starved = []
     this.h1Starved = []
+    this.h1Driving = []
     this.restUntil = new Array<i64>(4)
     this.h2Clear = []
     this.h2Gen = []
@@ -907,6 +915,7 @@ export class HttpServer {
     this.h1Current = new Array<i32>(slots)
     this.h1Open = new Array<boolean>(slots)
     this.h1Starved = new Array<boolean>(slots)
+    this.h1Driving = new Array<i32>(slots)
     for (let s: i32 = 0; s < slots; s++) {
       this.h1Current[s] = -1
     }
@@ -1147,6 +1156,8 @@ export class HttpServer {
     for (let id: i32 = 0; id < HANDLER_MAX_WATCHED; id++) {
       this.watchedFired[id] = false
     }
+    // A starved slot driven here may read a head, so it reads the clock of now.
+    this.turnAt = monotonicNanos()
     this.feedStarved()
     let now: i64 = monotonicNanos()
     let timeout: i32 = this.queueCount > 0 ? 0 : timeoutMs
@@ -1367,6 +1378,21 @@ export class HttpServer {
    * reading and goes on `starved` until a request is handed back.
    */
   private drive(h1: Http1Server, slot: i32): void {
+    if (this.h1Driving[slot] !== 0) {
+      this.h1Driving[slot] = 2
+      return
+    }
+    this.h1Driving[slot] = 1
+    this.drivePass(h1, slot)
+    while (this.h1Driving[slot] === 2 && this.h1Open[slot]) {
+      this.h1Driving[slot] = 1
+      this.drivePass(h1, slot)
+    }
+    this.h1Driving[slot] = 0
+  }
+
+  /** One pass of `drive`: the slot's events until it needs more input, then `settle`. */
+  private drivePass(h1: Http1Server, slot: i32): void {
     const conn: Http1Connection = h1.connection(slot)
     let event: i32 = H1_NEED_MORE
     if (!this.starve(slot)) {
@@ -1737,7 +1763,8 @@ export class HttpServer {
 
   /**
    * The `content-length` `r` declared, or -1 for none: its body array is
-   * grown to it at once, in one step rather than many. The carrier has
+   * grown toward it in one step rather than many, to the length itself up to
+   * 64 KiB and to `maxBody` past that. The carrier has
    * checked the value's syntax and refused one past `maxBody`.
    */
   private declared(r: HttpServerRequest): i32 {
@@ -2618,7 +2645,9 @@ export class HttpServer {
       return 204
     }
     const count: i32 = toI32(f.names.length)
-    if (count + 1 > this.maxFields) {
+    // `:authority` becomes a `host` field, so it takes a slot only when present.
+    const host: i32 = toI32(f.authority.length) > 0 ? 1 : 0
+    if (count + host > this.maxFields) {
       return 431
     }
     let bytes: i32 = toI32(f.method.length) + pathLength + 4 + toI32(f.authority.length)

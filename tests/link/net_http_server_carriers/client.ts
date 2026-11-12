@@ -23,7 +23,9 @@ import {
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
+  quicPushConnectionClose,
   quicPushStream,
+  quicPushStreamError,
   quicPushStreamValue,
   quicPutDatagram,
 } from "nish/net/quic-frame";
@@ -173,6 +175,28 @@ export class QuicClient {
   credit(id: i64, value: i64): void {
     const frames: u8[] = [];
     quicPushStreamValue(frames, QUIC_FRAME_MAX_STREAM_DATA, id, value);
+    this.packet(frames);
+  }
+
+  /** A RESET_STREAM of stream `id` with `code`, at the final size the client has sent on it. */
+  reset(id: i64, code: i64): void {
+    const frames: u8[] = [];
+    quicPushStreamError(frames, id, code, this.advance(id, n64(0)));
+    this.packet(frames);
+  }
+
+  /** A STOP_SENDING of stream `id` with `code`. */
+  stop(id: i64, code: i64): void {
+    const frames: u8[] = [];
+    quicPushStreamError(frames, id, code, n64(-1));
+    this.packet(frames);
+  }
+
+  /** An application CONNECTION_CLOSE with `code` and no reason. */
+  close(code: i64): void {
+    const frames: u8[] = [];
+    const reason: u8[] = [];
+    quicPushConnectionClose(frames, true, code, n64(0), reason);
     this.packet(frames);
   }
 
