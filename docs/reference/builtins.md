@@ -3700,8 +3700,11 @@ the port, 0 for any.
 <scalar-field name="flags" type="i32" required>
 
 flag 1 `SO_REUSEPORT`, so several sockets that all ask for it share a port and
-  the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); any other
-  bit is -22.
+  the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); flag 4, with
+  flag 1 and a group size N from 1 to 255 in bits 8 to 15, steers QUIC: the port's group hands
+  each datagram to its socket number (byte 0 of the Destination Connection ID) mod N, in the
+  order the sockets were bound, and a refused attach closes the socket and answers the errno
+  (-95 on Darwin). Flag 4 without 1, with 2 or with N 0, N without 4, or any other bit is -22.
 
 </scalar-field>
 

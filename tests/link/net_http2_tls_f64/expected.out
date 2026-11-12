@@ -37,4 +37,14 @@ PASS  a server of 1024 slots and no connection has made no frame buffer (0)
 PASS  and has made one slot's connection, slot 0's (1)
 PASS  a slot never accepted into is free: no descriptor, H2_ERROR to next, done to flush
 PASS  and names slot 0's connection, making none for itself
-http2 over tls: 39 passed, 0 failed, 0 skipped
+PASS  a client that does not acknowledge the server's SETTINGS is answered all the same
+PASS  before any deadline, expire closes nothing
+PASS  ten seconds on, it closes the client late with its acknowledgement, and the one that never said hello, whose clock ran from its accept
+PASS  the first is sent GOAWAY SETTINGS_TIMEOUT
+PASS  and both sockets end
+PASS  a client that acknowledged and asks is not idle
+PASS  a minute on, it is
+PASS  and is sent GOAWAY NO_ERROR, naming its stream
+PASS  and its socket ends
+PASS  with nothing gone wrong in the loop
+http2 over tls: 49 passed, 0 failed, 0 skipped

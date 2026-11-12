@@ -214,6 +214,7 @@ class Http2Config
 | `connectionWindowSize: i32` | The connection's receive window, raised from 65,535 by a WINDOW_UPDATE at the start. |
 | `enableConnectProtocol: boolean` | SETTINGS_ENABLE_CONNECT_PROTOCOL (RFC 8441): whether `:protocol` is accepted. |
 | `headerTableSize: i32` | SETTINGS_HEADER_TABLE_SIZE, in bytes: the largest HPACK dynamic table the peer's header blocks may make the decoder keep. It is in force once the peer acknowledges the server's SETTINGS; until then the table is 4,096 bytes, RFC 7541's default. A size update past it is a COMPRESSION_ERROR. |
+| `idleTimeout: i32` | Milliseconds without a byte read or written, counted from `lastActive`, after which `expired` answers true and `timeOut` ends the connection with GOAWAY NO_ERROR, streams open or not. |
 | `initialWindowSize: i32` | SETTINGS_INITIAL_WINDOW_SIZE: what each stream may send before the server credits it. |
 | `maxFrameSize: i32` | SETTINGS_MAX_FRAME_SIZE: the largest frame payload read, which sizes the input buffer. |
 | `maxHeaderBlock: i32` | The largest header block, compressed, across HEADERS and CONTINUATION. |
@@ -221,6 +222,7 @@ class Http2Config
 | `maxStreams: i32` | SETTINGS_MAX_CONCURRENT_STREAMS, and the stream slots the connection allocates. |
 | `outputSize: i32` | The output buffer, in bytes. |
 | `resetBudget: i32` | How many streams may be reset — by the peer, or by the server for a stream error the peer caused — net of the ones the server finishes. |
+| `settingsTimeout: i32` | Milliseconds the peer has, from `begin`, to acknowledge the server's SETTINGS: past them `expired` answers true and `timeOut` ends the connection with SETTINGS_TIMEOUT (RFC 9113 §6.5.3). |
 
 ### Http2Connection
 
@@ -249,6 +251,7 @@ class Http2Connection
 | `inputEnd: i32` | Where the bytes fed and not read yet end in `input`. |
 | `inputStart: i32` | Where the bytes fed and not read yet start in `input`. |
 | `inputUsed: i32` | How far into `input` the connection has written since it borrowed it: what giving it back zeroes. |
+| `lastActive: i64` | When the carrier last moved a byte for the connection, in `monotonicNanos`; `begin` starts it. |
 | `lastPeerStream: i32` | The highest stream identifier the peer has opened. |
 | `lastStreamId: i32` | H2_GOAWAY's last stream identifier. |
 | `output: u8[]` | Bytes to send are `output[outputStart .. outputEnd)`. |
@@ -258,9 +261,13 @@ class Http2Connection
 | `pools: Http2Pools \| null` | Where the connection borrows its input, its output and the header block it gathers: the pools `Http2TlsServer` shares among its slots, or, while this is `null` when a buffer is first needed, pools of one of each the connection makes itself. While the connection holds no input or no output buffer, `input` or `output` is an empty array. |
 | `resetByPeer: boolean` | Whether H2_RESET came from the peer's RST_STREAM rather than a rule its stream broke. |
 | `settingsAcked: boolean` | Whether the peer has acknowledged the server's SETTINGS. |
+| `settingsSince: i64` | When the server's SETTINGS began to wait for their acknowledgement, in `monotonicNanos`; `begin` sets it. |
 | `stream: i32` | The last event's stream. |
+| `begin(now: i64): void` | Starts both of the connection's clocks at `now`: the deadline for the peer's acknowledgement of the server's SETTINGS, and the idle one. The connection reads no clock itself; a carrier calls this when it takes the peer, stamps `lastActive` whenever bytes move, and asks `expired`. |
 | `consume(n: i32): void` | Marks the first `n` bytes of the output sent; once all of it is, the output goes back to its pool. |
 | `drop(): void` | Ends the connection where it stands, for a carrier that closes it: every buffer is given back, zeroed, with what was unread or unsent, and the connection answers H2_ERROR until `restart`. `errorCode` is left as it was. |
+| `expired(now: i64): boolean` | Whether the connection has outlived a timeout at `now`: the peer has not acknowledged the server's SETTINGS within `settingsTimeout` of `begin`, or nothing has moved for longer than `idleTimeout`. |
+| `expiresNoSooner(now: i64): i64` | The soonest `expired` can answer true at or after now, however the connection moves from here: `lastActive` only grows, and the SETTINGS deadline goes once they are acknowledged. |
 | `feed(buf: u8[], off: i32, len: i32): i32` | Takes as much of `buf[off, off + len)` as the input buffer has room for, and answers how much; the rest is the caller's to feed again once `next` has read what is there. Moves the unread bytes to the front of the buffer, which ends the last H2_DATA's window. Once the connection has failed it takes everything and keeps nothing. |
 | `find(id: i32): Http2Stream \| null` | The slot holding stream `id`, or `null`. |
 | `goaway(): i32` | Starts a graceful close (§6.8): GOAWAY with NO_ERROR naming the last stream the peer opened. Streams already open finish; newer ones are ignored; `isDone` once the last has closed and everything is sent. Answers 0, also when a GOAWAY was already sent or the connection has failed, or `H2_AGAIN` when the output has no room for the frame yet. |
@@ -271,6 +278,7 @@ class Http2Connection
 | `rest(): void` | Gives back every buffer the connection holds and does not need: the input once all of it is read, which ends the last H2_DATA's window; the output once all of it is sent; the header block while none is open. A carrier calls it once the program is done with the last event, so a connection waiting on its peer holds no buffer. |
 | `restart(): void` | Puts the connection back as the constructor left it, for the next peer: every stream closed, both HPACK tables empty, every buffer given back, and the server's SETTINGS owed again. It allocates nothing, which is what lets a carrier reuse one connection per slot (WP34 N9). |
 | `sendGoaway(code: i32): boolean` | Writes GOAWAY with `code`, naming the last stream the peer had opened when the server's first GOAWAY went: no later one may name a higher stream (§6.8). Answers whether it fit. |
+| `timeOut(now: i64): void` | Ends a connection `expired` at `now`: the connection fails with GOAWAY SETTINGS_TIMEOUT when the peer never acknowledged the server's SETTINGS in time (§6.5.3), and with GOAWAY NO_ERROR when it was idle. The carrier sends what it can of the output, then closes. |
 | `wantsWrite(): boolean` | Whether the output holds bytes to send; the SETTINGS a fresh connection owes are written first. |
 | `writeData(id: i32, buf: u8[], off: i32, len: i32, endStream: boolean): i32` | Sends as much of `buf[off, off + len)` on stream `id` as the stream's window, the connection's window, and the output allow, in frames no larger than the peer's SETTINGS_MAX_FRAME_SIZE, and answers how much. END_STREAM goes on the last frame when `endStream` and every byte was taken; `len` 0 with `endStream` sends an empty DATA that ends the stream. Answers `H2_AGAIN` when nothing could be taken — after H2_WINDOW for the stream or the connection, or once the output has drained, it may be tried again — and `H2_CLOSED` for a stream with no final response head or that has ended. |
 | `writeTrailers(id: i32, names: u8[][], values: u8[][]): i32` | Ends stream `id` with a trailer section, after its response head (§8.1). The block carries no `:status` and no `date`, and is encoded into the output before it answers. |
