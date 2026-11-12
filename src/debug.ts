@@ -368,6 +368,12 @@ export class DebugInfo {
     return ref
   }
 
+  /** The `DICompositeType` of `info` itself, not a pointer to it: a layout embedded by value. */
+  byValue(info: StructInfo): string {
+    this.typeRef(info.type)
+    return this.typeRefs[this.typeKeys.get(`=${this.table.mangle(info.type)}`, -1)]
+  }
+
   /** Record `ref` as the metadata for `key`, replacing a reservation made by `composite`. */
   setTypeRef(key: string, ref: string): void {
     const known = this.typeKeys.get(key, -1)
@@ -422,6 +428,9 @@ export class DebugInfo {
   composite(info: StructInfo): string {
     const ref = this.module.reserveMetadata()
     this.setTypeRef(this.table.mangle(info.type), this.pointerTo(ref))
+    // The struct itself, under a key no mangled type starts with, for a
+    // layout that embeds this one by value (WP27 S4.1).
+    this.setTypeRef(`=${this.table.mangle(info.type)}`, ref)
     const file = this.fileOf(info.origin)
     const members: string[] = []
     for (const f of info.fields) {
@@ -437,6 +446,13 @@ export class DebugInfo {
           // is the header itself, whose `data` points at the slots after it.
           members.push(this.member(f.name, ref, this.arrayHeader(elem, name), 192, f.offset * 8, file, line))
         }
+        continue
+      }
+      const nested = f.nested
+      if (nested !== null) {
+        members.push(
+          this.member(f.name, ref, this.byValue(nested), nested.size * 8, f.offset * 8, file, line)
+        )
         continue
       }
       const base = this.typeRef(f.type)

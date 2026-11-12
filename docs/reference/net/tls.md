@@ -521,6 +521,7 @@ class TlsServer
 | `input: u8[]` | The bytes received at the current level and not yet a whole message: `input[0 .. inputLength)`. |
 | `issuing: TlsTicketState` | What `issue` seals; its PSK is zeroed once sealed. |
 | `opened: TlsTicketState` | What the ticket `resume` is reading opened to; its PSK is zeroed once read. |
+| `peerRecordSizeLimit: i32` | The client's `record_size_limit` (RFC 8449): the most plaintext, content type and padding included, a protected record to it may carry, from `TLS_RECORD_SIZE_LIMIT_MIN` to `TLS_RECORD_SIZE_LIMIT_MAX`. 0 when the client sent none, and always over QUIC, which has no TLS records. |
 | `resumed: boolean` | Whether this connection resumed a ticket (row 1 of the record's table). |
 | `retried: boolean` | Whether a HelloRetryRequest was sent, so a second miss is fatal. |
 | `salt: u8[]` | The salt the handshake secret is extracted under, HashLen bytes of it: the `TLS_DERIVED_SALT_*` constant on a full handshake, derived from the PSK early secret on a resumed one. `exchangeKeys` reads it into the exchange's words and zeroes it. |
@@ -562,7 +563,7 @@ interface TlsServerConfig
 | --- | --- |
 | `alpn: string[]` | The ALPN protocols the server speaks, most preferred first. Empty means the server does not negotiate ALPN over TCP, and refuses every client over QUIC, where ALPN is mandatory (RFC 9001 §8.1). |
 | `certificateChain: u8[][]` | DER certificates, leaf first. At least one. |
-| `extraExtensions: u8[]` | Extensions this module does not interpret, already encoded (each a type, a length and a body), written first in EncryptedExtensions: `record_size_limit` is the record layer's, for one. Empty for none. |
+| `extraExtensions: u8[]` | Extensions this module does not interpret, already encoded (each a type, a length and a body), written first in EncryptedExtensions. Empty for none. Not for ALPN, `server_name` or `quic_transport_parameters`, which the server writes itself: a client refuses a repeated extension. A `record_size_limit` here replaces the one the server would write. |
 | `quic: boolean` | Whether the carrier is QUIC, which turns `quic_transport_parameters` on both ways. |
 | `quicTransportParameters: u8[]` | The server's transport parameters, opaque, sent in EncryptedExtensions only when `quic`. |
 | `signatureScheme: i32` | The signature scheme the caller's key signs with, sent in CertificateVerify: `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256` for a P-256 key. A client that does not list it is refused with `handshake_failure`. |

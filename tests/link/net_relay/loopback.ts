@@ -101,18 +101,28 @@ const life = (t: Suite): void => {
   rig.settle(n32(50));
   t.eqStr("a DATA payload of 1,200 bytes reaches the game server whole, and one of 1,201 does not", rig.echo.seen(), "1200");
   t.eqI32("the refused one is counted", rig.relay.oversized, n32(1));
-  // Down: the game server's echo of 1,200 bytes does not fit the client's path (1,164 does).
-  t.eqI32("the echo of 1,200 bytes cannot go down whole and is dropped, counted", rig.relay.droppedDown, n32(1));
+  // Down: path MTU discovery has validated the loopback path past 1,200 bytes, so the echo goes down whole.
+  t.eqI32("nothing from the game server is dropped on the way down", rig.relay.droppedDown, n32(0));
+  const echoed: u8[][] = ofType(c, RELAY_DATA);
+  t.ok(
+    "the echo of 1,200 bytes reaches the client as DATA, seq 1, past the old 1,164-byte limit",
+    toI32(echoed.length) === n32(1) && toI32(echoed[0].length) === n32(1203) && echoed[0][1] === toU8(1) && echoed[0][3] === toU8(0xab)
+  );
   rig.echo.reply(fill(n32(1164), n32(0x5a)));
+  rig.settle(n32(50));
+  rig.echo.reply(fill(n32(1165), n32(0x5b)));
   rig.settle(n32(50));
   const down: u8[][] = ofType(c, RELAY_DATA);
   t.ok(
-    "1,164 bytes from the game server reach the client as DATA, seq 2 after the dropped one's 1",
-    toI32(down.length) === n32(1) && toI32(down[0].length) === n32(1167) && down[0][1] === toU8(2) && down[0][3] === toU8(0x5a)
+    "1,164 and 1,165 bytes from the game server reach the client too, seq 2 and 3",
+    toI32(down.length) === n32(3) &&
+      toI32(down[1].length) === n32(1167) &&
+      down[1][1] === toU8(2) &&
+      toI32(down[2].length) === n32(1168) &&
+      down[2][1] === toU8(3) &&
+      down[2][3] === toU8(0x5b) &&
+      rig.relay.droppedDown === n32(0)
   );
-  rig.echo.reply(fill(n32(1165), n32(0x5b)));
-  rig.settle(n32(50));
-  t.ok("1,165 do not, and are counted", toI32(ofType(c, RELAY_DATA).length) === n32(1) && rig.relay.droppedDown === n32(2));
 
   const empty: u8[] = [];
   c.send(empty);

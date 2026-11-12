@@ -596,30 +596,27 @@ const serveTask = async (
   // one into the other.
   const src: HttpRequest = st.reqs[k]
   const r: HttpRequest = new HttpRequest(-1)
-  // The kept head ends at the furthest of the target and every field span.
-  const spanCount: i32 = 4 * src.headerCount
-  let end: i32 = src.targetEnd
-  for (let i: i32 = 0; i < spanCount && i < toI32(src.spans.length); i++) {
-    if (src.spans[i] > end) {
-      end = src.spans[i]
-    }
-  }
-  const head: u8[] = new Array<u8>(end)
-  copyBytes(head, 0, src.head, 0, end)
-  const spans: i32[] = new Array<i32>(spanCount)
+  const head: u8[] = new Array<u8>(src.headLength)
+  copyBytes(head, 0, src.head, 0, src.headLength)
+  const spans: i32[] = new Array<i32>(4 * src.headerCount)
   for (let i: i32 = 0; i < toI32(spans.length) && i < toI32(src.spans.length); i++) {
     spans[i] = src.spans[i]
   }
-  const params: i32[] = new Array<i32>(2 * src.paramCount)
-  for (let i: i32 = 0; i < toI32(params.length) && i < toI32(src.params.length); i++) {
-    params[i] = src.params[i]
+  // No parameters and no body keep the empty arrays the constructor made.
+  if (src.paramCount > 0) {
+    const params: i32[] = new Array<i32>(2 * src.paramCount)
+    for (let i: i32 = 0; i < toI32(params.length) && i < toI32(src.params.length); i++) {
+      params[i] = src.params[i]
+    }
+    r.params = params
   }
-  const body: u8[] = new Array<u8>(src.bodyLength)
-  copyBytes(body, 0, src.body, 0, src.bodyLength)
+  if (src.bodyLength > 0) {
+    const body: u8[] = new Array<u8>(src.bodyLength)
+    copyBytes(body, 0, src.body, 0, src.bodyLength)
+    r.body = body
+  }
   r.head = head
   r.spans = spans
-  r.params = params
-  r.body = body
   r.route = src.route
   r.paramCount = src.paramCount
   r.methodStart = src.methodStart
@@ -627,6 +624,7 @@ const serveTask = async (
   r.targetStart = src.targetStart
   r.targetEnd = src.targetEnd
   r.pathEnd = src.pathEnd
+  r.headLength = src.headLength
   r.headerCount = src.headerCount
   r.bodyLength = src.bodyLength
   const res: Response = await handle(new Request(r))
@@ -637,7 +635,16 @@ const serveTask = async (
   if (res.length < 0 || res.length > toI32(out.length) || res.length > toI32(res.body.length)) {
     st.lengths[k] = -1
   } else {
-    out.set(res.length === toI32(res.body.length) ? res.body : res.body.slice(0, res.length))
+    // The whole body is copied when the slot holds it, as one `set`: what lies
+    // past `length` is never sent. Only a body larger than the slot is copied
+    // byte by byte, up to `length`.
+    if (res.body.length <= out.length) {
+      out.set(res.body)
+    } else {
+      for (let i: i32 = 0; i < res.length && i < toI32(out.length) && i < toI32(res.body.length); i++) {
+        out[i] = res.body[i]
+      }
+    }
     st.lengths[k] = res.length
   }
   // A type the server has sent before is found by its text, with no copy;

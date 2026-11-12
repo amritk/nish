@@ -11,6 +11,7 @@
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
 import {
+  checkExportedLayouts,
   aliasType,
   builtinTypeName,
   rejectRangedIntegerName,
@@ -48,6 +49,7 @@ import {
   resolveTemplateConstraints,
 } from "./generics"
 import {
+  FLAG_ABSTRACT,
   FLAG_COMPUTED,
   FLAG_CONST,
   FLAG_FOREIGN,
@@ -347,6 +349,8 @@ export class Checker {
     // now has its members, and so does every struct declared here, so the two
     // checks that need both can run (WP18 G5).
     this.finishPendingStructs()
+    // Every record the module's exported types name has its fields now.
+    checkExportedLayouts(this.ctx)
 
     // Last, exactly where stage0 puts it, so two compilers report one file's
     // diagnostics in one order: every alias is resolved even when nothing
@@ -789,6 +793,15 @@ export class Checker {
     const nameNode = stmt.children[0]
     const name = nameNode.text
     const what = kind === STRUCT_CLASS ? "class" : "interface"
+    // WP27 S4.1: a C struct has one layout, and a template has none until `T`
+    // is bound. An abstract or interface `declare` is refused by its header.
+    if (kind === STRUCT_CLASS && (stmt.flags & (FLAG_FOREIGN | FLAG_ABSTRACT)) === FLAG_FOREIGN) {
+      this.ctx.error(
+        stmt,
+        "A generic `declare class` is not supported: a C struct layout has no type parameters"
+      )
+      return
+    }
     if (name.length === 0) {
       this.ctx.error(stmt, kind === STRUCT_CLASS ? "Classes must be named" : "Interfaces must be named")
       return
@@ -1036,6 +1049,9 @@ export class Checker {
         this.checkFunctionBody(sig)
       }
     }
+    // An instantiation a body asked for collects its fields here, after
+    // `collectSignatures` drained the list.
+    checkExportedLayouts(this.ctx)
   }
 
   /**
