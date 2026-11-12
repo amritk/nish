@@ -1,8 +1,8 @@
 # One server for HTTP/1.1, 2 and 3
 
-`nish/net/http-server` answers HTTP/1.1, HTTP/2 over TLS and HTTP/3 from one
-loop and one routing switch. You configure a listener for each version you
-serve; every request, whichever version carried it, comes out of the same
+`nish/net/http-server` answers HTTP/1.1, HTTP/2 (over TLS or cleartext) and
+HTTP/3 from one loop and one routing switch. You configure a listener for
+each version you serve; every request, whichever version carried it, comes out of the same
 `take` with the same fields, and one route body answers all three. Once an
 HTTP/3 listener is configured, every HTTP/1.1 and HTTP/2 response carries an
 `Alt-Svc` field naming its port, so a browser moves to HTTP/3 on its own.
@@ -107,9 +107,9 @@ for (;;) {
   (`QUIC_LISTENER_ENTROPY_SIZE` of them).
 - `key` is the certificate's P-256 private key, a
   [`Secret`](standard-library.md#nishsecret). `waitSigned` borrows it for the
-  call; it stays yours to wipe. A server with only an HTTP/1.1 listener calls
-  `wait`, which takes no key; `wait` panics once a TLS or QUIC listener is
-  configured.
+  call; it stays yours to wipe. A server with only HTTP/1.1 and h2c
+  listeners calls `wait`, which takes no key; `wait` panics once a TLS or
+  QUIC listener is configured.
 
 The `Alt-Svc` field reads `h3=":<port>"; ma=86400`: the UDP socket's own
 port, or `HttpServerLimits.altSvcPort` when a proxy in front of you
@@ -118,8 +118,18 @@ publishes another. With `altSvcMaxAge` 0 every response says
 response whose fields already name an `alt-svc` keeps yours. An HTTP/3
 response carries none.
 
-Cleartext HTTP/2 (`listenH2c`) is not yet available: it checks its
-configuration, then panics.
+### Cleartext HTTP/2
+
+`h.listenH2c(fd, new Http2Config(), slots)` serves HTTP/2 without TLS on a
+TCP listener, to clients that already know it speaks HTTP/2 (prior
+knowledge: the client opens with the 24-byte preface). There is no
+`Upgrade: h2c` from HTTP/1.1. Its requests come out of `take` like the rest,
+with `r.version` 2 and `r.secure` false, and carry no `alt-svc`. A
+connection that has not sent its preface within `prefaceTimeout` is closed,
+and after the preface `idleTimeout` applies as on HTTP/2 over TLS.
+
+Nothing on an h2c connection is encrypted or authenticated. Serve it only
+behind a proxy that ends TLS for you, or on a network you trust.
 
 ## Reading a request
 
@@ -127,7 +137,7 @@ A request holds the same fields on every version. `r.head` holds its method,
 target and fields, copied once out of the connection; `r.body` holds
 `r.bodyLength` bytes of body. Both stay valid until you answer it.
 `r.version` is 1, 2 or 3, and `r.secure` says whether it came over TLS or
-QUIC.
+QUIC: false on HTTP/1.1 and h2c.
 
 | You want | Call |
 | --- | --- |
@@ -185,7 +195,8 @@ that would let in more:
 | `maxFields` | 100 | the request is answered 431 |
 | `maxResponseFields` | 32 | the response is not sent; the request answers `HANDLER_DROPPED` |
 | `bodyTimeout` | 30 000 ms | a body still arriving that long after its head ends its request |
-| `idleTimeout` | 60 000 ms | an HTTP/2 connection with no open stream closes |
+| `idleTimeout` | 60 000 ms | an HTTP/2 connection, over TLS or h2c, with no open stream closes |
+| `prefaceTimeout` | 10 000 ms | an h2c connection that has not sent its preface closes |
 | `jsonBytes` | 64 KiB | `sendJson` answers 500 |
 
 An HTTP/1.1 connection is held to its own `Http1Config` caps as well, which

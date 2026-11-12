@@ -2194,7 +2194,13 @@ export class HttpServer {
   private carryEnd(r: HttpServerRequest): i32 {
     let done: i32 = 0
     if (r.kind === HTTP_SERVER_H2) {
-      done = this.h2Conn(r.slot).writeData(toI32(r.stream), r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+      done = this.h2Conn(r.slot).writeData(
+        toI32(r.stream),
+        r.pending,
+        HTTP_SERVER_ZERO,
+        HTTP_SERVER_ZERO,
+        true
+      )
       if (done === H2_AGAIN) {
         return 0
       }
@@ -2804,7 +2810,12 @@ export class HttpServer {
       this.h2Close(slot)
       return
     }
-    pollModify(this.loop, this.h2FdOf(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), HTTP_SERVER_H2_BASE + slot)
+    pollModify(
+      this.loop,
+      this.h2FdOf(slot),
+      wants & (H1_WANT_READ | H1_WANT_WRITE),
+      HTTP_SERVER_H2_BASE + slot
+    )
   }
 
   /** Pushes every response `slot` is sending: whether any moved a byte or ended. */

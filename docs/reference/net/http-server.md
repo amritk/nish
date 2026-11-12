@@ -2,7 +2,7 @@
 
 # nish/net/http-server
 
-One handler for HTTP/1.1, HTTP/2 over TLS and HTTP/3, with Alt-Svc advertising the HTTP/3 port.
+One handler for HTTP/1.1, HTTP/2 (over TLS and cleartext) and HTTP/3, with Alt-Svc advertising the HTTP/3 port.
 
 ```ts
 import {
@@ -89,14 +89,21 @@ than a quarter of the pool.
 <scalar-detail title="Alt-Svc">
 
 Once an HTTP/3 listener is configured, every HTTP/1.1 and
-HTTP/2 response names its port (`h3=":443"; ma=86400`); with
+HTTP/2 over TLS response names its port (`h3=":443"; ma=86400`); with
 `altSvcMaxAge` 0 they say `alt-svc: clear` instead. A response whose fields
-already hold an `alt-svc` keeps the program's.
+already hold an `alt-svc` keeps the program's. An h2c response carries
+none: it reaches clients through a proxy, and would name the backend's port.
 
 </scalar-detail>
 
-Cleartext HTTP/2 (`listenH2c`) checks its configuration but is not yet
-wired to a carrier: it panics.
+<scalar-detail title="One HTTP/2 slot space">
+
+The TLS and the cleartext HTTP/2 carriers share
+the stream tables: each listener's slots follow the other's, so every
+HTTP/2 path below names a slot of either and the carrier is looked up once,
+in the `h2Holds` family.
+
+</scalar-detail>
 
 ## Classes
 
@@ -122,7 +129,7 @@ class HttpServer
 | `fired(id: i32): boolean` | Whether watched descriptor `id` was ready in the last turn. |
 | `hungUp(r: HttpServerRequest): boolean` | Whether the client of `r` has hung up: its connection is closed or reused, its HTTP/2 or HTTP/3 stream was reset, or, on HTTP/1.1, the peer ended its side while `r` is held. Panics on another server's request. |
 | `json(): JsonWriter` | The JSON writer, reset onto the server's scratch buffer: write one value with it, then `sendJson`. One JSON body at a time, since every request shares the buffer. |
-| `listenH2c(fd: i32, config: Http2Config, slots: i32): void` | Checks a cleartext HTTP/2 (h2c, prior knowledge) listener's configuration. Not yet wired to a carrier: after the checks it panics. Panics on a second h2c listener, a `maxHeaderListSize` past `limits.maxHead`, or `enableConnectProtocol`. |
+| `listenH2c(fd: i32, config: Http2Config, slots: i32): void` | Serves cleartext HTTP/2 (h2c, prior knowledge: no Upgrade from HTTP/1.1) on `fd`, a listening TCP socket the program made, with up to `slots` connections. Meant for a server behind a TLS-terminating proxy or on a trusted network: nothing on it is encrypted. A connection that has not sent its 24-byte preface within `limits.prefaceTimeout` is closed, and one with no open stream after it within `limits.idleTimeout`. Its responses carry no Alt-Svc, and its requests say `secure` false. Each connection holds at most `config.maxStreams` requests and a quarter of `limits.requests`, as on `listenHttp2Tls`. Panics on a second h2c listener, a `maxHeaderListSize` past `limits.maxHead`, or `enableConnectProtocol`. `wait` serves it: it reads no key. |
 | `listenHttp1(fd: i32, config: Http1Config, slots: i32): void` | Serves HTTP/1.1 on `fd`, a listening TCP socket the program made, with up to `slots` connections. Panics on a second HTTP/1.1 listener, or when `config` would let in a head past `limits.maxHead` (its `maxTarget`, its `maxHeaderBytes` and 44 bytes of request line) or more fields than `limits.maxFields`. `config.maxBody` is set to `limits.maxBody`. |
 | `listenHttp2Tls(fd: i32, tls: TlsServerConfig, config: Http2Config, slots: i32): void` | Serves HTTP/2 over TLS (ALPN `h2`) on `fd`, a listening TCP socket the program made, with up to `slots` connections. Each connection holds at most `config.maxStreams` requests and a quarter of `limits.requests`; a stream past that is refused with REFUSED_STREAM. Panics on a second listener of this kind, a `maxHeaderListSize` past `limits.maxHead`, or `enableConnectProtocol`. Serve it with `waitSigned`. |
 | `listenHttp3(fd: i32, quic: QuicServerConfig, config: Http3Config, slots: i32, entropy: u8[]): void` | Serves HTTP/3 on `fd`, a bound UDP socket the program made, with up to `slots` QUIC connections, and from then on names its port in an Alt-Svc field on every HTTP/1.1 and HTTP/2 response. Each connection holds at most `quic.maxStreamsBidi` requests and a quarter of `limits.requests`; a stream past that is rejected with H3_REQUEST_REJECTED. Panics on a second HTTP/3 listener, a `maxFieldSectionSize` past `limits.maxHead`, or `webtransportSessions` above 0. Serve it with `waitSigned`. |
@@ -134,7 +141,7 @@ class HttpServer
 | `sendJson(r: HttpServerRequest, status: i32): i32` | Answers `r` with `status` and the value `json`'s writer holds, as `application/json`. A value the writer refused or did not finish is answered as a 500 problem instead. Panics when no value was begun with `json`. |
 | `start(r: HttpServerRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32` | Starts `r`'s response: `status` (200 to 599), the fields `names[k]`: `values[k]`, and a body of `bodyLength` bytes or `HTTP1_CHUNKED` for one of unknown length; then `write` the body and `end`. On HTTP/2 and HTTP/3 the field names must be lowercase, and a `content-length` is added for a known length the fields do not give; on HTTP/1.1 and HTTP/2 the Alt-Svc field is added when an HTTP/3 listener is set and the fields have none. Panics on another server's request, a request not taken or already answered, a status outside the range, a body length below `HTTP1_CHUNKED`, or fields the carrier refuses. |
 | `take(): HttpServerRequest` | The next whole request, of any version, which the program now owes an answer. Panics when none is `ready`. |
-| `wait(timeoutMs: i32): i32` | One turn of the loop for a server with no TLS or QUIC listener: as `waitSigned`, with no key. Panics when an HTTP/2 over TLS or HTTP/3 listener is configured, since a handshake there needs the key. |
+| `wait(timeoutMs: i32): i32` | One turn of the loop for a server with no TLS or QUIC listener: as `waitSigned`, with no key. It serves HTTP/1.1 and h2c (`listenH2c`). Panics when an HTTP/2 over TLS or HTTP/3 listener is configured, since a handshake there needs the key. |
 | `waitSigned(timeoutMs: i32, key: Secret<u8[]>): i32` | One turn of the loop: waits up to `timeoutMs` (-1 for no limit) for a socket to be ready, accepts, reads and writes what is, signs each TLS and QUIC handshake with `key`, closes what is past its timeouts, and answers how many whole requests are waiting for `take`. |
 | `watch(fd: i32, id: i32): void` | Adds `fd` to the descriptors `wait` and `waitSigned` block on, as `id`: `fired(id)` then says whether it was readable in the last turn. For a program's own descriptors, such as `signalFd()` for a graceful stop. Panics on an id outside 0 to `HANDLER_MAX_WATCHED - 1`. |
 | `write(r: HttpServerRequest, buf: u8[], off: i32, len: i32): i32` | Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room for is copied and sent as room comes, so `buf` is the caller's again on return. Body bytes of a HEAD, 204 or 304 response are dropped. Panics on another server's request, when the response is not started, on a window outside `buf`, or on more bytes than the declared length leaves. |
@@ -153,14 +160,14 @@ class HttpServerLimits
 | `altSvcMaxAge: i32` | Seconds a client may remember the Alt-Svc advertisement; 0 sends `alt-svc: clear`. |
 | `altSvcPort: i32` | The port Alt-Svc names; 0 names the HTTP/3 socket's own. |
 | `bodyTimeout: i32` | Milliseconds from a request's head to the end of its body. |
-| `idleTimeout: i32` | Milliseconds an HTTP/2 connection with no open stream is kept. |
+| `idleTimeout: i32` | Milliseconds an HTTP/2 connection (over TLS or h2c) with no open stream is kept. |
 | `jsonBytes: i32` | Bytes in the JSON scratch buffer. At least 256. |
 | `maxBody: i32` | The largest request body, in bytes; past it a request is answered 413. 0 to 2^30. |
 | `maxEvents: i32` | The most readiness events one `wait` takes. |
 | `maxFields: i32` | The most fields a request may carry. 1 to 1024. |
 | `maxHead: i32` | The largest request head (method, target and fields), in bytes. 256 to 2^20. |
 | `maxResponseFields: i32` | The most fields a response may carry, Alt-Svc and content-length included. 2 to 256. |
-| `prefaceTimeout: i32` | Milliseconds a cleartext HTTP/2 connection (`listenH2c`) has to send its preface; read once `listenH2c` serves. |
+| `prefaceTimeout: i32` | Milliseconds a cleartext HTTP/2 connection (`listenH2c`) has to send its 24-byte preface; after it, `idleTimeout` applies. |
 | `requests: i32` | The most requests held at once, across every connection and version. 1 to 65536. |
 
 ### HttpServerRequest
