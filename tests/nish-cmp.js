@@ -1147,6 +1147,32 @@ const pathMtu = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: PATH_MTU, why }))
   )
 
+/**
+ * The words WP39 G6's changelog line starts with: the branch's runtime commit
+ * renders "Steer QUIC datagrams ...", the squashed pull request "Steer QUIC
+ * packets ...".
+ */
+const QUIC_STEER = "Steer QUIC"
+
+/**
+ * WP39 G6's moves: `PreforkConfig` gains `listenUdp` (its struct in every
+ * program that links `nish/net/prefork`, and the supervisor's IR), and every
+ * `QuicServerConfig` literal sets `workerIndex` and `workerCount`, which the
+ * 0.38.0 seed's `std/` does not have, nor `preforkUdpCount`.
+ */
+const quicSteer = (filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: QUIC_STEER,
+      why:
+        file === "exit"
+          ? "the program uses `workerIndex`, `workerCount` or `preforkUdpCount`, which the 0.38.0 seed's std/ lacks, so only the candidate compiles it"
+          : "`PreforkConfig` gains `listenUdp` and the supervisor binds a steered UDP group, so the prefork struct and IR move",
+    }))
+  )
+
 /** The changelog words of the WP39 G2 server-clock fixes (H1-2, H2-3, WT-2). */
 const byFinding = (changelog) => (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -5352,6 +5378,96 @@ const DECLARED = [
     "tests/link/net_webtransport_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_webtransport_stream_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_webtransport_whole_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+  }),
+  ...quicSteer({
+    "examples/prefork-server.ts": ["prefork.ll"],
+    "examples/relay/main.ts": ["exit"],
+    "bench/http-app-carrier.ts": ["prefork.ll"],
+    "bench/http1-server.ts": ["prefork.ll"],
+    "bench/techempower/main.ts": ["prefork.ll"],
+    "tests/link/net_http3/main.ts": ["exit"],
+    "tests/link/net_http3_bad_body_chunk/main.ts": ["exit"],
+    "tests/link/net_http3_bad_config/main.ts": ["exit"],
+    "tests/link/net_http3_bad_credit/main.ts": ["exit"],
+    "tests/link/net_http3_bad_local_limit/main.ts": ["exit"],
+    "tests/link/net_http3_bad_uni_limit/main.ts": ["exit"],
+    "tests/link/net_http3_bad_write_chunk/main.ts": ["exit"],
+    "tests/link/net_http3_ecn/main.ts": ["exit"],
+    "tests/link/net_http3_ecn_f64/main.ts": ["exit"],
+    "tests/link/net_http3_errors/main.ts": ["exit"],
+    "tests/link/net_http3_errors_f64/main.ts": ["exit"],
+    "tests/link/net_http3_f64/main.ts": ["exit"],
+    "tests/link/net_http3_server/main.ts": ["exit"],
+    "tests/link/net_http3_server_bad_config/main.ts": ["exit"],
+    "tests/link/net_http3_server_f64/main.ts": ["exit"],
+    "tests/link/net_http3_write_window/main.ts": ["exit"],
+    "tests/link/net_http_date/main.ts": ["exit"],
+    "tests/link/net_http_date_f64/main.ts": ["exit"],
+    "tests/link/net_interop_server/main.ts": ["exit"],
+    "tests/link/net_interop_server_f64/main.ts": ["exit"],
+    "tests/link/net_loopback/main.ts": ["exit"],
+    "tests/link/net_loopback_f64/main.ts": ["exit"],
+    "tests/link/net_prefork/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_bad_config/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_bad_listen/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_channels/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_no_restart/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_pin/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_pin_too_many/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_prefork_zero_backoff/main.ts": ["main.h", "main.ll", "prefork.ll"],
+    "tests/link/net_quic_conn/main.ts": ["exit"],
+    "tests/link/net_quic_conn_f64/main.ts": ["exit"],
+    "tests/link/net_quic_conn_replay/main.ts": ["exit"],
+    "tests/link/net_quic_conn_replay_f64/main.ts": ["exit"],
+    "tests/link/net_quic_ecn/main.ts": ["exit"],
+    "tests/link/net_quic_ecn_f64/main.ts": ["exit"],
+    "tests/link/net_quic_lifecycle/main.ts": ["exit"],
+    "tests/link/net_quic_lifecycle_f64/main.ts": ["exit"],
+    "tests/link/net_quic_lifecycle_replay/main.ts": ["exit"],
+    "tests/link/net_quic_lifecycle_replay_f64/main.ts": ["exit"],
+    "tests/link/net_quic_listener/main.ts": ["exit"],
+    "tests/link/net_quic_listener_bad_window/main.ts": ["exit"],
+    "tests/link/net_quic_listener_f64/main.ts": ["exit"],
+    "tests/link/net_quic_memory/main.ts": ["exit"],
+    "tests/link/net_quic_memory_f64/main.ts": ["exit"],
+    "tests/link/net_quic_path/main.ts": ["exit"],
+    "tests/link/net_quic_path_f64/main.ts": ["exit"],
+    "tests/link/net_quic_prefork/main.ts": ["exit"],
+    "tests/link/net_quic_server_wipes/main.ts": ["exit"],
+    "tests/link/net_quic_server_wipes_f64/main.ts": ["exit"],
+    "tests/link/net_quic_stream/main.ts": ["exit"],
+    "tests/link/net_quic_stream_f64/main.ts": ["exit"],
+    "tests/link/net_quic_wipes/main.ts": ["exit"],
+    "tests/link/net_quic_wipes_f64/main.ts": ["exit"],
+    "tests/link/net_quic_worker/main.ts": ["exit"],
+    "tests/link/net_relay/main.ts": ["exit"],
+    "tests/link/net_relay_bad_hello/main.ts": ["exit"],
+    "tests/link/net_relay_bad_idle/main.ts": ["exit"],
+    "tests/link/net_relay_bad_path/main.ts": ["exit"],
+    "tests/link/net_relay_bad_per_peer/main.ts": ["exit"],
+    "tests/link/net_relay_bad_pool/main.ts": ["exit"],
+    "tests/link/net_relay_bad_rate/main.ts": ["exit"],
+    "tests/link/net_relay_bad_sessions/main.ts": ["exit"],
+    "tests/link/net_relay_bad_spare/main.ts": ["exit"],
+    "tests/link/net_relay_bad_stats/main.ts": ["exit"],
+    "tests/link/net_relay_f64/main.ts": ["exit"],
+    "tests/link/net_relay_forged/main.ts": ["exit"],
+    "tests/link/net_relay_soak/main.ts": ["exit"],
+    "tests/link/net_webtransport/main.ts": ["exit"],
+    "tests/link/net_webtransport_bad_datagrams/main.ts": ["exit"],
+    "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["exit"],
+    "tests/link/net_webtransport_bad_layer/main.ts": ["exit"],
+    "tests/link/net_webtransport_bad_pending/main.ts": ["exit"],
+    "tests/link/net_webtransport_bad_pending_high/main.ts": ["exit"],
+    "tests/link/net_webtransport_bad_sessions/main.ts": ["exit"],
+    "tests/link/net_webtransport_bad_streams/main.ts": ["exit"],
+    "tests/link/net_webtransport_bad_streams_high/main.ts": ["exit"],
+    "tests/link/net_webtransport_close_window/main.ts": ["exit"],
+    "tests/link/net_webtransport_datagram_window/main.ts": ["exit"],
+    "tests/link/net_webtransport_f64/main.ts": ["exit"],
+    "tests/link/net_webtransport_stream_window/main.ts": ["exit"],
+    "tests/link/net_webtransport_whole_window/main.ts": ["exit"],
+    "tests/link/tfb_entry/main.ts": ["prefork.ll"],
   }),
   {
     program: "tests/link/net_http2_cleartext/main.ts",

@@ -1,0 +1,33 @@
+{
+  "registry": "https://registry.npmjs.org/",
+  "applications": [
+    {
+      "name": "hardhat",
+      "version": "3.21.2",
+      "integrity": "sha512-+vkDnIhuEWBH+FzOAQh+2C1rnnkEaM7JOsm3faj8IyHH2CvgmkiuM1bcqsAMw7uNzdNCpgF5NZhDhvM3kbyXrA==",
+      "license": "MIT",
+      "what": "a command-line build and test tool for Ethereum contracts"
+    },
+    {
+      "name": "appium",
+      "version": "3.9.0",
+      "integrity": "sha512-OGOk9PURzjLoaP76Vm7gbZ4xK6MSskX64xHwMNs+g8gMbW+EHPoN2uFJRLGWW0ChaanhJklwux01BTg1gz4RqA==",
+      "license": "Apache-2.0",
+      "what": "an HTTP server that drives mobile and desktop apps for tests"
+    },
+    {
+      "name": "@stryker-mutator/core",
+      "version": "10.1.1",
+      "integrity": "sha512-4xJAOCw9utJMLyrTk9gINi434tBxnyuwt8lU/InyoKagKd2/zh/2ui7ncWoD0qZeJrxClYzblg8iUh5ewBAB3Q==",
+      "license": "Apache-2.0",
+      "what": "a command-line mutation tester that runs a pool of worker processes"
+    },
+    {
+      "name": "@budibase/server",
+      "version": "3.38.1",
+      "integrity": "sha512-72pJcq6AldXkAE4z41/B5DwAsdgP4qiFvNZO64jFgZ4WV/9toRk+rgOl9IyZx9w6a1cSFwZ9MWVT2lFIniZsug==",
+      "license": "GPL-3.0",
+      "what": "the HTTP back end of a low-code platform, over CouchDB and SQL stores"
+    }
+  ]
+}
