@@ -11770,7 +11770,11 @@ if (dealtHere("p256Seams")) {
   // 10,000 scalars. Neither inversion is exported, so the program reaches them
   // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
   // std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
-  // Its expected.out ends in a checksum of every inverse. Natively, and as a
+  // #1430 adds the field: `p256FieldInvert` (safegcd) against Fermat's a^(p-2)
+  // on 0, 1, p-1, p, every 2^k and 2^k-1 and 1,000 seeded values, and the
+  // verify's width-5 wNAF pass (`p256DoubleMultPublic`) against two
+  // `p256ScalarMult`s and a `p256PointAdd`, on n-1, n-2, zero, the identity
+  // and seeded sums. Its expected.out ends in a checksum of every result. Natively, and as a
   // `--profile wasi` module under Node.
   if (!only || ["p256 inverse", "crypto_p256_inverse", "wasi"].some((name) => name.includes(only))) {
     p256SeamProgram({
@@ -11780,7 +11784,7 @@ if (dealtHere("p256Seams")) {
       source: "inverse.ts",
       extra: [],
       nativeName:
-        "p256 inverse: safegcd and Fermat give the same inverse for every scalar of tests/link/crypto_p256_inverse, natively",
+        "p256 inverse: safegcd and Fermat give the same inverse for every scalar and field element, and the wNAF pass the comb's sum, in tests/link/crypto_p256_inverse, natively",
     })
   }
 
@@ -12197,19 +12201,20 @@ if (dealtHere("cryptoChecks")) {
   // group is and how a root's wipes are counted).
   runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
 
-  // The two wipes of `p256ScalarInverse` (#758) that `tests/wipes/` cannot count:
-  // `opt` promotes g, the signed-30 copy of the nonce, and t, the matrix derived
-  // from it, to stack slots, and their wipes reach -O2 as one volatile `i32` zero
-  // store per limb rather than as a memset. Each array's stores share an SROA base
-  // (`%arr.data.N.sroa.*`), so the body must hold a group of nine for g and one of
-  // four for t; deleting `wipe(g)` or `wipe(t)` removes its group. The `p256`,
+  // The three wipes of `p256Safegcd` (#758) that `tests/wipes/` cannot count:
+  // `opt` promotes f, the modulus, g, the signed-30 copy of the secret, and t,
+  // the matrix derived from them, to stack slots, and their wipes reach -O2 as
+  // one volatile `i32` zero store per limb rather than as a memset. Each array's
+  // stores share an SROA base (`%arr.data.N.sroa.*`), so the body must hold two
+  // groups of nine for f and g and one of four for t; deleting `wipe(f)`,
+  // `wipe(g)` or `wipe(t)` removes its group. The `p256`,
   // `crypto`, `wipe` and `crypto_p256` filters all run it.
   {
     const name =
-      "crypto: the wipes survive opt -O2 (p256ScalarInverse's g and t, nine and four volatile i32 zero stores)"
+      "crypto: the wipes survive opt -O2 (p256Safegcd's f, g and t, nine, nine and four volatile i32 zero stores)"
     if (!only || [name, "crypto_p256"].some((selector) => selector.includes(only))) {
       if (!has("opt")) {
-        skip("crypto: no opt to show p256ScalarInverse's promoted wipes survive -O2")
+        skip("crypto: no opt to show p256Safegcd's promoted wipes survive -O2")
       } else {
         const dir = path.join(buildDir, "wipes-o2", "p256-scalar-inverse")
         fs.rmSync(dir, { recursive: true, force: true })
@@ -12227,7 +12232,7 @@ if (dealtHere("cryptoChecks")) {
             : c
         const body =
           o.status === 0
-            ? (o.stdout.match(/^define [^\n]*@"?nish\.p256ScalarInverse"?\([\s\S]*?\n\}/m) ?? [""])[0]
+            ? (o.stdout.match(/^define [^\n]*@"?nish\.p256Safegcd"?\([\s\S]*?\n\}/m) ?? [""])[0]
             : ""
         const groups = new Map()
         for (const m of body.matchAll(/store volatile i32 0, ptr %([\w.]+?)\.sroa\.\d+,/g)) {
@@ -12238,9 +12243,9 @@ if (dealtHere("cryptoChecks")) {
         if (o.status !== 0) {
           detail = o.stderr
         } else if (body === "") {
-          detail = "nish.p256ScalarInverse: not in the optimised p256.ll"
+          detail = "nish.p256Safegcd: not in the optimised p256.ll"
         }
-        check(name, sizes.length === 2 && sizes[0] === 9 && sizes[1] === 4, detail)
+        check(name, sizes.length === 3 && sizes[0] === 9 && sizes[1] === 9 && sizes[2] === 4, detail)
       }
     }
   }

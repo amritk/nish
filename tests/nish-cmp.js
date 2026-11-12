@@ -1155,6 +1155,13 @@ const pgTls = (why, filesByProgram) =>
   )
 
 const DECLARED = [
+  // #1430: std/crypto/p256.ts inverts field elements by safegcd and verifies
+  // by one interleaved wNAF pass, so the module every importer writes moves.
+  ...["p256.ll", "std_crypto_p256.ll"].map((file) => ({
+    file,
+    changelog: "safegcd",
+    why: "std/crypto/p256.ts inverts field elements by safegcd and verifies signatures by one interleaved width-5 wNAF pass, so the module every importer of nish/crypto/p256 writes has new functions and renumbered values; no importer's own module moves",
+  })),
   // The TLS server takes secp256r1 key shares and its carrier an idle
   // timeout: four TLS classes gain fields, which moves every module laying
   // one out (TLS_SERVER_MOVED), and three tests use the new fields.

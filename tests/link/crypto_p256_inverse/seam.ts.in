@@ -1,7 +1,8 @@
 
 // ---- Test seam: appended by tests/run.js ("p256 inverse: ...") to a copy of ----
 // std/crypto/p256.ts and never part of the module itself. It exports the two
-// ways this file inverts a scalar mod n, so tests/link/crypto_p256_inverse can
+// ways this file inverts a scalar mod n and a field element mod p, and both ways
+// it computes u1 G + u2 Q, so tests/link/crypto_p256_inverse can
 // hold them to each other without the module growing a public API for it.
 
 /** `k mod n`, inverted by `p256ScalarInverse` (safegcd) or `p256ScalarInvert` (Fermat), as 32 big-endian bytes. */
@@ -27,3 +28,72 @@ export const p256SeamInverse = (k: u8[]): u8[] => p256SeamInvertWith(k, true)
 
 /** 1 / (k mod n) by Fermat, the reference. */
 export const p256SeamInvert = (k: u8[]): u8[] => p256SeamInvertWith(k, false)
+
+/** `x mod p`, inverted by `p256FieldInvert` (safegcd and R^3) or, as the reference, by a^(p - 2) in plain square-and-multiply, as 32 big-endian bytes. */
+const p256SeamFieldInvertWith = (x: u8[], safegcd: boolean): u8[] => {
+  const plain: u32[] = p256Limbs()
+  const a: u32[] = p256Limbs()
+  p256LimbsFromBytes(plain, x, 0)
+  p256ReduceOnce(a, plain, p256Prime())
+  p256FiatMul(a, a, p256FieldR2())
+  const out32: u32[] = p256Limbs()
+  if (safegcd) {
+    p256FieldInvert(out32, a)
+  } else {
+    // p - 2's top bit is set: start from a and walk bits 254 down to 0.
+    const e: u32[] = p256Prime()
+    e[0] = e[0] - 2
+    for (let i: i32 = 0; i < toI32(out32.length); i++) {
+      if (i < toI32(a.length)) {
+        out32[i] = a[i]
+      }
+    }
+    for (let bit: i32 = 254; bit >= 0; bit--) {
+      p256FiatSquare(out32, out32)
+      const word: u32 = e[bit / 32]
+      if (((word >> toU32(bit % 32)) & 1) === 1) {
+        p256FiatMul(out32, out32, a)
+      }
+    }
+  }
+  p256FiatMul(out32, out32, p256PlainOne())
+  const out: u8[] = new Array<u8>(32)
+  p256LimbsToBytes(out, 0, out32)
+  return out
+}
+
+/** 1 / (x mod p) by `p256FieldInvert`, the safegcd every affine conversion uses. */
+export const p256SeamFieldInverse = (x: u8[]): u8[] => p256SeamFieldInvertWith(x, true)
+
+/** 1 / (x mod p) by Fermat, the reference. */
+export const p256SeamFieldInvert = (x: u8[]): u8[] => p256SeamFieldInvertWith(x, false)
+
+/**
+ * `u1 G + u2 Q` for `Q = k G`, encoded uncompressed: by `p256DoubleMultPublic`
+ * (the verify path's wNAF pass) when `wnaf`, by two constant-time
+ * `p256ScalarMult` calls and one addition otherwise. `u1`, `u2` and `k` are
+ * 32 big-endian bytes below n.
+ */
+const p256SeamDoubleMultWith = (u1: u8[], u2: u8[], k: u8[], wnaf: boolean): u8[] => {
+  const s = new P256PointScratch()
+  const q = new P256ProjectivePoint()
+  p256BaseMult(q, k, s)
+  const sum = new P256ProjectivePoint()
+  if (wnaf) {
+    p256DoubleMultPublic(sum, u1, u2, q, s)
+  } else {
+    const a = new P256ProjectivePoint()
+    const b = new P256ProjectivePoint()
+    p256ScalarMult(a, u1, p256Generator(), s)
+    p256ScalarMult(b, u2, q, s)
+    p256PointAdd(sum, a, b, s)
+  }
+  return p256EncodePoint(sum)
+}
+
+/** `u1 G + u2 (k G)` by the wNAF pass `p256Verify` takes. */
+export const p256SeamDoubleMult = (u1: u8[], u2: u8[], k: u8[]): u8[] => p256SeamDoubleMultWith(u1, u2, k, true)
+
+/** `u1 G + u2 (k G)` by two constant-time multiplications, the reference. */
+export const p256SeamDoubleMultReference = (u1: u8[], u2: u8[], k: u8[]): u8[] =>
+  p256SeamDoubleMultWith(u1, u2, k, false)
