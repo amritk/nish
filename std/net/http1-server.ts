@@ -1544,14 +1544,17 @@ export class Http1Connection {
     const limit: i32 = this.headLength
     let at: i32 = this.headFieldsAt
     const lengths: i32[] = this.headLengths
-    for (let i: i32 = 0; i < count && at >= 0; i += 1) {
+    // `count` is both arrays' length; testing each proves every access.
+    for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length) && at >= 0; i += 1) {
       // Both lengths, so that a value cannot match the kept bytes past its
       // own field and pass for the kept head without its text checks.
-      if (toI32(names[i].length) !== lengths[2 * i] || toI32(values[i].length) !== lengths[2 * i + 1]) {
+      const name: u8[] = names[i]
+      const value: u8[] = values[i]
+      if (toI32(name.length) !== lengths[2 * i] || toI32(value.length) !== lengths[2 * i + 1]) {
         return false
       }
-      at = http1ServerKept(kept, at, limit, names[i], 58)
-      at = http1ServerKept(kept, at, limit, values[i], 13)
+      at = http1ServerKept(kept, at, limit, name, 58)
+      at = http1ServerKept(kept, at, limit, value, 13)
     }
     return at >= 0
   }
@@ -1598,7 +1601,7 @@ export class Http1Connection {
     if (!again) {
       return
     }
-    for (let i: i32 = 0; i < fields; i += 1) {
+    for (let i: i32 = 0; i < fields && i < toI32(values.length); i += 1) {
       this.headLengths[2 * i] = toI32(names[i].length)
       this.headLengths[2 * i + 1] = toI32(values[i].length)
     }
