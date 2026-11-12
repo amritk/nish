@@ -160,7 +160,7 @@ class HttpServerLimits
 | `maxFields: i32` | The most fields a request may carry. 1 to 1024. |
 | `maxHead: i32` | The largest request head (method, target and fields), in bytes. 256 to 2^20. |
 | `maxResponseFields: i32` | The most fields a response may carry, Alt-Svc and content-length included. 2 to 256. |
-| `prefaceTimeout: i32` | Milliseconds a cleartext HTTP/2 connection has to send its preface. |
+| `prefaceTimeout: i32` | Milliseconds a cleartext HTTP/2 connection (`listenH2c`) has to send its preface; read once `listenH2c` serves. |
 | `requests: i32` | The most requests held at once, across every connection and version. 1 to 65536. |
 
 ### HttpServerRequest
