@@ -7,7 +7,7 @@
 import { Suite } from "nish/testing";
 import { Secret, secret, wipe } from "nish:secret";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
-import { TLS_ALERT_DECODE_ERROR, TLS_ALERT_ILLEGAL_PARAMETER, TLS_ALERT_INTERNAL_ERROR, TLS_GROUP_X25519, TLS_LEGACY_VERSION, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec";
+import { TLS_ALERT_DECODE_ERROR, TLS_ALERT_ILLEGAL_PARAMETER, TLS_ALERT_INTERNAL_ERROR, TLS_GROUP_X25519, TLS_LEGACY_VERSION, TLS_RECORD_SIZE_LIMIT_MAX, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec";
 import { TlsServer, tlsSignEcdsaP256 } from "nish/net/tls";
 import { TLS_CONTENT_APPLICATION_DATA, TLS_CONTENT_HANDSHAKE, TLS_RECORD_HEADER_SIZE } from "nish/net/tls/record";
 import { TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_OPEN, TlsRecordServer } from "nish/net/tls/record-server";
@@ -17,6 +17,9 @@ import { leafPrivate, serverPrivate, serverRandom, tcpConfig } from "../net_tls_
 import { ClientKeys, clearRecord, clientKeysFor, splitRecords } from "../net_tls_record_common/client";
 import { Opened, ZERO, drain, feed, join, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
 import { TlsRecordProtection } from "nish/net/tls/record";
+
+/** What `peerRecordSizeLimit` reads when the client sent no limit. */
+const NO_LIMIT: i32 = 0;
 
 const SUITE: i32 = TLS_AES_128_GCM_SHA256;
 /** The AEAD tag on every protected record of the suite. */
@@ -229,11 +232,11 @@ export const recordSizeLimitChecks = (): i32 => {
   t.ok("a client that sent a limit gets the server's own, 2^14 + 1, in EncryptedExtensions", holds(encryptedExtensions(offered), "001c00024001"));
   const silent: Run = handshake(helloWith([]), 0);
   t.ok("one that did not gets none", encryptedExtensions(silent) !== "" && !holds(encryptedExtensions(silent), "001c"));
-  t.eqI32("and is not limited", silent.conn.tls.peerRecordSizeLimit, 0);
-  t.eqI32("and its application records still carry 2^14 bytes", longestInner(writeThrough(silent, 20000).records), 16385);
+  t.eqI32("and is not limited", silent.conn.tls.peerRecordSizeLimit, NO_LIMIT);
+  t.eqI32("and its application records still carry 2^14 bytes", longestInner(writeThrough(silent, 20000).records), TLS_RECORD_SIZE_LIMIT_MAX);
   const huge: Run = handshake(helloWith([extLimit(65535)]), 0);
-  t.eqI32("a limit past 2^14 + 1 is taken as 2^14 + 1 (§4)", huge.conn.tls.peerRecordSizeLimit, 16385);
-  t.eqI32("and the records it gets are the usual ones", longestInner(writeThrough(huge, 20000).records), 16385);
+  t.eqI32("a limit past 2^14 + 1 is taken as 2^14 + 1 (§4)", huge.conn.tls.peerRecordSizeLimit, TLS_RECORD_SIZE_LIMIT_MAX);
+  t.eqI32("and the records it gets are the usual ones", longestInner(writeThrough(huge, 20000).records), TLS_RECORD_SIZE_LIMIT_MAX);
   const exact: Run = handshake(helloWith([extLimit(64)]), 0);
   t.eqI32("a limit of 64 is the least one allowed", exact.conn.state, TLS_RECORD_STATE_OPEN);
 
