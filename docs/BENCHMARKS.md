@@ -1610,7 +1610,7 @@ So under `run.sh`'s pinning the explicit entry serves in the process it was star
 | | |
 | --- | --- |
 | Date | 2026-11-12 |
-| nish | `build/nish` built from `main` at `7e241d75` (nish 0.38.0 sources), `--link --profile speed` |
+| nish | `build/nish` built from `main` at `7e241d75`, its head when the runs were taken (nish 0.38.0 sources), `--link --profile speed` |
 | CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 15 GiB |
 | OS | linux 6.18.44 (x64) |
 | Postgres | 16, a throwaway cluster in `build/tfb/pg`, `fsync=off`, TFB's `world` (10,000 rows) and `fortune` tables |

@@ -96,17 +96,15 @@ TFB's three request headers for a browser's 759-byte head, sends one request at
 a time on `/plaintext` too, and times only the entry, its copy, `uws` and
 `go-fasthttp` at 256 connections: the browser-shaped table of
 [the HTTP/1 codec baseline](../../docs/BENCHMARKS.md#http1-codec-baseline). The recorded figures are in
-[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext)
-and, for the gate, its
-[first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6),
-its
-[re-measurement after the `serve` and pool fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6)
-its
-[re-measurement after the profile-led fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6)
-and
-[the baseline the gate is read against](../../docs/BENCHMARKS.md#techempower-the-gates-baseline-checked-and-re-measured-wp49-stage-6),
-which has the `/proc` reading of each contestant's processes and the latest
-`profile.sh` figures.
+[docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext).
+The gate has four sections there:
+
+- [its first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6);
+- [the re-measurement after the `serve` and pool fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6);
+- [the re-measurement after the profile-led fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6);
+- [the baseline the gate is read against](../../docs/BENCHMARKS.md#techempower-the-gates-baseline-checked-and-re-measured-wp49-stage-6),
+  with the `/proc` reading of each contestant's processes and the latest
+  `profile.sh` figures.
 
 ### Profiling the async entry against the explicit one
 
