@@ -143,7 +143,7 @@ bounds.ok:
   %77 = bitcast i8* %76 to i32*
   %78 = getelementptr inbounds i32, i32* %77, i64 0
   %79 = bitcast i32* %78 to <4 x i32>*
-  store <4 x i32> %65, <4 x i32>* %79, align 4
+  store <4 x i32> %65, <4 x i32>* %79, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %80 = load <4 x i32>, <4 x i32>* %b.addr, align 8
   %81 = load %struct.nish_array*, %struct.nish_array** %words.addr, align 8
   %82 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %81, i64 0, i32 0
@@ -166,7 +166,7 @@ bounds.ok.1:
   %92 = bitcast i8* %91 to i32*
   %93 = getelementptr inbounds i32, i32* %92, i64 4
   %94 = bitcast i32* %93 to <4 x i32>*
-  store <4 x i32> %80, <4 x i32>* %94, align 4
+  store <4 x i32> %80, <4 x i32>* %94, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %95 = load <4 x i32>, <4 x i32>* %c.addr, align 8
   %96 = load %struct.nish_array*, %struct.nish_array** %words.addr, align 8
   %97 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %96, i64 0, i32 0
@@ -189,7 +189,7 @@ bounds.ok.2:
   %107 = bitcast i8* %106 to i32*
   %108 = getelementptr inbounds i32, i32* %107, i64 8
   %109 = bitcast i32* %108 to <4 x i32>*
-  store <4 x i32> %95, <4 x i32>* %109, align 4
+  store <4 x i32> %95, <4 x i32>* %109, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %110 = load <4 x i32>, <4 x i32>* %d.addr, align 8
   %111 = load %struct.nish_array*, %struct.nish_array** %words.addr, align 8
   %112 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %111, i64 0, i32 0
@@ -212,7 +212,7 @@ bounds.ok.3:
   %122 = bitcast i8* %121 to i32*
   %123 = getelementptr inbounds i32, i32* %122, i64 12
   %124 = bitcast i32* %123 to <4 x i32>*
-  store <4 x i32> %110, <4 x i32>* %124, align 4
+  store <4 x i32> %110, <4 x i32>* %124, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   store i32 0, i32* %lane.addr, align 4
   %125 = load %struct.nish_array*, %struct.nish_array** %words.addr, align 8
   %126 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %125, i64 0, i32 0

@@ -55,7 +55,7 @@ bounds.ok:
   %23 = bitcast i8* %22 to i32*
   %24 = getelementptr inbounds i32, i32* %23, i64 1
   %25 = bitcast i32* %24 to <4 x i32>*
-  store <4 x i32> %11, <4 x i32>* %25, align 4
+  store <4 x i32> %11, <4 x i32>* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %26 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 0
   %28 = load i64, i64* %27, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -97,7 +97,7 @@ bounds.ok.2:
   %49 = bitcast i8* %48 to i32*
   %50 = getelementptr inbounds i32, i32* %49, i64 2
   %51 = bitcast i32* %50 to <4 x i32>*
-  store <4 x i32> %37, <4 x i32>* %51, align 4
+  store <4 x i32> %37, <4 x i32>* %51, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

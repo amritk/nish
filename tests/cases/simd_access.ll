@@ -96,7 +96,7 @@ bounds.ok:
   %33 = bitcast i8* %32 to i8*
   %34 = getelementptr inbounds i8, i8* %33, i64 2
   %35 = bitcast i8* %34 to <16 x i8>*
-  %36 = load <16 x i8>, <16 x i8>* %35, align 1
+  %36 = load <16 x i8>, <16 x i8>* %35, align 1, !alias.scope !4, !noalias !3, !tbaa !14
   store <16 x i8> %36, <16 x i8>* %b.addr, align 8
   %37 = load <16 x i8>, <16 x i8>* %b.addr, align 8
   %38 = extractelement <16 x i8> %37, i32 0
@@ -145,7 +145,7 @@ bounds.ok.1:
   %72 = bitcast i8* %71 to i8*
   %73 = getelementptr inbounds i8, i8* %72, i64 4
   %74 = bitcast i8* %73 to <16 x i8>*
-  store <16 x i8> %60, <16 x i8>* %74, align 1
+  store <16 x i8> %60, <16 x i8>* %74, align 1, !alias.scope !4, !noalias !3, !tbaa !14
   %75 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
   %76 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %75, i64 0, i32 0
   %77 = load i64, i64* %76, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -245,7 +245,7 @@ bounds.ok.5:
   %130 = bitcast i8* %129 to i32*
   %131 = getelementptr inbounds i32, i32* %130, i64 2
   %132 = bitcast i32* %131 to <4 x i32>*
-  %133 = load <4 x i32>, <4 x i32>* %132, align 4
+  %133 = load <4 x i32>, <4 x i32>* %132, align 4, !alias.scope !4, !noalias !3, !tbaa !16
   %134 = insertelement <4 x i32> %133, i32 100, i32 3
   store <4 x i32> %134, <4 x i32>* %w.addr, align 8
   %135 = load <4 x i32>, <4 x i32>* %w.addr, align 8
@@ -270,7 +270,7 @@ bounds.ok.6:
   %147 = bitcast i8* %146 to i32*
   %148 = getelementptr inbounds i32, i32* %147, i64 0
   %149 = bitcast i32* %148 to <4 x i32>*
-  store <4 x i32> %135, <4 x i32>* %149, align 4
+  store <4 x i32> %135, <4 x i32>* %149, align 4, !alias.scope !4, !noalias !3, !tbaa !16
   %150 = load %struct.nish_array*, %struct.nish_array** %words.addr, align 8
   %151 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %150, i64 0, i32 0
   %152 = load i64, i64* %151, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -367,7 +367,7 @@ bounds.ok.10:
   %202 = bitcast i8* %201 to double*
   %203 = getelementptr inbounds double, double* %202, i64 0
   %204 = bitcast double* %203 to <2 x double>*
-  %205 = load <2 x double>, <2 x double>* %204, align 8
+  %205 = load <2 x double>, <2 x double>* %204, align 8, !alias.scope !4, !noalias !3, !tbaa !18
   %206 = extractelement <2 x double> %205, i32 1
   %207 = call i8* @nish_str_from_f64(double %206)
   call void @nish_print(i8* %207)

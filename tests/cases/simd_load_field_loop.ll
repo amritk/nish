@@ -146,7 +146,7 @@ bounds.ok:
   %40 = bitcast i8* %24 to i8*
   %41 = getelementptr inbounds i8, i8* %40, i64 %33
   %42 = bitcast i8* %41 to <16 x i8>*
-  %43 = load <16 x i8>, <16 x i8>* %42, align 1
+  %43 = load <16 x i8>, <16 x i8>* %42, align 1, !alias.scope !4, !noalias !3, !tbaa !17
   store <16 x i8> %43, <16 x i8>* %v.addr, align 8
   %44 = load <16 x i8>, <16 x i8>* %v.addr, align 8
   %45 = extractelement <16 x i8> %44, i32 0
@@ -257,7 +257,7 @@ bounds.ok:
   %36 = bitcast i8* %21 to i8*
   %37 = getelementptr inbounds i8, i8* %36, i64 %29
   %38 = bitcast i8* %37 to <16 x i8>*
-  store <16 x i8> %27, <16 x i8>* %38, align 1
+  store <16 x i8> %27, <16 x i8>* %38, align 1, !alias.scope !4, !noalias !3, !tbaa !17
   %39 = load i32, i32* %i.addr, align 4
   %40 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %39, i32 16)
   %41 = extractvalue { i32, i1 } %40, 0
