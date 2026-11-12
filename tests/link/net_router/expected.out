@@ -146,6 +146,7 @@ PASS  a trailing slash is not the static route
 PASS  unless it is one
 PASS  another case is not the static route
 PASS  nor is an escape of it
+PASS  1000 matches from the table move the arena by nothing (0 bytes)
 PASS  the root is a static route
 PASS  a parameter route still refuses too little params
 PASS  300 static routes each answer their own index as they are added
@@ -166,4 +167,4 @@ PASS  one of them from the tree
 PASS  a tenth path of that slot is 404
 PASS  a table grown past them files the ninth (17 of 17)
 PASS  and all nine still answer their own index
-router: 168 passed, 0 failed, 0 skipped
+router: 169 passed, 0 failed, 0 skipped

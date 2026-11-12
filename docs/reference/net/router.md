@@ -81,6 +81,20 @@ time, which is what a connection loop does.
 
 </scalar-detail>
 
+<scalar-detail title="A route with no parameter and no `*` is answered without the tree">
+
+`add`
+also files such a route under a hash of its method and path, in one more
+flat array, and `match` looks there first, for a target no longer than the
+longest such route: one pass over the path, at most `ROUTER_PROBES` slots,
+and a byte comparison for a slot whose method and length agree. The
+tree stays the definition: a literal is tried first at every segment, so
+the route the exact table holds for a method and a path is the one the tree
+would have reached, and anything the table does not hold falls through to
+the tree unchanged. `matchTree` is the tree alone, for a test of exactly that.
+
+</scalar-detail>
+
 <scalar-detail title="The rules">
 
 **The rules** (`docs/wp43-http-app-layer.md` §2):
@@ -99,6 +113,18 @@ time, which is what a connection loop does.
   lookup visits each node of the table at most once.
 - A path that matches only routes of other methods answers
   `ROUTER_METHOD_NOT_ALLOWED`, so a server can tell 405 from 404.
+
+</scalar-detail>
+
+<scalar-detail title="What is unchecked">
+
+`routerSameRange` reads with `nish:unsafe`'s
+`uncheckedGet`, and has two callers: `enter` compares a method `add` stored
+with the caller's method range, and `staticRoute` a path `add` stored with
+the start of the target. The stored ranges are inside their arrays because
+`add` pushed those bytes and nothing removes one; the caller's ranges are
+the ones `enter` panics on when they are outside theirs. Every other read is
+checked.
 
 </scalar-detail>
 
@@ -172,10 +198,12 @@ class Router
 | --- | --- |
 | `new Router(limits: RouterLimits)` | An empty table. Panics, naming the field, on a limit outside the range `RouterLimits` gives it. |
 | `add(method: string, pattern: string): i32` | Adds the route `method pattern` and answers its index, counting from 0, or a negative `ROUTER_*` code; a refused pattern adds nothing. Whether a pattern is refused never depends on the order routes were added in. |
-| `lastVisited(): i32` | How many nodes the last `match` visited. |
+| `lastVisited(): i32` | How many nodes of the tree the last `match` visited. |
 | `match(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32` | The route `method[mStart .. mEnd)` and `target[tStart .. tEnd)` reach, or a negative `ROUTER_*` code. On a route, its parameters are written to `params` as `[start, end)` offsets into `target`, two slots each, in the pattern's order, and a final `*` as one more pair; on a refusal `params` is untouched. Panics on a range outside its array. |
+| `matchTree(method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32` | What `match` answers, found by the tree alone: the exact-path table is not read. The two agree on every method and target, in the route or code they answer, in `params` and in where the path ends; this one is the definition and exists so that a test can hold `match` to it. |
 | `nodeCount(): i32` | How many nodes the tree has, the root included: the most one `match` visits. |
 | `paramCount(route: i32): i32` | How many `[start, end)` pairs `route` answers: its parameters, and one more for a final `*`. |
+| `staticCount(): i32` | How many routes the exact-path table holds: the routes `match` answers without the tree. Every route with no parameter and no `*` is one, but for a route whose slots were all taken, which the tree answers instead. |
 
 ### RouterLimits
 

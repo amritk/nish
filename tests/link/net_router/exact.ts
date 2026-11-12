@@ -202,6 +202,18 @@ export const exactChecks = (t: Suite): void => {
   t.eqI32("unless it is one", both(r, "GET", "/a/", 6, true), toI32(8));
   t.eqI32("another case is not the static route", both(r, "GET", "/JSON", 6, true), ROUTER_NOT_FOUND);
   t.eqI32("nor is an escape of it", both(r, "GET", "/%6Ason", 6, true), ROUTER_NOT_FOUND);
+
+  // A hit in the table allocates nothing, as one in the tree does not.
+  const get: u8[] = httpFieldBytes("GET");
+  const plain: u8[] = httpFieldBytes("/plaintext");
+  const unused: i32[] = [];
+  let hitSum: i32 = 0;
+  const arenaBefore: i64 = Arena.used();
+  for (let k: i32 = 0; k < 1000; k++) {
+    hitSum += r.match(get, toI32(0), toI32(3), plain, toI32(0), toI32(plain.length), unused);
+  }
+  const moved: i64 = Arena.used() - arenaBefore;
+  t.ok(`1000 matches from the table move the arena by nothing (${moved} bytes)`, moved === toI64(0) && hitSum === 1000);
   t.eqI32("the root is a static route", both(r, "GET", "/", 0, true), toI32(0));
   t.eqI32(
     "a parameter route still refuses too little params",
