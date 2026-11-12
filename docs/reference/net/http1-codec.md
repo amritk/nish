@@ -831,7 +831,7 @@ class Http1Parser
 | `bodyOff: i32` | Where the bytes the last `HTTP1_BODY` handed over start in `body`. |
 | `chunked: boolean` | Whether the request's body is chunked (`Transfer-Encoding: chunked`), so it has no `contentLength`. |
 | `contentLength: i32` | The declared body length, or -1 when the request has none or is chunked. |
-| `head: u8[]` | The request line and the kept field lines of the request, copied out of `buf` as each is read, names in lowercase: what the spans below index. Kept from one request to the next, so a slot that has seen its largest head allocates nothing for the next one. |
+| `head: u8[]` | The request line (method to version, no CRLF) and then the header section's lines with their CRLFs, copied out of `buf` as each is read, names in lowercase: what the spans below index. The bytes from `headLength` on are slack: the section scan stores a line's first bytes there before the line is whole. Kept from one request to the next, so a slot that has seen its largest head allocates nothing for the next one. |
 | `headerCount: i32` | How many fields the request's header section kept: the spans of field `i` are `spans[4 * i ..]`. |
 | `headLength: i32` | How much of `head` the request uses. |
 | `keepAlive: boolean` | Whether the connection stays open after this request: HTTP/1.1 unless it sent `Connection: close`, HTTP/1.0 only when it sent `keep-alive`. A server closes after its response when this is false. |

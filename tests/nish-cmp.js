@@ -1989,11 +1989,14 @@ const DECLARED = [
     ]
   ),
   // #1416: the HTTP/1 parser reads a header section a vector at a time and
-  // classifies each framing field as it keeps it, so Http1Parser gains fields
-  // and the codec gains its field constants: every module that names the
-  // class, and every header that lays it out, moves.
+  // classifies each framing field as it keeps it. Two causes: Http1Parser
+  // gains fields, so every module that names the class and every header that
+  // lays it out moves; and the codec gains functions (http1Section,
+  // http1HeadGrow, http1FramingField and others), so http1-codec.ll moves
+  // wherever it is written, and the checks.ll and main.ll that inline or
+  // declare them move with it.
   ...vectorHead(
-    "Http1Parser grows from 200 to 232 bytes for the section scan and the framing field kinds, so each module that declares it and each emitted header moves",
+    "Http1Parser grows from 200 to 232 bytes for the section scan and the framing field kinds, so each module that declares it and each emitted header moves; and the codec's new functions (http1Section, http1HeadGrow, http1FramingField) move http1-codec.ll, checks.ll and main.ll where they are written or inlined",
     {
       "bench/http-app-carrier.ts": ["websocket.ll"],
       "bench/http1-parse/main.ts": ["main.h", "main.ll"],
