@@ -13,12 +13,13 @@ functions rather than lines, so it has no `file:line` anchors to move.
 
 | File | What |
 | --- | --- |
-| `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; the non-Linux stubs |
+| `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; `nish_sb_keep_interpreters` and `nish_sb_spawn_open`, the spawn-target check (SBX-1); the non-Linux stubs |
 | `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, the call of `@nish_sandbox_check` first in `@main`, and the scope constants `@.sandbox.read`, `@.sandbox.write` and `@.sandbox.exec` (`sandboxDirs`) |
 | `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-napi-async`, `--emit-ts`, `--emit-ast`, `--emit-checked`, `--fix`, two modes at once, an entry with no `main`; the scopes (`capabilityListMask`, `capabilityScopes`): which are accepted, and each directory's resolution |
-| `src/compilation.ts` | `sandboxWidened`, the widening of an `ffi` main by the policy's grants (open question 13); `narrowSandbox`, the scopes and the exec allowlist taken from a dependency's grant arguments (WP37 §2a, WP40 §2a) |
+| `src/compilation.ts` | `sandboxWidened`, the widening of an `ffi` main by the policy's grants (open question 13); `narrowSandbox`, the scopes and the exec allowlist taken from a dependency's grant arguments, and the `//` mark on an interpreter the grant does not name (WP37 §2a, WP40 §2a) |
+| `runtime/runtime-os.c` | `nish_spawn_target` and its call in `nish_spawn_start`: a refused target's error, and the spawn of `/proc/self/fd/N` in place of `argv[0]` |
 | `runtime/runtime-parallel.c` | `nish_cpu_prime` and the ceiling `nish_cpu_count` clamps to, step 1 |
-| `runtime/nish.h` | the declarations of `nish_sandbox`, `nish_sandbox_check` and `nish_cpu_prime` |
+| `runtime/nish.h` | the declarations of `nish_sandbox`, `nish_sandbox_check`, `nish_cpu_prime` and `nish_spawn_target` |
 | `scripts/build.sh` | the refusal of `--sandbox` IR under the wasm and wasi profiles |
 
 Out of scope: scopes in `package.json`'s `"nish"` field for the root's own
@@ -201,11 +202,11 @@ names it once and runs with nothing granted beneath it.
 
 What the sandbox does not hold by design is stated in the threat model's "What
 the adversary keeps" list above, and the limits below are recorded rather than
-counted. One finding is counted:
+counted. One finding is counted, and it is fixed:
 
 | ID | Severity | Where | What must hold | Status |
 | --- | --- | --- | --- | --- |
-| SBX-1 | High | `narrowSandbox` in `src/compilation.ts`, `nish_sandbox` in `runtime/runtime-sandbox.c` | Under `--sandbox`, a dependency granted `process.spawn=<program>` must run only that program. | **Open.** The exec allowlist grants EXECUTE on each granted program's ELF interpreter (`PT_INTERP`, e.g. `/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`), which the kernel needs to start the program. That loader is a program too: `spawnSync([loader, "/bin/echo", "x"])` is an allowed `execve`, and the loader then opens `/bin/echo` for reading, which `process.spawn`'s READ_FILE on `/` allows, and maps it executable. Landlock checks EXECUTE at `execve` and open-for-exec, not at `mmap`, so any program on the machine runs. The allowlist therefore bounds a dependency that spawns only what it names, not one written to escape it. Closing it needs the runtime's spawn path to refuse a program that is a granted program's loader, which the wrapper's list would have to mark; recorded for a later change. Pinned by `sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)` in `tests/run.js`, which fails once it is closed. |
+| SBX-1 | High | `narrowSandbox` in `src/compilation.ts`, `nish_sandbox` and `nish_sb_spawn_open` in `runtime/runtime-sandbox.c`, `nish_spawn_start` in `runtime/runtime-os.c` | Under `--sandbox`, a dependency granted `process.spawn=<program>` must run only that program. | **Fixed.** The exec allowlist must grant EXECUTE on each granted program's ELF interpreter (`PT_INTERP`, e.g. `/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`) and `#!` interpreter, which the kernel needs to start it. Before the fix that loader was a spawn target too: `spawnSync([loader, "/bin/echo", "x"])` was an allowed `execve`, the loader then opened `/bin/echo` under `process.spawn`'s READ_FILE on `/` and mapped it, and Landlock checks EXECUTE at `execve` and open-for-exec, not at `mmap`, so any program ran. Now `narrowSandbox` writes an interpreter the grant does not name with a second leading `/` (`//usr/lib/...`), the same file to Landlock's `O_PATH` open; `nish_sandbox` records each marked entry's `(st_dev, st_ino)` before it confines the process and sets `nish_spawn_target`. Every spawn then resolves `argv[0]` as `posix_spawnp` would, opens it `O_PATH`, refuses (`EACCES`) a file whose identity is a marked entry's, and otherwise execs that same open file through `/proc/self/fd/N`, so the file checked is the file run: a rename or symlink swap between the check and the `execve` cannot substitute the loader. An interpreter the grant also names (`process.spawn=sh` beside a script) stays unmarked and spawnable. Before/after: `sandbox dependency grants: a granted program's ELF loader is refused as a spawn target (SBX-1)` (sandboxed the spawn returns `-1`; the same build without `--sandbox` runs `echo`), `sandbox dependency grants: a second name for the loader is refused too (SBX-1)`, `sandbox dependency grants: a granted #! script runs and its interpreter is refused as a spawn target (SBX-1)` and `sandbox dependency grants: a program the grant names stays spawnable when it is also another's interpreter (SBX-1)` in `tests/run.js`. |
 
 ## Limits
 
@@ -260,9 +261,21 @@ counted. One finding is counted:
   reads its own libraries; only which files may be executed is narrowed. A
   program the allowlist names may itself be an interpreter (`sh`, `python3`)
   and run whatever it is told: grant a program that takes a script only to a
-  dependency that may run anything. The same holds of the ELF loader the
-  allowlist adds for a dynamic program: it runs any binary it is handed
-  (SBX-1, counted above).
+  dependency that may run anything. The ELF loader and `#!` interpreter the
+  allowlist adds for a granted program are refused as spawn targets (SBX-1,
+  fixed above) unless the grant names them itself: a grant of `sh` beside a
+  script keeps `sh`, which then runs anything.
+- **What the SBX-1 check costs a spawn.** Under `--sandbox` with a marked
+  entry, a spawn reads `PATH` to resolve its program (a changed `PATH` can
+  only find another file, which is checked the same way), needs `/proc`
+  mounted to exec through `/proc/self/fd/N`, and leaves the child that
+  descriptor (an `O_PATH` one, not close-on-exec, since the `execve` needs it;
+  a spawn on another thread in the same window can inherit it too). A `#!`
+  script started this way sees `/proc/self/fd/N` as its `$0`. More than 16
+  marked entries refuses every spawn rather than check some of them. The
+  refusal and the `/proc/self/fd` routing are armed whenever the build carries
+  a marked entry, Landlock or not: under `--sandbox=best-effort` on a kernel
+  without Landlock, where exec is otherwise not confined, they still apply.
 - **The allowlist is the build's.** Each program is the realpath the compiler
   found on `PATH` (or from the root package's directory), and its interpreter
   is read from the file then; a program replaced after the build with one
@@ -377,9 +390,15 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
   granted fs.write=<dir> writes inside it and not beside it` (without
   `--sandbox`, it writes beside it; skipped below Landlock ABI 3),
   `sandbox dependency grants: the wrapper passes the grant's real directory
-  as the fs.write scope`; and the SBX-1 pin, `sandbox dependency grants: a
-  granted program's ELF loader runs a program the grant does not name
-  (SBX-1, open)`, which fails once SBX-1 is closed
+  as the fs.write scope`; and SBX-1's, each before/after against the same
+  build without `--sandbox`: `sandbox dependency grants: a granted program's
+  ELF loader is refused as a spawn target (SBX-1)`, `sandbox dependency
+  grants: a second name for the loader is refused too (SBX-1)`, on
+  `sandbox_dep_exec_allowlist`; `sandbox dependency grants: a granted #!
+  script runs and its interpreter is refused as a spawn target (SBX-1)`, on
+  `sandbox_dep_exec_script`; and `sandbox dependency grants: a program the
+  grant names stays spawnable when it is also another's interpreter
+  (SBX-1)`, on `sandbox_dep_exec_interpreter_granted`
 
 ### Checks CI does not run
 
