@@ -25,7 +25,6 @@ and where it is specified.
 2. [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): G1's interop, G2's open timeouts, then G7's one handler.
 3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
 4. [WP21: Packages](wp21-packages.md): S4, the build cache.
-5. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
 
 [WP34: Hosting cs: the network stack](wp34-hosting-cs.md)'s remaining waves are in the cs repository.
 
@@ -59,7 +58,6 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |
 | [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 9 of 18 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 4 of 8 |
-| [WP38: SIMD](wp38-simd.md) | In progress | 8 of 10 |
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 12 of 27 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
@@ -99,6 +97,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP32: `Map` and `Set`](wp32-map.md) | Landed | 2 of 2 |
 | [WP35: The capability report](wp35-capabilities.md) | Landed | 1 of 1 |
 | [WP36: The capability policy](wp36-capability-policy.md) | Landed | 1 of 1 |
+| [WP38: SIMD](wp38-simd.md) | Landed | 10 of 10 |
 | [WP40: Dependency capabilities](wp40-dependency-capabilities.md) | Landed | 1 of 1 |
 | [WP42: A multi-core server from pre-forked processes](wp42-multicore-server.md) | Landed | 1 of 1 |
 | [WP44: Streaming file reads](wp44-streaming-files.md) | Landed | 4 of 4 |

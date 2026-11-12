@@ -498,6 +498,11 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * the flag checks. It went into `nish_net_bound`, sharing its close on failure, with
  * the program as static data; a separate attach function measured 4,684, and attaching
  * before the bind or inside the stream clause saved nothing under 4,608.
+ * **4,879 bytes** on 2026-11-12 once `udpBind` flag 4 was added (4,731 to 5,120): the
+ * seven-instruction classic BPF program that hands a QUIC datagram to the group's socket
+ * at its DCID byte 0 modulo the group's count (docs/h3-multicore.md), copied from static
+ * data so the count can be patched in, its attach, and the flag word's checks; as built
+ * on the stack the program measured 4,893.
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop were the second and third slices of N5,
  * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
@@ -505,7 +510,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
  */
-const NET_TEXT_BUDGET = 4864
+const NET_TEXT_BUDGET = 5120
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
