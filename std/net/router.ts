@@ -274,7 +274,7 @@ export class Router {
    */
   paramCount(route: i32): i32 {
     if (route < 0 || route >= this.routes()) {
-      panic(`Router.paramCount: route ${route} is not in a table of ${this.routes()}`)
+      routerNoRoute(route, this.routes())
     }
     return this.routeParams[route]
   }
@@ -871,6 +871,14 @@ const routerSlot = (hash: u32, mask: i32): i32 => {
  */
 const routerOutside = (what: string, start: i32, end: i32, length: i32): void => {
   panic(`Router.match: the ${what} range ${start} to ${end} is outside its ${length} bytes`)
+}
+
+/**
+ * Panics for a `route` that is not one of the table's `routes`. Apart from
+ * `paramCount`, which a server calls per request, for the reason `routerOutside` is.
+ */
+const routerNoRoute = (route: i32, routes: i32): void => {
+  panic(`Router.paramCount: route ${route} is not in a table of ${routes}`)
 }
 
 /** Panics, naming `RouterLimits.<field>`, unless `value` is in `low .. high`. */
