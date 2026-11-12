@@ -2495,7 +2495,8 @@ const arrowsNamingBefore = (node: Node, name: string, at: i32): i32 => {
   return count
 }
 
-const assignsName = (node: Node, name: string): boolean => {
+/** Whether `node` holds an assignment, `++` or `--` of the plain name `name`. */
+export const assignsName = (node: Node, name: string): boolean => {
   if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
     const target = unwrapParens(node.children[0])
     if (target.kind === N_IDENT && target.text === name) {

@@ -1524,6 +1524,160 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end fnref-field -->
 
+### A nullable function reference passed as an argument
+
+`Op | null` is the same `i32` tag, with `null` as tag 0, which no function
+has: `return null` returns `i32 0`, and `h !== null` is `icmp ne i32 %h, 0`.
+A reference passed for an inline function parameter is wrapped in an arrow
+that calls it, so `apply` is instantiated for the call, and that copy calls
+through `h`'s dispatcher, a `switch` over the functions `pick` can return,
+with no indirect call (docs/LANGUAGE.md, "Function references").
+
+<!-- cookbook:begin fnref-arg-nullable -->
+```ts
+// A nullable reference narrowed and passed for an inline function parameter.
+// `null` is tag 0, `h !== null` compares the tag with 0, and `apply(h, x)`
+// passes an arrow that calls `h`, so `apply` is instantiated for the call and
+// calls through the dispatcher of `h`'s place.
+type Op = (x: i32) => i32
+
+const double = (x: i32): i32 => x * 2
+const negate = (x: i32): i32 => 0 - x
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x)
+
+const pick = (k: i32): Op | null => {
+  if (k === 0) {
+    return null
+  }
+  return k === 1 ? double : negate
+}
+
+export const run = (k: i32, x: i32): i32 => {
+  const h = pick(k)
+  if (h !== null) {
+    return apply(h, x)
+  }
+  return -1
+}
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
+
+define internal noundef i32 @double(i32 noundef %x) #0 {
+entry:
+  %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %x, i32 2)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
+}
+
+define internal noundef i32 @negate(i32 noundef %x) #0 {
+entry:
+  %0 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 0, i32 %x)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
+}
+
+define internal noundef i32 @pick(i32 noundef %k) #1 {
+entry:
+  %0 = icmp eq i32 %k, 0
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  ret i32 0
+
+if.end:
+  %1 = icmp eq i32 %k, 1
+  br i1 %1, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %2 = phi i32 [ 1, %cond.true ], [ 2, %cond.false ]
+  ret i32 %2
+}
+
+define noundef i32 @run(i32 noundef %k, i32 noundef %x) #0 {
+entry:
+  %h.addr = alloca i32, align 4
+  %0 = call i32 @pick(i32 %k)
+  store i32 %0, i32* %h.addr, align 4
+  %1 = load i32, i32* %h.addr, align 4
+  %2 = icmp ne i32 %1, 0
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = load i32, i32* %h.addr, align 4
+  %4 = call i32 @apply$fn.10.run$arrow0(i32 %x, i32 %3)
+  ret i32 %4
+
+if.end:
+  ret i32 -1
+}
+
+define internal noundef i32 @run$arrow0(i32 noundef %$a0, i32 noundef %h) #0 {
+entry:
+  %0 = call i32 @$ref.0.fr1.i32.i32.0(i32 %h, i32 %$a0)
+  ret i32 %0
+}
+
+define internal noundef i32 @apply$fn.10.run$arrow0(i32 noundef %x, i32 noundef %cap.0) #0 {
+entry:
+  %0 = call i32 @run$arrow0(i32 %x, i32 %cap.0)
+  ret i32 %0
+}
+
+define internal noundef i32 @$ref.0.fr1.i32.i32.0(i32 noundef %$t, i32 noundef %$a0) #0 {
+entry:
+  switch i32 %$t, label %sw.default [
+    i32 1, label %sw.case
+  ]
+
+sw.case:
+  %0 = tail call i32 @double(i32 %$a0)
+  ret i32 %0
+
+sw.default:
+  %1 = tail call i32 @negate(i32 %$a0)
+  ret i32 %1
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end fnref-arg-nullable -->
+
 ### Default and rest parameters, filled at the call
 
 A default and a rest parameter are both the **caller's** work
@@ -15096,6 +15250,106 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 !9 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-handle -->
+
+### `declare class`: a C struct, lent by pointer
+
+A `declare class` (WP27 S4.1) is a named LLVM struct whose fields are the
+declaration's, in order, each at its natural alignment: `Stamp` below is
+`{ i8, %struct.Timespec, i32 }`, and LLVM's data layout pads it as C pads
+`struct { uint8_t tag; struct timespec at; int32_t seq; }`, 32 bytes with the
+`Timespec` at offset 8. There is no header word and no class id: the memory is
+C's layout and nothing else, so there is no room for one.
+
+`new Stamp()` is an `alloca` the escape analysis keeps in the frame, zeroed by
+one `llvm.memset` of the struct's size, padding included: a
+`store %struct.Stamp zeroinitializer` need not write the padding bytes, and C
+may compare or hash the whole struct. The embedded `Timespec` is part of
+the same memory: `stamp.at` is a `getelementptr inbounds` to field 1, and that
+address is what `clock_gettime` receives, so C writes into `stamp` directly.
+`stamp.at.sec` is a second `getelementptr` from it. None of these loads and
+stores carries a `!tbaa` tag: C writes the struct through a pointer the
+program cannot see, and the untagged access is the one LLVM cannot reorder
+around that write.
+
+<!-- cookbook:begin decl-ffi-struct -->
+```ts
+declare class Timespec {
+  sec: i64
+  nsec: i64
+}
+declare class Stamp {
+  tag: u8
+  at: Timespec
+  seq: i32
+}
+// biome-ignore lint/style/useNamingConvention: the C function's own name
+declare function clock_gettime(clock: i32, ts: Timespec): i32
+
+export const main = (): i32 => {
+  const stamp = new Stamp()
+  stamp.tag = 7
+  clock_gettime(1, stamp.at)
+  return stamp.at.sec > 0 ? 0 : 1
+}
+```
+
+```llvm
+%struct.Timespec = type { i64, i64 }
+%struct.Stamp = type { i8, %struct.Timespec, i32 }
+
+declare i32 @clock_gettime(i32, %struct.Timespec*)
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare void @nish_free_arena() #1
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %stamp.addr = alloca %struct.Stamp*, align 8
+  %Stamp.obj = alloca %struct.Stamp, align 8
+  %0 = bitcast %struct.Stamp* %Stamp.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 32, i1 false)
+  store %struct.Stamp* %Stamp.obj, %struct.Stamp** %stamp.addr, align 8
+  %1 = load %struct.Stamp*, %struct.Stamp** %stamp.addr, align 8
+  %2 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %1, i32 0, i32 0
+  store i8 7, i8* %2, align 1
+  %3 = load %struct.Stamp*, %struct.Stamp** %stamp.addr, align 8
+  %4 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %3, i32 0, i32 1
+  %5 = call i32 @clock_gettime(i32 1, %struct.Timespec* %4)
+  %6 = load %struct.Stamp*, %struct.Stamp** %stamp.addr, align 8
+  %7 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %6, i32 0, i32 1
+  %8 = getelementptr inbounds %struct.Timespec, %struct.Timespec* %7, i32 0, i32 0
+  %9 = load i64, i64* %8, align 8
+  %10 = icmp sgt i64 %9, 0
+  br i1 %10, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %11 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  ret i32 %11
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-ffi-struct -->
 
 ### Numeric `enum`
 

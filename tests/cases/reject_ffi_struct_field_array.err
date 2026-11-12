@@ -1,0 +1,1 @@
+Field `xs` of `declare class Bag` has type `i32[]`, which has no C layout

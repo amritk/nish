@@ -17,6 +17,9 @@
 //   `WebTransport` bound beside a slot's `Http3Connection` when the slot is
 //   first served as `h3`; `app.ts` answers them. Its handshakes sign with the
 //   key the caller holds, for the chain it was given.
+// - A WebSocket echo port for Autobahn's fuzzingclient is `ws.ts`, plain
+//   HTTP/1.1 on 127.0.0.1 in a readiness loop of its own, stepped like
+//   `H1Loop`'s.
 // - With `watchSignals`, SIGTERM or SIGINT stops the loop: `docker stop`.
 import { Secret } from "nish:secret";
 import { netLocalPort, pollAdd, pollCreate, pollWait, udpBind } from "nish:net";
@@ -32,10 +35,12 @@ import { App, H1Loop, TLS_SLOTS } from "../net_http1_server/harness";
 import { HQ_ALPN, InteropApp } from "./app";
 import { InteropFiles } from "./files";
 import { H2_LISTEN_TOKEN, H2_SLOT_TOKEN, InteropH2 } from "./h2";
+import { InteropWs } from "./ws";
 
 /** The tokens of this loop's descriptors. */
 const TOKEN_QUIC: i32 = 1;
 const TOKEN_H1: i32 = 2;
+const TOKEN_WS: i32 = 3;
 const TOKEN_SIGNAL: i32 = 4;
 
 /** What the server is started with. */
@@ -51,6 +56,8 @@ export class InteropOptions {
   h1Port: i32 = 0;
   h1sPort: i32 = 0;
   h2Port: i32 = 0;
+  /** The WebSocket echo port's, on 127.0.0.1; 0 for any free port. */
+  wsPort: i32 = 0;
   /**
    * Connections each pool serves at once: QUIC's, HTTP/2's and both
    * HTTP/1.1 pools', the last two no more than `H1_SLOT_LIMIT`. The runner's
@@ -172,6 +179,7 @@ const newH1Loop = (options: InteropOptions): H1Loop => {
 export class InteropServer {
   h1: H1Loop;
   h2: InteropH2;
+  ws: InteropWs;
   h3: Http3Server;
   app: InteropApp;
   ready: i32[];
@@ -209,6 +217,8 @@ export class InteropServer {
       pollAdd(this.loop, this.udp, 1, TOKEN_QUIC);
     }
     pollAdd(this.loop, this.h1.loop, 1, TOKEN_H1);
+    this.ws = new InteropWs(options.wsPort);
+    pollAdd(this.loop, this.ws.loop, 1, TOKEN_WS);
   }
 
   /** Stops the loop on SIGTERM or SIGINT. */
@@ -221,7 +231,7 @@ export class InteropServer {
 
   /** The line a client reads the ports from. */
   ports(): string {
-    return `ports quic ${this.quicPort} h1 ${this.h1.plainPort} h1s ${this.h1.tlsPort} h2 ${this.h2.port}`;
+    return `ports quic ${this.quicPort} h1 ${this.h1.plainPort} h1s ${this.h1.tlsPort} h2 ${this.h2.port} ws ${this.ws.port}`;
   }
 
   /**
@@ -243,6 +253,8 @@ export class InteropServer {
       if (who === TOKEN_H1) {
         this.h1.failure = "";
         this.h1.step(toI32(-1));
+      } else if (who === TOKEN_WS) {
+        this.ws.step();
       } else if (who === H2_LISTEN_TOKEN) {
         this.h2.acceptAll();
       } else if (who >= H2_SLOT_TOKEN) {

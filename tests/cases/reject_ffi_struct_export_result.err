@@ -1,0 +1,1 @@
+`Result<Point, string>` holds a `declare class Point` and cannot be the return type of an exported function

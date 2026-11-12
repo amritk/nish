@@ -788,8 +788,8 @@ site:
 A string C allocated for the caller to free (`strdup`) is a `CPtr`, not a
 `string`: the copy would leave C's allocation with no one to free it.
 
-A class, an interface or an array other than the byte buffer below is
-refused, in either direction, because nothing else the Nish compiler allocated
+A class other than a `declare class` (below), an interface or an array other
+than the byte buffer below is refused, in either direction, because nothing else the Nish compiler allocated
 may reach code it cannot see:
 
 ```ts nish:err NL2551
@@ -968,6 +968,61 @@ the process without the close; the operating system takes the descriptor
 back, but a bounds panic does not flush what C still buffers, so call
 `fflush` on a `FILE *` you wrote before code that may panic. The rules are in
 [A handle class](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr).
+
+A C function that fills a struct takes it through a pointer, and a
+`declare class` is that struct. Its fields are laid out in the order you write
+them, each at its natural alignment, as a C compiler lays out the same fields.
+`new` takes no arguments and zero-fills it, and a parameter typed with it
+passes C its address:
+
+```ts nish:ok
+declare class Rlimit {
+  cur: u64;
+  max: u64;
+}
+declare function getrlimit(resource: i32, limit: Rlimit): i32;
+
+export const main = (): i32 => {
+  const limit = new Rlimit();
+  // 7 is RLIMIT_NOFILE on Linux; macOS and the BSDs number it 8.
+  if (getrlimit(7, limit) !== 0) {
+    return 1;
+  }
+  console.log(limit.cur <= limit.max); // true
+  return 0;
+};
+```
+
+A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
+`CPtr | null`, or another `declare class`, which is embedded by value as C
+embeds one struct in another. `stamp.at.sec` reads a field of the embedded
+struct in place, and `clock_gettime(1, stamp.at)` hands C its address inside
+`stamp`. The class has fields and nothing else: no initialiser, no method or
+constructor, no `readonly`, no `extends`, no `export`. It cannot appear in
+an exported function's or class's signature, nor can any type that holds one
+(a `Result`, an array, a generic instance or a class with such a field), so no
+generated header or binding has to describe it. A `CPtr` field is the
+target's pointer, four bytes under `--profile wasi`. A build a web page loads
+(freestanding wasm, or one that writes `--emit-dts`) has no C to lend a struct
+to and refuses a `declare class`. Any other field type is refused, since it has no C
+spelling; that includes `number`, whose width `--number-mode` picks:
+
+```ts nish:err NL2752
+declare class Flags {
+  ok: boolean;
+}
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
+C borrows the struct for the call, as it borrows a string: it reads and
+writes the fields until it returns, and may not keep the address. A
+`declare function` cannot return one, and it cannot be an array element or
+built from an object literal. A parameter typed `Rlimit | null` passes `NULL`
+for `null`, under the same rule as a `CPtr | null`. The rules are in
+[A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 A declared function has no body and cannot be exported. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
