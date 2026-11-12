@@ -477,18 +477,6 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
     if (v[i] != s[i]->data) return -EINVAL;
   }
   v[i] = 0;
-  const char *run = v[0];
-#ifdef __linux__
-  /* The child executes the file the sandbox checked, through a descriptor
-     above every one a `dup` action writes. */
-  char proc[32];
-  int fd = -1;
-  if (nish_spawn_target) {
-    fd = nish_spawn_target(run, base + n + 3, proc);
-    if (fd < 0) return fd;
-    run = proc;
-  }
-#endif
   /* One list of file actions whether or not a stream is redirected: an empty
      list is the same spawn as none, and one path through is less code than
      creating the list only when a stream needs it. */
@@ -509,6 +497,21 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
        leave its own stdout pointing at the file. */
     if (to[k]) posix_spawn_file_actions_addopen(&fa, k + 1, nish_cpath(to[k]), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
   }
+  const char *run = v[0];
+#ifdef __linux__
+  /* The child executes the file the sandbox checked, through a descriptor
+     above every one a `dup` action writes. */
+  char proc[32];
+  int fd = -1;
+  if (nish_spawn_target) {
+    fd = nish_spawn_target(run, base + n + 3, proc);
+    if (fd < 0) {
+      posix_spawn_file_actions_destroy(&fa);
+      return fd;
+    }
+    run = proc;
+  }
+#endif
   pid_t pid;
   failed = posix_spawnp(&pid, run, &fa, 0, v, environ);
   posix_spawn_file_actions_destroy(&fa);

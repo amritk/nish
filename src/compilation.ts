@@ -3865,9 +3865,9 @@ export class Compilation {
    * `fs.read`, `fs.write` or `process.spawn`, and each of them is granted it
    * with arguments, `--sandbox` confines the program to those arguments — the
    * granted directories become its Landlock roots, the granted programs (and
-   * their interpreters, marked `//` unless granted too) its exec allowlist. A reach the root package makes
-   * itself, an `ffi` call, or a scope given on the command line leaves the
-   * capability as it was.
+   * their interpreters, marked `//` unless granted too) its exec allowlist. A
+   * reach the root package makes itself, an `ffi` call, or a scope given on
+   * the command line leaves the capability as it was.
    */
   narrowSandbox(facts: FactsTable): void {
     const caps = this.opts.sandboxCapabilities
