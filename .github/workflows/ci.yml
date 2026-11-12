@@ -475,6 +475,18 @@ jobs:
             grep -F "PASS  crc32 kernel: $program with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs" "$RUNNER_TEMP/test.log"
           done
 
+      # WP38 S8's Adler-32, the same way: the `simd` driver passes on the
+      # reference alone without SSSE3 and the `adler32 kernel` section on its
+      # soft arm, and these runners have SSSE3, so the kernel lines are required.
+      - name: The SSSE3 Adler-32 path ran
+        if: matrix.shard == 2
+        run: |
+          set -o pipefail
+          build/test/simd/adler32 | grep -E '^adler32: [0-9]+ cases agree across ssse3;'
+          for program in std_compress_adler_paths std_compress_adler_diff; do
+            grep -F "PASS  adler32 kernel: $program with NISH_ADLER32 unset calls the kernel, which /proc/cpuinfo says this CPU runs" "$RUNNER_TEMP/test.log"
+          done
+
       # #619: `par_map_vector` links its modules with `llvm-link` and runs `opt
       # -O3`, and skips without either tool. The line that says the map's loop
       # vectorised is required here, where both are installed.
@@ -531,6 +543,13 @@ jobs:
       - name: The CRC-32 benchmark answers the same on both paths
         if: matrix.shard == 1
         run: node bench/crc32.mjs --check
+
+      # bench/adler32.mjs the same way: the bench's own kernel, the Nish loop
+      # and the shipped adler32Update with NISH_ADLER32 unset, each checksum
+      # against the one it pins.
+      - name: The Adler-32 benchmark answers the same on every path
+        if: matrix.shard == 1
+        run: node bench/adler32.mjs --check
 
       # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
       # run, the compiler this job built.
@@ -1252,6 +1271,7 @@ jobs:
           grep -E '^PASS  simd: sha256 native arm64: [0-9]+ cases agree across armv8-sha2;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: chacha20 native arm64: [0-9]+ cases agree across neon;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: crc32 native arm64: [0-9]+ cases agree across armv8-crc32' "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: adler32 native arm64: [0-9]+ cases agree across neon;' "$RUNNER_TEMP/simd.log"
 
       # WP50 S5's float corpus on AArch64: the `--deterministic` build's bits
       # held to the expected.txt the x86-64 rows hold theirs to. FMA is where
@@ -1320,6 +1340,16 @@ jobs:
             grep -F "PASS  crc32 kernel: $program with NISH_CRC32 unset calls the kernel, which /proc/cpuinfo says this CPU runs" "$RUNNER_TEMP/crc32-kernel.log"
           done
 
+      # WP38 S8's Adler-32 on AArch64: the compiler's branch to the NEON
+      # kernel, run end to end against the Nish walk.
+      - name: The lowered Adler-32 programs, natively on AArch64
+        run: |
+          set -o pipefail
+          node tests/run.js "adler32 kernel" | tee "$RUNNER_TEMP/adler32-kernel.log"
+          for program in std_compress_adler_paths std_compress_adler_diff; do
+            grep -F "PASS  adler32 kernel: $program with NISH_ADLER32 unset calls the kernel, which /proc/cpuinfo says this CPU runs" "$RUNNER_TEMP/adler32-kernel.log"
+          done
+
       # The figures, not a gate: the C kernel timed against the table
       # reference, then bench/crc32.mjs's checksums on both paths and its
       # ns/op table with `--self`, whose byte-identical copy of the default
@@ -1332,13 +1362,15 @@ jobs:
           node bench/crc32.mjs --self --runs 9 --compiler build/nish-test
 
       # The figures, not a gate: WP38's NEON Adler-32 held to the scalar
-      # reference, then timed against the Nish adler32Update at 64 KiB and
-      # 1 MiB with a copy column for the noise band, and its verdict against
-      # the 20% bar (docs/wp38-simd.md §3.1).
+      # reference, then timed against the Nish loop at 64 KiB and 1 MiB with
+      # a copy column for the noise band, and its verdict against the 20% bar
+      # (docs/wp38-simd.md §3.1); then `--self`, the adler32Update that ships
+      # with NISH_ADLER32 unset against the same binary pinned soft.
       - name: Adler-32 throughput on AArch64
         run: |
           node bench/adler32.mjs --check --compiler build/nish-test
           node bench/adler32.mjs --runs 12 --compiler build/nish-test
+          node bench/adler32.mjs --self --runs 9 --compiler build/nish-test
 
       # The figures, not a gate: WP38 S10's ChaCha20 paths (portable 128-bit
       # and NEON) held to the scalar reference and RFC 8439's vector, then

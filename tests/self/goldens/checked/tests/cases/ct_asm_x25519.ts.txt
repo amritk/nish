@@ -3,77 +3,82 @@
 entry: tests/cases/ct_asm_x25519.ts
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
-unsafe import 33:10 uncheckedGet from "nish:unsafe"
-unsafe import 33:24 uncheckedSet from "nish:unsafe"
-unsafe call 54:5 uncheckedSet (node 185)
-unsafe call 54:26 uncheckedGet (node 191)
-unsafe call 61:20 uncheckedGet (node 229)
-unsafe call 62:5 uncheckedSet (node 242)
-unsafe call 62:24 uncheckedGet (node 248)
-unsafe call 63:5 uncheckedSet (node 261)
-unsafe call 63:39 uncheckedGet (node 273)
-unsafe call 70:20 uncheckedGet (node 306)
-unsafe call 71:3 uncheckedSet (node 319)
-unsafe call 71:22 uncheckedGet (node 325)
-unsafe call 72:3 uncheckedSet (node 338)
-unsafe call 72:33 uncheckedGet (node 348)
-unsafe call 73:19 uncheckedGet (node 370)
-unsafe call 74:3 uncheckedSet (node 383)
-unsafe call 74:22 uncheckedGet (node 389)
-unsafe call 75:3 uncheckedSet (node 402)
-unsafe call 75:33 uncheckedGet (node 412)
-unsafe call 81:5 uncheckedSet (node 456)
-unsafe call 81:37 uncheckedGet (node 466)
-unsafe call 81:57 uncheckedGet (node 472)
-unsafe call 88:5 uncheckedSet (node 515)
-unsafe call 88:37 uncheckedGet (node 525)
-unsafe call 88:57 uncheckedGet (node 531)
-unsafe call 96:41 uncheckedGet (node 606)
-unsafe call 96:68 uncheckedGet (node 612)
-unsafe call 98:7 uncheckedSet (node 628)
-unsafe call 98:40 uncheckedGet (node 638)
-unsafe call 98:78 uncheckedGet (node 649)
-unsafe call 107:5 uncheckedSet (node 708)
-unsafe call 107:41 uncheckedGet (node 718)
-unsafe call 122:5 uncheckedSet (node 879)
-unsafe call 122:35 uncheckedGet (node 889)
-unsafe call 122:69 uncheckedGet (node 899)
-unsafe call 124:3 uncheckedSet (node 913)
-unsafe call 124:22 uncheckedGet (node 919)
-unsafe call 137:5 uncheckedSet (node 995)
-unsafe call 137:37 uncheckedGet (node 1005)
-unsafe call 146:28 uncheckedGet (node 1081)
-unsafe call 146:49 uncheckedGet (node 1087)
-unsafe call 147:5 uncheckedSet (node 1096)
-unsafe call 147:24 uncheckedGet (node 1102)
-unsafe call 148:5 uncheckedSet (node 1111)
-unsafe call 148:24 uncheckedGet (node 1117)
-unsafe call 198:10 uncheckedGet (node 1512)
-unsafe call 198:36 uncheckedGet (node 1521)
-unsafe call 210:24 uncheckedGet (node 1606)
-unsafe call 219:9 uncheckedSet (node 1673)
-unsafe call 235:27 uncheckedGet (node 1765)
-unsafe call 237:20 uncheckedGet (node 1803)
-unsafe call 239:3 uncheckedSet (node 1817)
-unsafe call 239:33 uncheckedGet (node 1827)
-unsafe call 241:3 uncheckedSet (node 1850)
-unsafe call 241:22 uncheckedGet (node 1856)
-unsafe call 247:18 uncheckedGet (node 1923)
-unsafe call 250:7 uncheckedSet (node 1960)
-unsafe call 257:5 uncheckedSet (node 2013)
-unsafe call 310:5 uncheckedSet (node 2457)
-unsafe call 310:24 uncheckedGet (node 2463)
-unsafe call 312:3 uncheckedSet (node 2470)
-unsafe call 312:22 uncheckedGet (node 2476)
-unsafe call 313:3 uncheckedSet (node 2489)
-unsafe call 313:24 uncheckedGet (node 2496)
-unsafe call 316:3 uncheckedSet (node 2542)
-unsafe call 321:3 uncheckedSet (node 2606)
-unsafe call 328:30 uncheckedGet (node 2673)
-unsafe call 351:5 uncheckedSet (node 2880)
-unsafe call 362:26 uncheckedGet (node 2951)
-unsafe call 382:3 uncheckedSet (node 3082)
-unsafe call 384:3 uncheckedSet (node 3109)
+unsafe import 46:10 uncheckedGet from "nish:unsafe"
+unsafe import 46:24 uncheckedSet from "nish:unsafe"
+unsafe call 67:5 uncheckedSet (node 185)
+unsafe call 67:26 uncheckedGet (node 191)
+unsafe call 74:20 uncheckedGet (node 229)
+unsafe call 75:5 uncheckedSet (node 242)
+unsafe call 75:24 uncheckedGet (node 248)
+unsafe call 76:5 uncheckedSet (node 261)
+unsafe call 76:39 uncheckedGet (node 273)
+unsafe call 83:20 uncheckedGet (node 306)
+unsafe call 84:3 uncheckedSet (node 319)
+unsafe call 84:22 uncheckedGet (node 325)
+unsafe call 85:3 uncheckedSet (node 338)
+unsafe call 85:33 uncheckedGet (node 348)
+unsafe call 86:19 uncheckedGet (node 370)
+unsafe call 87:3 uncheckedSet (node 383)
+unsafe call 87:22 uncheckedGet (node 389)
+unsafe call 88:3 uncheckedSet (node 402)
+unsafe call 88:33 uncheckedGet (node 412)
+unsafe call 94:5 uncheckedSet (node 456)
+unsafe call 94:37 uncheckedGet (node 466)
+unsafe call 94:57 uncheckedGet (node 472)
+unsafe call 101:5 uncheckedSet (node 515)
+unsafe call 101:37 uncheckedGet (node 525)
+unsafe call 101:57 uncheckedGet (node 531)
+unsafe call 109:41 uncheckedGet (node 606)
+unsafe call 109:68 uncheckedGet (node 612)
+unsafe call 111:7 uncheckedSet (node 628)
+unsafe call 111:40 uncheckedGet (node 638)
+unsafe call 111:78 uncheckedGet (node 649)
+unsafe call 120:5 uncheckedSet (node 708)
+unsafe call 120:41 uncheckedGet (node 718)
+unsafe call 135:5 uncheckedSet (node 879)
+unsafe call 135:35 uncheckedGet (node 889)
+unsafe call 135:69 uncheckedGet (node 899)
+unsafe call 137:3 uncheckedSet (node 913)
+unsafe call 137:22 uncheckedGet (node 919)
+unsafe call 150:5 uncheckedSet (node 995)
+unsafe call 150:37 uncheckedGet (node 1005)
+unsafe call 159:28 uncheckedGet (node 1081)
+unsafe call 159:49 uncheckedGet (node 1087)
+unsafe call 160:5 uncheckedSet (node 1096)
+unsafe call 160:24 uncheckedGet (node 1102)
+unsafe call 161:5 uncheckedSet (node 1111)
+unsafe call 161:24 uncheckedGet (node 1117)
+unsafe call 211:10 uncheckedGet (node 1512)
+unsafe call 211:36 uncheckedGet (node 1521)
+unsafe call 218:23 uncheckedGet (node 1583)
+unsafe call 223:28 uncheckedGet (node 1650)
+unsafe call 236:5 uncheckedSet (node 1737)
+unsafe call 236:24 uncheckedGet (node 1743)
+unsafe call 237:17 uncheckedGet (node 1766)
+unsafe call 258:24 uncheckedGet (node 1864)
+unsafe call 267:9 uncheckedSet (node 1931)
+unsafe call 289:27 uncheckedGet (node 2062)
+unsafe call 291:20 uncheckedGet (node 2100)
+unsafe call 293:3 uncheckedSet (node 2114)
+unsafe call 293:33 uncheckedGet (node 2124)
+unsafe call 295:3 uncheckedSet (node 2147)
+unsafe call 295:22 uncheckedGet (node 2153)
+unsafe call 300:18 uncheckedGet (node 2205)
+unsafe call 303:7 uncheckedSet (node 2242)
+unsafe call 310:5 uncheckedSet (node 2295)
+unsafe call 378:30 uncheckedGet (node 2819)
+unsafe call 392:5 uncheckedSet (node 2922)
+unsafe call 392:24 uncheckedGet (node 2928)
+unsafe call 394:3 uncheckedSet (node 2935)
+unsafe call 394:22 uncheckedGet (node 2941)
+unsafe call 395:3 uncheckedSet (node 2954)
+unsafe call 395:24 uncheckedGet (node 2961)
+unsafe call 398:3 uncheckedSet (node 3007)
+unsafe call 403:3 uncheckedSet (node 3071)
+unsafe call 420:5 uncheckedSet (node 3245)
+unsafe call 431:26 uncheckedGet (node 3316)
+unsafe call 451:3 uncheckedSet (node 3447)
+unsafe call 453:3 uncheckedSet (node 3474)
 const HEX_DIGITS: string = "0123456789abcdef"
 function fieldAdd64(a: i64, b: i64): i64 -> @fieldAdd64
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -269,45 +274,95 @@ function indexAfterMul(f: i64[], g: i64[], table: i64[]): i64 -> @indexAfterMul 
   stackSites=1 stackLocals=1
   local +0:9 h: i64[] (const)
   callee +1:3 fieldMul -> @fieldMul
-function fieldDecode(bytes: u8[]): i64[] -> @fieldDecode
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+function ladderLoopToTopBit(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void -> @ladderLoopToTopBit [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ladderStep
+  calls: ladderStep
+  pointer x2: size=0 writesThrough=true captured=false passedTo=ladderStep#0
+  pointer z2: size=0 writesThrough=true captured=false passedTo=ladderStep#1
+  pointer x3: size=0 writesThrough=true captured=false passedTo=ladderStep#2
+  pointer z3: size=0 writesThrough=true captured=false passedTo=ladderStep#3
+  pointer u: size=0 writesThrough=false captured=false passedTo=ladderStep#4
+  pointer k: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 top: i32 (let)
+  local +4:7 swap: i64 (let)
+  local +5:12 at: i32 (let)
+  local +6:11 bit: i64 (const)
+  callee +8:5 ladderStep -> @ladderStep
+function decodeThroughTable(f: i64[], bytes: u8[], table: i64[]): void -> @decodeThroughTable [exported]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer f: size=0 writesThrough=true captured=false
+  pointer bytes: size=0 writesThrough=false captured=false
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -2:7 acc: i64 (let)
+  local -1:12 i: i32 (let)
+function fieldAddUnrolled(out: i64[], f: i64[], g: i64[]): void -> @fieldAddUnrolled [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldAdd
+  calls: fieldAdd
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldAdd#0
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldAdd#1
+  pointer g: size=0 writesThrough=false captured=false passedTo=fieldAdd#2
+  stackSites=0 stackLocals=0
+  callee +0:3 fieldAdd -> @fieldAdd
+function fieldDecodeInto(f: i64[], bytes: u8[]): void -> @fieldDecodeInto [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
   calls: fieldLimbMask fieldWidth nish_panic_overflow
+  pointer f: size=0 writesThrough=true captured=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local -13:7 acc: i64 (let)
+  local -12:7 bits: i64 (let)
+  local -11:7 limb: i32 (let)
+  local -10:12 i: i32 (let)
+  local -9:9 v: i64 (let)
+  local -2:13 width: i64 (const)
+  callee -2:26 fieldWidth -> @fieldWidth
+  callee +0:37 fieldLimbMask -> @fieldLimbMask
+function fieldDecode(bytes: u8[]): i64[] -> @fieldDecode
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: fieldDecodeInto
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=fieldDecodeInto#1
+  stackSites=0 stackLocals=0
   local +0:9 f: i64[] (const)
-  local +1:7 acc: i64 (let)
-  local +2:7 bits: i64 (let)
-  local +3:7 limb: i32 (let)
-  local +4:12 i: i32 (let)
-  local +5:9 v: i64 (let)
-  local +12:13 width: i64 (const)
-  callee +12:26 fieldWidth -> @fieldWidth
-  callee +14:37 fieldLimbMask -> @fieldLimbMask
-function fieldEncode(f: i64[]): u8[] -> @fieldEncode
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  callee +1:3 fieldDecodeInto -> @fieldDecodeInto
+function fieldEncodeInto(out: u8[], f: i64[]): void -> @fieldEncodeInto [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
   calls: fieldAdd64 fieldCarry fieldCarryChain fieldCopy fieldLimbMask fieldMul64 fieldWidth nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false
   pointer f: size=0 writesThrough=false captured=false passedTo=fieldCopy#1
   stackSites=1 stackLocals=1
-  local +0:9 h: i64[] (const)
-  callee +1:3 fieldCopy -> @fieldCopy
-  callee +2:3 fieldCarry -> @fieldCarry
-  callee +3:3 fieldCarry -> @fieldCarry
-  local +4:7 q: i64 (let)
-  callee +4:16 fieldAdd64 -> @fieldAdd64
-  local +5:12 i: i32 (let)
-  callee +6:9 fieldAdd64 -> @fieldAdd64
-  callee +6:46 fieldWidth -> @fieldWidth
-  callee +8:22 fieldAdd64 -> @fieldAdd64
-  callee +8:53 fieldMul64 -> @fieldMul64
-  callee +9:3 fieldCarryChain -> @fieldCarryChain
-  callee +10:43 fieldLimbMask -> @fieldLimbMask
-  local +11:9 out: u8[] (const)
-  local +12:7 acc: i64 (let)
-  local +13:7 bits: i64 (let)
-  local +14:7 at: i32 (let)
-  local +15:12 i: i32 (let)
-  callee +17:19 fieldWidth -> @fieldWidth
-function fieldSquareTimes(out: i64[], f: i64[], n: i32): void -> @fieldSquareTimes
+  local -18:9 h: i64[] (const)
+  callee -17:3 fieldCopy -> @fieldCopy
+  callee -16:3 fieldCarry -> @fieldCarry
+  callee -15:3 fieldCarry -> @fieldCarry
+  local -14:7 q: i64 (let)
+  callee -14:16 fieldAdd64 -> @fieldAdd64
+  local -13:12 i: i32 (let)
+  callee -12:9 fieldAdd64 -> @fieldAdd64
+  callee -12:46 fieldWidth -> @fieldWidth
+  callee -10:22 fieldAdd64 -> @fieldAdd64
+  callee -10:53 fieldMul64 -> @fieldMul64
+  callee -9:3 fieldCarryChain -> @fieldCarryChain
+  callee -8:43 fieldLimbMask -> @fieldLimbMask
+  local -7:7 acc: i64 (let)
+  local -6:7 bits: i64 (let)
+  local -5:7 at: i32 (let)
+  local -4:12 i: i32 (let)
+  callee -2:19 fieldWidth -> @fieldWidth
+function fieldEncode(f: i64[]): u8[] -> @fieldEncode
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: fieldEncodeInto
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldEncodeInto#1
+  stackSites=0 stackLocals=0
+  local +0:9 out: u8[] (const)
+  callee +1:3 fieldEncodeInto -> @fieldEncodeInto
+function fieldSquareTimes(out: i64[], f: i64[], n: i32): void -> @fieldSquareTimes [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via fieldSquare
   calls: fieldSquare
@@ -317,7 +372,7 @@ function fieldSquareTimes(out: i64[], f: i64[], n: i32): void -> @fieldSquareTim
   callee +0:3 fieldSquare -> @fieldSquare
   local +1:12 i: i32 (let)
   callee +2:5 fieldSquare -> @fieldSquare
-function fieldInvert(out: i64[], z: i64[]): void -> @fieldInvert
+function fieldInvert(out: i64[], z: i64[]): void -> @fieldInvert [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via fieldMul
   calls: fieldMul fieldSquare fieldSquareTimes
@@ -356,9 +411,27 @@ function fieldInvert(out: i64[], z: i64[]): void -> @fieldInvert
   callee +29:3 fieldMul -> @fieldMul
   callee +30:3 fieldSquareTimes -> @fieldSquareTimes
   callee +31:3 fieldMul -> @fieldMul
+function ladderLoop(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void -> @ladderLoop [exported]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ladderStep
+  calls: condSwap ladderStep
+  pointer x2: size=0 writesThrough=true captured=false passedTo=ladderStep#0 condSwap#0
+  pointer z2: size=0 writesThrough=true captured=false passedTo=ladderStep#1 condSwap#0
+  pointer x3: size=0 writesThrough=true captured=false passedTo=ladderStep#2 condSwap#1
+  pointer z3: size=0 writesThrough=true captured=false passedTo=ladderStep#3 condSwap#1
+  pointer u: size=0 writesThrough=false captured=false passedTo=ladderStep#4
+  pointer k: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 swap: i64 (let)
+  local +1:12 byte: i32 (let)
+  local +2:14 shift: i32 (let)
+  local +6:13 bit: i64 (const)
+  callee +8:7 ladderStep -> @ladderStep
+  callee +12:3 condSwap -> @condSwap
+  callee +13:3 condSwap -> @condSwap
 function ladder(scalar: u8[], uBytes: u8[]): u8[] -> @ladder
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: condSwap fieldCopy fieldDecode fieldEncode fieldInvert fieldMul ladderStep
+  calls: fieldCopy fieldDecode fieldEncode fieldInvert fieldMul ladderLoop
   pointer scalar: size=0 writesThrough=false captured=false
   pointer uBytes: size=0 writesThrough=false captured=false passedTo=fieldDecode#0
   stackSites=6 stackLocals=6
@@ -371,17 +444,11 @@ function ladder(scalar: u8[], uBytes: u8[]): u8[] -> @ladder
   local +10:9 x3: i64[] (const)
   callee +11:3 fieldCopy -> @fieldCopy
   local +12:9 z3: i64[] (const)
-  local +14:7 swap: i64 (let)
-  local +15:12 byte: i32 (let)
-  local +16:14 shift: i32 (let)
-  local +20:13 bit: i64 (const)
-  callee +22:7 ladderStep -> @ladderStep
-  callee +26:3 condSwap -> @condSwap
-  callee +27:3 condSwap -> @condSwap
-  local +28:9 t: i64[] (const)
-  callee +29:3 fieldInvert -> @fieldInvert
-  callee +30:3 fieldMul -> @fieldMul
-  callee +31:10 fieldEncode -> @fieldEncode
+  callee +14:3 ladderLoop -> @ladderLoop
+  local +15:9 t: i64[] (const)
+  callee +16:3 fieldInvert -> @fieldInvert
+  callee +17:3 fieldMul -> @fieldMul
+  callee +18:10 fieldEncode -> @fieldEncode
 function hexNibble(code: i32): i32 -> @hexNibble
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow

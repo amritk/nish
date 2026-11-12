@@ -7978,7 +7978,7 @@ if (dealtHere("selfHosting")) {
   const simdShard = DEALT_SECTIONS.simd.pinned
   const simdSteps = testJobText
     .split(/\n(?= {6}- name: )/)
-    .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32) kernel: /.test(step))
+    .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32|adler32) kernel: /.test(step))
   const strayed = simdSteps.filter((step) => !step.includes(`if: matrix.shard == ${simdShard}\n`))
   check(
     `ci.yml: the \`test\` job's ${simdSteps.length} steps that read the simd group run in its shard, ${simdShard}`,
@@ -15925,7 +15925,7 @@ if (dealtHere("simd")) {
     const judge = (label, cc, r) => {
       const said = r === null ? "" : String(r.stdout ?? "").trim()
       check(
-        `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256|chacha20|crc32): /, "") || "the agreement driver"}`,
+        `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256|chacha20|crc32|adler32): /, "") || "the agreement driver"}`,
         r !== null && r.status === 0 && /cases agree/.test(said),
         cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
       )
@@ -16066,6 +16066,33 @@ if (dealtHere("simd")) {
       )
     }
 
+    // WP38 S8: the same unit runs Adler-32 on SSSE3 or NEON, and adler32Update takes
+    // that path or std/compress/checksum.ts's loop. tests/simd/adler32.c includes the
+    // file and holds every path this machine has to that loop, itself held to RFC 1950:
+    // the check value, the empty input, every length 0..4,096 at offsets 0..15 from
+    // starts most of them unreduced, the lengths either side of a kernel stretch and of
+    // NMAX over random and all-0xff bytes, inputs of 1 to 16 MiB, streamed pieces and
+    // one split, every length 0..256 against a no-access page; then `nish_adler32_hw`
+    // under each `NISH_ADLER32`. The line must name the path /proc/cpuinfo says the CPU has.
+    const adlerSaid = agree(`adler32 native ${process.arch}`, [], path.join(simdDir, "adler32"), native, "tests/simd/adler32.c")
+    let adlerPath = null
+    if (process.arch === "x64" && features.has("ssse3")) {
+      adlerPath = "ssse3;"
+    } else if (process.arch === "arm64") {
+      adlerPath = "neon;"
+    }
+    if (adlerPath === null) {
+      skip(
+        `simd: adler32: /proc/cpuinfo names no SSSE3 for ${process.platform}-${process.arch}, so no kernel path is required to run`
+      )
+    } else {
+      check(
+        `simd: adler32 ran the ${adlerPath.replace(";", "")} path, which /proc/cpuinfo says this CPU has`,
+        adlerSaid.includes(`cases agree across ${adlerPath}`),
+        adlerSaid
+      )
+    }
+
     if (WASI_SYSROOT && has("wasm-ld")) {
       for (const [label, flags, source, name] of [
         ["wasm32-wasi, the scalar base path", [], driver, "index-of-any"],
@@ -16075,6 +16102,7 @@ if (dealtHere("simd")) {
         ["regex-scan wasm32-wasi, the scalar base path", [], scanDriver, "regex-scan"],
         ["regex-scan wasm32-wasi -msimd128", ["-msimd128"], scanDriver, "regex-scan"],
         ["crc32 wasm32-wasi, no kernel", [], "tests/simd/crc32.c", "crc32"],
+        ["adler32 wasm32-wasi, no kernel", [], "tests/simd/adler32.c", "adler32"],
       ]) {
         agree(
           label,
@@ -16163,6 +16191,13 @@ if (dealtHere("simd")) {
             "the ARMv8 CRC32 path",
             /cases agree across armv8-crc32;/,
           ],
+          [
+            "adler32 aarch64 through binfmt, the NEON path",
+            "tests/simd/adler32.c",
+            path.join(simdDir, "adler32.aarch64"),
+            "the NEON path of Adler-32",
+            /cases agree across neon;/,
+          ],
         ]) {
           const linked = build(cross, out, source)
           const r =
@@ -16173,7 +16208,7 @@ if (dealtHere("simd")) {
           // file to /bin/sh, which fails on it. So the driver ran when it printed its own
           // line (a summary or a FAIL) or died of a signal, and not otherwise.
           const ran =
-            r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|chacha20:|crc32:|FAIL )/m.test(String(r.stdout)))
+            r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|chacha20:|crc32:|adler32:|FAIL )/m.test(String(r.stdout)))
           if (linked.status !== 0 || ran) {
             const said = judge(label, linked, r)
             if (wantLine !== null) {
@@ -16223,7 +16258,7 @@ if (dealtHere("simd")) {
           .split("\n")
           .map((line) => line.trim().split(/\s+/).pop())
           .filter((name) =>
-            /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|nish_chacha20\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
+            /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|nish_chacha20\w*|nish_crc32\w*|nish_adler32\w*|__cpu_model|__cpu_indicator_init)$/.test(
               name
             )
           )
@@ -16231,6 +16266,7 @@ if (dealtHere("simd")) {
       }
       const aesControl = wantPath === null ? null : "nish_aes_hw: 1\n69c4e0d86a7b0430d8cdb78070b4c55a\n"
       const crcControl = crcPath === null ? null : "nish_crc32_hw: 1\ncbf43926\n"
+      const adlerControl = adlerPath === null ? null : "nish_adler32_hw: 1\n091e01de\n"
       /** The runtime as it was before build.sh paired `unit`: every file but that one. */
       const runtimeWithout = (unit) => {
         const dir = path.join(simdDir, `runtime-without-${unit.replace(/^runtime-|\.c$/g, "")}`)
@@ -16359,6 +16395,25 @@ if (dealtHere("simd")) {
             `the control keeps: ${crcCtrl.names.join(" ") || "(none)"} ${crcCtrl.why}\nthe control printed: ${crcPrinted || "(not run)"}`
         )
 
+        // Its Adler-32 half: hello is the same link as above, and this control keeps
+        // that half's kernel and gives Adler-32's check value where the CPU runs it.
+        const adlerExe = path.join(simdDir, `calls-adler32.${profile}`)
+        const adlerCtrl = kept(["tests/simd/calls-adler32.c"], adlerExe, profile)
+        const adlerRan = adlerCtrl.ok ? spawnSync(adlerExe, [], { encoding: "utf8" }) : null
+        const adlerPrinted = adlerRan === null ? "" : String(adlerRan.stdout)
+        check(
+          `simd: --profile ${profile} keeps runtime-checksum.c's Adler-32 kernel in a program that calls it, and runs it`,
+          quiet.ok &&
+            !quiet.names.some((name) => name.startsWith("nish_adler32_")) &&
+            adlerCtrl.ok &&
+            adlerCtrl.names.some((name) => name.startsWith("nish_adler32_")) &&
+            !adlerCtrl.names.includes("__cpu_model") &&
+            adlerRan.status === 0 &&
+            (adlerControl === null ? /^nish_adler32_hw: [01]\n/.test(adlerPrinted) : adlerPrinted === adlerControl),
+          `hello keeps: ${quiet.names.join(" ") || "(none)"} ${quiet.why}\n` +
+            `the control keeps: ${adlerCtrl.names.join(" ") || "(none)"} ${adlerCtrl.why}\nthe control printed: ${adlerPrinted || "(not run)"}`
+        )
+
         // runtime-chacha20.c, the same way, its control giving RFC 8439 §2.3.2's block
         // where the CPU runs the kernel.
         const withoutChacha =
@@ -16436,6 +16491,21 @@ if (dealtHere("simd")) {
         "simd: --profile wasi links runtime-checksum.c, and nish_crc32_hw answers 0 there",
         crcRan !== null && crcRan.status === 0 && crcRan.stdout === "nish_crc32_hw: 0\n",
         cb.status !== 0 ? cb.stderr : `${crcRan.stdout}${crcRan.stderr}`
+      )
+      const adlerWasm = path.join(simdDir, "calls-adler32.wasm")
+      const ab = spawnSync(
+        "bash",
+        ["scripts/build.sh", "tests/simd/calls-adler32.c", "runtime/runtime.c", "-o", adlerWasm, "--profile", "wasi"],
+        { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+      )
+      const adlerRan =
+        ab.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", adlerWasm], { cwd: root, encoding: "utf8" })
+          : null
+      check(
+        "simd: --profile wasi links runtime-checksum.c, and nish_adler32_hw answers 0 there",
+        adlerRan !== null && adlerRan.status === 0 && adlerRan.stdout === "nish_adler32_hw: 0\n",
+        ab.status !== 0 ? ab.stderr : `${adlerRan.stdout}${adlerRan.stderr}`
       )
       const chachaWasm = path.join(simdDir, "chacha20-calls.wasm")
       const chachaB = spawnSync(
@@ -18098,7 +18168,10 @@ if (dealtHere("simd")) {
           .map((l) => l.trim().split(/\s+/))
           .filter((f) => f.length >= 2)
           .map((f) => ({ type: f[f.length - 2], name: name(f[f.length - 1]) }));
-        const defined = syms.filter((x) => x.type !== "U").map((x) => x.name);
+        // The Adler-32 half of the unit is the adler32 kernel section's.
+        const defined = syms
+          .filter((x) => x.type !== "U" && !x.name.startsWith("nish_adler32_"))
+          .map((x) => x.name);
         const undef = syms.filter((x) => x.type === "U").map((x) => x.name);
         const ok =
           want === stub
@@ -18267,6 +18340,236 @@ if (dealtHere("simd")) {
     } else {
       skip(
         "crc32 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of std_compress_crc_paths is not checked for kernel references"
+      )
+    }
+  }
+
+  // `adler32Update`'s call of checksum.ts's `adler32Walk` is lowered the same way, to a
+  // branch on `nish_adler32_hw`: runtime-checksum.c's `nish_adler32_update` (SSSE3 on
+  // x86-64, NEON on AArch64) on one arm, the walk on the other.
+  // `tests/link/std_compress_adler_paths` holds the checksum to its check value, empty
+  // input, zlib trailers, the 5552-byte stretch edges and streamed pieces;
+  // `tests/link/std_compress_adler_diff` folds 69,648 window checksums and 48 large ones
+  // into its stdout. Each is counted and run as the CRC-32 programs are, under
+  // `NISH_ADLER32`; the targets CI cannot run are compiled the same way, and a
+  // `--profile wasi` build names no `nish_adler32_` symbol.
+  if (!only || "adler32 kernel wasi std_compress_adler_paths std_compress_adler_diff".includes(only)) {
+    const adlerDir = path.join(buildDir, "adler32-kernel")
+    fs.rmSync(adlerDir, { recursive: true, force: true })
+    fs.mkdirSync(adlerDir, { recursive: true })
+    const cpuHasAdler =
+      (process.arch === "x64" && cpuFeatures.has("ssse3")) ||
+      (process.arch === "arm64" && (cpuFeatures.has("asimd") || cpuFeatures.has("neon")))
+
+    if (!HAS_CLANG) {
+      skip("adler32 kernel: no clang to link the Adler-32 programs against runtime-checksum.c")
+    } else if (process.platform !== "linux") {
+      skip(
+        `adler32 kernel: the kernel's calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+      )
+    } else {
+      const counter = path.join(adlerDir, "count.c")
+      fs.writeFileSync(
+        counter,
+        [
+          "#include <stdint.h>",
+          "#include <stdio.h>",
+          "struct nish_array;",
+          "static unsigned long nish_adler32_calls;",
+          "uint32_t __real_nish_adler32_update(uint32_t adler, const struct nish_array *buf, int32_t off, int32_t len);",
+          "uint32_t __wrap_nish_adler32_update(uint32_t adler, const struct nish_array *buf, int32_t off, int32_t len) {",
+          "  nish_adler32_calls++;",
+          "  return __real_nish_adler32_update(adler, buf, off, len);",
+          "}",
+          "__attribute__((destructor)) static void nish_adler32_report(void) {",
+          '  fprintf(stderr, "adler32 kernel calls: %lu\\n", nish_adler32_calls);',
+          "}",
+          "",
+        ].join("\n")
+      )
+      const unset = { ...process.env }
+      delete unset.NISH_ADLER32
+      for (const program of ["std_compress_adler_paths", "std_compress_adler_diff"]) {
+        const compiled = compileLinkModules(program, path.join(adlerDir, program), [])
+        const exe = path.join(adlerDir, `${program}.counted`)
+        const linked =
+          compiled.lls.length > 0
+            ? spawnSync(
+                "bash",
+                [
+                  "scripts/build.sh",
+                  ...compiled.lls,
+                  "runtime/runtime.c",
+                  counter,
+                  "-Wl,--wrap=nish_adler32_update",
+                  "-o",
+                  exe,
+                  "--profile",
+                  "debug",
+                ],
+                { cwd: root, encoding: "utf8" }
+              )
+            : null
+        if (linked === null || linked.status !== 0) {
+          check(
+            `adler32 kernel: ${program} links with the kernel counted`,
+            false,
+            linked === null ? compiled.why : linked.stderr
+          )
+          continue
+        }
+        const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+        const hw = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: unset })
+        const soft = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: { ...unset, NISH_ADLER32: "soft" } })
+        /** The count the wrapper printed, or null. */
+        const calls = (r) => {
+          const m = /^adler32 kernel calls: (\d+)$/m.exec(r.stderr)
+          return m === null ? null : Number(m[1])
+        }
+        check(
+          `adler32 kernel: ${program} prints the same bytes with NISH_ADLER32 unset and with NISH_ADLER32=soft, and they are its expected.out`,
+          hw.status === 0 && soft.status === 0 && hw.stdout === soft.stdout && hw.stdout === want,
+          `--- NISH_ADLER32 unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_ADLER32=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+        )
+        check(`adler32 kernel: ${program} under NISH_ADLER32=soft calls no kernel`, calls(soft) === 0, soft.stderr)
+        if (cpuHasAdler) {
+          check(
+            `adler32 kernel: ${program} with NISH_ADLER32 unset calls the kernel, which /proc/cpuinfo says this CPU runs`,
+            calls(hw) > 0,
+            hw.stderr
+          )
+        } else {
+          check(
+            `adler32 kernel: ${program} with NISH_ADLER32 unset calls no kernel on a CPU /proc/cpuinfo names no SSSE3 or NEON for`,
+            calls(hw) === 0,
+            hw.stderr
+          )
+        }
+      }
+    }
+
+    // The targets CI cannot run, as for CRC-32 above: Darwin on x86-64 and AArch64
+    // selects the kernel, which asks the C library for nothing the CRC-32 kernel does
+    // not; the rest select the stub, whose Adler-32 half is `nish_adler32_hw` and
+    // `nish_adler32_update` alone.
+    const adlerNm = ["llvm-nm", "llvm-nm-18"].find(has)
+    if (!HAS_CLANG || adlerNm === undefined) {
+      skip("adler32 kernel: no clang and llvm-nm to compile runtime-checksum.c for the targets CI cannot run")
+    } else {
+      const xcDir = path.join(adlerDir, "cross")
+      fs.mkdirSync(xcDir, { recursive: true })
+      const resource = spawnSync("clang", ["-print-resource-dir"], { encoding: "utf8" }).stdout.trim()
+      const bare = path.join(xcDir, "include")
+      fs.mkdirSync(bare, { recursive: true })
+      for (const f of fs.readdirSync(path.join(resource, "include"))) {
+        if (["stdint.h", "stdbool.h", "stddef.h"].includes(f) || /^__stddef_.*\.h$/.test(f)) {
+          fs.copyFileSync(path.join(resource, "include", f), path.join(bare, f))
+        }
+      }
+      const stub = ["nish_adler32_hw", "nish_adler32_update"]
+      const crossTargets = [
+        ["x86_64-apple-darwin", [], ["nish_adler32_answer", "nish_adler32_ssse3"]],
+        ["arm64-apple-darwin", [], ["nish_adler32_answer", "nish_adler32_neon"]],
+        ["i686-linux-gnu", [], stub],
+        ["armv7-linux-gnueabihf", [], stub],
+        ["aarch64_be-linux-gnu", [], stub],
+        ["x86_64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+        ["aarch64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+      ]
+      for (const [triple, extra, want] of crossTargets) {
+        const hidden = extra.length > 0
+        const label = hidden ? `${triple} with the intrinsic headers hidden` : triple
+        const obj = path.join(xcDir, `${triple}${hidden ? "-hidden" : ""}.o`)
+        const cc = spawnSync(
+          "clang",
+          ["-c", "-ffreestanding", `--target=${triple}`, ...extra, "-Iruntime", "runtime/runtime-checksum.c", "-o", obj],
+          { cwd: root, encoding: "utf8" }
+        )
+        if (cc.status !== 0 && /no available targets|unknown target triple|unable to create target/i.test(cc.stderr)) {
+          skip(`adler32 kernel: this clang cannot compile for ${triple}: ${cc.stderr.trim().split("\n")[0]}`)
+          continue
+        }
+        if (cc.status !== 0) {
+          check(`adler32 kernel: runtime-checksum.c compiles for ${label}`, false, cc.stderr)
+          continue
+        }
+        const nm = spawnSync(adlerNm, [obj], { encoding: "utf8" })
+        // Mach-O names carry a leading underscore; ELF's do not.
+        const name = (n) => (triple.includes("apple") ? n.replace(/^_/, "") : n)
+        const syms = nm.stdout
+          .split("\n")
+          .map((l) => l.trim().split(/\s+/))
+          .filter((f) => f.length >= 2)
+          .map((f) => ({ type: f[f.length - 2], name: name(f[f.length - 1]) }))
+        const defined = syms
+          .filter((x) => x.type !== "U" && x.name.startsWith("nish_adler32_"))
+          .map((x) => x.name)
+          .sort()
+        const ok =
+          want === stub
+            ? defined.join(" ") === stub.join(" ")
+            : ["nish_adler32_hw", "nish_adler32_update", ...want].every((n) => defined.includes(n))
+        check(
+          want === stub
+            ? `adler32 kernel: runtime-checksum.c for ${label} is the stub, nish_adler32_hw and nish_adler32_update and no other nish_adler32_ symbol`
+            : `adler32 kernel: runtime-checksum.c for ${label} selects the kernel, ${want[1]}`,
+          nm.status === 0 && ok,
+          `nish_adler32_ symbols: ${defined.join(" ")}\n${nm.stderr}`
+        )
+      }
+    }
+
+    if (WASI_SYSROOT && has("wasm-ld")) {
+      const program = "std_compress_adler_paths"
+      const wasi = compileLinkModules(program, path.join(adlerDir, "wasi"), ["--profile", "wasi"])
+      const native = compileLinkModules(program, path.join(adlerDir, "native"), [])
+      const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_adler32_"))
+      /** The modules linked for wasm32-wasi with the Adler-32 symbols traced. */
+      const traced = (lls, out) =>
+        spawnSync(
+          "bash",
+          [
+            "scripts/build.sh",
+            ...lls,
+            "runtime/runtime.c",
+            "-Wl,--trace-symbol=nish_adler32_hw,--trace-symbol=nish_adler32_update",
+            "-o",
+            out,
+            "--profile",
+            "wasi",
+          ],
+          { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+        )
+      const wasm = path.join(adlerDir, `${program}.wasm`)
+      const linked = wasi.lls.length > 0 ? traced(wasi.lls, wasm) : null
+      const control = native.lls.length > 0 ? traced(native.lls, path.join(adlerDir, "native.wasm")) : null
+      const refs = (r) =>
+        r === null ? [] : `${r.stdout}${r.stderr}`.split("\n").filter((l) => /reference to nish_adler32_/.test(l))
+      const ran =
+        linked !== null && linked.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+          : null
+      const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+      check(
+        `adler32 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_adler32_ symbol, and it prints its expected.out`,
+        wasi.lls.length > 0 &&
+          named.length === 0 &&
+          linked.status === 0 &&
+          refs(linked).length === 0 &&
+          control !== null &&
+          control.status === 0 &&
+          refs(control).length > 0 &&
+          ran !== null &&
+          ran.status === 0 &&
+          ran.stdout === want,
+        `${wasi.why}IR naming one: ${named.join(", ") || "(none)"}\n` +
+          `references in the wasi link: ${refs(linked).join("; ") || "(none)"}\n` +
+          `references in the control's link (want some): ${refs(control).join("; ") || "(none)"}\n` +
+          `${linked === null ? "" : linked.stderr}${ran === null ? "(not run)" : `${ran.stdout}${ran.stderr}`}`
+      )
+    } else {
+      skip(
+        "adler32 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of std_compress_adler_paths is not checked for kernel references"
       )
     }
   }

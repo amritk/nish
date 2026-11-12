@@ -1,16 +1,19 @@
 /* Nish runtime, the checksum half: CRC-32 (ISO 3309, gzip's, RFC 1952 §8) on
- * the CPU's carry-less multiply or CRC instructions (docs/wp38-simd.md §3.1).
- * std/compress/checksum.ts is the checksum; this is a faster body for its one
- * private walker, `crc32Walk`, which the compiler calls in its place when
- * `nish_crc32_hw` says this machine can run it (src/kernels.ts).
+ * the CPU's carry-less multiply or CRC instructions, and Adler-32 (RFC 1950,
+ * zlib's) on SSSE3 or NEON vectors (docs/wp38-simd.md §3.1).
+ * std/compress/checksum.ts is the checksum; this is a faster body for its two
+ * private walkers, `crc32Walk` and `adler32Walk`, which the compiler calls in
+ * their place when `nish_crc32_hw` or `nish_adler32_hw` says this machine can
+ * run it (src/kernels.ts). The CRC-32 half comes first; the Adler-32 half,
+ * after it, says what its kernels are.
  *
  * A translation unit of its own for the reason runtime-aes.c is one: it carries
  * its own measured `.text*` ceiling in tests/runtime-budgets.js
  * (RUNTIME_CHECKSUM_TEXT_BUDGET), and a program that never checksums links
  * none of it once section GC has run.
  *
- * Two kernels, each compiled for its extensions alone with `target(...)`, so the
- * binary stays a baseline binary:
+ * Two CRC-32 kernels, each compiled for its extensions alone with `target(...)`,
+ * so the binary stays a baseline binary:
  *
  *   x86-64    PCLMULQDQ folding, four 128-bit lanes at a step, then a Barrett
  *             reduction to 32 bits; SSE4.1 for the lane extract. Never SSE4.2's
@@ -36,7 +39,7 @@
  * x^e mod P, or floor(x^64 / P), bit-reflected over 33 bits; tests/simd/crc32.c
  * computes each one again from P and holds this file to it.
  *
- * CRC-32 is no secret's checksum here, so nothing is wiped and nothing is held
+ * Neither checksum is a secret's here, so nothing is wiped and nothing is held
  * to constant time (docs/security/compress.md).
  */
 #include <stdint.h>
@@ -44,27 +47,28 @@
 #include "nish.h"
 
 #if defined(__has_include)
-#define NISH_CRC32_HAS(h) __has_include(h)
+#define NISH_CHECKSUM_HAS(h) __has_include(h)
 #else
-#define NISH_CRC32_HAS(h) 0
+#define NISH_CHECKSUM_HAS(h) 0
 #endif
 
-#if defined(__x86_64__) && NISH_CRC32_HAS(<cpuid.h>) && NISH_CRC32_HAS(<wmmintrin.h>) && \
-    NISH_CRC32_HAS(<smmintrin.h>)
+#if defined(__x86_64__) && NISH_CHECKSUM_HAS(<cpuid.h>) && NISH_CHECKSUM_HAS(<wmmintrin.h>) && \
+    NISH_CHECKSUM_HAS(<smmintrin.h>)
 #include <cpuid.h>
 #include <smmintrin.h>
 #include <wmmintrin.h>
 #define NISH_CRC32_X86 1
-#elif defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && NISH_CRC32_HAS(<arm_acle.h>)
+#elif defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && NISH_CHECKSUM_HAS(<arm_acle.h>)
 #include <arm_acle.h>
 #define NISH_CRC32_ARM 1
 #endif
 
-#if defined(NISH_CRC32_X86) || defined(NISH_CRC32_ARM)
-
 /* Named here rather than through <stdlib.h>, as runtime-aes.c names it: the
-   file compiles for aarch64 on hosts with no aarch64 libc headers. */
+   file compiles for aarch64 on hosts with no aarch64 libc headers. A stub build
+   declares it and never calls it, so it asks the C library for nothing. */
 char *getenv(const char *name);
+
+#if defined(NISH_CRC32_X86) || defined(NISH_CRC32_ARM)
 
 /* The fold constants (the header comment says what each is): K1 and K2 fold a
    lane 512 bits on, K3 and K4 128 bits on, K5 64 bits on; P is the polynomial
@@ -264,6 +268,194 @@ int32_t nish_crc32_hw(void) {
 
 uint32_t nish_crc32_update(uint32_t crc, const nish_array *buf, int32_t off, int32_t len) {
   (void)crc, (void)buf, (void)off, (void)len;
+  __builtin_trap();
+}
+
+#endif
+
+/* ---- Adler-32 (RFC 1950 §9, zlib's) ------------------------------------------
+
+   The same seam for std/compress/checksum.ts's `adler32Walk`: `nish_adler32_hw`
+   answers once per process, `NISH_ADLER32=soft` pins the Nish loop, and the
+   compiler calls `nish_adler32_update` in the walk's place when the answer is 1.
+
+   Two kernels on one blocking: 32-byte blocks, at most NMAX / 32 of them between
+   reductions, s2 given the earlier blocks' s1 once per block (summed in `ps` and
+   shifted once a stretch) and the block's bytes weighted 32..1, s1 the bytes.
+
+     x86-64    SSSE3, behind `target("ssse3")` and cpuid leaf 1 ECX bit 9:
+               `pmaddubsw` then `pmaddwd` for the weighted sum, `psadbw` for s1.
+     AArch64   NEON, baseline on every AArch64, so no target and no question
+               asked: pairwise widening adds for s1, the block's byte columns
+               summed in 16 bits (173 blocks * 255 fits) and weighted once a
+               stretch by widening multiply-adds.
+
+   Elsewhere (wasm32, i686, armv7, a big-endian AArch64, a toolchain without the
+   headers) the stub below. Written from RFC 1950 and the Intel and Arm
+   intrinsic references (bench/adler32/kernel.c measured them first); the
+   blocking is the standard technique zlib-ng and Chromium also use, and no
+   upstream code was copied. A checksum, not a secret: nothing is wiped. */
+
+#if defined(__x86_64__) && NISH_CHECKSUM_HAS(<cpuid.h>) && NISH_CHECKSUM_HAS(<tmmintrin.h>)
+#include <cpuid.h>
+#include <tmmintrin.h>
+#define NISH_ADLER32_X86 1
+#elif defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ && NISH_CHECKSUM_HAS(<arm_neon.h>)
+#include <arm_neon.h>
+#define NISH_ADLER32_ARM 1
+#endif
+
+#if defined(NISH_ADLER32_X86) || defined(NISH_ADLER32_ARM)
+
+#define NISH_ADLER32_BASE 65521u
+/* The most bytes before s2 can pass 2^32 - 1 from s1, s2 < BASE (zlib's NMAX). */
+#define NISH_ADLER32_NMAX 5552
+#define NISH_ADLER32_BLOCK 32
+
+#define NISH_ADLER32_UNSET 0
+#define NISH_ADLER32_KERNEL 1
+#define NISH_ADLER32_SOFT 2
+
+/* The bytes after the last whole block, fewer than 32, then the reduction. */
+static uint32_t nish_adler32_tail(uint32_t s1, uint32_t s2, const uint8_t *p, uint64_t n) {
+  for (uint64_t i = 0; i < n; i++) {
+    s1 += p[i];
+    s2 += s1;
+  }
+  return ((s2 % NISH_ADLER32_BASE) << 16) | (s1 % NISH_ADLER32_BASE);
+}
+
+#if defined(NISH_ADLER32_X86)
+
+#define NISH_ADLER32_TARGET __attribute__((target("ssse3")))
+
+static inline __attribute__((always_inline)) NISH_ADLER32_TARGET uint32_t nish_adler32_hsum(__m128i v) {
+  v = _mm_add_epi32(v, _mm_shuffle_epi32(v, _MM_SHUFFLE(1, 0, 3, 2)));
+  v = _mm_add_epi32(v, _mm_shuffle_epi32(v, _MM_SHUFFLE(2, 3, 0, 1)));
+  return (uint32_t)_mm_cvtsi128_si32(v);
+}
+
+/* The weighted sums cannot overflow a lane: a lane's share of s2 is at most
+   s2's whole, which NMAX bounds even from an unreduced 0xffff seed. */
+static NISH_ADLER32_TARGET uint32_t nish_adler32_ssse3(uint32_t adler, const uint8_t *p, uint64_t n) {
+  uint32_t s1 = adler & 0xffff, s2 = adler >> 16;
+  const __m128i tap1 = _mm_setr_epi8(32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17);
+  const __m128i tap2 = _mm_setr_epi8(16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1);
+  const __m128i zero = _mm_setzero_si128();
+  const __m128i ones = _mm_set1_epi16(1);
+  while (n >= NISH_ADLER32_BLOCK) {
+    uint64_t blocks = n / NISH_ADLER32_BLOCK;
+    if (blocks > NISH_ADLER32_NMAX / NISH_ADLER32_BLOCK) blocks = NISH_ADLER32_NMAX / NISH_ADLER32_BLOCK;
+    n -= blocks * NISH_ADLER32_BLOCK;
+    s2 += s1 * (uint32_t)(blocks * NISH_ADLER32_BLOCK);
+    __m128i ps = zero, vs1 = zero, vs2 = zero;
+    do {
+      const __m128i b1 = _mm_loadu_si128((const __m128i *)p);
+      const __m128i b2 = _mm_loadu_si128((const __m128i *)(p + 16));
+      ps = _mm_add_epi32(ps, vs1);
+      vs1 = _mm_add_epi32(vs1, _mm_sad_epu8(b1, zero));
+      vs1 = _mm_add_epi32(vs1, _mm_sad_epu8(b2, zero));
+      vs2 = _mm_add_epi32(vs2, _mm_madd_epi16(_mm_maddubs_epi16(b1, tap1), ones));
+      vs2 = _mm_add_epi32(vs2, _mm_madd_epi16(_mm_maddubs_epi16(b2, tap2), ones));
+      p += NISH_ADLER32_BLOCK;
+    } while (--blocks);
+    vs2 = _mm_add_epi32(vs2, _mm_slli_epi32(ps, 5));
+    s1 = (s1 + nish_adler32_hsum(vs1)) % NISH_ADLER32_BASE;
+    s2 = (s2 + nish_adler32_hsum(vs2)) % NISH_ADLER32_BASE;
+  }
+  return nish_adler32_tail(s1, s2, p, n);
+}
+
+static int32_t nish_adler32_cpu(void) {
+  unsigned a, b, c, d;
+  return __get_cpuid(1, &a, &b, &c, &d) && (c & bit_SSSE3) != 0 ? NISH_ADLER32_KERNEL : NISH_ADLER32_SOFT;
+}
+
+#else
+
+static uint32_t nish_adler32_neon(uint32_t adler, const uint8_t *p, uint64_t n) {
+  static const uint16_t taps[32] = {32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
+                                    16, 15, 14, 13, 12, 11, 10, 9,  8,  7,  6,  5,  4,  3,  2,  1};
+  uint32_t s1 = adler & 0xffff, s2 = adler >> 16;
+  while (n >= NISH_ADLER32_BLOCK) {
+    uint64_t blocks = n / NISH_ADLER32_BLOCK;
+    if (blocks > NISH_ADLER32_NMAX / NISH_ADLER32_BLOCK) blocks = NISH_ADLER32_NMAX / NISH_ADLER32_BLOCK;
+    n -= blocks * NISH_ADLER32_BLOCK;
+    s2 += s1 * (uint32_t)(blocks * NISH_ADLER32_BLOCK);
+    uint32x4_t ps = vdupq_n_u32(0), vs1 = vdupq_n_u32(0);
+    uint16x8_t c1 = vdupq_n_u16(0), c2 = c1, c3 = c1, c4 = c1;
+    do {
+      const uint8x16_t b1 = vld1q_u8(p);
+      const uint8x16_t b2 = vld1q_u8(p + 16);
+      ps = vaddq_u32(ps, vs1);
+      vs1 = vpadalq_u16(vs1, vpadalq_u8(vpaddlq_u8(b1), b2));
+      c1 = vaddw_u8(c1, vget_low_u8(b1));
+      c2 = vaddw_u8(c2, vget_high_u8(b1));
+      c3 = vaddw_u8(c3, vget_low_u8(b2));
+      c4 = vaddw_u8(c4, vget_high_u8(b2));
+      p += NISH_ADLER32_BLOCK;
+    } while (--blocks);
+    uint32x4_t vs2 = vshlq_n_u32(ps, 5);
+    vs2 = vmlal_u16(vs2, vget_low_u16(c1), vld1_u16(taps));
+    vs2 = vmlal_u16(vs2, vget_high_u16(c1), vld1_u16(taps + 4));
+    vs2 = vmlal_u16(vs2, vget_low_u16(c2), vld1_u16(taps + 8));
+    vs2 = vmlal_u16(vs2, vget_high_u16(c2), vld1_u16(taps + 12));
+    vs2 = vmlal_u16(vs2, vget_low_u16(c3), vld1_u16(taps + 16));
+    vs2 = vmlal_u16(vs2, vget_high_u16(c3), vld1_u16(taps + 20));
+    vs2 = vmlal_u16(vs2, vget_low_u16(c4), vld1_u16(taps + 24));
+    vs2 = vmlal_u16(vs2, vget_high_u16(c4), vld1_u16(taps + 28));
+    s1 = (s1 + vaddvq_u32(vs1)) % NISH_ADLER32_BASE;
+    s2 = (s2 + vaddvq_u32(vs2)) % NISH_ADLER32_BASE;
+  }
+  return nish_adler32_tail(s1, s2, p, n);
+}
+
+static int32_t nish_adler32_cpu(void) {
+  return NISH_ADLER32_KERNEL;
+}
+
+#endif
+
+/* Fixed by the first call, as nish_crc32_answer is. */
+static int32_t nish_adler32_answer;
+
+static int32_t nish_adler32_path(void) {
+  int32_t answer = __atomic_load_n(&nish_adler32_answer, __ATOMIC_RELAXED);
+  if (answer == NISH_ADLER32_UNSET) {
+    const char *pin = getenv("NISH_ADLER32");
+    int soft = pin != 0 && pin[0] == 's' && pin[1] == 'o' && pin[2] == 'f' && pin[3] == 't' && pin[4] == 0;
+    answer = soft ? NISH_ADLER32_SOFT : nish_adler32_cpu();
+    __atomic_store_n(&nish_adler32_answer, answer, __ATOMIC_RELAXED);
+  }
+  return answer;
+}
+
+int32_t nish_adler32_hw(void) {
+  return nish_adler32_path() != NISH_ADLER32_SOFT;
+}
+
+uint32_t nish_adler32_update(uint32_t adler, const nish_array *buf, int32_t off, int32_t len) {
+  /* The walk hands an empty window's value back as it came, reduced or not;
+     the kernels always reduce, so an empty window never reaches them. */
+  if (len == 0) return adler;
+  const uint8_t *p = (const uint8_t *)buf->data + off;
+#if defined(NISH_ADLER32_X86)
+  return nish_adler32_ssse3(adler, p, (uint64_t)len);
+#else
+  return nish_adler32_neon(adler, p, (uint64_t)len);
+#endif
+}
+
+#else
+
+/* No kernel for this target: the Nish loop always, and a kernel that a program
+   whose every call is behind `nish_adler32_hw` never reaches. */
+int32_t nish_adler32_hw(void) {
+  return 0;
+}
+
+uint32_t nish_adler32_update(uint32_t adler, const nish_array *buf, int32_t off, int32_t len) {
+  (void)adler, (void)buf, (void)off, (void)len;
   __builtin_trap();
 }
 
