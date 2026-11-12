@@ -201,7 +201,9 @@ export const QUIC_RECOVERY_CUBIC: i32 = 1
  * CUBIC's longest span in milliseconds: K and every `t − K` its curve is
  * read at are clamped to ±40 s. A cube of it times twice the largest UDP
  * payload stays inside an `i64` (2 × 65535 × 40000³ < 2^63), and K reaches
- * it only after a fall of 25600 datagrams, 30 MB at 1200 bytes.
+ * it only after a fall of 25600 datagrams, 30 MB at 1200 bytes. What the
+ * clamp costs: 40 s past K, W(t) stops at W_max + 25600 datagrams, so a
+ * window that far past its last loss grows only as fast as W_est.
  */
 const QUIC_RECOVERY_CUBIC_SPAN: i64 = 40000
 /**
@@ -628,6 +630,11 @@ export class QuicRecovery {
   cubicEst: i64 = 0
   /** What `cubicEst`'s last step truncated: the numerator of a fraction of 17 × the window then. */
   cubicEstCarry: i64 = 0
+  /**
+   * What the window's last step toward the curve truncated: the numerator of a fraction of the
+   * window then, so steps smaller than a byte add up instead of being lost (RFC 9438's cwnd_cnt).
+   */
+  cubicCarry: i64 = 0
   /** CUBIC's cwnd_prior (§4.6): the window just before the last reduction, in bytes. */
   cubicPrior: i64 = 0
   /**
@@ -742,6 +749,7 @@ export class QuicRecovery {
     this.cubicEpoch = -1
     this.cubicEst = 0
     this.cubicEstCarry = 0
+    this.cubicCarry = 0
     this.cubicPrior = 0
     this.cubicIdle = -1
     this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
@@ -1407,8 +1415,8 @@ export class QuicRecovery {
    * the curve W(t) is below W_est the window is W_est (the Reno-friendly
    * region); otherwise it moves toward W(t + RTT), held within cwnd ..
    * 1.5 × cwnd, by (target − cwnd) × size / cwnd: concave below W_max, convex
-   * past it. Integers throughout; each division truncates, and W_est carries
-   * what it truncated.
+   * past it. Integers throughout; W_est and the window each carry what their
+   * division truncated, so a step under a byte is deferred, never dropped.
    */
   private cubicAcked(size: i64, now: i64): void {
     const cwnd: i64 = this.congestionWindow
@@ -1417,6 +1425,7 @@ export class QuicRecovery {
       this.cubicIdle = -1
       this.cubicEst = cwnd
       this.cubicEstCarry = 0
+      this.cubicCarry = 0
       if (this.cubicMax > cwnd) {
         this.cubicK = this.cubicSpan(this.cubicMax - cwnd)
       } else {
@@ -1437,7 +1446,11 @@ export class QuicRecovery {
     const ceiling: i64 = cwnd + cwnd / 2
     const curve: i64 = this.cubicWindow(t + this.smoothedRtt)
     const target: i64 = quicRecoveryMax(cwnd, curve > ceiling ? ceiling : curve)
-    this.congestionWindow = cwnd + ((target - cwnd) * size) / cwnd
+    // The window only grows within a stage, so the carry, below the window
+    // it was a fraction of, stays below the one it is added against.
+    const step: i64 = (target - cwnd) * size + this.cubicCarry
+    this.congestionWindow = cwnd + step / cwnd
+    this.cubicCarry = step % cwnd
   }
 
   /**

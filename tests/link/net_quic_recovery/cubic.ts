@@ -5,9 +5,10 @@
 // units is W_max + 2 × 1200 × (t − K)³ / 5 × 10⁹ bytes, and
 // K = ∛((W_max − cwnd) × 5 × 10⁹ / 2400) ms.
 //
-// The windows pinned below were worked out by a separate integer model of
-// RFC 9438 §4 (the same units and truncations, written apart from the
-// module), driving the same synthetic ACK clock: each round, at one
+// The windows pinned below come from `cubic_model.py` beside this file, a
+// separate integer model of RFC 9438 §4 (the same units and truncations,
+// written apart from the module); `python3 cubic_model.py` prints each
+// figure again. It drives the same synthetic ACK clock: each round, at one
 // instant, acknowledges every packet of the round before one ACK at a time
 // and sends one in its place, so 100 full datagrams (120000 bytes) are
 // always in flight and every RTT sample is exactly the round's length.
@@ -117,7 +118,7 @@ const rcCubicCurveChecks = (t: Suite): void => {
   const at: i64[] = [];
   const text: string[] = [];
   const est: string[] = [];
-  for (let j: i32 = 1; j <= 61; j++) {
+  for (let j: i32 = 1; j <= 71; j++) {
     rcRound(r, c, n64(101) + n64(100) * toI64(j), n32(100));
     if ((j - 1) % 10 === 0) {
       at.push(r.congestionWindow);
@@ -129,15 +130,17 @@ const rcCubicCurveChecks = (t: Suite): void => {
   t.eqI64("K = ∛((W_max − cwnd) / C) = 5000 ms exactly", r.cubicK, n64(5000));
   t.eqI64("the epoch is the first ACK after recovery, at 201", r.cubicEpoch, n64(201));
   t.eqStr(
-    "the window at t = 0, 1, 2, 3, 4, 5 and 6 s",
+    "the window at t = 0 to 7 s",
     text.join(" "),
-    "140543 169251 186753 195903 199358 199834 200392"
+    "140543 169319 186828 195985 199447 199995 200483 203779"
   );
-  // Growth per second: 28708, 17502, 9150, 3455, 476, then 558 past K.
+  // Growth per second: 28776, 17509, 9157, 3462, 548, then 488 and 3296 past
+  // K. The window trails W(t + RTT) by under an RTT of growth, so the second
+  // just past K, where the curve is flattest, adds the least.
   t.ok("concave below W_max: each second adds less than the one before", at[1] - at[0] > at[2] - at[1] && at[2] - at[1] > at[3] - at[2] && at[3] - at[2] > at[4] - at[3] && at[4] - at[3] > at[5] - at[4]);
   t.ok("at K the window has reached W_max to within 0.1%, and holds below it", at[5] < n64(200000) && at[5] > n64(199800));
-  t.ok("convex past K: the second after K adds more than the second before it", at[6] - at[5] > at[5] - at[4] && at[6] > n64(200000));
-  t.eqStr("the Reno estimate W_est, far below: 9/17 of a datagram a window of ACKs", est.join(" "), "140543 145437 149702 153674 157525 161342 165153");
+  t.ok("convex past K: the second second past K adds more than the first", at[7] - at[6] > at[6] - at[5] && at[6] > n64(200000));
+  t.eqStr("the Reno estimate W_est, far below: 9/17 of a datagram a window of ACKs", est.slice(0, 7).join(" "), "140543 145435 149699 153669 157518 161333 165142");
 };
 
 /**
@@ -160,7 +163,19 @@ const rcCubicFriendlyChecks = (t: Suite): void => {
   }
   t.ok("every round the window is W_est", follows);
   // W(1000) = 200000 + 2400 × (1000 − 5000)³ / (5 × 10⁹) = 200000 − 30720 = 169280.
-  t.eqStr("the window at t = 0, 0.5 and 1 s: past W(1 s) = 169280, and the 169251 a 100 ms RTT reaches", at.join(" "), "140543 165457 187082");
+  t.eqStr("the window at t = 0, 0.5 and 1 s: past W(1 s) = 169280, and the 169319 a 100 ms RTT reaches", at.join(" "), "140543 165457 187082");
+  // On until W_est reaches cwnd_prior, 200000: from there α is 1 (§4.3), a
+  // datagram a window of ACKs where it was 9/17 of one.
+  let now: i64 = n64(1021);
+  while (r.cubicEst < r.cubicPrior) {
+    now = now + n64(10);
+    rcRound(r, c, now, n32(100));
+  }
+  t.ok("W_est reaches cwnd_prior in the round at 1351, which ends at 200146", now === n64(1351) && r.congestionWindow === n64(200146));
+  const before: i64 = r.congestionWindow;
+  rcRound(r, c, now + n64(10), n32(100));
+  // 100 × 1200 × 1200 / 200146 = 719.5, less what the carries hold back.
+  t.eqI64("past it a round adds 718 bytes, where 9/17 of a datagram a window would add 381", r.congestionWindow - before, n64(718));
 };
 
 /**
@@ -175,22 +190,64 @@ const rcCubicIdleChecks = (t: Suite): void => {
   for (let j: i32 = 1; j <= 10; j++) {
     rcRound(r, c, n64(101) + n64(100) * toI64(j), n32(100));
   }
-  t.eqI64("ten rounds in, at 1101", r.congestionWindow, n64(166946));
-  // The first round of one packet: the first ACKs still find more than half of 166946 in flight.
+  t.eqI64("ten rounds in, at 1101", r.congestionWindow, n64(167012));
+  // The first round of one packet: the first ACKs still find more than half of 167012 in flight.
   rcRound(r, c, n64(1201), n32(1));
-  t.eqI64("draining the flight grows the window while it is still half full", r.congestionWindow, n64(167873));
+  t.eqI64("draining the flight grows the window while it is still half full", r.congestionWindow, n64(167940));
   t.eqI64("the ACK that finds less than half in flight starts the idle time", r.cubicIdle, n64(1201));
   let held: boolean = true;
   for (let j: i32 = 12; j <= 21; j++) {
     rcRound(r, c, n64(101) + n64(100) * toI64(j), n32(j === 21 ? 100 : 1));
-    held = held && r.congestionWindow === n64(167873);
+    held = held && r.congestionWindow === n64(167940);
   }
   t.ok("the rounds of one packet in flight, to 2201, leave the window where it was", held);
   t.eqI64("the epoch has not moved yet", r.cubicEpoch, n64(201));
   rcRound(r, c, n64(2301), n32(100));
   // Idle from 1201 to 2301: the epoch moves 1100 ms, from 201 to 1301.
   t.eqI64("the first ACK of a full flight again moves the epoch by the idle time", r.cubicEpoch, n64(1301));
-  t.eqI64("and growth resumes from t = 1000", r.congestionWindow, n64(169701));
+  t.eqI64("and growth resumes from t = 1000", r.congestionWindow, n64(169768));
+};
+
+/**
+ * The target is W(t + RTT) but at most 1.5 × cwnd (§4.4): at a 10 s RTT,
+ * W(20 s) = 200000 + 2400 × 15000³ / (5 × 10⁹) = 1820000, far past it, so a
+ * round grows the window by half, 600 bytes an ACK, not 9000.
+ */
+const rcCubicCeilingChecks = (t: Suite): void => {
+  const r = rcCubicLoss(n64(10000), n64(0));
+  const c = new RcClock();
+  rcRound(r, c, n64(10001), n32(100));
+  rcRound(r, c, n64(20001), n32(100));
+  t.eqI64("at t = 0 the window is W_est, as at the shorter RTTs", r.congestionWindow, n64(140543));
+  rcRound(r, c, n64(30001), n32(100));
+  t.eqI64("at t = 10 s the curve's 1820000 is held to 1.5 × cwnd: 100 ACKs of 600 bytes, less truncation", r.congestionWindow, n64(200542));
+};
+
+/**
+ * At a 10⁸-byte window, 68718 bytes short of W(t + RTT), an ACK of 1200
+ * bytes moves the window 68718 × 1200 / 10⁸ = 0.82 of a byte. Truncated each
+ * time, that would never grow; the carry adds the fractions up.
+ */
+const rcCubicLargeChecks = (t: Suite): void => {
+  const r = new QuicRecovery();
+  r.handshakeConfirmed = true;
+  r.controller = QUIC_RECOVERY_CUBIC;
+  r.congestionWindow = n64(100000000);
+  r.ssthresh = n64(70000000);
+  r.cubicMax = n64(105000000);
+  r.cubicPrior = n64(105000000);
+  // 127 datagrams and one large packet, the record's 128: the large one,
+  // never acknowledged, keeps more than half the window in flight.
+  for (let pn: i64 = 0; pn < 127; pn++) {
+    r.onPacketSent(APP, pn, FULL, n64(0));
+  }
+  r.onPacketSent(APP, n64(127), n32(60000000), n64(0));
+  for (let pn: i64 = 0; pn < 127; pn++) {
+    r.onAck(APP, [pn, pn], n32(1), n64(0), n64(100));
+  }
+  // K = ∛(5 × 10⁶ × 5 × 10⁹ / 2400) = ∛(1.04 × 10¹³), 21839.
+  t.eqI64("K for a fall of 5 × 10⁶ bytes is 21839 ms", r.cubicK, n64(21839));
+  t.eqI64("127 ACKs of 0.82 byte each grow a 10⁸-byte window by 104, not 0", r.congestionWindow, n64(100000104));
 };
 
 /** Persistent congestion (§4.8 of RFC 9438, §7.6 of RFC 9002) collapses CUBIC to the minimum window as it does NewReno. */
@@ -237,6 +294,8 @@ export const recoveryCubicChecks = (t: Suite): void => {
   rcCubicCurveChecks(t);
   rcCubicFriendlyChecks(t);
   rcCubicIdleChecks(t);
+  rcCubicCeilingChecks(t);
+  rcCubicLargeChecks(t);
   rcCubicPersistentChecks(t);
   rcCubicConfigChecks(t);
 };
