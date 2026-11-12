@@ -395,8 +395,9 @@ count is above 64 with a service worker (63 with `listenPort`), the most
 `spawnWithFds` hands one child; when `pin`, on Linux, asks for more workers
 than `availableParallelism()`; when `listenUdp` asks for more than 255
 workers (62 with a service worker); and, through `preforkInvalid`, on
-seqpacket channels off Linux. A listener or UDP socket that cannot bind
-answers `PREFORK_SPAWN_FAILED` before any worker starts.
+seqpacket channels off Linux. A listener or UDP socket that cannot bind,
+or a refused steering that leaves one worker beside a `serviceWorker` past
+0, answers `PREFORK_SPAWN_FAILED` before any worker starts.
 
 ```ts
 function preforkSupervise<S>(

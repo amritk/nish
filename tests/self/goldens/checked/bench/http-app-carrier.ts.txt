@@ -433,25 +433,26 @@ function preforkSupervise<u8[], preforkDiscard>(args: string[], config: PreforkC
   local +31:9 loop: i32 (const)
   local +43:9 udp: i32[] (const)
   callee +43:41 preforkBindUdp -> @nish.preforkBindUdp
-  local +51:9 supervisor: PreforkSupervisor (const)
-  callee +51:22 new PreforkSupervisor -> @nish.PreforkSupervisor.constructor
-  callee +52:34 PreforkSupervisor.listen -> @nish.PreforkSupervisor.listen
-  local +57:9 ready: i32[] (const)
-  local +58:7 result: i32 (let)
-  callee +59:8 PreforkSupervisor.restart -> @nish.PreforkSupervisor.restart
-  local +63:9 running: boolean (let)
-  local +65:13 n: i32 (const)
-  local +66:16 k: i32 (let)
-  local +67:15 token: i32 (const)
-  local +68:15 events: i32 (const)
-  local +73:17 slot: PreforkSlot (const)
-  callee +74:11 preforkDiscard -> @nish.preforkDiscard
-  callee +76:13 PreforkSupervisor.closeChannel -> @nish.PreforkSupervisor.closeChannel
-  callee +81:9 PreforkSupervisor.reap -> @nish.PreforkSupervisor.reap
-  callee +86:9 PreforkSupervisor.escalate -> @nish.PreforkSupervisor.escalate
-  callee +87:9 PreforkSupervisor.restart -> @nish.PreforkSupervisor.restart
-  callee +91:3 PreforkSupervisor.stop -> @nish.PreforkSupervisor.stop
-  callee +92:3 PreforkSupervisor.closeListeners -> @nish.PreforkSupervisor.closeListeners
+  local +54:14 i: i32 (let)
+  local +60:9 supervisor: PreforkSupervisor (const)
+  callee +60:22 new PreforkSupervisor -> @nish.PreforkSupervisor.constructor
+  callee +61:34 PreforkSupervisor.listen -> @nish.PreforkSupervisor.listen
+  local +66:9 ready: i32[] (const)
+  local +67:7 result: i32 (let)
+  callee +68:8 PreforkSupervisor.restart -> @nish.PreforkSupervisor.restart
+  local +72:9 running: boolean (let)
+  local +74:13 n: i32 (const)
+  local +75:16 k: i32 (let)
+  local +76:15 token: i32 (const)
+  local +77:15 events: i32 (const)
+  local +82:17 slot: PreforkSlot (const)
+  callee +83:11 preforkDiscard -> @nish.preforkDiscard
+  callee +85:13 PreforkSupervisor.closeChannel -> @nish.PreforkSupervisor.closeChannel
+  callee +90:9 PreforkSupervisor.reap -> @nish.PreforkSupervisor.reap
+  callee +95:9 PreforkSupervisor.escalate -> @nish.PreforkSupervisor.escalate
+  callee +96:9 PreforkSupervisor.restart -> @nish.PreforkSupervisor.restart
+  callee +100:3 PreforkSupervisor.stop -> @nish.PreforkSupervisor.stop
+  callee +101:3 PreforkSupervisor.closeListeners -> @nish.PreforkSupervisor.closeListeners
 module std/net/http1-server.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
