@@ -87,6 +87,20 @@ until `netRead` does, and holds on to what `netWrite` could not send yet. The
 loop is level-triggered: anything you leave unread is reported again on the
 next `pollWait`.
 
+The protocol servers in `nish/net` keep no timer of their own: your loop owns
+the clock. Call their `expire(monotonicNanos())` once a turn, with a
+`pollWait` timeout no longer than the shortest deadline, and they close what
+has gone on too long. `Http1Server` closes an idle slot, a head past
+`headTimeout`, and a refused client still draining past `lingerTimeout`
+(it shuts its write side and reads what the client still sends, up to
+`lingerBytes`, so the error response is not lost to a reset).
+`Http2TlsServer` closes a client that has not acknowledged its SETTINGS
+within `settingsTimeout`, or is quiet past `idleTimeout`. A WebTransport
+layer ends a session quiet past its `idleTimeout` and drops datagrams past
+`maxDatagramsPerSecond`. Each limit has a default and is checked at start-up;
+[the standard library's `nish/net` section](standard-library.md#nishnet) has
+the details.
+
 ## Sharing a port and turning Nagle off: `tcpListenFlags`
 
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with one more

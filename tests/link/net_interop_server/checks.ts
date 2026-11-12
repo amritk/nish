@@ -6,7 +6,9 @@
 // and bidirectional stream, and the WebSocket echo port Autobahn drives. A
 // change in `nish/net` that breaks the server the interop job drives fails
 // here, inside `npm test`, before that job runs.
-// Then the refusals of the command line, each with its exit code.
+// Then the refusals of the command line, each with its exit code, and the
+// runner's `rebind-port` case played sans-IO against the server's QUIC
+// configuration (`rebind.ts`).
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { tlsTicketKeyDraw } from "nish/net/tls/ticket";
@@ -21,6 +23,7 @@ import {
   H3_STREAM_QPACK_ENCODER,
 } from "nish/net/http3-frame";
 import { QpackEncoder } from "nish/net/qpack";
+import { rebindChecks } from "./rebind";
 import {
   WS_CLOSE,
   WS_CLOSE_INVALID_DATA,
@@ -317,5 +320,6 @@ export const interopChecks = (): i32 => {
   identityChecks(t);
   carrierChecks(t);
   resumptionChecks(t);
+  rebindChecks(t);
   return t.done();
 };
