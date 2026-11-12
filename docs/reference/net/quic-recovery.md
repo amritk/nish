@@ -10,6 +10,7 @@ import {
   QUIC_RECOVERY_APPLICATION_CAPACITY,
   QUIC_RECOVERY_CUBIC,
   QUIC_RECOVERY_DATAGRAM_SIZE,
+  QUIC_RECOVERY_DEFAULT,
   QUIC_RECOVERY_DEFAULT_MAX_ACK_DELAY,
   QUIC_RECOVERY_ECN_CAPABLE,
   QUIC_RECOVERY_ECN_FAILED,
@@ -226,6 +227,7 @@ class QuicRecovery
 | `congestionEvents: i32` | How many congestion events reduced the window, and how many of them were persistent congestion. |
 | `congestionWindow: i64` | congestion_window (B.2), in bytes. |
 | `controller: i32` | The congestion controller, `QUIC_RECOVERY_NEWRENO` or `QUIC_RECOVERY_CUBIC`, which the caller sets once, before the first packet; `reset` keeps it. |
+| `cubicCarry: i64` | What the window's last step toward the curve truncated: the numerator of a fraction of the window then, so steps smaller than a byte add up instead of being lost (RFC 9438's cwnd_cnt). |
 | `cubicEpoch: i64` | When CUBIC's congestion avoidance stage began (t = 0 of its curve), in milliseconds, or -1 outside one. |
 | `cubicEst: i64` | CUBIC's W_est (§4.3) in bytes: the window Reno's AIMD with β 0.7 would have reached since `cubicEpoch`. |
 | `cubicEstCarry: i64` | What `cubicEst`'s last step truncated: the numerator of a fraction of 17 × the window then. |
@@ -395,6 +397,17 @@ bytes every datagram is at most until path MTU discovery validates more
 
 </scalar-card>
 
+<scalar-card title="QUIC_​RECOVERY_​CUBIC" icon="phosphor/regular/hash">
+
+`QUIC_RECOVERY_DEFAULT: i32`
+
+The controller a server runs unless it has a reason to pick: CUBIC. It
+beat NewReno outside the spread across loss draws on transfers of 32 and
+128 bandwidth-delay products and finished level on one
+(`bench/quic-goodput.ts`; the figures are in docs/security/quic.md).
+
+</scalar-card>
+
 <scalar-card title="25" icon="phosphor/regular/hash">
 
 `QUIC_RECOVERY_DEFAULT_MAX_ACK_DELAY: i64`
@@ -504,7 +517,7 @@ kMinimumWindow (§7.2) at 1200 bytes: two datagrams, 2400 bytes.
 
 `QUIC_RECOVERY_NEWRENO: i32`
 
-The congestion controller of RFC 9002 §7 and Appendix B: NewReno. The default.
+The congestion controller of RFC 9002 §7 and Appendix B: NewReno.
 
 </scalar-card>
 

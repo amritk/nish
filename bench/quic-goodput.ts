@@ -8,18 +8,18 @@
 // acknowledged, as RFC 9000 §13.2.1 lets a receiver.
 //
 // Nothing here reads a wall clock: a run is a pure function of its seed, the
-// controller and the size, so the spread across seeds (which datagrams the
-// shim drops) is the noise band. Every seed runs both controllers, NewReno
-// first then CUBIC, before the next seed: the repetitions interleave.
+// controller and the size, so the spread across seeds is the variance
+// across loss draws (which datagrams the shim drops). Every seed runs both
+// controllers, NewReno first then CUBIC, before the next seed.
 //
 //   build/nish bench/quic-goodput.ts --link build/quic-goodput && build/quic-goodput
 //
 // Prints a line per run and, per size and controller, the median goodput in
 // kbit/s with its quartiles and range, and on how many seeds CUBIC finished
-// first. The figures and the default they chose: docs/security/quic.md
-// ("Congestion control").
+// first, then which controller `QUIC_RECOVERY_DEFAULT` names. The figures
+// and the default they chose: docs/security/quic.md ("Congestion control").
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params"
-import { QUIC_RECOVERY_CUBIC, QUIC_RECOVERY_NEWRENO } from "nish/net/quic-recovery"
+import { QUIC_RECOVERY_CUBIC, QUIC_RECOVERY_DEFAULT, QUIC_RECOVERY_NEWRENO } from "nish/net/quic-recovery"
 import { QuicConnection } from "nish/net/quic"
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule"
 import { fromHex } from "../tests/link/crypto_x509/hex"
@@ -267,8 +267,8 @@ const summary = (name: string, total: i64, rates: i64[]): string => {
 
 export const main = (): i32 => {
   const runs: i32 = 41
-  // One BDP, and 32 of them.
-  const sizes: i64[] = [125000, 4000000]
+  // One BDP, 32 of them and 128.
+  const sizes: i64[] = [125000, 4000000, 16000000]
   for (let z: i32 = 0; z < toI32(sizes.length); z++) {
     const total: i64 = sizes[z]
     const reno: i64[] = []
@@ -295,5 +295,8 @@ export const main = (): i32 => {
     console.log(summary("cubic", total, cubic))
     console.log(`cubic finished first on ${wins} of ${runs} seeds`)
   }
+  console.log(
+    `the default, QUIC_RECOVERY_DEFAULT, is ${QUIC_RECOVERY_DEFAULT === QUIC_RECOVERY_CUBIC ? "cubic" : "newreno"}`
+  )
   return 0
 }

@@ -192,10 +192,17 @@ const QUIC_RECOVERY_MICROS: i64 = 1000
  */
 const QUIC_RECOVERY_PACER_WINDOW: i64 = 4294967296
 
-/** The congestion controller of RFC 9002 §7 and Appendix B: NewReno. The default. */
+/** The congestion controller of RFC 9002 §7 and Appendix B: NewReno. */
 export const QUIC_RECOVERY_NEWRENO: i32 = 0
 /** The congestion controller of RFC 9438: CUBIC, with its Reno-friendly region and fast convergence. */
 export const QUIC_RECOVERY_CUBIC: i32 = 1
+/**
+ * The controller a server runs unless it has a reason to pick: CUBIC. It
+ * beat NewReno outside the spread across loss draws on transfers of 32 and
+ * 128 bandwidth-delay products and finished level on one
+ * (`bench/quic-goodput.ts`; the figures are in docs/security/quic.md).
+ */
+export const QUIC_RECOVERY_DEFAULT: i32 = QUIC_RECOVERY_CUBIC
 
 /**
  * CUBIC's longest span in milliseconds: K and every `t − K` its curve is

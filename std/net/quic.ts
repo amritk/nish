@@ -663,7 +663,8 @@ export interface QuicServerConfig {
   /**
    * The congestion controller every connection runs: `QUIC_RECOVERY_NEWRENO`
    * (RFC 9002) or `QUIC_RECOVERY_CUBIC` (RFC 9438), from
-   * `nish/net/quic-recovery`. Any other value does not fit, and a connection
+   * `nish/net/quic-recovery`; `QUIC_RECOVERY_DEFAULT` names the one to pass
+   * without a reason to pick. Any other value does not fit, and a connection
    * made with it closes at once.
    */
   congestion: i32

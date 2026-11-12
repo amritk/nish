@@ -324,13 +324,15 @@ PASS  the decrease itself is still 0.7
 PASS  so K, the time back to W_max, is 3968 ms, where 200000 would have taken 5000
 PASS  K = ∛((W_max − cwnd) / C) = 5000 ms exactly
 PASS  the epoch is the first ACK after recovery, at 201
-PASS  the window at t = 0, 1, 2, 3, 4, 5 and 6 s
+PASS  the window at t = 0 to 7 s
 PASS  concave below W_max: each second adds less than the one before
 PASS  at K the window has reached W_max to within 0.1%, and holds below it
-PASS  convex past K: the second after K adds more than the second before it
+PASS  convex past K: from 6 to 7 s the window gains more than from 5 to 6 s
 PASS  the Reno estimate W_est, far below: 9/17 of a datagram a window of ACKs
 PASS  every round the window is W_est
-PASS  the window at t = 0, 0.5 and 1 s: past W(1 s) = 169280, and the 169251 a 100 ms RTT reaches
+PASS  the window at t = 0, 0.5 and 1 s: past W(1 s) = 169280, and the 169319 a 100 ms RTT reaches
+PASS  W_est reaches cwnd_prior in the round at 1351, which ends at 200146
+PASS  past it a round adds 718 bytes, where 9/17 of a datagram a window would add 381
 PASS  ten rounds in, at 1101
 PASS  draining the flight grows the window while it is still half full
 PASS  the ACK that finds less than half in flight starts the idle time
@@ -338,10 +340,14 @@ PASS  the rounds of one packet in flight, to 2201, leave the window where it was
 PASS  the epoch has not moved yet
 PASS  the first ACK of a full flight again moves the epoch by the idle time
 PASS  and growth resumes from t = 1000
+PASS  at t = 0 the window is W_est, as at the shorter RTTs
+PASS  at t = 10 s the curve's 1820000 is held to 1.5 × cwnd: 100 ACKs of 600 bytes, less truncation
+PASS  K for a fall of 5 × 10⁶ bytes is 21839 ms
+PASS  127 ACKs of 0.82 byte each grow a 10⁸-byte window by 104, not 0
 PASS  the losses of `unit.ts`'s persistent-congestion case are persistent congestion under CUBIC too
 PASS  ssthresh is 0.7 of the window, and the window the minimum plus the ACK's own packet
 PASS  and the next stage of congestion avoidance starts a new epoch
 PASS  congestion 0 is NewReno
 PASS  congestion QUIC_RECOVERY_CUBIC runs CUBIC, and fits
 PASS  an unknown controller, 2 or -1, does not fit: the connection closes with INTERNAL_ERROR
-quic recovery: 346 passed, 0 failed, 0 skipped
+quic recovery: 352 passed, 0 failed, 0 skipped

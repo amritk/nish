@@ -90,6 +90,7 @@ import { h3Count } from "nish/net/http3-frame"
 import { Http3Server, Http3Wheel, H3_SERVER_WHEEL } from "nish/net/http3-server"
 import { QuicServerConfig } from "nish/net/quic"
 import { quicPacketCopy } from "nish/net/quic-packet"
+import { QUIC_RECOVERY_DEFAULT } from "nish/net/quic-recovery"
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec"
 import {
   WT_CLOSED,
@@ -210,7 +211,7 @@ export const relayQuicConfig = (chain: u8[][], resetKey: u8[], retryKey: u8[]): 
   retryTokenKey: retryKey,
   workerIndex: toI32(-1),
   workerCount: toI32(0),
-  congestion: toI32(0),
+  congestion: QUIC_RECOVERY_DEFAULT,
 })
 
 /** The HTTP/3 configuration: one WebTransport session a connection, and a field section a CONNECT fits. */

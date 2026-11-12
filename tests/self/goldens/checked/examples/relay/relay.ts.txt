@@ -23,6 +23,7 @@ import Http3Wheel from "nish/net/http3-server" -> struct Http3Wheel
 import H3_SERVER_WHEEL from "nish/net/http3-server" -> const H3_SERVER_WHEEL
 import QuicServerConfig from "nish/net/quic" -> struct QuicServerConfig
 import quicPacketCopy from "nish/net/quic-packet" -> function @nish.quicPacketCopy
+import QUIC_RECOVERY_DEFAULT from "nish/net/quic-recovery" -> const QUIC_RECOVERY_DEFAULT
 import TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 from "nish/net/tls/codec" -> const TLS_SIGNATURE_ECDSA_SECP256R1_SHA256
 import WT_CLOSED from "nish/net/webtransport" -> const WT_CLOSED
 import WT_DATAGRAM from "nish/net/webtransport" -> const WT_DATAGRAM

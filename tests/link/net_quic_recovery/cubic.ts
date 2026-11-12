@@ -139,7 +139,7 @@ const rcCubicCurveChecks = (t: Suite): void => {
   // just past K, where the curve is flattest, adds the least.
   t.ok("concave below W_max: each second adds less than the one before", at[1] - at[0] > at[2] - at[1] && at[2] - at[1] > at[3] - at[2] && at[3] - at[2] > at[4] - at[3] && at[4] - at[3] > at[5] - at[4]);
   t.ok("at K the window has reached W_max to within 0.1%, and holds below it", at[5] < n64(200000) && at[5] > n64(199800));
-  t.ok("convex past K: the second second past K adds more than the first", at[7] - at[6] > at[6] - at[5] && at[6] > n64(200000));
+  t.ok("convex past K: from 6 to 7 s the window gains more than from 5 to 6 s", at[7] - at[6] > at[6] - at[5] && at[6] > n64(200000));
   t.eqStr("the Reno estimate W_est, far below: 9/17 of a datagram a window of ACKs", est.slice(0, 7).join(" "), "140543 145435 149699 153669 157518 161333 165142");
 };
 

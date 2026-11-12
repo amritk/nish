@@ -670,7 +670,7 @@ interface QuicServerConfig
 | `activeConnectionIdLimit: i64` | `active_connection_id_limit`: how many of its connection IDs the client may give the server, 2 to 8. |
 | `alpn: string[]` | The ALPN protocols the server speaks, most preferred first; QUIC requires one to match (RFC 9001 §8.1). |
 | `certificateChain: u8[][]` | DER certificates, leaf first, as `TlsServerConfig` takes them. |
-| `congestion: i32` | The congestion controller every connection runs: `QUIC_RECOVERY_NEWRENO` (RFC 9002) or `QUIC_RECOVERY_CUBIC` (RFC 9438), from `nish/net/quic-recovery`. Any other value does not fit, and a connection made with it closes at once. |
+| `congestion: i32` | The congestion controller every connection runs: `QUIC_RECOVERY_NEWRENO` (RFC 9002) or `QUIC_RECOVERY_CUBIC` (RFC 9438), from `nish/net/quic-recovery`; `QUIC_RECOVERY_DEFAULT` names the one to pass without a reason to pick. Any other value does not fit, and a connection made with it closes at once. |
 | `localStreams: i64` | How many streams of its own the server may have open at once, 0 to 1024 (`openStream`). |
 | `maxData: i64` | `initial_max_data`: the connection's receive window, 0 to 2^62 − 1, raised as the application reads. |
 | `maxDatagramFrameSize: i64` | RFC 9221's `max_datagram_frame_size`: the largest DATAGRAM frame the server takes, 0 (none, and the parameter is not sent) to 1500. The server sends DATAGRAM frames only when it takes them too. |
