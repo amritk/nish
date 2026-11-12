@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Reproduces the figures in docs/wp46-long-running-memory.md: the baseline's
-// arena and resident set over requests (`sessions.ts`), and the options'
-// prototypes (`options.c`, `rc-tax.c`) timed in interleaved rounds.
+// arena and resident set over requests (`sessions.ts`), the same server on
+// regions (`sessions-region.ts`, §7's stage 3) against it, and the options'
+// prototypes (`options.c`, `rc-tax.c`), all timed in interleaved rounds.
 //
 //   npm run build && node bench/wp46-memory/run.mjs [--rounds 9]
 //
@@ -15,9 +16,16 @@
 // anonymous resident set and the address space at exit, the peak resident
 // set, and the minor page faults. Every variant must print the same checksum, or the run fails.
 //
+// The two servers print a checkpoint line rather than a time, so their
+// ns/request is the process's wall time over the requests, start-up included
+// (a few milliseconds in a second), and their copy is `sessions` copied byte
+// for byte to `sessions2`. Their memory is per checkpoint: the median over the
+// rounds of the anonymous resident set, and of how far `Arena.mark()` has moved
+// since the first checkpoint.
+//
 // Linux only (/proc), run from the repository root.
 import { execFileSync } from "node:child_process"
-import { mkdirSync } from "node:fs"
+import { copyFileSync, mkdirSync } from "node:fs"
 
 const args = process.argv.slice(2)
 const at = args.indexOf("--rounds")
@@ -48,6 +56,8 @@ run(cc, ["-O2", "-c", "runtime/runtime.c", "-o", `${out}/runtime.o`])
 run(cc, ["-O2", "bench/wp46-memory/options.c", `${out}/runtime.o`, "-o", `${out}/options`])
 run(cc, ["-O2", "bench/wp46-memory/rc-tax.c", `${out}/runtime.o`, "-o", `${out}/rc-tax`])
 run("build/nish", ["bench/wp46-memory/sessions.ts", "--link", `${out}/sessions`])
+run("build/nish", ["bench/wp46-memory/sessions-region.ts", "--link", `${out}/sessions-region`])
+copyFileSync(`${out}/sessions`, `${out}/sessions2`)
 
 const median = (xs) => {
   const s = [...xs].sort((p, q) => p - q)
@@ -63,6 +73,56 @@ const field = (line, name) => {
 
 console.log(`## Baseline: ${out}/sessions 2000000 1000 250000\n`)
 console.log(run(`${out}/sessions`, ["2000000", "1000", "250000"]))
+
+const servers = (title, argv) => {
+  const variants = ["sessions", "sessions2", "sessions-region"]
+  const times = Object.fromEntries(variants.map((v) => [v, []]))
+  const anons = Object.fromEntries(variants.map((v) => [v, []]))
+  const moved = Object.fromEntries(variants.map((v) => [v, []]))
+  const sums = new Set()
+  let requests = []
+  for (let r = 0; r < rounds; r++) {
+    for (const v of shuffled(variants)) {
+      const start = process.hrtime.bigint()
+      const lines = run(`${out}/${v}`, argv).trim().split("\n")
+      times[v].push(Number(process.hrtime.bigint() - start) / Number(argv[0]))
+      sums.add(field(lines[lines.length - 1], "checksum"))
+      const points = lines.slice(0, -1)
+      requests = points.map((l) => field(l, "requests"))
+      const first = Number(field(points[0], "mark"))
+      anons[v].push(points.map((l) => Number(field(l, "anon"))))
+      moved[v].push(points.map((l) => Number(field(l, "mark")) - first))
+    }
+  }
+  if (sums.size !== 1) {
+    throw new Error(`${title}: the servers disagree on the checksum`)
+  }
+  const band = median(times.sessions.map((t, r) => Math.abs(t - times.sessions2[r]) / t))
+  const b = median(times.sessions)
+  console.log(`## ${title}: ${out}/<server> ${argv.join(" ")}, ${rounds} rounds\n`)
+  console.log("| server | ns/request (median) | vs sessions |")
+  console.log("| --- | ---: | ---: |")
+  for (const v of variants) {
+    const t = median(times[v])
+    console.log(`| ${v} | ${t.toFixed(0)} | ${(t / b).toFixed(2)}x |`)
+  }
+  console.log(`\nnoise band (sessions against sessions2): ${(band * 100).toFixed(1)}%\n`)
+  const atPoint = (xs, k) => median(xs.map((row) => row[k]))
+  console.log(
+    "| requests | sessions anon | sessions mark moved | sessions-region anon | sessions-region mark moved |"
+  )
+  console.log("| ---: | ---: | ---: | ---: | ---: |")
+  requests.forEach((n, k) => {
+    const cells = ["sessions", "sessions-region"].map(
+      (v) => `${atPoint(anons[v], k)} | ${atPoint(moved[v], k)}`
+    )
+    console.log(`| ${n} | ${cells.join(" | ")} |`)
+  })
+  console.log("")
+}
+
+servers("Sessions server, 1,000 live", ["2000000", "1000", "250000"])
+servers("Sessions server, 100,000 live", ["2000000", "100000", "250000"])
 
 const interleave = (title, file, variants, argv, base, copy, unit) => {
   const times = Object.fromEntries(variants.map((v) => [v, []]))
