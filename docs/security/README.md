@@ -368,8 +368,9 @@ the record that found it. The notes below the table name each such finding.
     were found by a review of the first version and fixed. COMP-8 (Low) and COMP-9
     (Medium), a stream of small dynamic blocks rebuilding the decoder's
     tables and the BREACH class of length leaks, are accepted, with the reason
-    in their record, and are not counted. COMP-1 to COMP-7 and COMP-10 are
-    properties checked and found to hold.
+    in their record, and are not counted. COMP-1 to COMP-7, COMP-10 and
+    COMP-16 (the Adler-32 kernels' window and sums) are properties checked
+    and found to hold.
 20. P384-1 to P384-3 are properties checked and recorded, not findings: high
     `s` accepted, variable time on public input, and digest truncation.
 21. PKI-R6 and PKI-R7 (Low) are accepted, with the reason in their record, and
