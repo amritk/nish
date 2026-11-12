@@ -278,8 +278,11 @@ program to one exec, so the spawn is refused (<errno>)`) and the negative
 errno as the builtin's answer. That covers a kernel without the listener
 flag (`EINVAL`, before Linux 5.0), a launcher whose filters already hold a
 listener (`EBUSY`), a kernel that has the listener but not "continue"
-(before 5.5: the answer is refused, the listener is closed and the child's
-exec is `ENOSYS`), and a launcher that denies `unshare` or `pipe2`: Docker's
+(before 5.5: the answer is refused, so the supervisor answers the same
+notification with the error `ENOSYS`, which fails the child's exec, and
+kills and reaps the child if that answer is refused too; closing the
+listener alone would not do, the child holding a copy until its exec
+commits), and a launcher that denies `unshare` or `pipe2`: Docker's
 default seccomp profile is one (`unshare` is `EPERM` without
 `CAP_SYS_ADMIN`), so a default `docker run` refuses every spawn under an
 exec allowlist. A program with no exec allowlist installs nothing.
@@ -759,7 +762,9 @@ compiles extra copies of `runtime-sandbox.c` with
 `-DNISH_SANDBOX_SIMULATE_ABI=<n>`, which makes the ABI probe answer `n`, for
 0, 1 and 2, and links the strict and best-effort fixtures against each. The define is not in
 `build.sh`'s flags, so no shipped runtime can carry it, and no binary reads it
-at run time.
+at run time. `-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=<n>` is the same kind of
+knob for the one-exec hold: 1 makes the "continue" answer fail as it does
+before Linux 5.5, 2 the error answer after it as well.
 
 **Budget rows.** `runtime-os.c` measures 1,530 of its 1,536 bytes of `.text*`
 (`RUNTIME_OS_TEXT_BUDGET`, `tests/runtime-budgets.js:86`; measured at

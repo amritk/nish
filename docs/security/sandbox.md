@@ -20,7 +20,7 @@ functions rather than lines, so it has no `file:line` anchors to move.
 | `runtime/runtime-os.c` | `nish_spawn_sandboxed` and its call in `nish_spawn_start`: the spawn handed to the sandbox whole under an exec allowlist, and its error |
 | `runtime/runtime-parallel.c` | `nish_cpu_prime` and the ceiling `nish_cpu_count` clamps to, step 1 |
 | `runtime/nish.h` | the declarations of `nish_sandbox`, `nish_sandbox_check`, `nish_cpu_prime` and `nish_spawn_sandboxed` |
-| `scripts/build.sh` | the refusal of `--sandbox` IR under the wasm and wasi profiles; `-pthread` on every ELF link, for the two threads a spawn under an exec allowlist runs on |
+| `scripts/build.sh` | the refusal of `--sandbox` IR under the wasm and wasi profiles; `-pthread` on every ELF link, for the two threads a spawn under an exec allowlist runs on. A build without `--sandbox` is byte for byte the same on glibc 2.34 and later; before 2.34, where `pthread_create` is in libpthread, it can gain a `DT_NEEDED` on `libpthread.so.0` (the debug profile always, speed and size where `--as-needed` still sees the runtime's reference), one more library of the same glibc loaded at start. Not measured: no test machine has such a glibc |
 
 Out of scope: scopes in `package.json`'s `"nish"` field for the root's own
 capabilities, which stay refused (open question 1), and scopes of any
@@ -291,7 +291,23 @@ counted. One finding is counted, and it is fixed:
   failure value, and one line on stderr says `nish: --sandbox: cannot hold a
   spawned program to one exec, so the spawn is refused (<errno>)`. That is
   so in `--sandbox=best-effort` as well: nothing falls back to an unheld
-  spawn. The hold also needs `unshare(CLONE_FILES)` and `pipe2`, and a
+  spawn. **A refused spawn returns; it does not wait.** The child holds a
+  copy of the listener until its exec commits, so closing the supervisor's
+  copy would leave a child whose exec was notified and not answered blocked
+  in it, and the spawn waiting on that child for good. Where "continue" is
+  refused the supervisor therefore answers the same notification with an
+  error (`ENOSYS`, an answer every kernel with a listener takes), which
+  fails the child's exec; if that answer is refused as well it kills the
+  child, reaps it and answers `-ENOSYS` itself. A notification gone before
+  its answer (`ENOENT`: the child was killed, or a signal restarted its
+  exec) sends the supervisor back to wait for the next one or for the
+  spawner's answer. Pinned by the two `a spawn whose exec cannot be answered
+  "continue" is refused and does not hang` checks below, against a runtime
+  built with `-DNISH_SANDBOX_SIMULATE_NO_CONTINUE`. The number the builtin
+  answers is not always the errno the line prints, by design: a failed
+  `unshare`, `pipe2`, descriptor move or `pthread_create` answers `-EAGAIN`
+  and a refused "continue" `-ENOSYS`, and a failed descriptor move prints `EMFILE`
+  whatever `fcntl` said; the line carries the cause. The hold also needs `unshare(CLONE_FILES)` and `pipe2`, and a
   failure of either prints the same line. **Docker's default seccomp profile
   is such a place**: it allows `unshare` only to a container with
   `CAP_SYS_ADMIN` and answers `EPERM` otherwise (moby's
@@ -383,10 +399,21 @@ Each is a kernel answer the test machines do not give; each fails closed:
   the listener or the target (`EMFILE`); either `pthread_create` failing;
   the filter refused (`EINVAL`,
   `EBUSY`, `ENOMEM`) and the "cannot hold" line it prints (the nested case
-  needs a second sandboxed Nish binary as the granted program); the
-  notification gone before it is read (`ENOENT`, a child killed while it
-  waited) and "continue" refused; a short or interrupted read of the
-  spawner's pipe (`-EIO`, and the `EINTR` retries of `read` and `poll`);
+  needs a second sandboxed Nish binary as the granted program); a refused
+  "continue" on a real kernel before 5.5 (reached only as the simulated
+  refusal); a notification gone before it is read or answered (`ENOENT`: a
+  child killed while it waited, or its exec restarted by a signal), after
+  which the supervisor polls again and so cannot wait on a child that is
+  gone, the spawner's pipe waking it; `poll` failing, which is retried, not
+  abandoned (`EINTR` and `ENOMEM` pass; `EFAULT` and `EINVAL` cannot occur,
+  the array being the supervisor's own two entries, under any descriptor
+  limit that let the listener exist); `NOTIF_RECV` failing other than
+  `ENOENT`, which polls again the same way (its argument is a zeroed struct
+  of the supervisor's own, so `EFAULT` and `EINVAL` cannot occur); `kill`
+  or `waitpid` failing after both answers were refused (the pid is the
+  notifying child's, a child of this process no other thread has been told
+  of); a short or interrupted read of the spawner's pipe (`-EIO`, and the
+  `EINTR` retries of `read`);
 - the non-Linux stubs.
 
 ## Tests
@@ -489,6 +516,11 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
   itself again (SBX-1)`, `sandbox dependency grants: a granted program that
   execs nothing runs as before`, `sandbox dependency grants: a spawn whose
   child dies before its exec answers the error and does not hang (SBX-1)`,
+  `sandbox dependency grants: a spawn whose exec cannot be answered
+  "continue" is refused and does not hang: the supervisor fails the child's
+  exec (SBX-1)` and `... the supervisor kills and reaps the child (SBX-1)`
+  (the runtime built with `-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=1` and `=2`;
+  a hang ends in the run's timeout and fails the check),
   `sandbox dependency grants: a granted find cannot hand the loader an
   ungranted binary (SBX-1)` and the same for `env`, `sandbox dependency
   grants: a granted program cannot exec another granted program (SBX-1)`;

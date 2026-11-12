@@ -29168,6 +29168,49 @@ if (!only || "sandbox dependency grants".includes(only)) {
           rPlainStart.status === 0 && rPlainStart.stdout === "0\n" && rPlainStart.stderr === "",
           said(rPlainStart)
         )
+        // A kernel that takes the filter and not the "continue" answer (Linux
+        // 5.0 to 5.4), read on this one: the runtime built with
+        // -DNISH_SANDBOX_SIMULATE_NO_CONTINUE=1 has that answer fail, and with
+        // =2 the error answer after it too, which leaves killing the child.
+        // The child holds the listener as well until its exec commits, so a
+        // supervisor that only closed its own copy would leave the child in
+        // its exec and the spawn waiting for good: the run's timeout would end
+        // it with a signal. Each spawn answers its refusal instead, the second
+        // one too, and the program goes on.
+        const refusedLine =
+          "nish: --sandbox: cannot hold a spawned program to one exec, so the spawn is refused (EINVAL)\n"
+        for (const [sim, how] of [
+          [1, "fails the child's exec"],
+          [2, "kills and reaps the child"],
+        ]) {
+          const exe = path.join(dir, `no-continue-${sim}`)
+          const rt = runtimeObjects([`-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=${sim}`])
+          const from = path.join(dir, `${helped}-sandbox`)
+          const lls = fs.readdirSync(from).filter((f) => f.endsWith(".ll"))
+          const l =
+            rt.error !== null
+              ? { status: 1, stdout: "", stderr: rt.error }
+              : spawnSync(
+                  "clang",
+                  ["-Wno-override-module", "-O2", ...lls.map((f) => path.join(from, f)), ...rt.objects, "-o", exe],
+                  { cwd: root, encoding: "utf8" }
+                )
+          const rSync = l.status === 0 ? run(exe, ["sync", helper]) : null
+          const rSpawn = l.status === 0 ? run(exe, ["spawn", helper]) : null
+          check(
+            `sandbox dependency grants: a spawn whose exec cannot be answered "continue" is refused and does not hang: the supervisor ${how} (SBX-1)`,
+            rSync !== null &&
+              rSync.status === 0 &&
+              rSync.signal === null &&
+              rSync.stdout === "-1\n" &&
+              rSync.stderr === refusedLine &&
+              rSpawn.status === 0 &&
+              rSpawn.signal === null &&
+              rSpawn.stdout === "-38\n" &&
+              rSpawn.stderr === refusedLine,
+            l.status === 0 ? `${said(rSync)}\n--- spawn\n${said(rSpawn)}` : shown(l)
+          )
+        }
         // What the granted program is started holding. The sandbox makes a
         // pipe, a seccomp listener and the checked file's descriptor for each
         // spawn, in a descriptor table where the lowest free numbers are the
@@ -29175,21 +29218,24 @@ if (!only || "sandbox dependency grants".includes(only)) {
         // closed by the shell that starts the program. The helper answers how
         // many descriptors from 3 up it holds that are not regular files: the
         // one `spawnWithFds` hands it (this check's stdout pipe) and no other,
-        // with `--sandbox` as without.
+        // with `--sandbox` as without. A runner may hand every process it
+        // starts descriptors of its own (CI's does); the helper started by the
+        // shell alone counts those, and each expectation is that count more.
         const closed = 'exec "$@" <&- 2>&-'
+        const mine = run("/bin/sh", ["-c", closed, "sh", helper, "--fds"]).status
         for (const [how, builtin, held] of [
-          ["sync", "spawnSync", "0\n"],
-          ["piped", "spawnPiped", "0 0\n"],
-          ["within", "spawnPipedWithin", "0 0\n"],
-          ["fds", "spawnWithFds", "1\n"],
-          ["spawn", "spawn", "0\n"],
+          ["sync", "spawnSync", `${mine}\n`],
+          ["piped", "spawnPiped", `${mine} 0\n`],
+          ["within", "spawnPipedWithin", `${mine} 0\n`],
+          ["fds", "spawnWithFds", `${mine + 1}\n`],
+          ["spawn", "spawn", `${mine}\n`],
         ]) {
           const rFds = run("/bin/sh", ["-c", closed, "sh", hAllow, how, helper, "--fds"])
           const rFdsPlain = run("/bin/sh", ["-c", closed, "sh", hOpen, how, helper, "--fds"])
           check(
             `sandbox dependency grants: a program granted to ${builtin} is started with no descriptor of the sandbox's, stdin and stderr closed (SBX-1)`,
             rFds.status === 0 && rFds.signal === null && rFds.stdout === held && rFdsPlain.stdout === held,
-            `${said(rFds)}\n--- without --sandbox\n${said(rFdsPlain)}`
+            `inherited from the runner: ${mine}\n${said(rFds)}\n--- without --sandbox\n${said(rFdsPlain)}`
           )
         }
         // The child of `to` dies before its exec: this package has no
@@ -29241,14 +29287,20 @@ if (!only || "sandbox dependency grants".includes(only)) {
         // `env` execs in place; each is checked only where its control run,
         // without `--sandbox`, does run the ungranted program through the
         // loader, so a tool that is missing or of another shape is a SKIP.
+        // What says the tool itself started, and that its own exec is what
+        // failed, is no message of the tool's (GNU's and uutils' differ): it is
+        // the line `find -print` writes before its `-exec`, and the status 126
+        // or 127 POSIX gives `env` for a utility it could not invoke. A refused
+        // spawn answers -1 and prints neither.
         const oAllow = build(once, ["--sandbox"])
         const oOpen = build(once, [])
         for (const [tool, argv] of [
-          ["find", ["find", ungranted, "-maxdepth", "0", "-exec", loader, ungranted, ";"]],
+          ["find", ["find", ungranted, "-maxdepth", "0", "-print", "-exec", loader, ungranted, ";"]],
           ["env", ["env", loader, ungranted]],
         ]) {
+          const lines = (r) => r.stdout.split("\n")
           const rRan = realOnPath(tool) === null ? null : run(oOpen, ["sync", ...argv])
-          if (rRan === null || rRan.status !== 0 || !rRan.stdout.startsWith("sbx-1\n")) {
+          if (rRan === null || rRan.status !== 0 || !lines(rRan).includes("sbx-1")) {
             skip(
               `sandbox dependency grants: \`${tool}\` is not on PATH here or did not run the loader without --sandbox (${said(rRan)}); one exec per spawn is not checked through it`
             )
@@ -29260,12 +29312,10 @@ if (!only || "sandbox dependency grants".includes(only)) {
             rHeld !== null &&
               rHeld.status === 0 &&
               rHeld.signal === null &&
-              !rHeld.stdout.includes("sbx-1") &&
-              // The tool itself started (a refused spawn answers -1 and says
-              // nothing) and it is the tool's exec of the loader that failed;
-              // `find` exits 0 all the same.
-              /^\d+\n$/.test(rHeld.stdout) &&
-              new RegExp(`^${tool}: .*${path.basename(loader)}`, "m").test(rHeld.stderr),
+              !lines(rHeld).includes("sbx-1") &&
+              (tool === "find"
+                ? lines(rHeld).length === 3 && lines(rHeld)[0] === ungranted && /^\d+$/.test(lines(rHeld)[1])
+                : /^12[67]\n$/.test(rHeld.stdout)),
             `${argv.join(" ")}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
           )
         }
@@ -29283,10 +29333,8 @@ if (!only || "sandbox dependency grants".includes(only)) {
             "sandbox dependency grants: a granted program cannot exec another granted program (SBX-1)",
             rOtherHeld !== null &&
               rOtherHeld.status === 0 &&
-              rOtherHeld.stdout !== "0\n" &&
-              /^\d+\n$/.test(rOtherHeld.stdout) &&
-              // `env` started and says its exec of `true` is what failed.
-              /^env: .*true/m.test(rOtherHeld.stderr) &&
+              // `env` started, and its exec of `true` is what failed.
+              /^12[67]\n$/.test(rOtherHeld.stdout) &&
               rTrueStill.stdout === "0\n",
             `${said(rOtherHeld)}\n--- true, spawned by the program itself\n${said(rTrueStill)}`
           )

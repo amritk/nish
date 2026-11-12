@@ -501,8 +501,13 @@ case "$(uname -s)" in
     # `--sandbox` is the binary it was: on glibc 2.34 and later the flag adds
     # nothing to the link (measured on 2.39: `arena_placement` and
     # `caps_process_spawn` at debug, speed and size are byte for byte the
-    # same with and without it), and before 2.34 it names libpthread, which
-    # --as-needed keeps only where something links against it.
+    # same with and without it). Before 2.34 it names libpthread to the
+    # linker, and a build without `--sandbox` can then carry a DT_NEEDED on
+    # libpthread.so.0 that it did not have: the debug profile always (its link
+    # line has no --as-needed), speed and size wherever the linker still sees
+    # the runtime's reference to pthread_create. That is one more library of
+    # the same glibc loaded at start, and not measured: no machine the tests
+    # run on has such a glibc.
     common+=(-pthread)
     # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
     common+=(-Wl,-z,relro,-z,now -Wl,-z,noexecstack) ;;

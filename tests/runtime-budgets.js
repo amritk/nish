@@ -691,8 +691,12 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * Measured 4,067 against 3,143 before it on 2026-11-12 with clang 18.1.3 on
  * linux-x64; `runtime-os.c` gave back 30 bytes (5,761 from 5,791), its spawn now
  * handed over whole.
+ *
+ * Raised to 4,352, the next 256-byte boundary, the same day: a spawn whose exec the
+ * supervisor cannot answer "continue" has its exec failed, or the child killed and
+ * reaped, so that the spawn answers its refusal. Measured 4,199 against 4,067.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 4096
+const RUNTIME_SANDBOX_TEXT_BUDGET = 4352
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
  * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`

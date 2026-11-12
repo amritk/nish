@@ -74,6 +74,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include <sched.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -83,6 +84,7 @@
 #include <sys/stat.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 #include <linux/audit.h>
 #include <linux/capability.h>
 #include <linux/filter.h>
@@ -547,8 +549,9 @@ static int nish_sb_spawn_open(const char *file, int low, char *proc) {
  *
  * The listener, the pipe and the target live in the private table only, and
  * go with it when both threads end. Where the filter cannot be installed
- * (EINVAL before Linux 5.0, EBUSY beneath a launcher's own listener) or
- * "continue" is not known (before 5.5), the spawn is refused in both modes. */
+ * (EINVAL before Linux 5.0, EBUSY beneath a launcher's own listener) the
+ * spawn is refused in both modes; where "continue" is not known (before
+ * 5.5) the supervisor fails the child's exec instead, which refuses it too. */
 #define NISH_SB_NEW_LISTENER 8u /* SECCOMP_FILTER_FLAG_NEW_LISTENER */
 #define NISH_SB_USER_NOTIF 0x7fc00000u /* SECCOMP_RET_USER_NOTIF */
 /* struct seccomp_notif and seccomp_notif_resp, spelled here like Landlock's
@@ -637,6 +640,20 @@ static int32_t nish_sb_answer(int fd) {
   return n == sizeof said ? said : -EIO;
 }
 
+/* The supervisor's answer to one notification. The test-only
+ * `-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=<n>` makes the "continue" answer fail
+ * as it does before Linux 5.5, and for 2 the error answer after it as well;
+ * `scripts/build.sh` never passes it. */
+static int nish_sb_reply(int listener, struct nish_sb_notif_resp *go) {
+#ifdef NISH_SANDBOX_SIMULATE_NO_CONTINUE
+  if (go->flags || NISH_SANDBOX_SIMULATE_NO_CONTINUE > 1) {
+    errno = EINVAL;
+    return -1;
+  }
+#endif
+  return ioctl(listener, NISH_SB_NOTIF_SEND, go);
+}
+
 static void *nish_sb_supervisor(void *arg) {
   struct nish_sb_job *job = arg;
   pthread_t spawner;
@@ -679,21 +696,43 @@ static void *nish_sb_supervisor(void *arg) {
     job->result = listener;
   } else {
     struct pollfd fds[2] = {{listener, POLLIN, 0}, {job->pipe[0], POLLIN, 0}};
-    while (poll(fds, 2, -1) < 0 && errno == EINTR) {}
-    if (fds[0].revents & POLLIN) {
+    struct nish_sb_notif_resp go = {0, 0, 0, 1};
+    pid_t killed = 0;
+    /* Until the spawner answers: a child that never reaches its exec notifies
+     * nobody, and one whose exec a signal restarted notifies again. */
+    for (;;) {
       struct nish_sb_notif exec;
-      struct nish_sb_notif_resp go = {0, 0, 0, 1};
+      while (poll(fds, 2, -1) < 0) {}
+      if (!(fds[0].revents & POLLIN)) break;
       memset(&exec, 0, sizeof exec);
-      /* A child killed while it waited leaves nothing to answer (ENOENT). */
-      if (!ioctl(listener, NISH_SB_NOTIF_RECV, &exec)) {
-        go.id = exec.id;
-        if (ioctl(listener, NISH_SB_NOTIF_SEND, &go) && errno != ENOENT) nish_sb_refuse_spawn(errno);
-      }
+      /* The child holds the listener too until its exec commits, so closing
+       * this copy releases nothing: a notification that is neither answered
+       * nor gone (ENOENT: the child was killed, or its exec restarted) would
+       * leave the child in its exec and the spawner in its `vfork` for good.
+       * Each one is therefore read again, answered, or its child killed. */
+      if (ioctl(listener, NISH_SB_NOTIF_RECV, &exec)) continue;
+      go.id = exec.id;
+      if (!nish_sb_reply(listener, &go)) break;
+      if (errno == ENOENT) continue;
+      /* "Continue" is not known here (EINVAL before Linux 5.5), and failing
+       * the exec needs no such flag. */
+      nish_sb_refuse_spawn(errno);
+      go.flags = 0;
+      go.error = -ENOSYS;
+      if (!nish_sb_reply(listener, &go)) break;
+      if (errno == ENOENT) continue;
+      killed = (pid_t)exec.pid;
+      kill(killed, SIGKILL);
+      break;
     }
-    /* From here every exec in the child's subtree is ENOSYS, this one too if
-     * it was not answered. */
+    /* From here every exec in the child's subtree is ENOSYS. */
     close(listener);
     job->result = nish_sb_answer(job->pipe[0]);
+    /* `posix_spawn` reports a child killed before its exec as started. */
+    if (killed && job->result > 0) {
+      while (waitpid(job->result, 0, 0) < 0 && errno == EINTR) {}
+      job->result = -ENOSYS;
+    }
   }
   pthread_join(spawner, 0);
   return 0;
