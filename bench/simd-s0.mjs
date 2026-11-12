@@ -3,7 +3,8 @@
 // (docs/wp38-simd.md §2.3 and §7). Nothing here is built into the compiler; it
 // only measures what the current one does.
 //
-//   npm run build && node bench/simd-s0.mjs [--runs N] [--only a,b] [--self] [--level L]... [--compiler <nish>]
+//   npm run build && node bench/simd-s0.mjs [--runs N] [--only a,b] [--self]
+//     [--level L]... [--compiler <nish>]
 //     --runs N    timed runs per row after one warm-up (default 7, the note's minimum)
 //     --only a,b  rows to run: scan, nbody, vec3, spectral, bootstrap (default: all)
 //     --self      time each -march row's baseline against a copy of itself too
@@ -75,7 +76,14 @@ for (let i = 2; i < argv.length; i++) {
   } else if (argv[i] === "--self") {
     self = true
   } else if (argv[i] === "--level") {
-    levels.push(argv[++i] ?? "")
+    const level = argv[++i]
+    if (level === undefined) {
+      fail("--level needs a CPU level")
+    }
+    if (levels.includes(level)) {
+      fail(`--level ${level} is given twice`)
+    }
+    levels.push(level)
   } else {
     fail(`unknown option ${argv[i]}`)
   }
