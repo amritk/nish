@@ -613,6 +613,7 @@ cases/simd_access_oob added after R6: no rewriter to freeze it with
 cases/simd_access_oob_first added after R6: no rewriter to freeze it with
 cases/simd_access_oob_guard added after R6: no rewriter to freeze it with
 cases/simd_access_oob_negative added after R6: no rewriter to freeze it with
+cases/simd_access_oob_resized added after R6: no rewriter to freeze it with
 cases/simd_access_proven added after R6: no rewriter to freeze it with
 cases/simd_chacha_quarter added after R6: no rewriter to freeze it with
 cases/simd_lanes added after R6: no rewriter to freeze it with

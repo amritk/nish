@@ -1169,6 +1169,7 @@ const DECLARED = [
       "tests/cases/simd_access.ts": ["simd_access.ll"],
       "tests/cases/simd_access_alias.ts": ["simd_access_alias.ll"],
       "tests/cases/simd_access_oob_guard.ts": ["simd_access_oob_guard.ll"],
+      "tests/cases/simd_access_oob_resized.ts": ["simd_access_oob_resized.ll"],
       "tests/cases/simd_access_proven.ts": ["simd_access_proven.ll"],
       "tests/cases/simd_values.ts": ["simd_values.ll"],
       "tests/cases/simd_zero_fill.ts": ["simd_zero_fill.ll"],
@@ -1198,6 +1199,7 @@ const DECLARED = [
       "tests/link/net_outbound/main.ts": ["outbound.ll"],
       "tests/link/net_outbound_f64/main.ts": ["outbound.ll"],
       "tests/link/net_upstream/main.ts": ["outbound.ll"],
+      "tests/link/net_upstream_release/main.ts": ["outbound.ll"],
     }
   ),
   // #1430: std/crypto/p256.ts inverts field elements by safegcd and verifies
