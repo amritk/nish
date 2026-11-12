@@ -580,6 +580,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "posix_spawn_file_actions_addopen" ||
   name === "posix_spawn_file_actions_destroy" ||
   name === "posix_spawn_file_actions_init" ||
+  name === "posix_spawn" ||
   name === "posix_spawnp" ||
   name === "pow" ||
   name === "powf" ||
@@ -803,6 +804,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "ungetc" ||
   name === "unlink" ||
   name === "unsetenv" ||
+  name === "unshare" ||
   name === "utime" ||
   name === "utimensat" ||
   name === "utimes" ||
