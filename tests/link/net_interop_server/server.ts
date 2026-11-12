@@ -129,15 +129,19 @@ export const supportedTestcase = (name: string): boolean =>
  * finish.
  *
  * `maxStreamData` also sizes each stream's send buffer, so it bounds the
- * bytes in flight past the oldest unacknowledged one. At 64 KiB, under the
- * runner's 10 Mbps and 30 ms round trip (75 KB in flight), one early loss
- * stalled the sender until the loss timer fired; in `rebind-port` and
- * `rebind-addr` that idle let the 1 s rebind land with nothing crossing the
- * NAT, the retransmissions went to the dead binding, and the client closed
- * on its idle timer with the file truncated. 256 KiB keeps the pipe full
- * through recovery.
+ * bytes sent past the oldest unacknowledged one. At 64 KiB, under the
+ * runner's 10 Mbps link and its queue (about 75 KB in flight), one lost
+ * packet used the whole buffer: once the loss was found, the server sent the
+ * hole again and nothing new for the round trip until the client
+ * acknowledged it. In `rebind-port` and `rebind-addr` the 1 s rebind landed
+ * in that quiet round trip. The client had acknowledged everything and had
+ * nothing more to answer, so it never sent from its new port, and the server
+ * followed the old one to the end: the burst after the stall and every probe
+ * went to the dead binding until the client closed on its idle timer.
+ * 256 KiB keeps new data flowing while the hole is resent, and so keeps the
+ * client answering through a rebind. `rebindChecks` in `rebind.ts` plays it.
  */
-const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
+export const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
   return {
     certificateChain: chain,
     alpn: [H3_ALPN, HQ_ALPN],
