@@ -133,6 +133,12 @@ difference is one of these:
 | refused | The program is refused with NL4010 to NL4015 and nothing is written. |
 | order | Spawned tasks print the same lines in another order: Node runs `spawn(f(x))`'s `f` only to its first `await`, where the native build runs it until it first waits. |
 
+The divisions that truncate here and divide exactly there are not in the
+table: they are your program's, and `nish --warn-portability` reports each
+one. With `--json`, a division the compiler can rewrite carries a `review`
+edit, `n / 2` to `toI32(n / 2)`, that reads the same both ways and costs no
+instruction; see [`--fix`](cli.md#--fix) for how to apply it.
+
 Anything else is a bug in the translation. The repository's test suite runs
 every test program both ways and holds the list of the ones that differ, each
 filed under its row; that list only shrinks.
