@@ -21,7 +21,7 @@ import { tcpListenFlags } from "nish:net"
 import { signalFd } from "nish:process"
 import { secret, wipe } from "nish:secret"
 import { PgConfig, pgTarget } from "nish/net/postgres"
-import { PG_ASYNC_MAX_SIZE, PgAsyncPool, pgAsyncConnect } from "nish/net/postgres-async"
+import { PG_ASYNC_MAX_DEPTH, PG_ASYNC_MAX_SIZE, PgAsyncPool, pgAsyncConnect } from "nish/net/postgres-async"
 import { PreforkConfig, preforkArgs, preforkListener, preforkWith } from "nish/net/prefork"
 import { ServeStats } from "nish/net/serve"
 import { TfbAsyncDb, tfbDbLimits, tfbKeepPool, tfbServeDbUntil } from "./async-db-server"
@@ -97,6 +97,8 @@ export const main = async (): Promise<i32> => {
     size = PG_ASYNC_MAX_SIZE
   }
   const pool = new PgAsyncPool(size)
+  // As deep as the pool goes: the explicit entry's carrier pipelines without a cap.
+  pool.depth = PG_ASYNC_MAX_DEPTH
   const target = pgTarget(pgHost, pgPort)
   const connected: i32 = await pgAsyncConnect(pool, config, password, target)
   if (connected < 1) {
