@@ -83,7 +83,7 @@ function stringFindings(walk: PortabilityWalk, node: Node, out: PortabilityFindi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via proveSliceBounds
   calls: Trail.constructor followValue isProvablyAscii needleSpan nish_alloc_struct parameterIndex proveSliceBounds sliceFinding sourceKind sourceReceiver
-  pointer walk: size=48 writesThrough=true captured=true passedTo=sliceFinding#0 sourceKind#0 isProvablyAscii#0 Trail.constructor#1 needleSpan#0 parameterIndex#0
+  pointer walk: size=56 writesThrough=true captured=true passedTo=sliceFinding#0 sourceKind#0 isProvablyAscii#0 Trail.constructor#1 needleSpan#0 parameterIndex#0
   pointer node: size=40 writesThrough=true captured=true passedTo=sliceFinding#1 sourceKind#1 sourceReceiver#0 Trail.constructor#2 needleSpan#1 sourceReceiver#0 followValue#1
   pointer out: size=0 writesThrough=true captured=true passedTo=sliceFinding#2 Trail.constructor#5
   stackSites=1 stackLocals=0
@@ -103,7 +103,7 @@ function Trail.constructor(this: Trail, walk: PortabilityWalk, source: Node, kin
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: kind out source span walk
   pointer this: size=80 writesThrough=true captured=false
-  pointer walk: size=48 writesThrough=true captured=true
+  pointer walk: size=56 writesThrough=true captured=true
   pointer source: size=40 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -131,7 +131,7 @@ function Trail.derive(this: Trail, walk: PortabilityWalk, via: Node, verb: strin
   escaping: param verb via
   calls: Trail.constructor nish_alloc_struct nish_panic_overflow
   pointer this: size=80 writesThrough=false captured=false
-  pointer walk: size=48 writesThrough=true captured=true passedTo=Trail.constructor#1
+  pointer walk: size=56 writesThrough=true captured=true passedTo=Trail.constructor#1
   pointer via: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:11 trail: Trail (const)
@@ -155,13 +155,13 @@ function Relay.name(this: Relay): string -> @Relay.name [method]
 function isString(walk: PortabilityWalk, node: Node): boolean -> @isString
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function sourceKind(walk: PortabilityWalk, node: Node): i32 -> @sourceKind
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isString nish_panic_index nish_str_eq unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false passedTo=isString#0 isString#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=isString#0 isString#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:59 isString -> @isString
@@ -171,7 +171,7 @@ function sourceKind(walk: PortabilityWalk, node: Node): i32 -> @sourceKind
 function needleSpan(walk: PortabilityWalk, source: Node): f64 -> @needleSpan
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: asciiValue nish_panic_index nish_str_eq unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false passedTo=asciiValue#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=asciiValue#0
   pointer source: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 method: string (const)
@@ -188,7 +188,7 @@ function isProvablyAscii(walk: PortabilityWalk, expr: Node, assumed: Local[]): b
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: asciiConstant hostWritesOf isAsciiText isNumeric isProvablyAscii nish_array_grow nish_panic_index nish_str_eq sourceLocal unwrapParens writesOf
-  pointer walk: size=48 writesThrough=false captured=false passedTo=isProvablyAscii#0 isProvablyAscii#0 isProvablyAscii#0 isProvablyAscii#0 isProvablyAscii#0 asciiConstant#0 writesOf#0 hostWritesOf#0 isProvablyAscii#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=isProvablyAscii#0 isProvablyAscii#0 isProvablyAscii#0 isProvablyAscii#0 isProvablyAscii#0 asciiConstant#0 writesOf#0 hostWritesOf#0 isProvablyAscii#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer assumed: size=0 writesThrough=true captured=false passedTo=isProvablyAscii#2 isProvablyAscii#2 isProvablyAscii#2 isProvablyAscii#2 isProvablyAscii#2 isProvablyAscii#2
   stackSites=1 stackLocals=1
@@ -218,7 +218,7 @@ function hostWritesOf(walk: PortabilityWalk, local: Local, writes: Node[]): bool
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via writesOf
   calls: FunctionSig.body writesOf
-  pointer walk: size=48 writesThrough=false captured=false passedTo=writesOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=writesOf#0
   pointer local: size=64 writesThrough=false captured=false passedTo=writesOf#2
   pointer writes: size=0 writesThrough=true captured=false passedTo=writesOf#3
   stackSites=0 stackLocals=0
@@ -229,7 +229,7 @@ function hostWritesOf(walk: PortabilityWalk, local: Local, writes: Node[]): bool
 function parameterIndex(walk: PortabilityWalk, expr: Node): i32 -> @parameterIndex
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow nish_str_eq unwrapParens writesOf
-  pointer walk: size=48 writesThrough=false captured=false passedTo=writesOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=writesOf#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=1 stackLocals=1
   local +0:9 e: Node (const)
@@ -244,7 +244,7 @@ function writesOf(walk: PortabilityWalk, node: Node, local: Local, writes: Node[
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: names nish_array_grow nish_panic_index nish_str_eq unwrapParens writesOf
-  pointer walk: size=48 writesThrough=false captured=false passedTo=names#0 names#0 writesOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=names#0 names#0 writesOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=names#1
   pointer local: size=64 writesThrough=false captured=false passedTo=names#2 names#2 writesOf#2
   pointer writes: size=0 writesThrough=true captured=false passedTo=writesOf#3
@@ -259,7 +259,7 @@ function writesOf(walk: PortabilityWalk, node: Node, local: Local, writes: Node[
 function asciiConstant(walk: PortabilityWalk, ident: Node): string | null -> @asciiConstant
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isAsciiText nish_panic_index
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer ident: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 constant: ConstInfo | null (const)
@@ -267,7 +267,7 @@ function asciiConstant(walk: PortabilityWalk, ident: Node): string | null -> @as
 function asciiValue(walk: PortabilityWalk, expr: Node): string | null -> @asciiValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: asciiConstant asciiValue isAsciiText nish_panic_index unwrapParens writesOf
-  pointer walk: size=48 writesThrough=false captured=false passedTo=asciiConstant#0 writesOf#0 asciiValue#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=asciiConstant#0 writesOf#0 asciiValue#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=1 stackLocals=1
   local +0:9 e: Node (const)
@@ -348,7 +348,7 @@ function argumentIndex(list: Node, arg: Node): i32 -> @argumentIndex
 function isFollowable(walk: PortabilityWalk, sig: FunctionSig | null): boolean -> @isFollowable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.body FunctionSig.definedIn
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.body#0 FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee +0:3 FunctionSig.body -> @FunctionSig.body
@@ -385,7 +385,7 @@ function parameterLocal(walk: PortabilityWalk, node: Node, name: string): Local 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: nish_panic_index nish_str_eq parameterLocal
-  pointer walk: size=48 writesThrough=false captured=false passedTo=parameterLocal#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=parameterLocal#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 local: Local | null (const)
@@ -422,14 +422,14 @@ function followIntoCallers(trail: Trail, value: Node, holder: Local | null): voi
   callee +10:5 callsOf -> @callsOf
   local +14:11 there: PortabilityWalk (const)
   callee +14:19 new PortabilityWalk -> @PortabilityWalk.constructor
-  local +15:16 call: Node (const)
-  callee +16:7 followIntoCaller -> @followIntoCaller
+  local +23:16 call: Node (const)
+  callee +24:7 followIntoCaller -> @followIntoCaller
 function callsOf(walk: PortabilityWalk, node: Node, calls: Node[]): void -> @callsOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: node
   calls: callsOf nish_array_grow nish_panic_index runsAsBody
-  pointer walk: size=48 writesThrough=false captured=false passedTo=callsOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=callsOf#0
   pointer node: size=40 writesThrough=true captured=true
   pointer calls: size=0 writesThrough=true captured=false passedTo=callsOf#2
   stackSites=0 stackLocals=0
@@ -453,7 +453,7 @@ function followIntoCaller(trail: Trail, value: Node, holder: Local | null, there
   pointer trail: size=80 writesThrough=false captured=false passedTo=Trail.derive#0 Trail.derive#0 Trail.report#0 Trail.derive#0
   pointer value: size=40 writesThrough=true captured=true passedTo=Trail.report#1
   pointer holder: size=64 writesThrough=false captured=false passedTo=Trail.report#2
-  pointer there: size=48 writesThrough=true captured=true passedTo=isProvablyAscii#0 parameterIndex#0 Trail.derive#1 Trail.derive#1 Trail.derive#1
+  pointer there: size=56 writesThrough=true captured=true passedTo=isProvablyAscii#0 parameterIndex#0 Trail.derive#1 Trail.derive#1 Trail.derive#1
   pointer call: size=40 writesThrough=true captured=true passedTo=Trail.derive#2 followValue#1 followValue#1
   stackSites=1 stackLocals=0
   local +0:9 args: Node[] (const)
@@ -476,7 +476,7 @@ function followIntoCaller(trail: Trail, value: Node, holder: Local | null, there
 function isConversion(walk: PortabilityWalk, call: Node): boolean -> @isConversion
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isIdentifierBuiltinCall nish_panic_index nish_str_eq
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false passedTo=isIdentifierBuiltinCall#1
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -532,7 +532,7 @@ function loopOf(walk: PortabilityWalk, comparison: Node): Node | null -> @loopOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: comparison
   calls: ParentTable.parentOf nish_panic_index nish_str_eq
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer comparison: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:7 at: Node (let)
@@ -544,7 +544,7 @@ function isCursor(walk: PortabilityWalk, expr: Node, loop: Node, bound: Node | n
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via readsOf
   calls: ParentTable.parentOf isArithmetic isNumberLiteral isSameString isString nish_panic_index nish_str_eq readsOf sourceLocal unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false passedTo=isNumberLiteral#0 isNumberLiteral#0 readsOf#0 isString#0 isSameString#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=isNumberLiteral#0 isNumberLiteral#0 readsOf#0 isString#0 isSameString#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer loop: size=40 writesThrough=true captured=true passedTo=readsOf#1
   pointer bound: size=40 writesThrough=true captured=true passedTo=isSameString#2
@@ -574,7 +574,7 @@ function isCursor(walk: PortabilityWalk, expr: Node, loop: Node, bound: Node | n
 function isSameString(walk: PortabilityWalk, receiver: Node, bound: Node | null): boolean -> @isSameString
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: PortabilityWalk.textOf nish_arena_mark nish_arena_release nish_panic_index nish_str_eq sourceLocal unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
   pointer receiver: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer bound: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
@@ -623,7 +623,7 @@ function followIntoPlace(trail: Trail, parent: Node, at: Node, value: Node, hold
 function enclosingArrow(walk: PortabilityWalk, node: Node): Node | null -> @enclosingArrow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ParentTable.parentOf
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   stackSites=0 stackLocals=0
   local +0:7 at: Node | null (let)
@@ -664,7 +664,7 @@ function followLocal(trail: Trail, local: Local | null): void -> @followLocal
 function names(walk: PortabilityWalk, node: Node, local: Local): boolean -> @names
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index sourceLocal
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -675,7 +675,7 @@ function readsOf(walk: PortabilityWalk, node: Node, local: Local, reads: Node[])
   sharedWrite: +0:7
   escaping: node
   calls: ParentTable.parentOf names nish_array_grow nish_panic_index nish_str_eq readsOf
-  pointer walk: size=48 writesThrough=false captured=false passedTo=names#0 readsOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=names#0 readsOf#0
   pointer node: size=40 writesThrough=true captured=true passedTo=names#1 ParentTable.parentOf#1
   pointer local: size=64 writesThrough=false captured=false passedTo=names#2 readsOf#2
   pointer reads: size=0 writesThrough=true captured=false passedTo=readsOf#3
@@ -689,7 +689,7 @@ function holdsOffset(walk: PortabilityWalk, expr: Node, throughLocals: boolean):
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: throughLocals
   calls: holdsOffset isArithmetic nish_panic_index sourceKind unwrapParens writesOf
-  pointer walk: size=48 writesThrough=false captured=false passedTo=sourceKind#0 holdsOffset#0 holdsOffset#0 writesOf#0 holdsOffset#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=sourceKind#0 holdsOffset#0 holdsOffset#0 writesOf#0 holdsOffset#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=1 stackLocals=1
   local +0:9 e: Node (const)
@@ -717,7 +717,7 @@ function meetsLiteral(kind: i32, value: f64): boolean -> @meetsLiteral
 function isNumberLiteral(walk: PortabilityWalk, expr: Node): boolean -> @isNumberLiteral
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isNumberLiteral isNumeric nish_panic_index nish_str_eq unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false passedTo=isNumberLiteral#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=isNumberLiteral#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -728,7 +728,7 @@ function isNumberLiteral(walk: PortabilityWalk, expr: Node): boolean -> @isNumbe
 function numberValue(walk: PortabilityWalk, expr: Node): f64 -> @numberValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isFloat nish_panic_index nish_str_eq numberValue numericLiteralValue unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false passedTo=numberValue#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=numberValue#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -740,14 +740,14 @@ function numberValue(walk: PortabilityWalk, expr: Node): f64 -> @numberValue
   callee +12:10 isFloat -> @isFloat
 function isEntryMain(walk: PortabilityWalk): boolean -> @isEntryMain
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 main: FunctionSig | null (const)
 function sliceFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @sliceFinding
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: PortabilityFinding.constructor PortabilityWalk.textOf isNumberLiteral isString nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq numberValue unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false passedTo=isString#0 isNumberLiteral#0 numberValue#0 PortabilityWalk.textOf#0 PortabilityWalk.textOf#0 PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=isString#0 isNumberLiteral#0 numberValue#0 PortabilityWalk.textOf#0 PortabilityWalk.textOf#0 PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
   pointer node: size=40 writesThrough=true captured=true passedTo=PortabilityWalk.textOf#1 PortabilityFinding.constructor#1 PortabilityFinding.constructor#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0

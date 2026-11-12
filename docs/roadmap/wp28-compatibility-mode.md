@@ -20,7 +20,7 @@
 
 ## Next
 
-Waiting on the proposal's acceptance and the questions of its §10. WP33's R6 is this package, after R5's review tier.
+Waiting on the proposal's acceptance and the questions of its §10. WP33's R6 is this package; R5's review tier, the stage before it, is built.
 
 ## Waiting on a decision
 

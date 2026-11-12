@@ -96,9 +96,11 @@ a time on `/plaintext` too, and times only the entry, its copy, `uws` and
 [the HTTP/1 codec baseline](../../docs/BENCHMARKS.md#http1-codec-baseline). The recorded figures are in
 [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext)
 and, for the gate, its
-[first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)
+[first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6),
+its
+[re-measurement after the `serve` and pool fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6)
 and its
-[re-measurement after the `serve` and pool fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6).
+[re-measurement after the profile-led fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6).
 
 ### Profiling the async entry against the explicit one
 

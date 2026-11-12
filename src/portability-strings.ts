@@ -666,7 +666,7 @@ const followIntoParameter = (
   if (index < 0 || index >= names.length || body === null) {
     return
   }
-  const inner = new PortabilityWalk(program, walk.table, walk.opts, walk.parents, sig, body)
+  const inner = new PortabilityWalk(program, walk.table, walk.opts, walk.parents, sig, body, walk.bound)
   const param = parameterLocal(inner, body, names[index])
   if (param === null) {
     return
@@ -743,7 +743,15 @@ const followIntoCallers = (trail: Trail, value: Node, holder: Local | null): voi
     if (calls.length === 0) {
       continue
     }
-    const there = new PortabilityWalk(walk.program, walk.table, walk.opts, walk.parents, host, body)
+    const there = new PortabilityWalk(
+      walk.program,
+      walk.table,
+      walk.opts,
+      walk.parents,
+      host,
+      body,
+      walk.bound
+    )
     for (const call of calls) {
       followIntoCaller(trail, value, holder, there, call)
     }

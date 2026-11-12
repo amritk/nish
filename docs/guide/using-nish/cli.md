@@ -475,6 +475,11 @@ $ nish bad.ts --json
   program's files and the standard library's.
 - Failures with no source position — no usable `clang`, an internal error —
   are JSON objects too, so under `--json` you never need to read stderr.
+- **`review`**, after `fix`, is on some portability warnings
+  ([`--warn-portability`](to-typescript.md)): the same kind of edit list, for
+  a rewrite that makes the line mean the same under Node and compiles to the
+  same native code, but changes what your source says. `nish --fix` never
+  applies it; see [below](#--fix).
 - The standard library has a reader for these objects:
   [`nish/json`](standard-library.md#nishjson).
 
@@ -499,6 +504,37 @@ It never edits a standard-library module or anything under `node_modules`,
 and it writes no IR, so `-o` and `--link` are usage errors beside it. **It
 rewrites your files in place with no backup**, so run it on a tree you have
 committed.
+
+`--fix` applies `fix` and nothing else. A portability warning's `review` is
+a suggestion for you, or the agent driving `nish`, to read and apply by hand:
+an integer division wrapped in its own type's conversion, which truncates
+under Node as it does natively and adds no instruction. For a `half.ts` of
+
+```ts
+const half = (n: i32): i32 => n / 2;
+```
+
+`--json` prints:
+
+```console
+$ nish half.ts --warn-portability --json
+{"file":"half.ts","line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this `/` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}
+```
+
+Applied, `n / 2` reads `toI32(n / 2)`, and the warning is gone. Apply a
+run's edits together, from the end of the file back, each placed in the
+original text: `a / b / c` gets two edits that both insert `toI32(` at one
+place, and applied that way they nest, `toI32(toI32(a / b) / c)`. Wrapping
+arithmetic (`NL8007`) and `>>>` on an `i32` (`NL8008`) get no `review`: no
+spelling of them reads the same under Node without costing an instruction
+here. A division gets none either in a generic function; where an operand's
+type differs from the conversion's; for an `i64` or `u64`, which no
+conversion leaves alone; for a `/=` on a field, an element or a ranged
+target, or with a comment before it; or in a file that binds a name
+`toI32`, `toU8`, `toU16` or `toU32` of its own (a function, `const`,
+parameter, loop variable, field, method or import), which the edit would
+call instead of the conversion. The full list is NL8006's row in
+[the language reference](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#diagnostics-and-debugging-flags).
 
 ## Colour, and when an agent runs `nish`
 
