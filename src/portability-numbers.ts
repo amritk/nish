@@ -27,16 +27,24 @@ import { isFractional, parseIntegerLiteral } from "./constants"
 import {
   FLAG_PREFIX,
   N_BINARY,
+  N_CALL,
   N_CONSTRUCTOR,
   N_EMPTY,
+  N_IDENT,
+  N_IMPORT_SPEC,
   N_NUMBER,
   N_PAREN,
   N_UNARY,
   N_VAR_DECL,
   Node,
 } from "./nodes"
+import { isBuiltinConversion } from "./bounds"
+import { Edit } from "./diagnostics"
+import { StringSet } from "./map"
+import { ParentTable } from "./parents"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
-import { intBits, isInteger, isUnsigned, T_I32 } from "./types"
+import { CheckedProgram } from "./program"
+import { intBits, isInteger, isUnsigned, T_I32, T_U16, T_U32, T_U8 } from "./types"
 
 /**
  * The numbers rows, asked about one node at a time.
@@ -85,8 +93,10 @@ const binaryFindings = (walk: PortabilityWalk, node: Node, out: PortabilityFindi
   const op = node.text
   if (op === "/" || op === "/=") {
     const operand = walk.table.baseOf(walk.program.nodeTypes[node.children[0].id])
-    if (isInteger(operand)) {
-      out.push(operatorFinding(walk, node, operand, "truncates here, and TypeScript divides exactly"))
+    if (isInteger(operand) && !isConverted(walk, node, operand)) {
+      const finding = operatorFinding(walk, node, operand, "truncates here, and TypeScript divides exactly")
+      finding.review = divisionReview(walk, node, operand)
+      out.push(finding)
     }
     return
   }
@@ -103,6 +113,179 @@ const binaryFindings = (walk: PortabilityWalk, node: Node, out: PortabilityFindi
   if (op === "+" || op === "-" || op === "*" || op === "+=" || op === "-=" || op === "*=") {
     wrapFinding(walk, node, out)
   }
+}
+
+/**
+ * The builtin that converts to `type` and is the identity on it, so wrapping
+ * an integer quotient in it emits no IR; `""` for a type with none (`i8`,
+ * `i16`) or whose TypeScript reading is not a double (`i64`, `u64`).
+ */
+const conversionTo = (type: i32): string => {
+  if (type === T_I32) {
+    return "toI32"
+  }
+  if (type === T_U8) {
+    return "toU8"
+  }
+  if (type === T_U16) {
+    return "toU16"
+  }
+  return type === T_U32 ? "toU32" : ""
+}
+
+/**
+ * Whether the `/` is the one argument of its own type's conversion builtin,
+ * `toI32(a / b)`: TypeScript truncates there too, so the site is portable.
+ * Parentheses between the two are looked through.
+ */
+const isConverted = (walk: PortabilityWalk, node: Node, type: i32): boolean => {
+  const name = conversionTo(type)
+  if (node.text !== "/" || name === "") {
+    return false
+  }
+  let arg = node
+  let up = walk.parents.parentOf(arg)
+  while (up !== null && up.kind === N_PAREN) {
+    arg = up
+    up = walk.parents.parentOf(arg)
+  }
+  if (up === null) {
+    return false
+  }
+  const call = walk.parents.parentOf(up)
+  return (
+    call !== null &&
+    call.kind === N_CALL &&
+    call.children[1] === up &&
+    isBuiltinConversion(walk.program, call, name)
+  )
+}
+
+/**
+ * NL8006's `review` edits (WP33 R5): `a / b` becomes `toI32(a / b)` and
+ * `q /= b` becomes `q = toI32(q / b)`, which `isConverted` reads as portable.
+ * The conversion is the identity on its own type, so the IR does not move,
+ * and under Node it truncates the exact quotient to the one written here.
+ *
+ * None is offered where that is not certain: a module that names the
+ * conversion as anything but the builtin (`boundConversionNames`), where the
+ * edit could call the module's own; a generic body, whose other
+ * instantiations the edit would change too; an operand or result not exactly
+ * `type`, so a `/=` on a ranged target, whose assignment a check reads; and a
+ * `/=` on anything but a plain name, which the rewrite would evaluate twice.
+ * A ranged operand's `/` takes the edit: its quotient is the base type, and
+ * `bounds.ts` reads a quotient's conversion to its own type as the quotient,
+ * so the range a later check consumes does not move. A `/=` whose divisor
+ * holds a `/` of its own is declined too: that `/` carries its own edits,
+ * which would land inside this one's span. So is a `/=` with anything but
+ * whitespace between the name and the divisor, a comment the rewrite would
+ * drop.
+ */
+const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] => {
+  const edits: Edit[] = []
+  const name = conversionTo(type)
+  const types = walk.program.nodeTypes
+  const left = node.children[0]
+  const right = node.children[1]
+  if (
+    name === "" ||
+    walk.bound.has(name) ||
+    walk.sig.instance !== null ||
+    types[node.id] !== type ||
+    types[left.id] !== type ||
+    types[right.id] !== type
+  ) {
+    return edits
+  }
+  if (node.text === "/") {
+    edits.push(new Edit(node.start, node.start, `${name}(`))
+    edits.push(new Edit(node.end, node.end, ")"))
+    return edits
+  }
+  if (left.kind !== N_IDENT || holdsDivision(right) || !onlyOperatorBetween(walk, left, right)) {
+    return edits
+  }
+  const bare =
+    right.kind === N_IDENT || right.kind === N_NUMBER || right.kind === N_PAREN || right.kind === N_CALL
+  const divisor = bare ? walk.textOf(right) : `(${walk.textOf(right)})`
+  edits.push(new Edit(left.end, right.end, ` = ${name}(${left.text} / ${divisor})`))
+  return edits
+}
+
+/**
+ * Which of the conversions NL8006's edit writes, `toI32`, `toU8`, `toU16` and
+ * `toU32`, the module names as anything but the builtin: an import, a
+ * function, a `const`, a parameter or a loop variable anywhere in it, or a
+ * method or field of that name. The edit is declined for each one, since the
+ * name it writes could reach the module's own binding rather than the
+ * conversion. The whole module, not the scope at the site: a name bound
+ * elsewhere costs only the edit, and a scope walk would be one more place to
+ * get shadowing wrong.
+ */
+export const boundConversionNames = (program: CheckedProgram, parents: ParentTable): StringSet => {
+  const out = new StringSet()
+  collectBoundConversions(program, parents, program.file, out)
+  return out
+}
+
+const collectBoundConversions = (
+  program: CheckedProgram,
+  parents: ParentTable,
+  node: Node,
+  out: StringSet
+): void => {
+  const named =
+    node.text === "toI32" || node.text === "toU8" || node.text === "toU16" || node.text === "toU32"
+  // `import { half as toI32 }` binds the spec's own text; its IDENT is `half`.
+  if (named && node.kind === N_IMPORT_SPEC) {
+    out.add(node.text)
+  }
+  if (named && node.kind === N_IDENT) {
+    const call = parents.parentOf(node)
+    const builtin =
+      call !== null &&
+      call.kind === N_CALL &&
+      call.children[0] === node &&
+      isBuiltinConversion(program, call, node.text)
+    if (!builtin) {
+      out.add(node.text)
+    }
+  }
+  for (const child of node.children) {
+    collectBoundConversions(program, parents, child, out)
+  }
+}
+
+/** Whether `node` is or contains a `/` or `/=`, at any depth. */
+const holdsDivision = (node: Node): boolean => {
+  if (node.kind === N_BINARY && (node.text === "/" || node.text === "/=")) {
+    return true
+  }
+  let i = 0
+  while (i < node.children.length) {
+    if (holdsDivision(node.children[i])) {
+      return true
+    }
+    i = i + 1
+  }
+  return false
+}
+
+/** Whether only whitespace and the `/=` itself stand between `t` and `e` in `t /= e`. */
+const onlyOperatorBetween = (walk: PortabilityWalk, left: Node, right: Node): boolean => {
+  const gap = walk.program.source.text.substring(left.end, right.start)
+  let seen = 0
+  let i = 0
+  while (i < gap.length) {
+    const c = gap.charCodeAt(i)
+    if (c === 47 || c === 61) {
+      seen = seen + 1
+    } else if (c !== 32 && c !== 9 && c !== 10 && c !== 13) {
+      return false
+    }
+    i = i + 1
+  }
+  return seen === 2 && gap.indexOf("/=") >= 0
 }
 
 /**
@@ -249,7 +432,8 @@ const isFirstBody = (walk: PortabilityWalk): boolean => {
 const moduleFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void => {
   const program = walk.program
   for (const struct of program.structList) {
-    if (struct.origin !== program.source) {
+    // A `declare class` is C's struct, which TypeScript never sees.
+    if (struct.origin !== program.source || struct.layout) {
       continue
     }
     for (const field of struct.fields) {

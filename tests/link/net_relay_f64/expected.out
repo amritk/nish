@@ -144,9 +144,9 @@ PASS  the hello is answered HELLO_OK: session 1, 1,200 bytes
 PASS  the session holds a place in both caps
 PASS  a DATA payload of 1,200 bytes reaches the game server whole, and one of 1,201 does not
 PASS  the refused one is counted
-PASS  the echo of 1,200 bytes cannot go down whole and is dropped, counted
-PASS  1,164 bytes from the game server reach the client as DATA, seq 2 after the dropped one's 1
-PASS  1,165 do not, and are counted
+PASS  nothing from the game server is dropped on the way down
+PASS  the echo of 1,200 bytes reaches the client as DATA, seq 1, past the old 1,164-byte limit
+PASS  1,164 and 1,165 bytes from the game server reach the client too, seq 2 and 3
 PASS  a PING is answered with a PONG carrying its id and clock, and the relay's dwell
 PASS  an empty datagram is a bad frame, counted, not fatal
 PASS  STATS after two seconds: one DATA forwarded in (the oversized one is not counted), three datagrams from the game server

@@ -176,6 +176,7 @@ class QuicRecovery
 | `new QuicRecovery()` | Makes the state a new connection has, as `reset` leaves it: every space empty, the RTT estimate and the window at their initial values. |
 | `congestionEvents: i32` | How many congestion events reduced the window, and how many of them were persistent congestion. |
 | `congestionWindow: i64` | congestion_window (B.2), in bytes. |
+| `datagramSize: i64` | max_datagram_size (B.1): the largest datagram the connection sends on this path, 1200 until path MTU discovery validates more. The initial and minimum windows and congestion avoidance's step are counted in it. `resetPath`, which the constructor runs, sets it to `QUIC_RECOVERY_DATAGRAM_SIZE`; a field's initializer must be a literal. |
 | `ecnCongestionEvents: i32` | How many congestion events a rise in the ECN-CE count caused (§7.1). |
 | `ecnState: i32` | ECN's state, `QUIC_RECOVERY_ECN_TESTING` until a marked packet's counts validate or fail. |
 | `ecnTestLost: i32` | How many marked packets were lost before ECN validated: once it reaches `ecnTestRecorded`, ECN fails (RFC 9000 A.4). |
@@ -205,18 +206,22 @@ class QuicRecovery
 | `ecnCodepoint(): i32` | The ECN codepoint to mark the next packet with (RFC 9000 A.4): ECT(0) for the first `QUIC_RECOVERY_ECN_TESTING_PACKETS` and, once the path is capable, for every one; 0, Not-ECT, while the testing packets wait to be validated and once validation failed. |
 | `evictOldest(space: i32): i32` | Gives up the oldest packet still in flight in space `space`, taking it out of flight without a congestion event, so that a probe can be recorded when the ring is full. The caller has already queued what the space had in flight again, which is what a probe sends. Answers the slot, or -1 when nothing is in flight there. |
 | `fineNow(now: i64): i64` | `now` on the pacer's clock: `micros` when it falls inside the millisecond `now` names, and `now × 1000` otherwise. |
+| `initialWindow(): i64` | kInitialWindow (§7.2) for the current datagram size: min(10 × size, max(14720, 2 × size)). |
 | `lossDelay(): i64` | The loss delay (§6.1.2): 9/8 of the larger of the latest and the smoothed RTT, at least the granularity. |
+| `minimumWindow(): i64` | kMinimumWindow (§7.2) for the current datagram size: two datagrams. |
 | `onAck(space: i32, ranges: i64[], count: i32, ackDelay: i64, now: i64): i32` | An ACK frame for space `space` (A.7): `ranges` holds `count` `[smallest, largest]` pairs, highest first, as `QuicFrame.ackRanges` does, and `ackDelay` is the peer's ACK Delay in milliseconds. The packets newly acknowledged are listed in the space's `acked`, those it shows lost in `lost`; an RTT sample is taken when the largest acknowledged is newly acknowledged (§5.1), the window grows or shrinks (B.5, B.8), and the probe backoff resets. Answers how many packets were newly acknowledged, or -1, changing nothing, when the space does not exist or there is no range. A packet number the space never sent is the caller's to refuse (RFC 9000 §13.1): only it knows the packets that elicit no acknowledgement, which are not recorded here. |
 | `onAckEcn(space: i32, ranges: i64[], count: i32, ackDelay: i64, now: i64, ect0: i64, ect1: i64, ce: i64): i32` | `onAck` for an ACK frame that carries ECN counts, `ect0`, `ect1` and `ce` as ACK_ECN gives them (RFC 9000 §19.3.2), or -1 each for one that carries none. The counts are validated (RFC 9000 §13.4.2.1) and a rise in ECN-CE is a congestion event (§7.1, B.7) before loss is detected, as A.7 orders it. |
 | `onEctSent(space: i32, slot: i32): void` | A packet of space `space` went out marked ECT(0): `slot` is the one `onPacketSent` answered for it, or -1 for a packet that elicits no acknowledgement and so was not recorded. Every packet of a datagram marked counts, whatever `ecnCodepoint()` answers by the last of them. |
 | `onPaced(now: i64, size: i32): void` | Charges the pacer for a datagram of `size` bytes sent at `now`. |
 | `onPacketSent(space: i32, pn: i64, size: i32, now: i64): i32` | Records an ack-eliciting packet (A.5): number `pn` of space `space`, `size` bytes on the wire, sent at `now`. Answers its slot, under which the caller keeps what it carried, or -1, recording nothing, for a space that does not exist, a size that is not positive, a packet number that is not above the last one recorded, or a ring that is full. |
+| `onProbeSent(space: i32, slot: i32): void` | Marks the packet in `space`'s slot `slot`, just recorded by `onPacketSent`, as a path MTU probe (RFC 8899): it counts in flight and its acknowledgement grows the window, but its loss is no congestion event and no part of persistent congestion (RFC 9000 §14.4). |
 | `onTimeout(now: i64, amplificationBlocked: boolean): i32` | OnLossDetectionTimeout (A.9), at `now`. When a time-threshold loss is due, the space's packets are checked again and the lost ones listed in its `lost`: `QUIC_RECOVERY_TIMEOUT_LOSS`. Otherwise, when the probe timeout is due, the backoff doubles and the caller is to send a probe in `timeoutSpace`: `QUIC_RECOVERY_TIMEOUT_PTO`. Before either is due, or when nothing is timed, `QUIC_RECOVERY_TIMEOUT_NONE`. |
 | `pacerDelay(now: i64, size: i32): i64` | How many milliseconds after `now` the pacer lets a datagram of `size` bytes go: 0 when it may go now, else its wait in microseconds rounded up to whole milliseconds, so at least 1. The rate is 5/4 of the window per `pacerRtt` (§7.7's N of 1.25). |
 | `pacerQuantum(least: i32, most: i32): i32` | The credit a paced flight waits for before it starts, in bytes: what the pacer earns in a millisecond, at least `least` and at most `most`. A pacer that earns by the microsecond would otherwise let a fast connection out a datagram at a time, one send each; one that earns slowly still lets a datagram go as soon as it has the credit for it. |
 | `probeTimeout(): i64` | The probe timeout's period without backoff (§6.2.1): smoothed_rtt + max(4 × rttvar, kGranularity), plus the peer's max_ack_delay once the handshake is confirmed. It is also what a key update's old keys are kept for and what the idle timeout is at least three of. |
 | `ptoTime(): i64` | GetPtoTimeAndSpace (A.8): when the probe timeout fires, the earliest over the spaces with an ack-eliciting packet in flight, with the backoff applied; the Application Data space counts only once the handshake is confirmed. Answers -1 with nothing in flight. |
 | `reset(): void` | Puts everything back as a new connection has it: every space empty, the RTT estimate and the window at their initial values. A connection slot reused for another peer calls it; the rings are kept. |
+| `setDatagramSize(size: i64): void` | Sets max_datagram_size to `size` bytes, as path MTU discovery validates a larger path or falls back from one (RFC 9002 §7.2). A window still at the old initial window becomes the new one, so a connection that has learnt nothing of the path yet starts from what the new size allows; a window below the new minimum is raised to it. A smaller size keeps the window as it is, and the pacer's held credit is cut to the new burst. |
 | `space(space: i32): QuicSentPackets \| null` | Space `space`'s packets, or `null` for an index that names no space. |
 
 ### QuicSentPackets
@@ -259,6 +264,7 @@ class QuicSentPackets
 | `lostSlot(k: i32): i32` | The `k`-th slot the last call declared lost, or -1. |
 | `markedAt(s: i32): boolean` | Whether the packet in slot `s` was sent marked ECT(0). |
 | `pnAt(s: i32): i64` | The packet number in slot `s`, or -1. |
+| `probeAt(s: i32): boolean` | Whether the packet in slot `s` was a path MTU probe (RFC 8899), whose loss says nothing of congestion. |
 | `sizeAt(s: i32): i32` | The size of the packet in slot `s`, or 0. |
 | `stateAt(s: i32): i32` | The state of slot `s`, or free for a slot outside the ring. |
 | `timeAt(s: i32): i64` | When the packet in slot `s` was sent, or -1. |
@@ -318,7 +324,9 @@ The Application Data space's index.
 
 `QUIC_RECOVERY_DATAGRAM_SIZE: i64`
 
-max_datagram_size (B.1): the 1200 bytes every datagram this server sends is at most.
+max_datagram_size (B.1) on a path nothing has been learnt of: the 1200
+bytes every datagram is at most until path MTU discovery validates more
+(`QuicRecovery.datagramSize`).
 
 </scalar-card>
 
@@ -415,7 +423,7 @@ kInitialRtt (§6.2.2), in milliseconds: the round trip assumed before the first 
 
 `QUIC_RECOVERY_INITIAL_WINDOW: i64`
 
-kInitialWindow (§7.2): min(10 × 1200, max(14720, 2 × 1200)), so 12000 bytes.
+kInitialWindow (§7.2) at 1200 bytes: min(10 × 1200, max(14720, 2 × 1200)), so 12000 bytes.
 
 </scalar-card>
 
@@ -423,7 +431,7 @@ kInitialWindow (§7.2): min(10 × 1200, max(14720, 2 × 1200)), so 12000 bytes.
 
 `QUIC_RECOVERY_MINIMUM_WINDOW: i64`
 
-kMinimumWindow (§7.2): two datagrams, 2400 bytes.
+kMinimumWindow (§7.2) at 1200 bytes: two datagrams, 2400 bytes.
 
 </scalar-card>
 

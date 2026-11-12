@@ -8,7 +8,7 @@ import {
   namesSecret,
 } from "./secret"
 import { rejectStoredMask } from "./simd"
-import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotations"
+import { rejectForeignPointer, rejectLayoutElement, resolveType, typedArrayElement } from "./annotations"
 import { checkBuiltinArity, isArgvExpression, requireStatementPosition } from "./builtins"
 import { CheckContext } from "./context"
 import {
@@ -122,6 +122,9 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
       continue
     }
     if (rejectStoredMask(ctx, type, "an array element", element)) {
+      continue
+    }
+    if (rejectLayoutElement(ctx, type, element)) {
       continue
     }
     if (ctx.table.holdsSecret(type)) {
@@ -884,6 +887,9 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
       return T_ERROR
     }
     if (rejectStoredMask(ctx, elem, "an array element", typeArgs.children[0])) {
+      return T_ERROR
+    }
+    if (rejectLayoutElement(ctx, elem, typeArgs.children[0])) {
       return T_ERROR
     }
     if (ctx.table.holdsSecret(elem)) {

@@ -24,6 +24,7 @@ import {
   TLS_EXT_PRE_SHARED_KEY,
   TLS_EXT_PSK_KEY_EXCHANGE_MODES,
   TLS_EXT_QUIC_TRANSPORT_PARAMETERS,
+  TLS_EXT_RECORD_SIZE_LIMIT,
   TLS_EXT_SERVER_NAME,
   TLS_EXT_SIGNATURE_ALGORITHMS,
   TLS_EXT_SUPPORTED_GROUPS,
@@ -43,6 +44,8 @@ import {
   TLS_PSK_DHE_KE,
   TLS_PSK_KE,
   TLS_RANDOM_SIZE,
+  TLS_RECORD_SIZE_LIMIT_MAX,
+  TLS_RECORD_SIZE_LIMIT_MIN,
   TLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
   TLS_SIGNATURE_ECDSA_SECP384R1_SHA384,
   TLS_SIGNATURE_RSA_PSS_RSAE_SHA256,
@@ -101,14 +104,14 @@ import {
 } from "nish/net/tls/codec";
 
 // `body` is a ClientHello without its four-byte handshake header;
-// `random`, `suite` and `x25519Public` are the server's own.
+// `random`, `suite` and `serverShare` are the server's own.
 const hello = new TlsClientHelloView()
 tlsReadClientHello(hello, body, 0, toI32(body.length))
 if (hello.alert !== 0) {
   // send hello.alert, such as TLS_ALERT_DECODE_ERROR (50), and close
 } else if (tlsWindowHasU16(hello.data, hello.versionsAt, hello.versionsLength, TLS_VERSION_13)) {
   const sessionId: u8[] = tlsCopyWindow(hello.data, hello.sessionIdAt, hello.sessionIdLength)
-  const reply: u8[] = tlsEncodeServerHello(random, sessionId, suite, x25519Public)
+  const reply: u8[] = tlsEncodeServerHello(random, sessionId, suite, serverShare)
 }
 ```
 
@@ -322,7 +325,7 @@ Writes a NewSessionTicket (§4.6.1) at `out[at]` and answers where it ends: `lif
 
 <scalar-card title="tls​Write​Server​Hello" icon="phosphor/regular/function" href="#tlswriteserverhello">
 
-Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends: choosing `suite` and TLS 1.3, echoing the session id `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying the server's x25519 share.
+Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends: choosing `suite` and TLS 1.3, echoing the session id `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying the server's key share, secp256r1 when `serverShare` is a 65-byte point and x25519 otherwise.
 
 </scalar-card>
 
@@ -408,8 +411,9 @@ are the peer's just as a client's are, so these readers never panic either
 The ones read are `server_name` (RFC 6066 §3),
 `supported_groups`, `signature_algorithms`, `supported_versions` and
 `key_share` (RFC 8446 §4.2), `application_layer_protocol_negotiation`
-(RFC 7301 §3.1) and `quic_transport_parameters` (RFC 9001 §8.2), and
-`pre_shared_key` and `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
+(RFC 7301 §3.1), `quic_transport_parameters` (RFC 9001 §8.2) and
+`record_size_limit` (RFC 8449 §4), and `pre_shared_key` and
+`psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
 whose identities and binders the reader checks against their syntax but
 does not open: a ticket and its binder are the server's to judge. Every
 other extension is skipped, which is what RFC 8446 §4.2 asks of a server
@@ -668,6 +672,7 @@ function tlsEncodeEncryptedExtensions(
   alpn: u8[],
   acknowledgeServerName: boolean,
   quicTransportParameters: u8[] | null,
+  recordSizeLimit: i32,
 ): u8[]
 ```
 
@@ -692,6 +697,12 @@ Whether to send the empty `server_name` that says the server used the name.
 <scalar-field name="quicTransportParameters" type="u8[] | null" required>
 
 The server's QUIC transport parameters, opaque; `null` to send none.
+
+</scalar-field>
+
+<scalar-field name="recordSizeLimit" type="i32" required>
+
+The server's own `record_size_limit` (RFC 8449 §4); 0 to send none.
 
 </scalar-field>
 
@@ -819,7 +830,7 @@ function tlsEncodeServerHello(
   random: u8[],
   sessionId: u8[],
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
 ): u8[]
 ```
 
@@ -841,9 +852,10 @@ The cipher suite the server chose.
 
 </scalar-field>
 
-<scalar-field name="x25519Public" type="u8[]" required>
+<scalar-field name="serverShare" type="u8[]" required>
 
-The server's x25519 public key, the share's `key_exchange`.
+The server's key share, its `key_exchange`: 32 bytes of x25519, or a
+  65-byte uncompressed secp256r1 point.
 
 </scalar-field>
 
@@ -863,7 +875,7 @@ function tlsEncodeServerHelloPsk(
   random: u8[],
   sessionId: u8[],
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
   selectedIdentity: i32,
 ): u8[]
 ```
@@ -886,9 +898,10 @@ The cipher suite the server chose.
 
 </scalar-field>
 
-<scalar-field name="x25519Public" type="u8[]" required>
+<scalar-field name="serverShare" type="u8[]" required>
 
-The server's x25519 public key, the share's `key_exchange`.
+The server's key share, its `key_exchange`: 32 bytes of x25519, or a
+  65-byte uncompressed secp256r1 point.
 
 </scalar-field>
 
@@ -1638,8 +1651,10 @@ Writes EncryptedExtensions (§4.3.1) at `out[at]` and answers where it ends.
 `extra` is extensions the caller encodes itself, written first and as they
 are; then the chosen ALPN protocol when `alpn` is not empty (RFC 7301 §3.1,
 a list of exactly one), an empty `server_name` when `acknowledgeServerName`
-(RFC 6066 §3's acknowledgement), and the server's
-`quic_transport_parameters` when `quicTransportParameters` is not `null`.
+(RFC 6066 §3's acknowledgement), the server's
+`quic_transport_parameters` when `quicTransportParameters` is not `null`,
+and the server's own `record_size_limit` (RFC 8449 §4) when
+`recordSizeLimit` is not 0.
 
 ```ts
 function tlsWriteEncryptedExtensions(
@@ -1649,6 +1664,7 @@ function tlsWriteEncryptedExtensions(
   alpn: string,
   acknowledgeServerName: boolean,
   quicTransportParameters: u8[] | null,
+  recordSizeLimit: i32,
 ): i32
 ```
 
@@ -1685,6 +1701,12 @@ Whether to send the empty `server_name` that says the server used the name.
 <scalar-field name="quicTransportParameters" type="u8[] | null" required>
 
 The server's QUIC transport parameters, opaque; `null` to send none.
+
+</scalar-field>
+
+<scalar-field name="recordSizeLimit" type="i32" required>
+
+The largest record plaintext the server takes, content type included, written as a `uint16`; 0 to send none.
 
 </scalar-field>
 
@@ -1913,7 +1935,8 @@ Where the message ends in `out`: `at` plus its length, written or not.
 Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends:
 choosing `suite` and TLS 1.3, echoing the session id
 `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying
-the server's x25519 share. The extensions are `key_share` then
+the server's key share, secp256r1 when `serverShare` is a 65-byte point
+and x25519 otherwise. The extensions are `key_share` then
 `supported_versions`, the order RFC 8448 §3 shows.
 
 ```ts
@@ -1925,7 +1948,7 @@ function tlsWriteServerHello(
   sessionIdOff: i32,
   sessionIdLength: i32,
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
 ): i32
 ```
 
@@ -1971,9 +1994,10 @@ The cipher suite the server chose, such as `nish/net/tls/schedule`'s `TLS_AES_12
 
 </scalar-field>
 
-<scalar-field name="x25519Public" type="u8[]" required>
+<scalar-field name="serverShare" type="u8[]" required>
 
-The server's x25519 public key, the share's `key_exchange`.
+The server's key share, its `key_exchange`: 32 bytes of x25519, or a
+  65-byte uncompressed secp256r1 point.
 
 </scalar-field>
 
@@ -2000,7 +2024,7 @@ function tlsWriteServerHelloPsk(
   sessionIdOff: i32,
   sessionIdLength: i32,
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
   selectedIdentity: i32,
 ): i32
 ```
@@ -2047,9 +2071,10 @@ The cipher suite the server chose.
 
 </scalar-field>
 
-<scalar-field name="x25519Public" type="u8[]" required>
+<scalar-field name="serverShare" type="u8[]" required>
 
-The server's x25519 public key, the share's `key_exchange`.
+The server's key share, its `key_exchange`: 32 bytes of x25519, or a
+  65-byte uncompressed secp256r1 point.
 
 </scalar-field>
 
@@ -2108,6 +2133,7 @@ class TlsClientHello
 | `pskTicketAges: u32[]` | Each identity's `obfuscated_ticket_age`, as sent: entry `i` belongs to `pskIdentities[i]`. |
 | `quicTransportParameters: u8[]` | The client's `quic_transport_parameters`, opaque (RFC 9001 §8.2). |
 | `random: u8[]` | The client's 32-byte `random`. |
+| `recordSizeLimit: i32` | The client's `record_size_limit` (RFC 8449), lowered to the TLS 1.3 maximum, or 0 when it sent none. |
 | `serverName: string` | The `host_name` of `server_name`, or empty. |
 | `sessionId: u8[]` | `legacy_session_id`, which a server echoes (§4.1.3). |
 | `shareGroups: i32[]` | Every group a key share was offered for, in order. |
@@ -2142,9 +2168,11 @@ class TlsClientHelloView
 | `groupsLength: i32` | The `supported_groups` window's length in bytes, two a group; 0 when the extension was absent. |
 | `hasAlpn: boolean` | Whether the hello carried ALPN. |
 | `hasKeyShare: boolean` | Whether the hello carried `key_share`, even an empty one. |
+| `hasP256Share: boolean` | Whether `key_share` offered a secp256r1 share, so `p256ShareAt` names one. |
 | `hasPreSharedKey: boolean` | Whether the hello carried `pre_shared_key`, which must be its last extension (§4.2.11). |
 | `hasPskModes: boolean` | Whether the hello carried `psk_key_exchange_modes`, without which a server must not resume (§4.2.9). |
 | `hasQuicTransportParameters: boolean` | Whether the hello carried `quic_transport_parameters`, which a QUIC handshake requires (RFC 9001 §8.2). |
+| `hasRecordSizeLimit: boolean` | Whether the hello carried `record_size_limit` (RFC 8449). |
 | `hasServerName: boolean` | Whether the hello carried `server_name` with a `host_name` in it. |
 | `hasSignatureAlgorithms: boolean` | Whether the hello carried `signature_algorithms`. |
 | `hasSupportedGroups: boolean` | Whether the hello carried `supported_groups`. |
@@ -2152,6 +2180,8 @@ class TlsClientHelloView
 | `hasX25519Share: boolean` | Whether `key_share` offered an x25519 share, so `x25519ShareAt` names one. |
 | `legacyVersion: i32` | `legacy_version` as sent; TLS 1.3 fixes it at 0x0303 and negotiates the real version in `supported_versions` (§4.1.2). |
 | `nullCompressionOnly: boolean` | Whether `legacy_compression_methods` is the single null method TLS 1.3 requires (§4.1.2). |
+| `p256ShareAt: i32` | The secp256r1 share's key_exchange, as sent; its length is the server's to check. |
+| `p256ShareLength: i32` | The secp256r1 share's length in bytes as sent, 0 when none was offered; a usable share is 65. |
 | `pskBinderAt: i32` | That identity's binder, the entry of the same index in `binders`. |
 | `pskBinderCount: i32` | How many binders `binders` holds, one an identity. |
 | `pskBinderLength: i32` | The chosen binder's length in bytes, 32 to 255: `tlsReadPreSharedKey` refuses a shorter one when it parses the extension. It must equal the suite's hash length. |
@@ -2170,6 +2200,7 @@ class TlsClientHelloView
 | `quicAt: i32` | The client's `quic_transport_parameters`, opaque (RFC 9001 §8.2). |
 | `quicLength: i32` | The QUIC transport parameters' length in bytes, 0 when the extension was absent. |
 | `randomAt: i32` | Where the client's 32-byte `random` starts in `data`; its length is always 32. |
+| `recordSizeLimit: i32` | The client's `record_size_limit`, at least `TLS_RECORD_SIZE_LIMIT_MIN` and at most `TLS_RECORD_SIZE_LIMIT_MAX`, a larger value lowered to it; 0 when the hello carried none. |
 | `schemesAt: i32` | `signature_algorithms`, 16-bit values. |
 | `schemesLength: i32` | The `signature_algorithms` window's length in bytes, two a scheme; 0 when the extension was absent. |
 | `serverNameAt: i32` | The `host_name` of `server_name`, or empty. |
@@ -2239,6 +2270,29 @@ class TlsServerFlightView
 | `signatureAt: i32` | Where CertificateVerify's signature starts in `data`. |
 | `signatureLength: i32` | The signature's length in bytes. |
 | `suite: i32` | The cipher suite the server chose, a 16-bit value. |
+
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="16,385" icon="phosphor/regular/hash">
+
+`TLS_RECORD_SIZE_LIMIT_MAX: i32`
+
+The largest `record_size_limit` TLS 1.3 can use (RFC 8449 §4): 2^14 bytes
+of content and the content-type byte. A larger value means this.
+
+</scalar-card>
+
+<scalar-card title="64" icon="phosphor/regular/hash">
+
+`TLS_RECORD_SIZE_LIMIT_MIN: i32`
+
+The smallest `record_size_limit` a peer may send (RFC 8449 §4); below it is `illegal_parameter`.
+
+</scalar-card>
+
+</scalar-grid>
 
 ## Constants
 
@@ -2388,6 +2442,14 @@ An extension in a server message that the client never offered (§4.2).
 
 </scalar-card>
 
+<scalar-card title="28" icon="phosphor/regular/hash">
+
+`TLS_EXT_RECORD_SIZE_LIMIT: i32`
+
+`record_size_limit` (RFC 8449 §4): the largest protected record plaintext the sender will take, content type included.
+
+</scalar-card>
+
 <scalar-card title="0" icon="phosphor/regular/hash">
 
 `TLS_EXT_SERVER_NAME: i32`
@@ -2424,7 +2486,7 @@ An extension in a server message that the client never offered (§4.2).
 
 `TLS_GROUP_SECP256R1: i32`
 
-secp256r1 (§4.2.7), the second group the client offers.
+secp256r1 (§4.2.7), the second group the client offers and the server agrees to.
 
 </scalar-card>
 
@@ -2432,7 +2494,7 @@ secp256r1 (§4.2.7), the second group the client offers.
 
 `TLS_GROUP_X25519: i32`
 
-x25519 (§4.2.7), the one group `nish/net/tls` agrees to.
+x25519 (§4.2.7), the group `nish/net/tls` prefers.
 
 </scalar-card>
 

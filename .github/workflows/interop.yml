@@ -14,13 +14,22 @@
 #         mid-transfer, each new path validated before it is trusted.
 # h2spec: every h2spec case against the HTTP/2 server.
 # curl:   curl --http3 and --http2, a GET of a 1 MB file and a POST with a
-#         body each; and curl --http2 resuming a TLS 1.3 session on a second
-#         connection, which the server's log must call `tls: resumed`.
+#         body each; curl --http1.1, plain and over TLS, a GET of /hello and of
+#         /big's 2 MiB chunked and a POST echoed back, small and of 1 MB; and
+#         curl --http2 resuming a TLS 1.3 session on a second connection,
+#         which the server's log must call `tls: resumed`.
 # chrome: Playwright's Chromium opens a WebTransport session pinned by
 #         serverCertificateHashes and echoes a datagram and a bidirectional
 #         stream, and resumes a TLS 1.3 session on a second HTTP/2
 #         connection (tests/interop/chrome-resume.py), with the certificate
-#         the server mints (nish/crypto/x509) and with one openssl makes.
+#         the server mints (nish/crypto/x509) and with one openssl makes; and
+#         speaks HTTP/1.1 to both HTTP/1.1 ports, a navigation over http/1.1,
+#         a POST echoed and a WebSocket echoing text and binary, over TLS and
+#         plain (tests/interop/chrome-http1.py).
+# autobahn: the Autobahn TestSuite's fuzzingclient against the server's
+#         WebSocket echo port (--ws-port), every case but 12.* and 13.*
+#         (permessage-deflate, never negotiated); any case graded other than
+#         OK or INFORMATIONAL fails (tests/interop/autobahn-verdict.py).
 # arena:  examples/wasm-arena (docs/wp50-wasm-host.md §10, W9) in Playwright's
 #         Chromium for ten minutes of scripted input (tests/interop/chrome-arena.py):
 #         flat linear memory, the used heap after a forced GC at minute 1 and
@@ -95,8 +104,11 @@ concurrency:
 # Every Ubuntu install goes through .github/actions/apt-install, which points
 # apt away from the Azure mirror (.github/apt-mirror.sh): that mirror served
 # libllvm18 at about 100 KB/s on #963 and timed the five-minute install out
-# before any test ran. The action also keeps the .debs in the Actions cache and
-# cuts a stalled download at a minute.
+# before any test ran. On arm64 the same list gives ports.ubuntu.com fallbacks:
+# it was the only host there, and on #1413 (run 43058055859) it stopped
+# resolving and three aarch64 jobs died at `apt-get update`. The action also
+# keeps the .debs and apt's index in the Actions cache, installs with no
+# network at all when both are there, and cuts a stalled download at a minute.
 env:
   # The quic-interop-runner at a fixed commit, and the images it drives.
   RUNNER_COMMIT: 740c05a10b61d65e8abd3ad38d60898004d335d9
@@ -112,6 +124,8 @@ env:
   CURL: ghcr.io/macbre/curl-http3@sha256:c3a360869a4e132180f458f83af2ce67b873b2302739eda27274dad4f62155f8
   # Playwright 1.56.0's Python image: Chromium 141, the browser that Playwright release pins.
   PLAYWRIGHT: mcr.microsoft.com/playwright/python:v1.56.0-noble@sha256:a7f6cf3ae520c9d670ad956572c13747ed5abdbba5123a01526f873ed1662528
+  # The Autobahn TestSuite 25.10.1's image, whose wstest drives the fuzzingclient.
+  AUTOBAHN: crossbario/autobahn-testsuite@sha256:519915fb568b04c9383f70a1c405ae3ff44ab9e35835b085239c258b6fac3074
   # The server's ports when a job runs it on the host's network.
   QUIC_PORT: "4433"
   H1_PORT: "8080"
@@ -202,8 +216,9 @@ jobs:
       # The Azure mirror sometimes served that at a trickle, never idle for
       # `APT_OPTS`'s thirty seconds, so the step's five-minute limit fired
       # before any case ran (main, and #854, in October 2026). The action
-      # fetches from other mirrors, keeps the .debs in the Actions cache keyed
-      # by runner image, and cuts a stalled download at a minute per attempt.
+      # fetches from other mirrors, keeps the .debs and apt's index in the
+      # Actions cache keyed by runner image, installs offline when both are
+      # there, and cuts a stalled download at a minute per attempt.
       #
       # The runner needs Wireshark 4.5 or later (its README). Ubuntu 24.04 ships
       # 4.2.2, whose QUIC dissector cannot follow a server's packet on a new
@@ -386,7 +401,7 @@ jobs:
         run: docker logs nish
 
   curl:
-    name: curl --http3 and --http2
+    name: curl --http3, --http2 and --http1.1
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -432,6 +447,28 @@ jobs:
           check "curl --http3-only says it spoke HTTP/3" "$(curl_in -sSfk --http3-only -o /dev/null -w '%{http_version}' "https://127.0.0.1:$QUIC_PORT/file" || echo ' (failed)')" "3"
           exit "$fail"
 
+      # The HTTP/1.1 ports serve tests/link/net_http1_server's routes, not --www:
+      # /hello's short body with a length, /big's 2 MiB chunked (byte k is
+      # (7k + 3) mod 256), and /echo, which streams a body back chunked.
+      - name: GET and POST over HTTP/1.1, plain and over TLS
+        run: |
+          curl_in() { docker run --rm --network host -v "$RUNNER_TEMP/www:/www:ro" --entrypoint curl "$CURL" --max-time 60 "$@"; }
+          big="$(python3 -c 'import sys; sys.stdout.buffer.write(bytes((k * 7 + 3) & 255 for k in range(2097152)))' | sha256sum)"
+          file="$(sha256sum < "$RUNNER_TEMP/www/file")"
+          fail=0
+          check() {
+            if [ "$2" = "$3" ]; then echo "PASS  $1"; else echo "FAIL  $1: got '$2', want '$3'"; fail=1; fi
+          }
+          for base in "http://127.0.0.1:$H1_PORT" "https://127.0.0.1:$H1S_PORT"; do
+            check "curl --http1.1 GET $base/hello" "$(curl_in -sSfk --http1.1 "$base/hello")" "hello from nish/net/http1"
+            check "curl --http1.1 GET $base/big, 2 MiB chunked" "$(curl_in -sSfk --http1.1 "$base/big" | sha256sum)" "$big"
+            check "curl --http1.1 POST $base/echo" "$(curl_in -sSfk --http1.1 --data-binary 'a body of 21 bytes...' "$base/echo")" "a body of 21 bytes..."
+            # 1 MiB is past curl's threshold for Expect: 100-continue, which /echo answers first.
+            check "curl --http1.1 POST $base/echo of the 1 MB file" "$(curl_in -sSfk --http1.1 --data-binary @/www/file "$base/echo" | sha256sum)" "$file"
+            check "curl --http1.1 says it spoke HTTP/1.1 to $base" "$(curl_in -sSfk --http1.1 -o /dev/null -w '%{http_version}' "$base/hello" || echo ' (failed)')" "1.1"
+          done
+          exit "$fail"
+
       - name: curl --http2 resumes a TLS 1.3 session
         run: |
           curl_in() { docker run --rm --network host --entrypoint curl "$CURL" --max-time 60 "$@"; }
@@ -462,7 +499,7 @@ jobs:
         run: docker logs nish
 
   chrome:
-    name: chrome WebTransport (${{ matrix.certificate }} certificate)
+    name: chrome WebTransport and HTTP/1.1 (${{ matrix.certificate }} certificate)
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -535,9 +572,75 @@ jobs:
               pip install --quiet --no-deps --require-hashes -r /interop/chrome-requirements.txt
               python3 /interop/chrome-resume.py $H2_PORT /out/hash /log/server.log"
 
+      # The HTTP/1.1 ports present the test leaf whatever --certs names, so one matrix row is enough.
+      - name: Chromium speaks HTTP/1.1 and WebSocket, over TLS and plain
+        if: matrix.certificate == 'minted'
+        timeout-minutes: 5
+        run: |
+          docker run --rm --network host --ipc host \
+            -v "$GITHUB_WORKSPACE/tests/interop:/interop:ro" \
+            "$PLAYWRIGHT" sh -c "set -e
+              pip install --quiet --no-deps --require-hashes -r /interop/chrome-requirements.txt
+              python3 /interop/chrome-http1.py $H1_PORT $H1S_PORT"
+
       - name: The server's log
         if: always()
         run: docker logs nish
+
+  autobahn:
+    name: autobahn fuzzingclient (WebSocket over HTTP/1.1)
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        timeout-minutes: 5
+        with:
+          name: nish-interop-image
+
+      - name: The verdict script's own checks
+        run: python3 -I tests/interop/autobahn-verdict-test.py
+
+      - name: Pull the Autobahn TestSuite
+        timeout-minutes: 10
+        run: docker pull "$AUTOBAHN"
+
+      - name: Start the server
+        run: |
+          docker load --input nish-interop.tar.gz
+          # 9001 is the port tests/interop/autobahn-fuzzingclient.json names, its one home.
+          # shellcheck disable=SC2086 # $SERVE_PORTS is several words
+          docker run -d --name nish --network host --entrypoint /interop-server nish-interop:ci \
+            serve $SERVE_PORTS --ws-port 9001
+          for _ in $(seq 1 100); do docker logs nish 2>&1 | grep -q '^ports ' && break; sleep 0.1; done
+          docker logs nish
+          docker logs nish 2>&1 | grep -q ' ws 9001$'
+
+      # The cases take about three minutes, most of it 9.*'s messages of up to 16 MiB.
+      - name: The fuzzingclient runs every case
+        timeout-minutes: 10
+        run: |
+          mkdir -p "$RUNNER_TEMP/reports"
+          chmod 777 "$RUNNER_TEMP/reports"
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE/tests/interop:/config:ro" -v "$RUNNER_TEMP/reports:/reports" \
+            --entrypoint wstest "$AUTOBAHN" -m fuzzingclient -s /config/autobahn-fuzzingclient.json
+
+      - name: Every case OK or INFORMATIONAL
+        run: python3 -I tests/interop/autobahn-verdict.py "$RUNNER_TEMP/reports/servers/index.json" nish
+
+      - name: The server's log
+        if: always()
+        run: docker logs nish
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: autobahn-reports
+          path: ${{ runner.temp }}/reports
+          if-no-files-found: ignore
 
   # The soak is ten minutes by design, so this job alone is given 25: the soak,
   # the compiler built from the seed (about two minutes), the image pull and pip.

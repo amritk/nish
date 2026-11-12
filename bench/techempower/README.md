@@ -39,15 +39,16 @@ serving its other connections.
   a 1000-deep one whose answers overrun the output (a reply held back by a
   full output resumes on `H1_WRITE`), one serialization per `/json`, and an `Arena.used()` that does not move over
   200 warmed requests.
-- `main.ts` is the program: one process, one thread, one `pollWait` loop. It
-  takes `main <port> [nodelay] [host] [slots]`, prints `listening <port>`, and
-  exits 0 on SIGINT or SIGTERM.
+- `main.ts` is the program, `tfbMain` of `server.ts`: one worker a core under
+  `nish/net/prefork`, each one `pollWait` loop on its CPU's `SO_REUSEPORT`
+  listener. It takes `main <port> [nodelay] [host] [slots] [workers]`, where
+  `workers` is 0 (one a core, the default), 1 (one process, no supervisor) or
+  the count; each worker prints `listening <port>`, and SIGINT or SIGTERM stops
+  them all with exit 0. `tfb_entry` runs it with two workers and checks that
+  both answer on the one port.
 
 The approach is `Realistic`: the handler uses the standard library's server as
-any program would, with nothing of HTTP stripped out. It is one core: the
-prefork supervisor of #719 (`nish/net/prefork`) has landed and the database
-entry below runs on it, but `main.ts` does not yet, which is WP39's
-follow-up for multi-core.
+any program would, with nothing of HTTP stripped out.
 
 ## Building and running it
 
@@ -73,6 +74,7 @@ docker run --rm -p 8080:8080 nish-tfb
 bash bench/http-twins/build.sh       # the twins, into build/http-twins/
 bash bench/techempower/run.sh        # 3 interleaved rounds of 10 s
 bash bench/techempower/run.sh --quick
+bash bench/techempower/run.sh --cores-compare   # one process against one worker a core
 bash bench/techempower/run.sh --browser-head --only plaintext   # and --only json
 ```
 
@@ -94,9 +96,11 @@ a time on `/plaintext` too, and times only the entry, its copy, `uws` and
 [the HTTP/1 codec baseline](../../docs/BENCHMARKS.md#http1-codec-baseline). The recorded figures are in
 [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md#techempower-json-and-plaintext)
 and, for the gate, its
-[first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)
+[first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6),
+its
+[re-measurement after the `serve` and pool fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6)
 and its
-[re-measurement after the `serve` and pool fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6).
+[re-measurement after the profile-led fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6).
 
 ### Profiling the async entry against the explicit one
 
