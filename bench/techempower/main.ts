@@ -18,5 +18,7 @@ export const main = (): i32 =>
     (worker: i32, port: i32): void => {
       console.log(`listening ${port}`)
     },
-    (worker: i32, tfb: TfbServer): void => {}
+    (worker: i32, tfb: TfbServer): void => {
+      // A stopped worker has nothing to report.
+    }
   )

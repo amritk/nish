@@ -74,6 +74,7 @@ docker run --rm -p 8080:8080 nish-tfb
 bash bench/http-twins/build.sh       # the twins, into build/http-twins/
 bash bench/techempower/run.sh        # 3 interleaved rounds of 10 s
 bash bench/techempower/run.sh --quick
+bash bench/techempower/run.sh --cores-compare   # one process against one worker a core
 ```
 
 `run.sh` times the entry, a byte-identical copy of it (the noise band), its
