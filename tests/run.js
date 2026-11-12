@@ -18194,37 +18194,9 @@ if (dealtHere("simd")) {
     const adlerDir = path.join(buildDir, "adler32-kernel")
     fs.rmSync(adlerDir, { recursive: true, force: true })
     fs.mkdirSync(adlerDir, { recursive: true })
-    const adlerFeatures = new Set(
-      ((fs.existsSync("/proc/cpuinfo") ? fs.readFileSync("/proc/cpuinfo", "utf8") : "").match(
-        /^(flags|Features)\s*:(.*)$/m
-      )?.[2] ?? "")
-        .trim()
-        .split(/\s+/)
-    )
     const cpuHasAdler =
-      (process.arch === "x64" && adlerFeatures.has("ssse3")) ||
-      (process.arch === "arm64" && (adlerFeatures.has("asimd") || adlerFeatures.has("neon")))
-    /** The modules of tests/link/<program> compiled into a directory of their own, or none and the reason. */
-    const compileAdler = (program, dir, flags) => {
-      const r = spawnSync(
-        NISH,
-        [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
-        {
-          cwd: root,
-          encoding: "utf8",
-          env: { ...process.env, ...(WASI_SYSROOT ? { WASI_SYSROOT } : {}) },
-        }
-      )
-      const lls =
-        r.status === 0
-          ? fs
-              .readdirSync(dir)
-              .filter((f) => f.endsWith(".ll"))
-              .sort()
-              .map((f) => path.join(dir, f))
-          : []
-      return { lls, why: r.status === 0 ? "" : r.stderr }
-    }
+      (process.arch === "x64" && cpuFeatures.has("ssse3")) ||
+      (process.arch === "arm64" && (cpuFeatures.has("asimd") || cpuFeatures.has("neon")))
 
     if (!HAS_CLANG) {
       skip("adler32 kernel: no clang to link the Adler-32 programs against runtime-checksum.c")
@@ -18255,7 +18227,7 @@ if (dealtHere("simd")) {
       const unset = { ...process.env }
       delete unset.NISH_ADLER32
       for (const program of ["std_compress_adler_paths", "std_compress_adler_diff"]) {
-        const compiled = compileAdler(program, path.join(adlerDir, program), [])
+        const compiled = compileLinkModules(program, path.join(adlerDir, program), [])
         const exe = path.join(adlerDir, `${program}.counted`)
         const linked =
           compiled.lls.length > 0
@@ -18386,8 +18358,8 @@ if (dealtHere("simd")) {
 
     if (WASI_SYSROOT && has("wasm-ld")) {
       const program = "std_compress_adler_paths"
-      const wasi = compileAdler(program, path.join(adlerDir, "wasi"), ["--profile", "wasi"])
-      const native = compileAdler(program, path.join(adlerDir, "native"), [])
+      const wasi = compileLinkModules(program, path.join(adlerDir, "wasi"), ["--profile", "wasi"])
+      const native = compileLinkModules(program, path.join(adlerDir, "native"), [])
       const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_adler32_"))
       /** The modules linked for wasm32-wasi with the Adler-32 symbols traced. */
       const traced = (lls, out) =>
