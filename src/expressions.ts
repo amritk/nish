@@ -1291,6 +1291,20 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       )
       return T_ERROR
     }
+    // WP27 S4.2: `readStruct<Stat>(p)` is the same shape, and its type
+    // argument comes from the context, as `Ok(v)`'s does.
+    const left = expr.children[0]
+    if (left.kind === N_IDENT && scope.lookup(left.text) === null) {
+      const imported = ctx.program.builtinImport(left.text)
+      if (imported !== null && imported.canonical === "readStruct") {
+        ctx.error(
+          expr.children[1],
+          `Type arguments are not written at a call site in ${LANGUAGE}: \`readStruct\` copies into the ` +
+            `\`declare class\` its context names, so write \`const s: Stat = readStruct(p)\``
+        )
+        return T_ERROR
+      }
+    }
   }
   return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope)
 }

@@ -1,0 +1,6 @@
+churned 6336
+kept: tag 7, count 1234567890123, name first, ratio 0.5
+alias: tag 7, count 1234567890123, name first, ratio 0.5
+nullable: tag 7, count 1234567890123, name first, ratio 0.5
+fresh: tag 9, count -1, name second, ratio 2.5
+decimal point ., thousands separator ""
