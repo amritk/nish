@@ -971,9 +971,10 @@ const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): 
 /**
  * Copies `buf[from .. to)` to the end of `head`, growing it when it must, and
  * answers where the copy starts. The head keeps sixteen bytes past its last
- * line, so the copy goes a vector at a time and a vector load at any byte of
- * the head is in bounds: the name and value compares read one. A vector's
- * lanes past the line write bytes past `headLength`, which nothing reads.
+ * line, so a short line is copied as whole vectors and a vector load at any
+ * byte of the head is in bounds: the name and value compares read one. A
+ * vector's lanes past the line write bytes past `headLength`, which nothing
+ * reads.
  */
 const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   const n: i32 = to - from
@@ -998,14 +999,17 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   }
   const head: u8[] = p.head
   const buf: u8[] = p.buf
-  let k: i32 = 0
-  while (k < n && from + k >= 0 && from + k <= toI32(buf.length) - 16 && at + k <= toI32(head.length) - 16) {
-    store(loadU8x16(buf, from + k), head, at + k)
-    k += 16
-  }
-  if (k < n && from + k >= 0 && from <= toI32(buf.length) - n && at <= toI32(head.length) - n) {
-    // The last bytes of a line that ends within a vector of `buf`'s end.
-    copyBytes(head, at + k, buf, from + k, n - k)
+  // A line of up to 32 bytes is one or two vector stores; a longer one, or
+  // one that ends within a vector of `buf`'s end, is one `copyBytes`, which
+  // outruns a loop of stores at a Cookie or User-Agent line's length.
+  const room: i32 = n <= 16 ? 16 : 32
+  if (n <= 32 && from >= 0 && from <= toI32(buf.length) - room && at <= toI32(head.length) - room) {
+    store(loadU8x16(buf, from), head, at)
+    if (n > 16) {
+      store(loadU8x16(buf, from + 16), head, at + 16)
+    }
+  } else if (n > 0 && from >= 0 && from <= toI32(buf.length) - n && at <= toI32(head.length) - n) {
+    copyBytes(head, at, buf, from, n)
   }
   p.headLength = at + n
   return at
