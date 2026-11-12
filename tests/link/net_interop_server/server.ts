@@ -127,6 +127,15 @@ export const supportedTestcase = (name: string): boolean =>
  * WebTransport, a Retry for the runner's `retry` case, and stream limits under
  * the runner's 1,000 for `multiplexing`, which the server raises as streams
  * finish.
+ *
+ * `maxStreamData` also sizes each stream's send buffer, so it bounds the
+ * bytes in flight past the oldest unacknowledged one. At 64 KiB, under the
+ * runner's 10 Mbps and 30 ms round trip (75 KB in flight), one early loss
+ * stalled the sender until the loss timer fired; in `rebind-port` and
+ * `rebind-addr` that idle let the 1 s rebind land with nothing crossing the
+ * NAT, the retransmissions went to the dead binding, and the client closed
+ * on its idle timer with the file truncated. 256 KiB keeps the pipe full
+ * through recovery.
  */
 const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
   return {
@@ -134,7 +143,7 @@ const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
     alpn: [H3_ALPN, HQ_ALPN],
     signatureScheme: TLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
     maxData: toI64(16777216),
-    maxStreamData: toI64(65536),
+    maxStreamData: toI64(262144),
     maxStreamsBidi: toI64(64),
     maxStreamsUni: toI64(8),
     localStreams: toI64(8),
