@@ -12,6 +12,7 @@ declare i32 @nish_s6_personality(...)
 declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #0
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @mix(i32 noundef %rec, i32 noundef %key) #0 {
 entry:
@@ -94,13 +95,11 @@ ovf.fail:
   unreachable
 }
 
-define internal noundef i32 @parseRecord(i32 noundef %rec, i32 noundef %key) #2 {
+define internal noundef i32 @parseRecord(i32 noundef %rec, i32 noundef %key, i1 noundef zeroext %poison) #2 {
 entry:
   %h = call i32 @mix(i32 %rec, i32 %key)
-  %rem = srem i32 %rec, 1000
-  %last = icmp eq i32 %rem, 999
   %low = and i32 %h, 7
-  %bad = select i1 %last, i32 %low, i32 -1
+  %bad = select i1 %poison, i32 %low, i32 -1
   %a = call i32 @parseField(i32 %h, i32 %bad, i32 0)
   %b = call i32 @parseField(i32 %h, i32 %bad, i32 4)
   %c = call i32 @parseField(i32 %h, i32 %bad, i32 8)
@@ -124,7 +123,7 @@ ovf.fail:
   unreachable
 }
 
-define noundef i32 @parse(i32 noundef %n, i32 noundef %seed) #2 personality ptr @nish_s6_personality {
+define noundef i32 @parse(i32 noundef %n, i32 noundef %seed, i32 noundef %every) #2 personality ptr @nish_s6_personality {
 entry:
   %sum0 = and i32 %seed, 65535
   br label %for.cond
@@ -132,12 +131,24 @@ entry:
 for.cond:
   %sum = phi i32 [ %sum0, %entry ], [ %sum.next, %for.inc ]
   %failed = phi i32 [ 0, %entry ], [ %failed.next, %for.inc ]
+  %until = phi i32 [ %every, %entry ], [ %until.next, %for.inc ]
   %rec = phi i32 [ 0, %entry ], [ %rec.next, %for.inc ]
   %more = icmp slt i32 %rec, %n
   br i1 %more, label %for.body, label %for.end
 
 for.body:
-  %v = invoke i32 @parseRecord(i32 %rec, i32 %sum) to label %try.ok unwind label %catch
+  %poison = icmp eq i32 %until, 1
+  br i1 %poison, label %cond.end, label %cond.false
+
+cond.false:
+  %dec = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %until, i32 1)
+  %dec.v = extractvalue { i32, i1 } %dec, 0
+  %dec.o = extractvalue { i32, i1 } %dec, 1
+  br i1 %dec.o, label %ovf.fail, label %cond.end
+
+cond.end:
+  %until.next = phi i32 [ %every, %for.body ], [ %dec.v, %cond.false ]
+  %v = invoke i32 @parseRecord(i32 %rec, i32 %sum, i1 %poison) to label %try.ok unwind label %catch
 
 try.ok:
   %add = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %sum, i32 %v)

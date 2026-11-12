@@ -1,7 +1,8 @@
-// S6, shape 3: a call chain 32 frames deep whose bottom frame fails on every
-// call. `descend` calls itself 32 times and each frame has work left after the
-// call below it returns, so no frame is a tail call and a failure passes
-// through all 32 on its way to the loop that handles it. `descend` only ever
+// S6, shape 3: a call chain `depth` frames deep (32 in the headline row)
+// whose bottom frame fails on every call. `descend` calls itself `depth` times
+// and each frame has work left after the call below it returns, so no frame is
+// a tail call and a failure passes through all of them on its way to the loop
+// that handles it. `descend` only ever
 // sees a 16-bit `x`, so the bottom frame's success arm is the dead one here.
 //
 // This is the program the desugaring would produce from
@@ -13,10 +14,10 @@
 //     }
 //     return (descend(d - 1, x ^ d) + d) & 0xffff
 //   }
-//   export const deep = (n: i32, seed: i32): i32 => {
+//   export const deep = (n: i32, seed: i32, depth: i32): i32 => {
 //     let acc = seed & 0xffff
 //     for (let i = 0; i < n; i++) {
-//       try { acc = (acc ^ descend(32, (acc + (i & 0xff)) & 0xffff)) & 0xffff }
+//       try { acc = (acc ^ descend(depth, (acc + (i & 0xff)) & 0xffff)) & 0xffff }
 //       catch (e) { acc = (acc + e + 1) & 0xffff }
 //     }
 //     return acc
@@ -35,10 +36,10 @@ const descend = (d: i32, x: i32): Result<i32, i32> => {
   return Ok((below + d) & 0xffff)
 }
 
-export const deep = (n: i32, seed: i32): i32 => {
+export const deep = (n: i32, seed: i32, depth: i32): i32 => {
   let acc: i32 = seed & 0xffff
   for (let i: i32 = 0; i < n; i++) {
-    const r = descend(32, (acc + (i & 0xff)) & 0xffff)
+    const r = descend(depth, (acc + (i & 0xff)) & 0xffff)
     if (r.isErr()) {
       acc = (acc + r.error + 1) & 0xffff
       continue

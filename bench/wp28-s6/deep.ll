@@ -1,5 +1,5 @@
 ; S6, shape 3 on landing pads: deep.ts with the bottom `descend` throwing
-; where it answers `Err`. The 32 frames above it have nothing to release, so
+; where it answers `Err`. The frames above it have nothing to release, so
 ; they recurse by plain `call` with no landing pad and the unwinder crosses
 ; each on its tables alone; `deep` calls the top one by `invoke` and its
 ; landing pad is the catch inside the loop. The arithmetic, its overflow
@@ -54,7 +54,7 @@ ovf.fail:
   unreachable
 }
 
-define noundef i32 @deep(i32 noundef %n, i32 noundef %seed) #0 personality ptr @nish_s6_personality {
+define noundef i32 @deep(i32 noundef %n, i32 noundef %seed, i32 noundef %depth) #0 personality ptr @nish_s6_personality {
 entry:
   %acc0 = and i32 %seed, 65535
   br label %for.cond
@@ -69,7 +69,7 @@ for.body:
   %lo = and i32 %i, 255
   %sum = add nsw i32 %acc, %lo
   %arg = and i32 %sum, 65535
-  %v = invoke i32 @descend(i32 32, i32 %arg) to label %try.ok unwind label %catch
+  %v = invoke i32 @descend(i32 %depth, i32 %arg) to label %try.ok unwind label %catch
 
 try.ok:
   %mixed = xor i32 %acc, %v
