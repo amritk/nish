@@ -2,6 +2,7 @@
    "Regions"; docs/security/async.md, ASYNC-20): `nish_async_done` recycles
    the region instead of freeing it, so the next task on the node starts in
    an empty arena that already holds the last one's newest chunk. What is
+   A region that grew through several chunks keeps the newest alone. What is
    kept is bounded twice: a chunk past 64 KiB is freed, and once the free
    nodes keep 16 MiB between them a finishing task keeps none. The probe
    reads `nish_arena` as each task is entered, which is where the kept chunk
@@ -40,6 +41,29 @@ static struct nish_arena task(uint64_t n) {
   return at;
 }
 
+/* The chunks the entered arena links: a chunk begins with its `next`
+   (runtime.c, `nish_chunk`). */
+static int chunks(void) {
+  int n = 0;
+  for (void **c = nish_arena.chunks; c; c = *c) n++;
+  return n;
+}
+
+/* Run one task that allocates twelve strings of 3000 bytes and ends; answers
+   the chunks its region linked as it ended, and in `entered` those it was
+   entered with, or -1 for an arena entered part used or past 64 KiB. */
+static int grown(int *entered) {
+  void *t = nish_async_spawn(0, 16);
+  void *prev = nish_async_enter(t);
+  *entered = nish_arena.off == 0 && nish_arena.cap <= KEEP ? chunks() : -1;
+  memset(big, 'g', 3000);
+  for (int i = 0; i < 12; i++) nish_str_new(big, 3000);
+  int linked = chunks();
+  nish_async_leave(t, prev);
+  nish_async_done(t);
+  return linked;
+}
+
 /* Spawn MANY tasks at once, 60000 bytes each, and end them all; answers the
    bytes the nodes' regions held as the tasks were entered. */
 static uint64_t burst(int *kept_nodes) {
@@ -75,6 +99,17 @@ int main(void) {
   printf("of 100000 later tasks, entered with the kept chunk: %d, entered empty: %d\n", reused, empty);
   printf("peak resident size moved after round 100: %s\n", grew == 0 ? "no" : "yes");
   printf("nodes: %d\n", nish_async_stat(0));
+
+  int entered = 0, one = 0;
+  int linked = grown(&entered);
+  settled = peak();
+  for (int i = 0; i < 100000; i++) {
+    grown(&entered);
+    if (entered == 1) one++;
+  }
+  printf("a task grew its region through several chunks: %s\n", linked > 1 ? "yes" : "no");
+  printf("of 100000 after it, entered with one chunk, empty and at most 64 KiB: %d\n", one);
+  printf("peak resident size moved over them: %s\n", peak() == settled ? "no" : "yes");
 
   task(sizeof big);
   struct nish_arena after_big = task(4000);

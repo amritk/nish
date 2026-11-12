@@ -1,2 +1,3 @@
-rounds 200, filled 125200
+rounds 200, filled 25408
+readers that ran on the node the writer released: 200
 elements a new array did not hold as zero: 0

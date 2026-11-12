@@ -54,7 +54,8 @@
  * each resume (`nish_async_enter`, `nish_async_leave`). A node keeps its
  * region from its first task on: `nish_async_done` enters it once more and
  * rewinds it (`nish_reset_arena`) rather than freeing it, so the node's next
- * task makes no region, and bumps from the newest chunk the last one left
+ * task (a later spawn of the same async function: a node never changes
+ * kind) makes no region, and bumps from the newest chunk the last one left
  * when that chunk is at most 64 KiB (`NISH_ASYNC_KEEP`), so a task that fits
  * it asks `malloc` for nothing. The region keeps its handle and generation:
  * the handle never leaves this file, and a task's region has no children
