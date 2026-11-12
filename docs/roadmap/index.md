@@ -62,7 +62,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 6 of 9 |
 | [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 9 of 18 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 3 of 8 |
-| [WP38: SIMD](wp38-simd.md) | In progress | 8 of 10 |
+| [WP38: SIMD](wp38-simd.md) | In progress | 9 of 10 |
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 12 of 27 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
 | [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md) | In progress | 3 of 4 |

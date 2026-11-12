@@ -1118,7 +1118,7 @@ jobs:
   simd-arm64:
     name: the NEON path agrees (aarch64-linux)
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -1260,18 +1260,6 @@ jobs:
         run: |
           node bench/chacha20.mjs --check --compiler build/nish-test
           node bench/chacha20.mjs --runs 10 --compiler build/nish-test
-
-      # The figures, not a gate: WP38 S2's bar for an AArch64 `--cpu` level.
-      # nbody, vec3 and spectral linked at the baseline, a byte-identical copy
-      # of it (the noise band), armv8.2-a and armv8.4-a+crypto, in rotating
-      # rounds, two samples (docs/wp38-simd.md §7, "S2").
-      - name: The --cpu levels on AArch64
-        timeout-minutes: 12
-        run: |
-          for sample in 1 2; do
-            node bench/simd-s0.mjs --only nbody,vec3,spectral --self --runs 15 \
-              --level armv8.2-a --level armv8.4-a+crypto --compiler build/nish-test
-          done
 
   # runtime/runtime-net.c's Darwin branch, run (#358). The file is one
   # `#ifdef __linux__` away from two event loops -- epoll on Linux, kqueue on
