@@ -500,6 +500,13 @@ const dnsFallback = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: DNS_FALLBACK, why }))
   )
+// The fail-fast UTF-8 check lands under this PR's subject, which names the
+// Autobahn run that grades it.
+const WS_FAIL_FAST = "Autobahn"
+const wsFailFast = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: WS_FAIL_FAST, why }))
+  )
 const ASYNC_FETCH = "Async fetch speaks https and resolves names without blocking"
 const asyncFetch = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -1192,6 +1199,103 @@ const DECLARED = [
     changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd, so the module every importer of nish/text writes has new functions and renumbered string constants; no importer's own module moves",
   },
+  // WsDecoder gains `frameChecked`, how far the text frame still arriving has
+  // been unmasked and UTF-8 checked, so every program that links
+  // nish/net/websocket lays the decoder out 8 bytes wider: websocket.ll moves
+  // for all of them, and a header or module that names the struct moves too.
+  {
+    file: "websocket.ll",
+    changelog: WS_FAIL_FAST,
+    why: "WsDecoder gains an i32 field, frameChecked, so the module every importer of nish/net/websocket writes lays the decoder out 8 bytes wider; its text-frame path checks UTF-8 as bytes arrive and grows the message buffer with them",
+  },
+  ...wsFailFast(
+    "WsDecoder gains an i32 field, frameChecked, so a program's header or a module of its own that names the decoder lays it out 8 bytes wider",
+    {
+      "bench/http1-request/main.ts": ["main.h"],
+      "bench/techempower/main.ts": ["main.h"],
+      "examples/prefork-server.ts": ["prefork-server.h"],
+      "examples/relay/main.ts": ["main.h"],
+      "tests/link/net_http1_server/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_config/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["main.h"],
+      "tests/link/net_http1_server_f64/main.ts": ["main.h"],
+      "tests/link/net_http1_server_feed_window/main.ts": ["main.h"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["main.h"],
+      "tests/link/net_http1_server_send_body/main.ts": ["main.h"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["main.h"],
+      "tests/link/net_http1_server_write_window/main.ts": ["main.h"],
+      "tests/link/net_http2_bad_config_tls/main.ts": ["main.h"],
+      "tests/link/net_http2_tls/main.ts": ["main.h"],
+      "tests/link/net_http2_tls_f64/main.ts": ["main.h"],
+      "tests/link/net_http3/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_body_chunk/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_config/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_credit/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_local_limit/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_uni_limit/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_write_chunk/main.ts": ["main.h"],
+      "tests/link/net_http3_ecn/main.ts": ["main.h"],
+      "tests/link/net_http3_ecn_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_errors/main.ts": ["main.h"],
+      "tests/link/net_http3_errors_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_server/main.ts": ["main.h"],
+      "tests/link/net_http3_server_bad_config/main.ts": ["main.h"],
+      "tests/link/net_http3_server_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_write_window/main.ts": ["main.h"],
+      "tests/link/net_http_date/main.ts": ["main.h"],
+      "tests/link/net_http_date_f64/main.ts": ["main.h"],
+      "tests/link/net_interop_server/main.ts": ["main.h", "ws.ll"],
+      "tests/link/net_interop_server_f64/main.ts": ["main.h", "ws.ll"],
+      "tests/link/net_loopback/main.ts": ["main.h"],
+      "tests/link/net_loopback_f64/main.ts": ["main.h"],
+      "tests/link/net_quic_server_wipes/main.ts": ["main.h"],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["main.h"],
+      "tests/link/net_relay/main.ts": ["main.h"],
+      "tests/link/net_relay_bad_hello/main.ts": ["main.h"],
+      "tests/link/net_relay_bad_idle/main.ts": ["main.h"],
+      "tests/link/net_relay_bad_path/main.ts": ["main.h"],
+      "tests/link/net_relay_bad_per_peer/main.ts": ["main.h"],
+      "tests/link/net_relay_bad_pool/main.ts": ["main.h"],
+      "tests/link/net_relay_bad_rate/main.ts": ["main.h"],
+      "tests/link/net_relay_bad_sessions/main.ts": ["main.h"],
+      "tests/link/net_relay_bad_spare/main.ts": ["main.h"],
+      "tests/link/net_relay_bad_stats/main.ts": ["main.h"],
+      "tests/link/net_relay_encode_window/main.ts": ["main.h"],
+      "tests/link/net_relay_f64/main.ts": ["main.h"],
+      "tests/link/net_relay_forged/main.ts": ["main.h"],
+      "tests/link/net_relay_frame_window/main.ts": ["main.h"],
+      "tests/link/net_relay_grant_window/main.ts": ["main.h"],
+      "tests/link/net_relay_json_window/main.ts": ["main.h"],
+      "tests/link/net_relay_soak/main.ts": ["main.h"],
+      "tests/link/net_websocket/main.ts": ["checks.ll", "main.h"],
+      "tests/link/net_websocket_f64/main.ts": ["checks.ll", "main.h"],
+      "tests/link/net_websocket_feed_window/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_websocket_frame_window/main.ts": ["main.h"],
+      "tests/link/net_websocket_utf8_window/main.ts": ["main.h"],
+      "tests/link/net_websocket_write_window/main.ts": ["main.h"],
+      "tests/link/net_webtransport/main.ts": ["main.h"],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["main.h"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["main.h"],
+      "tests/link/net_webtransport_bad_layer/main.ts": ["main.h"],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["main.h"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["main.h"],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["main.h"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["main.h"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["main.h"],
+      "tests/link/net_webtransport_close_window/main.ts": ["main.h"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["main.h"],
+      "tests/link/net_webtransport_f64/main.ts": ["main.h"],
+      "tests/link/net_webtransport_stream_window/main.ts": ["main.h"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["main.h"],
+      "tests/link/std_http1_end_head/main.ts": ["main.h"],
+      "tests/link/std_http1_mss/main.ts": ["main.h"],
+      "tests/link/std_http_compress/main.ts": ["main.h"],
+      "tests/link/tfb_entry/main.ts": ["main.h"],
+    }
+  ),
   {
     program: "tests/link/std_text_camel_case/main.ts",
     file: "exit",
