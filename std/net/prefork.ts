@@ -415,15 +415,18 @@ const preforkUdpField = (args: string[], at: i32): i32 => {
   for (let back: i32 = 2; back <= 4 && back < toI32(args.length); back++) {
     const flag: string = args[toI32(args.length) - back]
     if (flag.startsWith(PREFORK_UDP_FLAG)) {
-      const fields: string[] = flag.substring(PREFORK_UDP_FLAG.length).split(",")
-      if (fields.length !== 2 || !preforkDigits(fields[0]) || !preforkDigits(fields[1])) {
+      const value: string = flag.substring(PREFORK_UDP_FLAG.length)
+      const comma: i32 = value.indexOf(",")
+      const fd: string = comma > 0 ? value.substring(0, comma) : ""
+      const size: string = comma > 0 ? value.substring(comma + 1) : ""
+      if (!preforkDigits(fd) || !preforkDigits(size)) {
         return -1
       }
-      const count: i32 = parseInt(fields[1])
+      const count: i32 = parseInt(size)
       if (count < 1 || count > PREFORK_UDP_MAX) {
         return -1
       }
-      return at === 0 ? parseInt(fields[0]) : count
+      return at === 0 ? parseInt(fd) : count
     }
   }
   return -1
