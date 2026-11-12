@@ -274,8 +274,8 @@ function manifestNish(manifest: string, condition: string): NishManifest -> @man
   local +47:11 valueAt: i32 (const)
   callee +50:16 manifestNishProblem -> @manifestNishProblem
   local +61:13 isTrue: boolean (const)
-  callee +63:16 manifestNishProblem -> @manifestNishProblem
-  callee +67:14 manifestNishProblem -> @manifestNishProblem
+  callee +66:16 manifestNishProblem -> @manifestNishProblem
+  callee +70:14 manifestNishProblem -> @manifestNishProblem
 function manifestNoPanic(manifest: string, at: i32): ManifestList -> @manifestNoPanic [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   escaping: at manifest
