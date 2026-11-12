@@ -241,28 +241,14 @@ report, not a hunt through their own code. That obligation is still open (§8).
 | ---: | --- | --- |
 | S1 | Package-scoped symbols (§5a) | **Shipped**, 0.2.0, #57. §9. |
 | S2 | Bare specifiers and the `nish` condition (§5b) | **Shipped**, 0.3.0. §10. |
-| S3 | The boundary diagnostics (§5c, §6) | **Resolution half shipped**, 0.9.0, #178; **identity half**, 0.10.0, #202. §11. Two items open, below. |
+| S3 | The boundary diagnostics (§5c, §6) | **Shipped.** Resolution half 0.9.0, #178; identity half 0.10.0, #202; the hostless-builtin refusal and dependency attribution after them. §11. |
 | S4 | The build cache | Open. Content-addressed by (package version, number mode, target, profile, compiler version); invisible to the package author, and the answer to §3's stated cost. `nish run`'s cache is not it: that keeps the linked binary of a whole program and recompiles every run. |
 | S5 | Prebuilt distribution | Deferred, possibly permanently (§7). |
 
-**S3 is the stage to resist over-building**: §6 already talked one manifest out
-of existence, and everything left in it is a message rather than a file. What
-remains:
-
-- **A builtin with no runtime on the target.** A whole-program diagnostic,
-  decided after every module is checked rather than at the import, naming the
-  package that reached the builtin. WP34 N3 has since covered part of the
-  ground at the call site: the host builtins (`Date.now`,
-  `crypto.getRandomValues`, `statMtimeSync`, the ownership checks) and
-  `nish:net` are refused on `--target wasm32` with "reaches the operating
-  system, and a wasm32 build has none to reach" (NL2404), but that message
-  names the call, not the package, and the `nish:fs` builtins such as
-  `readFileSync` are not refused there at all.
-- **A compile error attributed to the dependency** (§6's obligation): an error
-  located in `node_modules/<pkg>/…` should say it is the dependency's.
-
-Each is a diagnostic for a program that already fails, so neither withdraws
-anything, and neither is on any release's critical path.
+**S3 was the stage to resist over-building**: §6 talked one manifest out of
+existence, and everything left in it was a message rather than a file. Each of
+its last two items is a diagnostic for a program that already fails, so neither
+withdraws anything (§11b).
 
 ## 9. S1 as built: package-scoped symbols
 
@@ -419,4 +405,43 @@ The reasoning that still governs the code:
   gave this compiler no file to compile for `.`" — rather than "declares no
   `nish` condition", which the mode ranking can make false.
 
-What S3 still owes is in §8.
+### 11b. The last two diagnostics
+
+**A builtin with no runtime on the target** is a whole-program refusal, made
+after every module is checked (`Compilation.refuseHostlessBuiltins`), not at
+the import. On `--target wasm32` without a WASI sysroot, the analysis's facts
+for the program's roots — `main` and every exported function of the root
+package — are read for the capabilities a freestanding module cannot have
+(`hostlessOnFreestandingWasm` in `src/capabilities.ts`: clock, entropy, env,
+fs.read, fs.write, process.spawn, signal, tty; `net` is refused at every call
+but `netMss`, which a wasm build compiles to `-1`). For each one reached, the
+first root's witness chain names the builtin, the chain, and — walking the
+chain back — the dependency whose function calls it:
+
+```text
+error: `getenv` reaches the operating system, and a wasm32 build has none to reach; the dependency `pkg_conf` calls it in `load` — the chain that reaches it: …
+```
+
+It shares NL2404's wording and code with WP34 N3's call-site refusals, which
+still catch the host builtins at the call. Deciding by reachability is what lets
+a wasm program import `nish/cli` — whose terminal probe calls `getenv` — and
+never be refused for a function it does not reach (`tests/run.js`,
+"wasm-hostless"). Cases: `tests/link/package_wasm_hostless`,
+`wasm_hostless_own`, `tests/cases/reject_read_file_wasm`.
+
+**A compile error inside a dependency says so.** `discover` marks each module
+that is not in the root package and not the standard library (judged by its
+resolved location, so a dependency named `nish` is still a dependency) with its
+package name and version (`SourceFile.dependency`, `dependencyVersion`). A
+diagnostic located there gains one line,
+
+```text
+  = note: this is in the dependency `pkg_broken` 0.3.1, not in this program's own source
+```
+
+and its `--json` object a `"package"` field, so a tool can route the report
+without reading the path (`tests/link/package_dependency_error`).
+
+**Where it stops.** `process.argv` and console output carry no capability, so a
+freestanding wasm program that uses them still fails at the link, with the
+linker's undefined symbol rather than this message.

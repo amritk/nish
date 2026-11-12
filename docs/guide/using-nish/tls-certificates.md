@@ -69,7 +69,7 @@ nearest a root.
 | Code | Meaning |
 | --- | --- |
 | `PKI_OK` | the chain is trusted and names the host |
-| `PKI_ERR_MALFORMED` | the chain is empty, a certificate does not parse, or one breaks the profile a server's chain keeps: a missing key identifier, a zero or overlong serial number, a DNS name with an underscore |
+| `PKI_ERR_MALFORMED` | the chain is empty, a certificate does not parse, or one breaks the profile a server's chain keeps: a missing key identifier, an extension marked critical when it must not be or not when it must, a zero or overlong serial number, a DNS name with an underscore |
 | `PKI_ERR_EXPIRED` | a certificate's validity ended before `nowMs` |
 | `PKI_ERR_NOT_YET_VALID` | a certificate's validity starts after `nowMs` |
 | `PKI_ERR_UNTRUSTED` | no path leads to a root of the store |
@@ -108,9 +108,13 @@ certificate's signature verifies under another's key.
 
 - **Revocation.** Neither CRLs nor OCSP are read, so a certificate revoked
   before it expires is still accepted.
-- **Whether an extension is critical.** A known extension is read whether
-  it is marked critical or not, so a certificate the profile says must mark
-  one is not refused for leaving it unmarked.
+- **Whether name constraints are critical.** A name constraints extension
+  binds whether it is marked critical or not. Every other extension marked
+  against the profile refuses the chain: a critical authority key
+  identifier or, on the server's certificate, extended key usage; basic
+  constraints not critical on an issuer; a policy constraints not critical;
+  or a subject alternative name whose marking does not follow whether the
+  subject is empty.
 - **Certificate policies** are not processed.
 - **The common name** is never read as a hostname.
 
@@ -124,7 +128,9 @@ certificates, carry name constraints or allow any extended key usage, and its
 key must be RSA of 2048 bits or more, P-256, P-384 or Ed25519.
 
 A certificate that breaks the profile is refused as `PKI_ERR_MALFORMED`: one
-below the root without an authorityKeyIdentifier, a serial number of zero or of
+below the root without an authorityKeyIdentifier, a root whose
+authorityKeyIdentifier has no key identifier or names its issuer and serial,
+a malformed authorityInfoAccess, a serial number of zero or of
 more than 20 octets, or a DNS name with an underscore, which some private CAs
 still issue. The checks follow the x509-limbo test suite, and the cases where
 they differ are listed in the security record.

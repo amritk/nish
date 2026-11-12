@@ -106,7 +106,18 @@ module that calls them. Their answers match a browser's `Math` or differ from it
 the last bit only, and `%` is exact. An export may return a `string`, which the
 loader decodes into a JS string, and a host import may take one (see
 [Strings and the page](#strings-and-the-page) below). Functions that *take* a string, or do I/O, are not
-callable from it; the generated `.d.ts` lists them as comments. A whole program that does need them can be built for WASI instead,
+callable from it; the generated `.d.ts` lists them as comments. A `--target wasm32`
+build that reaches a builtin the freestanding runtime has none of — a file
+read, `getenv`, a clock, a spawn — is refused at compile time rather than at
+the link, at your call that leads there, and names the dependency when it is
+a package's code that makes the call:
+
+```text
+main.ts:6:32: error: `getenv` reaches the operating system, and a wasm32 build has none to reach; the dependency `pkg_conf` calls it in `load` — the chain that reaches it: main.ts:6:32 calls configSize, node_modules/pkg_conf/src/index.ts:9:38 calls load, node_modules/pkg_conf/src/index.ts:5:17 calls getenv
+```
+
+What decides is what your exported functions reach, so importing a module
+that uses `getenv` somewhere you never call is fine. A whole program that does need them can be built for WASI instead,
 with `nish app.ts --link app.wasm --profile wasi` (which needs a WASI sysroot;
 see [INSTALL.md](../../INSTALL.md#wasi-optional-for---profile-wasi)), and run
 under any WASI host.

@@ -20,7 +20,7 @@ pathological::pathological-chain-distinct-subject-distinct-key: FAILURE ERR_MALF
 pathological::pathological-chain-same-subject-distinct-key: FAILURE ERR_BUDGET
 pathological::pathological-chain-distinct-subject-same-key: FAILURE ERR_MALFORMED
 pathological::pathological-chain-same-subject-same-key: FAILURE ERR_BUDGET
-rfc5280::aki::critical-aki: SUCCESS, limbo says FAILURE: kept, PKI-26
+rfc5280::aki::critical-aki: FAILURE ERR_MALFORMED
 rfc5280::aki::leaf-missing-aki: FAILURE ERR_MALFORMED
 rfc5280::aki::intermediate-missing-aki: FAILURE ERR_MALFORMED
 rfc5280::aki::self-signed-root-missing-aki: SUCCESS
@@ -72,9 +72,9 @@ rfc5280::nc::nc-permits-uri-subdomains-rejects-apex: FAILURE ERR_NAME_CONSTRAINT
 rfc5280::nc::nc-forbids-othername: FAILURE ERR_NAME_CONSTRAINTS
 rfc5280::nc::nc-forbids-othername-noop: FAILURE ERR_NAME_CONSTRAINTS, limbo says SUCCESS: kept, PKI-25
 rfc5280::nc::nc-forbids-dnsname-wildcard-san: FAILURE ERR_NAME_CONSTRAINTS
-rfc5280::pc::ica-noncritical-pc: SUCCESS, limbo says FAILURE: kept, PKI-26
+rfc5280::pc::ica-noncritical-pc: FAILURE ERR_MALFORMED
 rfc5280::san::malformed: FAILURE ERR_MALFORMED
-rfc5280::san::noncritical-with-empty-subject: SUCCESS, limbo says FAILURE: kept, PKI-26
+rfc5280::san::noncritical-with-empty-subject: FAILURE ERR_MALFORMED
 rfc5280::san::underscore-dns: FAILURE ERR_MALFORMED
 rfc5280::san::ip-in-dns: FAILURE ERR_HOSTNAME
 rfc5280::serial::too-long: FAILURE ERR_MALFORMED
@@ -105,7 +105,7 @@ rfc5280::chain-untrusted-root: FAILURE ERR_UNTRUSTED
 rfc5280::intermediate-ca-without-ca-bit: FAILURE ERR_NOT_CA
 rfc5280::intermediate-ca-missing-basic-constraints: FAILURE ERR_UNTRUSTED
 rfc5280::root-missing-basic-constraints: FAILURE ERR_NOT_CA
-rfc5280::root-non-critical-basic-constraints: SUCCESS, limbo says FAILURE: kept, PKI-26
+rfc5280::root-non-critical-basic-constraints: FAILURE ERR_MALFORMED
 rfc5280::root-inconsistent-ca-extensions: FAILURE ERR_UNTRUSTED
 rfc5280::ica-ku-keycertsign: FAILURE ERR_UNTRUSTED
 rfc5280::leaf-ku-keycertsign: FAILURE ERR_KEY_USAGE
@@ -118,10 +118,10 @@ rfc5280::mismatching-signature-algorithm: FAILURE ERR_MALFORMED
 rfc5280::ca-as-leaf: FAILURE ERR_NOT_CA, limbo says SUCCESS: kept, PKI-25
 rfc5280::ca-as-leaf-wrong-san: FAILURE ERR_NOT_CA
 rfc5280::root-and-intermediate-swapped: SUCCESS
-webpki::aki::root-with-aki-missing-keyidentifier: SUCCESS, limbo says FAILURE: kept, PKI-27
+webpki::aki::root-with-aki-missing-keyidentifier: FAILURE ERR_MALFORMED
 webpki::aki::root-with-aki-authoritycertissuer: FAILURE ERR_UNTRUSTED
 webpki::aki::root-with-aki-authoritycertserialnumber: FAILURE ERR_UNTRUSTED
-webpki::aki::root-with-aki-all-fields: SUCCESS, limbo says FAILURE: kept, PKI-27
+webpki::aki::root-with-aki-all-fields: FAILURE ERR_MALFORMED
 webpki::aki::root-with-aki-ski-mismatch: FAILURE ERR_MALFORMED
 webpki::cn::ipv4-hex-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
 webpki::cn::ipv4-leading-zeros-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
@@ -133,7 +133,7 @@ webpki::cn::utf8-vs-punycode-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
 webpki::cn::not-in-san: SUCCESS, limbo says FAILURE: kept, PKI-29
 webpki::cn::case-mismatch: SUCCESS, limbo says FAILURE: kept, PKI-29
 webpki::eku::ee-anyeku: FAILURE ERR_EXT_KEY_USAGE
-webpki::eku::ee-critical-eku: SUCCESS, limbo says FAILURE: kept, PKI-26
+webpki::eku::ee-critical-eku: FAILURE ERR_EXT_KEY_USAGE
 webpki::eku::ee-without-eku: SUCCESS, limbo says FAILURE: kept, PKI-30
 webpki::eku::root-has-eku: FAILURE ERR_EXT_KEY_USAGE
 webpki::nc::permitted-dns-match-noncritical: SUCCESS
@@ -156,13 +156,13 @@ webpki::san::wildcard-match-across-labels-san: FAILURE ERR_HOSTNAME
 webpki::san::wildcard-embedded-ulabel-san: FAILURE ERR_HOSTNAME
 webpki::san::unicode-emoji-san: FAILURE ERR_MALFORMED
 webpki::san::no-san: FAILURE ERR_HOSTNAME
-webpki::san::san-critical-with-nonempty-subject: SUCCESS, limbo says FAILURE: kept, PKI-26
+webpki::san::san-critical-with-nonempty-subject: FAILURE ERR_MALFORMED
 webpki::san::san-wildcard-only: FAILURE ERR_HOSTNAME
 webpki::san::san-wildcard-only-tld: FAILURE ERR_HOSTNAME
 webpki::explicit-curve: FAILURE ERR_UNSUPPORTED_ALGORITHM
 webpki::cryptographydotio-chain: SUCCESS
 webpki::cryptographydotio-chain-missing-intermediate: FAILURE ERR_UNTRUSTED
-webpki::malformed-aia: SUCCESS, limbo says FAILURE: kept, PKI-27
+webpki::malformed-aia: FAILURE ERR_MALFORMED
 webpki::forbidden-p192-root: FAILURE ERR_UNSUPPORTED_ALGORITHM
 webpki::forbidden-p192-leaf: FAILURE ERR_UNSUPPORTED_ALGORITHM
 webpki::forbidden-dsa-root: FAILURE ERR_UNSUPPORTED_ALGORITHM
@@ -670,4 +670,4 @@ online::microsoft.com: SUCCESS
 online::stackoverflow.com: SUCCESS
 nish::anchor-pathlen::pathlen::intermediate-violates-pathlen-0: FAILURE ERR_PATH_LENGTH
 nish::anchor-pathlen::pathlen::ee-with-intermediate-pathlen-0: SUCCESS
-x509-limbo: 672 cases, 118 accepted, 642 as limbo says, 30 divergences kept
+x509-limbo: 672 cases, 109 accepted, 651 as limbo says, 21 divergences kept

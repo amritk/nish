@@ -50,7 +50,7 @@ function factsText(source: SourceFile, table: TypeTable, sig: FunctionSig, facts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: TypeTable.isResult TypeTable.isStruct flag nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 position sortedStrings
-  pointer source: size=32 writesThrough=false captured=false passedTo=position#0
+  pointer source: size=48 writesThrough=false captured=false passedTo=position#0
   pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.isResult#0
   pointer sig: size=200 writesThrough=false captured=false
   pointer facts: size=432 writesThrough=false captured=false
@@ -130,7 +130,7 @@ function position(source: SourceFile, offset: i32): string -> @position
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: offset
   calls: SourceFile.columnOf SourceFile.lineOf nish_str_concat nish_str_from_i32
-  pointer source: size=32 writesThrough=false captured=false passedTo=SourceFile.lineOf#0 SourceFile.columnOf#0
+  pointer source: size=48 writesThrough=false captured=false passedTo=SourceFile.lineOf#0 SourceFile.columnOf#0
   stackSites=0 stackLocals=0
   callee +0:6 SourceFile.lineOf -> @SourceFile.lineOf
   callee +0:31 SourceFile.columnOf -> @SourceFile.columnOf
@@ -139,7 +139,7 @@ function bodyTables(program: CheckedProgram, source: SourceFile, table: TypeTabl
   sharedWrite: via walkBody
   calls: nish_panic_index walkBody
   pointer program: size=800 writesThrough=false captured=false passedTo=walkBody#0
-  pointer source: size=32 writesThrough=false captured=false passedTo=walkBody#1
+  pointer source: size=48 writesThrough=false captured=false passedTo=walkBody#1
   pointer table: size=112 writesThrough=false captured=false passedTo=walkBody#2
   pointer sig: size=200 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=walkBody#4
@@ -151,7 +151,7 @@ function walkBody(program: CheckedProgram, source: SourceFile, table: TypeTable,
   sharedWrite: +0:7
   calls: TypeTable.typeName nish_array_grow nish_panic_index nish_str_concat position walkBody
   pointer program: size=800 writesThrough=false captured=false passedTo=walkBody#0
-  pointer source: size=32 writesThrough=false captured=false passedTo=position#0 position#0 position#0 walkBody#1
+  pointer source: size=48 writesThrough=false captured=false passedTo=position#0 position#0 position#0 walkBody#1
   pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0 walkBody#2
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=walkBody#4

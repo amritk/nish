@@ -187,4 +187,11 @@ PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
 PASS  after its handshake a connection keeps none: ten echoes, a close
 PASS  and from the second on, a handshake through the slot keeps nothing either (QUIC-3)
-quic streams: 189 passed, 0 failed, 0 skipped
+PASS  a 1,001-byte ring takes runs that straddle its end
+PASS  out-of-order frames at unaligned offsets hold the contiguous edge until the gap fills, then move it to the run's end
+PASS  6,000 bytes come out of a 1,001-byte ring in 37-byte reads, each the one sent at its offset
+PASS  what is in flight straddles the 1,001-byte ring's end, round after round
+PASS  every chunk off a 1,001-byte ring carries the bytes written at its offset
+PASS  the send base stops at the first unacknowledged byte through out-of-order, mid-byte acknowledgements
+PASS  once every byte and the FIN are acknowledged nothing is left to send
+quic streams: 196 passed, 0 failed, 0 skipped

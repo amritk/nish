@@ -134,7 +134,7 @@ function DebugInfo.fileOf(this: DebugInfo, source: SourceFile): string -> @Debug
   sharedWrite: +0:5
   calls: IRModule.addMetadata StringMap.get StringMap.set nish_array_grow nish_panic_index nish_str_concat quote
   pointer this: size=104 writesThrough=false captured=false
-  pointer source: size=32 writesThrough=false captured=false
+  pointer source: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -8:11 known: i32 (const)
   callee -8:19 StringMap.get -> @StringMap.get
@@ -147,7 +147,7 @@ function DebugInfo.lineOf(this: DebugInfo, source: SourceFile, node: Node): i32 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.lineOf
   pointer this: size=104 writesThrough=false captured=false
-  pointer source: size=32 writesThrough=false captured=false passedTo=SourceFile.lineOf#0
+  pointer source: size=48 writesThrough=false captured=false passedTo=SourceFile.lineOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 SourceFile.lineOf -> @SourceFile.lineOf

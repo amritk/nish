@@ -1,0 +1,1 @@
+{"file":"tests/link/wasm_hostless_own/main.ts","line":7,"column":17,"endLine":7,"endColumn":31,"severity":"error","code":"NL2404","message":"`getenv` reaches the operating system, and a wasm32 build has none to reach — the chain that reaches it: main.ts:7:17 calls getenv"}

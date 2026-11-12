@@ -88,6 +88,7 @@ import {
   capabilityNames,
   deterministicReason,
   deterministicRefusals,
+  hostlessOnFreestandingWasm,
   everyCapabilityName,
   optInCapabilities,
 } from "./capabilities"
@@ -105,6 +106,7 @@ import {
   programInterpreter,
   rootReach,
   witnessChain,
+  WitnessHop,
 } from "./capability-report"
 import { CapabilityLock, capabilityLockName, capabilityLockText, readCapabilityLock } from "./capability-lock"
 import {
@@ -171,6 +173,7 @@ import {
   COLLECTIONS_SPECIFIER,
   isArrayMethodLocal,
   isArrayModule,
+  isStdModule,
   isStdModuleName,
   SECRET_STD_SPECIFIER,
   stdModuleName,
@@ -564,6 +567,24 @@ export class Compilation {
   }
 
   /**
+   * Mark `source` as dependency `packageName`'s file, with the version its
+   * `package.json` gives, when it is one: not the root package's and not the
+   * standard library's. Where the module was resolved decides the second, as
+   * it does for the capability checks: a dependency that calls itself `nish`
+   * is still a dependency.
+   */
+  markDependency(source: SourceFile, packageName: string, path: string): void {
+    if (packageName === ROOT_PACKAGE || isStdModule(this.libraryRoot(), source.path, path)) {
+      return
+    }
+    source.dependency = packageName
+    const at = this.packageIndex.get(packageName, -1)
+    if (at >= 0 && at < this.packageCopies.length) {
+      source.dependencyVersion = this.packageCopies[at].version
+    }
+  }
+
+  /**
    * Which package a module is in (WP21 S1). Everything that shares the entry's
    * package directory is the root package — for an ordinary program that is
    * "no package directory at all", so every module of it is — and everything
@@ -803,6 +824,14 @@ export class Compilation {
     const host = this.hostIdentities.has(identity)
     const read: HostText | null = host ? hostModuleText(text) : null
     const source = new SourceFile(name, read === null ? text : read.text)
+    const isEntry = this.modules.length === 0
+    if (isEntry) {
+      this.rootPackageDir = packageDirOf(name)
+    }
+    // Whose file this is, settled before anything can report against it, so a
+    // dependency's syntax error says it is the dependency's too (WP21 S3).
+    const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(name)
+    this.markDependency(source, packageName, path)
     if (read !== null && read.problem.length > 0) {
       this.sink.report(source, read.start, read.end, read.problem)
       return false
@@ -837,14 +866,11 @@ export class Compilation {
       dropRefused(file, refusals)
       markHostFunctions(file)
     }
-    const isEntry = this.modules.length === 0
     if (isEntry) {
-      this.rootPackageDir = packageDirOf(name)
       // Before anything numbers the tree by its size: the `main` it builds
       // takes its ids from the same parser.
       liftScript(parser, file)
     }
-    const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(name)
     const checker = new Checker(
       this.table,
       source,
@@ -1496,6 +1522,7 @@ export class Compilation {
     this.refuseCapabilities()
     this.refuseDependencyCapabilities()
     this.refuseNarrowGrants()
+    this.refuseHostlessBuiltins()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -2076,6 +2103,88 @@ export class Compilation {
       }
       p = p + 1
     }
+  }
+
+  /**
+   * WP21 S3: refuse a freestanding wasm32 build whose program reaches a
+   * builtin that target has no runtime for, the `nish:fs` and `nish:process`
+   * calls `readFileSync`, `getenv` or `spawnSync` among them. Decided here,
+   * once every module is checked, rather than at the call: the standard
+   * library calls them in functions a wasm program may never reach, and a
+   * program that imports `nish/cli` for its argument parser must not be
+   * refused for the `getenv` it never calls. What is judged is what the host
+   * can call: `main`, and each exported function of the root package's own
+   * modules. One error per capability, spanned at the first call of the
+   * witness chain, so it lands in the program's own source; when the chain
+   * passes through a dependency the message names it, the one nearest the
+   * builtin, since that is the package whose code has no runtime here.
+   */
+  refuseHostlessBuiltins(): void {
+    if (!isFreestandingWasmBuild(this.opts) || this.modules.length === 0) {
+      return
+    }
+    const facts = this.analyze()
+    const index = functionIndex(this, facts)
+    const judged: FunctionSig[] = []
+    const main = this.entry().checker.program.entryMain
+    let mainName = ""
+    if (main !== null) {
+      judged.push(main)
+      mainName = main.name
+    }
+    for (const unit of this.modules) {
+      if (unit.packageName === ROOT_PACKAGE) {
+        const program = unit.checker.program
+        for (const sig of program.functions) {
+          if (sig.name !== mainName && sig.exported && sig.definedIn(program.source)) {
+            judged.push(sig)
+          }
+        }
+      }
+    }
+    const hostless = hostlessOnFreestandingWasm()
+    let c = 0
+    while (c < CAPABILITY_COUNT) {
+      if ((hostless & (1 << c)) !== 0) {
+        for (const sig of judged) {
+          const chain = witnessChain(index, facts, sig, c)
+          const source: SourceFile | null = chain.length > 0 ? chain[0].source : null
+          const site: Node | null = chain.length > 0 ? chain[0].site : null
+          if (source !== null && site !== null) {
+            this.reportHostless(source, site, chain)
+            break
+          }
+        }
+      }
+      c = c + 1
+    }
+  }
+
+  /** The refusal `refuseHostlessBuiltins` reports for `chain`, a method of its own for the reason `reportRefusal` is. */
+  reportHostless(source: SourceFile, site: Node, chain: WitnessHop[]): void {
+    const hops: string[] = []
+    for (const hop of chain) {
+      hops.push(`${hop.at} calls ${hop.calls}`)
+    }
+    const builtin = chain[chain.length - 1].calls
+    let dependency = ""
+    let caller = ""
+    let k = chain.length - 1
+    while (k >= 0 && dependency.length === 0) {
+      const at: SourceFile | null = chain[k].source
+      if (at !== null && at.dependency.length > 0) {
+        dependency = at.dependency
+        caller = chain[k].caller
+      }
+      k = k - 1
+    }
+    const whose = dependency.length > 0 ? `; the dependency \`${dependency}\` calls it in \`${caller}\`` : ""
+    this.sink.report(
+      source,
+      site.start,
+      site.end,
+      `\`${builtin}\` reaches the operating system, and a wasm32 build has none to reach${whose} — the chain that reaches it: ${hops.join(", ")}`
+    )
   }
 
   /** The refusal of dependency `name`'s capability `c`, a method of its own for the reason `reportRefusal` is. */
@@ -3756,9 +3865,9 @@ export class Compilation {
    * `fs.read`, `fs.write` or `process.spawn`, and each of them is granted it
    * with arguments, `--sandbox` confines the program to those arguments — the
    * granted directories become its Landlock roots, the granted programs (and
-   * their interpreters) its exec allowlist. A reach the root package makes
-   * itself, an `ffi` call, or a scope given on the command line leaves the
-   * capability as it was.
+   * their interpreters, marked `//` unless granted too) its exec allowlist. A
+   * reach the root package makes itself, an `ffi` call, or a scope given on
+   * the command line leaves the capability as it was.
    */
   narrowSandbox(facts: FactsTable): void {
     const caps = this.opts.sandboxCapabilities
@@ -3821,6 +3930,11 @@ export class Compilation {
       if (!reached || !scoped) {
         continue
       }
+      // An interpreter the grant does not name itself is written with a
+      // second leading `/`, the same file to Landlock, which the runtime keeps
+      // out of a spawn's reach by identity (SBX-1). Grant values and
+      // interpreters are real paths, so no other entry starts `//`.
+      const granted = values.length
       if (c === capabilityIndex("process.spawn")) {
         let k = 0
         while (k < values.length) {
@@ -3831,8 +3945,10 @@ export class Compilation {
           k = k + 1
         }
       }
-      for (const value of values) {
-        cli.push(value)
+      let v = 0
+      while (v < values.length) {
+        cli.push(v < granted ? values[v] : `/${values[v]}`)
+        v = v + 1
       }
     }
   }

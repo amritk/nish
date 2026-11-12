@@ -8809,6 +8809,32 @@ if (dealtHere("cryptoBench")) {
     markers.every((m) => /^[a-z-]+$/.test(m)),
     `markers: ${markers.join(", ")}`
   )
+  // The paired-rounds decision on run 43086306918's numbers: a mask that
+  // changed nothing passed its fourth set at 36 of 48 and 1.000x, the count's
+  // bound having covered two sets of the four two cases may take. Split over
+  // all four the count is 37, and a tie fails whatever the count; the real
+  // mask's lowest CI ratio, 1.029x, with 40 rounds still passes.
+  const { pairedProves, pairedWant } = await import("../bench/crypto/paired.mjs")
+  const want2 = pairedWant(2)
+  const tie = [36, 48].map((lost) => pairedProves(lost, want2, 1.0))
+  // run.mjs splits the bound over the family's own cases (curves has two), and
+  // the ratio's margin is a hard floor.
+  const runSrc = fs.readFileSync(path.join(root, "bench", "crypto", "run.mjs"), "utf8")
+  const curvesCases = JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", "curves", "family.json"), "utf8")).portableProof
+  check(
+    "crypto-bench: run.mjs asks for the count over the family's cases, curves' two need 37, and the ratio floor is 1.01",
+    runSrc.includes("pairedWant(cases.length)") &&
+      curvesCases.length === 2 &&
+      pairedWant(curvesCases.length) === 37 &&
+      !pairedProves(48, want2, 1.009) &&
+      pairedProves(48, want2, 1.011),
+    `pairedWant(cases.length) in run.mjs ${runSrc.includes("pairedWant(cases.length)")}; curves cases ${curvesCases.length}; 1.009x ${pairedProves(48, want2, 1.009)}; 1.011x ${pairedProves(48, want2, 1.011)}`
+  )
+  check(
+    "crypto-bench: the paired rounds fail CI's tie (36 of 48 at 1.000x over two cases) and pass the real mask's 40 at 1.029x",
+    want2 === 37 && tie.every((p) => !p) && !pairedProves(36, want2, 1.029) && pairedProves(40, want2, 1.029),
+    `want ${want2} of 48; 36 and 48 at 1.000x prove ${tie}; 36 at 1.029x ${pairedProves(36, want2, 1.029)}; 40 at 1.029x ${pairedProves(40, want2, 1.029)}`
+  )
   if (HAS_CLANG) {
     const families = fs
       .readdirSync(path.join(root, "bench", "crypto"))
@@ -10951,25 +10977,86 @@ if (dealtHere("fileServer")) {
     )
     // One fetch from a fresh server: the response head, the body's length and
     // SHA-256, and the server's VmHWM in kB once the body is in. The server is
-    // killed whatever happens, and the whole exchange has a deadline.
+    // killed whatever happens.
+    //
+    // The deadline is on progress, not on the whole exchange: the fetch fails
+    // once `FILE_SERVER_STALL_MS` pass with no byte while the reader is not
+    // pausing, and the clock restarts on every byte. A whole 64 MiB fetch
+    // takes 0.74 to 0.78 s on CI and its longest pause is 250 ms, so 20 s
+    // without a byte is a stall, not a slow runner. CI saw three of them, each
+    // the whole 60 s the old fixed deadline allowed, with the server alive and
+    // nothing to say which side had stopped. A stall now records where the
+    // fetch was (phase, bytes, ms since the last one), the server's scheduler
+    // state and kernel wait channel, and both ends' kernel queues from
+    // /proc/net/tcp: a full send queue with an empty receive queue is the
+    // reader, empty queues with the server asleep are a lost wake-up. That
+    // record named #1420 (27ad7dd8) as the cause of CI's three stalls, all on
+    // heads before it: with its write bit reverted, one run in ten stalled
+    // at 33 MB with the server in do_epoll_wait and both queues empty.
+    //
+    // A transfer that trickles a byte under the stall bound would never trip
+    // it, so the whole fetch also has a cap derived from the reader's pacing:
+    // its pauses (250 ms, then 5 ms per further MiB), the body at
+    // `FILE_SERVER_FLOOR` bytes a second (CI moves about 90 MiB/s), and one
+    // stall bound for start-up and the head.
+    const FILE_SERVER_STALL_MS = 20_000
+    const FILE_SERVER_FLOOR = 1 << 20
+    const fetchCapMs = (size) =>
+      FILE_SERVER_STALL_MS + 250 + 5 * Math.floor(size / (1 << 20)) + Math.ceil((size * 1000) / FILE_SERVER_FLOOR)
+    const tcpQueues = (port) => {
+      const hex = port.toString(16).toUpperCase().padStart(4, "0")
+      try {
+        return fs
+          .readFileSync("/proc/net/tcp", "utf8")
+          .split("\n")
+          .map((l) => l.trim().split(/\s+/))
+          .filter((f) => f.length > 4 && (f[1].endsWith(`:${hex}`) || f[2].endsWith(`:${hex}`)))
+          .map((f) => `${f[1]}->${f[2]} st ${f[3]} tx:rx ${f[4]}`)
+      } catch (e) {
+        return [String(e)]
+      }
+    }
+    const procLine = (pid, name) => {
+      try {
+        return fs.readFileSync(`/proc/${pid}/${name}`, "utf8").trim()
+      } catch (e) {
+        return String(e)
+      }
+    }
     const serveOnce = (file, method) =>
       new Promise((resolve) => {
-        const server = spawn(exe, [file, "0"], {
-          stdio: ["ignore", "pipe", "pipe"],
-          timeout: 90_000,
-          killSignal: "SIGKILL",
-        })
+        // Before the spawn, so that a throw here leaves no server running.
+        const cap = fetchCapMs(fs.statSync(file).size)
+        const server = spawn(exe, [file, "0"], { stdio: ["ignore", "pipe", "pipe"] })
+        const born = Date.now()
         let out = ""
         let fetching = false
         let settled = false
+        // Where the fetch is, for a stall's detail; `paused` stops the clock.
+        const at = { phase: "start", got: 0, last: Date.now(), paused: false, port: 0 }
         const finish = (r) => {
           if (settled) return
           settled = true
-          clearTimeout(timer)
+          clearInterval(watch)
           server.kill("SIGKILL")
           resolve({ ...r, out })
         }
-        const timer = setTimeout(() => finish({ error: "timed out after 60 s" }), 60_000)
+        const watch = setInterval(() => {
+          const now = Date.now()
+          const idle = now - at.last
+          const over = now - born >= cap
+          if (!over && (at.paused || idle < FILE_SERVER_STALL_MS)) return
+          finish({
+            error: over
+              ? `the fetch passed its ${cap} ms cap (the reader's pauses, the body at 1 MiB/s and one stall bound)`
+              : `no byte for ${idle} ms`,
+            phase: at.phase,
+            got: at.got,
+            server: procLine(server.pid, "stat").replace(/^.*\) /, "").split(" ")[0],
+            wchan: procLine(server.pid, "wchan"),
+            tcp: at.port > 0 ? tcpQueues(at.port) : [],
+          })
+        }, 1_000)
         server.on("error", (e) => finish({ error: String(e) }))
         server.on("exit", (code, signal) => finish({ error: `the server exited (${code ?? signal})` }))
         server.stderr.on("data", (d) => (out += d))
@@ -10978,30 +11065,48 @@ if (dealtHere("fileServer")) {
           const port = /http:\/\/127\.0\.0\.1:(\d+)\//.exec(out)
           if (port === null || fetching) return
           fetching = true
-          const socket = net.connect(Number(port[1]), "127.0.0.1")
+          at.port = Number(port[1])
+          at.phase = "connect"
+          at.last = Date.now()
+          const socket = net.connect(at.port, "127.0.0.1")
           const hash = crypto.createHash("sha256")
           let head = Buffer.alloc(0)
           let inBody = false
           let got = 0
           let sincePause = 0
           let pauses = 0
-          socket.on("connect", () => socket.write(`${method} / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`))
+          socket.on("connect", () => {
+            at.phase = "head"
+            at.last = Date.now()
+            socket.write(`${method} / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`)
+          })
           socket.on("data", (chunk) => {
+            at.last = Date.now()
             if (!inBody) {
               head = Buffer.concat([head, chunk])
               const end = head.indexOf("\r\n\r\n")
               if (end < 0) return
               inBody = true
+              at.phase = "body"
               chunk = head.subarray(end + 4)
               head = head.subarray(0, end)
             }
             hash.update(chunk)
             got += chunk.length
+            at.got = got
             sincePause += chunk.length
             if (sincePause >= 1 << 20) {
               sincePause = 0
               socket.pause()
-              setTimeout(() => socket.resume(), pauses++ === 0 ? 250 : 5)
+              at.paused = true
+              setTimeout(
+                () => {
+                  at.paused = false
+                  at.last = Date.now()
+                  socket.resume()
+                },
+                pauses++ === 0 ? 250 : 5
+              )
             }
           })
           socket.on("error", (e) => finish({ error: String(e) }))
@@ -15537,6 +15642,31 @@ if (dealtHere("runtimeChecks")) {
         String(mc.stderr) + String(ml.stderr) + (mr ? String(mr.stdout) + String(mr.stderr) : "")
       )
     }
+  }
+
+  // WP21 S3: a builtin with no runtime on freestanding wasm32 is refused by
+  // what the program reaches, not at every call. `nish/cli` calls `getenv` in
+  // functions a program that only styles text never reaches, so importing it
+  // for `Style` compiles for wasm32 (the reached case is
+  // tests/link/package_wasm_hostless and tests/link/wasm_hostless_own).
+  if (!only || "wasm-hostless".includes(only)) {
+    const hostlessDir = path.join(buildDir, "wasm-hostless")
+    fs.rmSync(hostlessDir, { recursive: true, force: true })
+    fs.mkdirSync(hostlessDir, { recursive: true })
+    const entry = path.join(hostlessDir, "main.ts")
+    fs.writeFileSync(
+      entry,
+      'import { Style } from "nish/cli";\n\nexport const headingLength = (): i32 => new Style(true, true).heading("hi").length;\n'
+    )
+    const r = spawnSync(NISH, [entry, "-o", path.join(hostlessDir, "out") + path.sep, "--target", "wasm32"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "wasm hostless: a wasm32 program that imports nish/cli and never reaches its `getenv` is not refused",
+      r.status === 0,
+      r.stderr
+    )
   }
 
   // ---- #643: a function named `memory` in a wasm module -----------------------------
@@ -22394,7 +22524,13 @@ if (dealtHere("releaseChecks")) {
   //   ```ts nish:err NL2231         must be rejected, with that code among the errors
   //   ```ts nish:err-body NL2188    the same, wrapped in a `main` body
   //
-  // Anything after the code is passed to the CLI as flags (`--number-mode f64`).
+  // Anything after the code is passed to the CLI as flags (`--number-mode f64`),
+  // except `file=<path>`, which makes the fence one file of a program of several:
+  // a run of `file=` fences in one section (no heading between them) is written
+  // out as one directory, each at its path (a `json` fence may be one, for a
+  // package's `package.json`), and the last of them is compiled with its marker
+  // and flags. The fences before it are files the program imports, so they are
+  // `nish:ok` with no flags.
   // A plain ```ts block is prose and is not compiled, which is what lets the doc
   // show a fragment. The expectation is the *code* rather than the message,
   // because that is what the doc tells its reader to key on (`AGENTS.md`,
@@ -22429,28 +22565,65 @@ if (dealtHere("releaseChecks")) {
     const markedSnippets = (text) => {
       const found = []
       const lines = text.split("\n")
+      let section = 0
+      let inFence = false
       for (let i = 0; i < lines.length; i++) {
-        const m = /^```ts\s+nish:(ok|err)(-body)?\s*(.*)$/.exec(lines[i])
+        const m = /^```(ts|json)\s+nish:(ok|err)(-body)?\s*(.*)$/.exec(lines[i])
         if (!m) {
+          // A `#` line inside an unmarked fence, a shell comment, is not a heading.
+          if (lines[i].startsWith("```")) {
+            inFence = !inFence
+          } else if (!inFence && /^#{1,6} /.test(lines[i])) {
+            section++
+          }
           continue
         }
-        const rest = m[3].trim().split(/\s+/).filter(Boolean)
-        const code = m[1] === "err" ? rest.shift() : null
+        const rest = m[4].trim().split(/\s+/).filter(Boolean)
+        const code = m[2] === "err" ? rest.shift() : null
+        const fileArg = rest.findIndex((a) => a.startsWith("file="))
+        const file = fileArg < 0 ? null : rest.splice(fileArg, 1)[0].slice("file=".length)
         let end = i + 1
         while (end < lines.length && lines[end] !== "```") {
           end++
         }
         found.push({
-          kind: m[1],
-          wrap: m[2] === "-body",
+          lang: m[1],
+          kind: m[2],
+          wrap: m[3] === "-body",
           code,
           args: rest,
+          file,
+          section,
           line: i + 1,
           source: lines.slice(i + 1, end).join("\n"),
         })
         i = end
       }
       return found
+    }
+
+    /**
+     * The programs a page's marked fences make: a fence alone, or a run of `file=`
+     * fences in one section, compiled at its last.
+     */
+    const programsOf = (snippets) => {
+      const programs = []
+      let run = null
+      for (const s of snippets) {
+        if (s.file === null) {
+          run = null
+          programs.push({ entry: s, files: [] })
+          continue
+        }
+        if (run === null || run.entry.section !== s.section) {
+          run = { entry: s, files: [] }
+          programs.push(run)
+        } else {
+          run.files.push(run.entry)
+          run.entry = s
+        }
+      }
+      return programs
     }
 
     /** A stub is the page's title and a single paragraph saying what it will cover. */
@@ -22586,6 +22759,148 @@ if (dealtHere("releaseChecks")) {
       return foreign
     }
 
+    /** The source a fence holds, wrapped in a `main` body for a `-body` marker. */
+    const fenceBody = (s) =>
+      s.wrap ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n` : `${s.source}\n`
+
+    /**
+     * Writes a program's fences out and compiles its entry, the last of them. A
+     * program of `file=` fences gets a directory of its own, each fence at its path;
+     * `misplaced` lists the lines of the fences before the entry that carry
+     * `nish:err` or flags, which nothing would check, a path outside that
+     * directory, which is not written, or a `.ts` that does not compile alone, which
+     * the entry might never import. A `json` fence is only ever a file of a program;
+     * alone it fails.
+     */
+    const compileProgram = (program, stem) => {
+      const s = program.entry
+      if (s.lang === "json" && s.file === null) {
+        const run = { status: 1, stdout: "", stderr: "a json fence is checked only as a file= of a program" }
+        return { run, errors: [], detail: "", body: s.source, misplaced: [] }
+      }
+      let file = path.join(snippetDir, `${stem}.ts`)
+      const misplaced = []
+      if (s.file !== null) {
+        const dir = path.join(snippetDir, `${stem}.src`)
+        for (const f of [...program.files, s]) {
+          const target = path.resolve(dir, f.file)
+          if (!target.startsWith(dir + path.sep)) {
+            misplaced.push(f.line)
+            continue
+          }
+          fs.mkdirSync(path.dirname(target), { recursive: true })
+          fs.writeFileSync(target, fenceBody(f))
+          if (f !== s && (f.kind !== "ok" || f.args.length > 0)) {
+            misplaced.push(f.line)
+          }
+        }
+        for (const f of program.files) {
+          const target = path.resolve(dir, f.file)
+          if (f.lang === "ts" && !misplaced.includes(f.line)) {
+            const out = `${path.join(snippetDir, stem)}_${f.line}${path.sep}`
+            const alone = spawnSync(NISH, [target, "-o", out], { encoding: "utf8" })
+            if (alone.status !== 0) {
+              misplaced.push(f.line)
+            }
+          }
+        }
+        file = path.join(dir, s.file)
+      } else {
+        fs.writeFileSync(file, fenceBody(s))
+      }
+      // A directory, because a snippet that imports `nish/threads` writes one module per file.
+      const out = `${path.join(snippetDir, stem)}${path.sep}`
+      const run = spawnSync(NISH, [file, "--json", "-o", out, ...s.args], { encoding: "utf8" })
+      const errors = run.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+        .filter((d) => d.severity === "error")
+      const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
+      return { run, errors, detail, body: fenceBody(s), misplaced }
+    }
+
+    // A program of several files is compiled as one: the same two files, with the
+    // export the import names taken off, are refused with NL2045. Were each fence
+    // compiled alone, or the files not written beside each other, this would compile
+    // (the module alone) or fail for another reason (no `./geometry` at all).
+    {
+      const page = [
+        "## A program of two files",
+        "```ts nish:ok file=geometry.ts",
+        "const half = (x: i32): i32 => x / 2;",
+        "```",
+        "```ts nish:ok file=main.ts",
+        'import { half } from "./geometry";',
+        "export const main = (): i32 => half(4);",
+        "```",
+      ].join("\n")
+      const programs = programsOf(markedSnippets(page))
+      check(
+        "docs: consecutive file= fences of a section are one program",
+        programs.length === 1 && programs[0].files.length === 1 && programs[0].entry.file === "main.ts",
+        JSON.stringify(programs)
+      )
+      const broken = compileProgram(programs[0], "file_fences_broken")
+      check(
+        "docs: a file= program whose import names an unexported function fails the check, with NL2045",
+        broken.run.status !== 0 && broken.errors.some((e) => e.code === "NL2045"),
+        broken.run.status === 0 ? "it compiled" : broken.detail || broken.run.stderr
+      )
+      const exported = programsOf(markedSnippets(page.replace("const half", "export const half")))
+      const fixed = compileProgram(exported[0], "file_fences_fixed")
+      check(
+        "docs: the same file= program with the export compiles",
+        fixed.run.status === 0,
+        fixed.detail || fixed.run.stderr
+      )
+      const headed = page.replace("```ts nish:ok file=main.ts", "## Another\n```ts nish:ok file=main.ts")
+      const split = programsOf(markedSnippets(headed))
+      const shell = page.replace("```ts nish:ok file=main.ts", "```sh\n# a comment\n```\n$&")
+      check(
+        "docs: a `#` line in an unmarked fence between file= fences is not a heading",
+        programsOf(markedSnippets(shell)).length === 1,
+        "the program was split"
+      )
+      check(
+        "docs: a heading between file= fences starts another program",
+        split.length === 2,
+        JSON.stringify(split)
+      )
+      const errFirst = page.replace("nish:ok file=geometry", "nish:err NL2045 file=geometry")
+      const misplaced = compileProgram(programsOf(markedSnippets(errFirst))[0], "file_fences_misplaced")
+      check(
+        "docs: a nish:err before a program's last fence is reported",
+        misplaced.misplaced.length === 1,
+        JSON.stringify(misplaced.misplaced)
+      )
+      const unimported = exported[0].entry.source.replace(/^import .*\n/, "").replace("half(4)", "2")
+      const strayPage = page
+        .replace("const half", "export const half")
+        .replace("x / 2;", "x / 2 + undefinedName;")
+        .replace(exported[0].entry.source, unimported)
+      const stray = compileProgram(programsOf(markedSnippets(strayPage))[0], "file_fences_unimported")
+      check(
+        "docs: a broken file= fence the entry never imports is reported",
+        stray.run.status === 0 && stray.misplaced.length === 1,
+        `${stray.run.status} ${JSON.stringify(stray.misplaced)}`
+      )
+      const escape = compileProgram(
+        programsOf(markedSnippets(page.replace("file=geometry.ts", "file=../geometry.ts")))[0],
+        "file_fences_escape"
+      )
+      check(
+        "docs: a file= path outside the program's directory is reported",
+        escape.misplaced.length === 1,
+        JSON.stringify(escape.misplaced)
+      )
+      const loneJson = compileProgram(
+        programsOf(markedSnippets('## Alone\n```json nish:ok\n{"name": "hash"}\n```'))[0],
+        "file_fences_json"
+      )
+      check("docs: a json fence without file= fails", loneJson.run.status !== 0, "it passed")
+    }
+
     for (const page of docPages) {
       const rel = path.relative(root, page).split(path.sep).join("/")
       const text = fs.readFileSync(page, "utf8")
@@ -22601,27 +22916,16 @@ if (dealtHere("releaseChecks")) {
         check(`${rel} marks an example for compilation`, snippets.length > 0, "no ```ts nish: fence")
       }
       const prefix = rel.slice(0, -3).replace(/[/-]/g, "_")
-      for (const s of snippets) {
-        const stem = `${prefix}_${s.line}`
-        const file = path.join(snippetDir, `${stem}.ts`)
-        const body = s.wrap
-          ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n`
-          : `${s.source}\n`
-        fs.writeFileSync(file, body)
-        // A directory, because a snippet that imports `nish/threads` writes one module per file.
-        const run = spawnSync(
-          NISH,
-          [file, "--json", "-o", `${path.join(snippetDir, stem)}${path.sep}`, ...s.args],
-          {
-            encoding: "utf8",
-          }
-        )
-        const diagnostics = run.stdout
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => JSON.parse(line))
-        const errors = diagnostics.filter((d) => d.severity === "error")
-        const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
+      for (const program of programsOf(snippets)) {
+        const s = program.entry
+        const { run, errors, detail, body, misplaced } = compileProgram(program, `${prefix}_${s.line}`)
+        if (s.file !== null) {
+          check(
+            `${rel}:${s.line}: its program's other files are plain nish:ok, inside its directory`,
+            misplaced.length === 0,
+            `line ${misplaced.join(", ")}`
+          )
+        }
         if (rel === threadsPage && s.kind === "err") {
           const refused = errors.find((e) => e.code === s.code)
           if (refused && !threadRefusals.has(s.code)) {
@@ -27859,10 +28163,10 @@ if (!only || "sandbox dependency grants".includes(only)) {
         trueReal !== null && ir(runner).includes(`@.sandbox.exec = `) && ir(runner).includes(`c"${trueReal}\\00`),
         `the first \`true\` on PATH resolves to ${trueReal}\n${ir(runner)}`
       )
-      // SBX-1, recorded open in docs/security/sandbox.md: the allowlist grants
-      // EXECUTE on the granted program's ELF loader, and the loader runs any
-      // binary it is handed. This pins that it still does; closing SBX-1
-      // turns this check red, and it then pins the refusal instead.
+      // SBX-1, fixed (docs/security/sandbox.md): the allowlist must grant
+      // EXECUTE on the granted program's ELF loader, which runs any binary it
+      // is handed, so the compiler marks the loader `//` and the runtime
+      // refuses it, by file identity, as a spawn target of its own.
       const execList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(runner))
       const loaders =
         execList === null ? [] : execList[1].split("\\00").filter((p) => p !== "" && p !== trueReal)
@@ -27876,16 +28180,68 @@ if (!only || "sandbox dependency grants".includes(only)) {
       const ungrantedCc = spawnSync("clang", ["-O2", ungrantedSrc, "-o", ungranted], { encoding: "utf8" })
       if (loaders.length === 0 || ungrantedCc.status !== 0) {
         skip(
-          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or clang could not build the ungranted program (${ungrantedCc.stderr ?? ungrantedCc.error}); SBX-1 is not pinned`
+          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or clang could not build the ungranted program (${ungrantedCc.stderr ?? ungrantedCc.error}); SBX-1 is not checked`
         )
       } else {
-        const rLoader = run(allow, [loaders[0], ungranted])
+        const loader = loaders[0].replace(/^\/\//, "/")
+        const second = path.join(dir, "sbx-1-loader")
+        fs.rmSync(second, { force: true })
+        fs.symlinkSync(loader, second)
+        const rLoader = run(allow, [loader, ungranted])
+        const rSecond = run(allow, [second, ungranted])
+        const rLoaderPlain = run(open, [loader, ungranted])
         check(
-          "sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)",
-          rLoader !== null && rLoader.status === 0 && rLoader.stdout === "sbx-1\n0\n",
-          `${loaders[0]} ${ungranted}\n${said(rLoader)}`
+          "sandbox dependency grants: a granted program's ELF loader is refused as a spawn target (SBX-1)",
+          loaders[0].startsWith("//") &&
+            rLoader !== null &&
+            rLoader.status === 0 &&
+            rLoader.stdout === "-1\n" &&
+            rLoaderPlain !== null &&
+            rLoaderPlain.status === 0 &&
+            rLoaderPlain.stdout === "sbx-1\n0\n",
+          `${loaders[0]} ${ungranted}\n${said(rLoader)}\n--- without --sandbox\n${said(rLoaderPlain)}`
+        )
+        check(
+          "sandbox dependency grants: a second name for the loader is refused too (SBX-1)",
+          rSecond !== null && rSecond.status === 0 && rSecond.stdout === "-1\n",
+          `${second} -> ${loader}\n${said(rSecond)}`
         )
       }
+      // A `#!` script's interpreter is on the allowlist for the script's sake
+      // and refused named directly, unless the grant names it as well.
+      const script = (fixture) => fs.realpathSync(path.join(linkDir, fixture, "bin", "hello.sh"))
+      const scripted = "sandbox_dep_exec_script"
+      const sAllow = build(scripted, ["--sandbox"])
+      const sOpen = build(scripted, [])
+      const rScript = run(sAllow, [script(scripted)])
+      const rSh = run(sAllow, ["sh", "-c", "echo sh-ran"])
+      const rShPlain = run(sOpen, ["sh", "-c", "echo sh-ran"])
+      check(
+        "sandbox dependency grants: a granted #! script runs and its interpreter is refused as a spawn target (SBX-1)",
+        rScript !== null &&
+          rScript.status === 0 &&
+          rScript.stdout === "script-ran\n0\n" &&
+          rSh !== null &&
+          rSh.status === 0 &&
+          rSh.stdout === "-1\n" &&
+          rShPlain !== null &&
+          rShPlain.stdout === "sh-ran\n0\n",
+        `${said(rScript)}\n--- sh\n${said(rSh)}\n--- without --sandbox\n${said(rShPlain)}\n${ir(scripted)}`
+      )
+      const both = "sandbox_dep_exec_interpreter_granted"
+      const bAllow = build(both, ["--sandbox"])
+      const rBothScript = run(bAllow, [script(both)])
+      const rBothSh = run(bAllow, ["sh", "-c", "echo sh-ran"])
+      check(
+        "sandbox dependency grants: a program the grant names stays spawnable when it is also another's interpreter (SBX-1)",
+        rBothScript !== null &&
+          rBothScript.status === 0 &&
+          rBothScript.stdout === "script-ran\n0\n" &&
+          rBothSh !== null &&
+          rBothSh.status === 0 &&
+          rBothSh.stdout === "sh-ran\n0\n",
+        `${said(rBothScript)}\n--- sh\n${said(rBothSh)}\n${ir(both)}`
+      )
     }
   }
 }

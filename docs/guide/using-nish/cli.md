@@ -470,6 +470,9 @@ $ nish bad.ts --json
   [diagnostic index](../../reference/diagnostics.md) lists them all.
 - **`severity`** is `"error"`, `"performance"`, `"portability"` or
   `"deprecation"`. Only errors fail a compile.
+- **`package`**, after `message`, names the dependency when the diagnostic is
+  in a package's own source (`node_modules/<pkg>/…`); it is absent for your
+  program's files and the standard library's.
 - Failures with no source position — no usable `clang`, an internal error —
   are JSON objects too, so under `--json` you never need to read stderr.
 - The standard library has a reader for these objects:
