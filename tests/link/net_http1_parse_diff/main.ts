@@ -14,7 +14,10 @@
 // of three requests, nine bytes inserted at every position, each limit at -1,
 // 0 and +1, every two-feed split point, byte-at-a-time feeding and pipelined
 // pairs, field names and values and targets with a stop byte at every vector
-// lane, long Cookie and Authorization values, and a head of many fields.
+// lane, long Cookie and Authorization values (each at every stop-byte place,
+// under five setups), a head of many fields, maxTarget, maxHeaderBytes and
+// maxHeaders at -1, 0 and +1 with the deciding byte at every lane, and a
+// 936-byte browser head split at every point.
 //
 // HTTP1_DIFF_SEED and HTTP1_DIFF_CASES set the grammar's seed and how many
 // requests it makes, for a soak; the defaults make 10^5 grammar requests and
@@ -961,6 +964,38 @@ const limitCases = (tally: Tally): void => {
   }
 }
 
+/**
+ * Each of maxTarget, maxHeaderBytes and maxHeaders at its value -1, 0 and +1
+ * for sixteen limits in a row, so the byte that decides between a head and a
+ * 414 or 431 falls at every lane of the vector the scan reads it in; text kept
+ * and spans only, each whole, a byte at a time and split at every point.
+ */
+const tightCases = (tally: Tally): void => {
+  tally.label = "tight"
+  const setups: Setup[] = [setupOf(0), setupOf(2)]
+  for (let lane: i32 = 0; lane < 16; lane++) {
+    for (let d: i32 = -1; d <= 1; d++) {
+      for (let k: i32 = 0; k < toI32(setups.length); k++) {
+        const s: Setup = setupCopy(setups[k])
+        // The target: `/` and t up to maxTarget + d bytes.
+        s.maxTarget = 32 + lane
+        runCut(tally, s, bytesOf(`GET /${repeat("t", s.maxTarget - 1 + d)} HTTP/1.1\r\nHost: h\r\n\r\n`), true)
+        s.maxTarget = 8192
+        // The section: `Host: h`, then X whose line and the empty line come
+        // to maxHeaderBytes + d.
+        s.maxHeaderBytes = 64 + lane
+        runCut(tally, s, bytesOf(`GET / HTTP/1.1\r\nHost: h\r\nX: ${repeat("v", s.maxHeaderBytes + d - 16)}\r\n\r\n`), true)
+        s.maxHeaderBytes = 16384
+        // The count: a first field `lane` bytes long moves every later line
+        // start, and the fields come to maxHeaders + d.
+        s.maxHeaders = 3 + lane % 4
+        const fields: string = repeat("A: b\r\n", s.maxHeaders + d - 1)
+        runCut(tally, s, bytesOf(`GET / HTTP/1.1\r\nP: ${repeat("p", lane)}\r\n${fields}\r\n`), true)
+      }
+    }
+  }
+}
+
 /** Tchars for names, the letters next to the bytes that are not: `@` `[` `` ` `` `{` sit either side of the letters. */
 const NAME_CHARS: string = "aZ-^b_Y`c|X~d!W#e$V%f&U'g*T+h.S0i9RjQkPlOmNnMoLpKqJrIsHtGuFvEwDxCyBzA"
 
@@ -1048,8 +1083,9 @@ const nameCases = (tally: Tally): void => {
  * every length 1 to 48 and of 255, 256, 257, 1000 and 4000 bytes, with each of
  * nine bytes the scan or the field rules stop at (CR, LF, NUL, HTAB, SP, DEL,
  * 0x80, 0xff and a comma) at every place in its first and last 48, so every
- * lane of the vectors at both ends; and a head of 60 fields, each cut every
- * way, so many lines take the same path.
+ * lane of the vectors at both ends, each in both fields under five setups;
+ * and a head of 60 fields, each cut every way, so many lines take the same
+ * path.
  */
 const valueCases = (tally: Tally): void => {
   tally.label = "value"
@@ -1057,6 +1093,11 @@ const valueCases = (tally: Tally): void => {
   const lengths: i32[] = [255, 256, 257, 1000, 4000]
   const text: Setup = setupOf(0)
   const spans: Setup = setupOf(2)
+  // Fresh arrays, a declined upgrade with spans, and pieces of 13, 16 and 3
+  // bytes in turn, so the reads end at shifting lanes.
+  const cut: Setup = setupOf(0)
+  cut.cuts = [13, 16, 3]
+  const setups: Setup[] = [text, spans, setupOf(32), setupOf(18), cut]
   const all: i32[] = []
   for (let n: i32 = 1; n <= 48; n++) {
     all.push(n)
@@ -1066,23 +1107,25 @@ const valueCases = (tally: Tally): void => {
   }
   for (let i: i32 = 0; i < toI32(all.length); i++) {
     const n: i32 = all[i]
-    const cookie: u8[] = bytesOf(nameOf(n, n, 0))
+    const value: u8[] = bytesOf(nameOf(n, n, 0))
     for (let at: i32 = 0; at < n; at++) {
       if (at >= 48 && at < n - 48) {
         continue
       }
       for (let e: i32 = 0; e < toI32(stops.length); e++) {
-        const bad: u8[] = sliceBytes(cookie, 0, n)
+        const bad: u8[] = sliceBytes(value, 0, n)
         bad[at] = toU8(stops[e])
-        const field: string = (at + e) % 2 === 0 ? "Cookie: " : "Authorization: Bearer "
-        const xs: u8[] = new Out().text(`GET / HTTP/1.1\r\nHost: h\r\n${field}`).bytes(bad).text("\r\nAccept: */*\r\n\r\n").xs
-        run(tally, text, xs)
-        run(tally, spans, xs)
+        const cookie: u8[] = new Out().text("GET / HTTP/1.1\r\nHost: h\r\nCookie: ").bytes(bad).text("\r\nAccept: */*\r\n\r\n").xs
+        const bearer: u8[] = new Out().text("GET / HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer ").bytes(bad).text("\r\nAccept: */*\r\n\r\n").xs
+        for (let k: i32 = 0; k < toI32(setups.length); k++) {
+          run(tally, setups[k], cookie)
+          run(tally, setups[k], bearer)
+        }
         const target: u8[] = new Out().text("GET /").bytes(bad).text(" HTTP/1.1\r\nHost: h\r\n\r\n").xs
         run(tally, text, target)
       }
     }
-    const whole: u8[] = new Out().text("GET /").bytes(cookie).text(" HTTP/1.1\r\nHost: h\r\nCookie: ").bytes(cookie).text("\r\nAuthorization: Basic ").bytes(cookie).text("\r\n\r\n").xs
+    const whole: u8[] = new Out().text("GET /").bytes(value).text(" HTTP/1.1\r\nHost: h\r\nCookie: ").bytes(value).text("\r\nAuthorization: Basic ").bytes(value).text("\r\n\r\n").xs
     runCut(tally, text, whole, n === 15 || n === 16 || n === 17 || n === 32 || n === 256)
     runCut(tally, spans, whole, false)
   }
@@ -1091,6 +1134,41 @@ const valueCases = (tally: Tally): void => {
     many.text(`X-Field-${f}: ${repeat("v", f)}\r\n`)
   }
   runCut(tally, text, many.text("\r\n").xs, true)
+}
+
+/** A browser's GET as Chrome sends it, 936 bytes with its cookies. */
+const BROWSER: string =
+  "GET /products/shoes/running?size=42&color=blue&sort=price_asc HTTP/1.1\r\n" +
+  "Host: shop.example.com\r\n" +
+  "Connection: keep-alive\r\n" +
+  'sec-ch-ua: "Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"\r\n' +
+  "sec-ch-ua-mobile: ?0\r\n" +
+  'sec-ch-ua-platform: "macOS"\r\n' +
+  "Upgrade-Insecure-Requests: 1\r\n" +
+  "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36\r\n" +
+  "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n" +
+  "Sec-Fetch-Site: same-origin\r\n" +
+  "Sec-Fetch-Mode: navigate\r\n" +
+  "Sec-Fetch-User: ?1\r\n" +
+  "Sec-Fetch-Dest: document\r\n" +
+  "Accept-Encoding: gzip, deflate, br, zstd\r\n" +
+  "Accept-Language: en-GB,en-US;q=0.9,en;q=0.8,de;q=0.7\r\n" +
+  "Cookie: session=4f9c2a7e1b8d4c6fa0e3b5d7c9e1f3a5; cart=7b2e9d4c; _ga=GA1.2.1234567890.1700000000; consent=analytics%3Dyes%26ads%3Dno; theme=dark\r\n" +
+  "If-None-Match: W/\"5e1-18f3a9c2b7d\"\r\n" +
+  "\r\n"
+
+/** The browser head alone and pipelined after a short GET, each whole, a byte at a time and split at every point, text kept and spans only. */
+const browserCases = (tally: Tally): void => {
+  tally.label = "browser"
+  const head: u8[] = bytesOf(BROWSER)
+  if (toI32(head.length) < 750 || toI32(head.length) > 1000) {
+    writeError(`net_http1_parse_diff: the browser head is ${head.length} bytes, not 750 to 1000\n`)
+    tally.failed = true
+    return
+  }
+  runCut(tally, setupOf(0), head, true)
+  runCut(tally, setupOf(2), head, true)
+  runCut(tally, setupOf(32), bytesOf(`GET / HTTP/1.1\r\nHost: h\r\n\r\n${BROWSER}`), true)
 }
 
 /** One drawn grammar case and what runs it: a region's root, freed when the case ends. */
@@ -1203,13 +1281,17 @@ export const main = (): i32 => {
   const afterName: i32 = tally.cases
   valueCases(tally)
   const afterValue: i32 = tally.cases
+  tightCases(tally)
+  const afterTight: i32 = tally.cases
+  browserCases(tally)
+  const afterBrowser: i32 = tally.cases
   grammarCases(tally, toU32(seed), count)
   if (tally.failed) {
     return 1
   }
   console.log(`seed ${seed}, ${tally.cases} cases agree`)
   console.log(
-    `  corpus ${afterCorpus}, mutation ${afterMutation - afterCorpus}, limit ${afterLimit - afterMutation}, name ${afterName - afterLimit}, value ${afterValue - afterName}, grammar ${tally.cases - afterValue}`
+    `  corpus ${afterCorpus}, mutation ${afterMutation - afterCorpus}, limit ${afterLimit - afterMutation}, name ${afterName - afterLimit}, value ${afterValue - afterName}, tight ${afterTight - afterValue}, browser ${afterBrowser - afterTight}, grammar ${tally.cases - afterBrowser}`
   )
   console.log(
     `  events ${tally.events}: head ${tally.heads}, body ${tally.bodies}, end ${tally.ends}, upgrade ${tally.upgrades}, closed ${tally.closes}, error ${tally.errors}`
