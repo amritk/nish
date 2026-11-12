@@ -46,10 +46,11 @@
  *  no arithmetic; it kept the input's pointer from being spilled in a way the
  *  aarch64 disassembly check once misread (#334). The scalar functions use the
  *  field's four helpers, which fiat generates identically for both. The nonce's
- *  inverse, `p256ScalarInverse`, is libsecp256k1's 32-bit safegcd (`modinv32`),
- *  function for function; the section that holds it says what changes.
- *  Everything else in this file — the curve, the encodings, the other inversions
- *  and ECDSA — is written for this module from the documents it names.
+ *  inverse, `p256ScalarInverse`, and the field's, `p256FieldInvert`, are
+ *  libsecp256k1's 32-bit safegcd (`modinv32`), function for function; the
+ *  section that holds it says what changes. Everything else in this file — the
+ *  curve, the encodings, verification's inversion and ECDSA — is written for
+ *  this module from the documents it names.
  *
  * **The curve** is `y^2 = x^3 - 3x + b` over GF(p),
  * p = 2^256 - 2^224 + 2^192 + 2^96 - 1, with the base point G and its order n from SEC 2 §2.4.2 (FIPS
@@ -84,8 +85,10 @@
  *  masks and adds, whatever the scalar, so its loops count constants and no
  *  branch or address follows the nonce; Fermat's `p256ScalarInvert` is the
  *  reference it is held to bit for bit (`tests/link/crypto_p256_inverse`) and
- *  what verification still uses. The other inversions raise to the public
- *  exponents p - 2 and n - 2, so their branches follow a constant.
+ *  what verification still uses, raising to the public exponent n - 2, so its
+ *  branches follow a constant. Every field inversion — of a Z that follows the
+ *  key or the nonce in the public key, ECDH and signing — is the same safegcd
+ *  modulo p, `p256FieldInvert`, on the same divstep and update functions.
  *
  *  The branches that remain are on public facts: a length, a limb or bit
  *  position, whether a received key or signature is in range, and — once in
@@ -3753,25 +3756,6 @@ const p256Bit = (e: u32[], i: i32): boolean => {
 }
 
 /**
- * `out = 1 / a` in the field, as `a^(p - 2)` (Fermat); zero for a zero `a`.
- * Square-and-multiply from the top bit: the branch is on the exponent's bits,
- * which are a constant.
- */
-const p256FieldInvert = (out: u32[], a: u32[]): void => {
-  const e: u32[] = p256Prime()
-  e[0] = 0xfffffffd
-  const acc: u32[] = p256Limbs()
-  p256FiatSetOne(acc)
-  for (let i: i32 = 255; i >= 0; i--) {
-    p256FiatSquare(acc, acc)
-    if (p256Bit(e, i)) {
-      p256FiatMul(acc, acc, a)
-    }
-  }
-  p256Copy(out, acc)
-}
-
-/**
  * `out = 1 / a` mod n, as `a^(n - 2)` with the scalar Montgomery multiply;
  * the exponent is public, so the square-and-multiply branches only on a
  * constant. Verification inverts s with it; the signer's `p256ScalarInverse`
@@ -3791,14 +3775,14 @@ const p256ScalarInvert = (out: u32[], a: u32[]): void => {
   p256Copy(out, acc)
 }
 
-// ---- The nonce's inverse by safegcd -------------------------------------------
+// ---- The nonce's and the field's inverses by safegcd -------------------------
 //
 // Bernstein and Yang's constant-time inversion ("Fast constant-time gcd
 // computation and modular inversion", 2019), as libsecp256k1's modinv32 writes
 // it for 32-bit targets (MIT, std/crypto/LICENSE-libsecp256k1): the functions
 // below are its secp256k1_modinv32_divsteps_30, _update_de_30, _update_fg_30,
 // _normalize_30 and secp256k1_modinv32, with its scalar_8x32 conversions to and
-// from signed-30, ported to Nish for the one modulus n. A value is nine limbs
+// from signed-30, ported to Nish for the two moduli n and p. A value is nine limbs
 // of 30 bits each, limb 8 carrying the sign, held as the u32 bit patterns of
 // the C's int32_t: `u32` arithmetic wraps where the C's never overflows, so the
 // low bits agree, and the arithmetic shifts go through `i32` and `i64`.
@@ -3927,12 +3911,13 @@ const p256Divsteps30 = (zeta: u32, f0: u32, g0: u32, t: u32[]): u32 => {
 }
 
 /**
- * `[d, e] = (t [d, e] + n [md, me]) / 2^30`, with `md` and `me` chosen so
- * that the division is exact: d and e stay in (-2n, n) and keep tracking f
- * and g modulo n (`secp256k1_modinv32_update_de_30`). The products are 32 by
- * 32 bits into 64.
+ * `[d, e] = (t [d, e] + n [md, me]) / 2^30` for the modulus `n` (n or p),
+ * with `md` and `me` chosen so that the division is exact: d and e stay in
+ * (-2n, n) and keep tracking f and g modulo n
+ * (`secp256k1_modinv32_update_de_30`). `inverse30` is n^-1 mod 2^30, which
+ * makes the sum's bottom 30 bits zero. The products are 32 by 32 bits into 64.
  */
-const p256UpdateDe30 = (d: u32[], e: u32[], t: u32[], n: u32[]): void => {
+const p256UpdateDe30 = (d: u32[], e: u32[], t: u32[], n: u32[], inverse30: u32): void => {
   if (toI32(d.length) < 9 || toI32(e.length) < 9 || toI32(t.length) < 4 || toI32(n.length) < 9) {
     return
   }
@@ -3940,8 +3925,6 @@ const p256UpdateDe30 = (d: u32[], e: u32[], t: u32[], n: u32[]): void => {
   const v: u64 = p256Wide(t[1])
   const q: u64 = p256Wide(t[2])
   const r: u64 = p256Wide(t[3])
-  // n^-1 mod 2^30, which makes the sum's bottom 30 bits zero below.
-  const inverse30: u32 = 0x11ff43b1
   // [md, me] start as [u, q] if d is negative plus [v, r] if e is.
   const sd: u32 = p256SignMask(d[8])
   const se: u32 = p256SignMask(e[8])
@@ -4000,8 +3983,8 @@ const p256UpdateFg30 = (f: u32[], g: u32[], t: u32[]): void => {
   g[8] = toU32(cg)
 }
 
-/** Add n to the signed-30 `a` when `mask` is all ones, then carry so every limb but the last is in [0, 2^30). */
-const p256AddOrder30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
+/** Add the modulus `n` to the signed-30 `a` when `mask` is all ones, then carry so every limb but the last is in [0, 2^30). */
+const p256AddModulus30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
   if (toI32(a.length) < 9 || toI32(n.length) < 9) {
     return
   }
@@ -4015,53 +3998,102 @@ const p256AddOrder30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
 }
 
 /**
- * `d` in (-2n, n) to [0, n), negated first when `sign`'s top bit is set: f
- * ended as -1 rather than 1 (`secp256k1_modinv32_normalize_30`).
+ * `d` in (-2n, n) to [0, n) for the modulus `n`, negated first when `sign`'s
+ * top bit is set: f ended as -1 rather than 1
+ * (`secp256k1_modinv32_normalize_30`).
  */
 const p256Normalize30 = (d: u32[], sign: u32, n: u32[]): void => {
   if (toI32(d.length) < 9) {
     return
   }
   const zero: u32 = 0
-  p256AddOrder30(d, n, p256SignMask(d[8]), p256SignMask(sign))
-  p256AddOrder30(d, n, p256SignMask(d[8]), zero)
+  p256AddModulus30(d, n, p256SignMask(d[8]), p256SignMask(sign))
+  p256AddModulus30(d, n, p256SignMask(d[8]), zero)
 }
 
 /**
- * `out = 1 / a` mod n for `a` in the Montgomery domain, zero for a zero `a`:
- * the signing paths' inversion of the nonce. Twenty batches of thirty divsteps
+ * `out = 1 / a` mod `m` for the plain limbs `a`, below 2^256, and the odd
+ * modulus `m` in signed-30 limbs (n or p), with `inverse30` = m^-1 mod 2^30;
+ * zero for an `a` that is zero mod `m`. Twenty batches of thirty divsteps
  * each: 600, past the 590 that bound any 256-bit input, so the count never
  * depends on `a`, and every step and update runs the same instructions on any
- * value. The divsteps invert `a R` as a plain number; one Montgomery multiply
- * by R^3 takes `(a R)^-1` to `a^-1 R`. f, g, d, e and the matrix are wiped
- * before it returns (ECC-2).
+ * value. f, g, d, e and the matrix are wiped before it returns (ECC-2).
  */
-const p256ScalarInverse = (out: u32[], a: u32[]): void => {
-  const n: u32[] = p256Order30()
+const p256Safegcd = (out: u32[], a: u32[], m: u32[], inverse30: u32): void => {
   const d: u32[] = new Array<u32>(9)
   const e: u32[] = new Array<u32>(9)
-  const f: u32[] = p256Order30()
+  const f: u32[] = new Array<u32>(9)
   const g: u32[] = new Array<u32>(9)
   const t: u32[] = new Array<u32>(4)
+  if (toI32(m.length) < 9) {
+    return
+  }
+  for (let i: i32 = 0; i < 9; i++) {
+    f[i] = m[i]
+  }
   e[0] = 1
   p256ToSigned30(g, a)
   // zeta = -(delta + 1/2), delta starting at 1/2.
   let zeta: u32 = 0xffffffff
   for (let i: i32 = 0; i < 20; i++) {
     zeta = p256Divsteps30(zeta, f[0], g[0], t)
-    p256UpdateDe30(d, e, t, n)
+    p256UpdateDe30(d, e, t, m, inverse30)
     p256UpdateFg30(f, g, t)
   }
   // g is now 0 and f is 1 or -1, with d the inverse up to that sign; for a
-  // zero `a`, f is n and d stays 0.
-  p256Normalize30(d, f[8], n)
+  // zero `a`, f is m and d stays 0.
+  p256Normalize30(d, f[8], m)
   p256FromSigned30(out, d)
-  p256FiatScalarMul(out, out, p256ScalarR3())
   wipe(d)
   wipe(e)
   wipe(f)
   wipe(g)
   wipe(t)
+}
+
+/**
+ * `out = 1 / a` mod n for `a` in the Montgomery domain, zero for a zero `a`:
+ * the signing paths' inversion of the nonce, by `p256Safegcd`. The divsteps
+ * invert `a R` as a plain number; one Montgomery multiply by R^3 takes
+ * `(a R)^-1` to `a^-1 R`.
+ */
+const p256ScalarInverse = (out: u32[], a: u32[]): void => {
+  p256Safegcd(out, a, p256Order30(), 0x11ff43b1)
+  p256FiatScalarMul(out, out, p256ScalarR3())
+}
+
+/** p in nine signed-30 limbs, limb 0 the least significant. */
+const p256Prime30 = (): u32[] => {
+  const out: u32[] = new Array<u32>(9)
+  out[0] = 0x3fffffff
+  out[1] = 0x3fffffff
+  out[2] = 0x3fffffff
+  out[3] = 0x0000003f
+  out[4] = 0
+  out[5] = 0
+  out[6] = 0x00001000
+  out[7] = 0x3fffc000
+  out[8] = 0x0000ffff
+  return out
+}
+
+/** R^3 mod p, which does for `p256FieldInvert` what `p256ScalarR3` does for the scalars. */
+const p256FieldR3 = (): u32[] => {
+  const out: u32[] = p256Limbs()
+  p256SetLimbs(out, 0xa, 0xfffffffd, 0xfffffff7, 0xffffffed, 0xfffffffc, 0x5, 0x1, 0x18)
+  return out
+}
+
+/**
+ * `out = 1 / a` in the field for `a` in the Montgomery domain, zero for a
+ * zero `a`, by `p256Safegcd` modulo p (p^-1 mod 2^30 is 2^30 - 1, as p is
+ * -1 mod 2^96) and a Montgomery multiply by R^3. Constant time: what it
+ * inverts is a Z that follows a secret scalar in signing, ECDH and the public
+ * key. `out` may be `a`.
+ */
+const p256FieldInvert = (out: u32[], a: u32[]): void => {
+  p256Safegcd(out, a, p256Prime30(), 0x3fffffff)
+  p256FiatMul(out, out, p256FieldR3())
 }
 
 /**
@@ -5321,9 +5353,9 @@ export const p256Ecdh = (priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> | nu
 
 /**
  * `p256Ecdh` on the plain key, for `exposeWith` to run. The scratch, the
- * product and every limb of `X / Z` follow the key, so all are wiped; the
- * inversion is written out here, rather than through `p256AffineX`, so that its
- * accumulator and Z's inverse are this function's to wipe.
+ * product and every limb of `X / Z` follow the key, so all are wiped; Z is
+ * inverted here, rather than through `p256AffineX`, so that its inverse is this
+ * function's to wipe (`p256FieldInvert` wipes its own intermediates).
  */
 const p256EcdhExposed = (priv: u8[], peerPoint: u8[]): u8[] | null => {
   if (!p256ScalarInRange(priv)) {
@@ -5338,17 +5370,9 @@ const p256EcdhExposed = (priv: u8[], peerPoint: u8[]): u8[] | null => {
   p256ScalarMult(point, priv, peer, scratch)
   p256WipeScratch(scratch)
   const infinity: boolean = p256FiatNonzero(point.z) === 0
-  // 1 / Z as Z^(p - 2), as p256FieldInvert computes it, over limbs wiped below.
-  const e: u32[] = p256Prime()
-  e[0] = 0xfffffffd
+  // 1 / Z, over limbs wiped below.
   const acc: u32[] = p256Limbs()
-  p256FiatSetOne(acc)
-  for (let i: i32 = 255; i >= 0; i--) {
-    p256FiatSquare(acc, acc)
-    if (p256Bit(e, i)) {
-      p256FiatMul(acc, acc, point.z)
-    }
-  }
+  p256FieldInvert(acc, point.z)
   const x: u32[] = p256Limbs()
   p256FiatMul(x, point.x, acc)
   p256FiatMul(x, x, p256PlainOne())
