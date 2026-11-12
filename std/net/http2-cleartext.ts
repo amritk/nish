@@ -49,8 +49,8 @@
  * **The preface is the carrier's.** `Http2Connection` checks the preface
  * itself, but on a mismatch it queues SETTINGS and a GOAWAY, and a port
  * scanner or a confused HTTP/1.1 client should get nothing back. So each slot
- * reads its first 24 bytes into a 24-byte array of its own and compares them
- * with its own copy of `PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`: at the first byte
+ * reads its first 24 bytes into a 24-byte array of its own and compares each,
+ * as it comes, with `PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`: at the first byte
  * that differs the socket is closed, with no byte sent. A whole preface is
  * fed to the connection, which checks it again, and from then on the socket
  * is read straight into the connection's input, as `http2-tls.ts` reads TLS
@@ -99,10 +99,7 @@ const H2C_AGAIN: i32 = -11
 const H2C_NANOS_PER_MS: i64 = 1000000
 
 /** The client connection preface, `PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n` (RFC 9113 §3.4). */
-const H2C_PREFACE: u8[] = [
-  0x50, 0x52, 0x49, 0x20, 0x2a, 0x20, 0x48, 0x54, 0x54, 0x50, 0x2f, 0x32, 0x2e, 0x30, 0x0d, 0x0a, 0x0d, 0x0a,
-  0x53, 0x4d, 0x0d, 0x0a, 0x0d, 0x0a,
-]
+const H2C_PREFACE: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
 /**
  * A pool of HTTP/2 connections over plain TCP, with prior knowledge, on one
@@ -341,7 +338,7 @@ export class Http2CleartextServer {
         return false
       }
       for (let k: i32 = have; k < have + n; k++) {
-        if (this.prefaces[base + k] !== H2C_PREFACE[k]) {
+        if (toI32(this.prefaces[base + k]) !== toI32(H2C_PREFACE.charCodeAt(k))) {
           this.close(slot)
           return false
         }
