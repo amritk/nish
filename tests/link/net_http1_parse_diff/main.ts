@@ -13,7 +13,8 @@
 // high-bit bytes, bodies, pipelining), every byte 0 to 255 at every position
 // of three requests, nine bytes inserted at every position, each limit at -1,
 // 0 and +1, every two-feed split point, byte-at-a-time feeding and pipelined
-// pairs.
+// pairs, field names and values and targets with a stop byte at every vector
+// lane, long Cookie and Authorization values, and a head of many fields.
 //
 // HTTP1_DIFF_SEED and HTTP1_DIFF_CASES set the grammar's seed and how many
 // requests it makes, for a soak; the defaults make 10^5 grammar requests and
@@ -1016,6 +1017,57 @@ const nameCases = (tally: Tally): void => {
   runCut(tally, spans, bytesOf(`${first}GET / HTTP/1.1\r\nA:B\r\nCc: D\r\n\r\n`), true)
 }
 
+/**
+ * Field values and targets, which the section scan reads for CR and LF a
+ * vector at a time: a Cookie and an Authorization value, and a target, of
+ * every length 1 to 48 and of 255, 256, 257, 1000 and 4000 bytes, with each of
+ * nine bytes the scan or the field rules stop at (CR, LF, NUL, HTAB, SP, DEL,
+ * 0x80, 0xff and a comma) at every place in its first and last 48, so every
+ * lane of the vectors at both ends; and a head of 60 fields, each cut every
+ * way, so many lines take the same path.
+ */
+const valueCases = (tally: Tally): void => {
+  tally.label = "value"
+  const stops: i32[] = [13, 10, 0, 9, 32, 127, 128, 255, 44]
+  const lengths: i32[] = [255, 256, 257, 1000, 4000]
+  const text: Setup = setupOf(0)
+  const spans: Setup = setupOf(2)
+  const all: i32[] = []
+  for (let n: i32 = 1; n <= 48; n++) {
+    all.push(n)
+  }
+  for (let l: i32 = 0; l < toI32(lengths.length); l++) {
+    all.push(lengths[l])
+  }
+  for (let i: i32 = 0; i < toI32(all.length); i++) {
+    const n: i32 = all[i]
+    const cookie: u8[] = bytesOf(nameOf(n, n, 0))
+    for (let at: i32 = 0; at < n; at++) {
+      if (at >= 48 && at < n - 48) {
+        continue
+      }
+      for (let e: i32 = 0; e < toI32(stops.length); e++) {
+        const bad: u8[] = sliceBytes(cookie, 0, n)
+        bad[at] = toU8(stops[e])
+        const field: string = (at + e) % 2 === 0 ? "Cookie: " : "Authorization: Bearer "
+        const xs: u8[] = new Out().text(`GET / HTTP/1.1\r\nHost: h\r\n${field}`).bytes(bad).text("\r\nAccept: */*\r\n\r\n").xs
+        run(tally, text, xs)
+        run(tally, spans, xs)
+        const target: u8[] = new Out().text("GET /").bytes(bad).text(" HTTP/1.1\r\nHost: h\r\n\r\n").xs
+        run(tally, text, target)
+      }
+    }
+    const whole: u8[] = new Out().text("GET /").bytes(cookie).text(" HTTP/1.1\r\nHost: h\r\nCookie: ").bytes(cookie).text("\r\nAuthorization: Basic ").bytes(cookie).text("\r\n\r\n").xs
+    runCut(tally, text, whole, n === 15 || n === 16 || n === 17 || n === 32 || n === 256)
+    runCut(tally, spans, whole, false)
+  }
+  const many = new Out().text("GET /many HTTP/1.1\r\nHost: h\r\n")
+  for (let f: i32 = 0; f < 60; f++) {
+    many.text(`X-Field-${f}: ${repeat("v", f)}\r\n`)
+  }
+  runCut(tally, text, many.text("\r\n").xs, true)
+}
+
 /** One drawn grammar case and what runs it: a region's root, freed when the case ends. */
 class Drawn {
   t: Tally
@@ -1124,13 +1176,15 @@ export const main = (): i32 => {
   const afterLimit: i32 = tally.cases
   nameCases(tally)
   const afterName: i32 = tally.cases
+  valueCases(tally)
+  const afterValue: i32 = tally.cases
   grammarCases(tally, toU32(seed), count)
   if (tally.failed) {
     return 1
   }
   console.log(`seed ${seed}, ${tally.cases} cases agree`)
   console.log(
-    `  corpus ${afterCorpus}, mutation ${afterMutation - afterCorpus}, limit ${afterLimit - afterMutation}, name ${afterName - afterLimit}, grammar ${tally.cases - afterName}`
+    `  corpus ${afterCorpus}, mutation ${afterMutation - afterCorpus}, limit ${afterLimit - afterMutation}, name ${afterName - afterLimit}, value ${afterValue - afterName}, grammar ${tally.cases - afterValue}`
   )
   console.log(
     `  events ${tally.events}: head ${tally.heads}, body ${tally.bodies}, end ${tally.ends}, upgrade ${tally.upgrades}, closed ${tally.closes}, error ${tally.errors}`
