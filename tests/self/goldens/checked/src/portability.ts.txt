@@ -3,6 +3,7 @@
 entry: src/portability.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/annotations.ts src/simd.ts src/arrays.ts src/context.ts src/diagnostics.ts std/cli.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/region.ts src/branding.ts src/std-modules.ts src/paths.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/async-check.ts src/expressions.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/types.ts src/ice.ts src/handles.ts src/emit-util.ts src/symbols.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/declarations.ts src/checker.ts src/assignment.ts src/module-storage.ts src/script.ts src/parser.ts src/hygiene.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/fnrefs.ts src/visibility.ts src/options.ts src/parents.ts src/region-check.ts src/region-rules.ts src/loop-flow.ts src/host-module.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/target.ts src/emit-region.ts src/emit-shm-window.ts src/shm-window.ts src/emit-json.ts src/emit-async.ts src/capabilities.ts src/debug.ts src/emit-fnrefs.ts src/portability-numbers.ts src/portability-records.ts src/portability-strings.ts
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import CLI from "./branding" -> const CLI
+import Edit from "./diagnostics" -> struct Edit
 import numericLiteralValue from "./constants" -> function @numericLiteralValue
 import StringSet from "./map" -> struct StringSet
 import FLAG_PREFIX from "./nodes" -> const FLAG_PREFIX
@@ -15,6 +16,7 @@ import N_UNARY from "./nodes" -> const N_UNARY
 import Node from "./nodes" -> struct Node
 import Options from "./options" -> struct Options
 import ParentTable from "./parents" -> struct ParentTable
+import boundConversionNames from "./portability-numbers" -> function @boundConversionNames
 import numberFindings from "./portability-numbers" -> function @numberFindings
 import recordFindings from "./portability-records" -> function @recordFindings
 import stringFindings from "./portability-strings" -> function @stringFindings
@@ -24,46 +26,49 @@ import isFloat from "./types" -> function @isFloat
 import isNumeric from "./types" -> function @isNumeric
 import T_BOOL from "./types" -> const T_BOOL
 import TypeTable from "./types" -> struct TypeTable
-struct PortabilityFinding (class) size=16 align=8 exported
+struct PortabilityFinding (class) size=24 align=8 exported
   field node: Node index=0 offset=0
   field message: string index=1 offset=8
+  field review: Edit[] index=2 offset=16
   constructor -> @PortabilityFinding.constructor
-struct PortabilityWalk (class) size=48 align=8 exported
+struct PortabilityWalk (class) size=56 align=8 exported
   field program: CheckedProgram index=0 offset=0
   field table: TypeTable index=1 offset=8
   field opts: Options index=2 offset=16
   field parents: ParentTable index=3 offset=24
   field sig: FunctionSig index=4 offset=32
   field body: Node index=5 offset=40
+  field bound: StringSet index=6 offset=48
   constructor -> @PortabilityWalk.constructor
   method textOf -> @PortabilityWalk.textOf
 function PortabilityFinding.constructor(this: PortabilityFinding, node: Node, message: string): void -> @PortabilityFinding.constructor [exported constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: message node
-  pointer this: size=16 writesThrough=true captured=false
+  pointer this: size=24 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function PortabilityWalk.constructor(this: PortabilityWalk, program: CheckedProgram, table: TypeTable, opts: Options, parents: ParentTable, sig: FunctionSig, body: Node): void -> @PortabilityWalk.constructor [exported constructor]
+function PortabilityWalk.constructor(this: PortabilityWalk, program: CheckedProgram, table: TypeTable, opts: Options, parents: ParentTable, sig: FunctionSig, body: Node, bound: StringSet): void -> @PortabilityWalk.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  escaping: body opts parents program sig table
-  pointer this: size=48 writesThrough=true captured=false
+  escaping: body bound opts parents program sig table
+  pointer this: size=56 writesThrough=true captured=false
   pointer program: size=800 writesThrough=true captured=true
   pointer table: size=112 writesThrough=true captured=true
   pointer opts: size=216 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true
   pointer sig: size=200 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
+  pointer bound: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function PortabilityWalk.textOf(this: PortabilityWalk, node: Node): string -> @PortabilityWalk.textOf [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_new
-  pointer this: size=48 writesThrough=false captured=false
+  pointer this: size=56 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function portabilityFindings(unit: AnalysisUnit, table: TypeTable, opts: Options): PortabilityFinding[] -> @portabilityFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckedProgram.enterInstance
-  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FunctionSig.body FunctionSig.definedIn PortabilityWalk.constructor StringSet.add StringSet.constructor nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32 walkPortability
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FunctionSig.body FunctionSig.definedIn PortabilityWalk.constructor StringSet.add StringSet.constructor boundConversionNames nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32 walkPortability
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=112 writesThrough=true captured=true passedTo=PortabilityWalk.constructor#2
   pointer opts: size=216 writesThrough=true captured=true passedTo=PortabilityWalk.constructor#3
@@ -72,23 +77,25 @@ function portabilityFindings(unit: AnalysisUnit, table: TypeTable, opts: Options
   local +1:9 out: PortabilityFinding[] (const)
   local +5:9 seen: StringSet (const)
   callee +5:16 new StringSet -> @StringSet.constructor
-  local +6:14 sig: FunctionSig (const)
-  local +7:11 body: Node | null (const)
-  callee +7:18 FunctionSig.body -> @FunctionSig.body
-  callee +8:43 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local +11:11 instance: Instantiation | null (const)
-  callee +13:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  local +15:11 found: PortabilityFinding[] (const)
-  callee +16:5 walkPortability -> @walkPortability
-  callee +16:21 new PortabilityWalk -> @PortabilityWalk.constructor
-  callee +18:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local +20:16 finding: PortabilityFinding (const)
-  callee +21:11 StringSet.add -> @StringSet.add
+  local +6:9 bound: StringSet (const)
+  callee +6:17 boundConversionNames -> @boundConversionNames
+  local +7:14 sig: FunctionSig (const)
+  local +8:11 body: Node | null (const)
+  callee +8:18 FunctionSig.body -> @FunctionSig.body
+  callee +9:43 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +12:11 instance: Instantiation | null (const)
+  callee +14:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  local +16:11 found: PortabilityFinding[] (const)
+  callee +17:5 walkPortability -> @walkPortability
+  callee +17:21 new PortabilityWalk -> @PortabilityWalk.constructor
+  callee +19:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local +21:16 finding: PortabilityFinding (const)
+  callee +22:11 StringSet.add -> @StringSet.add
 function walkPortability(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @walkPortability
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via zeroFillFinding
   calls: numberFindings recordFindings stringFindings walkPortability zeroFillFinding
-  pointer walk: size=48 writesThrough=true captured=true passedTo=zeroFillFinding#0 numberFindings#0 stringFindings#0 recordFindings#0 walkPortability#0
+  pointer walk: size=56 writesThrough=true captured=true passedTo=zeroFillFinding#0 numberFindings#0 stringFindings#0 recordFindings#0 walkPortability#0
   pointer node: size=40 writesThrough=true captured=true passedTo=zeroFillFinding#1 numberFindings#1 stringFindings#1 recordFindings#1
   pointer out: size=0 writesThrough=true captured=true passedTo=zeroFillFinding#2 numberFindings#2 stringFindings#2 recordFindings#2 walkPortability#2
   stackSites=0 stackLocals=0
@@ -101,7 +108,7 @@ function walkPortability(walk: PortabilityWalk, node: Node, out: PortabilityFind
 function isZeroLength(walk: PortabilityWalk, expr: Node): boolean -> @isZeroLength
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isFloat isZeroLength nish_panic_index nish_str_eq numericLiteralValue
-  pointer walk: size=48 writesThrough=false captured=false passedTo=isZeroLength#0 isZeroLength#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=isZeroLength#0 isZeroLength#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 numericLiteralValue -> @numericLiteralValue
@@ -113,7 +120,7 @@ function zeroFillFinding(walk: PortabilityWalk, node: Node, out: PortabilityFind
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: PortabilityFinding.constructor PortabilityWalk.textOf TypeTable.baseOf TypeTable.isArray TypeTable.refOf isNumeric isZeroLength nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq
-  pointer walk: size=48 writesThrough=false captured=false passedTo=isZeroLength#0 PortabilityWalk.textOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=isZeroLength#0 PortabilityWalk.textOf#0
   pointer node: size=40 writesThrough=true captured=true passedTo=PortabilityFinding.constructor#1 PortabilityWalk.textOf#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0

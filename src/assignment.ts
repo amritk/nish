@@ -286,7 +286,7 @@ const walkLoop = (
  * none is read before it is. Runs after the layouts are known.
  */
 export const checkDefiniteAssignment = (ctx: CheckContext, cls: StructInfo): void => {
-  if (cls.kind !== STRUCT_CLASS) {
+  if (cls.kind !== STRUCT_CLASS || cls.layout) {
     return
   }
   const assigned = new Assigned(false)

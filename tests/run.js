@@ -76,6 +76,7 @@ import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
+import { runFfiStructChecks } from "./ffi-struct.js"
 import { hardeningProblems } from "../scripts/check-hardening.mjs"
 import {
   packageRootOf,
@@ -3728,6 +3729,15 @@ if (selects("fnref", "fnref_debug_check")) {
     peakOf("place_set_1x", scaled("fnref_place_set", 9, 1000)),
     peakOf("place_set_10x", scaled("fnref_place_set", 9, 10000))
   )
+  // WP51 stage 2: the same loop through an argument, a nullable element and
+  // a `Map` value.
+  for (const variant of ["arg", "nullable", "map"]) {
+    flat(
+      `fnref_place_set_${variant}: 10x the loop peaks where 1x does`,
+      peakOf(`place_set_${variant}_1x`, scaled(`fnref_place_set_${variant}`, 9, 1000)),
+      peakOf(`place_set_${variant}_10x`, scaled(`fnref_place_set_${variant}`, 9, 10000))
+    )
+  }
   const keepless = (t) => t.replace(/\n\s*sum = sum \+ slot\.use\(new P\(i\), k\)/, "")
   flat(
     "fnref_escape_join: 10x the loop through the set that keeps nothing peaks where 1x does",
@@ -3786,6 +3796,44 @@ if (selects("fnref", "fnref_debug_check")) {
       gLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
       enumTag.test(gLl),
     gLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gLl.slice(0, 2000)
+  )
+  // A nullable reference's tag 0 is `null`: its enumeration names it, so a
+  // debugger prints `h = null` rather than `0`.
+  const gnSrc = path.join(fnrefDir, "fnref_gn.ts")
+  fs.writeFileSync(
+    gnSrc,
+    [
+      "type Op = (x: i32) => i32",
+      "const inc = (x: i32): i32 => x + 1",
+      "const twice = (x: i32): i32 => x * 2",
+      "export const main = (): number => {",
+      "  let h: Op | null = null",
+      "  if (Date.now() > 0) {",
+      "    h = inc",
+      "  }",
+      "  if (Date.now() > 1) {",
+      "    h = twice",
+      "  }",
+      "  if (h !== null) {",
+      "    console.log(`${h(3)}`)",
+      "  }",
+      "  return 0",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const gnOut = path.join(fnrefDir, "gn-ir") + path.sep
+  const gnIr = spawnSync(NISH, [gnSrc, "-g", "-o", gnOut], { cwd: root, encoding: "utf8" })
+  const gnLlPath = path.join(gnOut, "fnref_gn.ll")
+  const gnLl = gnIr.status === 0 && fs.existsSync(gnLlPath) ? fs.readFileSync(gnLlPath, "utf8") : shown(gnIr)
+  const nullableTag = /!DICompositeType\(tag: DW_TAG_enumeration_type, name: "\(i32\) => i32 \| null",[^\n]*size: 32/
+  check(
+    "fnref -g: a nullable reference's enumeration names tag 0 `null`, then its members",
+    gnLl.includes('!DIEnumerator(name: "null", value: 0)') &&
+      gnLl.includes('!DIEnumerator(name: "inc", value: 1)') &&
+      gnLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
+      nullableTag.test(gnLl),
+    gnLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gnLl.slice(0, 2000)
   )
   const dispatcherSp = gLl
     .split("\n")
@@ -4121,6 +4169,212 @@ if (!only || "net_tls_tcp".includes(only)) {
       ended.code === 0 && body === want,
       `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(body)}\nwant:   ${JSON.stringify(want)}\nstderr: ${serverErr}`
     )
+  }
+}
+
+// ---- `nish/net/http2-cleartext`, against curl and h2load (WP39 G7) --------------
+//
+// What the Nish clients in `tests/link/net_http2_cleartext` cannot say: that an
+// HTTP/2 stack somebody else wrote speaks to the carrier by prior knowledge,
+// with no TLS and no Upgrade. The same program run as `serve 5` listens, prints
+// its port and serves five connections: one from `curl --http2-prior-knowledge`,
+// whose GET must come back 200 over HTTP/2 with the short body, then four from
+// `h2load -n 1000 -c 4`, every one of whose thousand requests must succeed. The
+// server prints one line per connection it closed; each must end with no error.
+// Either client missing is a skip, named, rather than a pass.
+if (!only || "net_http2_cleartext".includes(only)) {
+  const h2cDir = path.join(buildDir, "net-h2c")
+  fs.rmSync(h2cDir, { recursive: true, force: true })
+  fs.mkdirSync(h2cDir, { recursive: true })
+  const exe = path.join(h2cDir, "app")
+  const built = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "net_http2_cleartext", "main.ts"),
+      "-o",
+      h2cDir + path.sep,
+      "--link",
+      exe,
+      ...linkProfile("net_http2_cleartext"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  // A curl built without nghttp2 refuses --http2-prior-knowledge before it
+  // connects, and the server would wait out its timer for that connection.
+  const curlFound = has("curl")
+  const hasCurl = curlFound && /\bHTTP2\b/.test(String(spawnSync("curl", ["--version"], { encoding: "utf8" }).stdout))
+  const hasH2load = has("h2load")
+  if (!curlFound) skip("net_http2_cleartext: curl is not installed, so no third-party client speaks h2c to the carrier")
+  else if (!hasCurl) skip("net_http2_cleartext: curl was built without HTTP2 (curl --version), so it cannot speak h2c to the carrier")
+  if (!hasH2load) skip("net_http2_cleartext: h2load is not installed (nghttp2-client), so the carrier is not loaded by one")
+  if (check("net_http2_cleartext: the server links", built.status === 0, String(built.stderr)) && (hasCurl || hasH2load)) {
+    const connections = (hasCurl ? 1 : 0) + (hasH2load ? 4 : 0)
+    const server = spawn(exe, ["serve", String(connections)], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let served = ""
+    let serverErr = ""
+    const serverTimer = setTimeout(() => server.kill("SIGKILL"), 60000)
+    const serverDone = new Promise((resolve) =>
+      server.on("close", (code, signal) => {
+        clearTimeout(serverTimer)
+        resolve({ code, signal })
+      })
+    )
+    server.stderr.on("data", (chunk) => {
+      serverErr += chunk
+    })
+    const port = await new Promise((resolve) => {
+      server.stdout.on("data", (chunk) => {
+        served += chunk
+        const m = /^port (\d+)\n/.exec(served)
+        if (m !== null) {
+          resolve(Number(m[1]))
+        }
+      })
+      server.on("close", () => resolve(0))
+    })
+    // Each client runs to its end before the next, asynchronously, so that the
+    // server's output keeps arriving while it does.
+    const run = (tool, args) =>
+      new Promise((resolve) => {
+        const child = spawn(tool, args, { stdio: ["ignore", "pipe", "pipe"] })
+        let out = ""
+        const timer = setTimeout(() => child.kill("SIGKILL"), 30000)
+        child.stdout.on("data", (chunk) => {
+          out += chunk
+        })
+        child.stderr.on("data", (chunk) => {
+          out += chunk
+        })
+        child.on("close", (code, signal) => {
+          clearTimeout(timer)
+          resolve({ code, signal, out })
+        })
+      })
+    const url = `http://127.0.0.1:${port}/hello`
+    if (hasCurl) {
+      const r = port > 0 ? await run("curl", ["-sS", "--max-time", "10", "--http2-prior-knowledge", url, "-w", "\n%{http_version} %{http_code}\n"]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: curl --http2-prior-knowledge GETs the page over HTTP/2, 200 with the short body",
+        r.code === 0 && r.out === "hello from nish/net/http2\n\n2 200\n",
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    if (hasH2load) {
+      const r = port > 0 ? await run("h2load", ["-n", "1000", "-c", "4", url]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: h2load -n 1000 -c 4 over prior knowledge: every request succeeds with a 2xx",
+        r.code === 0 && /requests: 1000 total, 1000 started, 1000 done, 1000 succeeded, 0 failed, 0 errored, 0 timeout/.test(r.out) && /status codes: 1000 2xx/.test(r.out),
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    const ended = await serverDone
+    const lines = served.replace(/^port \d+\n/, "").split("\n").filter((line) => line !== "")
+    check(
+      `net_http2_cleartext: the server closes all ${connections} connections, each with no error, and exits 0`,
+      ended.code === 0 && lines.length === connections && lines.every((line) => /^closed: streams \d+ error 0$/.test(line)),
+      `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(served)}\nstderr: ${serverErr}`
+    )
+  }
+}
+
+// ---- record_size_limit (RFC 8449) against openssl s_client (WP39 G3) ------------
+//
+// `tests/link/net_tls_record_size_limit` reads the record lengths the server
+// writes under a client's limit; this asks a third-party client the same, when
+// its openssl can send the extension: s_client offers a limit of 512 with
+// `-record_size_limit`, prints every record header it reads under `-msg`, and
+// no protected record the server sends may carry more than 512 + 16 bytes
+// (the inner plaintext and the AEAD tag). OpenSSL has no such option up to at
+// least 3.0, so most hosts skip, and say why.
+if (!only || "net_tls_record_size_limit".includes(only)) {
+  const help = spawnSync("openssl", ["s_client", "-help"], { encoding: "utf8" })
+  const helpText = `${help.stdout ?? ""}${help.stderr ?? ""}`
+  if (help.error !== undefined || !helpText.includes("-record_size_limit")) {
+    const version = spawnSync("openssl", ["version"], { encoding: "utf8" })
+    const which = help.error === undefined ? String(version.stdout).trim() : "no openssl on PATH"
+    skip(`net_tls_record_size_limit: ${which}: s_client has no -record_size_limit, so the interop run did not happen`)
+  } else {
+    const rslDir = path.join(buildDir, "net-tls-rsl")
+    fs.rmSync(rslDir, { recursive: true, force: true })
+    fs.mkdirSync(rslDir, { recursive: true })
+    const exe = path.join(rslDir, "app")
+    const built = spawnSync(
+      NISH,
+      [
+        path.join(root, "tests", "link", "net_tls_record_tcp", "main.ts"),
+        "-o",
+        rslDir + path.sep,
+        "--link",
+        exe,
+        ...linkProfile("net_tls_record_tcp"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    if (check("net_tls_record_size_limit: the server links", built.status === 0, String(built.stderr))) {
+      const server = spawn(exe, ["serve", "1"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+      const serverTimer = setTimeout(() => server.kill("SIGKILL"), 30000)
+      const serverDone = new Promise((resolve) =>
+        server.on("close", (code) => {
+          clearTimeout(serverTimer)
+          resolve(code)
+        })
+      )
+      let served = ""
+      const port = await new Promise((resolve) => {
+        server.stdout.on("data", (chunk) => {
+          served += chunk
+          const m = /^port (\d+)\n/.exec(served)
+          if (m !== null) {
+            resolve(Number(m[1]))
+          }
+        })
+        server.on("close", () => resolve(0))
+      })
+      // A line long enough that the echo must be cut into several records.
+      const line = `${"x".repeat(2000)}\n`
+      const got =
+        port > 0
+          ? await new Promise((resolve) => {
+              const child = spawn(
+                "openssl",
+                ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-servername", "localhost", "-msg", "-record_size_limit", "512"],
+                { stdio: ["pipe", "pipe", "pipe"] }
+              )
+              let all = ""
+              let sent = false
+              const timer = setTimeout(() => child.kill("SIGKILL"), 15000)
+              const onData = (chunk) => {
+                all += chunk
+                if (!sent && all.includes("Verify return code")) {
+                  sent = true
+                  child.stdin.write(line)
+                }
+                // The echo, whole: s_client prints what it reads, one record at a
+                // time between the `-msg` lines, and never what it was given.
+                if (sent && (all.match(/x{8,}/g) ?? []).join("").length >= 2000) {
+                  child.stdin.end()
+                }
+              }
+              child.stdout.on("data", onData)
+              child.stderr.on("data", onData)
+              child.on("close", (code) => {
+                clearTimeout(timer)
+                resolve({ code, all })
+              })
+            })
+          : { code: null, all: "" }
+      // `-msg` prints `<<< ... RecordHeader` and the five header bytes, in hex,
+      // on the next line, for every record s_client reads.
+      const lengths = [...got.all.matchAll(/<<< [^\n]*RecordHeader[^\n]*\n\s*17 03 03 ([0-9a-f]{2}) ([0-9a-f]{2})/gi)].map(
+        (m) => Number.parseInt(m[1] + m[2], 16)
+      )
+      check(
+        "net_tls_record_size_limit: openssl s_client -record_size_limit 512 completes, and no protected record it reads passes 512 + 16 bytes",
+        got.code === 0 && lengths.length > 1 && lengths.every((n) => n <= 512 + 16),
+        `exit ${got.code}, protected record lengths ${JSON.stringify(lengths)}\n${got.all.slice(-1500)}`
+      )
+      await serverDone
+    }
   }
 }
 
@@ -5952,6 +6206,36 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       many.stderr.includes("\n...and 5 more portability warnings\n25 portability warnings"),
     many.stderr
   )
+
+  // WP33 R5's review tier, one `--json` line per row it covers. An NL8006
+  // whose rewrite compiles to the same IR carries `review` after `message`, in
+  // `fix`'s edit shape; NL8007 and NL8008 have no such rewrite (their
+  // conversions saturate under Node, or add an instruction here), so their
+  // lines are what they were before the tier, byte for byte.
+  const reviewSrc = path.join(buildDir, "port_class_review.ts")
+  fs.writeFileSync(
+    reviewSrc,
+    "const half = (a: i32): i32 => a / 2;\n" +
+      "const twice = (b: u8): u8 => b + b;\n" +
+      "const shifted = (k: i32, n: i32): i32 => k >>> n;\n\n" +
+      "export const main = (): number => {\n" +
+      "  console.log(half(7) + toI32(twice(250)) + shifted(-8, 0));\n" +
+      "  return 0;\n" +
+      "};\n"
+  )
+  const review = compile(reviewSrc, "port_class_review.ll", ["--warn-portability", "--json"])
+  const head = `{"file":${JSON.stringify(reviewSrc)},`
+  check(
+    "portability: --json carries `review` on NL8006 alone, after `message`, and NL8007 and NL8008 lines are unchanged",
+    review.status === 0 &&
+      objects(review.stdout).join("\n") ===
+        [
+          `${head}"line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this \`/\` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}`,
+          `${head}"line":2,"column":30,"endLine":2,"endColumn":35,"severity":"portability","code":"NL8007","message":"this \`+\` on u8 wraps here, and TypeScript keeps counting past the range"}`,
+          `${head}"line":3,"column":42,"endLine":3,"endColumn":49,"severity":"portability","code":"NL8008","message":"this \`>>>\` on i32 reads back signed here, and unsigned in TypeScript"}`,
+        ].join("\n"),
+    review.stdout + review.stderr
+  )
 }
 
 // ---- WP33 R4: `--emit-ts` ------------------------------------------------------------
@@ -6477,9 +6761,29 @@ if (!only || "arena_removed".includes(only)) {
     }
     fs.rmSync(work, { recursive: true, force: true })
   }
+  // `review` edits (WP33 R5) applied to `text` the way an agent would: each
+  // placed by line and UTF-16 column, end exclusive, applied from the end.
+  const applyReview = (text, objects) => {
+    const starts = [0]
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "\n") {
+        starts.push(i + 1)
+      }
+    }
+    const at = (line, column) => starts[line - 1] + column - 1
+    const edits = objects
+      .flatMap((d) => d.review ?? [])
+      .map((e) => [at(e.line, e.column), at(e.endLine, e.endColumn), e.text])
+      .sort((a, b) => b[0] - a[0] || b[1] - a[1])
+    let out = text
+    for (const [start, end, insert] of edits) {
+      out = out.slice(0, start) + insert + out.slice(end)
+    }
+    return out
+  }
   const inputs = fs
     .readdirSync(fixDir)
-    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts") && !f.endsWith(".reviewed.ts"))
     .sort()
   for (const file of inputs) {
     const noFix = file.endsWith(".nofix.ts")
@@ -6487,16 +6791,122 @@ if (!only || "arena_removed".includes(only)) {
     if (only && !name.includes(only) && !"fix".includes(only)) {
       continue
     }
+    // A `port-` case is a portability row's: every run is under
+    // `--warn-portability`, and its plain run, whose diagnostics are all
+    // warnings, exits 0 unless `plain-exit` says otherwise.
+    const portability = name.startsWith("port-")
+    const flags = portability ? ["--warn-portability"] : []
     const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
     const input = fs.readFileSync(path.join(fixDir, file))
     fs.writeFileSync(path.join(work, file), input)
-    const plain = spawnSync(NISH, ["--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
+    const plain = spawnSync(NISH, [...flags, "--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
     const plainObjects = diagnosticsOf(plain.stdout)
-    const fixed = spawnSync(NISH, ["--fix", "--json", file], { cwd: work, encoding: "utf8" })
+    const fixed = spawnSync(NISH, [...flags, "--fix", "--json", file], { cwd: work, encoding: "utf8" })
     const after = fs.readFileSync(path.join(work, file))
-    const wantPlain = plainExit(path.join(fixDir, `${name}.plain-exit`))
+    const wantPlain = Number(sidecar(path.join(fixDir, `${name}.plain-exit`), portability ? "0" : "1"))
     codeCheck(name, path.join(fixDir, `${name}.code`), plain)
-    if (noFix) {
+    const reviewedFile = path.join(fixDir, `${name}.reviewed.ts`)
+    if (!noFix && fs.existsSync(reviewedFile)) {
+      // The `review` tier: edits a reader approves, which `--fix` never
+      // applies. Applied by hand they give `.reviewed.ts`, which compiles to
+      // the input's IR byte for byte with the warning gone, and which runs
+      // under Node to print what the input prints natively.
+      const reviewed = fs.readFileSync(reviewedFile, "utf8")
+      // Checked per site: each diagnostic of the case's `code` carries a
+      // `review` unless `.reviewed-keeps` names its `line:column`, and the
+      // reviewed file reports that code at exactly those sites.
+      const code = sidecar(path.join(fixDir, `${name}.code`), "")
+      const keepSites = sidecar(path.join(fixDir, `${name}.reviewed-keeps`), "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+        .sort()
+      const siteOf = (d) => `${d.line}:${d.column}`
+      const sitesOf = (objects) =>
+        objects
+          .filter((d) => d.code === code)
+          .map(siteOf)
+          .sort()
+      check(
+        `fix ${name}: --json carries \`review\` at every ${code} site but ${keepSites.join(", ") || "none"}, and no \`fix\``,
+        plain.status === wantPlain &&
+          plainObjects.some((d) => d.code === code) &&
+          plainObjects
+            .filter((d) => d.code === code)
+            .every((d) => (Array.isArray(d.review) && d.review.length > 0) !== keepSites.includes(siteOf(d))) &&
+          plainObjects.every((d) => !("fix" in d)),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: the review edits make ${name}.reviewed.ts byte for byte`,
+        applyReview(input.toString("utf8"), plainObjects) === reviewed,
+        `got:\n${applyReview(input.toString("utf8"), plainObjects)}`
+      )
+      check(
+        `fix ${name}: --fix applies no review edit and leaves the file byte-identical`,
+        fixed.status === plain.status && after.equals(input),
+        shown(fixed)
+      )
+      // The same file name in a directory of its own, so the IR's
+      // `source_filename` and debug names match.
+      fs.mkdirSync(path.join(work, "reviewed"))
+      fs.writeFileSync(path.join(work, "reviewed", file), reviewed)
+      const clean = spawnSync(NISH, [...flags, "--json", file, "-o", "plain.ll"], {
+        cwd: path.join(work, "reviewed"),
+        encoding: "utf8",
+      })
+      check(
+        `fix ${name}: ${name}.reviewed.ts compiles with nothing left to review`,
+        clean.status === 0 &&
+          diagnosticsOf(clean.stdout).every((d) => d.severity !== "error" && !("review" in d) && !("fix" in d)),
+        shown(clean)
+      )
+      // A warning whose own edit was declined stands in the reviewed file (a
+      // `/=` around a reviewed `/`), at the site `.reviewed-keeps` names, with
+      // no `review` of its own, which the check above already holds.
+      check(
+        `fix ${name}: ${name}.reviewed.ts reports ${code} at ${keepSites.join(", ") || "no site"}`,
+        JSON.stringify(sitesOf(diagnosticsOf(clean.stdout))) === JSON.stringify(keepSites),
+        shown(clean)
+      )
+      const ll = path.join(work, "plain.ll")
+      const reviewedLl = path.join(work, "reviewed", "plain.ll")
+      check(
+        `fix ${name}: ${name}.reviewed.ts compiles to the input's IR byte for byte`,
+        fs.existsSync(ll) && fs.existsSync(reviewedLl) && fs.readFileSync(ll).equals(fs.readFileSync(reviewedLl)),
+        "the two .ll files differ"
+      )
+      // `.ll-lacks` names, one `<function> <text>` per line, a check the
+      // input's IR must not hold in that function's body: a case about the
+      // edit keeping a proof lists the checks the proof drops.
+      const lacks = sidecar(path.join(fixDir, `${name}.ll-lacks`), "")
+      const irText = fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+      for (const line of lacks === "" ? [] : lacks.split("\n")) {
+        const [fn, needle] = line.split(" ")
+        const head = irText.indexOf(` @${fn}(`)
+        const body = head === -1 ? "" : irText.slice(head, irText.indexOf("\n}\n", head))
+        check(`fix ${name}: the input's IR for ${fn} holds no \`${needle}\``, body !== "" && !body.includes(needle), body || `no @${fn} in plain.ll`)
+      }
+      const want = fs.readFileSync(path.join(fixDir, `${name}.stdout`), "utf8")
+      if (HAS_CLANG) {
+        const exe = path.join(work, "native")
+        const built = spawnSync(NISH, [file, "-o", `${exe}.ll`, "--link", exe], { cwd: work, encoding: "utf8" })
+        const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+        check(
+          `fix ${name}: the input prints ${name}.stdout natively`,
+          ran.status === 0 && ran.stdout === want,
+          shown(ran)
+        )
+      } else {
+        skip(`fix ${name}: the native run needs clang`)
+      }
+      const node = runUnderPrelude(path.join(work, "reviewed", file), [])
+      check(
+        `fix ${name}: ${name}.reviewed.ts prints ${name}.stdout under Node`,
+        node.status === 0 && node.stdout === want,
+        shown(node)
+      )
+    } else if (noFix) {
       // A refused shape must name the diagnostic it was written for: with
       // nothing to apply, a case whose diagnostic stopped firing, or that
       // another diagnostic now stops first, would otherwise pass for having
@@ -6506,8 +6916,10 @@ if (!only || "arena_removed".includes(only)) {
         sidecar(path.join(fixDir, `${name}.code`), "").length > 0
       )
       check(
-        `fix ${name}: reported with no \`fix\` key`,
-        plain.status === wantPlain && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
+        `fix ${name}: reported with no \`fix\` or \`review\` key`,
+        plain.status === wantPlain &&
+          plainObjects.length > 0 &&
+          plainObjects.every((d) => !("fix" in d) && !("review" in d)),
         shown(plain)
       )
       check(
@@ -11358,7 +11770,11 @@ if (dealtHere("p256Seams")) {
   // 10,000 scalars. Neither inversion is exported, so the program reaches them
   // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
   // std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
-  // Its expected.out ends in a checksum of every inverse. Natively, and as a
+  // #1430 adds the field: `p256FieldInvert` (safegcd) against Fermat's a^(p-2)
+  // on 0, 1, p-1, p, every 2^k and 2^k-1 and 1,000 seeded values, and the
+  // verify's width-5 wNAF pass (`p256DoubleMultPublic`) against two
+  // `p256ScalarMult`s and a `p256PointAdd`, on n-1, n-2, zero, the identity
+  // and seeded sums. Its expected.out ends in a checksum of every result. Natively, and as a
   // `--profile wasi` module under Node.
   if (!only || ["p256 inverse", "crypto_p256_inverse", "wasi"].some((name) => name.includes(only))) {
     p256SeamProgram({
@@ -11368,7 +11784,7 @@ if (dealtHere("p256Seams")) {
       source: "inverse.ts",
       extra: [],
       nativeName:
-        "p256 inverse: safegcd and Fermat give the same inverse for every scalar of tests/link/crypto_p256_inverse, natively",
+        "p256 inverse: safegcd and Fermat give the same inverse for every scalar and field element, and the wNAF pass the comb's sum, in tests/link/crypto_p256_inverse, natively",
     })
   }
 
@@ -11785,19 +12201,20 @@ if (dealtHere("cryptoChecks")) {
   // group is and how a root's wipes are counted).
   runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
 
-  // The two wipes of `p256ScalarInverse` (#758) that `tests/wipes/` cannot count:
-  // `opt` promotes g, the signed-30 copy of the nonce, and t, the matrix derived
-  // from it, to stack slots, and their wipes reach -O2 as one volatile `i32` zero
-  // store per limb rather than as a memset. Each array's stores share an SROA base
-  // (`%arr.data.N.sroa.*`), so the body must hold a group of nine for g and one of
-  // four for t; deleting `wipe(g)` or `wipe(t)` removes its group. The `p256`,
+  // The three wipes of `p256Safegcd` (#758) that `tests/wipes/` cannot count:
+  // `opt` promotes f, the modulus, g, the signed-30 copy of the secret, and t,
+  // the matrix derived from them, to stack slots, and their wipes reach -O2 as
+  // one volatile `i32` zero store per limb rather than as a memset. Each array's
+  // stores share an SROA base (`%arr.data.N.sroa.*`), so the body must hold two
+  // groups of nine for f and g and one of four for t; deleting `wipe(f)`,
+  // `wipe(g)` or `wipe(t)` removes its group. The `p256`,
   // `crypto`, `wipe` and `crypto_p256` filters all run it.
   {
     const name =
-      "crypto: the wipes survive opt -O2 (p256ScalarInverse's g and t, nine and four volatile i32 zero stores)"
+      "crypto: the wipes survive opt -O2 (p256Safegcd's f, g and t, nine, nine and four volatile i32 zero stores)"
     if (!only || [name, "crypto_p256"].some((selector) => selector.includes(only))) {
       if (!has("opt")) {
-        skip("crypto: no opt to show p256ScalarInverse's promoted wipes survive -O2")
+        skip("crypto: no opt to show p256Safegcd's promoted wipes survive -O2")
       } else {
         const dir = path.join(buildDir, "wipes-o2", "p256-scalar-inverse")
         fs.rmSync(dir, { recursive: true, force: true })
@@ -11815,7 +12232,7 @@ if (dealtHere("cryptoChecks")) {
             : c
         const body =
           o.status === 0
-            ? (o.stdout.match(/^define [^\n]*@"?nish\.p256ScalarInverse"?\([\s\S]*?\n\}/m) ?? [""])[0]
+            ? (o.stdout.match(/^define [^\n]*@"?nish\.p256Safegcd"?\([\s\S]*?\n\}/m) ?? [""])[0]
             : ""
         const groups = new Map()
         for (const m of body.matchAll(/store volatile i32 0, ptr %([\w.]+?)\.sroa\.\d+,/g)) {
@@ -11826,9 +12243,9 @@ if (dealtHere("cryptoChecks")) {
         if (o.status !== 0) {
           detail = o.stderr
         } else if (body === "") {
-          detail = "nish.p256ScalarInverse: not in the optimised p256.ll"
+          detail = "nish.p256Safegcd: not in the optimised p256.ll"
         }
-        check(name, sizes.length === 2 && sizes[0] === 9 && sizes[1] === 4, detail)
+        check(name, sizes.length === 3 && sizes[0] === 9 && sizes[1] === 9 && sizes[2] === 4, detail)
       }
     }
   }
@@ -12311,7 +12728,7 @@ if (dealtHere("cryptoChecks")) {
           // A spec that could not be read exactly fails below, in the fixture check,
           // rather than being run here with a secret it lost.
           for (const spec of specs.filter((sp) => sp.problems.length === 0)) {
-            const body = functionBody(lines, spec.name, target)
+            const body = functionBody(lines, spec.name, target, { labels: spec.loops })
             const found = body === null ? [] : ctViolations(body, spec, target)
             const kinds = [...new Set(found.map((v) => v.kind))]
             check(
@@ -12468,6 +12885,125 @@ if (dealtHere("cryptoChecks")) {
         loopBody === undefined
           ? "no `for (let i: i32 = 0; i < 30; i++)` loop in std/crypto/p256.ts's p256Divsteps30"
           : `${blocks.length} blocks, ${stray.length} unlike the module's loop body:\n${stray[0] ?? ""}\n--- module:\n${loopBody}`
+      )
+
+      // ct_asm_chacha20poly1305's loop copies are the module's text with a `ct`
+      // prefix and an `export`, so a module edit the copy misses fails here, not
+      // silently. `ctPoly1305AbsorbWhole` is the head of poly1305Absorb up to the
+      // end of its whole-blocks loop; the padded tail stays discipline.
+      const chachaSource = fs.readFileSync(path.join(root, "std", "crypto", "chacha20poly1305.ts"), "utf8")
+      const chachaFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_chacha20poly1305.ts"), "utf8")
+        .replace(/\bct(Chacha20|Poly1305)/g, (_m, word) => word.toLowerCase())
+        .replace(/\bCT_POLY1305_/g, "POLY1305_")
+        .replace(/\nexport const /g, "\nconst ")
+      const bodyOf = (source, name) =>
+        source.match(new RegExp(`\\nconst ${name} = (?:[^\\n]*\\{\\n[\\s\\S]*?\\n\\}\\n|[^\\n]*[^{\\n]\\n)`))?.[0]
+      const drifted = []
+      for (const name of ["chacha20Rotl", "chacha20Core", "chacha20XorInto"]) {
+        const copy = bodyOf(chachaFixture, name)
+        if (copy === undefined || copy !== bodyOf(chachaSource, name)) {
+          drifted.push(name)
+        }
+      }
+      const absorbHead = bodyOf(chachaFixture, "poly1305AbsorbWhole")
+        ?.replace("poly1305AbsorbWhole", "poly1305Absorb")
+        .replace(", len: i32): void", ", len: i32, zeroPad: boolean): void")
+        .replace(/\}\n$/, "")
+      if (absorbHead === undefined || !bodyOf(chachaSource, "poly1305Absorb")?.startsWith(absorbHead)) {
+        drifted.push("poly1305Absorb's whole-blocks loop")
+      }
+      if (!chachaSource.includes("\nconst POLY1305_HIGH_BIT: i32 = 0x1000000\n")) {
+        drifted.push("POLY1305_HIGH_BIT")
+      }
+      check(
+        "ct_asm: ct_asm_chacha20poly1305's loop copies match std/crypto/chacha20poly1305.ts",
+        drifted.length === 0,
+        `differs from the module: ${drifted.join(", ")}`
+      )
+
+      // ct_asm_aes's loop copies keep the module's names, so only `export` differs.
+      const aesSource = fs.readFileSync(path.join(root, "std", "crypto", "aes.ts"), "utf8")
+      const aesFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_aes.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const aesDrifted = [
+        "aesBytes",
+        "aesSwapBits",
+        "aesTranspose",
+        "aesPack",
+        "aesUnpack",
+        "aesEncryptBatch",
+        "aesSubWord",
+      ].filter((name) => {
+        const copy = bodyOf(aesFixture, name)
+        return copy === undefined || copy !== bodyOf(aesSource, name)
+      })
+      check(
+        "ct_asm: ct_asm_aes's loop copies match std/crypto/aes.ts",
+        aesDrifted.length === 0,
+        `differs from the module: ${aesDrifted.join(", ")}`
+      )
+
+      // ct_asm_x25519's copies are std/crypto/x25519.ts put through the rewrites
+      // the fixture's header names: the module's names mapped to the fixture's,
+      // the short-array early returns, comments and blank lines dropped, and
+      // each `a[i]` written through `nish:unsafe`. `ladderStep` and `ladderLoop`
+      // put their parameters on lines of their own, which `bodyOf`'s one-line
+      // form would stop at, so a line ending in `(` opens a block here.
+      const x25519Body = (source, name) =>
+        source.match(new RegExp(`\\nconst ${name} = (?:[^\\n]*[^{(\\n]\\n|[\\s\\S]*?\\n\\}\\n)`))?.[0]
+      const x25519Module = fs
+        .readFileSync(path.join(root, "std", "crypto", "x25519.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+        .replace(/\bf25519Swap\b/g, "condSwap")
+        .replace(/\bx25519Ladder(Step|Loop)\b/g, (_m, word) => `ladder${word}`)
+        .replace(/\bf25519(\w)/g, (_m, c) => `field${c}`)
+        .replace(/\bX25519_A24\b/g, "toI64(121665)")
+        .replace(/\bfieldZero\(\)/g, "new Array<i64>(10)")
+      const x25519Fixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_x25519.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const x25519Drifted = [
+        "fieldAdd64",
+        "fieldSub64",
+        "fieldMul64",
+        "fieldWidth",
+        "fieldLimbMask",
+        "fieldCopy",
+        "fieldCarryChain",
+        "fieldCarry",
+        "fieldAdd",
+        "fieldSub",
+        "fieldMulRow",
+        "fieldMul",
+        "fieldSquare",
+        "fieldSquareTimes",
+        "fieldMulA24",
+        "fieldPow250",
+        "fieldInvert",
+        "condSwap",
+        "fieldDecode",
+        "fieldDecodeInto",
+        "fieldEncode",
+        "fieldEncodeInto",
+        "ladderStep",
+        "ladderLoop",
+      ].filter((name) => {
+        const copy = x25519Body(x25519Fixture, name)
+        const want = x25519Body(x25519Module, name)
+          ?.replace(/\n {2}if \(toI32\([^\n]*\.length\) < \d+[^\n]*\{\n {4}return[^\n]*\n {2}\}/g, "")
+          .replace(/\n\s*\/\/[^\n]*/g, "")
+          .replace(/ \/\/ [^\n]*/g, "")
+          .replace(/\n\s*(?=\n)/g, "")
+          .replace(/^(\s*)(\w+)\[([^\]\n]+)\] = ([^\n]*)$/gm, "$1uncheckedSet($2, $3, $4);")
+          .replace(/\b(\w+)\[([^[\]\n]+)\]/g, "uncheckedGet($1, $2)")
+        return copy === undefined || want === undefined || copy !== want
+      })
+      check(
+        "ct_asm: ct_asm_x25519's copies match std/crypto/x25519.ts",
+        x25519Drifted.length === 0,
+        `differs from the module: ${x25519Drifted.join(", ")}`
       )
     }
   }
@@ -29483,6 +30019,7 @@ if (!only || "c_symbol_private_libm".includes(only)) {
 }
 
 runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
+runFfiStructChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 

@@ -12,6 +12,7 @@ import isShmWindowIntrinsic from "./shm-window" -> function @isShmWindowIntrinsi
 import jsonRouteCallees from "./json-typed" -> function @jsonRouteCallees
 import jsonRouteOf from "./json-typed" -> function @jsonRouteOf
 import openedHandle from "./handles" -> function @openedHandle
+import layoutClass from "./structs" -> function @layoutClass
 import builtinCalleesNamed from "./emit-builtins" -> function @builtinCalleesNamed
 import checksRangesInPrologue from "./emit-builtins" -> function @checksRangesInPrologue
 import identifierBuiltinCallees from "./emit-builtins" -> function @identifierBuiltinCallees
@@ -2035,10 +2036,10 @@ function FactCollector.noteHandleClose(this: FactCollector, node: Node): void ->
 function FactCollector.addCallee(this: FactCollector, callee: FunctionSig, call: Node): void -> @FactCollector.addCallee [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.addComposedCallee
-  calls: FactCollector.addCallees FactCollector.addComposedCallee FactCollector.noteArguments FactCollector.noteSite FactCollector.noteSlotWrite FunctionFacts.offerCapability FunctionSig.foreign StringSet.add TypeTable.isNullable TypeTable.isReadonlyArray TypeTable.stripNull foreignBufferCount foreignBufferCountProven foreignResultCallees foreignStringCallees foreignStringIsNulFree hostFunction hostWindowProven lentBuffer nish_panic_index panicTailCallees
-  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.noteSlotWrite#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.addCallees#0 FactCollector.noteSite#0
+  calls: FactCollector.addCallees FactCollector.addComposedCallee FactCollector.noteArguments FactCollector.noteSite FactCollector.noteSlotWrite FunctionFacts.offerCapability FunctionSig.foreign StringSet.add TypeTable.isNullable TypeTable.isReadonlyArray TypeTable.stripNull foreignBufferCount foreignBufferCountProven foreignResultCallees foreignStringCallees foreignStringIsNulFree hostFunction hostWindowProven layoutClass lentBuffer nish_panic_index panicTailCallees unwrapParens
+  pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.noteSlotWrite#0 FactCollector.noteSlotWrite#0 FactCollector.noteSlotWrite#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.addCallees#0 FactCollector.noteSite#0
   pointer callee: size=200 writesThrough=false captured=false passedTo=FunctionSig.foreign#0 FactCollector.noteArguments#2 hostFunction#0 lentBuffer#1 hostFunction#0 foreignBufferCount#1
-  pointer call: size=40 writesThrough=true captured=true passedTo=FactCollector.addComposedCallee#2 FactCollector.noteArguments#1 FunctionFacts.offerCapability#3 FactCollector.noteSlotWrite#1 hostWindowProven#2 foreignBufferCountProven#2 FactCollector.noteSite#1
+  pointer call: size=40 writesThrough=true captured=true passedTo=FactCollector.addComposedCallee#2 FactCollector.noteArguments#1 FunctionFacts.offerCapability#3 FactCollector.noteSlotWrite#1 FactCollector.noteSlotWrite#1 FactCollector.noteSlotWrite#1 hostWindowProven#2 foreignBufferCountProven#2 FactCollector.noteSite#1
   stackSites=3 stackLocals=3
   callee +0:10 FunctionSig.foreign -> @FunctionSig.foreign
   callee +1:7 FactCollector.addComposedCallee -> @FactCollector.addComposedCallee
@@ -2059,25 +2060,32 @@ function FactCollector.addCallee(this: FactCollector, callee: FunctionSig, call:
   callee +22:9 FactCollector.noteSite -> @FactCollector.noteSite
   local +32:9 b: i32 (let)
   local +34:13 buffer: Node (const)
-  callee +35:11 lentBuffer -> @lentBuffer
-  callee +36:14 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
-  callee +37:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
-  local +39:15 proven: boolean (const)
-  callee +39:24 hostFunction -> @hostFunction
-  callee +40:13 hostWindowProven -> @hostWindowProven
-  callee +41:13 foreignBufferCountProven -> @foreignBufferCountProven
-  callee +46:15 foreignBufferCount -> @foreignBufferCount
-  local +51:17 tail: string[] (const)
-  callee +52:11 panicTailCallees -> @panicTailCallees
-  callee +53:11 FactCollector.addCallees -> @FactCollector.addCallees
-  callee +55:9 FactCollector.noteSite -> @FactCollector.noteSite
-  callee +61:9 TypeTable.stripNull -> @TypeTable.stripNull
-  local +62:13 nullable: boolean (const)
-  callee +62:24 TypeTable.isNullable -> @TypeTable.isNullable
-  local +63:13 copy: string[] (const)
-  callee +64:7 foreignResultCallees -> @foreignResultCallees
-  callee +65:7 FactCollector.addCallees -> @FactCollector.addCallees
-  callee +67:9 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +40:9 layoutClass -> @layoutClass
+  callee +40:52 TypeTable.stripNull -> @TypeTable.stripNull
+  local +42:13 held: Node (let)
+  callee +42:20 unwrapParens -> @unwrapParens
+  callee +43:9 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
+  callee +45:18 unwrapParens -> @unwrapParens
+  callee +46:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
+  callee +49:11 lentBuffer -> @lentBuffer
+  callee +50:14 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee +51:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
+  local +53:15 proven: boolean (const)
+  callee +53:24 hostFunction -> @hostFunction
+  callee +54:13 hostWindowProven -> @hostWindowProven
+  callee +55:13 foreignBufferCountProven -> @foreignBufferCountProven
+  callee +60:15 foreignBufferCount -> @foreignBufferCount
+  local +65:17 tail: string[] (const)
+  callee +66:11 panicTailCallees -> @panicTailCallees
+  callee +67:11 FactCollector.addCallees -> @FactCollector.addCallees
+  callee +69:9 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +75:9 TypeTable.stripNull -> @TypeTable.stripNull
+  local +76:13 nullable: boolean (const)
+  callee +76:24 TypeTable.isNullable -> @TypeTable.isNullable
+  local +77:13 copy: string[] (const)
+  callee +78:7 foreignResultCallees -> @foreignResultCallees
+  callee +79:7 FactCollector.addCallees -> @FactCollector.addCallees
+  callee +81:9 FactCollector.noteSite -> @FactCollector.noteSite
 function FactCollector.noteBuiltin(this: FactCollector, name: string, call: Node, resolved: boolean): void -> @FactCollector.noteBuiltin [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
@@ -2420,54 +2428,53 @@ function collectStatedFacts(unit: AnalysisUnit, table: TypeTable, opts: Options,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=432
   sharedWrite: +0:7
   escaping: nodeCount
-  calls: FactCollector.addCallees FactCollector.addUserCallee FactCollector.constructor FactCollector.findPrivateArrays FactCollector.noteSite FactCollector.visit FunctionFacts.constructor FunctionFacts.pointerParam FunctionSig.body FunctionSig.foreign FunctionSig.suspends Options.recordsPanics PanicSite.constructor PointerParamFacts.constructor StringSet.has TypeTable.isRanged TypeTable.isReadonlyArray TypeTable.stripNull applyStance checksRangesInPrologue initialisesFields isAtomicMethod isChannelSend isLockMethod isMapRoute isPointerParam isRegionEntry isRegionIntrinsic isScalarArgument isShmSource isShmWindowIntrinsic isSpawnEntry jsonRouteOf lentBuffer markAtomic markChannelSend markJsonRoute markLock markMapRoute markParallelEntry markRegionIntrinsic markShmWindow markWipe maxEffect nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq panicTailCallees pointerAlign rootsHoldNoPointer routeCalleesOf secretRoleOf structSize
+  calls: FactCollector.addCallees FactCollector.addUserCallee FactCollector.constructor FactCollector.findPrivateArrays FactCollector.noteSite FactCollector.visit FunctionFacts.constructor FunctionFacts.pointerParam FunctionSig.body FunctionSig.foreign FunctionSig.suspends Options.recordsPanics PanicSite.constructor PointerParamFacts.constructor StringSet.has TypeTable.isRanged TypeTable.stripNull applyStance checksRangesInPrologue filledByC initialisesFields isAtomicMethod isChannelSend isLockMethod isMapRoute isPointerParam isRegionEntry isRegionIntrinsic isScalarArgument isShmSource isShmWindowIntrinsic isSpawnEntry jsonRouteOf markAtomic markChannelSend markJsonRoute markLock markMapRoute markParallelEntry markRegionIntrinsic markShmWindow markWipe maxEffect nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq panicTailCallees pointerAlign rootsHoldNoPointer routeCalleesOf secretRoleOf structSize
   pointer unit: size=16 writesThrough=true captured=true passedTo=FactCollector.constructor#1
-  pointer table: size=112 writesThrough=true captured=true passedTo=structSize#1 pointerAlign#1 rootsHoldNoPointer#1 isScalarArgument#0 isPointerParam#0 structSize#1 TypeTable.stripNull#0 pointerAlign#1 markJsonRoute#1 isPointerParam#0 lentBuffer#0 TypeTable.isReadonlyArray#0 TypeTable.stripNull#0 FactCollector.constructor#2 checksRangesInPrologue#0 TypeTable.isRanged#0 markMapRoute#0 routeCalleesOf#0
+  pointer table: size=112 writesThrough=true captured=true passedTo=structSize#1 pointerAlign#1 rootsHoldNoPointer#1 isScalarArgument#0 isPointerParam#0 structSize#1 TypeTable.stripNull#0 pointerAlign#1 markJsonRoute#1 isPointerParam#0 filledByC#1 TypeTable.stripNull#0 FactCollector.constructor#2 checksRangesInPrologue#0 TypeTable.isRanged#0 markMapRoute#0 routeCalleesOf#0
   pointer opts: size=216 writesThrough=true captured=true passedTo=Options.recordsPanics#0 FactCollector.constructor#3 checksRangesInPrologue#1
-  pointer sig: size=200 writesThrough=true captured=true passedTo=isChannelSend#0 jsonRouteOf#0 rootsHoldNoPointer#2 jsonRouteOf#0 markJsonRoute#2 isChannelSend#0 isAtomicMethod#0 isRegionIntrinsic#1 isShmWindowIntrinsic#1 FunctionSig.foreign#0 lentBuffer#1 FactCollector.constructor#4 FunctionSig.body#0 initialisesFields#0 checksRangesInPrologue#2 isRegionEntry#0 isSpawnEntry#0 isMapRoute#0 markMapRoute#1 routeCalleesOf#1 secretRoleOf#0 isLockMethod#0 FunctionSig.suspends#0
+  pointer sig: size=200 writesThrough=true captured=true passedTo=isChannelSend#0 jsonRouteOf#0 rootsHoldNoPointer#2 jsonRouteOf#0 markJsonRoute#2 isChannelSend#0 isAtomicMethod#0 isRegionIntrinsic#1 isShmWindowIntrinsic#1 FunctionSig.foreign#0 filledByC#2 FactCollector.constructor#4 FunctionSig.body#0 initialisesFields#0 checksRangesInPrologue#2 isRegionEntry#0 isSpawnEntry#0 isMapRoute#0 markMapRoute#1 routeCalleesOf#1 secretRoleOf#0 isLockMethod#0 FunctionSig.suspends#0
   pointer memory: size=104 writesThrough=false captured=false
   pointer known: size=24 writesThrough=true captured=true passedTo=FactCollector.constructor#6
   stackSites=3 stackLocals=3
-  local -167:9 program: CheckedProgram (const)
-  local -164:9 ownMemory: boolean (const)
-  callee -164:41 isChannelSend -> @isChannelSend
-  callee -164:63 jsonRouteOf -> @jsonRouteOf
-  local -159:9 facts: FunctionFacts (const)
-  callee -159:17 new FunctionFacts -> @FunctionFacts.constructor
-  callee -157:23 structSize -> @structSize
-  callee -156:23 pointerAlign -> @pointerAlign
-  callee -135:23 rootsHoldNoPointer -> @rootsHoldNoPointer
-  callee -127:54 isScalarArgument -> @isScalarArgument
-  local -126:7 i: i32 (let)
-  local -124:11 type: i32 (const)
-  callee -123:9 isPointerParam -> @isPointerParam
-  callee -121:9 new PointerParamFacts -> @PointerParamFacts.constructor
-  callee -119:11 structSize -> @structSize
-  callee -119:38 TypeTable.stripNull -> @TypeTable.stripNull
-  callee -118:11 pointerAlign -> @pointerAlign
-  callee -110:7 jsonRouteOf -> @jsonRouteOf
-  callee -109:5 applyStance -> @applyStance
-  callee -109:24 markJsonRoute -> @markJsonRoute
-  callee -104:7 isChannelSend -> @isChannelSend
-  callee -103:5 applyStance -> @applyStance
-  callee -103:24 markChannelSend -> @markChannelSend
-  callee -98:7 isAtomicMethod -> @isAtomicMethod
-  callee -97:5 applyStance -> @applyStance
-  callee -97:24 markAtomic -> @markAtomic
-  callee -92:7 isRegionIntrinsic -> @isRegionIntrinsic
-  callee -91:5 applyStance -> @applyStance
-  callee -91:24 markRegionIntrinsic -> @markRegionIntrinsic
-  callee -90:9 Options.recordsPanics -> @Options.recordsPanics
-  callee -89:29 new PanicSite -> @PanicSite.constructor
-  callee -83:7 isShmWindowIntrinsic -> @isShmWindowIntrinsic
-  callee -82:5 applyStance -> @applyStance
-  callee -82:24 markShmWindow -> @markShmWindow
+  local -168:9 program: CheckedProgram (const)
+  local -165:9 ownMemory: boolean (const)
+  callee -165:41 isChannelSend -> @isChannelSend
+  callee -165:63 jsonRouteOf -> @jsonRouteOf
+  local -160:9 facts: FunctionFacts (const)
+  callee -160:17 new FunctionFacts -> @FunctionFacts.constructor
+  callee -158:23 structSize -> @structSize
+  callee -157:23 pointerAlign -> @pointerAlign
+  callee -136:23 rootsHoldNoPointer -> @rootsHoldNoPointer
+  callee -128:54 isScalarArgument -> @isScalarArgument
+  local -127:7 i: i32 (let)
+  local -125:11 type: i32 (const)
+  callee -124:9 isPointerParam -> @isPointerParam
+  callee -122:9 new PointerParamFacts -> @PointerParamFacts.constructor
+  callee -120:11 structSize -> @structSize
+  callee -120:38 TypeTable.stripNull -> @TypeTable.stripNull
+  callee -119:11 pointerAlign -> @pointerAlign
+  callee -111:7 jsonRouteOf -> @jsonRouteOf
+  callee -110:5 applyStance -> @applyStance
+  callee -110:24 markJsonRoute -> @markJsonRoute
+  callee -105:7 isChannelSend -> @isChannelSend
+  callee -104:5 applyStance -> @applyStance
+  callee -104:24 markChannelSend -> @markChannelSend
+  callee -99:7 isAtomicMethod -> @isAtomicMethod
+  callee -98:5 applyStance -> @applyStance
+  callee -98:24 markAtomic -> @markAtomic
+  callee -93:7 isRegionIntrinsic -> @isRegionIntrinsic
+  callee -92:5 applyStance -> @applyStance
+  callee -92:24 markRegionIntrinsic -> @markRegionIntrinsic
+  callee -91:9 Options.recordsPanics -> @Options.recordsPanics
+  callee -90:29 new PanicSite -> @PanicSite.constructor
+  callee -84:7 isShmWindowIntrinsic -> @isShmWindowIntrinsic
+  callee -83:5 applyStance -> @applyStance
+  callee -83:24 markShmWindow -> @markShmWindow
   callee -64:7 FunctionSig.foreign -> @FunctionSig.foreign
   local -63:9 at: i32 (let)
   local -62:9 p: i32 (let)
   callee -60:11 isPointerParam -> @isPointerParam
-  callee -59:13 lentBuffer -> @lentBuffer
-  callee -59:43 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee -59:13 filledByC -> @filledByC
   callee -30:64 isShmSource -> @isShmSource
   callee -24:9 TypeTable.stripNull -> @TypeTable.stripNull
   local -16:9 collector: FactCollector (const)
@@ -3634,6 +3641,18 @@ function lentBuffer(table: TypeTable, sig: FunctionSig, i: i32): boolean -> @len
   callee +0:3 hostFunction -> @hostFunction
   callee +0:23 isHostWindow -> @isHostWindow
   callee +0:64 isForeignBuffer -> @isForeignBuffer
+function filledByC(program: CheckedProgram, table: TypeTable, sig: FunctionSig, i: i32): boolean -> @filledByC
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: TypeTable.isReadonlyArray TypeTable.stripNull layoutClass lentBuffer
+  pointer program: size=800 writesThrough=false captured=false passedTo=layoutClass#0
+  pointer table: size=112 writesThrough=false captured=false passedTo=lentBuffer#0 TypeTable.isReadonlyArray#0 layoutClass#1 TypeTable.stripNull#0
+  pointer sig: size=200 writesThrough=false captured=false passedTo=lentBuffer#1
+  stackSites=0 stackLocals=0
+  callee +0:4 lentBuffer -> @lentBuffer
+  callee +0:34 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee +1:3 layoutClass -> @layoutClass
+  callee +1:31 TypeTable.stripNull -> @TypeTable.stripNull
 function hostWindowProven(program: CheckedProgram, table: TypeTable, call: Node, index: i32, known: FactsTable | null): boolean -> @hostWindowProven [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
@@ -3699,8 +3718,8 @@ function functionAttributes(f: FunctionFacts): string[] -> @functionAttributes [
 function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionFacts, privateAbi: boolean): string[] -> @paramAttributes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name type
-  calls: FunctionFacts.pointerParam StringSet.has TypeTable.kindOf TypeTable.refOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.refOf#0
+  calls: FunctionFacts.pointerParam StringSet.has TypeTable.isFnRef TypeTable.kindOf TypeTable.refOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.isFnRef#0 TypeTable.refOf#0 TypeTable.refOf#0
   pointer f: size=432 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   local +0:9 attrs: string[] (const)
@@ -3711,20 +3730,24 @@ function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionF
   callee +10:16 TypeTable.kindOf -> @TypeTable.kindOf
   callee +20:10 StringSet.has -> @StringSet.has
   callee +59:28 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +83:9 TypeTable.refOf -> @TypeTable.refOf
-  local +90:11 uncaptured: boolean (const)
-  callee +90:64 StringSet.has -> @StringSet.has
+  callee +81:30 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +81:44 TypeTable.refOf -> @TypeTable.refOf
+  callee +86:9 TypeTable.refOf -> @TypeTable.refOf
+  local +93:11 uncaptured: boolean (const)
+  callee +93:64 StringSet.has -> @StringSet.has
 function returnAttributes(table: TypeTable, type: i32, deref: i32, privateAbi: boolean, align: i32): string[] -> @returnAttributes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.kindOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_from_i32
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.resultByValue#0
+  calls: TypeTable.isFnRef TypeTable.kindOf TypeTable.refOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_from_i32
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.resultByValue#0 TypeTable.isFnRef#0 TypeTable.refOf#0
   stackSites=0 stackLocals=0
   local +0:9 attrs: string[] (const)
   local +1:9 kind: i32 (const)
   callee +1:16 TypeTable.kindOf -> @TypeTable.kindOf
   callee +8:21 TypeTable.resultByValue -> @TypeTable.resultByValue
   callee +27:28 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +43:31 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +43:45 TypeTable.refOf -> @TypeTable.refOf
 function isNumericLiteral(node: Node): boolean -> @isNumericLiteral
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq

@@ -1,0 +1,38 @@
+PASS  a client with prior knowledge gets the server's SETTINGS, the acknowledgement of its own and the answer
+PASS  its preface is whole
+PASS  a POST's body is echoed back
+PASS  a hundred more GETs on the warmed connection are answered
+PASS  and the server's serve calls moved the arena not at all (0 bytes)
+PASS  and with every frame sent, the idle slot holds none of its frame buffers (0 lent)
+PASS  after the client's GOAWAY the server ends the connection and its program closes the slot
+PASS  with nothing gone wrong in the loop
+PASS  an HTTP/1.1 request line is closed at its first byte, with nothing written
+PASS  an Upgrade: h2c request is closed, with nothing written
+PASS  ten bytes of the preface hold the slot
+PASS  and an eleventh that differs closes it, with nothing written
+PASS  ten bytes of the preface and a hang-up free the slot
+PASS  ten bytes of the preface and silence wait no more than prefaceTimeout
+PASS  and are closed, with nothing written
+PASS  two clients mid-preface fill the pool and a third is shed (1 shed)
+PASS  and none of it has made a frame buffer (0 made)
+PASS  the two are closed once they hang up
+PASS  a free slot answers H2_ERROR to next and done to the rest
+PASS  a preface's first 1 bytes leave slot 1 open and not yet prefaced
+PASS  a preface split after its byte 1 is held and answered as one
+PASS  and expire a minute past the deadline closes the slot mid-preface beside it (1) and spares slot 1
+PASS  which still answers
+PASS  and closes on its GOAWAY
+PASS  a preface's first 10 bytes leave slot 1 open and not yet prefaced
+PASS  a preface split after its byte 10 is held and answered as one
+PASS  and expire a minute past the deadline closes the slot mid-preface beside it (1) and spares slot 1
+PASS  which still answers
+PASS  and closes on its GOAWAY
+PASS  a preface's first 23 bytes leave slot 1 open and not yet prefaced
+PASS  a preface split after its byte 23 is held and answered as one
+PASS  and expire a minute past the deadline closes the slot mid-preface beside it (1) and spares slot 1
+PASS  which still answers
+PASS  and closes on its GOAWAY
+PASS  with nothing gone wrong in the loop
+PASS  a server of 1024 slots and no connection has made no frame buffer (0) and one connection, slot 0's (1)
+PASS  a slot never accepted into is free and names slot 0's connection
+http2 over cleartext: 37 passed, 0 failed, 0 skipped

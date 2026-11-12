@@ -247,4 +247,66 @@ PASS  the server never sends more than three times what it received
 PASS  the other is still owed
 PASS  and goes once the client sends more
 PASS  still inside the limit
-quic recovery: 249 passed, 0 failed, 0 skipped
+PASS  at 1452 bytes the initial window is ten datagrams: 14520, under the 14720 cap
+PASS  a window still at the initial one becomes it
+PASS  and the minimum window is two datagrams: 2904
+PASS  a size under 1200 is taken as 1200
+PASS  and the untouched window falls back to 12000
+PASS  the probe is lost by packet threshold
+PASS  but no congestion event follows
+PASS  and the slow start threshold is not cut
+PASS  nor the window
+PASS  the same loss of a packet that is no probe is a congestion event
+PASS  an ACK of 6 loses 1 to 5, the probe 2 among them
+PASS  the lost probe is passed over: 1, 3, 4 and 5 span 186 ms, persistent congestion
+PASS  an ACK of 6 and the probe 2 loses 1, 3, 4 and 5
+PASS  but the acknowledged probe breaks the run: no persistent congestion
+PASS  only the congestion event
+PASS  before any probe the path is 1200 bytes
+PASS  with nothing else to send the server probes 1452 bytes, and again after each loss
+PASS  three probes lost
+PASS  none of them a congestion event
+PASS  nor a loss event toward a black hole
+PASS  the path stays at 1200
+PASS  the search goes on halfway below: 1326
+PASS  acknowledged, it validates 1326
+PASS  and recovery counts datagrams of that size
+PASS  then tries halfway up: 1389
+PASS  room for 1200 bytes holds no 1452-byte probe
+PASS  room under 1200 bytes answers 0
+PASS  room past the buffer's end answers 0
+PASS  so neither sent a probe
+PASS  room for 1452 does
+PASS  a carrier limit of 1200 sends no probe
+PASS  and counts none
+PASS  a carrier limit of 1300 holds the first probe to 1300
+PASS  a client's max_udp_payload_size of 1280 holds it to 1280
+PASS  a validated probe makes the path 1452
+PASS  and the search ends there
+PASS  before loss event 1 no black hole is taken
+PASS  before loss event 2 no black hole is taken
+PASS  a 1420-byte DATAGRAM is queued while the path is 1452
+PASS  before loss event 3 no black hole is taken
+PASS  three packets past 1200 bytes go out and never arrive
+PASS  the third loss event of one takes the path for a black hole
+PASS  the path falls back to 1200
+PASS  and so does every datagram
+PASS  and recovery's datagram size
+PASS  the queued DATAGRAM no longer fits a packet and is dropped
+PASS  the search starts again below 1452: 1326
+PASS  a validated probe makes the path 1452
+PASS  a limit lowered to 1300 holds the next datagram to 1300
+PASS  and the path with it
+PASS  and recovery's datagram size
+PASS  a full datagram is then 1300 bytes
+PASS  a limit under 1200 takes the path to 1200, no lower
+PASS  a 1452-byte probe goes out
+PASS  a limit lowered while it flies leaves a 1200 path as it is
+PASS  acknowledged after, the probe raises the path only to the limit
+PASS  and recovery's datagram size with it
+PASS  the oldest goes behind the others
+PASS  and is not counted as dropped
+PASS  in a full ring the oldest becomes the newest
+PASS  and the rest keep their order
+PASS  a ring of one is left as it is
+quic recovery: 311 passed, 0 failed, 0 skipped

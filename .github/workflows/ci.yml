@@ -104,9 +104,13 @@ permissions:
 # Every Ubuntu install goes through .github/actions/apt-install, which points
 # apt away from the Azure mirror (.github/apt-mirror.sh): that mirror served
 # libllvm18 at about 100 KB/s on #963 and timed the five-minute install out
-# before any test ran. The action also keeps the .debs in the Actions cache and
-# cuts a stalled download at a minute. Every macOS install goes through
-# .github/actions/brew-install, which keeps Homebrew's bottles in the cache.
+# before any test ran. On arm64 the same list gives ports.ubuntu.com fallbacks:
+# it was the only host there, and on #1413 (run 43058055859) it stopped
+# resolving and three aarch64 jobs died at `apt-get update`. The action also
+# keeps the .debs and apt's index in the Actions cache, installs with no
+# network at all when both are there, and cuts a stalled download at a minute.
+# Every macOS install goes through .github/actions/brew-install, which keeps
+# Homebrew's bottles in the cache.
 env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
@@ -258,8 +262,9 @@ jobs:
       # fire, so the step's five-minute limit did, and in October 2026 that was
       # every red run on main (one `test` shard of four, a different one each
       # time). .github/actions/apt-install fetches from mirrors other than
-      # Azure's, keeps the .debs in the Actions cache keyed by runner image, and
-      # cuts a stalled download at a minute per attempt.
+      # Azure's, keeps the .debs and apt's index in the Actions cache keyed by
+      # runner image, installs offline when both are there, and cuts a stalled
+      # download at a minute per attempt.
       #
       # wasi-libc and compiler-rt's wasm32 builtins are the WASI sysroot the
       # `wasi` profile links against (scripts/build.sh). Without them the
@@ -1668,7 +1673,9 @@ jobs:
   # tests/postgres/live/run.mjs prints a line a check and a summary that names
   # its skips, which must be none. The service's role and password are a
   # throwaway the job alone reaches; they match the names the expected
-  # outputs print, the same as the cluster run.mjs starts locally.
+  # outputs print, the same as the cluster run.mjs starts locally. The
+  # service speaks TLS with a leaf from a root made in the job, so the `tls`
+  # check can verify it and see it refused under another root or name.
   postgres-live:
     name: postgres-live
     runs-on: ubuntu-latest
@@ -1727,11 +1734,38 @@ jobs:
         timeout-minutes: 10
         run: npm run build
 
+      # A throwaway root and a leaf for 127.0.0.1 under it, copied into the
+      # service, which turns `ssl` on at a reload: the image takes no
+      # server options, and a service starts before the checkout.
+      - name: Turn TLS on in the PostgreSQL service
+        timeout-minutes: 2
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+          PG_TLS_DIR: ${{ runner.temp }}/pg-tls
+        run: |
+          bash tests/postgres/live/tls-certs.sh "$PG_TLS_DIR"
+          docker exec "$PG_CONTAINER" mkdir -p /var/lib/postgresql/tls
+          for f in server.pem server.key; do
+            docker cp "$PG_TLS_DIR/$f" "$PG_CONTAINER:/var/lib/postgresql/tls/$f"
+          done
+          docker exec "$PG_CONTAINER" chown -R postgres:postgres /var/lib/postgresql/tls
+          docker exec "$PG_CONTAINER" chmod 600 /var/lib/postgresql/tls/server.key
+          for sql in \
+            "alter system set ssl_cert_file = '/var/lib/postgresql/tls/server.pem'" \
+            "alter system set ssl_key_file = '/var/lib/postgresql/tls/server.key'" \
+            "alter system set ssl = on" \
+            "select pg_reload_conf()"; do
+            docker exec "$PG_CONTAINER" psql -U nish_live -d nish_live -v ON_ERROR_STOP=1 -qAt -c "$sql"
+          done
+          sleep 1
+          test "$(docker exec "$PG_CONTAINER" psql -U nish_live -d nish_live -qAt -c 'show ssl')" = on
+
       - name: The live PostgreSQL suite
         timeout-minutes: 5
         env:
           PG_TEST_URL: postgres://nish_live:nish-live@127.0.0.1:5432/nish_live
           PG_TEST_SOCKET_DIR: /tmp/nish-pg-socket
+          PG_TEST_TLS_DIR: ${{ runner.temp }}/pg-tls
         run: |
           set -o pipefail
           node tests/postgres/live/run.mjs | tee "$RUNNER_TEMP/postgres-live.log"

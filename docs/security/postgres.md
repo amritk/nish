@@ -38,9 +38,10 @@ were fixed in review, and PG-15 to PG-17 (a spent batch run that panicked,
 a text key that failed its whole batch, and collidable keys) in the
 batcher's.
 
-Three properties a reader might assume are not provided, by
-design, and are recorded as accepted: no TLS (PG-9), no way to require SCRAM
-of a server (PG-10), and MD5 and cleartext refused (PG-11). Two more are
+Two properties a reader might assume are not provided, by
+design, and are recorded as accepted: no way to require SCRAM
+of a server (PG-10), and MD5 and cleartext refused (PG-11). TLS (PG-9) is
+fixed in the carrier and off by default; see "TLS in the carrier". Two more are
 accepted for a Unix socket target: nothing checks who owns the socket
 (PG-21), and a host naming the socket file itself is taken as a directory,
 as `libpq` takes it (PG-22).
@@ -103,14 +104,15 @@ URLs under "Properties verified").
 
 | File | Functions |
 | --- | --- |
-| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, `paramInt4Array` and `paramInt8Array`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, the binary array builder `binaryArrayStart`, `binaryArrayInt` and `binaryArrayNull`, the parameter format codes written at `bindEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgPutDecimal`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys`; the connection targets `PgTarget`, `pgTarget` and `pgTargetUrl`, with their helpers `pgTargetFailed`, `pgDecoded` (which calls `urlDecode` from `std/net/url.ts`, audited in [url.md](url.md)) and `pgPortValue`; `PgBatcher.shed` |
+| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, `paramInt4Array` and `paramInt8Array`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, the binary array builder `binaryArrayStart`, `binaryArrayInt` and `binaryArrayNull`, the parameter format codes written at `bindEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgPutDecimal`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys`; the connection targets `PgTarget`, `pgTarget` and `pgTargetUrl`, with their helpers `pgTargetFailed`, `pgDecoded` (which calls `urlDecode` from `std/net/url.ts`, audited in [url.md](url.md)) and `pgPortValue`; `PgBatcher.shed`; `PgConfig.tls`, `tlsRootsPath` and `tlsServerName`, `pgSslRequest` |
 | `std/net/postgres-async.ts` | `PgAsyncPool` (the constructor, `live`, `close`); `PgAsyncParams`; `PgAsyncResult` (`ok`, `text`, `isNull`, `int`, `cell`); `pgAsyncConnect`, `pgAsyncStartup`, `pgAsyncClaim`, `pgAsyncRelease`, `pgAsyncQuery`, `pgAsyncPrepare`, `pgAsyncSeat`, `pgAsyncSend`, `pgAsyncTurn`, `pgAsyncAnswer`, `pgAsyncDone`, and the helpers they call: `pgAsyncForget`, `pgAsyncSlot`, `pgAsyncWaitFailure`, `pgAsyncWaitUntil`, `pgAsyncSince`, `pgAsyncSignal`, `pgAsyncDrain`, `pgAsyncPark`, `pgAsyncSeatOf`, `pgAsyncAhead`, `pgAsyncLostSeat`, `pgAsyncReady`, `pgAsyncDoom`, `pgAsyncFree`, `pgAsyncWakePool`, `pgAsyncFreeSeats`, `pgAsyncUnqueue`, `pgAsyncAbandon`, `pgAsyncSettle`, `pgAsyncSkippable`, `pgAsyncSkip`, `pgAsyncPlain`, `pgAsyncSkipAny`, `pgAsyncLabel`, `pgAsyncScan`, `pgAsyncLost`, `pgAsyncCheckCaps`, `pgAsyncEncode`, `pgAsyncBytes` (which also refuses a NUL), `pgAsyncRead`, `pgAsyncRow`, `pgAsyncError`, `pgAsyncDecimal` |
-| `std/net/postgres-carrier.ts` | `PgCarrierLimits`; `PgCarrier` (the constructor, `attach`, `run`, `runInt`, `runText`, `request`, `connection`, `send`, `next`, `close`, and the private helpers they call: the poll pass, connect and its timeout, the read and write of each slot, the routing of pool events to queries and batched executions, the ticket map, the free stacks and the shedding of a lost execution's requests) |
+| `std/net/postgres-carrier.ts` | `PgCarrierLimits`; the TLS helpers `pgCarrierTrust` and `pgCarrierTlsStart`, the SSLRequest and its one-byte answer, and the TLS record pass in front of each slot's reads and writes; `PgCarrier` (the constructor, `attach`, `run`, `runInt`, `runText`, `request`, `connection`, `send`, `next`, `close`, and the private helpers they call: the poll pass, connect and its timeout, the read and write of each slot, the routing of pool events to queries and batched executions, the ticket map, the free stacks and the shedding of a lost execution's requests) |
 
 Out of scope: the `nish:net` calls themselves, which the carrier and the
 async pool make and the client never does, the executor behind `readable`,
 `writable` and `sleep` (`docs/security/async.md`), and `HttpHandler`, whose `watch` and `fired` the
-carrier uses ([handler.md](handler.md)); the HMAC,
+carrier uses ([handler.md](handler.md)); the TLS 1.3 client, its records and
+its certificate checks, which the carrier drives and [tls.md](tls.md) audits; the HMAC,
 SHA-256, base64 and constant-time primitives the SCRAM exchange calls, which
 are [crypto-k1.md](crypto-k1.md)'s; and what a program does with a column's
 bytes.
@@ -118,8 +120,8 @@ bytes.
 ## Threat model
 
 The attacker is the server, or anyone on the network between it and the
-client: there is no TLS, so every backend byte is theirs, of any length, split
-anywhere. A win is a panic, a read or write outside the input or output
+client: without TLS (and always for `PgPool` driven by hand and the async
+pool), every backend byte is theirs, of any length, split anywhere. A win is a panic, a read or write outside the input or output
 buffer, memory or time a server can make the client spend beyond the caps, a
 connection that believes a server knows the password when it does not, a
 password or key the client leaves in memory after it is done with it, or a
@@ -149,7 +151,8 @@ finding; the guide says so.
 
 Rows PG-1 to PG-8 are the shapes a hostile server's bytes can take, each
 checked and found to hold; they are recorded so that the audit can see what
-was tried. PG-9 to PG-11 are accepted. PG-12 and PG-13 were found by the
+was tried. PG-10 and PG-11 are accepted; PG-9 was accepted and is fixed in the
+carrier by WP39 E6. PG-12 and PG-13 were found by the
 first review of this module and fixed before it merged; PG-15 to PG-17 by the
 batcher's first review, and fixed before it merged.
 
@@ -176,9 +179,9 @@ PG-41 is accepted.
 | PG-6 | High if it failed | `scramFinal`, `authenticate` | The client must not believe a server that does not know the password. | **Holds.** The `v=` signature must be 32 bytes and equal the one computed with the proof, by `timingSafeEqual`; a mismatch is `PG_ERR_SERVER_SIGNATURE`. An `AuthenticationOk` before the server's final message is `PG_ERR_SCRAM`. |
 | PG-7 | Medium if it failed | `scramContinue` | The iteration count must not make the client spin, nor overflow while it is read. | **Holds.** Outside `minIterations`..`maxIterations` (4096 to 100000) is `PG_ERR_SCRAM`, and the digits stop being read once the count passes `maxIterations`. |
 | PG-8 | Medium if it failed | `dispatch` (`ParameterStatus`) | A `client_encoding` other than `UTF8` would make `columnText` decode bytes as what they are not; a `DateStyle` other than ISO or a `TimeZone` other than UTC would make `PgText.timestamp` read a time the server did not mean. | **Holds.** The first is `PG_ERR_ENCODING`, the other two `PG_ERR_SETTING`, at startup or after a `SET`. |
-| PG-9 | Medium | the whole module | No TLS: an eavesdropper reads every query and row, and a man in the middle can answer as the server. SCRAM keeps the password itself from them, and PG-6 keeps a server that does not know it from being believed, but a MITM can relay the exchange and then read and change what follows. | **Accepted.** TLS is out of this stage's scope; the guide says so. Connect over a trusted network or a local socket until it lands. |
-| PG-10 | Low | `authenticate` | A server may answer `AuthenticationOk` at once (`trust`), and the client takes it: a program cannot insist on SCRAM, so an attacker that can answer as the server skips authentication. | **Accepted.** Without TLS the attacker of PG-9 wins anyway; a `requireAuth` setting belongs with TLS. |
-| PG-11 | Low | `authenticate` | MD5 and cleartext passwords are refused with `PG_ERR_AUTH_UNSUPPORTED`, so a role whose password is MD5-hashed cannot connect. | **Accepted.** Without TLS cleartext sends the password as it is, and an MD5 response is a hash anyone who sees it can replay; SCRAM-SHA-256 is PostgreSQL's default since 14. `nish/crypto/md5` is therefore not written. |
+| PG-9 | Medium | the whole module | No TLS: an eavesdropper reads every query and row, and a man in the middle can answer as the server. SCRAM keeps the password itself from them, and PG-6 keeps a server that does not know it from being believed, but a MITM can relay the exchange and then read and change what follows. | **Fixed** in the carrier by WP39 E6 (see "TLS in the carrier"): `PgConfig.tls` set to `PG_TLS_VERIFY_FULL` sends an SSLRequest and runs the TLS 1.3 client with chain and host-name checks, and a certificate under another root or for another name fails the connection with `PG_ERR_TLS`. Before: with the carrier's verdict forced to 0, the six refusal lines of `tests/link/std_postgres_tls` fail; after: they pass, and the live `tls` check sees alerts 48 and 42. The default stays `PG_TLS_DISABLE`. Every other path refuses a `tls` it cannot honour rather than run in the clear: the `PgConnection` constructor (and so `pgAsyncConnect`, which makes one) and `PgPool.connect` on a pool no carrier drives panic (Panic sites); before, at the change's first head, both took the config and connected in the clear. |
+| PG-10 | Low | `authenticate` | A server may answer `AuthenticationOk` at once (`trust`), and the client takes it: a program cannot insist on SCRAM, so an attacker that can answer as the server skips authentication. | **Accepted.** Without TLS the attacker of PG-9 wins anyway. Under `PG_TLS_VERIFY_FULL` the network attacker is gone, and only a server holding a certificate the program trusts can skip authentication; a `requireAuth` setting is still not written. |
+| PG-11 | Low | `authenticate` | MD5 and cleartext passwords are refused with `PG_ERR_AUTH_UNSUPPORTED`, so a role whose password is MD5-hashed cannot connect. | **Accepted**, under TLS too: the refusal does not look at the transport. Without TLS cleartext sends the password as it is, and an MD5 response is a hash anyone who sees it can replay; inside TLS either would hand the password, or a replayable hash, to any server the program trusts, where SCRAM proves it without sending it; SCRAM-SHA-256 is PostgreSQL's default since 14. `nish/crypto/md5` is therefore not written. |
 | PG-12 | Low | `pgScramKeys`, `pgSha256Wiped` | `sha256(clientKey)`, the one-shot that made StoredKey, left a hasher whose state and block had absorbed ClientKey, which is password-equivalent for that server. | **Fixed.** StoredKey is computed by `pgSha256Wiped`, a hasher of its own whose `state`, `block` and `schedule` are wiped before it returns, as `HmacSha256.digest` does for its two. Not observable from outside (the hasher is a local); the wipes are read in the source. |
 | PG-13 | Low | the builders, `sent`, the output reservation | The output buffer doubled without a cap and was compacted only once fully drained, so a program that queued faster than it sent grew it without bound, toward an `i32` offset's end. The program is trusted, so this is Low. | **Fixed.** `maxOutput` (1 MiB by default) caps the bytes queued unsent: a builder call that would pass it answers false and writes nothing, the room for `Sync` and `Terminate` is kept free under it, and the sent prefix is moved off the front once more than half the buffer is gone, or before any message, `bindEnd`'s, `Sync` and `Terminate` included, that would otherwise grow the buffer past its end; the buffer doubles only while twice its length fits in an `i32`. "a prepare that would pass maxOutput is refused", "a parameter that would pass maxOutput is refused", "unsent bytes count against maxOutput", "a send past half the buffer moves the rest to its start", "rather than double the buffer". |
 | PG-14 | High if it failed | `PgBatcher.row` | A row is routed to requests by the ordinal in its last column, which the server sends. An ordinal past the keys, of 0 or less, NULL, not an integer, or past an int8 would index outside the run's arrays or give one request another's rows; one that goes back would answer a request after its last event. | **Holds.** `row` reads the ordinal with the connection's integer decoder (`int` for a text batch, `binaryInt` for a `binary` one, with `binary.failed` saved and restored around it) and refuses each of these before it routes anything: it answers false, counts the row in `refused`, and fails the run, so every request still waiting on it gets `PG_BATCH_FAILED`. A run's rows are routed only while it is open, and `take` resets a reused run's keys, so a later batch cannot read an earlier one's. "an ordinal past the keys", "ordinal 0", "a negative ordinal", "a NULL ordinal", "an ordinal that is not an integer", "an ordinal past an int8", "a row of no columns", "an ordinal that goes back", "a later batch cannot read an earlier one's ordinals", "and a bad one does not set it" (the program's `text.failed`); for a `binary` batch, "a binary take answers a run", "its Bind asks for one result format, binary", "its ordinals are read as binary int8s, each row to its request", "binary.failed stays as the caller set it", "a text ordinal is refused" and "a NULL ordinal is refused" (`link/std_postgres_batch`). With `sorted` false the rows may come in any order, so an ordinal that goes back or repeats is accepted, but every other refusal holds, and no request has a last event before `end`, so no row can answer one after it: "an ordinal past the keys", "ordinal 0", "a negative ordinal", "a NULL ordinal", "an ordinal that is not an integer", "an ordinal past an int8", "a row of no columns", "a bad ordinal after rows fails those keys' requests too", "an ordinal that goes back is accepted", "a key's ordinal may come again", "a bad ordinal does not set the program's text.failed", "the reused run sees none of the old run's rows" (`link/std_postgres_batch_unsorted`). |
@@ -275,6 +278,10 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `PgBatchTurns.finished` | a slot holding no batch ("PgBatchTurns.finished on a slot holding no batch") | `link/std_postgres_batch_clock_turns_panic` (slot 0 finished twice, after once) |
 | `PgCarrier` constructor | a cap out of range: `queries` or `executions` outside 1..65536, `connectTimeoutMs` outside 1..3,600,000, or a `watch` id outside 0..15 (`HANDLER_MAX_WATCHED` − 1), checked before the poll set is made so that none leaks ("a PgCarrierLimits cap out of range") | `link/std_postgres_carrier_limits_panic` (`queries` of 0, after 1 is taken); the other bounds share its condition |
 | `PgCarrier` constructor | a target that failed, a TCP host that is not a numeric address (the carrier resolves no names), or a poll set the kernel refuses | — |
+| `PgConnection` constructor (and `pgAsyncConnect`, which makes one) | `PgConfig.tls` other than `PG_TLS_DISABLE`: only `PgCarrier` speaks TLS, and a connection driven by hand would run in the clear ("PgConfig.tls asks for TLS, which only PgCarrier speaks") | `link/std_postgres_tls_connection_panic` (`PG_TLS_VERIFY_FULL`, after `PG_TLS_DISABLE`) |
+| `PgPool.connect` | `PgConfig.tls` other than `PG_TLS_DISABLE` on a pool no `PgCarrier` drives (the carrier marks its pool with `carryTls`, and its connections are made with a cleartext copy of the config under the carrier's TLS) | `link/std_postgres_tls_pool_panic` (`PG_TLS_REQUIRE`, after `PG_TLS_DISABLE`) |
+| `PgCarrier` constructor | `PgConfig.tls` other than `PG_TLS_DISABLE` on a Unix socket target ("PgConfig.tls asks for TLS on a Unix socket") | `link/std_postgres_tls_unix_panic` (`PG_TLS_REQUIRE`, after `PG_TLS_DISABLE`) |
+| `PgCarrier` constructor, through `pgCarrierTrust` | `PG_TLS_VERIFY_FULL` with no root certificate read from `tlsRootsPath`, or from the system's store when it is empty ("PG_TLS_VERIFY_FULL with no root certificate to read") | `link/std_postgres_tls_roots_panic` (a roots file that is not there, after `PG_TLS_REQUIRE`, which reads none) |
 | `PgCarrier.attach` | past 8 batchers, or where `PgPool.register` refuses: after the pool connected, a NUL in the name or SQL, past 256 statements | `link/std_postgres_carrier_attach_panic` (a ninth, after eight) |
 | `PgCarrier.runInt`, `runText` | a batcher id `attach` never gave ("PgCarrier batcher id out of range") | `link/std_postgres_carrier_batcher_panic` (id 1 with only id 0 attached) |
 | `PgCarrier.request` | no event has named a query yet, or the event's query was run with no request | `link/std_postgres_carrier_request_panic` (a query run, no event read yet) |
@@ -305,6 +312,87 @@ before or after it. Once closed, `run`, `runInt` and `runText` answer
 after `close()` makes no connection on its closed poll set, and a second
 `close()` does nothing ("after close(), a second close() does nothing and
 the carrier refuses queries", "and connects nothing").
+
+## TLS in the carrier
+
+WP39 E6 closes PG-9 for `PgCarrier`. `PgConfig.tls` picks one of three modes:
+
+- `PG_TLS_DISABLE` (0, the default): no SSLRequest; the connection is in the
+  clear, as before.
+- `PG_TLS_REQUIRE` (1): TLS or no connection, but the certificate is not
+  checked. It defeats a passive eavesdropper only: a man in the middle
+  answers with a certificate of their own and is taken.
+- `PG_TLS_VERIFY_FULL` (2): TLS, with the chain checked to a root read from
+  `tlsRootsPath` (the system's store when it is empty) and the leaf checked
+  for `tlsServerName`, or the target's host when that is empty. This is the
+  mode that defeats the PG-9 attacker.
+
+Each connection writes the 8-byte SSLRequest (`pgSslRequest`, code
+80877103), and only once all eight bytes are out reads exactly one byte of
+answer, so bytes a server or man in the middle sends in the clear after it
+never reach the backend parser (CVE-2021-23222's shape). After an `N`
+nothing more is read; the test cannot tell a trailer read from one left
+unread, since either way the result is `PG_ERR_TLS` with `socketError` 0,
+so that rests on the code. After an `S` the next bytes go to the record layer as
+the handshake's first record, which must be the server's ServerHello, so
+anything else fails the handshake: a fake AuthenticationOk and
+ReadyForQuery there fail the connection with alert 10
+(`unexpected_message`). An answer other than `S` fails the connection with
+`PG_ERR_TLS` and `socketError` 0. The TLS 1.3 client offers ALPN `postgresql`, as `libpq`
+does, and key shares for x25519 and secp256r1: PostgreSQL before 18 allows
+only `ssl_ecdh_curve`, prime256v1 unless set, and asks for it with a
+HelloRetryRequest. A failed handshake is `PG_ERR_TLS` with `socketError`
+the alert the client sent: 48 (`unknown_ca`) for a chain to no trusted root,
+42 (`bad_certificate`) for a leaf naming another host. The startup message,
+the SCRAM exchange and every query then pass through the TLS records; the
+password and the SCRAM keys are handled as before (PG-12), and the TLS key
+schedule is the client's, wiped when its connection is dropped, as
+[tls.md](tls.md) records.
+
+**The default stays `PG_TLS_DISABLE`.** A program written before this change
+keeps the bytes it sent, so no deployment that connects in the clear today
+(a local server, a sidecar, a network that is trusted by construction) stops
+connecting on upgrade; a Unix socket, where TLS buys nothing, keeps working
+unchanged. `PG_TLS_REQUIRE` as a default would look safe and stop only an
+eavesdropper, and `PG_TLS_VERIFY_FULL` as a default would refuse every
+server without a certificate the host trusts. The choice is therefore the
+program's, made once in its `PgConfig`, and the guide tells a program that
+crosses an untrusted network to set `PG_TLS_VERIFY_FULL`.
+
+TLS on a Unix socket target is a panic (Panic sites), not a silent
+downgrade, and so is `PG_TLS_VERIFY_FULL` with no root to read. So is a
+`tls` other than `PG_TLS_DISABLE` anywhere the carrier does not drive the
+connection: a `PgConnection` made by hand, a `pgAsyncConnect` connection,
+and `PgPool.connect` on a pool no `PgCarrier` took. A program cannot ask for
+TLS and get the clear. No test reaches `pgAsyncConnect` with a TLS config:
+its refusal is pinned through the `PgConnection` constructor it calls
+(`link/std_postgres_tls_connection_panic`). The one way around is
+`PgPool.carryTls()`, which the carrier calls: it is `@internal`, and a
+program that calls it by hand has chosen the clear, as if it set `tls` to
+`PG_TLS_DISABLE`.
+
+Out of scope: TLS for the async pool (`std/net/postgres-async.ts`) and for
+`PgPool` driven by hand, whose bytes the program moves itself: both have
+no TLS, and both refuse a `PgConfig` that asks for it (above);
+client certificates (`sslcert`), which TLS-7 records the client does not
+offer; and `sslnegotiation=direct`, PostgreSQL 17's TLS without the
+SSLRequest.
+
+Tests: `tests/link/std_postgres_tls` serves a stand-in server on loopback
+that answers the SSLRequest and runs the TLS 1.3 server with a chain made
+for the test. It checks the SSLRequest's bytes; an `N` answer refused
+with no StartupMessage sent; a query over `PG_TLS_VERIFY_FULL`, by address
+and by `tlsServerName`, with the StartupMessage inside TLS; and
+`PG_TLS_REQUIRE` taking a chain no root vouches for. Its six refusal lines
+check a root the roots file does not hold, a leaf for another name and a
+good leaf under another `tlsServerName`, each refused with no StartupMessage
+sent. Forced to accept every chain (the verdict replaced by 0), those six
+fail.
+`tests/postgres/live`'s `tls` check, which CI's `postgres-live` job runs
+against a PostgreSQL service given a leaf from a root made in the job, reads
+`pg_stat_ssl` under each mode (`ssl true TLSv1.3` under `require` and
+`verify-full`, `ssl false` under `disable`) and sees the untrusted root and
+the wrong name refused with alerts 48 and 42.
 
 ## Limits
 
@@ -816,3 +904,12 @@ The async pool's tests:
   `tests/link/std_postgres_async_seat_ticket_panic` (Panic sites)
 - `tests/link/std_postgres_async_release_panic`,
   `tests/link/std_postgres_async_size_panic` (Panic sites)
+
+The carrier's TLS tests (PG-9, "TLS in the carrier"):
+
+- `tests/link/std_postgres_tls` (PG-9)
+- `tests/postgres/live` `tls` (PG-9)
+- `tests/link/std_postgres_tls_unix_panic`,
+  `tests/link/std_postgres_tls_roots_panic`,
+  `tests/link/std_postgres_tls_connection_panic`,
+  `tests/link/std_postgres_tls_pool_panic` (Panic sites)

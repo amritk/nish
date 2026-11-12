@@ -178,6 +178,13 @@ sequence numbers. `padding` is how many zero bytes each protected record
 the server writes carries after its content type (§5.4), 0 unless the
 caller sets it.
 
+A client that sent `record_size_limit` (RFC 8449) gets no protected record
+whose plaintext, content type and padding included, passes it: `write` and
+the handshake flight are cut into records of at most the limit less one
+less `padding`, and a padding that leaves no room fails the connection with
+`internal_error` as it does under 2^14. Records in the clear (ServerHello,
+HelloRetryRequest, the compatibility `change_cipher_spec`) are not limited.
+
 ```ts
 class TlsRecordServer
 ```
@@ -221,7 +228,7 @@ class TlsRecordServer
 | `receive(data: u8[], off: i32, len: i32): i32` | Takes bytes of the client's stream, `data[off .. off + len)`, and handles every record they complete. Answers how many it took, which is fewer than `len` only when its buffers are full (read `interest` before reading the socket again), or `TLS_RECORD_INVALID` for a window outside `data`. Once the connection has failed, or the client has sent `close_notify`, bytes are taken and dropped (§6.1). |
 | `release(): void` | Gives back every record buffer this slot holds, zeroed, and drops what was in them: unsent output, unread application data and a partial record. The carrier calls it when it closes the slot, after the last flush and `wipeKeys`, so a free slot holds no buffer of the pools'. |
 | `resume(current: Secret<u8[]>, currentInfo: TlsTicketKeyInfo, previous: Secret<u8[]>, previousInfo: TlsTicketKeyInfo, strikes: TlsTicketStrikes, now: i64): i32` | While `interest` says `TLS_RECORD_TICKET` in the handshake: reads the ClientHello's tickets under the keys the carrier lends (`TlsServer.resume`) and seals the flight that answers it, resumed or in full. Answers 0, or the alert the connection failed with — `internal_error` when no ticket waits. |
-| `sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean` | Seals one record of `type` from `data[off .. off + len)` onto `output` under the write protection, padded when it is protected. False, writing nothing, when it does not fit; a refusal from `seal` itself, which only a mistake here could cause, fails the connection. |
+| `sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean` | Seals one record of `type` from `data[off .. off + len)` onto `output` under the write protection, padded when it is protected. False, writing nothing, when it does not fit; content and padding past `writeCap()` (the client's `record_size_limit`, or 2^14) and a refusal from `seal` itself fail the connection with `internal_error`. |
 | `sign(signature: u8[]): i32` | Takes the signature over `signatureInput()` (DER for ECDSA, as `tlsSignEcdsaP256` answers it) and seals the rest of the flight. Answers 0, or the alert the connection failed with — `internal_error` when no signature is due. |
 | `signatureInput(): u8[] \| null` | What the CertificateVerify signs, while `interest` says `TLS_RECORD_SIGN`; `null` otherwise. |
 | `space(): i32` | How many bytes `receive` would take now: what the socket should read at most. |

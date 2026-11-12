@@ -1644,7 +1644,9 @@ export class Emitter {
       case N_FALSE:
         return "false"
       case N_NULL:
-        return "null" // `null` of a `T | null` type: the pointer constant
+        // `null` of a `T | null` type: the pointer constant, or tag 0 of a
+        // function reference, which names no function (WP51 stage 2).
+        return this.table.isFnRef(this.table.stripNull(this.typeOf(expr))) ? "0" : "null"
       case N_STRING:
         return this.stringConstant(expr.text)
       case N_TEMPLATE:

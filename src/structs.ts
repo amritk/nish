@@ -26,7 +26,7 @@ import {
 import { CheckContext } from "./context"
 import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
 import { rejectStoredMask } from "./simd"
-import { rejectForeignPointer, resolveType } from "./annotations"
+import { deferExportedLayout, rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import {
   collectTypeParamNames,
@@ -38,6 +38,7 @@ import { isExported, collectParams } from "./declarations"
 import { checkNumericLiteral, memberSlotMessage } from "./expressions"
 import {
   FLAG_DEFINITE,
+  FLAG_FOREIGN,
   FLAG_OPTIONAL,
   FLAG_READONLY,
   FLAG_STATIC,
@@ -71,7 +72,23 @@ import {
   TemplateInfo,
 } from "./program"
 import { StringSet } from "./map"
-import { isNumeric, T_BOOL, T_CPTR, T_ERROR, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
+import {
+  isNumeric,
+  T_BOOL,
+  T_CPTR,
+  T_ERROR,
+  T_F32,
+  T_F64,
+  T_I32,
+  T_I64,
+  T_STRING,
+  T_U16,
+  T_U32,
+  T_U64,
+  T_U8,
+  T_VOID,
+  TypeTable,
+} from "./types"
 import {
   handleFieldMessage,
   handleHeaderMessage,
@@ -104,7 +121,14 @@ const SLICE_BYTES: i32 = 16
  * the larger of the header's 8 and its slots' own, as the LLVM literal struct
  * `{ %struct.nish_array, [K x T] }` is aligned. A vector slot asks sixteen.
  */
-const fieldAlign = (table: TypeTable, field: FieldInfo): i32 => {
+const fieldAlign = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
+  const nested = field.nested
+  if (nested !== null) {
+    return nested.align
+  }
+  if (table.stripNull(field.type) === T_CPTR) {
+    return pointer
+  }
   if (field.boxed) {
     return 8
   }
@@ -123,14 +147,21 @@ const fieldAlign = (table: TypeTable, field: FieldInfo): i32 => {
  * The slots are values, never records: `src/inline-arrays.ts` refuses a record
  * element type.
  */
-const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
+const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
+  const nested = field.nested
+  if (nested !== null) {
+    return nested.size
+  }
+  if (table.stripNull(field.type) === T_CPTR) {
+    return pointer
+  }
   if (field.boxed) {
     return SLICE_BYTES
   }
   if (!field.inline()) {
     return table.alignOf(field.type)
   }
-  const align = fieldAlign(table, field)
+  const align = fieldAlign(table, field, pointer)
   const stride = table.alignOf(table.refOf(field.type))
   const slots = roundUpTo(INLINE_HEADER_BYTES, align)
   return roundUpTo(slots + field.inlineCapacity * stride, align)
@@ -148,12 +179,16 @@ const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
  * reordering, and almost every struct is one of those.
  */
 export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
+  // A `declare class`'s `CPtr` field is the target's `void *`, four bytes on
+  // wasm32 as its LLVM `i8*` is (WP27 S4.1); every other class keeps the
+  // eight-byte slot its arena object has always had.
+  const pointer = info.layout && ctx.wasm ? 4 : 8
   let offset = 0
   let align = 1
   let used = 0
   for (const field of info.fields) {
-    const need = fieldAlign(ctx.table, field)
-    const width = fieldWidth(ctx.table, field)
+    const need = fieldAlign(ctx.table, field, pointer)
+    const width = fieldWidth(ctx.table, field, pointer)
     offset = roundUpTo(offset, need)
     field.offset = offset
     offset = offset + width
@@ -449,8 +484,26 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
   }
   const info = new StructInfo(name, kind, ctx.table.structOf(name), decl, ctx.source)
   info.exported = isExported(decl)
-  if (kind === STRUCT_CLASS) {
+  // WP27 S4.1: a `declare class` is a C struct layout, never a handle: its
+  // `CPtr` fields are C's to own (docs/wp27-ffi.md §9).
+  info.layout = kind === STRUCT_CLASS && (decl.flags & FLAG_FOREIGN) !== 0
+  if (kind === STRUCT_CLASS && !info.layout) {
     declareHandle(ctx, info, decl)
+  }
+  if (info.layout && info.exported) {
+    ctx.error(
+      decl.children[0],
+      `\`declare class ${name}\` cannot be exported: a C struct layout is used in the module that declares it`
+    )
+  } else if (info.layout && ctx.pageModule) {
+    // A layout exists to be lent to a `declare function`, which a module a
+    // page loads cannot have (`src/declarations.ts` refuses one). It would be
+    // sized for the host when `scripts/build.sh` recompiles an `--emit-dts`
+    // module's IR for wasm32, where a `CPtr` field is four bytes, not eight.
+    ctx.error(
+      decl.children[0],
+      `\`declare class ${name}\` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the \`declare function\` that takes it in a native build`
+    )
   }
   ctx.program.addStruct(name, info)
   ctx.program.typeNames.add(name)
@@ -492,7 +545,7 @@ const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void =>
 const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 => {
   // A function reference is a tag only a function's name gives (WP51 §2.1):
   // a number is not one, though both are an `i32`.
-  const number = ctx.table.isFnRef(want) ? T_I32 : want
+  const number = ctx.table.isFnRef(ctx.table.stripNull(want)) ? T_I32 : want
   switch (expr.kind) {
     case N_NUMBER:
       return number
@@ -670,6 +723,8 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     return
   } else if (rejectStoredMask(ctx, type, "a field", decl.children[1])) {
     return
+  } else if (owner.exported) {
+    deferExportedLayout(ctx, type, "a field of an exported class or interface", decl.children[1])
   }
   // `nish:secret`: a field outlives the function that made the secret, unless
   // it is a holder's `readonly` field, which its `wipe()` ends (`secret.ts`).
@@ -834,6 +889,14 @@ export const collectMethodSignature = (
       returnAnnotation
     )
     rejectStoredMask(ctx, sig.returnType, "the return type of a method", returnAnnotation)
+    if (sig.exported) {
+      deferExportedLayout(
+        ctx,
+        sig.returnType,
+        "the return type of an exported class's method",
+        returnAnnotation
+      )
+    }
   }
   return sig
 }
@@ -893,6 +956,136 @@ const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): v
   ctx.program.functions.push(sig)
 }
 
+/** The scalar types a C struct layout's field may have: C's fixed-width integers and floats. */
+const isLayoutScalar = (t: i32): boolean =>
+  t === T_I32 ||
+  t === T_I64 ||
+  t === T_U8 ||
+  t === T_U16 ||
+  t === T_U32 ||
+  t === T_U64 ||
+  t === T_F32 ||
+  t === T_F64
+
+/**
+ * The `declare class` (WP27 S4.1) the non-null type `type` names, or `null`:
+ * a C struct layout, which a field embeds by value and a `declare function`
+ * takes by pointer.
+ */
+export const layoutClass = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
+  if (type < 0 || !table.isStruct(type)) {
+    return null
+  }
+  const info = program.struct(table.nameOf(type))
+  return info !== null && info.layout ? info : null
+}
+
+/**
+ * One field of a `declare class` (WP27 S4.1, docs/wp27-ffi.md §9b): a C
+ * scalar, a `CPtr` (nullable or not) or another layout embedded by value.
+ * No initializer and no `readonly`: `new` zero-fills the struct, and C may
+ * write any field through the pointer it is lent.
+ */
+const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
+  const name = decl.children[0].text
+  const what = `Field \`${name}\` of \`declare class ${owner.name}\``
+  if (owner.hasMember(name)) {
+    ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${owner.name}\``)
+    return
+  }
+  if ((decl.flags & (FLAG_STATIC | FLAG_OPTIONAL | FLAG_DEFINITE | FLAG_READONLY)) !== 0) {
+    ctx.error(
+      decl,
+      `${what} must be a plain field: a C struct field is not \`static\`, optional or \`readonly\``
+    )
+    return
+  }
+  if (decl.children[2].kind !== N_EMPTY) {
+    ctx.error(decl.children[2], `${what} cannot have an initializer: \`new\` zero-fills a C struct`)
+    return
+  }
+  // `number` is i32 or f64 as `--number-mode` says, and a C struct has one
+  // layout whatever flag the program is built with. The resolver counts every
+  // spelling that reaches it (parentheses, an alias chain, an imported alias).
+  const annotation = decl.children[1]
+  const before = ctx.numberSpellings
+  const type = resolveType(annotation, ctx)
+  if (type === T_ERROR) {
+    return
+  }
+  if (ctx.numberSpellings !== before) {
+    ctx.error(
+      annotation,
+      `${what} has type \`number\`, whose width \`--number-mode\` chooses: a C struct field has one layout, so spell it \`i32\` or \`f64\``
+    )
+    return
+  }
+  // A nested layout is collected first, so its size and alignment are known;
+  // one that is still being collected embeds itself, which no C struct can.
+  const nested = layoutClass(ctx.program, ctx.table, type)
+  if (nested !== null) {
+    if (nested.laying) {
+      ctx.error(
+        decl.children[1],
+        `${what} embeds \`${nested.name}\` in itself: a C struct cannot contain itself by value`
+      )
+      return
+    }
+    collectStructMembers(ctx, nested)
+  } else if (!isLayoutScalar(type) && ctx.table.stripNull(type) !== T_CPTR) {
+    ctx.error(
+      decl.children[1],
+      `${what} has type \`${ctx.table.typeName(type)}\`, which has no C layout: a field of a \`declare class\` is i32, i64, u8, u16, u32, u64, f32, f64, \`CPtr\`, \`CPtr | null\` or another \`declare class\``
+    )
+    return
+  }
+  const field = new FieldInfo(name, type, decl)
+  field.index = owner.fields.length
+  field.nested = nested
+  owner.fieldIndex.set(name, owner.fields.length)
+  owner.fields.push(field)
+}
+
+/**
+ * The members of a `declare class`: its fields, laid out in declaration order
+ * as clang lays out the C struct, with no padding warning, since the order is
+ * C's. Everything a C struct cannot have is refused: a heritage clause, a
+ * method, a constructor.
+ */
+const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
+  const decl = info.decl
+  info.laying = true
+  if (decl.children[1].kind !== N_EMPTY || decl.children[2].children.length > 0) {
+    const clause = decl.children[1].kind !== N_EMPTY ? decl.children[1] : decl.children[2].children[0]
+    ctx.error(
+      clause,
+      `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`
+    )
+    info.poisoned = true
+  }
+  for (const member of decl.children[3].children) {
+    if (member.kind === N_FIELD) {
+      collectLayoutField(ctx, info, member)
+    } else {
+      // An index signature or a `static` block is neither, and a C struct has
+      // no member of its kind either.
+      let word = "a member other than a field"
+      if (member.kind === N_CONSTRUCTOR) {
+        word = "a constructor"
+      } else if (member.kind === N_METHOD) {
+        word = "a method or accessor"
+      }
+      ctx.error(
+        member,
+        `\`declare class ${info.name}\` cannot have ${word}: a C struct layout has fields only`
+      )
+    }
+  }
+  computeLayout(ctx, info)
+  info.laying = false
+  info.collected = true
+}
+
 /**
  * The fields, layout, methods and constructor of a declared struct.
  *
@@ -921,6 +1114,10 @@ const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): v
  */
 export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void => {
   if (info.collected) {
+    return
+  }
+  if (info.layout) {
+    collectLayoutMembers(ctx, info)
     return
   }
   const decl = info.decl

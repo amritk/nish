@@ -10,6 +10,8 @@
 // - HTTP/2: the TLS 1.3 client of `tests/link/net_http2_tls` (the handshake of
 //   `net_tls_common`, records of `net_tls_record_common`) on a TCP socket,
 //   with frames from `tests/link/net_http2/peer`.
+// - WebSocket: masked frames from `nish/net/websocket` to the echo port of
+//   `ws.ts`, its answers read through a `WsDecoder`.
 import { Secret } from "nish:secret";
 import { netAddress, netRead, netWrite, tcpConnect, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
 import {
@@ -46,12 +48,13 @@ import {
   vec16,
   vec8,
 } from "../net_tls_common/client";
-import { Opened, ZERO, filled, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
+import { Opened, ZERO, ascii, filled, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
 import { SUITE, Session, Ticket, bindHello, selectedIdentity, sessionFor, ticketFrom } from "../net_tls_resume/client";
 import { clearRecord, clientKeysFor } from "../net_tls_record_common/client";
 import { FrameLog, Wire, textAt } from "../net_http2/peer";
 import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcPushAppAck, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
 import { fromHex, textOf } from "../crypto_x509/hex";
+import { WS_NEED_MORE, WsDecoder, websocketFrame } from "nish/net/websocket";
 import { InteropServer } from "./server";
 
 /** What `netRead` answers when nothing is waiting. */
@@ -477,3 +480,128 @@ export class H2TlsClient {
     return this.log.take();
   }
 }
+
+/**
+ * A WebSocket client of the echo port (`ws.ts`), over plain TCP: the opening
+ * handshake, masked frames out, and the server's frames read through a
+ * `WsDecoder`, turning the server's loop while it waits.
+ */
+export class WsClient {
+  server: InteropServer;
+  decoder: WsDecoder;
+  got: u8[];
+  buf: u8[];
+  fd: i32 = -1;
+  /** Whether the server has closed its end. */
+  closed: boolean = false;
+
+  /** A client of `server`; each call that waits turns its loop with the signing key `key` and no ticket keys. */
+  constructor(server: InteropServer) {
+    this.server = server;
+    this.decoder = new WsDecoder(false, 16777216);
+    this.got = [];
+    this.buf = new Array<u8>(65536);
+  }
+
+  /** Connects to the echo port and sends an opening handshake for `target`; answers the head of the server's response, or "" if none came. */
+  open(target: string, key: Secret<u8[]>): string {
+    return this.request(
+      `GET ${target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n`,
+      key
+    );
+  }
+
+  /** Connects to the echo port and sends a GET of `target` that asks no upgrade; answers the response's head. */
+  openPlain(target: string, key: Secret<u8[]>): string {
+    return this.request(`GET ${target} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n`, key);
+  }
+
+  /** Connects, sends `head`, and answers the head of the response, the rest left in `got`. */
+  request(head: string, key: Secret<u8[]>): string {
+    const addr: u8[] = new Array<u8>(18);
+    netAddress(addr, "127.0.0.1", this.server.ws.port);
+    this.fd = tcpConnect(addr);
+    if (this.fd < 0) {
+      return "";
+    }
+    this.send(ascii(head), key);
+    for (let turn: i32 = 0; turn < TURNS; turn++) {
+      const end: i32 = headEnd(this.got);
+      if (end > 0) {
+        const head: string = textOf(range(this.got, ZERO, end));
+        this.got = range(this.got, end, toI32(this.got.length));
+        return head;
+      }
+      if (!this.pull(key)) {
+        break;
+      }
+    }
+    return "";
+  }
+
+  /** Sends one frame, masked as a client's are, `fin` ending its message. */
+  frame(fin: boolean, opcode: i32, payload: u8[], key: Secret<u8[]>): void {
+    const mask: u8[] = [toU8(1), toU8(2), toU8(3), toU8(4)];
+    const out: u8[] | null = websocketFrame(fin, opcode, payload, ZERO, toI32(payload.length), mask);
+    if (out !== null) {
+      this.send(out, key);
+    }
+  }
+
+  /** Sends every byte of `bytes`, turning the server's loop while the socket is full. */
+  send(bytes: u8[], key: Secret<u8[]>): void {
+    let sent: i32 = 0;
+    for (let turn: i32 = 0; turn < TURNS && sent < toI32(bytes.length); turn++) {
+      const w: i32 = netWrite(this.fd, bytes, sent, toI32(bytes.length) - sent);
+      if (w > 0) {
+        sent = sent + w;
+      } else {
+        this.pull(key);
+      }
+    }
+  }
+
+  /** The decoder's next event, `WS_NEED_MORE` if the server ends or never sends one. */
+  next(key: Secret<u8[]>): i32 {
+    for (let turn: i32 = 0; turn < TURNS; turn++) {
+      if (toI32(this.got.length) > 0) {
+        this.decoder.feed(this.got, ZERO, toI32(this.got.length));
+        this.got = [];
+      }
+      const event: i32 = this.decoder.next();
+      if (event !== WS_NEED_MORE || !this.pull(key)) {
+        return event;
+      }
+    }
+    return WS_NEED_MORE;
+  }
+
+  /** One turn of the server's loop, then everything waiting read into `got`; false once the server has closed. */
+  pull(key: Secret<u8[]>): boolean {
+    if (this.closed) {
+      return false;
+    }
+    this.server.step(n32(5), key, null, null);
+    let n: i32 = netRead(this.fd, this.buf, ZERO, toI32(this.buf.length));
+    while (n > 0) {
+      for (let k: i32 = 0; k < n; k++) {
+        this.got.push(this.buf[k]);
+      }
+      n = netRead(this.fd, this.buf, ZERO, toI32(this.buf.length));
+    }
+    if (n !== WOULD_BLOCK && n <= 0) {
+      this.closed = true;
+    }
+    return true;
+  }
+}
+
+/** Where a response head ends in `got`, just past its blank line, or 0 while it has not. */
+const headEnd = (got: u8[]): i32 => {
+  for (let k: i32 = 3; k < toI32(got.length); k++) {
+    if (got[k] === toU8(10) && got[k - 1] === toU8(13) && got[k - 2] === toU8(10) && got[k - 3] === toU8(13)) {
+      return k + 1;
+    }
+  }
+  return 0;
+};

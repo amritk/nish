@@ -140,40 +140,41 @@ export const wipeChecks = [
   // intermediates (ECC-2): `p256PublicKeyExposed` 18, `p256SignExposed` 93 and
   // `p256SignSha256Into` 56. `opt` inlines `p256BaseMult` into
   // `p256PublicKeyExposed` and `p256SignScalar`, and that into
-  // `p256SignExposed`, so its wipes are counted there. The nonce's safegcd
-  // inversion (#758), `p256ScalarInverse`, which `opt` keeps out of line and
-  // both signing paths call, wipes d, e, f, g and the matrix t; `opt` promotes
-  // g and t to stack slots and turns their wipes into thirteen volatile `i32`
-  // stores, which this counter does not count, so it reaches 3 (d, e and f)
-  // and adds 3 to `p256SignExposed` and `p256SignSha256Into`. `tests/run.js`
-  // pins those stores itself, nine for g and four for t ("crypto: the wipes
-  // survive opt -O2 (p256ScalarInverse's g and t, …)").
+  // `p256SignExposed`, so its wipes are counted there. The safegcd inversion
+  // (#758), `p256Safegcd`, which `opt` keeps out of line and both the nonce's
+  // inverse (`p256ScalarInverse`) and the field's (`p256FieldInvert`, 1 / Z in
+  // the public key and the signature's r) call, wipes d, e, f, g and the
+  // matrix t; `opt` promotes f, g and t to stack slots and turns their wipes
+  // into twenty-two volatile `i32` stores, which this counter does not count,
+  // so it reaches 2 (d and e) per call. `tests/run.js` pins those stores
+  // itself, nine for f, nine for g and four for t ("crypto: the wipes survive
+  // opt -O2 (p256Safegcd's f, g and t, …)").
   {
     name: "crypto: the wipes survive opt -O2 (P-256's selected comb entry in p256BaseMultWith; the scratch and accumulator in p256PublicKeyExposed, p256SignExposed and p256SignSha256Into)",
     program: "tests/link/crypto_p256/main.ts",
     modules: P256_MODULES,
     roots: [
       ["nish.p256BaseMultWith", 3],
-      ["nish.p256PublicKeyExposed", 18],
-      ["nish.p256ScalarInverse", 3],
-      ["nish.p256SignExposed", 96],
-      ["nish.p256SignSha256Into", 59],
+      ["nish.p256PublicKeyExposed", 20],
+      ["nish.p256ScalarInverse", 2],
+      ["nish.p256SignExposed", 97],
+      ["nish.p256SignSha256Into", 60],
     ],
   },
   // `nish/crypto/p256`'s ECDH (`p256Ecdh`, for TLS's secp256r1 share).
   // `p256EcdhExposed` wipes the product's scratch and point, 1 / Z, the
   // shared x's limbs, and the output it refuses for a product at infinity;
   // `p256ScalarMult` under it wipes its window table and accumulator, and
-  // `p256ScalarInRange` the key's limbs. `opt` inlines it into `p256Ecdh`, so
-  // the two count the same 25. Deleting `wipe(acc)` (1 / Z) or `wipe(x)` takes
-  // 1 from each.
+  // `p256ScalarInRange` the key's limbs, and `p256FieldInvert`'s safegcd d
+  // and e. `opt` inlines it into `p256Ecdh`, so the two count the same 27.
+  // Deleting `wipe(acc)` (1 / Z) or `wipe(x)` takes 1 from each.
   {
     name: "crypto: the wipes survive opt -O2 (P-256 ECDH's product, scratch, 1 / Z and shared x in p256EcdhExposed)",
     program: "tests/link/crypto_p256_ecdh/main.ts",
     modules: P256_MODULES,
     roots: [
-      ["nish.p256Ecdh", 25],
-      ["nish.p256EcdhExposed", 25],
+      ["nish.p256Ecdh", 27],
+      ["nish.p256EcdhExposed", 27],
     ],
   },
   // The derivations into a held `Secret` (#668). Each derives into a fresh

@@ -162,7 +162,8 @@ const show = (x: i32 | string): void => {
 
 Name the real type. When a function has to take more than one, write one
 function per type. Nish allows two kinds of union. One is `T | null`, where
-`T` is a class, an interface, an array or a string; the next section covers
+`T` is a class, an interface, an array, a string or a
+[function reference](../language/function-references.md); the next section covers
 it. The other is a union of classes and interfaces that each start with a tag
 field, a [discriminated union](../language/unions.md).
 `undefined` is refused in the same way: use `null`. The one place `undefined`
