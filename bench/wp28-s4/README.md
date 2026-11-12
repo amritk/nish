@@ -19,21 +19,25 @@ compiler.
 
 ## The verdict
 
-**The payoff is real above a task of about 17 µs and a pessimisation below
-it. On four cores a fork/join of two tasks costs about 17 µs more than the
-work it shares out, so it runs the pair in 0.883x of the sequential time at
-21 µs a task, 0.638x at 103 µs and 0.529x at 10.8 ms, and in 1.299x at 10 µs
-and 9.155x at 1 µs. The lowering needs a size rule: a `Promise.all` whose
-calls it cannot show to be worth tens of microseconds each must stay
-sequential.**
+**The payoff is real above a task of about 16 µs and a loss below it. On
+this machine a fork/join of two tasks costs about 16 µs more than the work it
+shares out, so it runs the pair in 0.882x of the sequential time at 20 µs a
+task, 0.627x at 101 µs and 0.504x at 10.7 ms, and in 1.271x at 10 µs and
+9.419x at 1 µs.**
+
+What that argues: §6.4's second payoff holds for calls worth tens of
+microseconds or more, and a fork taken on every non-interfering
+`Promise.all` whatever its calls cost would make the small ones up to nine
+times slower here. How the lowering tells the two apart is a design question
+this spike does not answer.
 
 Against `parallelReduce`: below 2^20 elements a reduce is one block on the
 calling thread, so at every size but the largest it is the sequential fold
-(0.981x to 1.018x of it) and the fork/join is the only form that forks at
+(0.977x to 1.014x of it) and the fork/join is the only form that forks at
 all. At the largest size, 5 000 000 elements in five blocks, the reduce runs
-in 0.393x of the sequential time and the fork/join in 0.529x: the reduce is
-1.35 times as fast because it uses all four cores where a two-call
-`Promise.all` can use two. The fork/join is 6% short of the 0.5x two tasks
+in 0.381x of the sequential time and the fork/join in 0.504x: the reduce is
+1.32 times as fast because it uses more than the two cores a two-call
+`Promise.all` can use. The fork/join is within 1% of the 0.5x two tasks
 could reach.
 
 ## The programs
@@ -57,65 +61,67 @@ print different checksums.
 
 ## The figures
 
-4 x Intel(R) Xeon(R) Processor @ 2.30GHz (4 cores), linux-x64, nish 0.38.0
-at 43e7ef47, node v22.23.4, LLVM 18. 11 interleaved rounds after one warm-up.
+4 logical CPUs, Intel(R) Xeon(R) Processor @ 2.30GHz, no cgroup CPU quota,
+linux-x64, nish 0.38.0 at 890bc4f9, node v22.23.4, LLVM 18. 11 interleaved
+rounds after one warm-up. 890bc4f9 is the commit that last changed the
+programs and the harness; the commits after it change this file only.
 
-One task is half a sequential call. A ratio is the form's median wall time
-over the sequential median, whole process; the band is the gap between the
-sequential binary and a byte-identical copy of it in the same rounds.
+One task is half a sequential call. A time is the median wall time of the
+whole process less the median of the same binary's zero-call run in the same
+rounds, its start-up and the fill of its arrays. A ratio is a form's time
+over the sequential time; the band is the gap between the sequential binary
+and a byte-identical copy of it in the same rounds.
 
-| elements per task | one task | calls | sequential, per call | fork/join, per call | ratio | reading | reduce, per call | ratio | reading | band | checksum |
-| ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: | ---: |
-| 250 | 1.01 µs | 100000 | 2.01 µs | 18.4 µs | 9.155x | slower | 2.05 µs | 1.018x | slower | ±1.3% | 7487678 |
-| 2500 | 10.3 µs | 10000 | 20.6 µs | 26.8 µs | 1.299x | slower | 20.2 µs | 0.981x | faster | ±0.7% | 16244414 |
-| 5000 | 20.7 µs | 5000 | 41.5 µs | 36.6 µs | 0.883x | faster | 40.8 µs | 0.983x | faster | ±1.0% | 10291506 |
-| 10000 | 41.2 µs | 4000 | 82.3 µs | 58.8 µs | 0.715x | faster | 81.1 µs | 0.985x | faster | ±0.6% | 13015432 |
-| 25000 | 103 µs | 2000 | 206 µs | 131 µs | 0.638x | faster | 202 µs | 0.982x | faster | ±1.3% | 3873713 |
-| 2500000 | 10.8 ms | 40 | 21.7 ms | 11.5 ms | 0.529x | faster | 8.51 ms | 0.393x | faster | ±0.0% | 14678537 |
+| elements per task | one task | calls | sequential, per call | fork/join, per call | ratio | reading | reduce, per call | ratio | reading | band | start-up and fill | checksum |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: | ---: | ---: |
+| 250 | 0.98 µs | 100000 | 1.96 µs | 18.4 µs | 9.419x | slower | 1.98 µs | 1.014x | slower | ±0.3% | 2.51 ms | 7487678 |
+| 2500 | 10.00 µs | 10000 | 20.0 µs | 25.4 µs | 1.271x | slower | 19.8 µs | 0.991x | within the band | ±1.6% | 2.56 ms | 16244414 |
+| 5000 | 20.2 µs | 5000 | 40.4 µs | 35.6 µs | 0.882x | faster | 39.8 µs | 0.986x | faster | ±0.5% | 2.35 ms | 10291506 |
+| 10000 | 41.1 µs | 4000 | 82.2 µs | 58.1 µs | 0.707x | faster | 80.3 µs | 0.977x | at the band's edge | ±1.9% | 2.75 ms | 13015432 |
+| 25000 | 101 µs | 2000 | 203 µs | 127 µs | 0.627x | faster | 201 µs | 0.991x | at the band's edge | ±0.8% | 2.46 ms | 3873713 |
+| 2500000 | 10.7 ms | 40 | 21.4 ms | 10.8 ms | 0.504x | faster | 8.17 ms | 0.381x | faster | ±0.4% | 15.3 ms | 14678537 |
 
-Break-even: the fork/join is last slower outside the band at a 10.3 µs task
-(1.299x) and first faster outside it at 20.7 µs (0.883x); interpolated
+Break-even: the fork/join is last slower outside the band at a 10.0 µs task
+(1.271x) and first faster outside it at 20.2 µs (0.882x); interpolated
 between the sizes either side of 1.000x, the ratio crosses 1 at a task of
-about 16.6 µs.
+about 15.9 µs.
 
 What one fork/join costs over the work it shares out, its call less half a
-sequential call: 17.4 µs at 250, 16.5 µs at 2500, 15.9 µs at 5000, 17.7 µs at
-10000, 28.4 µs at 25000, 623 µs at 2500000.
+sequential call: 17.4 µs at 250, 15.4 µs at 2500, 15.4 µs at 5000, 17.0 µs at
+10000, 25.8 µs at 25000, 95.9 µs at 2500000.
 
 Reading them:
 
 - **The break-even is the overhead.** A pair costs `2t` in sequence and
   `t + o` forked, so the two meet where a task takes `o`. The measured
-  overhead is 16 to 18 µs at the four smallest sizes and the interpolated
-  crossing is 16.6 µs: the two readings agree. The 1 µs, 100 µs and 10 ms
+  overhead is 15 to 17 µs at the four smallest sizes and the interpolated
+  crossing is 15.9 µs: the two readings agree. The 1 µs, 100 µs and 10 ms
   tasks the spike asked for are rows 1, 5 and 6; rows 2 to 4 are there to
-  narrow the bracket to 10.3 µs–20.7 µs.
+  narrow the bracket to 10.0 µs–20.2 µs.
 - **The overhead is one hand-off to the pool and one wait for it**, not a
   thread start: a scope's first task runs on the thread that opened it and
   the second on a pooled worker (`nish_scope_join` in
   `runtime/runtime-parallel.c`), plus the two-slot result array and the two
   task records each call allocates.
-- **The overhead is not constant at the top.** At 10.8 ms a task the
-  fork/join is 623 µs a call over half the sequential time, 5.7% of a task,
-  where 17 µs would be 0.2%. Two 10 MB arrays read at once on a shared
-  virtual machine is the likely reason, and this run does not separate that
-  from scheduling.
-- **At the one-block sizes the reduce is the sequential fold, to within 2%.**
-  It is 1.8% slower at the smallest size and 1.5% to 1.9% faster at the other
-  four, outside the band each time. That is not a parallel effect, since no
-  thread is started; this run does not say where it comes from.
-- **The band is one binary against its copy at one size**, and the 0.0% at
-  the largest size is two medians that happened to agree, not a quieter
-  machine: read that row with the ±1.3% of its neighbours.
+- **The overhead grows with the task, and stays small beside it.** It is
+  25.8 µs at a 101 µs task and 95.9 µs at 10.7 ms, which is 0.9% of that
+  task. This run does not say why it grows. The start-up and fill column is
+  why it is taken out: at the largest size it is 15.3 ms against 40 calls,
+  and left in every time it would put about 190 µs a call into this figure
+  that no fork/join spent.
+- **At the one-block sizes the reduce is the sequential fold, to within
+  2.3%.** It is 1.4% slower at the smallest size, outside the band, and
+  0.9% to 2.3% faster at the other four, outside the band at one of them.
+  No thread is started, so none of that is a parallel effect.
+- **The band is one binary against its copy at one size.** A ratio closer to
+  1 than the largest band in the table, ±1.9%, is best read as no
+  difference.
 
 ## What the lowering has to do with it
 
-- **A size rule, or no fork.** The compiler sees the calls, not their cost.
-  Either the fork is taken only where a cost is known (a loop whose trip
-  count is known to be large, a call the programmer marks), or the join
-  decides at run time, or every small `Promise.all` in a ported program pays
-  up to 9x. The number to beat is about 17 µs a task on this machine; a
-  machine with more expensive wake-ups moves it up.
+- **The compiler sees the calls, not their cost.** The number a fork has to
+  beat is about 16 µs a task on this machine; a machine with more expensive
+  wake-ups moves it up.
 - **Two tasks use two cores.** A `Promise.all` of two calls tops out at 2x
   whatever the machine has. The data-parallel forms are still how a program
   uses every core, and §6.4's payoff does not replace them.
@@ -217,7 +223,12 @@ bounds.ok.1:
 
 ## What this run does not cover
 
-- One machine, four virtual cores, one run of 11 rounds. The break-even is a
+- One callee over one array argument. `pair` uses the documented form of
+  `spawn`, a top-level entry and a destination slot, with `product` as the
+  entry of both tasks. A `Promise.all([f(), g()])` of two different callees,
+  or of calls with other argument shapes, would need the arrow-capture form,
+  and its cost is not measured.
+- One machine, four logical CPUs, one run of 11 rounds. The break-even is a
   property of the machine's wake-up cost as much as of the lowering.
 - Two tasks only. A `Promise.all` of `N` calls hands `N - 1` tasks to the
   pool and its overhead was not measured.
