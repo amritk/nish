@@ -652,6 +652,11 @@
                         "title": "http-fields",
                         "filepath": "docs/reference/net/http-fields.md"
                       },
+                      "/http-server": {
+                        "type": "page",
+                        "title": "http-server",
+                        "filepath": "docs/reference/net/http-server.md"
+                      },
                       "/http1-client-codec": {
                         "type": "page",
                         "title": "http1-client-codec",
@@ -1198,6 +1203,11 @@
                     "type": "page",
                     "title": "Async server",
                     "filepath": "docs/security/serve.md"
+                  },
+                  "/http-server": {
+                    "type": "page",
+                    "title": "One HTTP server for HTTP/1.1, 2 and 3",
+                    "filepath": "docs/security/http-server.md"
                   },
                   "/router": {
                     "type": "page",

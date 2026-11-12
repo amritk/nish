@@ -64,7 +64,7 @@ import {
   H1_WRITE,
   Http1Config,
   Http1Connection,
-  Http1Server
+  Http1Server,
 } from "nish/net/http1-server"
 import {
   H2_AGAIN,
@@ -76,7 +76,7 @@ import {
   H2_RESET,
   H2_TRAILERS,
   Http2Config,
-  Http2Connection
+  Http2Connection,
 } from "nish/net/http2"
 import { H2_CANCEL, H2_INTERNAL_ERROR, H2_NO_ERROR, H2_REFUSED_STREAM } from "nish/net/http2-frame"
 import { Http2TlsServer } from "nish/net/http2-tls"
@@ -90,12 +90,23 @@ import {
   H3_REQUEST,
   H3_RESET,
   Http3Config,
-  Http3Connection
+  Http3Connection,
 } from "nish/net/http3"
-import { H3_INTERNAL_ERROR, H3_NO_ERROR, H3_REQUEST_CANCELLED, H3_REQUEST_REJECTED } from "nish/net/http3-frame"
+import {
+  H3_INTERNAL_ERROR,
+  H3_NO_ERROR,
+  H3_REQUEST_CANCELLED,
+  H3_REQUEST_REJECTED,
+} from "nish/net/http3-frame"
 import { Http3Server } from "nish/net/http3-server"
 import { QuicServerConfig } from "nish/net/quic"
-import { ROUTER_BAD_ESCAPE, ROUTER_METHOD_NOT_ALLOWED, ROUTER_NO_ROOM, Router, routerDecode } from "nish/net/router"
+import {
+  ROUTER_BAD_ESCAPE,
+  ROUTER_METHOD_NOT_ALLOWED,
+  ROUTER_NO_ROOM,
+  Router,
+  routerDecode,
+} from "nish/net/router"
 import { TlsServerConfig } from "nish/net/tls"
 import { TLS_RECORD_DONE, TLS_RECORD_SIGN } from "nish/net/tls/record-server"
 import { TLS_TCP_POOL_FULL } from "nish/net/tls-tcp"
@@ -306,7 +317,6 @@ export class HttpServerRequest {
     this.body = []
     this.pending = []
   }
-
 
   /**
    * Whether the method is exactly `method` (methods are case-sensitive, RFC 9110 §9.1).
@@ -831,7 +841,9 @@ export class HttpServer {
       )
     }
     if (config.maxHeaders > this.maxFields) {
-      panic(`HttpServer.listenHttp1: maxHeaders ${config.maxHeaders} is more than limits.maxFields ${this.maxFields}`)
+      panic(
+        `HttpServer.listenHttp1: maxHeaders ${config.maxHeaders} is more than limits.maxFields ${this.maxFields}`
+      )
     }
     if (slots < 1) {
       panic(`HttpServer.listenHttp1: slots ${slots} is below 1`)
@@ -1486,7 +1498,15 @@ export class HttpServer {
    */
   private route(r: HttpServerRequest): void {
     const params: i32[] = r.params
-    let route: i32 = this.router.match(r.head, r.methodStart, r.methodEnd, r.head, r.targetStart, r.targetEnd, params)
+    let route: i32 = this.router.match(
+      r.head,
+      r.methodStart,
+      r.methodEnd,
+      r.head,
+      r.targetStart,
+      r.targetEnd,
+      params
+    )
     if (route === ROUTER_METHOD_NOT_ALLOWED && r.quiet) {
       const get: i32 = this.router.methodIndex("GET")
       if (get >= 0) {
@@ -1540,7 +1560,11 @@ export class HttpServer {
 
   /** Hands back `r` once its connection is gone, unless it is queued or the program's to answer. */
   private drop(r: HttpServerRequest): void {
-    if (r.state === HTTP_SERVER_READING || r.state === HTTP_SERVER_PARKED || r.state === HTTP_SERVER_FLUSHING) {
+    if (
+      r.state === HTTP_SERVER_READING ||
+      r.state === HTTP_SERVER_PARKED ||
+      r.state === HTTP_SERVER_FLUSHING
+    ) {
       this.release(r)
     }
   }
@@ -1719,7 +1743,12 @@ export class HttpServer {
     }
     if (r.kind === HTTP_SERVER_H1) {
       const conn: Http1Connection = this.h1Of().connection(r.slot)
-      const sent: i32 = conn.respond(status, this.outNames, this.outValues, noBody ? HTTP1_NO_BODY : bodyLength)
+      const sent: i32 = conn.respond(
+        status,
+        this.outNames,
+        this.outValues,
+        noBody ? HTTP1_NO_BODY : bodyLength
+      )
       if (sent === H1_AGAIN) {
         // The output still holds more of the response before this one than a
         // head can fit behind: ending the connection is the one answer left.
@@ -1727,21 +1756,29 @@ export class HttpServer {
         return HANDLER_DROPPED
       }
       if (sent !== 0) {
-        panic(`HttpServer.start: the carrier refused the head (${sent}): a reserved field, or a name or value that is not a token or field text`)
+        panic(
+          `HttpServer.start: the carrier refused the head (${sent}): a reserved field, or a name or value that is not a token or field text`
+        )
       }
       return HANDLER_SENT
     }
     const endNow: boolean = r.quiet || bodyLength === 0
     let sent: i32 = 0
     if (r.kind === HTTP_SERVER_H2) {
-      sent = this.h2Of().connection(r.slot).respond(toI32(r.stream), status, this.outNames, this.outValues, endNow)
+      sent = this.h2Of()
+        .connection(r.slot)
+        .respond(toI32(r.stream), status, this.outNames, this.outValues, endNow)
       if (sent === H2_INVALID) {
-        panic(`HttpServer.start: the HTTP/2 carrier refused the head: a name that is not a lowercase token, a reserved field, or a value that is not field text`)
+        panic(
+          "HttpServer.start: the HTTP/2 carrier refused the head: a name that is not a lowercase token, a reserved field, or a value that is not field text"
+        )
       }
     } else {
       sent = this.h3Of().connection(r.slot).respond(r.stream, status, this.outNames, this.outValues, endNow)
       if (sent === H3_INVALID) {
-        panic(`HttpServer.start: the HTTP/3 carrier refused the head: a name that is not a lowercase token, a reserved field, or a value that is not field text`)
+        panic(
+          "HttpServer.start: the HTTP/3 carrier refused the head: a name that is not a lowercase token, a reserved field, or a value that is not field text"
+        )
       }
     }
     if (sent !== 0) {
@@ -1762,9 +1799,13 @@ export class HttpServer {
   private outFields(r: HttpServerRequest, names: u8[][], values: u8[][], bodyLength: i32): boolean {
     const given: i32 = toI32(names.length)
     const altSvc: u8[] | null = this.altSvc
-    const addAlt: boolean = altSvc !== null && r.kind !== HTTP_SERVER_H3 && !this.hasField(names, this.altSvcName)
+    const addAlt: boolean =
+      altSvc !== null && r.kind !== HTTP_SERVER_H3 && !this.hasField(names, this.altSvcName)
     const addLength: boolean =
-      r.kind !== HTTP_SERVER_H1 && !r.quiet && bodyLength >= 0 && !this.hasField(names, this.contentLengthName)
+      r.kind !== HTTP_SERVER_H1 &&
+      !r.quiet &&
+      bodyLength >= 0 &&
+      !this.hasField(names, this.contentLengthName)
     const count: i32 = given + (addAlt ? 1 : 0) + (addLength ? 1 : 0)
     if (count > this.maxResponseFields) {
       return false
@@ -1897,7 +1938,9 @@ export class HttpServer {
       panic(`HttpServer.write: the window ${off} + ${len} is outside its ${buf.length} bytes`)
     }
     if (r.left >= 0 && !r.quiet && len > r.left) {
-      panic(`HttpServer.write: ${len} byte(s) is more than the ${r.left} the length the response declared leaves`)
+      panic(
+        `HttpServer.write: ${len} byte(s) is more than the ${r.left} the length the response declared leaves`
+      )
     }
     if (!this.live(r)) {
       return HANDLER_DROPPED
@@ -1935,7 +1978,9 @@ export class HttpServer {
         return 0
       }
       if (taken < 0) {
-        panic(`HttpServer.write: the carrier refused the body (${taken}): more than the length the response declared`)
+        panic(
+          `HttpServer.write: the carrier refused the body (${taken}): more than the length the response declared`
+        )
       }
       return taken
     }
@@ -2067,7 +2112,15 @@ export class HttpServer {
    * @param len how many body bytes to send
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection or stream closed first, or the head could not be sent
    */
-  sendFields(r: HttpServerRequest, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32): i32 {
+  sendFields(
+    r: HttpServerRequest,
+    status: i32,
+    names: u8[][],
+    values: u8[][],
+    body: u8[],
+    off: i32,
+    len: i32
+  ): i32 {
     const started: i32 = this.start(r, status, names, values, len)
     if (started === HANDLER_DROPPED) {
       this.release(r)
@@ -2086,7 +2139,15 @@ export class HttpServer {
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection or stream closed first, or the head could not be sent
    */
   empty(r: HttpServerRequest, status: i32): i32 {
-    return this.sendFields(r, status, this.noFields, this.noFields, this.scratch, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO)
+    return this.sendFields(
+      r,
+      status,
+      this.noFields,
+      this.noFields,
+      this.scratch,
+      HTTP_SERVER_ZERO,
+      HTTP_SERVER_ZERO
+    )
   }
 
   /**
@@ -2178,7 +2239,15 @@ export class HttpServer {
     if (r.route === ROUTER_METHOD_NOT_ALLOWED) {
       const length: i32 = this.writeProblem(toI32(405), "Method Not Allowed", "")
       this.allowValues[1] = this.allowFor(r)
-      return this.sendFields(r, toI32(405), this.allowNames, this.allowValues, this.scratch, HTTP_SERVER_ZERO, length)
+      return this.sendFields(
+        r,
+        toI32(405),
+        this.allowNames,
+        this.allowValues,
+        this.scratch,
+        HTTP_SERVER_ZERO,
+        length
+      )
     }
     return this.problem(r, toI32(404), "Not Found", "")
   }
@@ -2267,7 +2336,11 @@ export class HttpServer {
       return 501
     }
     const pathLength: i32 = toI32(f.path.length)
-    if (pathLength === 1 && toI32(f.path[0]) === 42 && httpServerSpanIs(f.method, HTTP_SERVER_ZERO, toI32(f.method.length), "OPTIONS")) {
+    if (
+      pathLength === 1 &&
+      toI32(f.path[0]) === 42 &&
+      httpServerSpanIs(f.method, HTTP_SERVER_ZERO, toI32(f.method.length), "OPTIONS")
+    ) {
       return 204
     }
     const count: i32 = toI32(f.names.length)
@@ -2571,7 +2644,10 @@ export class HttpServer {
     const ms: i64 = now / HTTP_SERVER_NANOS_PER_MS
     h3.clock(now / toI64(1000))
     if (this.h3Readable) {
-      for (let round: i32 = 0; round < HTTP_SERVER_H3_ROUNDS && h3.receive(ms, key) > 0; round++) {}
+      let round: i32 = 0
+      while (round < HTTP_SERVER_H3_ROUNDS && h3.receive(ms, key) > 0) {
+        round += 1
+      }
     }
     h3.tick(ms)
     let slot: i32 = h3.ready()
