@@ -3862,8 +3862,8 @@ function Http1Connection.sameHead(this: Http1Connection, status: i32, names: u8[
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.HttpDate.formats nish.http1ServerKept nish_panic_index nish_panic_overflow
   pointer this: size=256 writesThrough=false captured=false
-  pointer names: size=0 writesThrough=true captured=false
-  pointer values: size=0 writesThrough=true captured=false
+  pointer names: size=0 writesThrough=false captured=false
+  pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 count: i32 (const)
   callee +9:7 HttpDate.formats -> @nish.HttpDate.formats
@@ -3871,11 +3871,13 @@ function Http1Connection.sameHead(this: Http1Connection, status: i32, names: u8[
   local +14:11 limit: i32 (const)
   local +15:9 at: i32 (let)
   local +16:11 lengths: i32[] (const)
-  local +17:14 i: i32 (let)
-  callee +23:12 http1ServerKept -> @nish.http1ServerKept
-  callee +24:12 http1ServerKept -> @nish.http1ServerKept
+  local +18:14 i: i32 (let)
+  local +21:13 name: u8[] (const)
+  local +22:13 value: u8[] (const)
+  callee +26:12 http1ServerKept -> @nish.http1ServerKept
+  callee +27:12 http1ServerKept -> @nish.http1ServerKept
 function Http1Connection.keepHead(this: Http1Connection, start: i32, end: i32, status: i32, reason: string, names: u8[][], values: u8[][], framing: i32, connection: i32): void -> @nish.Http1Connection.keepHead [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: connection framing start status
   calls: nish.HttpDate.formats nish.copyBytes nish_panic nish_panic_index nish_panic_overflow
