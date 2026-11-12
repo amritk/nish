@@ -329,7 +329,12 @@ const quicStreamRingRun = (bits: u8[], size: i32, slot: i32, count: i32, on: boo
   return first + quicStreamScan(bits, 0, count - first, on)
 }
 
-/** Copies `count` bytes of `src` from `from` into the ring `ring` at index `slot`, wrapping at its end: at most two slices. */
+/**
+ * Copies `count` bytes of `src` from `from` into the ring `ring` at index `slot`, wrapping at its end: at most two slices.
+ * Every caller passes `slot` from `QuicStream.at`, so below the ring's length, and a `count` of a ring at most:
+ * `onStream` keeps a frame's last ring's worth, and `write` clamps to `room()`. So both slices are in range,
+ * and `copyBytes` panicking on one that is not marks a broken invariant, not a byte to skip.
+ */
 const quicStreamRingIn = (ring: u8[], slot: i32, src: u8[], from: i32, count: i32): void => {
   const first: i32 = quicStreamFirstRun(toI32(ring.length), slot, count)
   copyBytes(ring, slot, src, from, first)
@@ -338,7 +343,11 @@ const quicStreamRingIn = (ring: u8[], slot: i32, src: u8[], from: i32, count: i3
   }
 }
 
-/** Copies `count` bytes of the ring `ring` from index `slot`, wrapping at its end, into `dst` at `at`: at most two slices. */
+/**
+ * Copies `count` bytes of the ring `ring` from index `slot`, wrapping at its end, into `dst` at `at`: at most two slices.
+ * `read` passes a `count` of at most what is contiguous past `recvRead`, never more than a ring, so, as for
+ * `quicStreamRingIn`, both slices are in range.
+ */
 const quicStreamRingOut = (dst: u8[], at: i32, ring: u8[], slot: i32, count: i32): void => {
   const first: i32 = quicStreamFirstRun(toI32(ring.length), slot, count)
   copyBytes(dst, at, ring, slot, first)
@@ -1540,6 +1549,8 @@ export class QuicStreams {
       this.borrowRecv(stream)
     }
     const size: i32 = toI32(stream.recvBuf.length)
+    // A side holds either no buffer (length 0) or one from the pools, whose buffers are the table's
+    // `bufferSize` (`share` refuses pools of another size), so the size test fails only with no buffer.
     if (size > 0 && size === stream.size) {
       // The frame's bytes from the first not yet contiguous, inside `buf`; of
       // more than a buffer, the last buffer's worth, which a byte-wise copy
@@ -1794,6 +1805,7 @@ export class QuicStreams {
     if (n > 0) {
       this.borrowSend(stream)
     }
+    // No buffer (length 0) is the one way this fails: a pool buffer is always `bufferSize` bytes.
     if (n > 0 && toI32(stream.sendBuf.length) === stream.size) {
       quicStreamRingIn(stream.sendBuf, stream.at(stream.sendEnd), buf, from, n)
     }
@@ -1849,6 +1861,7 @@ export class QuicStreams {
     }
     const n: i32 = toI64(length) < available ? length : toI32(available)
     const size: i32 = toI32(stream.recvBuf.length)
+    // With bytes owed, the buffer is held (the test above), and a held buffer is `bufferSize` bytes.
     if (n > 0 && size === stream.size) {
       const slot: i32 = stream.at(stream.recvRead)
       quicStreamRingOut(buf, at, stream.recvBuf, slot, n)

@@ -439,6 +439,10 @@ over 50:
 | `main` at `60e5be7` | 60,833,641 | 182,835,401 | 2,440,035 |
 | this change | 51,530,232 | 124,068,707 | 1,450,770 |
 
+Both builds come from `60e5be7`, the commit this change starts from, with the
+same seed and flags. They differ only in `std/net/quic-stream.ts` and
+`std/net/quic-packet.ts`.
+
 That is 40.5 % fewer instructions per 8 kB request, for the client and the
 server together. A second run of the base gave 2,440,138 per request, so the
 noise is about ±0.01 %. The count is the whole process: the client's own
