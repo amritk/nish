@@ -875,9 +875,9 @@ export const http1Checks = (): i32 => {
   t.eqI32("refused: a CR in the connection value", http1WriteResponseHead(out, zero, ok, "OK", none, none, zero, "close\r\nX: y", noDate), HTTP1_REFUSED);
   t.eqI32("refused: a LF in a value's octets", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a")], [bytesOf("b\nc")], zero, "", noDate), HTTP1_REFUSED);
   t.eqI32("refused: a name that is not a token", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a b")], [bytesOf("c")], zero, "", noDate), HTTP1_REFUSED);
-  // A name of sixteen octets or more is checked a vector at a time, the last
-  // vector overlapping the one before it: a space at every lane of every
-  // length around the vector width is refused, and the clean name written.
+  // Names around the sixteen-octet vector width, where a vector check would
+  // split a name: a space at every position of every length from 15 to 34 is
+  // refused, and the clean name of each length is written.
   const tokenOut: u8[] = new Array<u8>(400);
   let longRefused: i32 = 0;
   let longTried: i32 = 0;
