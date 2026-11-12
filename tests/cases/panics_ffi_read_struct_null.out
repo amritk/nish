@@ -1,0 +1,3 @@
+42
+`readStruct` read a NULL pointer into a `Pair`
+absent exit 1
