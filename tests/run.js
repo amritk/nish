@@ -36223,7 +36223,7 @@ if (fs.existsSync(threadsLl)) {
 // A call to a `nish:unsafe` export carries `unsafe` (`builtinCapability`), and
 // the bit travels through callers, modules and packages like every other: here
 // read off `--emit-capabilities` for a direct call, a call two frames up, a
-// module with no unsafe call, each of the seven exports, and a dependency that
+// module with no unsafe call, each of the eight exports, and a dependency that
 // imports `nish:unsafe` when the entry package does not.
 if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
   const unsafeDir = path.join(buildDir, "caps-unsafe")
@@ -36240,7 +36240,7 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       'import { firstTwice } from "./mid";\nimport { sum } from "./pure";\n\n' +
       "export const main = (): i32 => firstTwice([3, 4]) + sum([1, 2]);\n",
     "each.ts":
-      "import { readCString, readStruct, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
+      "import { cErrno, readCString, readStruct, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
       '"nish:unsafe";\n\n' +
       "declare class Rec {\n  n: i32\n}\n\n" +
       "declare function cbuf(): CPtr | null;\n\n" +
@@ -36251,7 +36251,8 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
       'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n' +
       "export const rec = (): i32 => {\n  const p = cbuf();\n  if (p === null) {\n    return 0;\n  }\n" +
-      "  const r: Rec = readStruct(p);\n  return r.n;\n};\n",
+      "  const r: Rec = readStruct(p);\n  return r.n;\n};\n" +
+      "export const err = (): i32 => cErrno();\n",
     // The root grants `pkg_fast` its `unsafe` (docs/wp40-dependency-capabilities.md).
     "package.json":
       '{ "name": "caps-unsafe", "private": true, "nish": { "capabilities": { "dependencies": { "pkg_fast": ["unsafe"] } } } }\n',
@@ -36330,10 +36331,11 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     ["mul", "wrappingMul"],
     ["str", "readCString"],
     ["rec", "readStruct"],
+    ["err", "cErrno"],
   ].filter(([fn, callee]) => chainOf(fnOf(each.report, "each.ts", fn)) === `${fn}->${callee}`)
   check(
-    "capabilities: each of the seven `nish:unsafe` exports carries `unsafe` at its call",
-    exportsSeen.length === 7,
+    "capabilities: each of the eight `nish:unsafe` exports carries `unsafe` at its call",
+    exportsSeen.length === 8,
     `${exportsSeen.map(([, callee]) => callee).join(", ")}\n${shown(each.r)}`
   )
 

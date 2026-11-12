@@ -13,9 +13,9 @@ program that reaches C
 ([wp36-capability-policy.md](wp36-capability-policy.md)), and a declaration in
 a package or a `std/` module binds the bare C name rather than the package's
 prefixed one, with duplicate declarations required to agree
-(`tests/link/ffi_package_declare`). Whether S5
-should happen at all is a language question (§3); §8 answers it for S3 and
-§9 for S4, which is built. The rules are normative in
+(`tests/link/ffi_package_declare`). Whether S3 to S5
+should happen at all was a language question (§3); §8 answers it for S3,
+§9 for S4 and §10 for S5, all three built. The rules are normative in
 [LANGUAGE.md](LANGUAGE.md#calling-c) and the lowering is in
 [IR_COOKBOOK.md](IR_COOKBOOK.md#declare-function-calling-c).
 
@@ -106,10 +106,10 @@ stage is a real decision rather than a missing line:
   than know.
 - **S5, `errno`.** A thread-local the runtime does not model.
 
-Whether S5 should happen at all is a language question, not a
-schedule (§8 answers it for S3, §9 for S4): a
-language whose selling point is that every value has one known layout may
-decide that the OS is reached through builtins on purpose.
+Whether S5 should happen at all was a language question, not a
+schedule: a language whose selling point is that every value has one known
+layout may decide that the OS is reached through builtins on purpose. §8
+answers it for S3, §9 for S4 and §10 for S5.
 [wp34-hosting-cs.md](wp34-hosting-cs.md) weighed C crypto through FFI against
 pure Nish and chose pure Nish, partly because the C route needed S3 and S4.
 

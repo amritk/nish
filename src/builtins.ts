@@ -433,7 +433,7 @@ const checkUncheckedAccess = (ctx: CheckContext, call: Node, scope: Scope, name:
 }
 
 /**
- * A `nish:unsafe` function called by its global name. The six are declared
+ * A `nish:unsafe` function called by its global name. The eight are declared
  * as globals in `runtime/nish.d.ts`, as every `nish:` export is, but a
  * program reaches them only through the import: an unchecked index and a
  * defined wrap are each a decision about one site, and the import is what
