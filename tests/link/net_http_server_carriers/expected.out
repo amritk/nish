@@ -1,4 +1,4 @@
-PASS  the server listens: HTTP/2 over TLS and HTTP/3
+PASS  the server listens: HTTP/2 over TLS, h2c and HTTP/3
 PASS  HTTP/2: a TLS handshake offering h2, the server's signature and Finished verified
 PASS  a GET of /hello: 200 and its body
 PASS  with alt-svc naming the HTTP/3 port, and its content-length
@@ -6,6 +6,12 @@ PASS  a GET of /users/42: the parameter as JSON
 PASS  a POST of /echo: its body echoed
 PASS  a GET of a path no route has: 404 as problem+json
 PASS  every stream ended
+PASS  h2c: a connection to the cleartext listener
+PASS  a GET of /hello: 200, its body, its content-length and no alt-svc
+PASS  a GET of /users/42: the parameter as JSON
+PASS  a POST of /echo: its body echoed
+PASS  a GET of a path no route has: 404 as problem+json
+PASS  every stream ended, and no alt-svc on any
 PASS  HTTP/3: the handshake through the listener into a slot, ALPN h3
 PASS  a GET of /hello answered and ended
 PASS  200 hello
@@ -18,4 +24,11 @@ PASS  404 as problem+json
 PASS  a server with a pool of one: the TLS handshake
 PASS  a GET of /big: 200, and the body waits for window
 PASS  the reset handed the request back: the next stream is answered, not refused
-http server carriers: 20 passed, 0 failed, 0 skipped
+PASS  altSvcMaxAge 0: the TLS handshake
+PASS  HTTP/2 over TLS says alt-svc: clear
+PASS  h2c says nothing of alt-svc
+PASS  an h2c connection that never sends its preface is closed by prefaceTimeout
+PASS  one silent after its preface is closed by idleTimeout
+PASS  h2c alone: a connection
+PASS  wait serves it: /hello answered and every stream ended
+http server carriers: 33 passed, 0 failed, 0 skipped

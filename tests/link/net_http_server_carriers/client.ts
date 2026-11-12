@@ -59,7 +59,7 @@ import { Rig } from "./rig";
 const WOULD_BLOCK: i32 = -11;
 
 /** The most turns of the server's loop one wait takes, at up to 5 ms each. */
-const TURNS: i32 = 2000;
+export const TURNS: i32 = 2000;
 
 /** What one stream of the server's has carried so far. */
 export class Received {
@@ -476,5 +476,74 @@ export class H2TlsClient {
       }
     }
     return this.log.take();
+  }
+}
+
+/** One cleartext HTTP/2 (h2c, prior knowledge) client of the server: frames from `wire` straight onto a TCP socket. */
+export class H2cClient {
+  server: Rig;
+  wire: Wire;
+  log: FrameLog;
+  buf: u8[];
+  fd: i32 = -1;
+  /** Whether the server has closed its end. */
+  closed: boolean = false;
+
+  constructor(server: Rig) {
+    this.server = server;
+    this.wire = new Wire();
+    this.log = new FrameLog();
+    this.buf = new Array<u8>(16384);
+  }
+
+  /** Connects to `port`; false when the connect failed. */
+  connect(port: i32): boolean {
+    const addr: u8[] = new Array<u8>(18);
+    netAddress(addr, "127.0.0.1", port);
+    this.fd = tcpConnect(addr);
+    return this.fd >= 0;
+  }
+
+  /** Sends what `wire` holds, turning the server's loop while the socket is full. */
+  flush(key: Secret<u8[]>): void {
+    const bytes: u8[] = this.wire.take();
+    let sent: i32 = 0;
+    for (let turn: i32 = 0; turn < TURNS && sent < toI32(bytes.length); turn++) {
+      const w: i32 = netWrite(this.fd, bytes, sent, toI32(bytes.length) - sent);
+      if (w > 0) {
+        sent = sent + w;
+      } else {
+        this.server.step(n32(5), key, null, null);
+      }
+    }
+  }
+
+  /** One turn of the server's loop, then every byte waiting on the socket into the log; marks `closed` at its end. */
+  turn(key: Secret<u8[]>): void {
+    this.server.step(n32(5), key, null, null);
+    let n: i32 = netRead(this.fd, this.buf, ZERO, toI32(this.buf.length));
+    while (n > 0) {
+      this.log.push(this.buf, ZERO, n);
+      n = netRead(this.fd, this.buf, ZERO, toI32(this.buf.length));
+    }
+    if (n !== WOULD_BLOCK && n <= 0) {
+      this.closed = true;
+    }
+  }
+
+  /** Turns the server's loop until the log holds `n` frames, or the server closes; answers them joined. */
+  awaitFrames(n: i32, key: Secret<u8[]>): string {
+    for (let turn: i32 = 0; turn < TURNS && toI32(this.log.frames.length) < n && !this.closed; turn++) {
+      this.turn(key);
+    }
+    return this.log.take();
+  }
+
+  /** Turns the server's loop until it closes the connection, at most `turns` times; whether it did. */
+  awaitClose(turns: i32, key: Secret<u8[]>): boolean {
+    for (let turn: i32 = 0; turn < turns && !this.closed; turn++) {
+      this.turn(key);
+    }
+    return this.closed;
   }
 }

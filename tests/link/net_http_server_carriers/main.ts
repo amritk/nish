@@ -1,14 +1,19 @@
-// `nish/net/http-server` over HTTP/2 over TLS and HTTP/3, in one process over
-// loopback: the scripted clients of `tests/link/net_interop_server` against
-// one `HttpServer` holding both listeners, so the program of `rig.ts` answers
-// each carrier through the same calls.
+// `nish/net/http-server` over HTTP/2 over TLS, h2c and HTTP/3, in one process
+// over loopback: the scripted clients of `tests/link/net_interop_server`
+// against one `HttpServer` holding all three listeners, so the program of
+// `rig.ts` answers each carrier through the same calls.
 //
 //   1. HTTP/2 over TLS: a text route, a parameter as JSON, a body echoed, a
 //      404 as problem+json, and `alt-svc` naming the HTTP/3 port on each.
-//   2. HTTP/3: the same requests, answered alike, with no `alt-svc`.
-//   3. A stream reset while its response waits for flow-control window: the
+//   2. h2c: the same requests, answered alike, with no `alt-svc`.
+//   3. HTTP/3: the same requests, answered alike, with no `alt-svc`.
+//   4. A stream reset while its response waits for flow-control window: the
 //      request goes back to the pool, so a server whose pool holds one
 //      request answers the next stream rather than refusing it.
+//   5. `altSvcMaxAge` 0: `alt-svc: clear` over TLS, still none over h2c; an
+//      h2c connection silent before its preface is closed by
+//      `prefaceTimeout`, and one silent after it by `idleTimeout`.
+//   6. A server with the h2c listener alone turns by `wait`, no key lent.
 import { Secret, secret, wipe } from "nish:secret"
 import { Suite } from "nish/testing"
 import { H2_CANCEL, H2_FLAG_END_STREAM } from "nish/net/http2-frame"
@@ -16,10 +21,10 @@ import { H3_FRAME_DATA, H3_FRAME_HEADERS, H3_STREAM_CONTROL, H3_STREAM_QPACK_DEC
 import { QpackEncoder } from "nish/net/qpack"
 import { n32, n64 } from "../net_quic_frame/typed"
 import { leafPrivate } from "../net_tls_common/server"
-import { getOf, postOf } from "../net_http2/peer"
+import { Wire, getOf, postOf } from "../net_http2/peer"
 import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, H3Limits, h3Cat, h3ClientParams, h3ClientSettings, h3Frame, h3Section, h3Varint } from "../net_http3/peer"
-import { H2TlsClient, QuicClient, h3Answer } from "./client"
-import { Rig } from "./rig"
+import { H2cClient, H2TlsClient, QuicClient, TURNS, h3Answer } from "./client"
+import { Rig, rigLimits } from "./rig"
 
 /** The HEADERS frame of an HTTP/3 request with these pseudo-headers, then `names`/`values`. */
 const request = (method: string, path: string, names: string[], values: string[]): u8[] => {
@@ -59,9 +64,79 @@ const h2Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   t.ok("every stream ended", frames.indexOf(`DATA 1 0 "" end`) >= 0 && frames.indexOf(`DATA 3 0 "" end`) >= 0 && frames.indexOf(`DATA 5 0 "" end`) >= 0 && frames.indexOf(`DATA 7 0 "" end`) >= 0)
 }
 
+/** The four requests of `h2Checks`, on streams 1, 3, 5 and 7 of `wire`, after the preface and SETTINGS. */
+const fourRequests = (wire: Wire): void => {
+  const none: i32[] = []
+  const noValues: i64[] = []
+  wire.preface()
+  wire.settings(none, noValues)
+  wire.settingsAck()
+  wire.headers(n32(1), getOf("/hello"), H2_FLAG_END_STREAM)
+  wire.headers(n32(3), getOf("/users/42"), H2_FLAG_END_STREAM)
+  wire.headers(n32(5), postOf("/echo", n32(5)), 0)
+  wire.data(n32(5), "hello", H2_FLAG_END_STREAM)
+  wire.headers(n32(7), getOf("/missing"), H2_FLAG_END_STREAM)
+}
+
+/** h2c, prior knowledge: `h2Checks`'s requests, answered alike, with no `alt-svc`. */
+const h2cChecks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
+  const c = new H2cClient(rig)
+  t.ok("h2c: a connection to the cleartext listener", c.connect(rig.h2.h2cPort))
+  fourRequests(c.wire)
+  c.flush(key)
+  const frames: string = c.awaitFrames(n32(15), key)
+  t.ok("a GET of /hello: 200, its body, its content-length and no alt-svc", frames.indexOf("HEADERS 1 :status=200 ") >= 0 && frames.indexOf("content-type=text/plain content-length=6;") >= 0 && frames.indexOf(`DATA 1 6 "hello\n"`) >= 0)
+  t.ok("a GET of /users/42: the parameter as JSON", frames.indexOf("content-type=application/json content-length=9;") >= 0 && frames.indexOf(`DATA 3 9 "{"id":42}"`) >= 0)
+  t.ok("a POST of /echo: its body echoed", frames.indexOf("HEADERS 5 :status=200 ") >= 0 && frames.indexOf(`DATA 5 5 "hello"`) >= 0)
+  t.ok("a GET of a path no route has: 404 as problem+json", frames.indexOf("HEADERS 7 :status=404 ") >= 0 && frames.indexOf("content-type=application/problem+json content-length=55;") >= 0 && frames.indexOf("DATA 7 55;") >= 0)
+  t.ok("every stream ended, and no alt-svc on any", frames.indexOf(`DATA 7 0 "" end`) >= 0 && frames.indexOf("alt-svc") < 0)
+}
+
+/** `altSvcMaxAge` 0, and the two timeouts of an h2c connection. */
+const clearChecks = (t: Suite, key: Secret<u8[]>): void => {
+  const limits = rigLimits(n32(16))
+  limits.altSvcMaxAge = 0
+  limits.prefaceTimeout = 300
+  limits.idleTimeout = 300
+  const rig = new Rig(limits, true)
+  const h2 = new H2TlsClient(rig)
+  t.ok("altSvcMaxAge 0: the TLS handshake", h2.handshake(rig.h2.port, key) && h2.verified)
+  fourRequests(h2.wire)
+  h2.flush(key, null, null)
+  t.ok("HTTP/2 over TLS says alt-svc: clear", h2.awaitFrames(n32(15), key, null, null).indexOf("content-type=text/plain alt-svc=clear content-length=6;") >= 0)
+  const c = new H2cClient(rig)
+  c.connect(rig.h2.h2cPort)
+  fourRequests(c.wire)
+  c.flush(key)
+  const frames: string = c.awaitFrames(n32(15), key)
+  t.ok("h2c says nothing of alt-svc", frames.indexOf("content-type=text/plain content-length=6;") >= 0 && frames.indexOf("alt-svc") < 0)
+  const silent = new H2cClient(rig)
+  silent.connect(rig.h2.h2cPort)
+  t.ok("an h2c connection that never sends its preface is closed by prefaceTimeout", silent.awaitClose(TURNS, key))
+  const idle = new H2cClient(rig)
+  idle.connect(rig.h2.h2cPort)
+  const none: i32[] = []
+  const noValues: i64[] = []
+  idle.wire.preface()
+  idle.wire.settings(none, noValues)
+  idle.flush(key)
+  t.ok("one silent after its preface is closed by idleTimeout", idle.awaitClose(TURNS, key) && idle.log.take().indexOf("SETTINGS") >= 0)
+}
+
+/** A server with the h2c listener alone needs no key: its loop turns by `wait`. */
+const waitChecks = (t: Suite, key: Secret<u8[]>): void => {
+  const rig = new Rig(rigLimits(n32(16)), false)
+  const c = new H2cClient(rig)
+  t.ok("h2c alone: a connection", c.connect(rig.h2.h2cPort))
+  fourRequests(c.wire)
+  c.flush(key)
+  const frames: string = c.awaitFrames(n32(15), key)
+  t.ok("wait serves it: /hello answered and every stream ended", frames.indexOf(`DATA 1 6 "hello\n"`) >= 0 && frames.indexOf(`DATA 7 0 "" end`) >= 0)
+}
+
 /** A reset of a stream still flushing its response hands its request back. */
 const h2ResetFlushing = (t: Suite, key: Secret<u8[]>): void => {
-  const rig = new Rig(n32(1))
+  const rig = new Rig(rigLimits(n32(1)), true)
   const h2 = new H2TlsClient(rig)
   t.ok("a server with a pool of one: the TLS handshake", h2.handshake(rig.h2.port, key) && h2.verified)
   const none: i32[] = []
@@ -117,11 +192,14 @@ const h3Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
 export const main = (): i32 => {
   const t = new Suite("http server carriers")
   const key: Secret<u8[]> = secret(leafPrivate())
-  const rig = new Rig(n32(1024))
-  t.ok("the server listens: HTTP/2 over TLS and HTTP/3", rig.h2.port > 0 && rig.quicPort > 0)
+  const rig = new Rig(rigLimits(n32(1024)), true)
+  t.ok("the server listens: HTTP/2 over TLS, h2c and HTTP/3", rig.h2.port > 0 && rig.h2.h2cPort > 0 && rig.quicPort > 0)
   h2Checks(t, rig, key)
+  h2cChecks(t, rig, key)
   h3Checks(t, rig, key)
   h2ResetFlushing(t, key)
+  clearChecks(t, key)
+  waitChecks(t, key)
   wipe(key)
   return t.done()
 }
