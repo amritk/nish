@@ -978,8 +978,10 @@ const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): 
 
 /**
  * Grows `p.head` so that `n` more bytes and sixteen of slack fit past
- * `p.headLength`, keeping the bytes already there: `http1HeadAppend`'s rare
- * path, apart so that the common one stays small enough to inline.
+ * `p.headLength`, keeping every byte already there, those `http1Section` has
+ * copied past `headLength` for a line not yet whole included: the rare path
+ * of `http1HeadAppend` and of the section scan's copy, apart so that the
+ * common one stays small enough to inline.
  */
 const http1HeadGrow = (p: Http1Parser, n: i32): void => {
   const at: i32 = p.headLength
@@ -995,8 +997,9 @@ const http1HeadGrow = (p: Http1Parser, n: i32): void => {
   }
   const grown: u8[] = new Array<u8>(size)
   const old: u8[] = p.head
-  if (at > 0 && at <= toI32(old.length) && at <= size) {
-    copyBytes(grown, 0, old, 0, at)
+  const kept: i32 = toI32(old.length) < size ? toI32(old.length) : size
+  if (kept > 0) {
+    copyBytes(grown, 0, old, 0, kept)
   }
   p.head = grown
 }
@@ -1351,10 +1354,11 @@ const http1RequestLine = (p: Http1Parser): i32 => {
 
 /**
  * Reads one field line in `lineStart .. lineEnd` (§5) into `names` and
- * `values`, or, for a trailer, only checks it. Answers `HTTP1_NEED_MORE` or the
- * refusal.
+ * `values`, or, for a trailer, only checks it. A kept line is already in the
+ * head, `http1Section`'s copy of it: `buf[x]` is at `head[x + delta]`.
+ * Answers `HTTP1_NEED_MORE` or the refusal.
  */
-const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
+const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
   const buf: u8[] = p.buf
   const n: i32 = toI32(buf.length)
   const a: i32 = p.lineStart
@@ -1362,17 +1366,14 @@ const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
   if (a >= 0 && a < b && (buf[a] === 32 || buf[a] === 9)) {
     return http1Fail(p, 400, "a field line that starts with whitespace (obs-fold)")
   }
-  // A kept line is copied into the head first, and its name is read there,
-  // each upper-case letter lowered as the scan passes it: one walk over the
-  // name, not a check of `buf` and then a second walk of the copy. The copy
-  // of a line refused below is never read, since a refusal ends the parse.
+  // A kept line's name is read in the head's copy, each upper-case letter
+  // lowered as the scan passes it: one walk over the name, not a check of
+  // `buf` and then a second walk of the copy. The copy of a line refused
+  // below is never read, since a refusal ends the parse.
   let at: i32 = 0
   let i: i32 = a
   if (keep) {
-    if (b - a > toI32(p.head.length) - p.headLength - 16) {
-      http1HeadGrow(p, b - a)
-    }
-    at = http1HeadAppend(p, a, b)
+    at = a + delta
     i = a + (http1LowerName(p.head, at, at + (b - a)) - at)
   } else {
     while (i >= 0 && i < b && i < toI32(buf.length) && http1IsTokenByte(toI32(buf[i]))) {
@@ -1662,7 +1663,8 @@ const http1BodyWindow = (p: Http1Parser, after: i32): i32 => {
  */
 const http1Section = (p: Http1Parser): i32 => {
   const buf: u8[] = p.buf
-  const stop: i32 = p.end < toI32(buf.length) ? p.end : toI32(buf.length)
+  const length: i32 = toI32(buf.length)
+  const stop: i32 = p.end < length ? p.end : length
   const trailer: boolean = p.state === HTTP1_S_TRAILERS
   let i: i32 = p.start
   if (p.scan > p.start) {
@@ -1673,6 +1675,17 @@ const http1Section = (p: Http1Parser): i32 => {
   if (i < 0) {
     i = 0
   }
+  // A header section is copied into the head as it is scanned, each vector
+  // stored as it is loaded, CRLFs and all: `buf[x]` lands at `head[x +
+  // delta]`, so a field line is in the head before it is read, and a line
+  // that ends in a later call finds its first bytes where this one left them.
+  // Nothing past `copyStop` is copied: a line reaching it is over its limit
+  // (see the 431 below; what is left of `maxHeaderBytes` is the same at every
+  // line), so the copy, and the head, stay within the limit.
+  const copy: boolean = !trailer
+  const delta: i32 = p.headLength - p.start
+  const room: i32 = p.maxHeaderBytes - p.sectionBytes + 2
+  const copyStop: i32 = p.start > 2147483647 - room ? 2147483647 : p.start + room
   // Bit `k` of `bits` is set when `buf[base + k]` is a control byte or DEL
   // at or past `i`: the vector last loaded, its lanes before `i` cleared.
   let base: i32 = i - 16
@@ -1687,15 +1700,38 @@ const http1Section = (p: Http1Parser): i32 => {
         seeking = false
       } else {
         const q: i32 = base + 16 > i ? base + 16 : i
-        if (q >= 0 && q <= stop - 16) {
+        if (q >= stop) {
+          seeking = false
+        } else if (q >= 0 && q <= length - 16) {
+          // The vector may run past `stop` into bytes not yet fed: its lanes
+          // there are dropped from `bits`, and its copy of them is
+          // overwritten when they arrive.
           const v: u8x16 = loadU8x16(buf, q)
+          if (copy && q < copyStop) {
+            const at: i32 = q + delta
+            if (at > toI32(p.head.length) - 32) {
+              http1HeadGrow(p, at + 16 - p.headLength)
+            }
+            store(v, p.head, at)
+          }
           bits = bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127))))
+          if (q > stop - 16) {
+            bits = bits & ((toI32(1) << (stop - q)) - 1)
+          }
           base = q
         } else {
-          // Fewer than sixteen bytes are left: a byte at a time.
+          // Fewer than sixteen bytes are left in `buf`: a byte at a time.
           let k: i32 = q
           while (k >= 0 && k < stop && buf[k] >= 32 && buf[k] !== 127) {
             k += 1
+          }
+          const last: i32 = k < stop ? k + 1 : stop
+          const end: i32 = last < copyStop ? last : copyStop
+          if (copy && q < end) {
+            if (end + delta > toI32(p.head.length) - 16) {
+              http1HeadGrow(p, end + delta - p.headLength)
+            }
+            copyBytes(p.head, q + delta, buf, q, end - q)
           }
           j = k
           base = k + 1 - 16
@@ -1738,9 +1774,10 @@ const http1Section = (p: Http1Parser): i32 => {
           p.state = HTTP1_S_MESSAGE_END
           return HTTP1_LINE
         }
+        p.headLength = p.start + delta
         return http1EndOfHead(p)
       }
-      if (http1FieldLine(p, !trailer) === HTTP1_ERROR) {
+      if (http1FieldLine(p, copy, delta) === HTTP1_ERROR) {
         return HTTP1_ERROR
       }
       p.lineControl = false
@@ -1758,6 +1795,9 @@ const http1Section = (p: Http1Parser): i32 => {
     }
   }
   p.scan = i
+  if (copy) {
+    p.headLength = p.start + delta
+  }
   if (p.end - p.start > p.maxHeaderBytes - p.sectionBytes + 1) {
     return http1Fail(p, 431, "a line over its limit")
   }

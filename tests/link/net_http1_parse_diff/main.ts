@@ -167,6 +167,39 @@ const mixMaybe = (sum: u32, text: string | null): u32 => (text === null ? mix(su
  * the old have the same fields under the same names, and this and `stateOld`
  * read them in the same order.
  */
+/**
+ * The head as a caller reads it: the bytes of the method, the target and each
+ * field's name and value, through their spans, and the spans' shape (each
+ * field's name and value relative to its own name). Where the head stores
+ * them, and what lies between, is the parser's own: the new parser keeps a
+ * field line's CRLF in the head, the old one drops it.
+ */
+const mixSpans = (
+  sum0: u32,
+  head: u8[],
+  length: i32,
+  spans: i32[],
+  count: i32,
+  methodStart: i32,
+  methodEnd: i32,
+  targetStart: i32,
+  targetEnd: i32
+): u32 => {
+  let sum: u32 = mixBytes(sum0, head, methodStart, methodEnd)
+  sum = mix(sum, targetStart - methodStart)
+  sum = mixBytes(sum, head, targetStart, targetEnd)
+  for (let k: i32 = 0; k < count && 4 * k + 3 < toI32(spans.length); k++) {
+    const at: i32 = spans[4 * k]
+    sum = mix(sum, spans[4 * k + 1] - at)
+    sum = mix(sum, spans[4 * k + 2] - at)
+    sum = mix(sum, spans[4 * k + 3] - at)
+    sum = mixBytes(sum, head, at, spans[4 * k + 1])
+    sum = mixBytes(sum, head, spans[4 * k + 2], spans[4 * k + 3])
+    sum = mixBool(sum, spans[4 * k + 3] <= length)
+  }
+  return sum
+}
+
 const stateNew = (p: Http1Parser, e: i32): u32 => {
   let sum: u32 = mix(2166136261, e)
   sum = mix(sum, p.status)
@@ -183,11 +216,7 @@ const stateNew = (p: Http1Parser, e: i32): u32 => {
     sum = mix(sum, p.targetStart)
     sum = mix(sum, p.targetEnd)
     sum = mix(sum, p.headerCount)
-    sum = mix(sum, p.headLength)
-    for (let k: i32 = 0; k < 4 * p.headerCount && k < toI32(p.spans.length); k++) {
-      sum = mix(sum, p.spans[k])
-    }
-    sum = mixBytes(sum, p.head, 0, p.headLength)
+    sum = mixSpans(sum, p.head, p.headLength, p.spans, p.headerCount, p.methodStart, p.methodEnd, p.targetStart, p.targetEnd)
     sum = mixBool(sum, p.methodIs("GET"))
     sum = mixBool(sum, p.targetIs("/"))
     sum = mixBool(sum, p.upgradeIs("websocket"))
@@ -235,11 +264,7 @@ const stateOld = (p: H1oldParser, e: i32): u32 => {
     sum = mix(sum, p.targetStart)
     sum = mix(sum, p.targetEnd)
     sum = mix(sum, p.headerCount)
-    sum = mix(sum, p.headLength)
-    for (let k: i32 = 0; k < 4 * p.headerCount && k < toI32(p.spans.length); k++) {
-      sum = mix(sum, p.spans[k])
-    }
-    sum = mixBytes(sum, p.head, 0, p.headLength)
+    sum = mixSpans(sum, p.head, p.headLength, p.spans, p.headerCount, p.methodStart, p.methodEnd, p.targetStart, p.targetEnd)
     sum = mixBool(sum, p.methodIs("GET"))
     sum = mixBool(sum, p.targetIs("/"))
     sum = mixBool(sum, p.upgradeIs("websocket"))
