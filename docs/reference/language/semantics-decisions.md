@@ -1248,7 +1248,8 @@ through further calls
 **`unchecked`**: `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no
 check at all, so nothing panics, but an index out of range is undefined
 behaviour; `readCString`, whose pointer nothing proves is live and
-NUL-terminated
+NUL-terminated; `readStruct`, whose pointer nothing proves is live and covers
+the layout
 
 - *What proves it away:* nothing, and nothing needs to: the call is the
   author's word that the index is in range, or that the pointer is, not a

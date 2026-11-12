@@ -781,7 +781,7 @@ so it takes `T` from where the result goes, as `Ok(v)` and `Err(e)` do: an
 annotation (`const lc: Lconv = readStruct(p)`), a parameter, a return type or
 an assignment's target. The context, stripped of `| null`, must be a
 `declare class`; a call with no context, or one whose context is not a layout,
-is refused (`reject_unsafe_read_struct_context`, `_layout`), and
+is refused (`reject_unsafe_read_struct_context` holds both), and
 `readStruct<Lconv>(p)` is refused with a message that names the annotated form
 (`reject_unsafe_read_struct_type_args`). `runtime/nish.d.ts` still declares
 `readStruct<T>(p: CPtr): T`, which `tsc` infers from the same context.

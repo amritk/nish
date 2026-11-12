@@ -1024,6 +1024,36 @@ built from an object literal. A parameter typed `Rlimit | null` passes `NULL`
 for `null`, under the same rule as a `CPtr | null`. The rules are in
 [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
 
+A C function that answers a pointer to a struct it owns, such as `localeconv`
+or `gmtime`, often answers the same static buffer every call. `readStruct`
+from `nish:unsafe` copies that struct into a `declare class` instance the
+program owns, so a later call that overwrites C's buffer leaves the copy
+alone. The type to copy into comes from the context, an annotation or a
+return type, and the copy is the class's size in bytes:
+
+```ts nish:ok
+import { readCString, readStruct } from "nish:unsafe";
+
+declare class Lconv {
+  decimalPoint: CPtr;
+  thousandsSep: CPtr;
+}
+declare function localeconv(): CPtr;
+
+export const main = (): i32 => {
+  const lc: Lconv = readStruct(localeconv());
+  console.log(readCString(lc.decimalPoint)); // .
+  return 0;
+};
+```
+
+Nothing is checked: the pointer must be live and not `NULL`, and the class
+must declare C's fields in C's order, or the copy reads the wrong bytes. A
+`CPtr` field is copied as C's address, not followed, so read what it points
+at, with `readCString` here, while C still holds it. A `CPtr | null` result
+is narrowed with `!== null` before the call. The rules are in
+[`readStruct`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#readstruct-a-struct-out-of-memory-c-owns).
+
 A declared function has no body and cannot be exported. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and

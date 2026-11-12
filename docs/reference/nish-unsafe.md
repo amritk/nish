@@ -7,6 +7,7 @@ Element access with no bounds check, signed arithmetic that wraps, and a C strin
 ```ts
 import {
   readCString,
+  readStruct,
   uncheckedGet,
   uncheckedSet,
   wrappingAdd,
@@ -32,6 +33,12 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
 <scalar-card title="read​CString" icon="phosphor/regular/function" href="#readcstring">
 
 The `NUL`-terminated bytes at `p`, copied into a new string by `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses.
+
+</scalar-card>
+
+<scalar-card title="read​Struct" icon="phosphor/regular/function" href="#readstruct">
+
+A copy of the C struct at `p` in a new instance of the `declare class` the call's context names (`const lc: Lconv = readStruct(localeconv())`), so C may free or overwrite its struct straight after.
 
 </scalar-card>
 
@@ -77,11 +84,11 @@ for each name imported and an `unsafe call` line for each site.
 
 </scalar-callout>
 
-The global spelling is refused (NL2456): the six are called only through an
+The global spelling is refused (NL2456): the seven are called only through an
 import of `nish:unsafe`. An index outside `[0, xs.length)` is undefined
 behaviour, which is the whole of the trade. There is no flag that turns the
 checks off: `--unchecked-indexing` and `--wrapping` are gone, and the CLI
-refuses each with exit 2. `readCString` has no Node form, because its
+refuses each with exit 2. `readCString` and `readStruct` have no Node form, because their
 `CPtr` comes only from a `declare function`, which Node cannot call.
 
 <scalar-detail title="Under Node">
@@ -96,7 +103,7 @@ refuses each with exit 2. `readCString` has no Node form, because its
 <scalar-detail title="The no-panic scope">
 
 Under `--deny-panics` or `"nish".noPanic`,
-`uncheckedGet`, `uncheckedSet` and `readCString` are allowed `unchecked`
+`uncheckedGet`, `uncheckedSet`, `readCString` and `readStruct` are allowed `unchecked`
 sites, because the import has already said that an index out of range is
 the author's to rule out. The wrapping three are not sites at all: they
 are defined for every pair.
@@ -127,6 +134,30 @@ A pointer from a `declare function`. Undefined behaviour unless
 <scalar-field name="returns" type="string">
 
 A copy of the bytes before the `NUL`; C keeps its buffer.
+
+</scalar-field>
+
+### readStruct
+
+A copy of the C struct at `p` in a new instance of the `declare class` the
+call's context names (`const lc: Lconv = readStruct(localeconv())`), so C
+may free or overwrite its struct straight after. It reads and allocates,
+and is native only.
+
+```ts
+function readStruct<T>(p: CPtr): T
+```
+
+<scalar-field name="p" type="CPtr" required>
+
+A pointer from a `declare function`. Undefined behaviour unless
+  it points at the layout's size of readable bytes.
+
+</scalar-field>
+
+<scalar-field name="returns" type="T">
+
+A copy of the struct; C keeps its own.
 
 </scalar-field>
 

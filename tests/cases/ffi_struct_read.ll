@@ -78,9 +78,8 @@ define internal noundef nonnull align 8 dereferenceable(32) %struct.Sample* @cop
 entry:
   %0 = call i8* @samplePtr()
   %1 = call i8* @nish_alloc_struct(i64 32)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %1, i8* align 1 %0, i64 32, i1 false)
   %2 = bitcast i8* %1 to %struct.Sample*
-  %3 = bitcast %struct.Sample* %2 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %3, i8* align 1 %0, i64 32, i1 false)
   ret %struct.Sample* %2
 }
 
@@ -180,61 +179,57 @@ entry:
   store %struct.Sample* %0, %struct.Sample** %kept.addr, align 8
   %1 = call i8* @samplePtr()
   %2 = call i8* @nish_alloc_struct(i64 32)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %2, i8* align 1 %1, i64 32, i1 false)
   %3 = bitcast i8* %2 to %struct.Sample*
-  %4 = bitcast %struct.Sample* %3 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %4, i8* align 1 %1, i64 32, i1 false)
   store %struct.Sample* %3, %struct.Sample** %alias.addr, align 8
   store %struct.Sample* null, %struct.Sample** %maybe.addr, align 8
-  %5 = call i8* @samplePtr()
-  %6 = call i8* @nish_alloc_struct(i64 32)
-  %7 = bitcast i8* %6 to %struct.Sample*
-  %8 = bitcast %struct.Sample* %7 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %8, i8* align 1 %5, i64 32, i1 false)
-  store %struct.Sample* %7, %struct.Sample** %maybe.addr, align 8
-  %9 = call i64 @churn()
-  %10 = call i8* @nish_str_from_i64(i64 %9)
-  %11 = call i8* @nish_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.4 to i8*), i8* %10)
-  call void @nish_print(i8* %11)
+  %4 = call i8* @samplePtr()
+  %5 = call i8* @nish_alloc_struct(i64 32)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %5, i8* align 1 %4, i64 32, i1 false)
+  %6 = bitcast i8* %5 to %struct.Sample*
+  store %struct.Sample* %6, %struct.Sample** %maybe.addr, align 8
+  %7 = call i64 @churn()
+  %8 = call i8* @nish_str_from_i64(i64 %7)
+  %9 = call i8* @nish_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.4 to i8*), i8* %8)
+  call void @nish_print(i8* %9)
   call void @overwriteSample()
-  %12 = load %struct.Sample*, %struct.Sample** %kept.addr, align 8
-  call void @show(i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), %struct.Sample* %12)
-  %13 = load %struct.Sample*, %struct.Sample** %alias.addr, align 8
-  call void @show(i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*), %struct.Sample* %13)
-  %14 = load %struct.Sample*, %struct.Sample** %maybe.addr, align 8
-  %15 = icmp ne %struct.Sample* %14, null
-  br i1 %15, label %if.then, label %if.end
+  %10 = load %struct.Sample*, %struct.Sample** %kept.addr, align 8
+  call void @show(i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), %struct.Sample* %10)
+  %11 = load %struct.Sample*, %struct.Sample** %alias.addr, align 8
+  call void @show(i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*), %struct.Sample* %11)
+  %12 = load %struct.Sample*, %struct.Sample** %maybe.addr, align 8
+  %13 = icmp ne %struct.Sample* %12, null
+  br i1 %13, label %if.then, label %if.end
 
 if.then:
-  %16 = load %struct.Sample*, %struct.Sample** %maybe.addr, align 8
-  call void @show(i8* bitcast ({ i64, [9 x i8] }* @.str.7 to i8*), %struct.Sample* %16)
+  %14 = load %struct.Sample*, %struct.Sample** %maybe.addr, align 8
+  call void @show(i8* bitcast ({ i64, [9 x i8] }* @.str.7 to i8*), %struct.Sample* %14)
   br label %if.end
 
 if.end:
-  %17 = call i8* @samplePtr()
-  %18 = call i8* @nish_alloc_struct(i64 32)
-  %19 = bitcast i8* %18 to %struct.Sample*
-  %20 = bitcast %struct.Sample* %19 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %20, i8* align 1 %17, i64 32, i1 false)
-  call void @show(i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*), %struct.Sample* %19)
-  %21 = call i8* @localeconv()
-  %22 = call i8* @nish_alloc_struct(i64 16)
-  %23 = bitcast i8* %22 to %struct.Lconv*
-  %24 = bitcast %struct.Lconv* %23 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %24, i8* align 1 %21, i64 16, i1 false)
-  store %struct.Lconv* %23, %struct.Lconv** %lc.addr, align 8
-  %25 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
-  %26 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %25, i32 0, i32 0
-  %27 = load i8*, i8** %26, align 8
-  %28 = call i8* @nish.ffi.str(i8* %27)
-  %29 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.9 to i8*), i8* %28)
-  %30 = call i8* @nish_str_concat(i8* %29, i8* bitcast ({ i64, [24 x i8] }* @.str.10 to i8*))
-  %31 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
-  %32 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %31, i32 0, i32 1
-  %33 = load i8*, i8** %32, align 8
-  %34 = call i8* @nish.ffi.str(i8* %33)
-  %35 = call i8* @nish_str_concat(i8* %30, i8* %34)
-  %36 = call i8* @nish_str_concat(i8* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.11 to i8*))
-  call void @nish_print(i8* %36)
+  %15 = call i8* @samplePtr()
+  %16 = call i8* @nish_alloc_struct(i64 32)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %16, i8* align 1 %15, i64 32, i1 false)
+  %17 = bitcast i8* %16 to %struct.Sample*
+  call void @show(i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*), %struct.Sample* %17)
+  %18 = call i8* @localeconv()
+  %19 = call i8* @nish_alloc_struct(i64 16)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %19, i8* align 1 %18, i64 16, i1 false)
+  %20 = bitcast i8* %19 to %struct.Lconv*
+  store %struct.Lconv* %20, %struct.Lconv** %lc.addr, align 8
+  %21 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
+  %22 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %21, i32 0, i32 0
+  %23 = load i8*, i8** %22, align 8
+  %24 = call i8* @nish.ffi.str(i8* %23)
+  %25 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.9 to i8*), i8* %24)
+  %26 = call i8* @nish_str_concat(i8* %25, i8* bitcast ({ i64, [24 x i8] }* @.str.10 to i8*))
+  %27 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
+  %28 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %27, i32 0, i32 1
+  %29 = load i8*, i8** %28, align 8
+  %30 = call i8* @nish.ffi.str(i8* %29)
+  %31 = call i8* @nish_str_concat(i8* %26, i8* %30)
+  %32 = call i8* @nish_str_concat(i8* %31, i8* bitcast ({ i64, [2 x i8] }* @.str.11 to i8*))
+  call void @nish_print(i8* %32)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

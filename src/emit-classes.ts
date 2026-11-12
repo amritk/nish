@@ -329,15 +329,14 @@ export const emitNewWithoutArguments = (emitter: Emitter, info: StructInfo, site
  * read at `align 1`.
  */
 export const emitStructCopy = (emitter: Emitter, info: StructInfo, from: string): string => {
-  const obj = arenaObject(emitter, info)
-  const bytes = emitter.fn.emitValue(`bitcast ${structTypeName(info)}* ${obj} to i8*`)
+  const bytes = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${info.size})`)
   emitter.declare(
     "declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)"
   )
   emitter.fn.emit(
     `call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 ${bytes}, i8* align 1 ${from}, i64 ${info.size}, i1 false)`
   )
-  return obj
+  return emitter.fn.emitValue(`bitcast i8* ${bytes} to ${structTypeName(info)}*`)
 }
 
 // ---- Members --------------------------------------------------------------------------------

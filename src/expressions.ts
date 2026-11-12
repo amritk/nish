@@ -1300,7 +1300,7 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
         ctx.error(
           expr.children[1],
           `Type arguments are not written at a call site in ${LANGUAGE}: \`readStruct\` copies into the ` +
-            `\`declare class\` its context names, so write \`const s: Stat = readStruct(p)\``
+            "`declare class` its context names, so write `const s: Stat = readStruct(p)`"
         )
         return T_ERROR
       }

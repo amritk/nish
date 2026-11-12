@@ -5212,7 +5212,8 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
 - **It is not a return type or an array element.** C returning a struct by
   value, or a pointer into memory it owns, leaves the copy with no owner on
   this side: `` a C struct is only lent to C by pointer: take a `Point`
-  parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); an array of
+  parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); a struct
+  C owns is copied out with `readStruct` (below) from the `CPtr` C returns. An array of
   them would be a C array the program lays out element by element, and is
   `` cannot be an array element `` (NL2740, `reject_ffi_struct_array`,
   `reject_ffi_struct_array_literal`, `reject_ffi_struct_array_new`), however
@@ -5225,6 +5226,68 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `reject_ffi_struct_spread`).
 - **`--emit-ts` refuses a module that declares one**, with the same message as
   for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
+
+### `readStruct`: a struct out of memory C owns
+
+**`readStruct(p)` from `nish:unsafe` copies the struct at a `CPtr` into a new
+instance of the `declare class` its context names, and the copy is the
+program's** (`tests/cases/ffi_struct_read`,
+[cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#readstruct-a-c-owned-struct-copied-out),
+`docs/wp27-ffi.md` §9h). It is how a struct C keeps comes back:
+`localeconv()`'s `struct lconv`, `getpwnam`'s `struct passwd`, each a buffer
+the next call overwrites.
+
+```ts
+import { readStruct, readCString } from "nish:unsafe"
+
+declare class Lconv {
+  decimalPoint: CPtr
+  thousandsSep: CPtr
+}
+declare function localeconv(): CPtr
+
+const lc: Lconv = readStruct(localeconv())
+console.log(readCString(lc.decimalPoint))
+```
+
+```llvm
+%struct.Lconv = type { i8*, i8* }
+  %0 = call i8* @localeconv()
+  %1 = call i8* @nish_alloc_struct(i64 16)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %1, i8* align 1 %0, i64 16, i1 false)
+  %2 = bitcast i8* %1 to %struct.Lconv*
+  store %struct.Lconv* %2, %struct.Lconv** %lc.addr, align 8
+```
+
+- **The layout comes from context**, as `Ok(v)`'s does: an annotation, a
+  parameter, a return type or an assignment's target, `| null` stripped. With
+  none it is
+  `` `readStruct(p)` needs a contextual `declare class` type to copy into ``
+  (NL2759), and a context that is not a layout is
+  `` `readStruct(p)` copies into a `declare class` layout, and Plain is not one ``
+  (NL2760, `reject_unsafe_read_struct_context`). A type argument is not
+  written at a call site: `readStruct<Lconv>(p)` is refused with the annotated
+  spelling in the message (NL2758, `reject_unsafe_read_struct_type_args`).
+- **One copy, the layout's size**: the arena allocation `new` makes, then one
+  `llvm.memcpy` of the struct's bytes, padding included, from the source at
+  `align 1`, since C promised the struct and not its address's alignment. The
+  size is the target's: 16 bytes for `{ CPtr; CPtr }` natively, 8 under
+  `--profile wasi` (`tests/ffi-struct.js`). After the call C may free or
+  rewrite its struct; the copy is an instance like any `new` one, and a copy
+  made in a callee and returned is held by its caller.
+- **It does not copy deep.** A `CPtr` field of the copy is still C's pointer,
+  read with [`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns) while
+  C keeps it live.
+- **Nothing about the pointer is checked**: not `NULL`, not the size it
+  covers. The argument is a `CPtr`, so a `CPtr | null` is narrowed first
+  (`` `readStruct` expects an argument of type CPtr, got CPtr | null ``,
+  `reject_unsafe_read_struct_null`), and the layout must be C's struct or a
+  prefix of it. That is why it is in
+  [`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping): an
+  allowed `unchecked` site under `--deny-panics`, with its copy's `oom`,
+  refused by `--deny unsafe`, and recorded by `--emit-checked`.
+- **There is no `writeStruct`.** A struct C should fill is lent to it, as
+  above.
 
 ### What a declaration cannot say
 
@@ -5244,7 +5307,7 @@ Each of these is refused, and each refusal is pinned by a case:
   [function reference](#function-references) is a tag only this program's
   dispatchers read, not an address, so it is not a `CPtr` either.
 - **A read through a `CPtr`.** `p[0]` is `Cannot index a value of type CPtr`
-  (`reject_ffi_pointer_deref`); `readCString` above is the one read.
+  (`reject_ffi_pointer_deref`); `readCString` and `readStruct` above are the two reads.
 - **Inline assembly.** `asm("nop")` is an unknown function (`reject_ffi_asm`).
 - **An allocator from C memory.** `arena()` takes no argument, so `using a =
   arena(p)` is refused (`reject_ffi_allocator`).

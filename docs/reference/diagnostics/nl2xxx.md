@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 749 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 752 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -14230,4 +14230,28 @@ export function f(): i32 {
 
 ```text
 `declare class Point` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the `declare function` that takes it in a native build
+```
+
+## NL2758
+
+The message of an error contains:
+
+```text
+…: `readStruct` copies into the `declare class` its context names, so write `const s: Stat = readStruct(p)`
+```
+
+## NL2759
+
+The message of an error contains:
+
+```text
+`readStruct(p)` needs a contextual `declare class` type to copy into (annotate it, e.g. `const s: Stat = readStruct(p)`)
+```
+
+## NL2760
+
+The message of an error contains:
+
+```text
+`readStruct(p)` copies into a `declare class` layout, and …
 ```
