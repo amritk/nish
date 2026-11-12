@@ -290,6 +290,7 @@ struct AliasInfo (class) size=40 align=8 exported
   field type: i32 index=4 offset=32
   field exported: boolean index=5 offset=36
   field resolving: boolean index=6 offset=37
+  field viaNumber: boolean index=7 offset=38
   constructor -> @AliasInfo.constructor
 struct EnumInfo (class) size=64 align=8 exported
   field name: string index=0 offset=0

@@ -167,6 +167,12 @@ export class CheckContext {
   source: SourceFile
   numberMode: i32
   /**
+   * How many annotations resolved here went through `number`, which is i32
+   * or f64 as `--number-mode` says. A reader that must not depend on the
+   * mode (a `declare class` field) compares it before and after resolving.
+   */
+  numberSpellings: i32
+  /**
    * `--strict-exports`, which is the default. Off, a non-exported function
    * keeps external linkage, and the WP15 §8 walk says so at a call inside a
    * loop; nothing else in the checker reads it, because linkage is the
@@ -376,6 +382,7 @@ export class CheckContext {
     this.sink = sink
     this.source = program.source
     this.numberMode = numberMode
+    this.numberSpellings = 0
     this.strictExports = strictExports
     this.wasm = false
     this.wasmFreestanding = false

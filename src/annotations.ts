@@ -259,7 +259,7 @@ export const checkExportedLayouts = (ctx: CheckContext): void => {
  * `| null`, an element, a `Result` arm, or a field of a record `t` names,
  * through any depth of records (`seen` stops a cycle).
  */
-export const heldLayout = (
+const heldLayout = (
   program: CheckedProgram,
   table: TypeTable,
   t: i32,
@@ -568,6 +568,9 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
 
   const scalar = scalarNamed(name, ctx.numberMode)
   if (scalar >= 0) {
+    if (name === "number") {
+      ctx.numberSpellings = ctx.numberSpellings + 1
+    }
     return scalar
   }
   if (alias >= 0) {
@@ -597,7 +600,11 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   // never learns that a name was involved (docs/LANGUAGE.md, Type aliases).
   const declared = ctx.program.alias(name)
   if (declared !== null) {
-    return aliasType(declared)
+    const aliased = aliasType(declared)
+    if (declared.viaNumber) {
+      ctx.numberSpellings = ctx.numberSpellings + 1
+    }
+    return aliased
   }
 
   // An enum is a type of its own, and its name is the only way to spell it
@@ -1203,8 +1210,10 @@ export const aliasType = (info: AliasInfo): i32 => {
     return info.type
   }
   info.resolving = true
+  const before = info.home.numberSpellings
   const resolved = resolveType(info.decl.children[1], info.home)
   info.resolving = false
+  info.viaNumber = info.home.numberSpellings !== before
   if (resolved === T_ERROR) {
     return T_ERROR
   }

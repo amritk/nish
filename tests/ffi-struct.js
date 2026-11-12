@@ -148,6 +148,36 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
         /int32_t viaHolder\(void\);/.test(heldText),
       held.status === 0 ? heldText : shown(held)
     )
+    // `number` is refused where the resolver meets it, so an alias imported
+    // from another module, already resolved there, is refused too; an alias
+    // of a fixed-width scalar is a layout field like the scalar itself.
+    const numberDir = path.join(dir, "number-alias")
+    fs.mkdirSync(numberDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(numberDir, "widths.ts"),
+      "export type Width = number\nexport type Fixed = i32\nexport const unit: Width = 1\n"
+    )
+    const field = (name, type) =>
+      fs.writeFileSync(
+        path.join(numberDir, name),
+        `import { Fixed, Width, unit } from "./widths"\n\ndeclare class Point {\n  x: ${type}\n}\n\n` +
+          "export const main = (): number => (new Point().x === 0 ? unit : 0)\n"
+      )
+    field("imported.ts", "Width")
+    field("fixed.ts", "Fixed")
+    const imported = compile(
+      path.join(numberDir, "imported.ts"),
+      path.join(numberDir, "imported") + path.sep,
+      []
+    )
+    check(
+      "ffi_struct: a layout field typed by an imported alias of number is refused",
+      imported.status === 1 && imported.stderr.includes("whose width `--number-mode` chooses"),
+      shown(imported)
+    )
+    const fixed = compile(path.join(numberDir, "fixed.ts"), path.join(numberDir, "fixed") + path.sep, [])
+    check("ffi_struct: a layout field typed by an alias of i32 is accepted", fixed.status === 0, shown(fixed))
+
     if (has("clang")) {
       for (const [what, file] of [
         ["beside a layout", header],

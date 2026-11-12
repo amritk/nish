@@ -5146,10 +5146,13 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
 - **A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
   `CPtr | null`, or another `declare class`, embedded by value** — C's
   `struct timespec it_value;`, not a pointer to one. A `number` field is
-  refused whatever the mode and however it is spelled, through a `type` alias
-  or a chain of them, imported or not, since `--number-mode` picks its width and a C
-  struct has one layout: `` has type `number`, whose width `--number-mode`
-  chooses `` (NL2755, `reject_ffi_struct_field_number`, `_alias`, `_alias_chain`). Any other type is
+  refused whatever the mode and however it is spelled — in parentheses, through a
+  `type` alias or a chain of them, imported or not — since `--number-mode` picks
+  its width and a C struct has one layout. The resolver decides it where it meets
+  `number`, so no spelling escapes; an alias of `i32` stays a field: `` has type
+  `number`, whose width `--number-mode` chooses `` (NL2755,
+  `reject_ffi_struct_field_number`, `_paren`, `_alias`, `_alias_paren`,
+  `_alias_chain`; `tests/ffi-struct.js`: the imported alias, the `i32` alias). Any other type is
   `` Field `ok` of `declare class Flags` has type `boolean`, which has no C
   layout `` (NL2752, `reject_ffi_struct_field_type`, `reject_cls_declare`,
   `reject_ffi_struct_field_array`, `reject_ffi_struct_field_class`): a

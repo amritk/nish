@@ -140,7 +140,7 @@ function checkExportedLayouts(ctx: CheckContext): void -> @checkExportedLayouts 
   local +6:11 what: string (const)
   callee +9:16 TypeTable.typeName -> @TypeTable.typeName
   callee +10:5 CheckContext.error -> @CheckContext.error
-function heldLayout(program: CheckedProgram, table: TypeTable, t: i32, seen: StringSet): StructInfo | null -> @heldLayout [exported]
+function heldLayout(program: CheckedProgram, table: TypeTable, t: i32, seen: StringSet): StructInfo | null -> @heldLayout
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via heldLayout
   escaping: t
@@ -261,81 +261,82 @@ function promiseArgument(annotation: Node): Node | null -> @promiseArgument [exp
   local +0:9 args: Node (const)
 function resolveReference(node: Node, ctx: CheckContext): i32 -> @resolveReference
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via resolveResult
+  sharedWrite: +0:7
   calls: CheckContext.errorType CheckContext.textOf CheckedProgram.alias CheckedProgram.enumNamed CheckedProgram.importNamed CheckedProgram.struct CheckedProgram.structTemplate StringMap.get StringSet.add StringSet.has TypeTable.arrayOf TypeTable.maskOf TypeTable.readonlyArrayOf TypeTable.regionOf TypeTable.structOf TypeTable.typeName TypeTable.vectorOf aliasType deferInstantiation elementType instantiateWritten namesRegion nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new resolveEnumMemberType resolveHostHandle resolveRanged resolveResult resolveType scalarNamed simdImportMessage simdLaneType simdMaskLane simdMaskWidth typedArrayElement
   pointer node: size=40 writesThrough=true captured=true passedTo=resolveResult#0 resolveEnumMemberType#0 resolveRanged#0 resolveHostHandle#0 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 instantiateWritten#3 deferInstantiation#3 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.textOf#1 CheckContext.errorType#1 CheckContext.errorType#1 instantiateWritten#3 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.textOf#1
   pointer ctx: size=336 writesThrough=true captured=true passedTo=resolveResult#3 resolveEnumMemberType#4 resolveRanged#3 resolveHostHandle#3 CheckContext.errorType#0 elementType#1 CheckContext.errorType#0 elementType#1 CheckContext.errorType#0 namesRegion#0 CheckContext.errorType#0 resolveType#1 instantiateWritten#0 deferInstantiation#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.textOf#0 CheckContext.errorType#0 CheckContext.errorType#0 instantiateWritten#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.textOf#0
   stackSites=0 stackLocals=0
-  local +0:9 name: string (const)
-  local +1:9 args: Node (const)
-  local +2:9 argc: i32 (const)
-  callee +5:12 resolveResult -> @resolveResult
-  local +10:9 dot: i32 (const)
-  callee +12:12 resolveEnumMemberType -> @resolveEnumMemberType
-  callee +19:12 resolveRanged -> @resolveRanged
-  callee +23:12 resolveHostHandle -> @resolveHostHandle
-  callee +28:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +30:12 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee +30:30 elementType -> @elementType
-  callee +36:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +41:12 TypeTable.readonlyArrayOf -> @TypeTable.readonlyArrayOf
-  callee +41:38 elementType -> @elementType
-  local +44:9 alias: i32 (const)
-  callee +44:17 typedArrayElement -> @typedArrayElement
-  local +46:11 spelled: string (const)
-  callee +46:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +46:40 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee +47:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +59:9 namesRegion -> @namesRegion
-  callee +61:16 CheckContext.errorType -> @CheckContext.errorType
-  callee +66:14 TypeTable.regionOf -> @TypeTable.regionOf
-  callee +66:33 resolveType -> @resolveType
-  local +68:11 written: StructTemplateInfo | null (const)
-  callee +68:21 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
-  local +70:13 instantiated: StructInfo | null (const)
-  callee +70:28 instantiateWritten -> @instantiateWritten
-  local +78:11 imported: ImportBinding | null (const)
-  callee +78:22 CheckedProgram.importNamed -> @CheckedProgram.importNamed
-  callee +80:14 deferInstantiation -> @deferInstantiation
-  callee +83:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +85:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +85:64 CheckContext.textOf -> @CheckContext.textOf
-  callee +89:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +92:12 CheckContext.errorType -> @CheckContext.errorType
-  local +95:9 scalar: i32 (const)
-  callee +95:18 scalarNamed -> @scalarNamed
-  callee +100:12 TypeTable.arrayOf -> @TypeTable.arrayOf
-  local +107:9 bare: StructTemplateInfo | null (const)
-  callee +107:16 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
-  callee +109:5 instantiateWritten -> @instantiateWritten
-  local +117:9 bound: i32 (const)
-  callee +117:17 StringMap.get -> @StringMap.get
-  local +124:9 declared: AliasInfo | null (const)
-  callee +124:20 CheckedProgram.alias -> @CheckedProgram.alias
-  callee +126:12 aliasType -> @aliasType
-  local +132:9 declaredEnum: EnumInfo | null (const)
-  callee +132:24 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
-  local +140:9 vectorImport: ImportBinding | null (const)
-  callee +140:24 CheckedProgram.importNamed -> @CheckedProgram.importNamed
-  local +142:11 lane: i32 (const)
-  callee +142:18 simdLaneType -> @simdLaneType
-  callee +144:14 TypeTable.vectorOf -> @TypeTable.vectorOf
-  local +148:11 width: i32 (const)
-  callee +148:19 simdMaskWidth -> @simdMaskWidth
-  callee +150:14 TypeTable.maskOf -> @TypeTable.maskOf
-  callee +150:31 simdMaskLane -> @simdMaskLane
-  callee +157:7 StringSet.has -> @StringSet.has
-  local +158:11 struct: StructInfo | null (const)
-  callee +158:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +162:5 StringSet.add -> @StringSet.add
-  callee +163:12 TypeTable.structOf -> @TypeTable.structOf
-  callee +166:7 simdLaneType -> @simdLaneType
-  callee +166:41 simdMaskWidth -> @simdMaskWidth
-  callee +167:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +167:32 simdImportMessage -> @simdImportMessage
-  callee +171:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +174:10 CheckContext.errorType -> @CheckContext.errorType
-  callee +174:62 CheckContext.textOf -> @CheckContext.textOf
+  local -98:9 name: string (const)
+  local -97:9 args: Node (const)
+  local -96:9 argc: i32 (const)
+  callee -93:12 resolveResult -> @resolveResult
+  local -88:9 dot: i32 (const)
+  callee -86:12 resolveEnumMemberType -> @resolveEnumMemberType
+  callee -79:12 resolveRanged -> @resolveRanged
+  callee -75:12 resolveHostHandle -> @resolveHostHandle
+  callee -70:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -68:12 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee -68:30 elementType -> @elementType
+  callee -62:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -57:12 TypeTable.readonlyArrayOf -> @TypeTable.readonlyArrayOf
+  callee -57:38 elementType -> @elementType
+  local -54:9 alias: i32 (const)
+  callee -54:17 typedArrayElement -> @typedArrayElement
+  local -52:11 spelled: string (const)
+  callee -52:21 TypeTable.typeName -> @TypeTable.typeName
+  callee -52:40 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee -51:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -39:9 namesRegion -> @namesRegion
+  callee -37:16 CheckContext.errorType -> @CheckContext.errorType
+  callee -32:14 TypeTable.regionOf -> @TypeTable.regionOf
+  callee -32:33 resolveType -> @resolveType
+  local -30:11 written: StructTemplateInfo | null (const)
+  callee -30:21 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  local -28:13 instantiated: StructInfo | null (const)
+  callee -28:28 instantiateWritten -> @instantiateWritten
+  local -20:11 imported: ImportBinding | null (const)
+  callee -20:22 CheckedProgram.importNamed -> @CheckedProgram.importNamed
+  callee -18:14 deferInstantiation -> @deferInstantiation
+  callee -15:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -13:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -13:64 CheckContext.textOf -> @CheckContext.textOf
+  callee -9:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -6:12 CheckContext.errorType -> @CheckContext.errorType
+  local -3:9 scalar: i32 (const)
+  callee -3:18 scalarNamed -> @scalarNamed
+  callee +5:12 TypeTable.arrayOf -> @TypeTable.arrayOf
+  local +12:9 bare: StructTemplateInfo | null (const)
+  callee +12:16 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  callee +14:5 instantiateWritten -> @instantiateWritten
+  local +22:9 bound: i32 (const)
+  callee +22:17 StringMap.get -> @StringMap.get
+  local +29:9 declared: AliasInfo | null (const)
+  callee +29:20 CheckedProgram.alias -> @CheckedProgram.alias
+  local +31:11 aliased: i32 (const)
+  callee +31:21 aliasType -> @aliasType
+  local +41:9 declaredEnum: EnumInfo | null (const)
+  callee +41:24 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
+  local +49:9 vectorImport: ImportBinding | null (const)
+  callee +49:24 CheckedProgram.importNamed -> @CheckedProgram.importNamed
+  local +51:11 lane: i32 (const)
+  callee +51:18 simdLaneType -> @simdLaneType
+  callee +53:14 TypeTable.vectorOf -> @TypeTable.vectorOf
+  local +57:11 width: i32 (const)
+  callee +57:19 simdMaskWidth -> @simdMaskWidth
+  callee +59:14 TypeTable.maskOf -> @TypeTable.maskOf
+  callee +59:31 simdMaskLane -> @simdMaskLane
+  callee +66:7 StringSet.has -> @StringSet.has
+  local +67:11 struct: StructInfo | null (const)
+  callee +67:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +71:5 StringSet.add -> @StringSet.add
+  callee +72:12 TypeTable.structOf -> @TypeTable.structOf
+  callee +75:7 simdLaneType -> @simdLaneType
+  callee +75:41 simdMaskWidth -> @simdMaskWidth
+  callee +76:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +76:32 simdImportMessage -> @simdImportMessage
+  callee +80:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +83:10 CheckContext.errorType -> @CheckContext.errorType
+  callee +83:62 CheckContext.textOf -> @CheckContext.textOf
 function resolveEnumMemberType(node: Node, qualifier: string, member: string, argc: i32, ctx: CheckContext): i32 -> @resolveEnumMemberType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -659,5 +660,6 @@ function aliasType(info: AliasInfo): i32 -> @aliasType [exported]
   pointer info: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -6:5 CheckContext.error -> @CheckContext.error
-  local +1:9 resolved: i32 (const)
-  callee +1:20 resolveType -> @resolveType
+  local +1:9 before: i32 (const)
+  local +2:9 resolved: i32 (const)
+  callee +2:20 resolveType -> @resolveType

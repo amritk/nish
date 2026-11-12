@@ -1314,6 +1314,11 @@ export class AliasInfo {
   exported: boolean
   /** In progress, which is how a cycle is caught, across modules too. */
   resolving: boolean
+  /**
+   * The right-hand side went through `number`, however deep, so the resolved
+   * type is the one `--number-mode` chose: a `declare class` field refuses it.
+   */
+  viaNumber: boolean
 
   constructor(name: string, decl: Node, origin: SourceFile, home: CheckContext) {
     this.name = name
@@ -1323,6 +1328,7 @@ export class AliasInfo {
     this.exported = false
     this.type = -1
     this.resolving = false
+    this.viaNumber = false
   }
 }
 

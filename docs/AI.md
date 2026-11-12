@@ -1507,7 +1507,7 @@ export const main = (): i32 => {
   in declaration order at C's alignment, and `new Name()` zero-fills it. A
   field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
   `CPtr | null` or another `declare class`, embedded by value. `number` is
-  refused by any spelling, an alias included, because `--number-mode` picks
+  refused by any spelling, parentheses or an alias included, because `--number-mode` picks
   its width; spell `i32` or `f64`. Fields only: no initializer, `readonly`,
   method or constructor. C borrows it for the call, may write its fields, and
   may not keep the address. It stays in its module: no exported signature
