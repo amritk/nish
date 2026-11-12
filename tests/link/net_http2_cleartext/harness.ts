@@ -32,10 +32,12 @@ export class H2cLoop {
   /** The first thing that went wrong, or empty. */
   failure: string = "";
   accepted: i32 = 0;
+  /** The slot the last connection was accepted into, or -1. */
+  lastSlot: i32 = -1;
   refused: i32 = 0;
   closed: i32 = 0;
   requests: i32 = 0;
-  /** While set, how far the server's calls moved the arena, summed. */
+  /** While set, how far the server's `serve` calls (not `accept` or `expire`) moved the arena, summed. */
   measuring: boolean = false;
   growth: i64 = 0;
   /** Serve mode, for a third-party client: a line for every connection closed. */
@@ -151,6 +153,7 @@ export class H2cLoop {
       const slot: i32 = this.server.accept();
       if (slot >= 0) {
         this.accepted = this.accepted + 1;
+        this.lastSlot = slot;
         pollAdd(this.loop, this.server.fd(slot), 1, slot);
       } else if (slot === H2C_POOL_FULL) {
         this.refused = this.refused + 1;

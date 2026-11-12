@@ -11,7 +11,10 @@
 //      that differs, with nothing written; ten right bytes and a hang-up free
 //      the slot; ten right bytes and silence are closed by `prefaceTimeout`;
 //      clients mid-preface fill the pool and the next is shed. None of it
-//      borrows a frame buffer.
+//      borrows a frame buffer. A preface split after its 1st, 10th or 23rd
+//      byte is held and answered as one; `expire` past the deadline then
+//      closes a slot mid-preface beside it and spares the prefaced one, which
+//      still answers.
 //   3. Slots: a free slot answers H2_ERROR and done; a server of 1,024 slots
 //      and no connection has made no frame buffer.
 //
@@ -49,6 +52,23 @@ class H2cClient {
   /** Sends what `wire` holds. */
   flush(): void {
     this.lb.send(this.index, this.wire.take());
+  }
+
+  /** Sends what `wire` holds in two writes, the first of `at` bytes, with ten milliseconds of the loop between. */
+  flushSplit(at: i32): void {
+    const bytes: u8[] = this.wire.take();
+    const head: u8[] = [];
+    const tail: u8[] = [];
+    for (let k: i32 = 0; k < toI32(bytes.length); k++) {
+      if (k < at) {
+        head.push(bytes[k]);
+      } else {
+        tail.push(bytes[k]);
+      }
+    }
+    this.lb.send(this.index, head);
+    this.lb.wait(toI32(10));
+    this.lb.send(this.index, tail);
   }
 
   /** Sends `text`, one byte a character. */
@@ -127,7 +147,7 @@ export const cleartextChecks = (): i32 => {
   }
   lb.measuring = false;
   t.eqI32("a hundred more GETs on the warmed connection are answered", answered, toI32(100));
-  t.ok(`and the server's calls moved the arena not at all (${lb.growth} bytes)`, lb.growth === toI64(0));
+  t.ok(`and the server's serve calls moved the arena not at all (${lb.growth} bytes)`, lb.growth === toI64(0));
   t.ok(
     `and with every frame sent, the idle slot holds none of its frame buffers (${lb.server.pools.lent()} lent)`,
     lb.server.pools.lent() === 0 && lb.server.pools.made() > 0
@@ -176,6 +196,37 @@ export const cleartextChecks = (): i32 => {
     "a free slot answers H2_ERROR to next and done to the rest",
     lp.server.next(ZERO) === H2_ERROR && (lp.server.flush(ZERO) & H2C_DONE) !== 0 && lp.server.fd(ZERO) === -1 && !lp.server.holds(toI32(9))
   );
+  lp.server.date.pin(noon);
+  const splits: i32[] = [toI32(1), toI32(10), toI32(23)];
+  for (let k: i32 = 0; k < 3; k++) {
+    const at: i32 = splits[k];
+    const split = new H2cClient(lp);
+    const slot: i32 = lp.lastSlot;
+    split.prefaces();
+    split.wire.headers(toI32(1), plainGet("/hello"), H2_FLAG_END_STREAM);
+    split.flushSplit(at);
+    t.eqStr(
+      `a preface split after its byte ${at} is held and answered as one`,
+      split.awaitFrames(toI32(5)),
+      'SETTINGS 1=4096,3=100,4=65535,5=16384,6=16384; WINDOW_UPDATE 0 983041; SETTINGS ack; HEADERS 1 :status=200 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain; DATA 1 26 "hello from nish/net/http2\n" end'
+    );
+    const pending = new H2cClient(lp);
+    pending.sendText(PREFACE.substring(0, 10));
+    lp.wait(toI32(10));
+    const late: i64 = monotonicNanos() + toI64(60000) * toI64(1000000);
+    const expired: i32 = lp.server.expire(late);
+    lp.closed = lp.closed + expired;
+    t.ok(
+      `and expire a minute past the deadline closes the slot mid-preface beside it (${expired}) and spares slot ${slot}`,
+      expired === 1 && pending.shutOut() && lp.server.holds(slot) && lp.server.prefaced(slot) && lp.server.busy() === 1
+    );
+    split.wire.headers(toI32(3), plainGet("/hello"), H2_FLAG_END_STREAM);
+    split.flush();
+    t.eqStr("which still answers", split.awaitFrames(toI32(2)), 'HEADERS 3 :status=200 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain; DATA 3 26 "hello from nish/net/http2\n" end');
+    split.wire.goaway(toI32(3), ZERO);
+    split.flush();
+    t.ok("and closes on its GOAWAY", lp.awaitClosed(lp.closed + 1) && lp.server.busy() === 0);
+  }
   t.eqStr("with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();
 

@@ -4151,9 +4151,13 @@ if (!only || "net_http2_cleartext".includes(only)) {
     ],
     { cwd: root, encoding: "utf8" }
   )
-  const hasCurl = has("curl")
+  // A curl built without nghttp2 refuses --http2-prior-knowledge before it
+  // connects, and the server would wait out its timer for that connection.
+  const curlFound = has("curl")
+  const hasCurl = curlFound && /\bHTTP2\b/.test(String(spawnSync("curl", ["--version"], { encoding: "utf8" }).stdout))
   const hasH2load = has("h2load")
-  if (!hasCurl) skip("net_http2_cleartext: curl is not installed, so no third-party client speaks h2c to the carrier")
+  if (!curlFound) skip("net_http2_cleartext: curl is not installed, so no third-party client speaks h2c to the carrier")
+  else if (!hasCurl) skip("net_http2_cleartext: curl was built without HTTP2 (curl --version), so it cannot speak h2c to the carrier")
   if (!hasH2load) skip("net_http2_cleartext: h2load is not installed (nghttp2-client), so the carrier is not loaded by one")
   if (check("net_http2_cleartext: the server links", built.status === 0, String(built.stderr)) && (hasCurl || hasH2load)) {
     const connections = (hasCurl ? 1 : 0) + (hasH2load ? 4 : 0)
