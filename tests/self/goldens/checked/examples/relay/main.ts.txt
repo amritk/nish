@@ -9982,16 +9982,16 @@ function quicStreamSetBits(bits: u8[], from: i32, to: i32, on: boolean): void ->
 function quicStreamScan(bits: u8[], from: i32, to: i32, on: boolean): i32 -> @nish.quicStreamScan
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
-  calls: nish.quicStreamBit nish_panic_index nish_panic_overflow
+  calls: nish.quicStreamBit nish_panic_overflow
   pointer bits: size=0 writesThrough=false captured=false passedTo=nish.quicStreamBit#0 nish.quicStreamBit#0
   stackSites=0 stackLocals=0
   local +0:9 full: i32 (const)
   local +1:7 k: i32 (let)
   callee +3:9 quicStreamBit -> @nish.quicStreamBit
-  local +8:9 length: i32 (const)
+  local +8:9 bytes: i32 (const)
   local +9:9 whole: i32 (const)
   local +10:7 at: i32 (let)
-  callee +16:9 quicStreamBit -> @nish.quicStreamBit
+  callee +18:9 quicStreamBit -> @nish.quicStreamBit
 function quicStreamFirstRun(size: i32, slot: i32, count: i32): i32 -> @nish.quicStreamFirstRun
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: count
