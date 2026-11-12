@@ -538,6 +538,11 @@ const asyncTrim = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ASYNC_TRIM, why }))
   )
+const STATIC_ROUTES = "static routes from an exact-path table ahead of the trie walk"
+const staticRoutes = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: STATIC_ROUTES, why }))
+  )
 const PIPELINED_WRITE = "answers pipelined requests in one write"
 const pipelinedWrite = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -4062,6 +4067,25 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts": ["http1-codec.ll", "websocket.ll"],
       "tests/link/tfb_db/main.ts": ["websocket.ll"],
       "tests/link/tfb_entry/main.ts": ["main.h", "websocket.ll"],
+    }
+  ),
+  // WP49 stage 6: `Router` files a route with no parameter in an exact-path
+  // table, so the class gains the table's fields and `matchTree`. A module
+  // that names Router's struct lays it out again (the negative programs'
+  // main.ll, bench/router.ts's own module) and so does the header that
+  // declares it; the two programs that call `matchTree` are refused by a
+  // release that has no such method. router.ll itself is declared below.
+  ...staticRoutes(
+    "Router gains the exact-path table's fields, so a module or header naming its struct moves, and the release has no matchTree for the equivalence test to call",
+    {
+      "bench/router.ts": ["router.h", "router.ll"],
+      "tests/link/net_router/main.ts": ["exit"],
+      "tests/link/net_router_f64/main.ts": ["exit"],
+      "tests/link/net_router_negative_ambiguous/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_duplicate/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_limits/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_too_long/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_too_many_params/main.ts": ["main.h", "main.ll"],
     }
   ),
   // WP49 stage 6: `Router.match` walks the path once, recording where it
