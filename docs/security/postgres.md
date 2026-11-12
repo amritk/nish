@@ -105,7 +105,7 @@ URLs under "Properties verified").
 | File | Functions |
 | --- | --- |
 | `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, `paramInt4Array` and `paramInt8Array`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, the binary array builder `binaryArrayStart`, `binaryArrayInt` and `binaryArrayNull`, the parameter format codes written at `bindEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `inFlight`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `takeDue`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; `PgBatchClockConfig`, `PgBatchClock` and `PgBatchTurns`, which take only the program's own times and counts, never a server's bytes; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgPutDecimal`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys`; the connection targets `PgTarget`, `pgTarget` and `pgTargetUrl`, with their helpers `pgTargetFailed`, `pgDecoded` (which calls `urlDecode` from `std/net/url.ts`, audited in [url.md](url.md)) and `pgPortValue`; `PgBatcher.shed`; `PgConfig.tls`, `tlsRootsPath` and `tlsServerName`, `pgSslRequest` |
-| `std/net/postgres-async.ts` | `PgAsyncPool` (the constructor, `live`, `close`); `PgAsyncParams`; `PgAsyncResult` (`ok`, `text`, `isNull`, `int`, `cell`); `pgAsyncConnect`, `pgAsyncStartup`, `pgAsyncClaim`, `pgAsyncRelease`, `pgAsyncQuery`, `pgAsyncPrepare`, `pgAsyncSeat`, `pgAsyncSend`, `pgAsyncTurn`, `pgAsyncAnswer`, `pgAsyncDone`, and the helpers they call: `pgAsyncForget`, `pgAsyncSlot`, `pgAsyncWaitFailure`, `pgAsyncWaitUntil`, `pgAsyncSince`, `pgAsyncSignal`, `pgAsyncDrain`, `pgAsyncPark`, `pgAsyncSeatOf`, `pgAsyncAhead`, `pgAsyncLostSeat`, `pgAsyncReady`, `pgAsyncDoom`, `pgAsyncFree`, `pgAsyncWakePool`, `pgAsyncUnqueue`, `pgAsyncAbandon`, `pgAsyncSettle`, `pgAsyncSkippable`, `pgAsyncSkip`, `pgAsyncPlain`, `pgAsyncSkipAny`, `pgAsyncLabel`, `pgAsyncScan`, `pgAsyncLost`, `pgAsyncCheckCaps`, `pgAsyncEncode`, `pgAsyncBytes` (which also refuses a NUL), `pgAsyncRead`, `pgAsyncRow`, `pgAsyncError`, `pgAsyncDecimal` |
+| `std/net/postgres-async.ts` | `PgAsyncPool` (the constructor, `live`, `close`); `PgAsyncParams`; `PgAsyncResult` (`ok`, `text`, `isNull`, `int`, `cell`); `pgAsyncConnect`, `pgAsyncStartup`, `pgAsyncClaim`, `pgAsyncRelease`, `pgAsyncQuery`, `pgAsyncPrepare`, `pgAsyncSeat`, `pgAsyncSend`, `pgAsyncTurn`, `pgAsyncAnswer`, `pgAsyncDone`, and the helpers they call: `pgAsyncForget`, `pgAsyncSlot`, `pgAsyncWaitFailure`, `pgAsyncWaitUntil`, `pgAsyncSince`, `pgAsyncSignal`, `pgAsyncDrain`, `pgAsyncPark`, `pgAsyncSeatOf`, `pgAsyncAhead`, `pgAsyncLostSeat`, `pgAsyncReady`, `pgAsyncDoom`, `pgAsyncFree`, `pgAsyncWakePool`, `pgAsyncFreeSeats`, `pgAsyncUnqueue`, `pgAsyncAbandon`, `pgAsyncSettle`, `pgAsyncSkippable`, `pgAsyncSkip`, `pgAsyncPlain`, `pgAsyncSkipAny`, `pgAsyncLabel`, `pgAsyncScan`, `pgAsyncLost`, `pgAsyncCheckCaps`, `pgAsyncEncode`, `pgAsyncBytes` (which also refuses a NUL), `pgAsyncRead`, `pgAsyncRow`, `pgAsyncError`, `pgAsyncDecimal` |
 | `std/net/postgres-carrier.ts` | `PgCarrierLimits`; the TLS helpers `pgCarrierTrust` and `pgCarrierTlsStart`, the SSLRequest and its one-byte answer, and the TLS record pass in front of each slot's reads and writes; `PgCarrier` (the constructor, `attach`, `run`, `runInt`, `runText`, `request`, `connection`, `send`, `next`, `close`, and the private helpers they call: the poll pass, connect and its timeout, the read and write of each slot, the routing of pool events to queries and batched executions, the ticket map, the free stacks and the shedding of a lost execution's requests) |
 
 Out of scope: the `nish:net` calls themselves, which the carrier and the
@@ -494,7 +494,24 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   connection is held (or every seat, `depth` a connection), `pgAsyncClaim`
   and `pgAsyncSeat` wait on the pool's wake, which a release or a done rings,
   and answer -2 once `claimWaitMs` (5000 by default) has passed. Tasks
-  waiting for a seat are seated in the order they began to wait (PG-42).
+  waiting for a seat are seated in the order they began to wait (PG-42):
+  the first as many as there are seats free may each take one, so seats
+  freed together go in one loop turn, and a task that has not waited takes
+  one only while none waits: "eight seats freed together: 8 seated, over at
+  most 5 loop turns", where one a turn took nine
+  (`link/std_postgres_async_pipeline`). A wake counts only the seats a task
+  could take at once, so a connection mid-write wakes no one until its write
+  ends.
+- **A task waiting for its answer yields before it parks.** `pgAsyncTurn`
+  yields to the loop (`sleep(0)`) up to `PG_ASYNC_TURN_YIELDS` (4) times
+  while the answer ahead of its own is unread, then parks on the
+  connection's wake. The yields are bounded, so a stalled server costs four
+  loop turns and then the same park, `claimWaitMs` and cancel as before.
+- **`pgAsyncRead` grows its buffer only as an answer needs it.** The buffer
+  starts the size of the input already read for the answer, then doubles
+  (from `PG_ASYNC_INPUT_SIZE` at the least) whenever it is full, clamped to
+  `maxMessage` + 1 once doubling would pass it, so a message over
+  `maxMessage` still fails `PG_ERR_TOO_BIG` before its body is read.
 - **A pool holds up to `size` + 129 socket pairs for its wakes.** Each
   connection has a wake, the pool has one, and so does each of 128 queue
   lanes. A pair is opened the first time a task waits on its wake and kept
