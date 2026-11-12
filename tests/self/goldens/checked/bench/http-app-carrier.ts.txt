@@ -692,14 +692,48 @@ struct Http1TlsServer (class) size=88 align=8 exported
   method send -> @nish.Http1TlsServer.send
   method close -> @nish.Http1TlsServer.close
   method expire -> @nish.Http1TlsServer.expire
-function http1ServerKept(kept: u8[], at: i32, limit: i32, bytes: u8[], after: i32): i32 -> @nish.http1ServerKept
+function http1ServerSameByByte(kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean -> @nish.http1ServerSameByByte
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer kept: size=0 writesThrough=false captured=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:12 k: i32 (let)
+function http1ServerSame8(kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean -> @nish.http1ServerSame8
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish.http1ServerSameByByte nish_panic_overflow
+  pointer kept: size=0 writesThrough=false captured=false passedTo=nish.http1ServerSameByByte#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.http1ServerSameByByte#2
+  stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +4:7 k: i32 (let)
+  local +1:9 e: i32 (const)
+  local +2:9 f: i32 (const)
+  callee +8:12 http1ServerSameByByte -> @nish.http1ServerSameByByte
+function http1ServerSame4(kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean -> @nish.http1ServerSame4
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish.http1ServerSameByByte nish_panic_overflow
+  pointer kept: size=0 writesThrough=false captured=false passedTo=nish.http1ServerSameByByte#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.http1ServerSameByByte#2
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  local +1:9 e: i32 (const)
+  local +2:9 f: i32 (const)
+  callee +8:12 http1ServerSameByByte -> @nish.http1ServerSameByByte
+function http1ServerKept(kept: u8[], at: i32, limit: i32, bytes: u8[], after: i32): i32 -> @nish.http1ServerKept
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish.http1ServerSame4 nish.http1ServerSame8 nish.http1ServerSameByByte nish_panic_index nish_panic_overflow
+  pointer kept: size=0 writesThrough=false captured=false passedTo=nish.http1ServerSame8#0 nish.http1ServerSame4#0 nish.http1ServerSameByByte#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.http1ServerSame8#2 nish.http1ServerSame4#2 nish.http1ServerSameByByte#2
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  local +5:9 k: i32 (let)
+  local +14:7 same: boolean (let)
+  callee +16:12 http1ServerSame8 -> @nish.http1ServerSame8
+  callee +18:12 http1ServerSame4 -> @nish.http1ServerSame4
+  callee +20:12 http1ServerSameByByte -> @nish.http1ServerSameByByte
 function http1ServerCheckCap(name: string, value: i32, low: i32, high: i32): void -> @nish.http1ServerCheckCap
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
