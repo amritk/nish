@@ -1147,6 +1147,15 @@ const pathMtu = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: PATH_MTU, why }))
   )
 
+/** The changelog words of the WP39 G2 server-clock fixes (H1-2, H2-3, WT-2). */
+const byFinding = (changelog) => (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog, why }))
+  )
+const lingeringClose = byFinding("lingering close")
+const http2Timeouts = byFinding("SETTINGS and idle timeouts for HTTP/2")
+const sessionClock = byFinding("session clock")
+
 /** The changelog line of the stage that runs TLS in the Postgres carrier. */
 const PG_TLS = "Postgres over TLS in the carrier"
 const pgTls = (why, filesByProgram) =>
@@ -3819,6 +3828,111 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts",
     ]
   ),
+  // WP39 G2: the HTTP/1.1 lingering close, the HTTP/2 SETTINGS and idle timeouts, the WebTransport session clock.
+  ...lingeringClose(
+    'Http1Config gains lingerTimeout and lingerBytes and Http1Connection a lingering state, so every program that reaches nish/net/http1-server (HttpDate included) declares wider structs in main.h, and the 0.38.0 seed refuses a program that sets lingerTimeout with "Unknown field"',
+    {
+      "bench/http1-request/main.ts": ["main.h"],
+      "bench/techempower/main.ts": ["main.h"],
+      "examples/prefork-server.ts": ["prefork-server.h"],
+      "tests/link/net_http1_server/main.ts": ["exit"],
+      "tests/link/net_http1_server_bad_config/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_linger/main.ts": ["exit"],
+      "tests/link/net_http1_server_bad_linger_bytes/main.ts": ["exit"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["main.h"],
+      "tests/link/net_http1_server_f64/main.ts": ["exit"],
+      "tests/link/net_http1_server_feed_window/main.ts": ["main.h"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["main.h"],
+      "tests/link/net_http1_server_send_body/main.ts": ["main.h"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["main.h"],
+      "tests/link/net_http1_server_write_window/main.ts": ["main.h"],
+      "tests/link/net_http3/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_body_chunk/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_config/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_credit/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_local_limit/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_uni_limit/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_write_chunk/main.ts": ["main.h"],
+      "tests/link/net_http3_ecn/main.ts": ["main.h"],
+      "tests/link/net_http3_ecn_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_errors/main.ts": ["main.h"],
+      "tests/link/net_http3_errors_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_server/main.ts": ["main.h"],
+      "tests/link/net_http3_server_bad_config/main.ts": ["main.h"],
+      "tests/link/net_http3_server_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_write_window/main.ts": ["main.h"],
+      "tests/link/net_http_date/main.ts": ["main.h"],
+      "tests/link/net_http_date_f64/main.ts": ["main.h"],
+      "tests/link/net_quic_server_wipes/main.ts": ["main.h"],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["main.h"],
+      "tests/link/std_http1_end_head/main.ts": ["main.h"],
+      "tests/link/std_http1_mss/main.ts": ["main.h"],
+      "tests/link/std_http_compress/main.ts": ["main.h"],
+      "tests/link/tfb_entry/main.ts": ["main.h"],
+    }
+  ),
+  ...http2Timeouts(
+    "Http2Config gains settingsTimeout and idleTimeout, the connection a clock, and Http2TlsServer an expire method, so http2.ll, http2-tls.ll and every importer's structs and calls move, and the 0.38.0 seed refuses a program that sets them or calls expire",
+    {
+      "tests/link/net_http2/main.ts": ["exit"],
+      "tests/link/net_http2_bad_config/main.ts": ["http2.ll", "main.h", "main.ll"],
+      "tests/link/net_http2_bad_config_tls/main.ts": ["http2-tls.ll", "http2.ll", "main.h", "main.ll"],
+      "tests/link/net_http2_bad_idle/main.ts": ["exit"],
+      "tests/link/net_http2_bad_timeout/main.ts": ["exit"],
+      "tests/link/net_http2_errors/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_errors_f64/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_f64/main.ts": ["exit"],
+      "tests/link/net_http2_hpack_bomb/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_hpack_bomb_f64/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_hpack_table/main.ts": ["http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_hpack_table_f64/main.ts": ["http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_reset/main.ts": ["http2.ll", "main.h", "main.ll", "peer.ll"],
+      "tests/link/net_http2_tls/main.ts": ["exit"],
+      "tests/link/net_http2_tls_f64/main.ts": ["exit"],
+    }
+  ),
+  ...sessionClock(
+    'WebTransportConfig gains idleTimeout and maxDatagramsPerSecond and the layer a session clock and a datagram window, so webtransport.ll and the relay\'s structs move, and the 0.38.0 seed refuses a program that sets idleTimeout with "Unknown field"',
+    {
+      "examples/relay/main.ts": ["main.h", "main.ll", "relay.ll", "webtransport.ll"],
+      "tests/link/net_interop_server/main.ts": ["exit"],
+      "tests/link/net_interop_server_f64/main.ts": ["exit"],
+      "tests/link/net_loopback/main.ts": ["exit"],
+      "tests/link/net_loopback_f64/main.ts": ["exit"],
+      "tests/link/net_relay/main.ts": ["exit"],
+      "tests/link/net_relay_bad_hello/main.ts": ["exit"],
+      "tests/link/net_relay_bad_idle/main.ts": ["exit"],
+      "tests/link/net_relay_bad_path/main.ts": ["exit"],
+      "tests/link/net_relay_bad_per_peer/main.ts": ["exit"],
+      "tests/link/net_relay_bad_pool/main.ts": ["exit"],
+      "tests/link/net_relay_bad_rate/main.ts": ["exit"],
+      "tests/link/net_relay_bad_sessions/main.ts": ["exit"],
+      "tests/link/net_relay_bad_spare/main.ts": ["exit"],
+      "tests/link/net_relay_bad_stats/main.ts": ["exit"],
+      "tests/link/net_relay_f64/main.ts": ["exit"],
+      "tests/link/net_relay_forged/main.ts": ["exit"],
+      "tests/link/net_relay_soak/main.ts": ["exit"],
+      "tests/link/net_webtransport/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_idle/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_layer/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_rate/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["exit"],
+      "tests/link/net_webtransport_close_window/main.ts": ["exit"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["exit"],
+      "tests/link/net_webtransport_f64/main.ts": ["exit"],
+      "tests/link/net_webtransport_stream_window/main.ts": ["exit"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["exit"],
+    }
+  ),
   ...pgTls(
     "PgConfig gains tls, tlsRootsPath and tlsServerName and the carrier a TLS session per slot, so the config struct grows by 24 bytes and every module that lays it out or reaches the carrier moves; the new TLS tests use exports the reference does not have, so only the candidate compiles them",
     {
@@ -5242,19 +5356,19 @@ const DECLARED = [
   {
     program: "tests/link/net_http2_cleartext/main.ts",
     file: "exit",
-    changelog: "cleartext HTTP/2 with prior knowledge",
+    changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
   {
     program: "tests/link/net_http2_cleartext_bad_slots/main.ts",
     file: "exit",
-    changelog: "cleartext HTTP/2 with prior knowledge",
+    changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
   {
     program: "tests/link/net_http2_cleartext_bad_timeout/main.ts",
     file: "exit",
-    changelog: "cleartext HTTP/2 with prior knowledge",
+    changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
 ]
