@@ -118,17 +118,17 @@ const median = (xs) => {
 }
 
 /**
- * Every binary at one size, in `rounds` interleaved rounds after one warm-up
+ * Every binary of `exes` at one size, in `rounds` interleaved rounds after one warm-up
  * round, the order rotated each round so that no binary always runs first.
  * Answers each binary's median wall time, and stops the run if two runs of
  * the size print different checksums.
  */
-const time = (binaries, size) => {
-  const samples = new Map(binaries.map((b) => [b.id, []]))
+const time = (exes, size) => {
+  const samples = new Map(exes.map((b) => [b.id, []]))
   let checksum
   for (let round = -1; round < rounds; round++) {
-    for (let k = 0; k < binaries.length; k++) {
-      const b = binaries[(k + Math.max(round, 0)) % binaries.length]
+    for (let k = 0; k < exes.length; k++) {
+      const b = exes[(k + Math.max(round, 0)) % exes.length]
       const got = run(b.exe, size)
       checksum ??= got.checksum
       if (got.checksum !== checksum) {
@@ -175,7 +175,8 @@ const rows = SIZES.map((size) => {
 
 // ---- Reporting ----------------------------------------------------------------------
 
-const micros = (n) => (n < 10 ? n.toFixed(2) : n < 100 ? n.toFixed(1) : n.toFixed(0))
+/** Three significant figures of a value under 1000. */
+const micros = (n) => n.toFixed(Math.max(0, 2 - Math.floor(Math.log10(Math.max(n, 1)))))
 const duration = (us) => (us < 1000 ? `${micros(us)} µs` : `${micros(us / 1000)} ms`)
 const percent = (n) => `${(n * 100).toFixed(1)}%`
 const READING = { within: "within the band", edge: "at the band's edge", slower: "slower", faster: "faster" }
