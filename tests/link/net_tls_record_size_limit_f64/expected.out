@@ -1,0 +1,40 @@
+PASS  limit 64, padding 0: the server keeps the client's limit
+PASS  limit 64, padding 0: the handshake completes
+PASS  limit 64, padding 0: no flight record's inner plaintext passes 64
+PASS  limit 64, padding 0: the flight's 418 bytes take 7 records
+PASS  limit 64, padding 0: the client reads back all 1000 bytes
+PASS  limit 64, padding 0: the fullest application record is exactly the limit
+PASS  limit 64, padding 0: 1000 bytes take 16 records
+PASS  limit 512, padding 0: the server keeps the client's limit
+PASS  limit 512, padding 0: the handshake completes
+PASS  limit 512, padding 0: no flight record's inner plaintext passes 512
+PASS  limit 512, padding 0: the flight's 419 bytes take 1 records
+PASS  limit 512, padding 0: the client reads back all 5000 bytes
+PASS  limit 512, padding 0: the fullest application record is exactly the limit
+PASS  limit 512, padding 0: 5000 bytes take 10 records
+PASS  limit 512, padding 11: the server keeps the client's limit
+PASS  limit 512, padding 11: the handshake completes
+PASS  limit 512, padding 11: no flight record's inner plaintext passes 512
+PASS  limit 512, padding 11: the flight's 419 bytes take 1 records
+PASS  limit 512, padding 11: the client reads back all 5000 bytes
+PASS  limit 512, padding 11: the fullest application record is exactly the limit
+PASS  limit 512, padding 11: 5000 bytes take 10 records
+PASS  a limit of 63: the alert
+PASS  a limit of 63: sent as a fatal alert in the clear
+PASS  a limit of 0: the alert
+PASS  a limit of 0: sent as a fatal alert in the clear
+PASS  a body of one byte: the alert
+PASS  a body of one byte: sent as a fatal alert in the clear
+PASS  a body of three bytes: the alert
+PASS  a body of three bytes: sent as a fatal alert in the clear
+PASS  an empty body: the alert
+PASS  an empty body: sent as a fatal alert in the clear
+PASS  a client that sent a limit gets the server's own, 2^14 + 1, in EncryptedExtensions
+PASS  one that did not gets none
+PASS  and is not limited
+PASS  and its application records still carry 2^14 bytes
+PASS  a limit past 2^14 + 1 is taken as 2^14 + 1 (§4)
+PASS  and the records it gets are the usual ones
+PASS  a limit of 64 is the least one allowed
+PASS  a padding of 63 under a limit of 64 fails the connection with internal_error
+tls record_size_limit: 39 passed, 0 failed, 0 skipped
