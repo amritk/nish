@@ -81,6 +81,29 @@ k = worker index, 0 <= k < N; the rest is unchanged
   prefork already panics for its other bad counts. k is a plain byte, not a field of
   log2 N bits. The steering program takes byte 0 modulo N (§3.1), so a
   server ID, below N, names its worker exactly.
+- **Who knows k and N, and how.** Only the supervisor computes N
+  (`preforkWorkerCount`, after the 255 check and any fallback of §5). A
+  worker cannot work it out again: under `pin`, `availableParallelism()`
+  is 1 in the worker, and `NISH_WORKERS` and `PreforkConfig.workers` may
+  both be unset. So the supervisor hands both values down. k travels as
+  today, in the worker flag (`--nish-prefork-worker=`, read by
+  `preforkIndex`). N travels beside the UDP socket's descriptor in one new
+  flag, `--nish-prefork-udp=<fd>,<N>`, which `preforkUdpListener(args)` and
+  `preforkUdpCount(args)` read (§8). The application copies the two values
+  into `QuicServerConfig.workerIndex` and `QuicServerConfig.workerCount`, and
+  the connection and the listener read them only from there. The runtime
+  learns N separately, from bits 8–15 of each `udpBind` the supervisor makes.
+  Nothing else re-derives either value.
+- **k is checked against N where the configuration is used.** k is written
+  into a `u8`, so an index of 256 would issue byte 0, 300 would issue 44, and
+  a negative index other than -1 has no meaning. The configuration is valid
+  when both fields are unset (`workerIndex` -1 and `workerCount` 0), or when
+  0 ≤ k < N ≤ 255. Anything else panics when a `QuicListener` or an
+  `Http3Server` is built from it, before a socket is read, with
+  `nish/net/quic: workerIndex <k> and workerCount <n>, not 0 <= k < n <= 255`.
+  A panic, as for the count above 255, because the values come from the
+  supervisor and a bad pair means the application wired them wrongly (§7,
+  row 13).
 - **Uniqueness and the reset token are unchanged.** The 7 remaining bytes are
   random or HMAC output, so IDs within one worker collide as rarely as 56-bit
   random values do. IDs in different workers cannot collide because byte 0
@@ -274,6 +297,21 @@ the dead worker are lost; moving QUIC connection state between processes is
 out of scope (§9). Connections on the other workers are untouched, because no
 other worker sees a packet whose byte 0 is k.
 
+New connections stall too. A client picks its first DCID at random, so about
+1/N of new Initials have a byte 0 that the program sends to socket k (byte 0
+mod N = k). While worker k is down they wait in socket k's buffer, and the
+client retransmits on its probe timer. The handshake completes once worker k
+is back, if the client is still trying. A worker that exits within
+`quickExitMs` of its start waits `backoffMs` (100 ms) before its restart,
+doubling each time up to `backoffCapMs` (5 s, `prefork.ts:86-90`), so a
+worker in a crash loop holds those handshakes for up to 5 seconds at a time,
+and a client with a shorter handshake timeout gives up. Clients that retry
+with a fresh random DCID usually land on a live worker. This is recorded, not
+fixed. A fix would mean the supervisor attaches a new program that maps k to
+a live worker while k is down, and back again after. That is a cBPF attach
+the supervisor can make, but the cost is a second program to get right. This
+stage leaves it out (§9).
+
 If `serviceWorker` channels are configured, prefork restarts the whole group
 (`prefork.ts:38-50`), and every connection is lost the same way. Steering
 needs no channels, so a QUIC server should not configure them for steering.
@@ -289,10 +327,30 @@ those IDs carry k too.
 
 ## 5. Platforms
 
-**Linux** steers as above. If the attach fails, `udpBind` returns the error
-and the supervisor runs one worker for QUIC, saying so on stderr, the way an
-unusable `pin` is reported (`prefork.ts:70`). It never falls back to hash
-spreading, because hash spreading is the bug in §1. Sandboxes that may refuse
+**Linux** steers as above. If the attach fails, `udpBind` closes the socket
+and returns the error, and the supervisor runs one worker for QUIC, saying so
+on stderr, the way an unusable `pin` is reported (`prefork.ts:70`). It never
+falls back to hash spreading, because hash spreading is the bug in §1. The
+fallback works as follows, all in `listen`, before any worker starts:
+
+1. The supervisor binds socket 0 with flags 1, 4 and N. A refused attach
+   shows there, on the first bind.
+2. If that bind fails, the supervisor binds socket 0 again with flag 1 alone.
+   If that bind also fails, the port is the problem, not the attach. `listen`
+   fails as it does for TCP today, with no fallback.
+3. If the second bind succeeds, the attach was refused. The supervisor keeps
+   that one socket, prints `nish/net/prefork: QUIC steering refused (<error>),
+   running one worker`, and sets the count to 1 before it forks. It fills one
+   slot, so the TCP group (§8) has one listener too.
+4. Worker 0 gets k = 0 and `--nish-prefork-udp=<fd>,1`.
+
+A failure on socket i > 0, after socket 0 attached, is a bind error, so
+`listen` closes what it bound and fails. A count of 1 never asks for
+steering. With N = 1 there is one socket and nothing to choose between, so
+the supervisor binds it with flag 1 alone. That covers `NISH_WORKERS=1`,
+Darwin's default and the fallback the same way. The worker still gets
+k = 0 and N = 1, which are valid (§2.1). Byte 0 of its IDs is 0, and the
+reset rule of §6 then excludes nothing. Sandboxes that may refuse
 the attach: seccomp profiles stricter than Docker's default, and gVisor. That
 gVisor does not implement it is an **estimate**, not checked.
 
@@ -301,8 +359,9 @@ group (WP42 §3), so there is nothing to steer. The steering flag answers -95
 there, and prefork's default of one worker on Darwin stays. A QUIC server on
 Darwin is one process.
 
-**wasm32 and WASI** have no sockets. NL2404 refuses the flag at compile time,
-like every `nish:net` call.
+**wasm32 and WASI** have no sockets. NL2404 refuses `udpBind` itself at
+compile time, whatever its flags are, as it does every `nish:net` call. A
+steered bind is refused the same way, with no new check.
 
 **Containers:** classic BPF is a `setsockopt` on a socket the process owns,
 so the default Docker, containerd and Kubernetes profiles allow it.
@@ -342,7 +401,11 @@ UDP attach. The record carries:
   bug, a packet a sibling injected), a reset would be valid under the shared
   key and would kill the sibling's live connection (RFC 9000 §21.11). The
   listener drops it instead. A byte 0 at or above N is not one of this run's
-  IDs, so the reset is safe and stays.
+  IDs, so the reset is safe and stays. The listener gets k and N from
+  `QuicServerConfig.workerIndex` and `.workerCount`. The application set
+  those from the supervisor's flags (§2.1) and they were checked when the
+  listener was built. With the fields unset, as on one process or Darwin, the
+  listener resets as today.
 - **The plaintext worker byte** and the linkability it costs (§2.2), recorded
   as Decided.
 - **Runts land on worker 0.** A datagram too short for the program's load
@@ -355,13 +418,18 @@ UDP attach. The record carries:
   hazard, inherited: the program that asks for the flag accepts that any
   process of its user may share the port.
 - **One reset key and one Retry key for all workers.** They come from the
-  configuration, which every worker reads, and must survive a restart
+  application's configuration, which every worker builds the same way at its
+  start (prefork passes no keys; each worker reads them from wherever the
+  application keeps them, as one process does today). They must survive a restart
   (`QuicServerConfig.statelessResetKey`: "keep across restarts") for §4.4's
   resets to be valid. Each worker wipes its copy on `stop`
   (`http3-server.ts:1251-1252`). No worker holds a key another lacks, so a
   compromised worker learns nothing new.
 - **Undefined flag bits** answer -22 before a socket is made, as for the
-  existing flags.
+  existing flags. The runtime knows N only from the bits of the call in hand,
+  and it checks them on every call.
+- **A wrong k or N** panics where the configuration is used (§2.1), so a
+  mis-wired application cannot issue IDs that steer to another worker.
 
 ## 7. Test matrix
 
@@ -377,8 +445,10 @@ UDP attach. The record carries:
 | 8 | Index stability: with three workers, kill worker 1; packets with byte 0 = 1 reach the new worker 1, not worker 2 | `net_quic_prefork` | Linux |
 | 9 | **Two connections on one 4-tuple** (one client UDP socket), their IDs issued by worker 0 and worker 1, both complete requests, each served by its own worker. The GRO decision is covered by the -22 check: `udpBind` with flags 2 and 4 together answers -22, so a steered socket never has GRO | `net_quic_prefork`; the -22 in `test_udp_steer` | Linux |
 | 10 | Darwin runs QUIC with one worker and says so | `net_quic_prefork` | Darwin |
-| 11 | The flag under a wasm target is refused with NL2404 | `tests/cases/reject_net_udp_steer_wasm` | wasm32 |
+| 11 | No new test. NL2404 refuses `udpBind` under wasm whatever its flags are, and `tests/cases/reject_net_udp_wasm` already covers that | (existing) | wasm32 |
 | 12 | `listenUdp` with `NISH_WORKERS=256` panics at `listen` with the message of §2.1, before any bind or fork; 255 starts | `net_quic_prefork` | Linux |
+| 13 | The configuration check panics with §2.1's message for `workerIndex` 2 with `workerCount` 2, for 0 with 0, for -2 with 2 and for 0 with 256. It passes for -1 with 0, for 0 with 1 and for 254 with 255 | a unit case over `QuicListener` and `Http3Server` | all |
+| 14 | A refused attach falls back to one worker. In the runtime, `test_udp_steer` forks a child that installs a seccomp filter failing `setsockopt(SO_ATTACH_REUSEPORT_CBPF)` with EPERM. The steered bind then answers -1 and leaves no socket bound, and a bind with flag 1 alone succeeds. In prefork, `NISH_WORKERS=1` binds once with flag 1 alone and worker 0 reads `--nish-prefork-udp=<fd>,1`. Prefork's own branch after a refusal is not forced in a test. A Nish program cannot install a seccomp filter. That branch is the second bind, the stderr line and the N = 1 path this row tests | `test_udp_steer`; `net_quic_prefork` | Linux |
 
 Row 4 is the acceptance test of the stage. That it fails without steering is
 reasoning from §1, not a run: the test needs the stage's own `listenUdp`.
@@ -425,20 +495,42 @@ the other worker and answered with a reset.
   The -22 checks come before the -95 check, so flag 4 alone answers -22 on
   Darwin too, as today. `tests/cases/reject_net_udp_wasm` is unaffected: it
   refuses the builtin, whatever the flags are.
-- **Prefork:** a way to make `listenPort` bind UDP. `PreforkConfig` gets a
-  `listenUdp: boolean`. With it, `listen` binds N UDP sockets with flags 1
-  and 4 and N in bits 8–15 (never 2: GRO is off on a steered socket, §5), holds them, and hands socket k to
-  worker k through `preforkListener`, as it does for TCP. Above 255 workers
-  it panics before binding (§2.1). When the attach fails, it falls back to one
-  worker (§5). The names are a proposal; the
-  stage chooses.
-- **QUIC:** a worker index in `QuicServerConfig` (default -1: none). With it,
+- **Prefork:** a UDP group beside the TCP one. `PreforkConfig` gets a
+  `listenUdp: boolean`, which needs `listenPort`. It **adds** a group and
+  replaces nothing. An HTTP/3 server still needs its TCP listeners, because
+  clients find HTTP/3 through an `Alt-Svc` header sent over HTTP/1.1 or
+  HTTP/2. The supervisor computes N, panics above 255 (§2.1), and binds the
+  TCP group as today. Then it binds N UDP sockets on `listenHost` and the
+  same port number, with flags 1 and 4 and N in bits 8–15, or flag 1 alone
+  when N is 1 (§5). It holds them, and hands worker k both its TCP listener
+  (`--nish-prefork-listener=`, as today) and its UDP socket with N
+  (`--nish-prefork-udp=<fd>,<N>`, new). The new flag goes before the
+  listener flag. `preforkArgs` strips it, and the back-scan in
+  `preforkListener` (`prefork.ts:357-368`) widens by one place. A refused
+  attach falls back to one worker as §5 lists.
+  Three existing options act on the TCP group only:
+  - `listenFlags` stays TCP's. Its 2 means `TCP_NODELAY` there. On UDP, 2 is
+    GRO, which a steered socket refuses, so the UDP flags are fixed by
+    prefork and never take `listenFlags`.
+  - `pin`'s CPU steering (TCP flag 4) steers the TCP group as today. The UDP
+    group is steered by the DCID instead.
+  - `pin`'s `setCpuAffinity(k)` still pins worker k, and `pin` still caps N
+    at `availableParallelism()`, so with `pin` the 255 cap is reached only on
+    a host with more CPUs than that.
+
+  The names are a proposal; the stage chooses.
+- **QUIC:** a worker index and a worker count in `QuicServerConfig`
+  (`workerIndex`, default -1, and `workerCount`, default 0; both unset means
+  no steering). The application fills them from `preforkIndex(args)` and
+  `preforkUdpCount(args)` when `preforkUdpListener(args)` is not -1, and
+  leaves them unset otherwise. `QuicListener` and `Http3Server` check the
+  pair when they are built (§2.1). With a valid pair,
   `begin` and the NEW_CONNECTION_ID path through `deriveConnectionId`
   (`quic.ts:3363`) write k into byte 0. The Retry SCID is written by
   `QuicListener.retry` (`quic-listener.ts:729`), not by the connection, so
   `QuicListener` needs the worker index too: `retry` writes k into the Retry
-  SCID's byte 0, and the listener applies §6's reset rule. `Http3Server` passes
-  the index through and does not change its routing: the slot index already
+  SCID's byte 0, and the listener applies §6's reset rule with N from
+  `workerCount`. `Http3Server` passes the configuration through and does not change its routing: the slot index already
   keys on all 8 bytes. `quic-conn-cid.ts`'s table holds the IDs and does not
   care what byte 0 is.
 
@@ -450,6 +542,9 @@ the other worker and answered with a reset.
 - **Encrypted worker IDs** (QUIC-LB's encrypted modes). They need AES in the
   steering program, which classic BPF cannot do.
 - **Forwarding,** unless a platform that needs it turns up (§3.3).
+- **Steering around a dead worker** (§4.4). Attaching a second program
+  while worker k restarts would spare the new Initials that would otherwise wait
+  for it. The stall is recorded first and measured before anyone builds that.
 - **A benchmark of the spread.** An HTTP/3 `BENCH_CORES` path like HTTP/1's
   belongs to G8.
 - **A load balancer in front of several hosts.** The byte layout leaves room
