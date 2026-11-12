@@ -24,6 +24,7 @@ import {
   TLS_EXT_PRE_SHARED_KEY,
   TLS_EXT_PSK_KEY_EXCHANGE_MODES,
   TLS_EXT_QUIC_TRANSPORT_PARAMETERS,
+  TLS_EXT_RECORD_SIZE_LIMIT,
   TLS_EXT_SERVER_NAME,
   TLS_EXT_SIGNATURE_ALGORITHMS,
   TLS_EXT_SUPPORTED_GROUPS,
@@ -43,6 +44,8 @@ import {
   TLS_PSK_DHE_KE,
   TLS_PSK_KE,
   TLS_RANDOM_SIZE,
+  TLS_RECORD_SIZE_LIMIT_MAX,
+  TLS_RECORD_SIZE_LIMIT_MIN,
   TLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
   TLS_SIGNATURE_ECDSA_SECP384R1_SHA384,
   TLS_SIGNATURE_RSA_PSS_RSAE_SHA256,
@@ -408,8 +411,8 @@ are the peer's just as a client's are, so these readers never panic either
 The ones read are `server_name` (RFC 6066 §3),
 `supported_groups`, `signature_algorithms`, `supported_versions` and
 `key_share` (RFC 8446 §4.2), `application_layer_protocol_negotiation`
-(RFC 7301 §3.1) and `quic_transport_parameters` (RFC 9001 §8.2), and
-`pre_shared_key` and `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
+(RFC 7301 §3.1), `quic_transport_parameters` (RFC 9001 §8.2) and
+`record_size_limit` (RFC 8449 §4), and `pre_shared_key` and `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
 whose identities and binders the reader checks against their syntax but
 does not open: a ticket and its binder are the server's to judge. Every
 other extension is skipped, which is what RFC 8446 §4.2 asks of a server
@@ -668,6 +671,7 @@ function tlsEncodeEncryptedExtensions(
   alpn: u8[],
   acknowledgeServerName: boolean,
   quicTransportParameters: u8[] | null,
+  recordSizeLimit: i32,
 ): u8[]
 ```
 
@@ -692,6 +696,12 @@ Whether to send the empty `server_name` that says the server used the name.
 <scalar-field name="quicTransportParameters" type="u8[] | null" required>
 
 The server's QUIC transport parameters, opaque; `null` to send none.
+
+</scalar-field>
+
+<scalar-field name="recordSizeLimit" type="i32" required>
+
+The server's own `record_size_limit` (RFC 8449 §4); 0 to send none.
 
 </scalar-field>
 
@@ -1640,8 +1650,10 @@ Writes EncryptedExtensions (§4.3.1) at `out[at]` and answers where it ends.
 `extra` is extensions the caller encodes itself, written first and as they
 are; then the chosen ALPN protocol when `alpn` is not empty (RFC 7301 §3.1,
 a list of exactly one), an empty `server_name` when `acknowledgeServerName`
-(RFC 6066 §3's acknowledgement), and the server's
-`quic_transport_parameters` when `quicTransportParameters` is not `null`.
+(RFC 6066 §3's acknowledgement), the server's
+`quic_transport_parameters` when `quicTransportParameters` is not `null`,
+and the server's own `record_size_limit` (RFC 8449 §4) when
+`recordSizeLimit` is not 0.
 
 ```ts
 function tlsWriteEncryptedExtensions(
@@ -1651,6 +1663,7 @@ function tlsWriteEncryptedExtensions(
   alpn: string,
   acknowledgeServerName: boolean,
   quicTransportParameters: u8[] | null,
+  recordSizeLimit: i32,
 ): i32
 ```
 
@@ -1687,6 +1700,12 @@ Whether to send the empty `server_name` that says the server used the name.
 <scalar-field name="quicTransportParameters" type="u8[] | null" required>
 
 The server's QUIC transport parameters, opaque; `null` to send none.
+
+</scalar-field>
+
+<scalar-field name="recordSizeLimit" type="i32" required>
+
+The largest record plaintext the server takes, content type included, written as a `uint16`; 0 to send none.
 
 </scalar-field>
 
@@ -2113,6 +2132,7 @@ class TlsClientHello
 | `pskTicketAges: u32[]` | Each identity's `obfuscated_ticket_age`, as sent: entry `i` belongs to `pskIdentities[i]`. |
 | `quicTransportParameters: u8[]` | The client's `quic_transport_parameters`, opaque (RFC 9001 §8.2). |
 | `random: u8[]` | The client's 32-byte `random`. |
+| `recordSizeLimit: i32` | The client's `record_size_limit` (RFC 8449), lowered to the TLS 1.3 maximum, or 0 when it sent none. |
 | `serverName: string` | The `host_name` of `server_name`, or empty. |
 | `sessionId: u8[]` | `legacy_session_id`, which a server echoes (§4.1.3). |
 | `shareGroups: i32[]` | Every group a key share was offered for, in order. |
@@ -2151,6 +2171,7 @@ class TlsClientHelloView
 | `hasPreSharedKey: boolean` | Whether the hello carried `pre_shared_key`, which must be its last extension (§4.2.11). |
 | `hasPskModes: boolean` | Whether the hello carried `psk_key_exchange_modes`, without which a server must not resume (§4.2.9). |
 | `hasQuicTransportParameters: boolean` | Whether the hello carried `quic_transport_parameters`, which a QUIC handshake requires (RFC 9001 §8.2). |
+| `hasRecordSizeLimit: boolean` | Whether the hello carried `record_size_limit` (RFC 8449). |
 | `hasServerName: boolean` | Whether the hello carried `server_name` with a `host_name` in it. |
 | `hasSignatureAlgorithms: boolean` | Whether the hello carried `signature_algorithms`. |
 | `hasSupportedGroups: boolean` | Whether the hello carried `supported_groups`. |
@@ -2178,6 +2199,7 @@ class TlsClientHelloView
 | `quicAt: i32` | The client's `quic_transport_parameters`, opaque (RFC 9001 §8.2). |
 | `quicLength: i32` | The QUIC transport parameters' length in bytes, 0 when the extension was absent. |
 | `randomAt: i32` | Where the client's 32-byte `random` starts in `data`; its length is always 32. |
+| `recordSizeLimit: i32` | The client's `record_size_limit`, at least `TLS_RECORD_SIZE_LIMIT_MIN` and at most `TLS_RECORD_SIZE_LIMIT_MAX`, a larger value lowered to it; 0 when the hello carried none. |
 | `schemesAt: i32` | `signature_algorithms`, 16-bit values. |
 | `schemesLength: i32` | The `signature_algorithms` window's length in bytes, two a scheme; 0 when the extension was absent. |
 | `serverNameAt: i32` | The `host_name` of `server_name`, or empty. |
@@ -2247,6 +2269,29 @@ class TlsServerFlightView
 | `signatureAt: i32` | Where CertificateVerify's signature starts in `data`. |
 | `signatureLength: i32` | The signature's length in bytes. |
 | `suite: i32` | The cipher suite the server chose, a 16-bit value. |
+
+## Limits
+
+<scalar-grid cols="2">
+
+<scalar-card title="16,385" icon="phosphor/regular/hash">
+
+`TLS_RECORD_SIZE_LIMIT_MAX: i32`
+
+The largest `record_size_limit` TLS 1.3 can use (RFC 8449 §4): 2^14 bytes
+of content and the content-type byte. A larger value means this.
+
+</scalar-card>
+
+<scalar-card title="64" icon="phosphor/regular/hash">
+
+`TLS_RECORD_SIZE_LIMIT_MIN: i32`
+
+The smallest `record_size_limit` a peer may send (RFC 8449 §4); below it is `illegal_parameter`.
+
+</scalar-card>
+
+</scalar-grid>
 
 ## Constants
 
@@ -2393,6 +2438,14 @@ An extension in a server message that the client never offered (§4.2).
 `TLS_EXT_QUIC_TRANSPORT_PARAMETERS: i32`
 
 `quic_transport_parameters` (RFC 9001 §8.2): QUIC's own parameters, opaque to TLS.
+
+</scalar-card>
+
+<scalar-card title="28" icon="phosphor/regular/hash">
+
+`TLS_EXT_RECORD_SIZE_LIMIT: i32`
+
+`record_size_limit` (RFC 8449 §4): the largest protected record plaintext the sender will take, content type included.
 
 </scalar-card>
 
