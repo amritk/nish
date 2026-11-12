@@ -265,15 +265,18 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
      datagram names a socket by its DCID alone and the kernel's address hash
      is never used. A load past a runt's end returns 0: socket 0. The count
      is the call's, so the program is built here and not shared. */
-  struct sock_filter dcid[] = {
+  static const struct sock_filter dcid0[] = {
       {BPF_LD | BPF_B | BPF_ABS, 0, 0, 0},
       {BPF_JMP | BPF_JSET | BPF_K, 2, 0, 0x80},
       {BPF_LD | BPF_B | BPF_ABS, 0, 0, 1},
       {BPF_JMP | BPF_JA, 0, 0, 1},
       {BPF_LD | BPF_B | BPF_ABS, 0, 0, 6},
-      {BPF_ALU | BPF_MOD | BPF_K, 0, 0, (uint32_t)((arg >> 8) & 255)},
+      {BPF_ALU | BPF_MOD | BPF_K, 0, 0, 0},
       {BPF_RET | BPF_A, 0, 0, 0},
   };
+  struct sock_filter dcid[7];
+  memcpy(dcid, dcid0, sizeof dcid);
+  dcid[5].k = (uint32_t)((arg >> 8) & 255);
   const struct sock_fprog quic = {7, dcid};
   int udp_steer = type == SOCK_DGRAM && (arg & 4);
 #endif
@@ -545,12 +548,9 @@ int32_t nish_net_mss(int32_t fd) {
    with a count of 0, or a count without 4, is -22; Linux alone has 2 and 4,
    elsewhere they are -95. */
 int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags) {
-  if ((flags & ~0xff07) != 0) return -22;
-  if (flags & 4) {
-    if ((flags & 3) != 1 || (flags & 0xff00) == 0) return -22;
-  } else if (flags & 0xff00) {
+  /* Without flag 4, 0 to 3; with it, flag 1 alone below it and a count. */
+  if ((flags & 4) ? (uint32_t)flags > 0xffff || flags < 0x100 || (flags & 0xfb) != 1 : (uint32_t)flags > 3)
     return -22;
-  }
 #if !defined(__linux__)
   if (flags & 6) return -95;
 #endif

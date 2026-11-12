@@ -416,9 +416,9 @@ const preforkUdpField = (args: string[], at: i32): i32 => {
     const flag: string = args[toI32(args.length) - back]
     if (flag.startsWith(PREFORK_UDP_FLAG)) {
       const value: string = flag.substring(PREFORK_UDP_FLAG.length)
-      const comma: i32 = value.indexOf(",")
-      const fd: string = comma > 0 ? value.substring(0, comma) : ""
-      const size: string = comma > 0 ? value.substring(comma + 1) : ""
+      const comma: i32 = toI32(value.indexOf(","))
+      const fd: string = comma < 0 ? "" : value.substring(0, comma)
+      const size: string = comma < 0 ? "" : value.substring(comma + 1)
       if (!preforkDigits(fd) || !preforkDigits(size)) {
         return -1
       }
@@ -465,7 +465,9 @@ export const preforkUdpCount = (args: string[]): i32 => {
 const preforkBindUdp = (config: PreforkConfig, count: i32): i32[] => {
   const host: string = config.listenHost
   const out: i32[] = []
-  const first: i32 = udpBind(host, config.listenPort, count > 1 ? 1 | 4 | (count << 8) : 1)
+  // Flag 1 (SO_REUSEPORT) and 4 (steer), the group's size in bits 8 to 15.
+  const steered: i32 = (count << 8) | 4 | 1
+  const first: i32 = udpBind(host, config.listenPort, count > 1 ? steered : 1)
   if (first < 0 && count > 1) {
     const plain: i32 = udpBind(host, config.listenPort, 1)
     if (plain >= 0) {
@@ -481,7 +483,7 @@ const preforkBindUdp = (config: PreforkConfig, count: i32): i32[] => {
   out.push(first)
   const port: i32 = config.listenPort === 0 ? netLocalPort(first) : config.listenPort
   for (let i: i32 = 1; i < count; i++) {
-    const fd: i32 = udpBind(host, port, 1 | 4 | (count << 8))
+    const fd: i32 = udpBind(host, port, steered)
     if (fd < 0) {
       console.error(`nish/net/prefork: cannot bind UDP ${host}:${port} (${fd})`)
       for (let j: i32 = 0; j < toI32(out.length); j++) {
@@ -903,7 +905,8 @@ class PreforkSupervisor {
     const config: PreforkConfig = this.config
     const flags: i32 = config.listenFlags | 1 | (steer ? 4 : 0)
     // With `listenUdp`, port 0 was chosen by the UDP group, bound first.
-    let port: i32 = config.listenPort === 0 && this.udp.length > 0 ? netLocalPort(this.udp[0]) : config.listenPort
+    let port: i32 =
+      config.listenPort === 0 && this.udp.length > 0 ? netLocalPort(this.udp[0]) : config.listenPort
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       const fd: i32 = tcpListenFlags(config.listenHost, port, config.listenBacklog, flags)
       if (fd < 0) {

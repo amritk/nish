@@ -566,7 +566,11 @@ export class QuicListener {
       // steered group is that sibling's, and a reset under the shared key
       // would end its live connection. Byte 0 at or above N is no worker's.
       const owner: i32 = toI32(datagram[header.dcidStart])
-      if (quicWorkerByte(this.config) >= 0 && owner < this.config.workerCount && owner !== this.config.workerIndex) {
+      if (
+        quicWorkerByte(this.config) >= 0 &&
+        owner < this.config.workerCount &&
+        owner !== this.config.workerIndex
+      ) {
         return answer.kind
       }
       this.statelessReset(answer, len, datagram, header.dcidStart, header.dcidLength)

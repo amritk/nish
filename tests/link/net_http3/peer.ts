@@ -125,8 +125,8 @@ export const h3QuicConfig = (limits: H3Limits): QuicServerConfig => {
     activeConnectionIdLimit: n64(4),
     statelessResetKey: resetKey(),
     retryTokenKey: tokenKey(),
-    workerIndex: -1,
-    workerCount: 0,
+    workerIndex: toI32(-1),
+    workerCount: toI32(0),
     retry: false,
     retryTokenLifetime: n64(10000),
   };
