@@ -278,6 +278,7 @@ function literalInitializerType(ctx: CheckContext, expr: Node, want: i32): i32 -
   stackSites=0 stackLocals=0
   local +0:9 number: i32 (const)
   callee +0:18 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +0:36 TypeTable.stripNull -> @TypeTable.stripNull
   callee +5:14 TypeTable.stripNull -> @TypeTable.stripNull
   callee +14:14 TypeTable.isNullable -> @TypeTable.isNullable
 function checkEnumInitializer(ctx: CheckContext, field: FieldInfo, init: Node, what: string, notLiteral: string): void -> @checkEnumInitializer

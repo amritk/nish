@@ -603,7 +603,7 @@ function refuseReferenceHole(ctx: CheckContext, part: Node): void -> @refuseRefe
 function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkTemplate
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
-  calls: CheckContext.error TypeTable.isFnRef TypeTable.isSecret TypeTable.typeName checkExpression isNumeric nish_str_concat refuseReferenceHole templateMessage
+  calls: CheckContext.error TypeTable.isFnRef TypeTable.isSecret TypeTable.stripNull TypeTable.typeName checkExpression isNumeric nish_str_concat refuseReferenceHole templateMessage
   pointer ctx: size=320 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 refuseReferenceHole#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
@@ -615,6 +615,7 @@ function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @che
   callee +9:7 CheckContext.error -> @CheckContext.error
   callee +9:23 templateMessage -> @templateMessage
   callee +12:9 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +12:27 TypeTable.stripNull -> @TypeTable.stripNull
   callee +13:7 refuseReferenceHole -> @refuseReferenceHole
   callee +16:10 isNumeric -> @isNumeric
   local +17:13 spelled: string (const)
