@@ -461,27 +461,38 @@ const pause = (ms: i32): void => {
   netClose(loop);
 };
 
+/** What `exitStatus` answers for a child still running past its deadline. */
+const STILL_RUNNING: i32 = -1000;
+
 /**
- * True when child `pid` exits 0 within five seconds. A WNOHANG loop, never on
- * a pid that is not positive; past the deadline the child gets SIGKILL and a
- * second more to be reaped.
+ * Child `pid`'s exit code, 128 plus the signal that ended it, `waitPid`'s
+ * negative errno when the wait fails, or `STILL_RUNNING` when it has not
+ * exited within `ms` milliseconds; that child gets SIGKILL and a second more to
+ * be reaped. A WNOHANG loop, never on a pid that is not positive.
  */
-const exitsZero = (pid: i32): boolean => {
+const exitStatus = (pid: i32, ms: i32): i32 => {
   if (pid <= 0) {
-    return false;
+    return STILL_RUNNING;
   }
-  for (let k: i32 = 0; k < 600; k++) {
+  const ticks: i32 = ms / 10;
+  for (let k: i32 = 0; k < ticks + 100; k++) {
     const status: i32[] = waitPid(pid, 1);
-    if (status[0] !== 0) {
-      return status[0] === pid && status[1] === 0 && k < 500;
+    if (status[0] < 0) {
+      return status[0];
     }
-    if (k === 500) {
+    if (status[0] === pid) {
+      return k < ticks ? status[1] : STILL_RUNNING;
+    }
+    if (k === ticks) {
       kill(pid, 9);
     }
     pause(10);
   }
-  return false;
+  return STILL_RUNNING;
 };
+
+/** True when child `pid` exits 0 within five seconds. */
+const exitsZero = (pid: i32): boolean => exitStatus(pid, 5000) === 0;
 
 /**
  * `serve <udp port> <port> <nodelay> <host> <slots> <workers>`: main.ts's
@@ -545,10 +556,9 @@ const workers = (t: Suite): void => {
   const fd: i32 = udpBind("127.0.0.1", ZERO, ZERO);
   const loop: i32 = pollCreate();
   pollAdd(loop, fd, 1, ZERO);
-  // `--foreground` hands SIGTERM to the supervisor alone: without it `timeout`
-  // signals its whole group, the workers die beside the supervisor, and one
-  // it restarts before it reads its own SIGTERM makes the checks below flaky.
-  const sup: i32 = spawn(["timeout", "--foreground", "60", self, "serve", `${netLocalPort(fd)}`, "0", "1", "127.0.0.1", "64", "2"]);
+  // The supervisor is this test's own child, so SIGTERM reaches it alone and
+  // its status is read here, with no `timeout` between them.
+  const sup: i32 = spawn([self, "serve", `${netLocalPort(fd)}`, "0", "1", "127.0.0.1", "64", "2"]);
   // Each worker's `ready`: its index, its port and its pid, by index.
   const ports: i32[] = [0, 0];
   const pids: i32[] = [0, 0];
@@ -581,7 +591,9 @@ const workers = (t: Suite): void => {
   }
   const both: boolean = up && pids[0] !== pids[1] && stopped[0] === pids[0] && stopped[1] === pids[1];
   t.ok(names[3], both && answered[0] > 0 && answered[1] > 0);
-  t.ok(names[4], exitsZero(sup));
+  // The supervisor may reap for prefork's `graceMs` (5 s) before SIGKILL, so
+  // it is given that and 5 s more; the check shows the status it exited with.
+  t.eqI32(names[4], exitStatus(sup, 10000), ZERO);
   netClose(loop);
   netClose(fd);
 };
