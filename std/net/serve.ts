@@ -637,7 +637,16 @@ const serveTask = async (
   if (res.length < 0 || res.length > toI32(out.length) || res.length > toI32(res.body.length)) {
     st.lengths[k] = -1
   } else {
-    out.set(res.length === toI32(res.body.length) ? res.body : res.body.slice(0, res.length))
+    // The whole body is copied when the slot holds it, as one `set`: what lies
+    // past `length` is never sent. Only a body larger than the slot is copied
+    // byte by byte, up to `length`.
+    if (res.body.length <= out.length) {
+      out.set(res.body)
+    } else {
+      for (let i: i32 = 0; i < res.length && i < toI32(out.length) && i < toI32(res.body.length); i++) {
+        out[i] = res.body[i]
+      }
+    }
     st.lengths[k] = res.length
   }
   // A type the server has sent before is found by its text, with no copy;
