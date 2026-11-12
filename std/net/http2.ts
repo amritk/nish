@@ -175,6 +175,7 @@ import {
   H2_SETTINGS_MAX_CONCURRENT_STREAMS,
   H2_SETTINGS_MAX_FRAME_SIZE,
   H2_SETTINGS_MAX_HEADER_LIST_SIZE,
+  H2_SETTINGS_TIMEOUT,
   H2_STREAM_CLOSED,
   Http2Frame,
   http2ParseFrame,
@@ -292,6 +293,16 @@ export class Http2Config {
    * stream error the peer caused — net of the ones the server finishes.
    */
   resetBudget: i32 = 100
+  /**
+   * Milliseconds the peer has, from `begin`, to acknowledge the server's SETTINGS: past them
+   * `expired` answers true and `timeOut` ends the connection with SETTINGS_TIMEOUT (RFC 9113 §6.5.3).
+   */
+  settingsTimeout: i32 = 10000
+  /**
+   * Milliseconds without a byte read or written, counted from `lastActive`, after which `expired`
+   * answers true and `timeOut` ends the connection with GOAWAY NO_ERROR, streams open or not.
+   */
+  idleTimeout: i32 = 60000
 }
 
 /**
@@ -509,6 +520,10 @@ export class Http2Connection {
   data: u8[]
   /** H2_RESET's, H2_GOAWAY's and H2_ERROR's code. */
   errorCode: i64 = 0
+  /** When the carrier last moved a byte for the connection, in `monotonicNanos`; `begin` starts it. */
+  lastActive: i64 = 0
+  /** When the server's SETTINGS began to wait for their acknowledgement, in `monotonicNanos`; `begin` sets it. */
+  settingsSince: i64 = 0
   /** Where the bytes fed and not read yet start in `input`. */
   inputStart: i32 = 0
   /** Where the bytes fed and not read yet end in `input`. */
@@ -590,6 +605,8 @@ export class Http2Connection {
     http2CheckCap("headerTableSize", config.headerTableSize, 0, H2_MAX_WINDOW)
     http2CheckCap("outputSize", config.outputSize, 1024, H2_MAX_WINDOW)
     http2CheckCap("resetBudget", config.resetBudget, 0, H2_MAX_WINDOW)
+    http2CheckCap("settingsTimeout", config.settingsTimeout, 1, H2_MAX_WINDOW)
+    http2CheckCap("idleTimeout", config.idleTimeout, 1, H2_MAX_WINDOW)
     this.config = config
     this.frame = new Http2Frame()
     this.empty = []
@@ -686,6 +703,73 @@ export class Http2Connection {
     this.localInitialWindow = toI64(config.initialWindowSize) > big ? toI64(config.initialWindowSize) : big
     this.recvWindow = toI64(config.connectionWindowSize)
     this.prefaceOwed = true
+  }
+
+  // ---- The clock ----------------------------------------------------------------
+
+  /**
+   * Starts both of the connection's clocks at `now`: the deadline for the
+   * peer's acknowledgement of the server's SETTINGS, and the idle one. The
+   * connection reads no clock itself; a carrier calls this when it takes the
+   * peer, stamps `lastActive` whenever bytes move, and asks `expired`.
+   *
+   * @param now the current time in `monotonicNanos`, which both timeouts count from
+   */
+  begin(now: i64): void {
+    this.settingsSince = now
+    this.lastActive = now
+  }
+
+  /** Whether the server's SETTINGS have waited longer than `settingsTimeout` at `now` (`monotonicNanos`). */
+  private settingsLate(now: i64): boolean {
+    return (
+      !this.settingsAcked && now - this.settingsSince > toI64(this.config.settingsTimeout) * toI64(1000000)
+    )
+  }
+
+  /**
+   * Whether the connection has outlived a timeout at `now`: the peer has not
+   * acknowledged the server's SETTINGS within `settingsTimeout` of `begin`,
+   * or nothing has moved for longer than `idleTimeout`.
+   *
+   * @param now the current time in `monotonicNanos`
+   * @returns true when the carrier should end the connection, after `timeOut` has written its GOAWAY
+   */
+  expired(now: i64): boolean {
+    return this.settingsLate(now) || now - this.lastActive > toI64(this.config.idleTimeout) * toI64(1000000)
+  }
+
+  /**
+   * The soonest `expired` can answer true at or after now, however the
+   * connection moves from here: `lastActive` only grows, and the SETTINGS
+   * deadline goes once they are acknowledged.
+   *
+   * @param now the current time in `monotonicNanos`
+   * @returns the earliest `monotonicNanos` instant at which `expired` could answer true
+   */
+  expiresNoSooner(now: i64): i64 {
+    let soonest: i64 = this.lastActive + toI64(this.config.idleTimeout) * toI64(1000000)
+    if (!this.settingsAcked) {
+      const settings: i64 = this.settingsSince + toI64(this.config.settingsTimeout) * toI64(1000000)
+      soonest = settings < soonest ? settings : soonest
+    }
+    return soonest > now ? soonest : now
+  }
+
+  /**
+   * Ends a connection `expired` at `now`: the connection fails with GOAWAY
+   * SETTINGS_TIMEOUT when the peer never acknowledged the server's SETTINGS
+   * in time (§6.5.3), and with GOAWAY NO_ERROR when it was idle. The
+   * carrier sends what it can of the output, then closes.
+   *
+   * @param now the current time in `monotonicNanos`, as `expired` was asked at
+   */
+  timeOut(now: i64): void {
+    if (this.state === H2_STATE_FAILED) {
+      return
+    }
+    this.room()
+    this.fail(this.settingsLate(now) ? H2_SETTINGS_TIMEOUT : H2_NO_ERROR)
   }
 
   // ---- Borrowed buffers ---------------------------------------------------------
