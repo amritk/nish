@@ -69,14 +69,14 @@ function JsonField.constructor(this: JsonField, field: FieldInfo | null, type: i
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: field kind nullable type
   pointer this: size=64 writesThrough=true captured=false
-  pointer field: size=72 writesThrough=true captured=true
+  pointer field: size=80 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function noteJsonOptions(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @noteJsonOptions [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: decl
   calls: CheckContext.error nish_panic_index nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer owner: size=176 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -111,7 +111,7 @@ function jsonNotLiteral(ctx: CheckContext, info: StructInfo, node: Node, where: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=176 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -120,7 +120,7 @@ function jsonSpread(ctx: CheckContext, info: StructInfo, node: Node, where: stri
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=176 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -130,7 +130,7 @@ function jsonOptionField(ctx: CheckContext, info: StructInfo, node: Node, option
   sharedWrite: via CheckContext.error
   escaping: name
   calls: CheckContext.error StructInfo.field nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.field#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -141,7 +141,7 @@ function jsonDuplicate(ctx: CheckContext, info: StructInfo, node: Node, detail: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=176 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -150,7 +150,7 @@ function jsonReadRename(ctx: CheckContext, info: StructInfo, value: Node): void 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: CheckContext.error StringSet.add StringSet.constructor jsonDuplicate jsonIsOtherLiteral jsonIsStringLiteral jsonIsUtf8 jsonNotLiteral jsonOptionField jsonSpread jsonStringLiteral nish_panic_index nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonSpread#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0 CheckContext.error#0 jsonNotLiteral#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonSpread#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0 CheckContext.error#0 jsonNotLiteral#0
   pointer info: size=176 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonSpread#1 jsonOptionField#1 jsonDuplicate#1 jsonNotLiteral#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=1 stackLocals=1
@@ -177,7 +177,7 @@ function jsonReadOptional(ctx: CheckContext, info: StructInfo, value: Node): voi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: CheckContext.error jsonDuplicate jsonIsStringLiteral jsonNotLiteral jsonOptionField jsonStringLiteral nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0
   pointer info: size=176 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonNotLiteral#1 jsonOptionField#1 jsonDuplicate#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=0 stackLocals=0
@@ -194,7 +194,7 @@ function jsonPresenceMisuse(ctx: CheckContext, info: StructInfo, node: Node, det
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=176 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -204,11 +204,11 @@ function jsonPresenceFlagIs(ctx: CheckContext, info: StructInfo, to: Node, field
   sharedWrite: via jsonPresenceMisuse
   escaping: why
   calls: TypeTable.typeName jsonPresenceMisuse nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=jsonPresenceMisuse#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=jsonPresenceMisuse#0
   pointer info: size=176 writesThrough=false captured=false passedTo=jsonPresenceMisuse#1
   pointer to: size=40 writesThrough=false captured=false passedTo=jsonPresenceMisuse#2
-  pointer field: size=72 writesThrough=false captured=false
-  pointer flag: size=72 writesThrough=false captured=false
+  pointer field: size=80 writesThrough=false captured=false
+  pointer flag: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 what: string (const)
   callee +0:44 TypeTable.typeName -> @TypeTable.typeName
@@ -217,7 +217,7 @@ function jsonReadPresence(ctx: CheckContext, info: StructInfo, value: Node): voi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: jsonIsStringLiteral jsonNotLiteral jsonOptionField jsonPresenceFlagIs jsonPresenceMisuse jsonSpread jsonStringLiteral nish_panic_index nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonSpread#0 jsonNotLiteral#0 jsonOptionField#0 jsonOptionField#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceFlagIs#0 jsonPresenceFlagIs#0 jsonPresenceFlagIs#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonSpread#0 jsonNotLiteral#0 jsonOptionField#0 jsonOptionField#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceMisuse#0 jsonPresenceFlagIs#0 jsonPresenceFlagIs#0 jsonPresenceFlagIs#0
   pointer info: size=176 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonSpread#1 jsonNotLiteral#1 jsonOptionField#1 jsonOptionField#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceMisuse#1 jsonPresenceFlagIs#1 jsonPresenceFlagIs#1 jsonPresenceFlagIs#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=0 stackLocals=0
@@ -256,7 +256,7 @@ function jsonReadTag(ctx: CheckContext, info: StructInfo, value: Node): void -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.error jsonHasTag jsonIsStringLiteral jsonIsUtf8 jsonStringLiteral nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
   pointer info: size=176 writesThrough=true captured=false passedTo=jsonHasTag#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonIsStringLiteral#0 CheckContext.error#1 jsonStringLiteral#0 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -272,7 +272,7 @@ function checkJsonOptions(ctx: CheckContext, info: StructInfo): void -> @checkJs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: CheckContext.error CheckedProgram.isJsonTyped StringSet.add StringSet.constructor TypeTable.typeName jsonDuplicate jsonNotLiteral jsonOptionsShapeMessage jsonPresenceMisuse jsonReadOptional jsonReadPresence jsonReadRename jsonReadTag jsonSpread nish_panic_index nish_str_concat nish_str_eq
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0 jsonNotLiteral#0 jsonSpread#0 CheckContext.error#0 jsonDuplicate#0 jsonReadRename#0 jsonReadOptional#0 jsonReadTag#0 jsonReadPresence#0 jsonPresenceMisuse#0 jsonDuplicate#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0 jsonNotLiteral#0 jsonSpread#0 CheckContext.error#0 jsonDuplicate#0 jsonReadRename#0 jsonReadOptional#0 jsonReadTag#0 jsonReadPresence#0 jsonPresenceMisuse#0 jsonDuplicate#0
   pointer info: size=176 writesThrough=true captured=false passedTo=jsonNotLiteral#1 jsonSpread#1 jsonDuplicate#1 jsonReadRename#1 jsonReadOptional#1 jsonReadTag#1 jsonReadPresence#1 jsonPresenceMisuse#1 jsonDuplicate#1
   stackSites=2 stackLocals=2
   callee -1:67 CheckedProgram.isJsonTyped -> @CheckedProgram.isJsonTyped
@@ -384,7 +384,7 @@ function jsonTagsVariant(table: TypeTable, info: StructInfo, field: FieldInfo): 
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer table: size=112 writesThrough=false captured=false
   pointer info: size=176 writesThrough=false captured=false
-  pointer field: size=72 writesThrough=false captured=false
+  pointer field: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 u: i32 (let)
   local +2:11 variants: i32[] (const)
@@ -395,7 +395,7 @@ function jsonWireTag(table: TypeTable, info: StructInfo, field: FieldInfo): stri
   calls: TypeTable.nameOf jsonTagsVariant
   pointer table: size=112 writesThrough=false captured=false passedTo=jsonTagsVariant#0 TypeTable.nameOf#0
   pointer info: size=176 writesThrough=false captured=false passedTo=jsonTagsVariant#1
-  pointer field: size=72 writesThrough=false captured=false passedTo=jsonTagsVariant#2
+  pointer field: size=80 writesThrough=false captured=false passedTo=jsonTagsVariant#2
   stackSites=0 stackLocals=0
   callee +0:30 jsonTagsVariant -> @jsonTagsVariant
   callee +0:83 TypeTable.nameOf -> @TypeTable.nameOf
@@ -405,7 +405,7 @@ function jsonValueOf(program: CheckedProgram, table: TypeTable, field: FieldInfo
   calls: JsonField.constructor TypeTable.isArray TypeTable.isEnum TypeTable.isEnumMemberType TypeTable.isNullable TypeTable.isReadonlyArray TypeTable.isUnion TypeTable.refOf TypeTable.stripNull jsonClassOf jsonIsUnionTag jsonMapOf jsonScalar jsonValueOf jsonVariantsOf nish_alloc_struct nish_panic_index
   pointer program: size=800 writesThrough=false captured=false passedTo=jsonVariantsOf#0 jsonVariantsOf#0 jsonClassOf#0 jsonMapOf#0 jsonValueOf#0 jsonClassOf#0
   pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isEnumMemberType#0 jsonIsUnionTag#0 TypeTable.isUnion#0 jsonVariantsOf#1 TypeTable.isEnum#0 TypeTable.isArray#0 TypeTable.isReadonlyArray#0 TypeTable.refOf#0 TypeTable.isEnum#0 TypeTable.isUnion#0 jsonVariantsOf#1 jsonClassOf#1 jsonMapOf#1 jsonValueOf#1 jsonClassOf#1
-  pointer field: size=72 writesThrough=true captured=true passedTo=JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1
+  pointer field: size=80 writesThrough=true captured=true passedTo=JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1
   stackSites=0 stackLocals=0
   local +0:9 nullable: boolean (const)
   callee +0:20 TypeTable.isNullable -> @TypeTable.isNullable
@@ -463,7 +463,7 @@ function jsonFieldOf(program: CheckedProgram, table: TypeTable, field: FieldInfo
   calls: jsonValueOf
   pointer program: size=800 writesThrough=false captured=false passedTo=jsonValueOf#0
   pointer table: size=112 writesThrough=false captured=false passedTo=jsonValueOf#1
-  pointer field: size=72 writesThrough=true captured=true passedTo=jsonValueOf#2
+  pointer field: size=80 writesThrough=true captured=true passedTo=jsonValueOf#2
   stackSites=0 stackLocals=0
   callee +0:3 jsonValueOf -> @jsonValueOf
 function jsonValuesOf(f: JsonField, out: JsonField[]): void -> @jsonValuesOf
@@ -620,9 +620,9 @@ function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, ro
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonClasses
   escaping: name type
-  calls: TypeTable.isUnion TypeTable.stripNull TypeTable.typeName jsonBadVariant jsonClasses jsonFieldOf jsonMadeClasses jsonNotClassVariant jsonRootsOf jsonUnionIn jsonUnionRefusal nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer program: size=800 writesThrough=false captured=false passedTo=jsonBadVariant#0 jsonRootsOf#0 jsonUnionRefusal#0 jsonClasses#0 jsonFieldOf#0 jsonUnionIn#0 jsonBadVariant#0 jsonUnionRefusal#0 jsonMadeClasses#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonBadVariant#1 jsonNotClassVariant#0 jsonRootsOf#1 TypeTable.typeName#0 jsonUnionRefusal#1 jsonClasses#1 jsonFieldOf#1 jsonUnionIn#1 jsonBadVariant#1 jsonNotClassVariant#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonMadeClasses#1
+  calls: CheckedProgram.struct TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.stripNull TypeTable.typeName jsonBadVariant jsonClasses jsonFieldOf jsonMadeClasses jsonNotClassVariant jsonRootsOf jsonUnionIn jsonUnionRefusal nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer program: size=800 writesThrough=false captured=false passedTo=jsonBadVariant#0 jsonRootsOf#0 CheckedProgram.struct#0 jsonUnionRefusal#0 jsonClasses#0 jsonFieldOf#0 jsonUnionIn#0 jsonBadVariant#0 jsonUnionRefusal#0 jsonMadeClasses#0
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonBadVariant#1 jsonNotClassVariant#0 jsonRootsOf#1 TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonClasses#1 jsonFieldOf#1 jsonUnionIn#1 jsonBadVariant#1 jsonNotClassVariant#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonMadeClasses#1
   stackSites=1 stackLocals=1
   local +0:9 base: i32 (const)
   callee +0:16 TypeTable.stripNull -> @TypeTable.stripNull
@@ -636,28 +636,33 @@ function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, ro
   local +25:9 none: StructInfo[] (const)
   local +26:9 roots: StructInfo[] (const)
   callee +26:70 jsonRootsOf -> @jsonRootsOf
-  callee +29:35 TypeTable.typeName -> @TypeTable.typeName
-  local +34:11 why: string (const)
-  callee +34:17 jsonUnionRefusal -> @jsonUnionRefusal
-  local +39:9 decode: boolean (const)
-  local +40:9 classes: StructInfo[] (const)
-  callee +40:19 jsonClasses -> @jsonClasses
-  local +41:14 info: StructInfo (const)
-  local +45:16 field: FieldInfo (const)
-  local +50:13 f: JsonField | null (const)
-  callee +50:17 jsonFieldOf -> @jsonFieldOf
-  local +52:15 inner: i32 (const)
-  callee +52:23 jsonUnionIn -> @jsonUnionIn
-  local +54:17 bad: i32 (const)
-  callee +54:23 jsonBadVariant -> @jsonBadVariant
-  callee +56:20 jsonNotClassVariant -> @jsonNotClassVariant
-  callee +62:83 TypeTable.typeName -> @TypeTable.typeName
-  local +71:11 v: JsonField | null (let)
-  local +74:17 why: string (const)
-  callee +74:23 jsonUnionRefusal -> @jsonUnionRefusal
-  local +91:16 info: StructInfo (const)
-  callee +91:24 jsonMadeClasses -> @jsonMadeClasses
-  local +92:13 ctor: FunctionSig | null (const)
+  local +27:9 declared: StructInfo | null (const)
+  callee +27:39 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +27:62 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +27:77 TypeTable.nameOf -> @TypeTable.nameOf
+  callee +30:40 TypeTable.typeName -> @TypeTable.typeName
+  callee +34:35 TypeTable.typeName -> @TypeTable.typeName
+  local +39:11 why: string (const)
+  callee +39:17 jsonUnionRefusal -> @jsonUnionRefusal
+  local +44:9 decode: boolean (const)
+  local +45:9 classes: StructInfo[] (const)
+  callee +45:19 jsonClasses -> @jsonClasses
+  local +46:14 info: StructInfo (const)
+  local +50:16 field: FieldInfo (const)
+  local +55:13 f: JsonField | null (const)
+  callee +55:17 jsonFieldOf -> @jsonFieldOf
+  local +57:15 inner: i32 (const)
+  callee +57:23 jsonUnionIn -> @jsonUnionIn
+  local +59:17 bad: i32 (const)
+  callee +59:23 jsonBadVariant -> @jsonBadVariant
+  callee +61:20 jsonNotClassVariant -> @jsonNotClassVariant
+  callee +67:83 TypeTable.typeName -> @TypeTable.typeName
+  local +76:11 v: JsonField | null (let)
+  local +79:17 why: string (const)
+  callee +79:23 jsonUnionRefusal -> @jsonUnionRefusal
+  local +96:16 info: StructInfo (const)
+  callee +96:24 jsonMadeClasses -> @jsonMadeClasses
+  local +97:13 ctor: FunctionSig | null (const)
 function jsonScalarMethod(type: i32): string -> @jsonScalarMethod [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

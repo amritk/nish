@@ -56,8 +56,9 @@
  * **Extensions.** The ones read are `server_name` (RFC 6066 §3),
  * `supported_groups`, `signature_algorithms`, `supported_versions` and
  * `key_share` (RFC 8446 §4.2), `application_layer_protocol_negotiation`
- * (RFC 7301 §3.1) and `quic_transport_parameters` (RFC 9001 §8.2), and
- * `pre_shared_key` and `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
+ * (RFC 7301 §3.1), `quic_transport_parameters` (RFC 9001 §8.2) and
+ * `record_size_limit` (RFC 8449 §4), and `pre_shared_key` and
+ * `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
  * whose identities and binders the reader checks against their syntax but
  * does not open: a ticket and its binder are the server's to judge. Every
  * other extension is skipped, which is what RFC 8446 §4.2 asks of a server
@@ -113,6 +114,15 @@ export const TLS_EXT_SUPPORTED_VERSIONS: i32 = 43
 export const TLS_EXT_KEY_SHARE: i32 = 51
 /** `quic_transport_parameters` (RFC 9001 §8.2): QUIC's own parameters, opaque to TLS. */
 export const TLS_EXT_QUIC_TRANSPORT_PARAMETERS: i32 = 57
+/** `record_size_limit` (RFC 8449 §4): the largest protected record plaintext the sender will take, content type included. */
+export const TLS_EXT_RECORD_SIZE_LIMIT: i32 = 28
+/** The smallest `record_size_limit` a peer may send (RFC 8449 §4); below it is `illegal_parameter`. */
+export const TLS_RECORD_SIZE_LIMIT_MIN: i32 = 64
+/**
+ * The largest `record_size_limit` TLS 1.3 can use (RFC 8449 §4): 2^14 bytes
+ * of content and the content-type byte. A larger value means this.
+ */
+export const TLS_RECORD_SIZE_LIMIT_MAX: i32 = 16385
 /** `cookie` (§4.2.2): what a HelloRetryRequest may carry and the client's second ClientHello echoes. */
 export const TLS_EXT_COOKIE: i32 = 44
 
@@ -408,6 +418,14 @@ export class TlsClientHelloView {
   hasAlpn: boolean = false
   /** Whether the hello carried `quic_transport_parameters`, which a QUIC handshake requires (RFC 9001 §8.2). */
   hasQuicTransportParameters: boolean = false
+  /** Whether the hello carried `record_size_limit` (RFC 8449). */
+  hasRecordSizeLimit: boolean = false
+  /**
+   * The client's `record_size_limit`, at least `TLS_RECORD_SIZE_LIMIT_MIN`
+   * and at most `TLS_RECORD_SIZE_LIMIT_MAX`, a larger value lowered to it;
+   * 0 when the hello carried none.
+   */
+  recordSizeLimit: i32 = 0
   /** Whether the hello carried `pre_shared_key`, which must be its last extension (§4.2.11). */
   hasPreSharedKey: boolean = false
   /** Whether the hello carried `psk_key_exchange_modes`, without which a server must not resume (§4.2.9). */
@@ -482,6 +500,8 @@ export class TlsClientHelloView {
     this.hasServerName = false
     this.hasAlpn = false
     this.hasQuicTransportParameters = false
+    this.hasRecordSizeLimit = false
+    this.recordSizeLimit = 0
     this.hasPreSharedKey = false
     this.hasPskModes = false
     for (let k: i32 = 0; k < toI32(this.extensionSeen.length); k++) {
@@ -703,6 +723,26 @@ const tlsReadPskModes = (r: TlsReader, hello: TlsClientHelloView): void => {
   }
 }
 
+/**
+ * `record_size_limit` (RFC 8449 §4), the body `r.at .. end`: a bare
+ * `uint16`. A body of another length fails the reader, `decode_error`, and
+ * is checked before the value so that a short value with trailing bytes is
+ * not reported as `illegal_parameter`; a value below 64 is
+ * `illegal_parameter`; one above the TLS 1.3 maximum is read as that maximum.
+ */
+const tlsReadRecordSizeLimit = (r: TlsReader, end: i32, hello: TlsClientHelloView): void => {
+  if (end - r.at !== 2) {
+    r.failed = true
+    return
+  }
+  const limit: i32 = tlsReadU16(r)
+  hello.hasRecordSizeLimit = true
+  if (limit < TLS_RECORD_SIZE_LIMIT_MIN) {
+    tlsHelloRefuse(hello, TLS_ALERT_ILLEGAL_PARAMETER)
+  }
+  hello.recordSizeLimit = limit > TLS_RECORD_SIZE_LIMIT_MAX ? TLS_RECORD_SIZE_LIMIT_MAX : limit
+}
+
 /** Reads one extension body, `r.at .. end`, of type `type`; an unknown type is skipped. */
 const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHelloView): void => {
   switch (type) {
@@ -741,6 +781,9 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
       hello.quicAt = r.at
       hello.quicLength = end - r.at
       tlsReadSkipTo(r, end)
+      break
+    case TLS_EXT_RECORD_SIZE_LIMIT:
+      tlsReadRecordSizeLimit(r, end, hello)
       break
     default:
       tlsReadSkipTo(r, end)
@@ -974,6 +1017,8 @@ export class TlsClientHello {
   hasAlpn: boolean = false
   /** Whether the hello carried `quic_transport_parameters`, which a QUIC handshake requires (RFC 9001 §8.2). */
   hasQuicTransportParameters: boolean = false
+  /** The client's `record_size_limit` (RFC 8449), lowered to the TLS 1.3 maximum, or 0 when it sent none. */
+  recordSizeLimit: i32 = 0
   /** Whether the hello carried `pre_shared_key`, which must be its last extension (§4.2.11). */
   hasPreSharedKey: boolean = false
   /** Whether the hello carried `psk_key_exchange_modes`, without which a server must not resume (§4.2.9). */
@@ -1123,6 +1168,7 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
   hello.hasServerName = view.hasServerName
   hello.hasAlpn = view.hasAlpn
   hello.hasQuicTransportParameters = view.hasQuicTransportParameters
+  hello.recordSizeLimit = view.recordSizeLimit
   hello.hasPreSharedKey = view.hasPreSharedKey
   hello.hasPskModes = view.hasPskModes
   hello.pskDheKe = view.pskDheKe
@@ -1411,8 +1457,10 @@ export const tlsWriteHelloRetryRequest = (
  * `extra` is extensions the caller encodes itself, written first and as they
  * are; then the chosen ALPN protocol when `alpn` is not empty (RFC 7301 §3.1,
  * a list of exactly one), an empty `server_name` when `acknowledgeServerName`
- * (RFC 6066 §3's acknowledgement), and the server's
- * `quic_transport_parameters` when `quicTransportParameters` is not `null`.
+ * (RFC 6066 §3's acknowledgement), the server's
+ * `quic_transport_parameters` when `quicTransportParameters` is not `null`,
+ * and the server's own `record_size_limit` (RFC 8449 §4) when
+ * `recordSizeLimit` is not 0.
  *
  * @param out The array to write into; a byte that would land outside it is dropped, so an empty one measures.
  * @param at Where the message, handshake header first, starts in `out`.
@@ -1420,6 +1468,7 @@ export const tlsWriteHelloRetryRequest = (
  * @param alpn The protocol the server chose, one character a byte, at most 255; empty to send no ALPN.
  * @param acknowledgeServerName Whether to send the empty `server_name` that says the server used the name.
  * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
+ * @param recordSizeLimit The largest record plaintext the server takes, content type included, written as a `uint16`; 0 to send none.
  * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
 export const tlsWriteEncryptedExtensions = (
@@ -1428,7 +1477,8 @@ export const tlsWriteEncryptedExtensions = (
   extra: u8[],
   alpn: string,
   acknowledgeServerName: boolean,
-  quicTransportParameters: u8[] | null
+  quicTransportParameters: u8[] | null,
+  recordSizeLimit: i32
 ): i32 => {
   const extensions: i32 = at + 6
   let p: i32 = tlsPutBytes(out, extensions, extra)
@@ -1450,6 +1500,9 @@ export const tlsWriteEncryptedExtensions = (
     const body: i32 = p + 2
     p = tlsPutBytes(out, body, quicTransportParameters)
     tlsPutLength(out, body, p, 2)
+  }
+  if (recordSizeLimit !== 0) {
+    p = tlsPutU16(out, tlsPutU16(out, tlsPutU16(out, p, TLS_EXT_RECORD_SIZE_LIMIT), 2), recordSizeLimit)
   }
   tlsPutLength(out, extensions, p, 2)
   tlsPutHeader(out, at, TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS, p)
@@ -1708,13 +1761,15 @@ export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i
  * @param alpn The protocol the server chose, as its bytes, at most 255; empty to send no ALPN.
  * @param acknowledgeServerName Whether to send the empty `server_name` that says the server used the name.
  * @param quicTransportParameters The server's QUIC transport parameters, opaque; `null` to send none.
+ * @param recordSizeLimit The server's own `record_size_limit` (RFC 8449 §4); 0 to send none.
  * @returns The whole message, handshake header included.
  */
 export const tlsEncodeEncryptedExtensions = (
   extra: u8[],
   alpn: u8[],
   acknowledgeServerName: boolean,
-  quicTransportParameters: u8[] | null
+  quicTransportParameters: u8[] | null,
+  recordSizeLimit: i32
 ): u8[] => {
   const none: u8[] = []
   const protocol: string = tlsBytesString(alpn)
@@ -1725,7 +1780,8 @@ export const tlsEncodeEncryptedExtensions = (
       extra,
       protocol,
       acknowledgeServerName,
-      quicTransportParameters
+      quicTransportParameters,
+      recordSizeLimit
     )
   )
   tlsWriteEncryptedExtensions(
@@ -1734,7 +1790,8 @@ export const tlsEncodeEncryptedExtensions = (
     extra,
     protocol,
     acknowledgeServerName,
-    quicTransportParameters
+    quicTransportParameters,
+    recordSizeLimit
   )
   return out
 }

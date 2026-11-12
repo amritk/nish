@@ -49,7 +49,7 @@ the record that found it. The notes below the table name each such finding.
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 12 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
-| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 3 / 19 / 17 ⁴ | 0 / 0 / 0 / 2 |
+| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16, RT-18 and RT-51 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`, `structs.ts`, `emit-classes.ts`, `annotations.ts`, `interop-abi.ts`, `interop-header.ts`) | 0 / 3 / 20 / 17 ⁴ | 0 / 0 / 0 / 2 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 6 ⁹ | 0 / 0 / 0 / 2 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 10 ¹¹ | 0 / 0 / 0 / 0 |
@@ -87,7 +87,7 @@ the record that found it. The notes below the table name each such finding.
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
-| **Total** ⁸ | | | **3 / 16 / 81 / 177** | **0 / 0 / 3 / 40** |
+| **Total** ⁸ | | | **3 / 16 / 82 / 177** | **0 / 0 / 3 / 40** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -114,7 +114,8 @@ the record that found it. The notes below the table name each such finding.
    (WP27 S3.2), is counted the same way. So is RT-16 (Medium), `readCString`
    and the literal `null` a `CPtr | null` parameter takes (WP27 S3.3), and
    RT-18 (Medium), a `u8[]` lent to C with its count checked (WP53 B1.2), and
-   RT-20 (Medium), the C resource a `using` owns (#861). RT-21 (Low),
+   RT-20 (Medium), the C resource a `using` owns (#861), and RT-51 (Medium),
+   a `declare class` lent to C by pointer (WP27 S4.1). RT-21 (Low),
    `nish_argv_init` testing `malloc`'s answer for null only after computing
    from it, was found by #888's harness stage while building the runtime under
    UBSan, fixed there, and is counted as a fixed Low.

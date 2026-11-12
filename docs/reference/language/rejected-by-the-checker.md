@@ -196,8 +196,10 @@ messages are exact for the cases cited; other entries quote the checker
   `Classes must be named` (a named class expression:
   `Unsupported expression in Phase 1: ClassExpression`)
   (`reject_cls_anonymous`, `nl2018_anonymous_class`)
-- **`declare class`, `declare interface`; `abstract` on a class or a member**:
-  `` `declare class` is not supported `` /
+- **a `declare class` that is not a C struct layout, a generic one, `declare
+  interface`; `abstract` on a class or a member**: the refusals the
+  [`declare class` section](declarations.md#a-declare-class-a-c-struct-lent-by-pointer) lists /
+  `` A generic `declare class` is not supported `` /
   `Abstract classes are not supported` (`reject_cls_declare`,
   `reject_generic_declare_class`, `reject_generic_abstract`)
 - **a method or a constructor with no body, a constructor's return type**:
