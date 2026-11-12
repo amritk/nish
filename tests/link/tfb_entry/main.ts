@@ -545,7 +545,10 @@ const workers = (t: Suite): void => {
   const fd: i32 = udpBind("127.0.0.1", ZERO, ZERO);
   const loop: i32 = pollCreate();
   pollAdd(loop, fd, 1, ZERO);
-  const sup: i32 = spawn(["timeout", "60", self, "serve", `${netLocalPort(fd)}`, "0", "1", "127.0.0.1", "64", "2"]);
+  // `--foreground` hands SIGTERM to the supervisor alone: without it `timeout`
+  // signals its whole group, the workers die beside the supervisor, and one
+  // it restarts before it reads its own SIGTERM makes the checks below flaky.
+  const sup: i32 = spawn(["timeout", "--foreground", "60", self, "serve", `${netLocalPort(fd)}`, "0", "1", "127.0.0.1", "64", "2"]);
   // Each worker's `ready`: its index, its port and its pid, by index.
   const ports: i32[] = [0, 0];
   const pids: i32[] = [0, 0];
