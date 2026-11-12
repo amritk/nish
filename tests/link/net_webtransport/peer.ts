@@ -86,6 +86,9 @@ export class WtLimits {
   sessions: i32 = 2;
   maxStreams: i32 = 64;
   maxPending: i32 = 4;
+  /** The session clock: milliseconds idle, and datagrams a second. */
+  idleTimeout: i32 = 60000;
+  maxDatagramsPerSecond: i32 = 1024;
 }
 
 /** The QUIC configuration of `limits`: `h3`, and DATAGRAM frames up to `datagramFrame`. */
@@ -123,6 +126,8 @@ export const wtConfig = (limits: WtLimits): WebTransportConfig => {
   const config = new WebTransportConfig();
   config.maxStreams = limits.maxStreams;
   config.maxPending = limits.maxPending;
+  config.idleTimeout = limits.idleTimeout;
+  config.maxDatagramsPerSecond = limits.maxDatagramsPerSecond;
   return config;
 };
 
