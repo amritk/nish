@@ -10975,8 +10975,20 @@ if (dealtHere("fileServer")) {
     // fetch was (phase, bytes, ms since the last one), the server's scheduler
     // state and kernel wait channel, and both ends' kernel queues from
     // /proc/net/tcp: a full send queue with an empty receive queue is the
-    // reader, empty queues with the server asleep are a lost wake-up.
+    // reader, empty queues with the server asleep are a lost wake-up. That
+    // record named #1420 (27ad7dd8) as the cause of CI's three stalls, all on
+    // heads before it: with its write bit reverted, one run in ten stalled
+    // at 33 MB with the server in do_epoll_wait and both queues empty.
+    //
+    // A transfer that trickles a byte under the stall bound would never trip
+    // it, so the whole fetch also has a cap derived from the reader's pacing:
+    // its pauses (250 ms, then 5 ms per further MiB), the body at
+    // `FILE_SERVER_FLOOR` bytes a second (CI moves about 90 MiB/s), and one
+    // stall bound for start-up and the head.
     const FILE_SERVER_STALL_MS = 20_000
+    const FILE_SERVER_FLOOR = 1 << 20
+    const fetchCapMs = (size) =>
+      FILE_SERVER_STALL_MS + 250 + 5 * Math.floor(size / (1 << 20)) + Math.ceil((size * 1000) / FILE_SERVER_FLOOR)
     const tcpQueues = (port) => {
       const hex = port.toString(16).toUpperCase().padStart(4, "0")
       try {
@@ -11000,6 +11012,8 @@ if (dealtHere("fileServer")) {
     const serveOnce = (file, method) =>
       new Promise((resolve) => {
         const server = spawn(exe, [file, "0"], { stdio: ["ignore", "pipe", "pipe"] })
+        const born = Date.now()
+        const cap = fetchCapMs(fs.statSync(file).size)
         let out = ""
         let fetching = false
         let settled = false
@@ -11013,10 +11027,14 @@ if (dealtHere("fileServer")) {
           resolve({ ...r, out })
         }
         const watch = setInterval(() => {
-          const idle = Date.now() - at.last
-          if (at.paused || idle < FILE_SERVER_STALL_MS) return
+          const now = Date.now()
+          const idle = now - at.last
+          const over = now - born >= cap
+          if (!over && (at.paused || idle < FILE_SERVER_STALL_MS)) return
           finish({
-            error: `no byte for ${idle} ms`,
+            error: over
+              ? `the fetch passed its ${cap} ms cap (the reader's pauses, the body at 1 MiB/s and one stall bound)`
+              : `no byte for ${idle} ms`,
             phase: at.phase,
             got: at.got,
             server: procLine(server.pid, "stat").replace(/^.*\) /, "").split(" ")[0],
