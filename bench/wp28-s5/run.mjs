@@ -153,7 +153,6 @@ if (options.quick && programs.length !== QUICK.length) {
 
 // ---- Building -------------------------------------------------------------------------
 
-const MODES = ["default", "f64"]
 const F64 = ["--number-mode", "f64"]
 
 /**
