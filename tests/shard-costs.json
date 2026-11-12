@@ -1056,7 +1056,7 @@
   "arrayChecks": 45,
   "runtimeChecks": 54,
   "simd": 153,
-  "cliChecks": 58,
+  "cliChecks": 103,
   "releaseChecks": 57,
   "cSymbols": 19,
   "runCache": 9

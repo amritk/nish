@@ -3,10 +3,14 @@
 // (docs/wp38-simd.md §2.3 and §7). Nothing here is built into the compiler; it
 // only measures what the current one does.
 //
-//   npm run build && node bench/simd-s0.mjs [--runs N] [--only a,b] [--self] [--compiler <nish>]
+//   npm run build && node bench/simd-s0.mjs [--runs N] [--only a,b] [--self]
+//     [--level L]... [--compiler <nish>]
 //     --runs N    timed runs per row after one warm-up (default 7, the note's minimum)
 //     --only a,b  rows to run: scan, nbody, vec3, spectral, bootstrap (default: all)
 //     --self      time each -march row's baseline against a copy of itself too
+//     --level L   a CPU level to link a column for, once per level (default:
+//                 x86-64-v3 on x86-64, armv8.2-a on AArch64); a level must be
+//                 one of the host's architecture (LEVELS below)
 //
 // What it times, and why each row is built the way it is:
 //
@@ -23,11 +27,13 @@
 //              compiled once to a .ll with the flags in their .args sidecars,
 //              then linked twice from that same .ll: `scripts/build.sh --profile
 //              speed` as `nish --link` runs it (the baseline: no -march), and
-//              again with clang given -march=x86-64-v3, module and runtime alike,
-//              which is what an opt-in CPU level would do (§3.4). Only the link
-//              differs, so the column is the target and nothing else. The two
-//              binaries run in alternating rounds and must print the same
-//              checksum. With --self a byte-for-byte copy of the baseline
+//              again for each --level with clang given -march=<level>, module
+//              and runtime alike, which is what `--cpu` does (§3.4). Only the
+//              link differs, so the column is the target and nothing else. The
+//              binaries run in rotating rounds and must print the same
+//              checksum. With two levels the second is also judged against the
+//              first (x86-64-v4 against x86-64-v3: a level that only matches
+//              the one below it buys nothing). With --self a byte-for-byte copy of the baseline
 //              joins the rotation as a third column: what separates a binary
 //              from itself on this machine, in these rounds, is the noise a
 //              gain or a loss has to stand out of (§7 S2).
@@ -60,6 +66,7 @@ const ROWS = ["scan", "nbody", "vec3", "spectral", "bootstrap"]
 let runs = 7
 let only = new Set(ROWS)
 let self = false
+const levels = []
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--runs") {
@@ -68,6 +75,15 @@ for (let i = 2; i < argv.length; i++) {
     only = new Set((argv[++i] ?? "").split(",").filter(Boolean))
   } else if (argv[i] === "--self") {
     self = true
+  } else if (argv[i] === "--level") {
+    const level = argv[++i]
+    if (level === undefined) {
+      fail("--level needs a CPU level")
+    }
+    if (levels.includes(level)) {
+      fail(`--level ${level} is given twice`)
+    }
+    levels.push(level)
   } else {
     fail(`unknown option ${argv[i]}`)
   }
@@ -81,10 +97,29 @@ for (const name of only) {
   }
 }
 
-/** The level the wider column is linked for: the one S2's flag would offer first. */
-const MARCH = "x86-64-v3"
-if (process.arch !== "x64" && ["nbody", "vec3", "spectral"].some((n) => only.has(n))) {
-  fail(`the ${MARCH} column needs an x86-64 host; pass --only scan,bootstrap here`)
+/**
+ * The levels a column may be linked for, by the host architecture each runs
+ * on: §7's table of levels both constant-time checkers pass at. `native` and
+ * the SVE levels are not among them, so they are not measured either.
+ */
+const LEVELS = {
+  x64: ["x86-64-v2", "x86-64-v3", "x86-64-v4"],
+  arm64: ["armv8.2-a", "armv8.4-a+crypto"],
+}
+const hostLevels = LEVELS[process.arch] ?? []
+if (levels.length === 0 && hostLevels.length > 0) {
+  levels.push(process.arch === "x64" ? "x86-64-v3" : "armv8.2-a")
+}
+const timesLevels = ["nbody", "vec3", "spectral"].some((n) => only.has(n))
+for (const level of timesLevels ? levels : []) {
+  if (!hostLevels.includes(level)) {
+    fail(
+      `--level ${level} cannot run on this ${process.arch} host (levels here: ${hostLevels.join(", ") || "none"}); pass --only scan,bootstrap here`
+    )
+  }
+}
+if (timesLevels && levels.length === 0) {
+  fail(`no CPU level runs on this ${process.arch} host; pass --only scan,bootstrap here`)
 }
 
 /** The rounds the scan driver runs over its document: about two seconds natively. */
@@ -191,18 +226,19 @@ const timeProcess =
   }
 
 /**
- * A C compiler that is the baseline's with `-march=<MARCH>` in front, for
+ * A C compiler that is the baseline's with `-march=<level>` in front, for
  * scripts/build.sh, which takes its compiler from `CC` and no extra flags.
  * Under `-flto` clang passes the CPU on to the link-time code generator, so the
- * module's functions get it as well as runtime.c's.
+ * module's functions get it as well as runtime.c's. build.sh already gives
+ * every unit -ffp-contract=off, so this is the line `--cpu <level>` runs.
  */
-const wideCC = (() => {
-  const file = path.join(outDir, `cc-${MARCH}`)
-  fs.writeFileSync(file, `#!/bin/sh\nexec ${process.env.CC || "clang"} -march=${MARCH} "$@"\n`, {
+const levelCC = (level) => {
+  const file = path.join(outDir, `cc-${level}`)
+  fs.writeFileSync(file, `#!/bin/sh\nexec ${process.env.CC || "clang"} -march=${level} "$@"\n`, {
     mode: 0o755,
   })
   return file
-})()
+}
 
 const results = []
 const row = (name, column, r) => {
@@ -305,27 +341,23 @@ for (const name of ["nbody", "vec3", "spectral"].filter((n) => only.has(n))) {
       env
     )
   const base = path.join(outDir, `${name}-baseline`)
-  const wide = path.join(outDir, `${name}-${MARCH}`)
   link(base, process.env)
-  link(wide, { ...process.env, CC: wideCC })
+  const columns = [["baseline", base]]
   if (self) {
     // A copy rather than the same path twice, so the two columns share
-    // nothing the third does not: each is its own file, mapped on its own.
+    // nothing the others do not: each is its own file, mapped on its own.
     const copy = path.join(outDir, `${name}-baseline-copy`)
     fs.copyFileSync(base, copy)
-    const [b, c, w] = timeAlternating(
-      name,
-      timeProcess(base, []),
-      timeProcess(copy, []),
-      timeProcess(wide, [])
-    )
-    row(name, "baseline", b)
-    row(name, "baseline (copy)", c)
-    row(name, MARCH, w)
-  } else {
-    const [b, w] = timeAlternating(name, timeProcess(base, []), timeProcess(wide, []))
-    row(name, "baseline", b)
-    row(name, MARCH, w)
+    columns.push(["baseline (copy)", copy])
+  }
+  for (const level of levels) {
+    const exe = path.join(outDir, `${name}-${level}`)
+    link(exe, { ...process.env, CC: levelCC(level) })
+    columns.push([level, exe])
+  }
+  const timed = timeAlternating(name, ...columns.map(([, exe]) => timeProcess(exe, [])))
+  for (const [k, [column]] of columns.entries()) {
+    row(name, column, timed[k])
   }
 }
 
@@ -369,7 +401,7 @@ const cpu = (() => {
     return "unknown"
   }
 })()
-const columns = self ? 3 : 2
+const columns = 1 + (self ? 1 : 0) + levels.length
 console.log(
   `\n${runs} runs after one warm-up (the -march rows: ${Math.ceil(runs / columns) * columns} rotating rounds of ${columns}), at ${commit}, on ${cpu}`
 )
@@ -379,9 +411,16 @@ const gains = (from, to) =>
 for (const name of ["nbody", "vec3", "spectral"]) {
   const b = results.find((r) => r.name === name && r.column === "baseline")
   const c = results.find((r) => r.name === name && r.column === "baseline (copy)")
-  const w = results.find((r) => r.name === name && r.column === MARCH)
-  if (b && w) {
-    console.log(`${name}: -march=${MARCH} ${gains(b, w)} (${b.min.toFixed(1)} -> ${w.min.toFixed(1)} ms)`)
+  const at = levels.map((level) => results.find((r) => r.name === name && r.column === level))
+  levels.forEach((level, k) => {
+    if (b && at[k]) {
+      console.log(
+        `${name}: -march=${level} ${gains(b, at[k])} (${b.min.toFixed(1)} -> ${at[k].min.toFixed(1)} ms)`
+      )
+    }
+  })
+  if (at.length === 2 && at[0] && at[1]) {
+    console.log(`${name}: -march=${levels[1]} against -march=${levels[0]} ${gains(at[0], at[1])}`)
   }
   if (b && c) {
     console.log(`${name}: the baseline against its own copy ${gains(b, c)}`)

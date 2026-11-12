@@ -1293,6 +1293,20 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       )
       return T_ERROR
     }
+    // WP27 S4.2: `readStruct<Stat>(p)` is the same shape, and its type
+    // argument comes from the context, as `Ok(v)`'s does.
+    const left = expr.children[0]
+    if (left.kind === N_IDENT && scope.lookup(left.text) === null) {
+      const imported = ctx.program.builtinImport(left.text)
+      if (imported !== null && imported.canonical === "readStruct") {
+        ctx.error(
+          expr.children[1],
+          `Type arguments are not written at a call site in ${LANGUAGE}: \`readStruct\` copies into the ` +
+            "`declare class` its context names, so write `const s: Stat = readStruct(p)`"
+        )
+        return T_ERROR
+      }
+    }
   }
   return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope)
 }
@@ -3282,7 +3296,13 @@ export const templateFix = (ctx: CheckContext, call: Node, value: Node): Edit[] 
  * The canonical name is recorded because the emitter dispatches builtins on
  * the identifier's own text, and under an import that text is the local name.
  */
-const checkImportedBuiltin = (ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 => {
+const checkImportedBuiltin = (
+  ctx: CheckContext,
+  expr: Node,
+  scope: Scope,
+  imported: BuiltinExport,
+  want: i32
+): i32 => {
   const callee = expr.children[0]
   if (imported.isProperty) {
     return ctx.errorType(callee, `\`${callee.text}\` is a builtin value and cannot be called`)
@@ -3290,7 +3310,7 @@ const checkImportedBuiltin = (ctx: CheckContext, expr: Node, scope: Scope, impor
   ctx.program.nodeBuiltins[expr.id] = imported.canonical
   return imported.namespace.length > 0
     ? checkImportedDottedBuiltin(ctx, expr, scope, imported.namespace, imported.member)
-    : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member)
+    : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member, want)
 }
 
 const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
@@ -3384,7 +3404,7 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
       if (refuseSecretArguments(ctx, expr, scope, imported.canonical)) {
         return T_ERROR
       }
-      return checkImportedBuiltin(ctx, expr, scope, imported)
+      return checkImportedBuiltin(ctx, expr, scope, imported, want)
     }
     if (isResultConstructor(callee.text)) {
       if (want === T_ERROR) {

@@ -1,6 +1,6 @@
 # WP38: SIMD
 
-**State:** In progress · **Done:** 9 of 10 · **Design note:** [`docs/wp38-simd.md`](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md)
+**State:** Landed · **Done:** 10 of 10 · **Design note:** [`docs/wp38-simd.md`](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md)
 
 ## Stages
 
@@ -13,11 +13,11 @@
 - [x] S7: crediting an offset index from the test that bounds it
 - [x] S9 and S10: SHA-256 on SHA-NI and ARMv8, ChaCha20 on AVX2 and NEON; CRC-32 on the same seam
 - [x] S8: the SSSE3 and NEON Adler-32 kernels, measured past their bar ([#1079](https://github.com/amritk/nish/issues/1079))
-- [ ] `--cpu` levels for AArch64 or `x86-64-v4`, each on its own measurement
+- [x] `--cpu` levels for AArch64 and `x86-64-v4`, each on its own measurement: measured, not built ([#1432](https://github.com/amritk/nish/pull/1432))
 
 ## Next
 
-`--cpu` levels for AArch64 or `x86-64-v4`, each on its own measurement. Spec: [§7](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear).
+Nothing is scheduled. `x86-64-v4` is kept out of `--cpu` (decided 2026-11-12): it clears S2's bar against the baseline but gains nothing over `x86-64-v3` ([§7](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear)).
 
 ## Not planned
 

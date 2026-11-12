@@ -146,7 +146,9 @@ const isSpawnPipedArity = (name: string, call: Node): boolean => {
  * `Set`; a module constant in this language is a scalar or a string, so the set
  * is a function here and the two are read side by side. `readCString` (WP27
  * S3.3) copies C's bytes into the arena at the call, as a `declare function`'s
- * `string` result does, and `ffi_owned_string` pins it after `churn()`.
+ * `string` result does, and `ffi_owned_string` pins it after `churn()`;
+ * `readStruct` (S4.2) copies a C struct into a fresh layout instance there,
+ * pinned by `ffi_struct_read`.
  */
 const isAllocatingBuiltin = (name: string): boolean =>
   name === "readFileSync" ||
@@ -157,7 +159,8 @@ const isAllocatingBuiltin = (name: string): boolean =>
   name === "realpathSync" ||
   name === "waitPid" ||
   name === "terminalSize" ||
-  name === "readCString"
+  name === "readCString" ||
+  name === "readStruct"
 
 /**
  * Whether the builtin `name` answers an array whose elements were allocated by

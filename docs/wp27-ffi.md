@@ -2,8 +2,8 @@
 
 **Status:** S1 and S2 are built; S3 (§8) is built: S3.1, `string`
 parameters, S3.2, `string` returns, and S3.3, `readCString` and the
-literal-`null` `CPtr | null` parameter; S4 (§9) is being built: S4.1, a `declare class`
-as a C struct layout passed by pointer, is built; S4.2 (`readStruct`) and S5 are unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
+literal-`null` `CPtr | null` parameter; S4 (§9) is built: S4.1, a `declare class`
+as a C struct layout passed by pointer, and S4.2, `readStruct`; S5 is unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
 ([#62](https://github.com/amritk/nish/pull/62), `tests/cases/ffi_scalar`); S2,
 the opaque pointer `CPtr`, in 0.3.0 (`tests/cases/ffi_pointer`, §7), with its
 debug-info type in 0.4.0 ([#90](https://github.com/amritk/nish/pull/90), §7e).
@@ -15,7 +15,7 @@ a package or a `std/` module binds the bare C name rather than the package's
 prefixed one, with duplicate declarations required to agree
 (`tests/link/ffi_package_declare`). Whether S5
 should happen at all is a language question (§3); §8 answers it for S3 and
-§9 for S4, which is being built. The rules are normative in
+§9 for S4, which is built. The rules are normative in
 [LANGUAGE.md](LANGUAGE.md#calling-c) and the lowering is in
 [IR_COOKBOOK.md](IR_COOKBOOK.md#declare-function-calling-c).
 
@@ -85,7 +85,7 @@ conservatism is the feature and the stages are small.
 | S1 | scalar-only `declare function`: `i32`, `i64`, `f64`, `boolean`, `void`, `u8`–`u64` | **built**, 0.2.0 |
 | S2 | an opaque pointer type, `null` only from a foreign call, no arithmetic | **built**, 0.3.0, §7 |
 | S3 | `string` ↔ `char *` marshalling, and who owns the bytes | **built**, §8: S3.1 (`string` parameters), S3.2 (`string` returns), S3.3 (`readCString`, the literal-`null` `CPtr \| null` parameter) |
-| S4 | C structs by layout declaration | §9: S4.1 (`declare class` as a layout, passed by pointer) **built**; S4.2 (`readStruct`) planned |
+| S4 | C structs by layout declaration | **built**, §9: S4.1 (`declare class` as a layout, passed by pointer), S4.2 (`readStruct`, a copy back, §9h) |
 | S5 | `errno`, and whether it is a builtin or a declared foreign global | proposed |
 
 S1 calls a great deal of libc (`getpid`, `abs`, `isatty`, `sysconf`). It is not
@@ -649,7 +649,7 @@ struct. A struct never crosses by value, in either direction: the C ABI for
 struct arguments and results differs per target (registers, a hidden pointer,
 split across classes) and LLVM leaves that lowering to the front end. A layout
 class as a `declare function` result is refused (`reject_ffi_struct_return`);
-S4.2's `readStruct` is how a C-owned struct comes back, by copy.
+S4.2's `readStruct` is how a C-owned struct comes back, by copy (§9h).
 
 The pointer is **borrowed for the call**, S3.1's rule (§8b) applied to a
 struct: C may read and write through it while the call runs and must not keep
@@ -679,7 +679,7 @@ callbacks and variadics.
 | Step | Delivers | Tests |
 | --- | --- | --- |
 | **S4.1** (built) | `declare class` as a layout (§9b, §9c); a layout-class `declare function` parameter lowered to a borrowed pointer (§9d) | `ffi_struct_param` (`getrlimit`/`setrlimit` round trip, `clock_gettime` twice, a nested layout); `ffi_struct_layout` (a C sidecar's `offsetof`/`sizeof` against the fields Nish read); one `reject_ffi_struct_*` per refusal; `reject_cls_declare` rewritten |
-| **S4.2** | `readStruct<T>(p: CPtr): T` in `nish:unsafe`, a copy of a C-owned struct into a Nish-owned instance | `ffi_struct_read` and its refusals |
+| **S4.2** (built) | `readStruct(p: CPtr)` in `nish:unsafe`, a copy of a C-owned struct into a Nish-owned instance of the `declare class` its context names (§9h) | `ffi_struct_read` (`localeconv`, a sidecar's static struct overwritten after the copy, a churned arena); `reject_unsafe_read_struct_*`; `reject_unsafe_no_import` extended; `panics_ffi_read_struct_null` (the `ffi-null` panic); `tests/ffi-struct.js` (the `ffi-null` site, the wasm32 size) |
 
 ### 9g. Headers, bindings and targets
 
@@ -741,3 +741,79 @@ are the layout's.
 
 The rolling freeze (§8h) holds: `std/` may declare a layout class from the
 commit that lands S4.1, `src/` not until the release after it.
+
+### 9h. `readStruct`: a C-owned struct comes back by copy (S4.2)
+
+§9d lends a struct Nish owns to C. The other direction is a struct C owns,
+whose address a `declare function` hands back: `localeconv()`'s `struct
+lconv`, `getpwnam`'s `struct passwd`, `gmtime`'s `struct tm`, each a static
+buffer the next call overwrites. Three shapes were open.
+
+1. **A view.** A layout-class value that is C's pointer, read field by field
+   in place. It costs no copy, but every read is then through memory the
+   program does not own and C may rewrite between two reads (the next
+   `localeconv()`, `setlocale`, another thread), and the value's lifetime is
+   C's, which no rule of Nish can state: a view kept in a field outlives the
+   buffer as easily as a local does. Escape analysis would have to treat a
+   layout value as possibly foreign everywhere, and §9d's borrowed pointer
+   would no longer be the only way a layout and C meet.
+2. **A borrowed reference, scoped to a block.** A view the checker keeps from
+   escaping a block, as `using` scopes an arena. That bounds the lifetime, but
+   not C's writes inside the block, and it is a new kind of value with its own
+   refusals at every place a layout may go, for a struct that is a few dozen
+   bytes.
+3. **A copy.** `readStruct(p)` allocates an instance as `new` does and copies
+   the layout's size of bytes into it, once. After the call the instance is
+   the program's, like any other: C may free or rewrite its struct, the copy
+   lives and dies by §9c's rules, and nothing about a layout value changes.
+
+S4.2 takes the copy. The cost is one `memcpy` of a struct, and the pointer is
+dereferenced exactly once, at a call the program spells in `nish:unsafe`.
+What the copy cannot do is deep-copy: a `CPtr` field of the copy is still C's
+pointer, read with `readCString` while C keeps it live, as S3.3 already
+requires.
+
+**The spelling: the layout comes from context.** The plan wrote
+`readStruct<T>(p)`, but a type argument is not written at a call site in
+Nish: `identity<i32>(7)` parses as `(identity < i32) > (7)`, and WP18 §2a
+refuses it by name. `readStruct` has nothing to infer `T` from in its argument,
+so it takes `T` from where the result goes, as `Ok(v)` and `Err(e)` do: an
+annotation (`const lc: Lconv = readStruct(p)`), a parameter, a return type or
+an assignment's target. The context, stripped of `| null`, must be a
+`declare class`; a call with no context, or one whose context is not a layout,
+is refused (`reject_unsafe_read_struct_context` holds both), and
+`readStruct<Lconv>(p)` is refused with a message that names the annotated form
+(`reject_unsafe_read_struct_type_args`). `runtime/nish.d.ts` still declares
+`readStruct<T>(p: CPtr): T`, which `tsc` infers from the same context.
+
+**A `NULL` test, and no size test.** The parameter is a non-null `CPtr`, so a
+`CPtr | null` is narrowed first, as for `readCString`
+(`reject_unsafe_read_struct_null`). That narrowing proves nothing about a
+result C answered: a `declare function` whose result is declared `CPtr` may
+still answer `NULL`, and reading a struct through it is a fault natively and a
+silent read of address 0 on wasm32. So the copy tests its pointer first and
+panics with the `ffi-null` kind, naming the layout (``` `readStruct` read a NULL
+pointer into a `Pair` ```, `panics_ffi_read_struct_null`). `--emit-panics`
+lists the call as an `ffi-null` site with the copy's `oom` beside it, and no
+proof removes the check, so `--deny-panics` refuses a call in its scope.
+`readCString` is the one reader left unchecked: it still trusts a `CPtr`
+result not to be `NULL` (RT-16) and stays an allowed `unchecked` site. The
+size is not checked: the compiler cannot know how many bytes C's pointer
+covers, so the layout must be the struct or a prefix of it. That, and the
+liveness of the pointer, are why the function is in `nish:unsafe`, and
+`--emit-checked` records the import and every call.
+
+**As built.** The checker is `checkReadStruct` in `src/builtins.ts`; the
+emitter is `emitStructCopy` in `src/emit-classes.ts`: the `NULL` test and
+its panic, then the arena allocation
+`new` makes (`nish_alloc_struct`, rounded to 8), then
+`llvm.memcpy` of the layout's size, the destination aligned to 8 and the source
+to 1, since C's struct is aligned to what C chose and the compiler knows only
+the address. The copy is a fresh allocation of the calling function
+(`isAllocatingBuiltin` in `src/escape.ts`), so a copy made in a callee and
+returned is held by the caller's scope. The size is the target's (§9g): 16 bytes for
+`{ CPtr; CPtr }` natively and 8 on wasm32. `tests/cases/ffi_struct_read` reads
+`localeconv()` and a C sidecar's static struct, and prints each copy after C
+has overwritten its struct and the arena has been churned. There is no
+`writeStruct`: writing C-owned memory stays out of scope (§9e), and a struct
+C should fill is lent to it by §9d.
