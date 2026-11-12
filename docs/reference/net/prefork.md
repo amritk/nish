@@ -10,6 +10,7 @@ import {
   PREFORK_LISTENER_FLAG,
   PREFORK_SPAWN_FAILED,
   PREFORK_STOPPED,
+  PREFORK_UDP_FLAG,
   PREFORK_WORKERS_EXITED,
   PREFORK_WORKER_FLAG,
   PreforkConfig,
@@ -20,6 +21,8 @@ import {
   preforkServiceChannelOf,
   preforkSupervise,
   preforkSupervisorChannel,
+  preforkUdpCount,
+  preforkUdpListener,
   preforkWith,
   preforkWorkerCount,
   preforkWorkers,
@@ -46,7 +49,7 @@ export const main = (): number => {
 
 <scalar-card title="prefork​Args" icon="phosphor/regular/function" href="#preforkargs">
 
-`args` (`process.argv`) without the worker flag and the channels and listener flags before it, the same in every process.
+`args` (`process.argv`) without the worker flag and the channels, listener and UDP flags before it, the same in every process.
 
 </scalar-card>
 
@@ -83,6 +86,18 @@ In the service worker, its end of the channel to worker `index`; -1 for itself o
 <scalar-card title="prefork​Supervisor​Channel" icon="phosphor/regular/function" href="#preforksupervisorchannel">
 
 In a worker, its end of its supervisor channel; -1 when it has none.
+
+</scalar-card>
+
+<scalar-card title="prefork​Udp​Count" icon="phosphor/regular/function" href="#preforkudpcount">
+
+In a worker, how many workers share its steered UDP port (`listenUdp`): the `QuicServerConfig.workerCount` to pair with `preforkIndex` as its `workerIndex`. 0 exactly when `preforkUdpListener` answers -1.
+
+</scalar-card>
+
+<scalar-card title="prefork​Udp​Listener" icon="phosphor/regular/function" href="#preforkudplistener">
+
+In a worker, the UDP socket the supervisor bound for it (`listenUdp`); -1 when none, or when the flag is not the supervisor's `<fd>,<N>`.
 
 </scalar-card>
 
@@ -190,6 +205,23 @@ ones. Both are off by default.
 
 </scalar-detail>
 
+<scalar-detail title="QUIC">
+
+`listenUdp`, with `listenPort`, binds one UDP socket per worker
+on the same port before the TCP listeners, held like them, as a group the
+kernel steers by connection ID (`udpBind` flag 4): a datagram whose
+destination ID starts with byte k reaches worker k. Worker k reads its
+socket with `preforkUdpListener(args)` and the group's size N with
+`preforkUdpCount(args)` (`--nish-prefork-udp=<fd>,<N>`, before the listener
+flag), and sets `QuicServerConfig.workerIndex` to k and `.workerCount` to N
+so every ID it issues starts with k. A connection then stays with its
+worker when the client's address or port changes. More than 255 workers
+panics; where the kernel refuses the steering (off Linux, or under a
+seccomp profile that refuses it) the supervisor says so on stderr and runs
+one worker.
+
+</scalar-detail>
+
 <scalar-detail title="How many">
 
 `NISH_WORKERS` when it is a positive whole number, else
@@ -234,8 +266,8 @@ Private helpers share the importing program's flat symbol namespace
 
 ### preforkArgs
 
-`args` (`process.argv`) without the worker flag and the channels and
-listener flags before it, the same in every process.
+`args` (`process.argv`) without the worker flag and the channels,
+listener and UDP flags before it, the same in every process.
 
 ```ts
 function preforkArgs(args: string[]): string[]
@@ -361,9 +393,10 @@ stops, and a restarted worker comes with a new one.
 Panics, besides, when `serviceWorker` is not below the worker count or the
 count is above 64 with a service worker (63 with `listenPort`), the most
 `spawnWithFds` hands one child; when `pin`, on Linux, asks for more workers
-than `availableParallelism()`; and, through `preforkInvalid`, on seqpacket
-channels off Linux. A listener that cannot bind answers
-`PREFORK_SPAWN_FAILED` before any worker starts.
+than `availableParallelism()`; when `listenUdp` asks for more than 255
+workers (62 with a service worker); and, through `preforkInvalid`, on
+seqpacket channels off Linux. A listener or UDP socket that cannot bind
+answers `PREFORK_SPAWN_FAILED` before any worker starts.
 
 ```ts
 function preforkSupervise<S>(
@@ -428,6 +461,49 @@ the worker's arguments, `process.argv`
 
 the descriptor the worker talks to the supervisor through, or -1
   without `supervisorChannels` or outside a worker
+
+</scalar-field>
+
+### preforkUdpCount
+
+In a worker, how many workers share its steered UDP port (`listenUdp`): the
+`QuicServerConfig.workerCount` to pair with `preforkIndex` as its
+`workerIndex`. 0 exactly when `preforkUdpListener` answers -1.
+
+```ts
+function preforkUdpCount(args: string[]): i32
+```
+
+<scalar-field name="args" type="string[]" required>
+
+the worker's arguments, `process.argv`
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the group's size, 1 to 255, or 0 without a UDP socket
+
+</scalar-field>
+
+### preforkUdpListener
+
+In a worker, the UDP socket the supervisor bound for it (`listenUdp`); -1
+when none, or when the flag is not the supervisor's `<fd>,<N>`.
+
+```ts
+function preforkUdpListener(args: string[]): i32
+```
+
+<scalar-field name="args" type="string[]" required>
+
+the worker's arguments, `process.argv`
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+the bound UDP socket's descriptor to serve QUIC on, or -1
 
 </scalar-field>
 
@@ -545,6 +621,7 @@ class PreforkConfig
 | `listenFlags: i32` | Their `tcpListenFlags` beyond `SO_REUSEPORT`, which is always set: 0, or 2 for `TCP_NODELAY`. |
 | `listenHost: string` | The address the listeners of `listenPort` bind. |
 | `listenPort: i32` | The port the supervisor binds one listener per worker on, 0 for any; -1, the default, leaves each worker to bind its own. |
+| `listenUdp: boolean` | With `listenPort`, also bind one UDP socket per worker on the same port, before the TCP listeners, as a group the kernel steers by QUIC connection ID (`udpBind` flag 4): a datagram goes to worker k when byte 0 of its destination connection ID is k, so a QUIC connection stays with the worker that issued its IDs when the client's address changes. Linux only, and at most 255 workers (more panics). Where the kernel refuses the steering, the supervisor says so on stderr and runs one worker. |
 | `pin: boolean` | Pin worker `k` to CPU `k` (`setCpuAffinity`), and with `listenPort`, steer each connection to the listener of the CPU that received it. Linux only; elsewhere the workers run unpinned. `k` is the CPU number, not the `k`-th allowed CPU: under a mask that skips CPU `k`, worker `k` runs unpinned and a connection received past the listeners falls back to the kernel's hash. |
 | `quickExitMs: i32` | A worker that exits within this many milliseconds of starting died young. |
 | `restart: boolean` | Start a worker that exited again. Off, a worker that exits stays gone, and the supervisor returns once none is left. |
@@ -592,6 +669,16 @@ supervisor could not listen for SIGTERM and so starts none.
 `PREFORK_STOPPED: i32`
 
 What `preforkWith` answers in the supervisor once its workers are gone.
+
+</scalar-card>
+
+<scalar-card title="&quot;--nish-prefork-udp=&quot;" icon="phosphor/regular/hash">
+
+`PREFORK_UDP_FLAG: string`
+
+The flag that hands a worker its UDP socket and the size of the steered
+group, `<fd>,<N>`, before the listener flag, when `listenUdp` is on: read
+it with `preforkUdpListener` and `preforkUdpCount`.
 
 </scalar-card>
 
