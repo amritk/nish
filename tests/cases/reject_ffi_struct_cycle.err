@@ -1,0 +1,1 @@
+in itself: a C struct cannot contain itself by value
