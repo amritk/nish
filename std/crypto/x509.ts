@@ -2104,10 +2104,7 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
     if (read === X509_EXT_MALFORMED) {
       return false
     }
-    if (
-      x509DerContentsAre(der, id, aia) &&
-      !x509AuthorityInfoAccessSound(der, value.start, value.end)
-    ) {
+    if (x509DerContentsAre(der, id, aia) && !x509AuthorityInfoAccessSound(der, value.start, value.end)) {
       return false
     }
     if (ce === X509_CE_POLICY_CONSTRAINTS) {

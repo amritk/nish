@@ -39156,39 +39156,39 @@ function x509ReadExtensions(der: u8[], e: X509DerElement, out: X509Certificate):
   pointer e: size=16 writesThrough=false captured=false
   pointer out: size=176 writesThrough=true captured=false passedTo=nish.x509ReadExtension#4 nish.x509NoteCritical#1
   stackSites=5 stackLocals=5
-  local -55:9 seq: X509DerElement | null (const)
-  callee -55:38 x509DerExpect -> @nish.x509DerExpect
-  local -49:9 seen: u8[][] (const)
-  local -47:9 ext: X509DerElement (const)
-  callee -47:15 new X509DerElement -> @nish.X509DerElement.constructor
-  local -46:9 id: X509DerElement (const)
-  callee -46:14 new X509DerElement -> @nish.X509DerElement.constructor
-  local -45:9 flag: X509DerElement (const)
-  callee -45:16 new X509DerElement -> @nish.X509DerElement.constructor
-  local -44:9 value: X509DerElement (const)
-  callee -44:17 new X509DerElement -> @nish.X509DerElement.constructor
-  local -43:9 aia: u8[] (const)
-  callee -43:21 x509OidAuthorityInfoAccess -> @nish.x509OidAuthorityInfoAccess
-  local -42:7 at: i32 (let)
-  callee -38:8 x509DerExpectInto -> @nish.x509DerExpectInto
-  callee -34:10 x509DerExpectInto -> @nish.x509DerExpectInto
-  callee -34:75 x509DerOidSound -> @nish.x509DerOidSound
-  local -31:11 oid: u8[] (const)
-  callee -31:23 x509DerSlice -> @nish.x509DerSlice
-  local -30:16 other: u8[] (const)
-  callee -29:11 x509BytesEqual -> @nish.x509BytesEqual
-  local -24:9 next: i32 (let)
-  local -23:9 critical: boolean (let)
-  callee -22:9 x509DerPeek -> @nish.x509DerPeek
-  callee -21:12 x509DerReadInto -> @nish.x509DerReadInto
-  callee -21:58 x509DerIsTrue -> @nish.x509DerIsTrue
-  callee -15:10 x509DerExpectInto -> @nish.x509DerExpectInto
-  local -12:11 ce: i32 (const)
-  callee -12:21 x509ExtensionArc -> @nish.x509ExtensionArc
-  local -11:11 read: i32 (const)
-  callee -11:23 x509ReadExtension -> @nish.x509ReadExtension
-  callee -6:7 x509DerContentsAre -> @nish.x509DerContentsAre
-  callee -5:8 x509AuthorityInfoAccessSound -> @nish.x509AuthorityInfoAccessSound
+  local -52:9 seq: X509DerElement | null (const)
+  callee -52:38 x509DerExpect -> @nish.x509DerExpect
+  local -46:9 seen: u8[][] (const)
+  local -44:9 ext: X509DerElement (const)
+  callee -44:15 new X509DerElement -> @nish.X509DerElement.constructor
+  local -43:9 id: X509DerElement (const)
+  callee -43:14 new X509DerElement -> @nish.X509DerElement.constructor
+  local -42:9 flag: X509DerElement (const)
+  callee -42:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -41:9 value: X509DerElement (const)
+  callee -41:17 new X509DerElement -> @nish.X509DerElement.constructor
+  local -40:9 aia: u8[] (const)
+  callee -40:21 x509OidAuthorityInfoAccess -> @nish.x509OidAuthorityInfoAccess
+  local -39:7 at: i32 (let)
+  callee -35:8 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -31:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -31:75 x509DerOidSound -> @nish.x509DerOidSound
+  local -28:11 oid: u8[] (const)
+  callee -28:23 x509DerSlice -> @nish.x509DerSlice
+  local -27:16 other: u8[] (const)
+  callee -26:11 x509BytesEqual -> @nish.x509BytesEqual
+  local -21:9 next: i32 (let)
+  local -20:9 critical: boolean (let)
+  callee -19:9 x509DerPeek -> @nish.x509DerPeek
+  callee -18:12 x509DerReadInto -> @nish.x509DerReadInto
+  callee -18:58 x509DerIsTrue -> @nish.x509DerIsTrue
+  callee -12:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  local -9:11 ce: i32 (const)
+  callee -9:21 x509ExtensionArc -> @nish.x509ExtensionArc
+  local -8:11 read: i32 (const)
+  callee -8:23 x509ReadExtension -> @nish.x509ReadExtension
+  callee -4:9 x509DerContentsAre -> @nish.x509DerContentsAre
+  callee -4:46 x509AuthorityInfoAccessSound -> @nish.x509AuthorityInfoAccessSound
   callee +3:7 x509NoteCritical -> @nish.x509NoteCritical
 function x509ParseCertificate(der: u8[]): X509Certificate | null -> @nish.x509ParseCertificate [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
