@@ -914,6 +914,7 @@ class PreforkSupervisor {
       config.listenPort === 0 && this.udp.length > 0 ? netLocalPort(this.udp[0]) : config.listenPort
     if (config.listenPort === 0 && this.udp.length > 0 && port <= 0) {
       console.error(`nish/net/prefork: cannot read the UDP port bound (${port})`)
+      this.closeListeners()
       return false
     }
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {

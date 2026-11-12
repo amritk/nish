@@ -494,8 +494,8 @@ The worker index k, from 0 to 254, or -1 when the IDs carry no worker.
 
 Panics, with the pair in the message, unless `config`'s worker fields are
 both unset (`workerIndex` -1 and `workerCount` 0) or name a worker of a
-steered group (0 <= k < N <= 255). `QuicListener` and `Http3Server` call it
-when they are built, before they read a datagram.
+steered group (0 <= k < N <= 255). `QuicListener` calls it when it is built,
+before it reads a datagram, so an `Http3Server` panics through its listener.
 
 ```ts
 function quicWorkerCheck(
