@@ -1067,8 +1067,9 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
  * `spawnWithFds` hands one child; when `pin`, on Linux, asks for more workers
  * than `availableParallelism()`; when `listenUdp` asks for more than 255
  * workers (62 with a service worker); and, through `preforkInvalid`, on
- * seqpacket channels off Linux. A listener or UDP socket that cannot bind
- * answers `PREFORK_SPAWN_FAILED` before any worker starts.
+ * seqpacket channels off Linux. A listener or UDP socket that cannot bind,
+ * or a refused steering that leaves one worker beside a `serviceWorker` past
+ * 0, answers `PREFORK_SPAWN_FAILED` before any worker starts.
  *
  * @param args the process's arguments, `process.argv`
  * @param config the supervisor's settings, every field checked (a bad one
@@ -1136,6 +1137,15 @@ export const preforkSupervise = <S>(
   }
   if (config.listenUdp) {
     count = toI32(udp.length)
+  }
+  // The one-worker fallback has no slot for a service worker past worker 0.
+  if (config.serviceWorker >= count) {
+    console.error(`nish/net/prefork: serviceWorker ${config.serviceWorker} with one worker, steering refused`)
+    for (let i: i32 = 0; i < toI32(udp.length); i++) {
+      netClose(udp[i])
+    }
+    netClose(loop)
+    return PREFORK_SPAWN_FAILED
   }
   const supervisor = new PreforkSupervisor(config, args, count, loop, udp)
   if (config.listenPort >= 0 && !supervisor.listen(pin)) {

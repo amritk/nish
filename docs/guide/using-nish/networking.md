@@ -408,6 +408,8 @@ Steering needs Linux. Where the kernel refuses it (off Linux, or under a
 seccomp profile that forbids the program), the supervisor says so on stderr,
 `nish/net/prefork: QUIC steering refused (-95), running one worker`, and runs
 a single worker on a plain socket, with `preforkUdpCount` answering `1`.
+A `serviceWorker` other than `0` has no place in that one-worker run, so
+there the supervisor starts nothing and answers `PREFORK_SPAWN_FAILED`.
 The underlying call is `udpBind` with flag `4`
 ([`nish:net`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
 
