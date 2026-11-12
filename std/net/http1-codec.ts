@@ -182,8 +182,8 @@ export class Http1Parser {
   // `buffered`, `http1TakeLine` and the head's lines move, then the flags,
   // then the rest of the request's numbers and the caller's limits. What only
   // `keepText`, an error or a chunked body reads follows. Each group packs as
-  // widest first does, and the flags' two bytes of padding are the only ones:
-  // the struct is the 200 bytes its fields sum to, rounded to 8.
+  // widest first does, and the flags' two bytes of padding are the only ones
+  // inside it: its fields sum to 228 bytes, which round to 232.
 
   // --- the request's buffers -------------------------------------------------
   /**
@@ -289,6 +289,41 @@ export class Http1Parser {
    * @internal Read and written by the parser's free functions in this module to enforce the 431 limit.
    */
   fieldCount: i32 = 0
+  /**
+   * Host fields the request's head has kept so far.
+   * @internal Counted by the field-line parser in this module as each name is lowered, and read by `http1EndOfHead`.
+   */
+  hostFields: i32 = 0
+  /**
+   * Content-Length fields the request's head has kept so far.
+   * @internal Counted by the field-line parser in this module, and read by `http1EndOfHead`.
+   */
+  lengthFields: i32 = 0
+  /**
+   * The index of the last Content-Length field, or -1.
+   * @internal Set by the field-line parser in this module, and read by `http1EndOfHead`.
+   */
+  lengthField: i32 = -1
+  /**
+   * Transfer-Encoding fields the request's head has kept so far.
+   * @internal Counted by the field-line parser in this module, and read by `http1EndOfHead`.
+   */
+  codingFields: i32 = 0
+  /**
+   * Upgrade fields the request's head has kept so far.
+   * @internal Counted by the field-line parser in this module, and read by `http1EndOfHead`.
+   */
+  upgradeFields: i32 = 0
+  /**
+   * The bytes of the Upgrade fields' values, OWS trimmed, summed.
+   * @internal Counted by the field-line parser in this module, and read by `http1EndOfHead`.
+   */
+  upgradeValueBytes: i32 = 0
+  /**
+   * The `HTTP1_CONNECTION_` options the Connection fields so far name.
+   * @internal Gathered by the field-line parser in this module as each Connection field is read, and read by `http1EndOfHead`.
+   */
+  connectionOptions: i32 = 0
   /** The minor version: 0 for HTTP/1.0, 1 for HTTP/1.1 and anything above it. */
   minor: i32 = 1
   /**
@@ -667,6 +702,13 @@ const http1StartRequest = (p: Http1Parser): void => {
   p.bodyTotal = 0
   p.sectionBytes = 0
   p.fieldCount = 0
+  p.hostFields = 0
+  p.lengthFields = 0
+  p.lengthField = -1
+  p.codingFields = 0
+  p.upgradeFields = 0
+  p.upgradeValueBytes = 0
+  p.connectionOptions = 0
   p.headHeld = false
 }
 
@@ -928,17 +970,20 @@ const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): 
 
 /**
  * Copies `buf[from .. to)` to the end of `head`, growing it when it must, and
- * answers where the copy starts.
+ * answers where the copy starts. The head keeps sixteen bytes past its last
+ * line, so the copy goes a vector at a time and a vector load at any byte of
+ * the head is in bounds: the name and value compares read one. A vector's
+ * lanes past the line write bytes past `headLength`, which nothing reads.
  */
 const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   const n: i32 = to - from
   const at: i32 = p.headLength
   let size: i32 = toI32(p.head.length)
-  if (n > size - at) {
+  if (n > size - at - 16) {
     if (size < HTTP1_FIRST_HEAD) {
       size = HTTP1_FIRST_HEAD
     }
-    while (size - at < n) {
+    while (size - at - 16 < n) {
       if (size > 1073741823) {
         panic("Http1Parser: a head of more than 2^31 - 1 bytes")
       }
@@ -946,22 +991,21 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
     }
     const grown: u8[] = new Array<u8>(size)
     const old: u8[] = p.head
-    for (let k: i32 = 0; k < at && k < toI32(grown.length) && k < toI32(old.length); k += 1) {
-      grown[k] = old[k]
+    if (at > 0 && at <= toI32(old.length) && at <= size) {
+      copyBytes(grown, 0, old, 0, at)
     }
     p.head = grown
   }
   const head: u8[] = p.head
   const buf: u8[] = p.buf
-  if (n > 0 && from >= 0 && from <= toI32(buf.length) - n && at <= toI32(head.length) - n) {
-    // The line lies in `buf` and the head was grown to hold it: one move.
-    copyBytes(head, at, buf, from, n)
-  } else {
-    for (let k: i32 = 0; k < n && at + k < toI32(head.length) && from + k < toI32(buf.length); k += 1) {
-      if (from + k >= 0) {
-        head[at + k] = buf[from + k]
-      }
-    }
+  let k: i32 = 0
+  while (k < n && from + k >= 0 && from + k <= toI32(buf.length) - 16 && at + k <= toI32(head.length) - 16) {
+    store(loadU8x16(buf, from + k), head, at + k)
+    k += 16
+  }
+  if (k < n && from + k >= 0 && from <= toI32(buf.length) - n && at <= toI32(head.length) - n) {
+    // The last bytes of a line that ends within a vector of `buf`'s end.
+    copyBytes(head, at + k, buf, from + k, n - k)
   }
   p.headLength = at + n
   return at
@@ -1032,53 +1076,127 @@ const http1Tally = (p: Http1Parser, name: string, word: string): Http1ListTally 
   return tally
 }
 
-/** `http1ConnectionOptions`: the Connection list names `close`. */
+/** `http1FramingField`: a Host field. */
+const HTTP1_FIELD_HOST: i32 = 1
+/** `http1FramingField`: a Content-Length field. */
+const HTTP1_FIELD_LENGTH: i32 = 2
+/** `http1FramingField`: a Transfer-Encoding field. */
+const HTTP1_FIELD_CODING: i32 = 3
+/** `http1FramingField`: a Connection field. */
+const HTTP1_FIELD_CONNECTION: i32 = 4
+/** `http1FramingField`: an Upgrade field. */
+const HTTP1_FIELD_UPGRADE: i32 = 5
+
+/**
+ * Whether `head[at .. at + n)` is `word`'s first `n` bytes, `n` at most 16,
+ * each upper-case ASCII letter of the head lowered when `fold`: one vector
+ * compare, or `http1HeadIs` when fewer than sixteen bytes follow `at`.
+ */
+const http1HeadIsVector = (head: u8[], at: i32, n: i32, word: u8x16, text: string, fold: boolean): boolean => {
+  if (at < 0 || at > toI32(head.length) - 16 || n > 16) {
+    return http1HeadIs(head, at, at + n, text, fold)
+  }
+  let v: u8x16 = loadU8x16(head, at)
+  if (fold) {
+    v = select(lt(subWrapping(v, splatU8x16(65)), splatU8x16(26)), or(v, splatU8x16(32)), v)
+  }
+  const want: i32 = n >= 16 ? 65535 : (1 << n) - 1
+  return (bitmask(eq(v, word)) & want) === want
+}
+
+/**
+ * Which of the fields that frame a message (RFC 9112 §6, §9.6, RFC 9110 §7.2,
+ * §7.8) the lowercase name `head[at .. at + n)` is, as an `HTTP1_FIELD_`
+ * kind, or 0. Every kept field line asks once, as its name is read, so the
+ * end of the head counts them without reading a name again; the length picks
+ * the one name a field could be, and one vector compare answers.
+ */
+const http1FramingField = (head: u8[], at: i32, n: i32): i32 => {
+  if (n === 4) {
+    const host: u8x16 = u8x16(104, 111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    return http1HeadIsVector(head, at, n, host, "host", false) ? HTTP1_FIELD_HOST : 0
+  }
+  if (n === 7) {
+    const upgrade: u8x16 = u8x16(117, 112, 103, 114, 97, 100, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    return http1HeadIsVector(head, at, n, upgrade, "upgrade", false) ? HTTP1_FIELD_UPGRADE : 0
+  }
+  if (n === 10) {
+    const connection: u8x16 = u8x16(99, 111, 110, 110, 101, 99, 116, 105, 111, 110, 0, 0, 0, 0, 0, 0)
+    return http1HeadIsVector(head, at, n, connection, "connection", false) ? HTTP1_FIELD_CONNECTION : 0
+  }
+  if (n === 14) {
+    const length: u8x16 = u8x16(99, 111, 110, 116, 101, 110, 116, 45, 108, 101, 110, 103, 116, 104, 0, 0)
+    return http1HeadIsVector(head, at, n, length, "content-length", false) ? HTTP1_FIELD_LENGTH : 0
+  }
+  if (n === 17) {
+    // "transfer-encodin" in the vector, and the "g" after it.
+    const coding: u8x16 = u8x16(116, 114, 97, 110, 115, 102, 101, 114, 45, 101, 110, 99, 111, 100, 105, 110)
+    const g: boolean = at >= 0 && at + 16 < toI32(head.length) && head[at + 16] === 103
+    return g && http1HeadIsVector(head, at, 16, coding, "transfer-encodin", false) ? HTTP1_FIELD_CODING : 0
+  }
+  return 0
+}
+
+/** `http1ConnectionList`: the Connection list names `close`. */
 const HTTP1_CONNECTION_CLOSE: i32 = 1
-/** `http1ConnectionOptions`: the Connection list names `keep-alive`. */
+/** `http1ConnectionList`: the Connection list names `keep-alive`. */
 const HTTP1_CONNECTION_KEEP_ALIVE: i32 = 2
-/** `http1ConnectionOptions`: the Connection list names `upgrade`. */
+/** `http1ConnectionList`: the Connection list names `upgrade`. */
 const HTTP1_CONNECTION_UPGRADE: i32 = 4
 
 /**
- * Which of `close`, `keep-alive` and `upgrade` the Connection fields name,
- * in any case, as `HTTP1_CONNECTION_` bits: one walk of every Connection
- * field's list, where three `http1Tally` walks would each read it all. An
- * element is trimmed of OWS and compared whole, as `http1TallyRun` compares.
+ * Which of `close`, `keep-alive` and `upgrade` the Connection value
+ * `head[from .. to)` names, in any case, as `HTTP1_CONNECTION_` bits. The
+ * commas are found sixteen bytes at a time; each element is trimmed of OWS and
+ * compared whole (RFC 9110 §5.6.1, §7.6.1), its length picking the one word it
+ * could be, and empty elements are skipped.
  */
-const http1ConnectionOptions = (p: Http1Parser): i32 => {
-  const spans: i32[] = p.spans
-  const head: u8[] = p.head
+const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
+  const close: u8x16 = u8x16(99, 108, 111, 115, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+  const keepAlive: u8x16 = u8x16(107, 101, 101, 112, 45, 97, 108, 105, 118, 101, 0, 0, 0, 0, 0, 0)
+  const upgrade: u8x16 = u8x16(117, 112, 103, 114, 97, 100, 101, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+  const length: i32 = toI32(head.length)
   let found: i32 = 0
-  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
-    if (!http1HeadIs(head, spans[4 * i], spans[4 * i + 1], "connection", false)) {
-      continue
+  let start: i32 = from
+  while (start >= 0 && start <= to) {
+    // The element runs to the next comma, or to the value's end.
+    let end: i32 = start
+    let seeking: boolean = true
+    while (seeking && end < to) {
+      if (end <= length - 16) {
+        const commas: i32 = bitmask(eq(loadU8x16(head, end), splatU8x16(44)))
+        if (commas !== 0) {
+          end += toI32(31) - toI32(Math.clz32(toU32(commas & -commas)))
+          seeking = false
+        } else {
+          end += 16
+        }
+      } else if (end < length && head[end] !== 44) {
+        end += 1
+      } else {
+        seeking = false
+      }
     }
-    const to: i32 = spans[4 * i + 3]
-    let start: i32 = spans[4 * i + 2]
-    for (let k: i32 = start; k <= to; k += 1) {
-      const c: i32 = k < to && k >= 0 && k < toI32(head.length) ? toI32(head[k]) : 44
-      if (c !== 44) {
-        continue
-      }
-      let a: i32 = start
-      let b: i32 = k
-      while (a >= 0 && a < b && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
-        a += 1
-      }
-      while (b > a && b - 1 >= 0 && b - 1 < toI32(head.length) && http1IsOws(toI32(head[b - 1]))) {
-        b -= 1
-      }
-      // The length picks the one word an element could be.
-      const n: i32 = b - a
-      if (n === 5 && http1HeadIs(head, a, b, "close", true)) {
-        found = found | HTTP1_CONNECTION_CLOSE
-      } else if (n === 10 && http1HeadIs(head, a, b, "keep-alive", true)) {
-        found = found | HTTP1_CONNECTION_KEEP_ALIVE
-      } else if (n === 7 && http1HeadIs(head, a, b, "upgrade", true)) {
-        found = found | HTTP1_CONNECTION_UPGRADE
-      }
-      start = k + 1
+    if (end > to) {
+      end = to
     }
+    let a: i32 = start
+    let b: i32 = end
+    while (a < b && a < length && http1IsOws(toI32(head[a]))) {
+      a += 1
+    }
+    while (b > a && b - 1 < length && http1IsOws(toI32(head[b - 1]))) {
+      b -= 1
+    }
+    const n: i32 = b - a
+    if (n === 5 && http1HeadIsVector(head, a, n, close, "close", true)) {
+      found = found | HTTP1_CONNECTION_CLOSE
+    } else if (n === 10 && http1HeadIsVector(head, a, n, keepAlive, "keep-alive", true)) {
+      found = found | HTTP1_CONNECTION_KEEP_ALIVE
+    } else if (n === 7 && http1HeadIsVector(head, a, n, upgrade, "upgrade", true)) {
+      found = found | HTTP1_CONNECTION_UPGRADE
+    }
+    start = end + 1
   }
   return found
 }
@@ -1116,8 +1234,23 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   const n: i32 = toI32(buf.length)
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < n ? p.lineEnd : n
+  // The method is tchars, sixteen at a time as a field name is read; the
+  // line's CR, a control byte, ends the run if no space or other byte does.
   let i: i32 = a
-  while (i >= 0 && i < b && i < toI32(buf.length) && http1IsTokenByte(toI32(buf[i]))) {
+  let ended: boolean = false
+  while (!ended && i >= 0 && i < b && i <= toI32(buf.length) - 16) {
+    const bad: i32 = http1NonTokenLanes(loadU8x16(buf, i))
+    if (bad !== 0) {
+      i += toI32(31) - toI32(Math.clz32(toU32(bad & -bad)))
+      ended = true
+    } else {
+      i += 16
+    }
+  }
+  if (i > b) {
+    i = b
+  }
+  while (!ended && i >= 0 && i < b && i < toI32(buf.length) && http1IsTokenByte(toI32(buf[i]))) {
     i += 1
   }
   if (i === a || i - a > HTTP1_MAX_METHOD || i >= b || buf[i] !== 32) {
@@ -1230,16 +1363,28 @@ const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
   if (keep) {
     let valueStart: i32 = nameEnd + 1
     let valueEnd: i32 = b
-    while (
-      valueStart >= 0 &&
-      valueStart < valueEnd &&
-      valueStart < toI32(buf.length) &&
-      http1IsOws(toI32(buf[valueStart]))
-    ) {
+    while (valueStart < valueEnd && (buf[valueStart] === 32 || buf[valueStart] === 9)) {
       valueStart += 1
     }
-    while (valueEnd > valueStart && valueEnd - 1 >= 0 && http1IsOws(toI32(buf[valueEnd - 1]))) {
+    while (valueEnd > valueStart && (buf[valueEnd - 1] === 32 || buf[valueEnd - 1] === 9)) {
       valueEnd -= 1
+    }
+    // The fields that frame the message are counted here, as their names
+    // are read, for `http1EndOfHead`: every kept field asks the same question.
+    const kind: i32 = http1FramingField(p.head, at, nameEnd - a)
+    if (kind === HTTP1_FIELD_HOST) {
+      p.hostFields += 1
+    } else if (kind === HTTP1_FIELD_LENGTH) {
+      p.lengthFields += 1
+      p.lengthField = p.headerCount
+    } else if (kind === HTTP1_FIELD_CODING) {
+      p.codingFields += 1
+    } else if (kind === HTTP1_FIELD_CONNECTION) {
+      p.connectionOptions =
+        p.connectionOptions | http1ConnectionList(p.head, at + (valueStart - a), at + (valueEnd - a))
+    } else if (kind === HTTP1_FIELD_UPGRADE) {
+      p.upgradeFields += 1
+      p.upgradeValueBytes += valueEnd - valueStart
     }
     const base: i32 = 4 * p.headerCount
     http1SpanSet(p, base + 3, at + (valueEnd - a))
@@ -1261,40 +1406,20 @@ const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
 
 /**
  * The header section has ended: decide the framing and the connection's fate
- * (§6.3, §9.3) and answer `HTTP1_HEAD`, or the refusal. It reads the spans,
- * and allocates nothing unless `keepText` asks for `upgrade` as a string.
+ * (§6.3, §9.3) and answer `HTTP1_HEAD`, or the refusal. It reads the counts
+ * the field lines left, and allocates nothing unless `keepText` asks for
+ * `upgrade` as a string.
  */
 const http1EndOfHead = (p: Http1Parser): i32 => {
   const spans: i32[] = p.spans
   const head: u8[] = p.head
-  let hosts: i32 = 0
-  let lengths: i32 = 0
-  let lengthField: i32 = -1
-  let codingFields: i32 = 0
-  let upgradeFields: i32 = 0
-  let upgradeBytes: i32 = 0
-  let connectionFields: i32 = 0
-  for (let i: i32 = 0; i < p.headerCount && 4 * i + 3 < toI32(spans.length); i += 1) {
-    const a: i32 = spans[4 * i]
-    const b: i32 = spans[4 * i + 1]
-    if (http1HeadIs(head, a, b, "host", false)) {
-      hosts += 1
-    } else if (http1HeadIs(head, a, b, "content-length", false)) {
-      lengths += 1
-      lengthField = i
-    } else if (http1HeadIs(head, a, b, "transfer-encoding", false)) {
-      codingFields += 1
-    } else if (http1HeadIs(head, a, b, "connection", false)) {
-      connectionFields += 1
-    } else if (http1HeadIs(head, a, b, "upgrade", false)) {
-      upgradeFields += 1
-      upgradeBytes += spans[4 * i + 3] - spans[4 * i + 2]
-    }
-  }
+  const hosts: i32 = p.hostFields
+  const lengths: i32 = p.lengthFields
+  const lengthField: i32 = p.lengthField
   if ((p.minor === 1 && hosts !== 1) || hosts > 1) {
     return http1Fail(p, 400, "a request without exactly one Host")
   }
-  if (codingFields > 0) {
+  if (p.codingFields > 0) {
     if (lengths > 0) {
       return http1Fail(p, 400, "both Content-Length and Transfer-Encoding")
     }
@@ -1329,16 +1454,14 @@ const http1EndOfHead = (p: Http1Parser): i32 => {
     }
     p.contentLength = size
   }
-  // One walk of the Connection list finds all three options, and none is
-  // made for a request without a Connection field.
-  const options: i32 = connectionFields > 0 ? http1ConnectionOptions(p) : 0
+  const options: i32 = p.connectionOptions
   const close: boolean = (options & HTTP1_CONNECTION_CLOSE) !== 0
   const keep: boolean = (options & HTTP1_CONNECTION_KEEP_ALIVE) !== 0
   const upgradeAsked: boolean = (options & HTTP1_CONNECTION_UPGRADE) !== 0
   p.keepAlive = p.minor === 1 ? !close : keep && !close
   // The fields of one name joined with ", " are empty only when there is one
   // field and it is empty: the same test, without the join.
-  p.upgrading = p.minor === 1 && upgradeAsked && (upgradeFields > 1 || upgradeBytes > 0)
+  p.upgrading = p.minor === 1 && upgradeAsked && (p.upgradeFields > 1 || p.upgradeValueBytes > 0)
   if (p.keepText && p.upgrading) {
     const upgrades: string[] = []
     const names: string[] = p.names
@@ -1493,6 +1616,121 @@ const http1BodyWindow = (p: Http1Parser, after: i32): i32 => {
   return HTTP1_BODY
 }
 
+/**
+ * Reads a header or trailer section's lines while whole ones are buffered:
+ * `http1TakeLine` and `http1FieldLine` in one loop, each line limited by what
+ * is left of `maxHeaderBytes` as `http1TakeLine` limits it, and the section's
+ * bytes counted after it. The control bytes of the vector that held one line's
+ * CRLF are kept for the next line, which mostly starts in the same vector, so
+ * each buffered byte is loaded once however many lines a read brought.
+ * Answers `HTTP1_LINE` when a trailer section has ended and the state machine
+ * goes on, or what `next()` answers: `HTTP1_HEAD`, `HTTP1_NEED_MORE` or the
+ * refusal. Its limits, refusals, spans and `scan` are `http1TakeLine`'s.
+ */
+const http1Section = (p: Http1Parser): i32 => {
+  const buf: u8[] = p.buf
+  const stop: i32 = p.end < toI32(buf.length) ? p.end : toI32(buf.length)
+  const trailer: boolean = p.state === HTTP1_S_TRAILERS
+  let i: i32 = p.start
+  if (p.scan > p.start) {
+    i = p.scan
+  } else {
+    p.lineControl = false
+  }
+  if (i < 0) {
+    i = 0
+  }
+  // Bit `k` of `bits` is set when `buf[base + k]` is a control byte or DEL
+  // at or past `i`: the vector last loaded, its lanes before `i` cleared.
+  let base: i32 = i - 16
+  let bits: i32 = 0
+  while (true) {
+    // The next control byte at or past `i`, or the end of the bytes so far.
+    let j: i32 = stop
+    let seeking: boolean = true
+    while (seeking) {
+      if (bits !== 0) {
+        j = base + (toI32(31) - toI32(Math.clz32(toU32(bits & -bits))))
+        seeking = false
+      } else {
+        const q: i32 = base + 16 > i ? base + 16 : i
+        if (q >= 0 && q <= stop - 16) {
+          const v: u8x16 = loadU8x16(buf, q)
+          bits = bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127))))
+          base = q
+        } else {
+          // Fewer than sixteen bytes are left: a byte at a time.
+          let k: i32 = q
+          while (k >= 0 && k < stop && buf[k] >= 32 && buf[k] !== 127) {
+            k += 1
+          }
+          j = k
+          base = k + 1 - 16
+          seeking = false
+        }
+      }
+    }
+    if (j < 0 || j >= stop) {
+      i = j < 0 ? i : j
+      break
+    }
+    const c: i32 = toI32(buf[j])
+    let lf: i32 = -1
+    if (c === 13 && j + 1 < stop && buf[j + 1] === 10) {
+      lf = j + 1
+    } else if (c === 10) {
+      lf = j
+    }
+    if (lf >= 0) {
+      const start: i32 = p.start
+      if (lf === start || buf[lf - 1] !== 13) {
+        return http1Fail(p, 400, "a line ended in a bare LF")
+      }
+      if (lf - 1 - start > p.maxHeaderBytes - p.sectionBytes) {
+        return http1Fail(p, 431, "a line over its limit")
+      }
+      p.lineStart = start
+      p.lineEnd = lf - 1
+      p.start = lf + 1
+      p.scan = lf + 1
+      i = lf + 1
+      const consumed: i32 = i - base
+      bits = consumed >= 31 ? 0 : bits & ~((1 << consumed) - 1)
+      p.sectionBytes += lf + 1 - start
+      if (p.sectionBytes > p.maxHeaderBytes) {
+        return http1Fail(p, 431, "a header section over the limit")
+      }
+      if (lf - 1 === start) {
+        if (trailer) {
+          p.state = HTTP1_S_MESSAGE_END
+          return HTTP1_LINE
+        }
+        return http1EndOfHead(p)
+      }
+      if (http1FieldLine(p, !trailer) === HTTP1_ERROR) {
+        return HTTP1_ERROR
+      }
+      p.lineControl = false
+    } else if (c === 13 && j + 1 >= stop) {
+      // A CR at the end of the bytes so far: whether it ends the line is
+      // the next byte's to say, so the next call looks at it again.
+      i = j
+      break
+    } else {
+      if (c !== 9) {
+        p.lineControl = true
+      }
+      i = j + 1
+      bits = bits & (bits - 1)
+    }
+  }
+  p.scan = i
+  if (p.end - p.start > p.maxHeaderBytes - p.sectionBytes + 1) {
+    return http1Fail(p, 431, "a line over its limit")
+  }
+  return HTTP1_NEED_MORE
+}
+
 /** The state machine behind `next()`. */
 const http1Next = (p: Http1Parser): i32 => {
   while (true) {
@@ -1522,24 +1760,9 @@ const http1Next = (p: Http1Parser): i32 => {
       }
       case HTTP1_S_FIELDS:
       case HTTP1_S_TRAILERS: {
-        const got: i32 = http1TakeLine(p, p.maxHeaderBytes - p.sectionBytes, 431)
+        const got: i32 = http1Section(p)
         if (got !== HTTP1_LINE) {
           return got
-        }
-        p.sectionBytes += p.lineEnd - p.lineStart + 2
-        if (p.sectionBytes > p.maxHeaderBytes) {
-          return http1Fail(p, 431, "a header section over the limit")
-        }
-        const trailer: boolean = p.state === HTTP1_S_TRAILERS
-        if (p.lineEnd === p.lineStart) {
-          if (trailer) {
-            p.state = HTTP1_S_MESSAGE_END
-            break
-          }
-          return http1EndOfHead(p)
-        }
-        if (http1FieldLine(p, !trailer) === HTTP1_ERROR) {
-          return HTTP1_ERROR
         }
         break
       }
