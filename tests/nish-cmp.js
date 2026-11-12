@@ -1146,30 +1146,33 @@ const pathMtu = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: PATH_MTU, why }))
   )
+/** The changelog words of the stage that tags vector accesses as element data. */
+const VECTOR_ACCESS_TBAA = "vector loads and stores as element data"
+const vectorAccessTbaa = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: VECTOR_ACCESS_TBAA, why }))
+  )
 
 const DECLARED = [
   // A vector load or store carries the scope and TBAA tag a scalar element
   // access of its lane type carries (emitVectorAccess, src/emit-arrays.ts).
-  ...[
-    ["tests/cases/simd_access.ts", "simd_access.ll"],
-    ["tests/cases/simd_access_oob.ts", "simd_access_oob.ll"],
-    ["tests/cases/simd_access_oob_first.ts", "simd_access_oob_first.ll"],
-    ["tests/cases/simd_access_oob_negative.ts", "simd_access_oob_negative.ll"],
-    ["tests/cases/simd_chacha_quarter.ts", "simd_chacha_quarter.ll"],
-    ["tests/cases/simd_load_field_loop.ts", "simd_load_field_loop.ll"],
-    ["tests/cases/simd_store_field_reload.ts", "simd_store_field_reload.ll"],
-    ["tests/cases/simd_store_oob.ts", "simd_store_oob.ll"],
-    ["docs/cookbook/simd-load-store.ts", "simd-load-store.ll"],
-    ["bench/http1-parse/main.ts", "old-copy.ll"],
-    ["bench/http1-parse/main.ts", "old.ll"],
-    ["tests/link/net_http1_parse_diff/main.ts", "old.ll"],
-    ["tests/link/simd_parallel_capture/main.ts", "main.ll"],
-  ].map(([program, file]) => ({
-    program,
-    file,
-    changelog: "vector loads and stores as element data",
-    why: "a nish:simd vector load or store gains the !alias.scope, !noalias and !tbaa a scalar element access of its lane type carries, so every module with one moves on those lines alone",
-  })),
+  ...vectorAccessTbaa(
+    "a nish:simd vector load or store gains the !alias.scope, !noalias and !tbaa a scalar element access of its lane type carries, so every module with one moves on those lines alone",
+    {
+      "tests/cases/simd_access.ts": ["simd_access.ll"],
+      "tests/cases/simd_access_oob.ts": ["simd_access_oob.ll"],
+      "tests/cases/simd_access_oob_first.ts": ["simd_access_oob_first.ll"],
+      "tests/cases/simd_access_oob_negative.ts": ["simd_access_oob_negative.ll"],
+      "tests/cases/simd_chacha_quarter.ts": ["simd_chacha_quarter.ll"],
+      "tests/cases/simd_load_field_loop.ts": ["simd_load_field_loop.ll"],
+      "tests/cases/simd_store_field_reload.ts": ["simd_store_field_reload.ll"],
+      "tests/cases/simd_store_oob.ts": ["simd_store_oob.ll"],
+      "docs/cookbook/simd-load-store.ts": ["simd-load-store.ll"],
+      "bench/http1-parse/main.ts": ["old-copy.ll", "old.ll"],
+      "tests/link/net_http1_parse_diff/main.ts": ["old.ll"],
+      "tests/link/simd_parallel_capture/main.ts": ["main.ll"],
+    }
+  ),
   // The TLS server takes secp256r1 key shares and its carrier an idle
   // timeout: four TLS classes gain fields, which moves every module laying
   // one out (TLS_SERVER_MOVED), and three tests use the new fields.
