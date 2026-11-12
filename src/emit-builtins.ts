@@ -29,6 +29,7 @@ import {
   stringifyCallee,
 } from "./emit-strings"
 import { emitIndex, emitUncheckedElement } from "./emit-arrays"
+import { emitStructCopy, structInfoOf } from "./emit-classes"
 import { emitWrapping } from "./emit-ops"
 import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
@@ -844,6 +845,13 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "readCString") {
     return emitCStringCopy(emitter, emitter.emitExpression(firstArgument(expr)))
   }
+  // WP27 S4.2: the struct's bytes, copied into the arena by the layout the
+  // checker typed the call with, after a null test: a `CPtr` a C function
+  // answered may be `NULL` whatever its declaration says.
+  if (name === "readStruct") {
+    const from = emitter.emitExpression(firstArgument(expr))
+    return emitStructCopy(emitter, structInfoOf(emitter, emitter.typeOf(expr)), from)
+  }
   if (name === "parseInt") {
     const value = emitParseCall(emitter, emitter.emitExpression(firstArgument(expr)), 2)
     return callIntrinsic(emitter, SAT_I32, "i32", `double ${value}`)
@@ -1484,6 +1492,13 @@ export const identifierBuiltinCalleesNamed = (
   // WP27 S3.3: `@nish.ffi.str`, the copy, calls `nish_str_new`.
   if (name === "readCString") {
     out.push("nish_str_new")
+    return out
+  }
+  // WP27 S4.2: a null test that panics, then a fresh arena struct and an
+  // inline memcpy.
+  if (name === "readStruct") {
+    panicTailCallees(out)
+    out.push("nish_alloc_struct")
     return out
   }
   // Declared here rather than left to fall through, so the table says it:

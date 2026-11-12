@@ -1214,10 +1214,14 @@ holds a NUL byte, which C would read as the end of the string:
 
 **`ffi-null`**: a `string` result of a [`declare function`](declarations.md#calling-c) that
 is `NULL`:
-`` `name` returned NULL for a `string` result; declare it `string | null` ``
+`` `name` returned NULL for a `string` result; declare it `string | null` ``;
+or the pointer of a [`readStruct`](declarations.md#readstruct-a-struct-out-of-memory-c-owns)
+call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``
 
 - *What proves it away:* nothing: a result declared `string | null` reads
-  `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`)
+  `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`); the
+  `readStruct` test stays at every call
+  (`tests/cases/panics_ffi_read_struct_null`)
 
 **`ffi-length`**: a call to a
 [`declare function`](declarations.md#a-u8-parameter-a-buffer-and-its-count) whose count is
@@ -1248,7 +1252,8 @@ through further calls
 **`unchecked`**: `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no
 check at all, so nothing panics, but an index out of range is undefined
 behaviour; `readCString`, whose pointer nothing proves is live and
-NUL-terminated
+NUL-terminated (`readStruct` tests its pointer for `NULL`, so it is an
+`ffi-null` site below)
 
 - *What proves it away:* nothing, and nothing needs to: the call is the
   author's word that the index is in range, or that the pointer is, not a
