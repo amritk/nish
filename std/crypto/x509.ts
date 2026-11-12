@@ -307,6 +307,31 @@ export class X509Certificate {
   ncUnsupported: boolean = false
   /** Whether a critical extension is one this module does not decode: RFC 5280 §4.2 has a verifier refuse it. */
   unknownCritical: boolean = false
+  /** Whether an authorityKeyIdentifier extension is present (RFC 5280 §4.2.1.1), with or without its keyIdentifier. */
+  akiPresent: boolean = false
+  /** Whether the authorityKeyIdentifier carries authorityCertIssuer and authorityCertSerialNumber, which are read and not kept. */
+  akiIssuerSerial: boolean = false
+  /** Whether the authorityKeyIdentifier is marked critical, which RFC 5280 §4.2.1.1 forbids. */
+  akiCritical: boolean = false
+  /** Whether the subjectKeyIdentifier is marked critical, which RFC 5280 §4.2.1.2 forbids. */
+  skiCritical: boolean = false
+  /** Whether keyUsage is marked critical, as RFC 5280 §4.2.1.3 says it should be. */
+  kuCritical: boolean = false
+  /** Whether subjectAltName is marked critical: RFC 5280 §4.2.1.6 has it critical when the subject is empty, and not otherwise. */
+  sanCritical: boolean = false
+  /** Whether basicConstraints is marked critical, which RFC 5280 §4.2.1.9 requires of a CA. */
+  bcCritical: boolean = false
+  /** Whether extKeyUsage is marked critical, which RFC 5280 §4.2.1.12 allows and the Web PKI does not. */
+  ekuCritical: boolean = false
+  /** Whether nameConstraints is marked critical, which RFC 5280 §4.2.1.10 requires. */
+  ncCritical: boolean = false
+  /**
+   * Whether a policyConstraints extension (RFC 5280 §4.2.1.11) is present. It
+   * is not decoded, so a critical one also sets `unknownCritical`.
+   */
+  pcPresent: boolean = false
+  /** Whether policyConstraints is marked critical, which RFC 5280 §4.2.1.11 requires. */
+  pcCritical: boolean = false
 
   /**
    * A certificate with every field empty, zero, `false` or `null`, and
@@ -669,11 +694,15 @@ const X509_CE_BASIC_CONSTRAINTS: i32 = 19
 const X509_CE_NAME_CONSTRAINTS: i32 = 30
 const X509_CE_AUTHORITY_KEY_ID: i32 = 35
 const X509_CE_EXT_KEY_USAGE: i32 = 37
+const X509_CE_POLICY_CONSTRAINTS: i32 = 36
 
 /** What `x509ReadExtension` answers: an extension it does not decode, one it decoded, one that is malformed. */
 const X509_EXT_UNKNOWN: i32 = 0
 const X509_EXT_SOUND: i32 = 1
 const X509_EXT_MALFORMED: i32 = 2
+
+/** id-pe-authorityInfoAccess, 1.3.6.1.5.5.7.1.1 (RFC 5280 §4.2.2.1). */
+const x509OidAuthorityInfoAccess = (): u8[] => x509DerOidContents([1, 3, 6, 1, 5, 5, 7, 1, 1])
 
 /** id-kp-serverAuth, 1.3.6.1.5.5.7.3.1 (RFC 5280 §4.2.1.12). */
 const x509OidServerAuth = (): u8[] => x509DerOidContents([1, 3, 6, 1, 5, 5, 7, 3, 1])
@@ -1883,13 +1912,15 @@ const x509GeneralNamesSound = (der: u8[], e: X509DerElement): boolean => {
  * OPTIONAL }`, its keyIdentifier, which may not be empty, into `out.akid`.
  * The other two are held to their order, to being both present or both
  * absent, as §4.2.1.1 has them, to a non-empty GeneralNames and a minimal
- * INTEGER, and not kept. `false` when it is malformed.
+ * INTEGER, and not kept: `out.akiIssuerSerial` says they are there. `false`
+ * when it is malformed.
  */
 const x509ReadAuthorityKeyId = (der: u8[], start: i32, end: i32, out: X509Certificate): boolean => {
   const seq: X509DerElement | null = x509DerExpect(der, start, end, X509_TAG_SEQUENCE)
   if (seq === null || seq.end !== end) {
     return false
   }
+  out.akiPresent = true
   let at: i32 = seq.start
   if (x509DerPeek(der, at, seq.end) === 0x80) {
     const id: X509DerElement | null = x509DerRead(der, at, seq.end)
@@ -1911,9 +1942,64 @@ const x509ReadAuthorityKeyId = (der: u8[], start: i32, end: i32, out: X509Certif
     ) {
       return false
     }
+    out.akiIssuerSerial = true
     at = serial.end
   }
   return at === seq.end
+}
+
+/**
+ * Whether authorityInfoAccess (RFC 5280 §4.2.2.1) is well formed: a non-empty
+ * `SEQUENCE OF AccessDescription { accessMethod OID, accessLocation
+ * GeneralName }`, each a sound OID and a sound GeneralName, and nothing after
+ * it. Nothing is kept: no access method is followed.
+ */
+const x509AuthorityInfoAccessSound = (der: u8[], start: i32, end: i32): boolean => {
+  const seq: X509DerElement | null = x509DerExpect(der, start, end, X509_TAG_SEQUENCE)
+  if (seq === null || seq.end !== end || seq.end === seq.start) {
+    return false
+  }
+  let at: i32 = seq.start
+  while (at < seq.end) {
+    const desc: X509DerElement | null = x509DerExpect(der, at, seq.end, X509_TAG_SEQUENCE)
+    const method: X509DerElement | null =
+      desc === null ? null : x509DerExpect(der, desc.start, desc.end, X509_TAG_OID)
+    const location: X509DerElement | null =
+      desc === null || method === null ? null : x509DerRead(der, method.end, desc.end)
+    if (
+      desc === null ||
+      method === null ||
+      location === null ||
+      location.end !== desc.end ||
+      !x509DerOidSound(der, method) ||
+      x509GeneralNameKind(der, location) === -1
+    ) {
+      return false
+    }
+    at = desc.end
+  }
+  return true
+}
+
+/** Notes in `out` that the extension at arc `ce` under 2.5.29, one this module decodes or policyConstraints, is marked critical. */
+const x509NoteCritical = (ce: i32, out: X509Certificate): void => {
+  if (ce === X509_CE_SUBJECT_ALT_NAME) {
+    out.sanCritical = true
+  } else if (ce === X509_CE_BASIC_CONSTRAINTS) {
+    out.bcCritical = true
+  } else if (ce === X509_CE_KEY_USAGE) {
+    out.kuCritical = true
+  } else if (ce === X509_CE_EXT_KEY_USAGE) {
+    out.ekuCritical = true
+  } else if (ce === X509_CE_NAME_CONSTRAINTS) {
+    out.ncCritical = true
+  } else if (ce === X509_CE_SUBJECT_KEY_ID) {
+    out.skiCritical = true
+  } else if (ce === X509_CE_AUTHORITY_KEY_ID) {
+    out.akiCritical = true
+  } else if (ce === X509_CE_POLICY_CONSTRAINTS) {
+    out.pcCritical = true
+  }
 }
 
 /**
@@ -1960,9 +2046,12 @@ const x509ExtensionArc = (der: u8[], id: X509DerElement): i32 => {
  * FALSE, extnValue OCTET STRING }` and nothing after it. `false` when any is
  * malformed, a critical flag is not DER's TRUE, an OID appears twice (§4.2:
  * "MUST NOT include more than one instance"), there are more than
- * `X509_MAX_EXTENSIONS`, or a decoded extension is malformed. A critical
- * extension this module does not decode sets `out.unknownCritical`; a
- * non-critical one is skipped.
+ * `X509_MAX_EXTENSIONS`, a decoded extension is malformed, or an
+ * authorityInfoAccess is not `x509AuthorityInfoAccessSound`. A decoded
+ * extension's critical flag is kept (`sanCritical` and the rest), and so is
+ * policyConstraints' presence and flag. A critical extension this module does
+ * not decode, authorityInfoAccess and policyConstraints among them, sets
+ * `out.unknownCritical`; a non-critical one is skipped.
  */
 const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate): boolean => {
   const seq: X509DerElement | null = x509DerExpect(der, e.start, e.end, X509_TAG_SEQUENCE)
@@ -2007,9 +2096,22 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
     if (!x509DerExpectInto(der, next, ext.end, X509_TAG_OCTET_STRING, value) || value.end !== ext.end) {
       return false
     }
-    const read: i32 = x509ReadExtension(der, x509ExtensionArc(der, id), value.start, value.end, out)
+    const ce: i32 = x509ExtensionArc(der, id)
+    const read: i32 = x509ReadExtension(der, ce, value.start, value.end, out)
     if (read === X509_EXT_MALFORMED) {
       return false
+    }
+    if (
+      x509DerContentsAre(der, id, x509OidAuthorityInfoAccess()) &&
+      !x509AuthorityInfoAccessSound(der, value.start, value.end)
+    ) {
+      return false
+    }
+    if (ce === X509_CE_POLICY_CONSTRAINTS) {
+      out.pcPresent = true
+    }
+    if (critical) {
+      x509NoteCritical(ce, out)
     }
     if (read === X509_EXT_UNKNOWN) {
       out.unknownCritical = out.unknownCritical || critical
