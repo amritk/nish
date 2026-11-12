@@ -30,6 +30,11 @@ The CPU goes to the stages listed under "Where the time goes" below.
 | C | nish 0.35.0 | [`patches/arm-c-sendbody.patch`](patches/arm-c-sendbody.patch): `ConduitWorker.answer` sends with `conn.sendBody` (one `writev` of head and body) where it used `conn.write` |
 | K-*name* | nish 0.35.0 | arm B, with [`patches/knob-<name>.patch`](patches/) applied to that arm's own copy of the installed `std/` |
 
+The baseline arm A is fetched from the npm registry, not from a git tag:
+`run.sh setup` runs `npm install -g nish@0.34.1` into its own prefix (and
+`nish@0.35.0` for B, C and the knob arms), so a fresh clone needs no tag.
+`ARM_NISH=<version|tarball>` overrides an arm's compiler.
+
 Every arm is built with the submission's `build.sh` plus `-g`. That way perf
 and cachegrind can name its functions, and the code they measure is the code
 that runs.
