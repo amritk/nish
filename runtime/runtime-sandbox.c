@@ -406,25 +406,33 @@ static int nish_sb_rows(struct sock_filter *prog, int at, const uint16_t *nrs, i
 #define NISH_SB_ARG0_LOW offsetof(struct seccomp_data, args)
 #endif
 
-/* Step 5: a denylist (open question 4), each row of the note's section 4.
- * The arch check comes first and kills on a mismatch, so a 32-bit entry
- * cannot step around the 64-bit numbers; on x86-64 the next instruction
- * kills any number with bit 30 set, since an x32 call reports
- * AUDIT_ARCH_X86_64 and would match none of them. */
+/* How every filter here starts, leaving the syscall number loaded. The arch
+ * check comes first and kills on a mismatch, so a 32-bit entry cannot step
+ * around the 64-bit numbers; on x86-64 the next instruction kills any number
+ * with bit 30 set, since an x32 call reports AUDIT_ARCH_X86_64 and would
+ * match none of them. */
+#if defined(__x86_64__)
+#define NISH_SB_X32                                        \
+  , BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, 0x40000000, 0, 1), \
+      BPF_STMT(BPF_RET | BPF_K, KILL)
+#else
+#define NISH_SB_X32
+#endif
+#define NISH_SB_HEAD                                                       \
+  BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)), \
+      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_ARCH, 1, 0),             \
+      BPF_STMT(BPF_RET | BPF_K, KILL),                                     \
+      BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)) NISH_SB_X32
+
+/* Step 5: a denylist (open question 4), each row of the note's section 4. */
 static void nish_sb_seccomp(int32_t caps) {
   uint32_t action = SECCOMP_RET_KILL_PROCESS;
   if (syscall(SYS_seccomp, SECCOMP_GET_ACTION_AVAIL, 0, &action) != 0)
     nish_sb_fail("this kernel has no seccomp filter that kills the process");
+  static const struct sock_filter head[] = {NISH_SB_HEAD};
   struct sock_filter prog[96];
-  int at = 0;
-  prog[at++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
-  prog[at++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_ARCH, 1, 0);
-  prog[at++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, KILL);
-  prog[at++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
-#if defined(__x86_64__)
-  prog[at++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, 0x40000000, 0, 1);
-  prog[at++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, KILL);
-#endif
+  int at = sizeof head / sizeof head[0];
+  memcpy(prog, head, sizeof head);
   at = NISH_SB_ROWS(prog, at, nish_sb_always, KILL);
   if (!(caps & CAP_BIT_NET)) at = NISH_SB_ROWS(prog, at, nish_sb_net, KILL);
   /* io_uring opens, connects and accepts sockets without those calls. */
@@ -582,14 +590,7 @@ static void nish_sb_refuse_spawn(int e) {
 static void *nish_sb_spawner(void *arg) {
   struct nish_sb_job *job = arg;
   static const struct sock_filter prog[] = {
-      BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
-      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_ARCH, 1, 0),
-      BPF_STMT(BPF_RET | BPF_K, KILL),
-      BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
-#if defined(__x86_64__)
-      BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, 0x40000000, 0, 1),
-      BPF_STMT(BPF_RET | BPF_K, KILL),
-#endif
+      NISH_SB_HEAD,
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_EXECVE, 6, 0),
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_EXECVEAT, 5, 0),
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_seccomp, 0, 3),
