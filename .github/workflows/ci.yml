@@ -887,9 +887,11 @@ jobs:
     # than a job with no rows, which is why the `if` is on the job.
     if: needs.seeds.outputs.cmp != '[]'
     runs-on: ${{ matrix.seed.runner }}
-    # About 8 minutes on the slower x86_64 runners since nish-cmp compiles four
-    # programs at a time; the serial run took 12 to 20 and timed out the 0.37.0
-    # release at 20. The margin is for a slow runner and a growing corpus.
+    # The byte compare and the two fuzz passes, about 6 minutes on the slower
+    # x86_64 runners now that nish-cmp compiles four programs at a time and the
+    # elision check runs beside it in `nish-cmp-elision`; the serial compare
+    # took 12 to 20 and timed out the 0.37.0 release at 20. The margin is for
+    # a slow runner and a growing corpus.
     timeout-minutes: 30
     strategy:
       # x86_64 and aarch64 have different registers and different calling
@@ -1169,16 +1171,20 @@ jobs:
       # The runner deals its link programs by their cost in
       # tests/shard-costs.json (by position, the last slice carried 504 s of
       # them against 351 s for the first); `--check-runner` reads that deal
-      # through `--list`, a slice per row of `nproc` parts, and fails one that
-      # misses or repeats a program or is uneven.
+      # through `--list`, a slice per row of `jobs` parts, and fails one that
+      # misses or repeats a program or is uneven. `jobs` is the runner's own
+      # default (a core each, at most 8), passed to both so the deal checked
+      # is the deal run.
       - name: The corpus, through the Nish runner
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          node scripts/shard-costs.mjs --check-runner build/nish-runner 3 "$(nproc)"
-          env --default-signal build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
+          jobs="$(nproc)"
+          if [ "$jobs" -gt 8 ]; then jobs=8; fi
+          node scripts/shard-costs.mjs --check-runner build/nish-runner 3 "$jobs"
+          env --default-signal build/nish-runner --compiler build/nish --shard "$SHARD/3" --jobs "$jobs" | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()

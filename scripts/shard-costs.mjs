@@ -139,8 +139,12 @@ if (argv[0] === "--check-runner") {
 }
 const write = argv.includes("--write")
 const runs = argv.filter((a) => a !== "--write")
-if (runs.length === 0) {
-  console.error("usage: node scripts/shard-costs.mjs [--write] <unzipped run log dir>...")
+// A median of fewer than three runs is one runner's luck, not a measurement;
+// and a flag this does not know (`--help`, a typo) is not a run directory.
+if (runs.length < 3 || runs.some((a) => a.startsWith("-"))) {
+  console.error(
+    "usage: node scripts/shard-costs.mjs [--write] <unzipped run log dir>... (at least three green runs)"
+  )
   process.exit(2)
 }
 
@@ -162,7 +166,7 @@ const RECOGNIZERS = {
   differential: /^differential: native and Node/,
   p256Seams: /^p256/,
   netStartup: /^net_\w+: /,
-  threadWasi: /^(skipped: )?link\/thread_mutex_counter/,
+  threadWasi: /^(skipped: )?link\/thread_mutex_counter: (the `--profile wasi` build|no WASI sysroot)/,
   cryptoChecks: /^nish:secret: (the wipe survives|no opt)/,
   arrayChecks: /^arr_range_call/,
   runtimeChecks: /^async: /,
@@ -218,7 +222,7 @@ const sections = (() => {
 /** One log line: its time in seconds and, for a check, its name. */
 const parse = (log) =>
   log.split("\n").map((line) => {
-    const m = /^﻿?(\d{4}-\d\d-\d\dT[\d:.]+Z) (.*)$/.exec(line)
+    const m = /^\uFEFF?(\d{4}-\d\d-\d\dT[\d:.]+Z) (.*)$/.exec(line)
     const t = m ? Date.parse(m[1]) / 1000 : Number.NaN
     const check = m ? /^(?:PASS|SKIP|FAIL) {2}(.*)$/.exec(m[2]) : null
     return { t, body: m ? m[2] : line, check: check ? check[1] : null }
@@ -231,6 +235,11 @@ const measureShard = (lines, shard, shards, linkCount) => {
   const summary = lines.findIndex((l) => /^\d+ passed, \d+ failed/.test(l.body))
   if (summary < 0) {
     fail(`shard ${shard}/${shards} has no summary line; was the run green?`)
+  }
+  // A failed check can stop a section early, so a red run's seconds are not its cost.
+  const failed = Number(/^\d+ passed, (\d+) failed/.exec(lines[summary].body)[1])
+  if (failed !== 0) {
+    fail(`shard ${shard}/${shards} reports ${failed} failed; measure green runs only`)
   }
   const delegated = new Set(
     lines.map((l) => /^DELEGATED {2}(.*) -- proved by /.exec(l.body)?.[1]).filter((n) => n !== undefined)
