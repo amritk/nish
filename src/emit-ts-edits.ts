@@ -1409,7 +1409,7 @@ export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
       }
       continue
     }
-    if (stmt.kind === N_FUNCTION && (stmt.flags & FLAG_FOREIGN) !== 0) {
+    if ((stmt.kind === N_FUNCTION || stmt.kind === N_CLASS) && (stmt.flags & FLAG_FOREIGN) !== 0) {
       walk.refuse(stmt, FOREIGN_REFUSAL)
       continue
     }

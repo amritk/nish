@@ -1,0 +1,1 @@
+cannot have an initializer: `new` zero-fills a C struct

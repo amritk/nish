@@ -6,12 +6,12 @@
 //
 //   main serve [--www <dir>] [--certs <dir>] [--testcase <name>]
 //              [--host <addr>] [--port <udp>] [--h1-port <tcp>] [--h1s-port <tcp>]
-//              [--h2-port <tcp>] [--slots <1-4096>] [--only h1|h1s|h2|h3]
+//              [--h2-port <tcp>] [--ws-port <tcp>] [--slots <1-4096>] [--only h1|h1s|h2|h3]
 //              [--hash-file <path>]
 //
 // `--slots` sizes every pool (64 by default; HTTP/1.1's stop at 500), and
 // `--only` sizes just the one named, the others at one slot, for
-// `bench/pool-rss.mjs`. It prints `ports quic <p> h1 <p> h1s <p> h2 <p>` and
+// `bench/pool-rss.mjs`. It prints `ports quic <p> h1 <p> h1s <p> h2 <p> ws <p>` and
 // `sha256 <hex>` (the QUIC certificate's, also written to `--hash-file`),
 // then serves until SIGTERM or SIGINT, and exits 0. A `--testcase` the server
 // does not take exits 127 at once, the quic-interop-runner's "unsupported"; a

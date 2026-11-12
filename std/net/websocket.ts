@@ -52,8 +52,10 @@
  *   frame with a one-byte payload, or a status code that may not be sent
  *   (§5.5.1, §7.4).
  * - 1007: a text message, or a close reason, that is not UTF-8 (§8.1). A text
- *   message is checked as each fragment arrives, so a bad byte is refused
- *   without waiting for the rest.
+ *   message is checked as its bytes arrive, inside a frame as well as across
+ *   fragments, so a bad byte is refused without waiting for the rest of the
+ *   frame. The message buffer grows with the bytes received, not the length
+ *   a frame header declares.
  * - 1009: a message longer than `maxMessage` (§7.4.1), refused from the frame
  *   header that would pass it, before its payload arrives.
  *
@@ -279,6 +281,8 @@ export class WsDecoder {
   messageOpcode: i32 = 0
   /** @internal Decoder state the module's `websocket` helpers read and write. */
   messageLen: i32 = 0
+  /** How many payload bytes of the text frame still arriving are unmasked and UTF-8 checked. @internal */
+  frameChecked: i32 = 0
 
   /** Whether every frame must be masked, as a server requires of a client. */
   expectMasked: boolean = false
@@ -359,6 +363,7 @@ export class WsDecoder {
     this.closeReason = ""
     this.messageOpcode = 0
     this.messageLen = 0
+    this.frameChecked = 0
     this.data = this.control
     websocketUtf8Reset(this.utf8)
   }
@@ -401,7 +406,8 @@ const websocketFail = (d: WsDecoder, code: i32, reason: string): i32 => {
 /**
  * Copies the frame payload at `buf[from .. from + len)` into `to[at ..)`,
  * unmasking it with the key at `buf[maskAt .. maskAt + 4)` when `masked`
- * (§5.3: byte i is XORed with key byte i mod 4).
+ * (§5.3: byte i is XORed with key byte i mod 4). `phase` is how far into the
+ * payload `from` is, so a payload can be unmasked a piece at a time.
  */
 const websocketUnmaskInto = (
   buf: u8[],
@@ -409,6 +415,7 @@ const websocketUnmaskInto = (
   len: i32,
   masked: boolean,
   maskAt: i32,
+  phase: i32,
   to: u8[],
   at: i32
 ): void => {
@@ -422,13 +429,19 @@ const websocketUnmaskInto = (
       (toU32(buf[maskAt + 2]) << 8) |
       toU32(buf[maskAt + 3])
   }
+  for (let r: i32 = 0; r < (phase & 3); r += 1) {
+    key = (key << 8) | (key >>> 24)
+  }
   for (let k: i32 = 0; k < len; k += 1) {
     to[at + k] = buf[from + k] ^ toU8(key >>> 24)
     key = (key << 8) | (key >>> 24)
   }
 }
 
-/** Grows `d.message` so that `need` bytes fit, keeping its live bytes. */
+/**
+ * Grows `d.message` so that `need` bytes fit, keeping its live bytes: the
+ * message so far and the part of a text frame already checked.
+ */
 const websocketMessageRoom = (d: WsDecoder, need: i32): void => {
   const old: u8[] = d.message
   let size: i32 = toI32(old.length)
@@ -439,7 +452,8 @@ const websocketMessageRoom = (d: WsDecoder, need: i32): void => {
     size = size > 1073741823 ? 2147483647 : size * 2
   }
   const grown: u8[] = new Array<u8>(size)
-  for (let k: i32 = 0; k < d.messageLen && k < toI32(grown.length) && k < toI32(old.length); k += 1) {
+  const live: i32 = d.messageLen + d.frameChecked
+  for (let k: i32 = 0; k < live && k < toI32(grown.length) && k < toI32(old.length); k += 1) {
     grown[k] = old[k]
   }
   d.message = grown
@@ -567,15 +581,41 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
       return websocketFail(d, WS_CLOSE_TOO_BIG, "a message longer than the limit")
     }
   }
+  const payloadAt: i32 = at + headerLength
+  const maskAt: i32 = payloadAt - 4
+  const text: boolean =
+    opcode === WS_OP_TEXT || (opcode === WS_OP_CONTINUATION && d.messageOpcode === WS_OP_TEXT)
+  if (text) {
+    // A text frame is unmasked and checked as its bytes arrive, so a byte
+    // that cannot continue UTF-8 fails the connection at once (§8.1), not
+    // when the frame or the message ends.
+    const arrived: i32 = ready - headerLength < length ? ready - headerLength : length
+    const from: i32 = d.messageLen
+    const done: i32 = d.frameChecked
+    if (done === 0 && opcode === WS_OP_TEXT) {
+      // A new message starts its UTF-8 check afresh, in place: nothing is
+      // allocated per message.
+      websocketUtf8Reset(d.utf8)
+    }
+    if (arrived > done) {
+      // Room for the bytes that have arrived, not the length the header
+      // declares: a peer that declares much and sends little costs little.
+      websocketMessageRoom(d, from + arrived)
+      websocketUnmaskInto(buf, payloadAt + done, arrived - done, masked, maskAt, done, d.message, from + done)
+      d.frameChecked = arrived
+      if (!websocketUtf8Run(d.utf8, d.message, from + done, arrived - done)) {
+        return websocketFail(d, WS_CLOSE_INVALID_DATA, "a text message that is not UTF-8")
+      }
+    }
+  }
   if (ready - headerLength < length) {
     return WS_NEED_MORE
   }
   // The whole frame is here: take it out of the input.
-  const payloadAt: i32 = at + headerLength
-  const maskAt: i32 = payloadAt - 4
   d.start = payloadAt + length
+  d.frameChecked = 0
   if (control) {
-    websocketUnmaskInto(buf, payloadAt, length, masked, maskAt, d.control, 0)
+    websocketUnmaskInto(buf, payloadAt, length, masked, maskAt, 0, d.control, 0)
     d.opcode = opcode
     d.data = d.control
     d.dataLen = length
@@ -586,21 +626,18 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
   }
   if (opcode !== WS_OP_CONTINUATION) {
     d.messageOpcode = opcode
-    // A new message starts its UTF-8 check afresh, in place: nothing is
-    // allocated per message.
-    websocketUtf8Reset(d.utf8)
   }
   const from: i32 = d.messageLen
-  websocketMessageRoom(d, from + length)
-  websocketUnmaskInto(buf, payloadAt, length, masked, maskAt, d.message, from)
-  d.messageLen = from + length
-  if (d.messageOpcode === WS_OP_TEXT && !websocketUtf8Run(d.utf8, d.message, from, length)) {
-    return websocketFail(d, WS_CLOSE_INVALID_DATA, "a text message that is not UTF-8")
+  if (!text) {
+    // A text frame's payload is already in `message`, unmasked and checked.
+    websocketMessageRoom(d, from + length)
+    websocketUnmaskInto(buf, payloadAt, length, masked, maskAt, 0, d.message, from)
   }
+  d.messageLen = from + length
   if (!fin) {
     return WS_CONTINUE
   }
-  if (d.messageOpcode === WS_OP_TEXT && d.utf8.need !== 0) {
+  if (text && d.utf8.need !== 0) {
     return websocketFail(d, WS_CLOSE_INVALID_DATA, "a text message that ends inside a character")
   }
   // The message is handed out whole, and the next data frame starts a new one
@@ -747,7 +784,7 @@ export const websocketWriteFrame = (
     }
     // Masking and unmasking are the same XOR, so the copied payload goes
     // through the decoder's own loop, reading the key just written.
-    websocketUnmaskInto(out, payloadAt, len, true, keyAt, out, payloadAt)
+    websocketUnmaskInto(out, payloadAt, len, true, keyAt, 0, out, payloadAt)
   }
   return payloadAt + len
 }

@@ -1,0 +1,4 @@
+`this.op` is a function reference: it can be called, compared, stored and passed, nothing else
+`n` is a function reference: it can be called, compared, stored and passed, nothing else
+`m` is a function reference: it can be called, compared, stored and passed, nothing else
+`fs[0]` is a function reference: it can be called, compared, stored and passed, nothing else

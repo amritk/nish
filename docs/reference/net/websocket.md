@@ -221,8 +221,10 @@ input after them is dropped.
   frame with a one-byte payload, or a status code that may not be sent
   (§5.5.1, §7.4).
 - 1007: a text message, or a close reason, that is not UTF-8 (§8.1). A text
-  message is checked as each fragment arrives, so a bad byte is refused
-  without waiting for the rest.
+  message is checked as its bytes arrive, inside a frame as well as across
+  fragments, so a bad byte is refused without waiting for the rest of the
+  frame. The message buffer grows with the bytes received, not the length
+  a frame header declares.
 - 1009: a message longer than `maxMessage` (§7.4.1), refused from the frame
   header that would pass it, before its payload arrives.
 

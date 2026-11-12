@@ -76,6 +76,7 @@ import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
+import { runFfiStructChecks } from "./ffi-struct.js"
 import { hardeningProblems } from "../scripts/check-hardening.mjs"
 import {
   packageRootOf,
@@ -3728,6 +3729,15 @@ if (selects("fnref", "fnref_debug_check")) {
     peakOf("place_set_1x", scaled("fnref_place_set", 9, 1000)),
     peakOf("place_set_10x", scaled("fnref_place_set", 9, 10000))
   )
+  // WP51 stage 2: the same loop through an argument, a nullable element and
+  // a `Map` value.
+  for (const variant of ["arg", "nullable", "map"]) {
+    flat(
+      `fnref_place_set_${variant}: 10x the loop peaks where 1x does`,
+      peakOf(`place_set_${variant}_1x`, scaled(`fnref_place_set_${variant}`, 9, 1000)),
+      peakOf(`place_set_${variant}_10x`, scaled(`fnref_place_set_${variant}`, 9, 10000))
+    )
+  }
   const keepless = (t) => t.replace(/\n\s*sum = sum \+ slot\.use\(new P\(i\), k\)/, "")
   flat(
     "fnref_escape_join: 10x the loop through the set that keeps nothing peaks where 1x does",
@@ -3786,6 +3796,44 @@ if (selects("fnref", "fnref_debug_check")) {
       gLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
       enumTag.test(gLl),
     gLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gLl.slice(0, 2000)
+  )
+  // A nullable reference's tag 0 is `null`: its enumeration names it, so a
+  // debugger prints `h = null` rather than `0`.
+  const gnSrc = path.join(fnrefDir, "fnref_gn.ts")
+  fs.writeFileSync(
+    gnSrc,
+    [
+      "type Op = (x: i32) => i32",
+      "const inc = (x: i32): i32 => x + 1",
+      "const twice = (x: i32): i32 => x * 2",
+      "export const main = (): number => {",
+      "  let h: Op | null = null",
+      "  if (Date.now() > 0) {",
+      "    h = inc",
+      "  }",
+      "  if (Date.now() > 1) {",
+      "    h = twice",
+      "  }",
+      "  if (h !== null) {",
+      "    console.log(`${h(3)}`)",
+      "  }",
+      "  return 0",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const gnOut = path.join(fnrefDir, "gn-ir") + path.sep
+  const gnIr = spawnSync(NISH, [gnSrc, "-g", "-o", gnOut], { cwd: root, encoding: "utf8" })
+  const gnLlPath = path.join(gnOut, "fnref_gn.ll")
+  const gnLl = gnIr.status === 0 && fs.existsSync(gnLlPath) ? fs.readFileSync(gnLlPath, "utf8") : shown(gnIr)
+  const nullableTag = /!DICompositeType\(tag: DW_TAG_enumeration_type, name: "\(i32\) => i32 \| null",[^\n]*size: 32/
+  check(
+    "fnref -g: a nullable reference's enumeration names tag 0 `null`, then its members",
+    gnLl.includes('!DIEnumerator(name: "null", value: 0)') &&
+      gnLl.includes('!DIEnumerator(name: "inc", value: 1)') &&
+      gnLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
+      nullableTag.test(gnLl),
+    gnLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gnLl.slice(0, 2000)
   )
   const dispatcherSp = gLl
     .split("\n")
@@ -4121,6 +4169,212 @@ if (!only || "net_tls_tcp".includes(only)) {
       ended.code === 0 && body === want,
       `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(body)}\nwant:   ${JSON.stringify(want)}\nstderr: ${serverErr}`
     )
+  }
+}
+
+// ---- `nish/net/http2-cleartext`, against curl and h2load (WP39 G7) --------------
+//
+// What the Nish clients in `tests/link/net_http2_cleartext` cannot say: that an
+// HTTP/2 stack somebody else wrote speaks to the carrier by prior knowledge,
+// with no TLS and no Upgrade. The same program run as `serve 5` listens, prints
+// its port and serves five connections: one from `curl --http2-prior-knowledge`,
+// whose GET must come back 200 over HTTP/2 with the short body, then four from
+// `h2load -n 1000 -c 4`, every one of whose thousand requests must succeed. The
+// server prints one line per connection it closed; each must end with no error.
+// Either client missing is a skip, named, rather than a pass.
+if (!only || "net_http2_cleartext".includes(only)) {
+  const h2cDir = path.join(buildDir, "net-h2c")
+  fs.rmSync(h2cDir, { recursive: true, force: true })
+  fs.mkdirSync(h2cDir, { recursive: true })
+  const exe = path.join(h2cDir, "app")
+  const built = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "net_http2_cleartext", "main.ts"),
+      "-o",
+      h2cDir + path.sep,
+      "--link",
+      exe,
+      ...linkProfile("net_http2_cleartext"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  // A curl built without nghttp2 refuses --http2-prior-knowledge before it
+  // connects, and the server would wait out its timer for that connection.
+  const curlFound = has("curl")
+  const hasCurl = curlFound && /\bHTTP2\b/.test(String(spawnSync("curl", ["--version"], { encoding: "utf8" }).stdout))
+  const hasH2load = has("h2load")
+  if (!curlFound) skip("net_http2_cleartext: curl is not installed, so no third-party client speaks h2c to the carrier")
+  else if (!hasCurl) skip("net_http2_cleartext: curl was built without HTTP2 (curl --version), so it cannot speak h2c to the carrier")
+  if (!hasH2load) skip("net_http2_cleartext: h2load is not installed (nghttp2-client), so the carrier is not loaded by one")
+  if (check("net_http2_cleartext: the server links", built.status === 0, String(built.stderr)) && (hasCurl || hasH2load)) {
+    const connections = (hasCurl ? 1 : 0) + (hasH2load ? 4 : 0)
+    const server = spawn(exe, ["serve", String(connections)], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let served = ""
+    let serverErr = ""
+    const serverTimer = setTimeout(() => server.kill("SIGKILL"), 60000)
+    const serverDone = new Promise((resolve) =>
+      server.on("close", (code, signal) => {
+        clearTimeout(serverTimer)
+        resolve({ code, signal })
+      })
+    )
+    server.stderr.on("data", (chunk) => {
+      serverErr += chunk
+    })
+    const port = await new Promise((resolve) => {
+      server.stdout.on("data", (chunk) => {
+        served += chunk
+        const m = /^port (\d+)\n/.exec(served)
+        if (m !== null) {
+          resolve(Number(m[1]))
+        }
+      })
+      server.on("close", () => resolve(0))
+    })
+    // Each client runs to its end before the next, asynchronously, so that the
+    // server's output keeps arriving while it does.
+    const run = (tool, args) =>
+      new Promise((resolve) => {
+        const child = spawn(tool, args, { stdio: ["ignore", "pipe", "pipe"] })
+        let out = ""
+        const timer = setTimeout(() => child.kill("SIGKILL"), 30000)
+        child.stdout.on("data", (chunk) => {
+          out += chunk
+        })
+        child.stderr.on("data", (chunk) => {
+          out += chunk
+        })
+        child.on("close", (code, signal) => {
+          clearTimeout(timer)
+          resolve({ code, signal, out })
+        })
+      })
+    const url = `http://127.0.0.1:${port}/hello`
+    if (hasCurl) {
+      const r = port > 0 ? await run("curl", ["-sS", "--max-time", "10", "--http2-prior-knowledge", url, "-w", "\n%{http_version} %{http_code}\n"]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: curl --http2-prior-knowledge GETs the page over HTTP/2, 200 with the short body",
+        r.code === 0 && r.out === "hello from nish/net/http2\n\n2 200\n",
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    if (hasH2load) {
+      const r = port > 0 ? await run("h2load", ["-n", "1000", "-c", "4", url]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: h2load -n 1000 -c 4 over prior knowledge: every request succeeds with a 2xx",
+        r.code === 0 && /requests: 1000 total, 1000 started, 1000 done, 1000 succeeded, 0 failed, 0 errored, 0 timeout/.test(r.out) && /status codes: 1000 2xx/.test(r.out),
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    const ended = await serverDone
+    const lines = served.replace(/^port \d+\n/, "").split("\n").filter((line) => line !== "")
+    check(
+      `net_http2_cleartext: the server closes all ${connections} connections, each with no error, and exits 0`,
+      ended.code === 0 && lines.length === connections && lines.every((line) => /^closed: streams \d+ error 0$/.test(line)),
+      `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(served)}\nstderr: ${serverErr}`
+    )
+  }
+}
+
+// ---- record_size_limit (RFC 8449) against openssl s_client (WP39 G3) ------------
+//
+// `tests/link/net_tls_record_size_limit` reads the record lengths the server
+// writes under a client's limit; this asks a third-party client the same, when
+// its openssl can send the extension: s_client offers a limit of 512 with
+// `-record_size_limit`, prints every record header it reads under `-msg`, and
+// no protected record the server sends may carry more than 512 + 16 bytes
+// (the inner plaintext and the AEAD tag). OpenSSL has no such option up to at
+// least 3.0, so most hosts skip, and say why.
+if (!only || "net_tls_record_size_limit".includes(only)) {
+  const help = spawnSync("openssl", ["s_client", "-help"], { encoding: "utf8" })
+  const helpText = `${help.stdout ?? ""}${help.stderr ?? ""}`
+  if (help.error !== undefined || !helpText.includes("-record_size_limit")) {
+    const version = spawnSync("openssl", ["version"], { encoding: "utf8" })
+    const which = help.error === undefined ? String(version.stdout).trim() : "no openssl on PATH"
+    skip(`net_tls_record_size_limit: ${which}: s_client has no -record_size_limit, so the interop run did not happen`)
+  } else {
+    const rslDir = path.join(buildDir, "net-tls-rsl")
+    fs.rmSync(rslDir, { recursive: true, force: true })
+    fs.mkdirSync(rslDir, { recursive: true })
+    const exe = path.join(rslDir, "app")
+    const built = spawnSync(
+      NISH,
+      [
+        path.join(root, "tests", "link", "net_tls_record_tcp", "main.ts"),
+        "-o",
+        rslDir + path.sep,
+        "--link",
+        exe,
+        ...linkProfile("net_tls_record_tcp"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    if (check("net_tls_record_size_limit: the server links", built.status === 0, String(built.stderr))) {
+      const server = spawn(exe, ["serve", "1"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+      const serverTimer = setTimeout(() => server.kill("SIGKILL"), 30000)
+      const serverDone = new Promise((resolve) =>
+        server.on("close", (code) => {
+          clearTimeout(serverTimer)
+          resolve(code)
+        })
+      )
+      let served = ""
+      const port = await new Promise((resolve) => {
+        server.stdout.on("data", (chunk) => {
+          served += chunk
+          const m = /^port (\d+)\n/.exec(served)
+          if (m !== null) {
+            resolve(Number(m[1]))
+          }
+        })
+        server.on("close", () => resolve(0))
+      })
+      // A line long enough that the echo must be cut into several records.
+      const line = `${"x".repeat(2000)}\n`
+      const got =
+        port > 0
+          ? await new Promise((resolve) => {
+              const child = spawn(
+                "openssl",
+                ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-servername", "localhost", "-msg", "-record_size_limit", "512"],
+                { stdio: ["pipe", "pipe", "pipe"] }
+              )
+              let all = ""
+              let sent = false
+              const timer = setTimeout(() => child.kill("SIGKILL"), 15000)
+              const onData = (chunk) => {
+                all += chunk
+                if (!sent && all.includes("Verify return code")) {
+                  sent = true
+                  child.stdin.write(line)
+                }
+                // The echo, whole: s_client prints what it reads, one record at a
+                // time between the `-msg` lines, and never what it was given.
+                if (sent && (all.match(/x{8,}/g) ?? []).join("").length >= 2000) {
+                  child.stdin.end()
+                }
+              }
+              child.stdout.on("data", onData)
+              child.stderr.on("data", onData)
+              child.on("close", (code) => {
+                clearTimeout(timer)
+                resolve({ code, all })
+              })
+            })
+          : { code: null, all: "" }
+      // `-msg` prints `<<< ... RecordHeader` and the five header bytes, in hex,
+      // on the next line, for every record s_client reads.
+      const lengths = [...got.all.matchAll(/<<< [^\n]*RecordHeader[^\n]*\n\s*17 03 03 ([0-9a-f]{2}) ([0-9a-f]{2})/gi)].map(
+        (m) => Number.parseInt(m[1] + m[2], 16)
+      )
+      check(
+        "net_tls_record_size_limit: openssl s_client -record_size_limit 512 completes, and no protected record it reads passes 512 + 16 bytes",
+        got.code === 0 && lengths.length > 1 && lengths.every((n) => n <= 512 + 16),
+        `exit ${got.code}, protected record lengths ${JSON.stringify(lengths)}\n${got.all.slice(-1500)}`
+      )
+      await serverDone
+    }
   }
 }
 
@@ -29641,6 +29895,7 @@ if (!only || "c_symbol_private_libm".includes(only)) {
 }
 
 runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
+runFfiStructChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 

@@ -13,9 +13,31 @@
 #   2. archive.ubuntu.com, Canonical's own archive;
 #   3. security.ubuntu.com, which serves the -security suites.
 #
-# The list only covers amd64: arm64 packages come from ports.ubuntu.com, which
-# has no Azure copy and no CDN mirror, so on arm64 only an Azure host (if an
-# image ever names one) is rewritten to the Canonical one.
+# arm64 packages come from Ubuntu's ports archive, which no Azure host or
+# kernel.org copy carries. Its own host, ports.ubuntu.com, was the arm64
+# runners' only source until it stopped resolving on PR #1413 (run
+# 43058055859) and three aarch64 jobs died at `apt-get update`. On arm64 every
+# ports source is pointed at a list of its own:
+#
+#   1. ports.ubuntu.com, Canonical's own, first: it is never behind, and it
+#      is what arm64 jobs have always fetched from, so the others take
+#      traffic only when it fails;
+#   2. mirrors.ocf.berkeley.edu and 3. mirrors.mit.edu, two US university
+#      mirrors on networks of their own;
+#   4. mirror.leaseweb.com, a European one, should the US ones fail too.
+#
+# A probe from an arm64 runner (PR #1415, run 43078069287) sent HEAD for
+# InRelease and main/binary-arm64/ of noble, noble-updates and noble-security
+# to eleven candidates. The four above answered 200 for all six, as did
+# ftp.tu-chemnitz.de and mirrors.dotsrc.org, left out as four are enough;
+# mirrors.edge.kernel.org, mirror.kumi.systems, ftp.halifax.rwth-aachen.de
+# and ftp.uni-stuttgart.de answered 404 for all six. universe and backports
+# were not probed, but ports.ubuntu.com comes first, so a gap at a later
+# entry matters only while it is down.
+#
+# A mirror that lags behind the index apt fetched first is no harm: apt asks
+# for each index file by its hash (by-hash), which a lagging mirror does not
+# have, so it moves on to the next entry rather than read a stale file.
 #
 # Every step tolerates a pattern that matches nothing. The inline version this
 # replaces piped `grep -rlZ azure... | xargs sed` under `pipefail`, and on an
@@ -41,11 +63,17 @@ if [ "$arch" = amd64 ]; then
       "${sources[@]}"
   fi
 else
+  printf '%s\tpriority:%s\n' \
+    http://ports.ubuntu.com/ubuntu-ports/ 1 \
+    https://mirrors.ocf.berkeley.edu/ubuntu-ports/ 2 \
+    https://mirrors.mit.edu/ubuntu-ports/ 3 \
+    https://mirror.leaseweb.com/ubuntu-ports/ 4 |
+    sudo tee "$list" > /dev/null
   if [ "${#sources[@]}" -gt 0 ]; then
-    sudo sed -i -E 's#azure\.(archive|ports)\.ubuntu\.com#\1.ubuntu.com#g' "${sources[@]}"
-  fi
-  if [ -f "$list" ]; then
-    sudo sed -i -E 's#azure\.(archive|ports)\.ubuntu\.com#\1.ubuntu.com#g' "$list"
+    sudo sed -i -E \
+      -e 's#https?://(azure\.)?ports\.ubuntu\.com/ubuntu-ports/?#mirror+file:/etc/apt/apt-mirrors.txt#g' \
+      -e 's#azure\.archive\.ubuntu\.com#archive.ubuntu.com#g' \
+      "${sources[@]}"
   fi
 fi
 

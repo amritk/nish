@@ -1,1 +1,1 @@
-`declare class` is not supported
+A generic `declare class` is not supported: a C struct layout has no type parameters

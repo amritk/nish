@@ -13,7 +13,11 @@
 // high-bit bytes, bodies, pipelining), every byte 0 to 255 at every position
 // of three requests, nine bytes inserted at every position, each limit at -1,
 // 0 and +1, every two-feed split point, byte-at-a-time feeding and pipelined
-// pairs.
+// pairs, field names and values and targets with a stop byte at every vector
+// lane, long Cookie and Authorization values (each at every stop-byte place,
+// under five setups), a head of many fields, maxTarget, maxHeaderBytes and
+// maxHeaders at -1, 0 and +1 with the deciding byte at every lane, and a
+// 936-byte browser head split at every point.
 //
 // HTTP1_DIFF_SEED and HTTP1_DIFF_CASES set the grammar's seed and how many
 // requests it makes, for a soak; the defaults make 10^5 grammar requests and
@@ -166,6 +170,77 @@ const mixMaybe = (sum: u32, text: string | null): u32 => (text === null ? mix(su
  * the old have the same fields under the same names, and this and `stateOld`
  * read them in the same order.
  */
+/**
+ * The head as a caller reads it: the bytes of the method, the target and each
+ * field's name and value, through their spans, and the spans' shape (each
+ * field's name and value relative to its own name). Where the head stores
+ * them is the parser's own: the new parser keeps a field line's CRLF in the
+ * head, the old one drops it. `mixHead` pins the rest of the head.
+ */
+const mixSpans = (
+  sum0: u32,
+  head: u8[],
+  length: i32,
+  spans: i32[],
+  count: i32,
+  methodStart: i32,
+  methodEnd: i32,
+  targetStart: i32,
+  targetEnd: i32
+): u32 => {
+  let sum: u32 = mixBytes(sum0, head, methodStart, methodEnd)
+  sum = mix(sum, targetStart - methodStart)
+  sum = mixBytes(sum, head, targetStart, targetEnd)
+  for (let k: i32 = 0; k < count && 4 * k + 3 < toI32(spans.length); k++) {
+    const at: i32 = spans[4 * k]
+    sum = mix(sum, spans[4 * k + 1] - at)
+    sum = mix(sum, spans[4 * k + 2] - at)
+    sum = mix(sum, spans[4 * k + 3] - at)
+    sum = mixBytes(sum, head, at, spans[4 * k + 1])
+    sum = mixBytes(sum, head, spans[4 * k + 2], spans[4 * k + 3])
+    sum = mixBool(sum, spans[4 * k + 3] <= length)
+  }
+  return sum
+}
+
+/**
+ * The whole head up to `length`, with the CRLFs the new parser keeps taken
+ * out: the bytes left must be the old parser's head, byte for byte, which pins
+ * `headLength` and every byte between spans. `crlfs` is how many CRLFs the
+ * parser's contract puts in the head (none for the old parser; for the new,
+ * one ending each of the `count` field lines and one closing the section), and
+ * each must sit where that contract says: before the next field's name, before
+ * the closing CRLF, or at `length`. A CR or LF anywhere else, or a CRLF out of
+ * place, mixes a refusal.
+ */
+const mixHead = (sum0: u32, head: u8[], length: i32, spans: i32[], count: i32, crlfs: i32): u32 => {
+  let sum: u32 = sum0
+  let kept: i32 = 0
+  let pairs: i32 = 0
+  let placed: boolean = length >= 0 && length <= toI32(head.length)
+  let k: i32 = 0
+  while (k >= 0 && k < length && k < toI32(head.length)) {
+    const c: i32 = toI32(head[k])
+    if (c === 13 && k + 1 < length && k + 1 < toI32(head.length) && head[k + 1] === 10) {
+      k += 2
+      if (pairs + 1 < count) {
+        const next: i32 = 4 * (pairs + 1)
+        placed = placed && next < toI32(spans.length) && spans[next] === k
+      } else if (pairs + 1 > count) {
+        placed = placed && k === length
+      }
+      pairs += 1
+    } else {
+      placed = placed && c !== 13 && c !== 10
+      sum = mix(sum, c)
+      kept += 1
+      k += 1
+    }
+  }
+  sum = mix(sum, kept)
+  return mixBool(sum, placed && pairs === crlfs)
+}
+
 const stateNew = (p: Http1Parser, e: i32): u32 => {
   let sum: u32 = mix(2166136261, e)
   sum = mix(sum, p.status)
@@ -182,11 +257,8 @@ const stateNew = (p: Http1Parser, e: i32): u32 => {
     sum = mix(sum, p.targetStart)
     sum = mix(sum, p.targetEnd)
     sum = mix(sum, p.headerCount)
-    sum = mix(sum, p.headLength)
-    for (let k: i32 = 0; k < 4 * p.headerCount && k < toI32(p.spans.length); k++) {
-      sum = mix(sum, p.spans[k])
-    }
-    sum = mixBytes(sum, p.head, 0, p.headLength)
+    sum = mixSpans(sum, p.head, p.headLength, p.spans, p.headerCount, p.methodStart, p.methodEnd, p.targetStart, p.targetEnd)
+    sum = mixHead(sum, p.head, p.headLength, p.spans, p.headerCount, p.headerCount + 1)
     sum = mixBool(sum, p.methodIs("GET"))
     sum = mixBool(sum, p.targetIs("/"))
     sum = mixBool(sum, p.upgradeIs("websocket"))
@@ -234,11 +306,8 @@ const stateOld = (p: H1oldParser, e: i32): u32 => {
     sum = mix(sum, p.targetStart)
     sum = mix(sum, p.targetEnd)
     sum = mix(sum, p.headerCount)
-    sum = mix(sum, p.headLength)
-    for (let k: i32 = 0; k < 4 * p.headerCount && k < toI32(p.spans.length); k++) {
-      sum = mix(sum, p.spans[k])
-    }
-    sum = mixBytes(sum, p.head, 0, p.headLength)
+    sum = mixSpans(sum, p.head, p.headLength, p.spans, p.headerCount, p.methodStart, p.methodEnd, p.targetStart, p.targetEnd)
+    sum = mixHead(sum, p.head, p.headLength, p.spans, p.headerCount, 0)
     sum = mixBool(sum, p.methodIs("GET"))
     sum = mixBool(sum, p.targetIs("/"))
     sum = mixBool(sum, p.upgradeIs("websocket"))
@@ -935,6 +1004,38 @@ const limitCases = (tally: Tally): void => {
   }
 }
 
+/**
+ * Each of maxTarget, maxHeaderBytes and maxHeaders at its value -1, 0 and +1
+ * for sixteen limits in a row, so the byte that decides between a head and a
+ * 414 or 431 falls at every lane of the vector the scan reads it in; text kept
+ * and spans only, each whole, a byte at a time and split at every point.
+ */
+const tightCases = (tally: Tally): void => {
+  tally.label = "tight"
+  const setups: Setup[] = [setupOf(0), setupOf(2)]
+  for (let lane: i32 = 0; lane < 16; lane++) {
+    for (let d: i32 = -1; d <= 1; d++) {
+      for (let k: i32 = 0; k < toI32(setups.length); k++) {
+        const s: Setup = setupCopy(setups[k])
+        // The target: `/` and t up to maxTarget + d bytes.
+        s.maxTarget = 32 + lane
+        runCut(tally, s, bytesOf(`GET /${repeat("t", s.maxTarget - 1 + d)} HTTP/1.1\r\nHost: h\r\n\r\n`), true)
+        s.maxTarget = 8192
+        // The section: `Host: h`, then X whose line and the empty line come
+        // to maxHeaderBytes + d.
+        s.maxHeaderBytes = 64 + lane
+        runCut(tally, s, bytesOf(`GET / HTTP/1.1\r\nHost: h\r\nX: ${repeat("v", s.maxHeaderBytes + d - 16)}\r\n\r\n`), true)
+        s.maxHeaderBytes = 16384
+        // The count: a first field `lane` bytes long moves every later line
+        // start, and the fields come to maxHeaders + d.
+        s.maxHeaders = 3 + lane % 4
+        const fields: string = repeat("A: b\r\n", s.maxHeaders + d - 1)
+        runCut(tally, s, bytesOf(`GET / HTTP/1.1\r\nP: ${repeat("p", lane)}\r\n${fields}\r\n`), true)
+      }
+    }
+  }
+}
+
 /** Tchars for names, the letters next to the bytes that are not: `@` `[` `` ` `` `{` sit either side of the letters. */
 const NAME_CHARS: string = "aZ-^b_Y`c|X~d!W#e$V%f&U'g*T+h.S0i9RjQkPlOmNnMoLpKqJrIsHtGuFvEwDxCyBzA"
 
@@ -1014,6 +1115,102 @@ const nameCases = (tally: Tally): void => {
   const first: string = `GET / HTTP/1.1\r\nHost: h\r\n${nameOf(40, 0, 2)}: ${repeat("Q", 40)}\r\nX: ${repeat("(", 40)}\r\n\r\n`
   runCut(tally, text, bytesOf(`${first}GET / HTTP/1.1\r\nA:B\r\nCc: D\r\nE\r\n\r\n`), true)
   runCut(tally, spans, bytesOf(`${first}GET / HTTP/1.1\r\nA:B\r\nCc: D\r\n\r\n`), true)
+}
+
+/**
+ * Field values and targets, which the section scan reads for CR and LF a
+ * vector at a time: a Cookie and an Authorization value, and a target, of
+ * every length 1 to 48 and of 255, 256, 257, 1000 and 4000 bytes, with each of
+ * eleven bytes the scan or the field rules stop at or must not (CR, LF, NUL,
+ * HTAB, SP, 0x1f and DEL, the last control bytes below and above the visible
+ * range, 0x7e, the last visible one, 0x80, 0xff and a comma) at every place in
+ * its first and last 48, so every
+ * lane of the vectors at both ends, each in both fields under five setups;
+ * and a head of 60 fields, each cut every way, so many lines take the same
+ * path.
+ */
+const valueCases = (tally: Tally): void => {
+  tally.label = "value"
+  const stops: i32[] = [13, 10, 0, 9, 32, 31, 127, 126, 128, 255, 44]
+  const lengths: i32[] = [255, 256, 257, 1000, 4000]
+  const text: Setup = setupOf(0)
+  const spans: Setup = setupOf(2)
+  // Fresh arrays, a declined upgrade with spans, and pieces of 13, 16 and 3
+  // bytes in turn, so the reads end at shifting lanes.
+  const cut: Setup = setupOf(0)
+  cut.cuts = [13, 16, 3]
+  const setups: Setup[] = [text, spans, setupOf(32), setupOf(18), cut]
+  const all: i32[] = []
+  for (let n: i32 = 1; n <= 48; n++) {
+    all.push(n)
+  }
+  for (let l: i32 = 0; l < toI32(lengths.length); l++) {
+    all.push(lengths[l])
+  }
+  for (let i: i32 = 0; i < toI32(all.length); i++) {
+    const n: i32 = all[i]
+    const value: u8[] = bytesOf(nameOf(n, n, 0))
+    for (let at: i32 = 0; at < n; at++) {
+      if (at >= 48 && at < n - 48) {
+        continue
+      }
+      for (let e: i32 = 0; e < toI32(stops.length); e++) {
+        const bad: u8[] = sliceBytes(value, 0, n)
+        bad[at] = toU8(stops[e])
+        const cookie: u8[] = new Out().text("GET / HTTP/1.1\r\nHost: h\r\nCookie: ").bytes(bad).text("\r\nAccept: */*\r\n\r\n").xs
+        const bearer: u8[] = new Out().text("GET / HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer ").bytes(bad).text("\r\nAccept: */*\r\n\r\n").xs
+        for (let k: i32 = 0; k < toI32(setups.length); k++) {
+          run(tally, setups[k], cookie)
+          run(tally, setups[k], bearer)
+        }
+        const target: u8[] = new Out().text("GET /").bytes(bad).text(" HTTP/1.1\r\nHost: h\r\n\r\n").xs
+        run(tally, text, target)
+      }
+    }
+    const whole: u8[] = new Out().text("GET /").bytes(value).text(" HTTP/1.1\r\nHost: h\r\nCookie: ").bytes(value).text("\r\nAuthorization: Basic ").bytes(value).text("\r\n\r\n").xs
+    runCut(tally, text, whole, n === 15 || n === 16 || n === 17 || n === 32 || n === 256)
+    runCut(tally, spans, whole, false)
+  }
+  const many = new Out().text("GET /many HTTP/1.1\r\nHost: h\r\n")
+  for (let f: i32 = 0; f < 60; f++) {
+    many.text(`X-Field-${f}: ${repeat("v", f)}\r\n`)
+  }
+  runCut(tally, text, many.text("\r\n").xs, true)
+}
+
+/** A browser's GET as Chrome sends it, 936 bytes with its cookies. */
+const BROWSER: string =
+  "GET /products/shoes/running?size=42&color=blue&sort=price_asc HTTP/1.1\r\n" +
+  "Host: shop.example.com\r\n" +
+  "Connection: keep-alive\r\n" +
+  'sec-ch-ua: "Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"\r\n' +
+  "sec-ch-ua-mobile: ?0\r\n" +
+  'sec-ch-ua-platform: "macOS"\r\n' +
+  "Upgrade-Insecure-Requests: 1\r\n" +
+  "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36\r\n" +
+  "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n" +
+  "Sec-Fetch-Site: same-origin\r\n" +
+  "Sec-Fetch-Mode: navigate\r\n" +
+  "Sec-Fetch-User: ?1\r\n" +
+  "Sec-Fetch-Dest: document\r\n" +
+  "Accept-Encoding: gzip, deflate, br, zstd\r\n" +
+  "Accept-Language: en-GB,en-US;q=0.9,en;q=0.8,de;q=0.7\r\n" +
+  "Cookie: session=4f9c2a7e1b8d4c6fa0e3b5d7c9e1f3a5; cart=7b2e9d4c; _ga=GA1.2.1234567890.1700000000; consent=analytics%3Dyes%26ads%3Dno; theme=dark\r\n" +
+  "If-None-Match: W/\"5e1-18f3a9c2b7d\"\r\n" +
+  "\r\n"
+
+/** The browser head alone and pipelined after a short GET, each whole, a byte at a time and split at every point, text kept and spans only. */
+const browserCases = (tally: Tally): void => {
+  tally.label = "browser"
+  const head: u8[] = bytesOf(BROWSER)
+  if (toI32(head.length) < 750 || toI32(head.length) > 1000) {
+    writeError(`net_http1_parse_diff: the browser head is ${head.length} bytes, not 750 to 1000\n`)
+    tally.failed = true
+    return
+  }
+  runCut(tally, setupOf(0), head, true)
+  runCut(tally, setupOf(2), head, true)
+  runCut(tally, setupOf(32), bytesOf(`GET / HTTP/1.1\r\nHost: h\r\n\r\n${BROWSER}`), true)
 }
 
 /** One drawn grammar case and what runs it: a region's root, freed when the case ends. */
@@ -1124,13 +1321,19 @@ export const main = (): i32 => {
   const afterLimit: i32 = tally.cases
   nameCases(tally)
   const afterName: i32 = tally.cases
+  valueCases(tally)
+  const afterValue: i32 = tally.cases
+  tightCases(tally)
+  const afterTight: i32 = tally.cases
+  browserCases(tally)
+  const afterBrowser: i32 = tally.cases
   grammarCases(tally, toU32(seed), count)
   if (tally.failed) {
     return 1
   }
   console.log(`seed ${seed}, ${tally.cases} cases agree`)
   console.log(
-    `  corpus ${afterCorpus}, mutation ${afterMutation - afterCorpus}, limit ${afterLimit - afterMutation}, name ${afterName - afterLimit}, grammar ${tally.cases - afterName}`
+    `  corpus ${afterCorpus}, mutation ${afterMutation - afterCorpus}, limit ${afterLimit - afterMutation}, name ${afterName - afterLimit}, value ${afterValue - afterName}, tight ${afterTight - afterValue}, browser ${afterBrowser - afterTight}, grammar ${tally.cases - afterBrowser}`
   )
   console.log(
     `  events ${tally.events}: head ${tally.heads}, body ${tally.bodies}, end ${tally.ends}, upgrade ${tally.upgrades}, closed ${tally.closes}, error ${tally.errors}`
