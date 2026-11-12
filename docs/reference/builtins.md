@@ -312,6 +312,12 @@ Up to `len` bytes of stdin into `buf[off, off + len)`, never blocking. stdin is 
 
 </scalar-card>
 
+<scalar-card title="read​Struct" icon="phosphor/regular/function" href="#readstruct">
+
+A copy of the C struct at `p`, in a new instance of the `declare class` the call's context names: `const lc: Lconv = readStruct(localeconv())`.
+
+</scalar-card>
+
 <scalar-card title="readdir​Sync" icon="phosphor/regular/function" href="#readdirsync">
 
 The directory's entries, sorted ascending by bytes (not by the file system's order, which neither `readdir(3)` nor Node's `fs.readdirSync` sorts) and without `.` or `..`; every other dotfile is an entry.
@@ -2525,6 +2531,50 @@ the count, 0 at end of stream, or -11 when nothing is waiting.
 
 </scalar-field>
 
+### readStruct
+
+A copy of the C struct at `p`, in a new instance of the `declare class` the
+call's context names: `const lc: Lconv = readStruct(localeconv())`. A type
+argument is not written at a call site (`readStruct<Lconv>(p)` is refused,
+as `identity<i32>(7)` is), so the layout comes from an annotation, a
+parameter or a return type, as `Ok(v)`'s type does; a call with none, or one
+whose context is not a `declare class`, is refused. It copies the layout's
+size in bytes, so the class must describe the struct's first fields (a
+prefix is enough) and `p` must point at that many readable bytes: undefined
+behaviour otherwise, as with `readCString`.
+
+The copy is the program's own: C may free or overwrite its struct straight
+after the call, and a `CPtr` field of the copy is still C's pointer, read
+with `readCString` while C keeps it live. The parameter is `CPtr`, so an
+unnarrowed `CPtr | null` is refused and `if (p !== null)` comes first.
+
+A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
+naming the layout, since a `declare function` declared to answer `CPtr` may
+still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
+`oom` beside it.
+
+The copy is new on every call and is the calling function's allocation, held
+by the arena like `new`. It lowers the same on wasm32, where a pointer is 4
+bytes and the layout is sized to match. It has no Node form.
+Capability: unsafe.
+
+```ts
+function readStruct<T>(p: CPtr): T
+```
+
+<scalar-field name="p" type="CPtr" required>
+
+the address of a C struct a `declare function` handed back.
+
+</scalar-field>
+
+<scalar-field name="returns" type="T">
+
+a copy of the struct, in the `declare class` its context names.
+
+</scalar-field>
+
 ### readdirSync
 
 The directory's entries, sorted ascending by bytes (not by the file system's
@@ -3726,8 +3776,11 @@ the port, 0 for any.
 <scalar-field name="flags" type="i32" required>
 
 flag 1 `SO_REUSEPORT`, so several sockets that all ask for it share a port and
-  the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); any other
-  bit is -22.
+  the kernel spreads the datagrams across them; flag 2 `UDP_GRO` (-95 on Darwin); flag 4, with
+  flag 1 and a group size N from 1 to 255 in bits 8 to 15, steers QUIC: the port's group hands
+  each datagram to its socket number (byte 0 of the Destination Connection ID) mod N, in the
+  order the sockets were bound, and a refused attach closes the socket and answers the errno
+  (-95 on Darwin). Flag 4 without 1, with 2 or with N 0, N without 4, or any other bit is -22.
 
 </scalar-field>
 

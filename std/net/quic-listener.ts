@@ -158,6 +158,8 @@ import {
   QuicConnection,
   QuicServerConfig,
   quicConnResetTokenInto,
+  quicWorkerByte,
+  quicWorkerCheck,
 } from "nish/net/quic"
 
 // ---- What `handle` answers ----------------------------------------------------
@@ -405,11 +407,14 @@ export class QuicListener {
    *
    * @param config The server's configuration, kept by reference: its static keys and Retry token lifetime.
    *   Keys of the wrong size, or a lifetime outside 1 to `QUIC_LISTENER_MAX_TOKEN_LIFETIME` ms, make a
-   *   listener that drops every datagram.
+   *   listener that drops every datagram. Its `workerIndex` and `workerCount` are checked here
+   *   (`quicWorkerCheck`, which panics on a bad pair); a valid pair puts the worker in byte 0 of each
+   *   Retry's connection ID and holds back the reset for an ID a sibling worker issued.
    * @param entropy `QUIC_LISTENER_ENTROPY_SIZE` (32) random bytes, the seed of every unpredictable byte
    *   the listener sends. Zeroed on return; any other length makes a listener that drops every datagram.
    */
   constructor(config: QuicServerConfig, entropy: u8[]) {
+    quicWorkerCheck(config)
     this.config = config
     this.seed = new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE)
     quicPacketCopy(this.seed, 0, entropy, 0, QUIC_LISTENER_ENTROPY_SIZE)
@@ -557,6 +562,17 @@ export class QuicListener {
       return answer.kind
     }
     if (header.type === QUIC_PACKET_SHORT) {
+      // RFC 9000 §21.11: an ID whose worker byte names a sibling in the
+      // steered group is that sibling's, and a reset under the shared key
+      // would end its live connection. Byte 0 at or above N is no worker's.
+      const owner: i32 = toI32(datagram[header.dcidStart])
+      if (
+        quicWorkerByte(this.config) >= 0 &&
+        owner < this.config.workerCount &&
+        owner !== this.config.workerIndex
+      ) {
+        return answer.kind
+      }
       this.statelessReset(answer, len, datagram, header.dcidStart, header.dcidLength)
       return answer.kind
     }
@@ -736,6 +752,11 @@ export class QuicListener {
     const reply: u8[] = answer.reply
     quicListenerResize(reply, tagAt + QUIC_RETRY_TAG_SIZE)
     this.randomInto(reply, retryScidAt, QUIC_CONN_CID_LENGTH)
+    const worker: i32 = quicWorkerByte(this.config)
+    if (worker >= 0) {
+      // The retried Initial is sent to this ID, so it steers back here.
+      reply[retryScidAt] = toU8(worker)
+    }
     reply[tokenAt] = toU8(QUIC_LISTENER_TOKEN_MARKER)
     quicListenerPutNumber(reply, tokenAt + 1, this.now, 8)
     reply[tokenAt + QUIC_LISTENER_TOKEN_HEAD - 1] = toU8(odcidLength)

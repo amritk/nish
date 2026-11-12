@@ -11,7 +11,10 @@
 #         handshake, transfer, retry, chacha20, multiplexing, keyupdate,
 #         handshakeloss (L1), transferloss (L2), blackhole (B), http3, and
 #         rebind-port (BP) and rebind-addr (BA), the client's NAT rebinding
-#         mid-transfer, each new path validated before it is trusted.
+#         mid-transfer, each new path validated before it is trusted; and the
+#         runner's two measurements, five transfers each over its 10 Mbps
+#         link, every one of which must complete: goodput (G), 10 MB alone,
+#         and crosstraffic (C), 25 MB beside an iperf TCP CUBIC flow.
 # h2spec: every h2spec case against the HTTP/2 server.
 # curl:   curl --http3 and --http2, a GET of a 1 MB file and a POST with a
 #         body each; curl --http1.1, plain and over TLS, a GET of /hello and of
@@ -115,8 +118,9 @@ env:
   SIMULATOR: martenseemann/quic-network-simulator@sha256:c23d82a55caffe681b1bdae65d4d30d23e1283141a414a7f02ee56cf15f9c6b9
   QUIC_GO: martenseemann/quic-go-interop@sha256:6743eea41cb8d525686eb8f2437e3ac45835740ec87c62728f645cd89e85ab88
   NGTCP2: ghcr.io/ngtcp2/ngtcp2-interop@sha256:bd635531dbe210e5d7138a08dc61c2da2d702670ff718e440b961860f5e18235
-  # The runner's cases, by the names its --json file gives them.
-  RUNNER_CASES: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3,rebind-port,rebind-addr
+  # The runner's cases, by the names its --json file gives them: its tests,
+  # then its two measurements.
+  RUNNER_CASES: handshake,transfer,retry,chacha20,multiplexing,keyupdate,handshakeloss,transferloss,blackhole,http3,rebind-port,rebind-addr,goodput,crosstraffic
   # h2spec 2.6.0's release tarball and its SHA-256.
   H2SPEC_URL: https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz
   H2SPEC_SHA256: 157ee0de702e01ad40e752dbf074b366027e550c8e7504f9450da2809e279318
@@ -138,9 +142,11 @@ env:
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
 
 # Every job stops at 15 minutes, the repository's cap (docs/wp10-ci.md), but
-# `arena`, whose soak is ten minutes by design and is given 25; and
-# every step that waits on the network at 5 or 10: the slowest lane takes about
-# 3 minutes, so a limit is reached only by a hang, in the step that names it.
+# `arena`, whose soak is ten minutes by design and is given 25, and
+# `quic-interop-runner`, whose measurements take it to 27 and which is given
+# 45; and every step that waits on the network at 5 or 10: the slowest other
+# lane takes about 3 minutes, so a limit is reached only by a hang, in the
+# step that names it.
 jobs:
   build:
     name: build the server image
@@ -169,8 +175,15 @@ jobs:
     name: quic-interop-runner (${{ matrix.client }})
     needs: build
     runs-on: ubuntu-24.04
-    # Room for the runner twice: a run that crashed retries every case.
-    timeout-minutes: 20
+    # A run takes 25 to 27 minutes, most of it the two measurements: five
+    # transfers each, and crosstraffic's 25 MB shares the 10 Mbps link with a
+    # TCP flow. The rest is room to run a failed measurement once more; a
+    # run that crashed and retries every case does not fit, and times out.
+    timeout-minutes: 45
+    env:
+      # The endpoint crosstraffic's iperf server and client run in, which the
+      # runner's docker-compose.yml names by tag.
+      IPERF: martenseemann/quic-interop-iperf-endpoint@sha256:cb50cc8019d45d9cad5faecbe46a3c21dd5e871949819a5175423755a9045106
     strategy:
       fail-fast: false
       matrix:
@@ -194,7 +207,7 @@ jobs:
       - name: Load the server image
         run: docker load --input nish-interop.tar.gz
 
-      - name: Pull the simulator and the client
+      - name: Pull the simulator, the iperf endpoint and the client
         timeout-minutes: 5
         env:
           CLIENT: ${{ matrix.client }}
@@ -205,6 +218,10 @@ jobs:
           docker pull "$SIMULATOR"
           docker build -f tests/interop/simulator.dockerfile --build-arg SIMULATOR="$SIMULATOR" \
             -t martenseemann/quic-network-simulator:latest tests/interop
+          # The same for crosstraffic's iperf endpoint: the pinned digest
+          # under the tag compose asks for, so it pulls nothing itself.
+          docker pull "$IPERF"
+          docker tag "$IPERF" martenseemann/quic-interop-iperf-endpoint:latest
           if [ "$CLIENT" = quic-go ]; then image="$QUIC_GO"; else image="$NGTCP2"; fi
           docker pull "$image"
           echo "CLIENT_IMAGE=$image" >> "$GITHUB_ENV"

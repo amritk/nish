@@ -193,6 +193,87 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
     }
   }
 
+  // WP27 S4.2: `readStruct` from `nish:unsafe` copies a C-owned struct into a
+  // fresh instance of the `declare class` its context names. Its NULL test is
+  // an `ffi-null` site beside its allocation's allowed `oom`, so --deny-panics
+  // refuses it; --deny unsafe refuses it and names the call; --emit-checked
+  // records the import and the call. The copy is `@llvm.memcpy` of the
+  // layout's own size: sixteen bytes for two `CPtr` fields natively, eight on
+  // wasm32, where a `CPtr` is four.
+  if (!only || "ffi_struct checks".includes(only) || "wasi".includes(only)) {
+    const read = write(
+      "read.ts",
+      [
+        'import { readStruct } from "nish:unsafe";',
+        "",
+        "declare class Lconv {",
+        "  decimalPoint: CPtr",
+        "  thousandsSep: CPtr",
+        "}",
+        "",
+        "declare function localeconv(): CPtr;",
+        "",
+        "export const main = (): i32 => {",
+        "  const lc: Lconv = readStruct(localeconv());",
+        "  return lc.decimalPoint === lc.thousandsSep ? 1 : 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const readDir = path.join(dir, "read") + path.sep
+    const json = path.join(dir, "read.panics.json")
+    const listed = compile(read, readDir, ["--emit-panics", json])
+    const report = listed.status === 0 ? JSON.parse(fs.readFileSync(json, "utf8")) : null
+    const kinds = ((report?.functions ?? []).find((f) => f.name === "main")?.panics ?? [])
+      .map((p) => `${p.line}:${p.kind}:${p.allowed}`)
+      .join(",")
+    check(
+      "ffi_struct_read: `readStruct` is an unproven `ffi-null` site and the copy's allowed `oom`, and nothing else",
+      kinds === "11:ffi-null:undefined,11:oom:true",
+      report === null ? shown(listed) : JSON.stringify(report)
+    )
+    const denyPanics = compile(read, readDir, ["--deny-panics"])
+    check(
+      "ffi_struct_read: --deny-panics refuses `readStruct` for its NULL test",
+      denyPanics.status === 1 &&
+        denyPanics.stderr.includes("`ffi-null` may panic here") &&
+        denyPanics.stderr.includes("`readStruct` panics on a NULL pointer"),
+      shown(denyPanics)
+    )
+    const denyUnsafe = compile(read, readDir, ["--deny", "unsafe"])
+    check(
+      "ffi_struct_read: --deny unsafe refuses `readStruct` and names the call",
+      denyUnsafe.status === 1 &&
+        denyUnsafe.stderr.includes("reaches `unsafe`") &&
+        denyUnsafe.stderr.includes("calls readStruct"),
+      shown(denyUnsafe)
+    )
+    const checked = spawnSync(nish, [read, "--emit-checked"], { cwd: root, encoding: "utf8" })
+    check(
+      "ffi_struct_read: --emit-checked records the `readStruct` import and its call",
+      checked.status === 0 &&
+        checked.stdout.includes('unsafe import 1:10 readStruct from "nish:unsafe"') &&
+        /unsafe call 11:21 readStruct \(node \d+\)/.test(checked.stdout),
+      shown(checked)
+    )
+    for (const [name, flags, size] of [
+      ["native", [], 16],
+      ["wasm32", ["--profile", "wasi"], 8],
+    ]) {
+      const ll = path.join(dir, `read-${name}.ll`)
+      const built = compile(read, ll, flags)
+      const ir = built.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+      check(
+        `ffi_struct_read: a ${name} build allocates and copies the layout's ${size} bytes`,
+        new RegExp(`call i8\\* @nish_alloc_struct\\(i64 ${size}\\)`).test(ir) &&
+          new RegExp(
+            `call void @llvm\\.memcpy\\.p0i8\\.p0i8\\.i64\\(i8\\* align 8 %[\\w.]+, i8\\* align 1 %[\\w.]+, i64 ${size}, i1 false\\)`
+          ).test(ir),
+        built.status === 0 ? ir : shown(built)
+      )
+    }
+  }
+
   // A layout's `CPtr` is the target's `void *`: eight bytes natively, four on
   // wasm32 (`--profile wasi`). Nish's build is measured, never assumed: the
   // size its `new` zero-fills and its lending parameter's `dereferenceable`

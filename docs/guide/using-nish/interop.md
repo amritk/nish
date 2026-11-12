@@ -1024,6 +1024,41 @@ built from an object literal. A parameter typed `Rlimit | null` passes `NULL`
 for `null`, under the same rule as a `CPtr | null`. The rules are in
 [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
 
+A C function that answers a pointer to a struct it owns, such as `localeconv`
+or `gmtime`, often answers the same static buffer every call. `readStruct`
+from `nish:unsafe` copies that struct into a `declare class` instance the
+program owns, so a later call that overwrites C's buffer leaves the copy
+alone. The type to copy into comes from the context, an annotation or a
+return type, and the copy is the class's size in bytes:
+
+```ts nish:ok
+import { readCString, readStruct } from "nish:unsafe";
+
+declare class Lconv {
+  decimalPoint: CPtr;
+  thousandsSep: CPtr;
+}
+declare function localeconv(): CPtr;
+
+export const main = (): i32 => {
+  const lc: Lconv = readStruct(localeconv());
+  console.log(readCString(lc.decimalPoint)); // .
+  return 0;
+};
+```
+
+A `NULL` pointer stops the program before the copy, with
+`` `readStruct` read a NULL pointer into a `Lconv` `` on stderr and exit
+status 1, and `--deny-panics` refuses the call for that reason. Nothing else
+is checked: the pointer must be live, and the class must declare C's fields
+in C's order, or the copy reads the wrong bytes. That is why `readStruct`
+comes from `nish:unsafe`: a call to it gives the function the `unsafe`
+capability, and a build with `--deny unsafe` refuses it. A
+`CPtr` field is copied as C's address, not followed, so read what it points
+at, with `readCString` here, while C still holds it. A `CPtr | null` result
+is narrowed with `!== null` before the call. The rules are in
+[`readStruct`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#readstruct-a-struct-out-of-memory-c-owns).
+
 A C function that fails through `errno` is checked with `cErrno` from
 `nish:unsafe`. It answers the errno the most recent `declare function` call on
 this thread left, and naming it makes the compiler set errno to 0 just before

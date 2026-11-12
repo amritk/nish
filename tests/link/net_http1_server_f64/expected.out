@@ -54,6 +54,15 @@ PASS  refused with 413: a Content-Length past maxBody
 PASS  refused with 501: a transfer coding other than chunked
 PASS  refused with 505: HTTP/2.0 in a request line
 PASS  a refusal after a good pipelined request: the good one is answered first
+PASS  a client still sending its body reads the 413, then the end of the stream, not a reset
+PASS  and the slot lingers, draining what it still sends
+PASS  the drained bytes neither reach the program nor move the idle clock
+PASS  past lingerTimeout, before headTimeout and idleTimeout, it is closed
+PASS  and the slot is free
+PASS  a refused client that floods the linger reads its 505 first
+PASS  past lingerBytes it is closed whatever it still sends
+PASS  a refused client that hangs up ends the linger at once
+PASS  and its slot is closed
 PASS  a request cut short by the end of the stream ends the connection
 PASS  a client gone in the middle of a response: the write fails and the slot is closed
 PASS  a slot that has just moved is not idle
@@ -242,4 +251,4 @@ PASS  so do they while a byte of the next request is unread
 PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
-http1 server: 244 passed, 0 failed, 0 skipped
+http1 server: 253 passed, 0 failed, 0 skipped
