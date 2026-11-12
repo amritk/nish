@@ -140,7 +140,9 @@ const filesUnder = (dir) =>
  */
 const caseArgs = (name) => {
   const argsFile = path.join(casesDir, `${name}.args`)
-  const args = fs.existsSync(argsFile) ? fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean) : []
+  const args = fs.existsSync(argsFile)
+    ? fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean)
+    : []
   return args.filter((arg) => arg !== FLAG && !arg.startsWith(`${FLAG}=`))
 }
 
@@ -229,7 +231,8 @@ const unmarkedStream = (bytes) => {
     const count = lines.findIndex((line, i) => i >= at && WARNING_COUNT.test(line))
     if (count >= 0) {
       const left = Number(WARNING_COUNT.exec(lines[count])[1]) - 1
-      lines = left === 1 ? withoutLines(lines, count, count + 1) : lines.with(count, `${left} performance warnings`)
+      lines =
+        left === 1 ? withoutLines(lines, count, count + 1) : lines.with(count, `${left} performance warnings`)
     }
   }
   return Buffer.from(lines.join("\n"), "latin1")
@@ -251,7 +254,12 @@ const unmarked = (answer) => {
     return bytes === null ? file : { name: file.name, bytes }
   })
   return {
-    answer: { ...answer, stdout: unmarkedStream(answer.stdout), stderr: unmarkedStream(answer.stderr), files },
+    answer: {
+      ...answer,
+      stdout: unmarkedStream(answer.stdout),
+      stderr: unmarkedStream(answer.stderr),
+      files,
+    },
     missing,
   }
 }
@@ -329,7 +337,9 @@ const erase = async (name) => {
   const pinned = caseArgs(name).includes(NUMBER_MODE)
   const golden = reject
     ? [["--json"]]
-    : GOLDEN_FLAGS.filter(([suffix]) => fs.existsSync(path.join(casesDir, `${name}${suffix}`))).map(([, f]) => f)
+    : GOLDEN_FLAGS.filter(([suffix]) => fs.existsSync(path.join(casesDir, `${name}${suffix}`))).map(
+        ([, f]) => f
+      )
   for (const flags of [[], ...golden]) {
     const without = await compile(name, flags)
     if (reject ? without.status !== 1 : without.status !== 0) {
