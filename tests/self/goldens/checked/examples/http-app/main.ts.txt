@@ -3682,8 +3682,8 @@ function Http1Connection.restart(this: Http1Connection): void -> @nish.Http1Conn
   callee -5:5 Http1Parser.restart -> @nish.Http1Parser.restart
   local -4:11 ws: WsDecoder | null (const)
   callee -2:7 WsDecoder.reset -> @nish.WsDecoder.reset
-  callee +25:5 Http1Connection.release -> @nish.Http1Connection.release
-  callee +26:5 Http1Connection.park -> @nish.Http1Connection.park
+  callee +29:5 Http1Connection.release -> @nish.Http1Connection.release
+  callee +30:5 Http1Connection.park -> @nish.Http1Connection.park
 function Http1Connection.park(this: Http1Connection): void -> @nish.Http1Connection.park [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
