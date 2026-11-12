@@ -118,7 +118,9 @@ import {
   TLS_GROUP_X25519,
   TLS_HANDSHAKE_CLIENT_HELLO,
   TLS_HANDSHAKE_FINISHED,
+  TLS_EXT_RECORD_SIZE_LIMIT,
   TLS_RANDOM_SIZE,
+  TLS_RECORD_SIZE_LIMIT_MAX,
   TLS_VERSION_13,
   TLS_P256_SHARE_SIZE,
   TLS_X25519_SHARE_SIZE,
@@ -218,8 +220,10 @@ export interface TlsServerConfig {
   quicTransportParameters: u8[]
   /**
    * Extensions this module does not interpret, already encoded (each a type,
-   * a length and a body), written first in EncryptedExtensions:
-   * `record_size_limit` is the record layer's, for one. Empty for none.
+   * a length and a body), written first in EncryptedExtensions. Empty for
+   * none. Not for ALPN, `server_name` or `quic_transport_parameters`, which
+   * the server writes itself: a client refuses a repeated extension. A
+   * `record_size_limit` here replaces the one the server would write.
    */
   extraExtensions: u8[]
   /**
@@ -258,10 +262,11 @@ const tlsConfigFits = (config: TlsServerConfig): boolean => {
     certificate = certificate + 5 + n
   }
   // ALPN's type, lengths and the one name (at most 4 + 2 + 1 + 255), the
-  // server_name acknowledgement (4), and the transport parameters' type and
-  // length (4), beside what the caller passes through.
+  // server_name acknowledgement (4), the transport parameters' type and
+  // length (4), and `record_size_limit` (6), beside what the caller passes
+  // through.
   const extensions: i32 =
-    266 + toI32(config.extraExtensions.length) + toI32(config.quicTransportParameters.length)
+    272 + toI32(config.extraExtensions.length) + toI32(config.quicTransportParameters.length)
   for (const protocol of config.alpn) {
     const n: i32 = toI32(protocol.length)
     if (n < 1 || n > 255) {
@@ -269,6 +274,23 @@ const tlsConfigFits = (config: TlsServerConfig): boolean => {
     }
   }
   return extensions <= 65535
+}
+
+/**
+ * Whether the encoded extensions `extensions` (each a type, a 16-bit length
+ * and a body) carry one of `type`. A length that runs past the end stops the
+ * walk.
+ */
+const tlsExtensionsHave = (extensions: u8[], type: i32): boolean => {
+  const end: i32 = toI32(extensions.length)
+  let at: i32 = 0
+  while (at + 4 <= end) {
+    if (((toI32(extensions[at]) << 8) | toI32(extensions[at + 1])) === type) {
+      return true
+    }
+    at = at + 4 + ((toI32(extensions[at + 2]) << 8) | toI32(extensions[at + 3]))
+  }
+  return false
 }
 
 /**
@@ -899,7 +921,8 @@ const tlsFlightCapacity = (config: TlsServerConfig): i32 => {
     config.extraExtensions,
     longest,
     true,
-    config.quic ? config.quicTransportParameters : null
+    config.quic ? config.quicTransportParameters : null,
+    config.quic ? 0 : TLS_RECORD_SIZE_LIMIT_MAX
   )
   const certificate: i32 = tlsWriteCertificate(none, TLS_FROM, config.certificateChain)
   return extensions + certificate + 8 + TLS_ECDSA_SIGNATURE_MAX + 4 + SHA384_SIZE
@@ -1111,6 +1134,8 @@ export class TlsServer {
   retried: boolean = false
   /** Whether `config` passed `tlsConfigFits`, decided once by the constructor. */
   private configFits: boolean = false
+  /** Whether `config.extraExtensions` carries its own `record_size_limit`, which the server then does not write. */
+  private extraRecordSizeLimit: boolean = false
   /** Whether the carrier turned resumption on with `enableTickets`; kept across `restart`. */
   tickets: boolean = false
   /**
@@ -1129,6 +1154,13 @@ export class TlsServer {
   issued: boolean = false
   /** Whether this connection resumed a ticket (row 1 of the record's table). */
   resumed: boolean = false
+  /**
+   * The client's `record_size_limit` (RFC 8449): the most plaintext, content
+   * type and padding included, a protected record to it may carry, from
+   * `TLS_RECORD_SIZE_LIMIT_MIN` to `TLS_RECORD_SIZE_LIMIT_MAX`. 0 when the
+   * client sent none, and always over QUIC, which has no TLS records.
+   */
+  peerRecordSizeLimit: i32 = 0
 
   /**
    * A server for one connection under `config`, with the 32-byte server
@@ -1151,6 +1183,7 @@ export class TlsServer {
     this.clientParameters = []
     this.transcript = new TlsTranscript(0)
     this.configFits = tlsConfigFits(config)
+    this.extraRecordSizeLimit = tlsExtensionsHave(config.extraExtensions, TLS_EXT_RECORD_SIZE_LIMIT)
     this.input = new Array<u8>(TLS_INPUT_START)
     this.outputInitial = new Array<u8>(TLS_INITIAL_OUTPUT_SIZE)
     this.outputHandshake = new Array<u8>(this.configFits ? tlsFlightCapacity(config) : TLS_FROM)
@@ -1202,6 +1235,7 @@ export class TlsServer {
     this.group = 0
     this.serverName = ""
     this.alpn = ""
+    this.peerRecordSizeLimit = 0
     this.clientTransportParameters = this.none
     this.inputLength = 0
     this.outputInitialLength = 0
@@ -1491,6 +1525,16 @@ export class TlsServer {
   }
 
   /**
+   * The `record_size_limit` the server sends in EncryptedExtensions: the
+   * TLS 1.3 maximum, since this server reads any record the protocol allows,
+   * and only when the client sent one (RFC 8449 §4) and the configuration's
+   * `extraExtensions` do not carry their own; 0 for none.
+   */
+  private ownRecordSizeLimit(): i32 {
+    return this.peerRecordSizeLimit !== 0 && !this.extraRecordSizeLimit ? TLS_RECORD_SIZE_LIMIT_MAX : 0
+  }
+
+  /**
    * ALPN (RFC 7301 §3.2): the first configured protocol the client offers.
    * Answers 0 with `alpn` set, or empty when nothing is negotiated, or
    * `no_application_protocol`.
@@ -1547,6 +1591,9 @@ export class TlsServer {
     if (hello.alert !== 0) {
       return hello.alert
     }
+    // RFC 8449 §4: taken from the hello the server answers, so a second
+    // ClientHello's replaces the first's.
+    this.peerRecordSizeLimit = this.config.quic ? 0 : hello.recordSizeLimit
     // §4.2.1: the version is negotiated by `supported_versions` alone, and
     // `legacy_version` is not consulted for it. The one exception is SSL 3.0
     // or below, which §D.5 lets a server refuse outright. Without
@@ -1962,7 +2009,8 @@ export class TlsServer {
       this.config.extraExtensions,
       this.alpn,
       hello.hasServerName,
-      this.config.quic ? this.config.quicTransportParameters : null
+      this.config.quic ? this.config.quicTransportParameters : null,
+      this.ownRecordSizeLimit()
     )
     this.reserveOutput(TLS_LEVEL_HANDSHAKE, extensionsEnd + 4 + this.hashLength)
     // The secrets' pool is the slot's, chosen before the blocks open.
@@ -2002,7 +2050,8 @@ export class TlsServer {
       this.config.extraExtensions,
       this.alpn,
       hello.hasServerName,
-      this.config.quic ? this.config.quicTransportParameters : null
+      this.config.quic ? this.config.quicTransportParameters : null,
+      this.ownRecordSizeLimit()
     )
     this.sent(TLS_LEVEL_HANDSHAKE, extensionsAt, written)
   }
@@ -2100,7 +2149,8 @@ export class TlsServer {
       this.config.extraExtensions,
       this.alpn,
       hello.hasServerName,
-      this.config.quic ? this.config.quicTransportParameters : null
+      this.config.quic ? this.config.quicTransportParameters : null,
+      this.ownRecordSizeLimit()
     )
     this.reserveOutput(
       TLS_LEVEL_HANDSHAKE,
@@ -2136,7 +2186,8 @@ export class TlsServer {
       this.config.extraExtensions,
       this.alpn,
       hello.hasServerName,
-      this.config.quic ? this.config.quicTransportParameters : null
+      this.config.quic ? this.config.quicTransportParameters : null,
+      this.ownRecordSizeLimit()
     )
     this.sent(TLS_LEVEL_HANDSHAKE, extensionsAt, written)
     const certificateEnd: i32 = tlsWriteCertificate(
