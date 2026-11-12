@@ -205,8 +205,11 @@ FIN, or a reset both ways when the capsule does not fit), and one already
 closed whose client never finished its half is let go. Each session it
 ends that the program still held is reported by the next calls of `next`
 as WT_CLOSED, `closedByPeer` false, code 0. A session takes at most
-`maxDatagramsPerSecond` datagrams in each second from its first; the rest
-are dropped and counted in `datagramsDropped`.
+`maxDatagramsPerSecond` datagrams in each fixed one-second window, the
+first starting when the session is asked for and the next at the first
+datagram a second or more after it; the rest are dropped and counted in
+`datagramsDropped`. The window does not slide, so across a boundary up to
+twice the cap can arrive within a second.
 
 </scalar-detail>
 

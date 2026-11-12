@@ -2823,21 +2823,26 @@ server shuts its write side and reads and throws away what the client still
 sends, so the client's TCP stack does not answer those bytes with a reset that
 destroys the error response (RFC 9112 §9.6). The drain stops when the client
 hangs up, after `lingerBytes` (64 KiB by default; 0 closes at once), or when
-`expire` finds it past `lingerTimeout` (2 s by default).
+`expire` finds it past `lingerTimeout` (2 s by default) — only `expire` reads
+that deadline, so call it from your loop. Until the linger ends the slot is
+busy and counts against the pool.
 
 `Http2TlsServer` has an `expire(now)` too. A client that has not acknowledged
 the server's SETTINGS within `Http2Config.settingsTimeout` (10 s by default,
 its TLS handshake included) is sent GOAWAY SETTINGS_TIMEOUT and closed; one
 that moves no byte for `Http2Config.idleTimeout` (60 s) is sent GOAWAY
-NO_ERROR and closed. A `WebTransport` session has its own clock:
+NO_ERROR and closed. Any frame counts as a byte moved, a PING included, and a
+quiet stream counts for nothing: a long poll or server-sent event stream with
+nothing to send for `idleTimeout` is cut, so send on it (a comment line, for
+SSE) more often than that, or raise it. A `WebTransport` session has its own clock:
 `expire(now)` ends one quiet for `WebTransportConfig.idleTimeout` (60 s) —
 refused with 503 if it was never answered, closed with code 0 if it was — and
 `next` reports it as `WT_CLOSED`. A session takes at most
-`maxDatagramsPerSecond` datagrams a second (1,024 by default); the rest are
-dropped and counted in `datagramsDropped`.
+`maxDatagramsPerSecond` datagrams a second (1,024 by default), counted in fixed
+one-second windows; the rest are dropped and counted in `datagramsDropped`.
 
 Calling `expire` on every turn of the loop is cheap: it walks the slots only
-when one can be due, about once per the shorter of the two timeouts, and
+when one can be due, about once per the shortest of its timeouts, and
 `expireScans` counts the walks. `TlsTcpServer`, `Http1TlsServer`,
 `Http2TlsServer` and `Http3Server` build a slot the same way, on the first
 connection accepted into it (an `Http2TlsServer` builds slot 0 in its

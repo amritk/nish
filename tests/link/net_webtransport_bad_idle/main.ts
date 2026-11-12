@@ -3,9 +3,9 @@
 //
 //     WebTransport: idleTimeout of 0, outside 1 to 86400000
 //
-// and exits 1; so does a `maxDatagramsPerSecond` outside 1 to 1,048,576. The
-// link harness compares stdout and the exit code only, so the message is
-// named here rather than pinned.
+// and exits 1 (`maxDatagramsPerSecond` is pinned by
+// `tests/link/net_webtransport_bad_rate`). The link harness compares stdout
+// and the exit code only, so the message is named here rather than pinned.
 import { QuicConnection } from "nish/net/quic";
 import { Http3Connection } from "nish/net/http3";
 import { WebTransport, WebTransportConfig } from "nish/net/webtransport";
