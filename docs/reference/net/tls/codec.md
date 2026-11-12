@@ -412,7 +412,8 @@ The ones read are `server_name` (RFC 6066 §3),
 `supported_groups`, `signature_algorithms`, `supported_versions` and
 `key_share` (RFC 8446 §4.2), `application_layer_protocol_negotiation`
 (RFC 7301 §3.1), `quic_transport_parameters` (RFC 9001 §8.2) and
-`record_size_limit` (RFC 8449 §4), and `pre_shared_key` and `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
+`record_size_limit` (RFC 8449 §4), and `pre_shared_key` and
+`psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9),
 whose identities and binders the reader checks against their syntax but
 does not open: a ticket and its binder are the server's to judge. Every
 other extension is skipped, which is what RFC 8446 §4.2 asks of a server
