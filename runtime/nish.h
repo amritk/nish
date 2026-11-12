@@ -999,9 +999,11 @@ void nish_sandbox_check(void);
    `nish_spawn_start` (runtime-os.c) then leaves the spawn to it. It checks
    `file` as `posix_spawnp` would resolve it, starts the child with the file
    actions `actions` (a `posix_spawn_file_actions_t`) and `argv`, holds it to
-   that one exec, and answers its pid or a negative errno. `low` is a
-   descriptor above every one the actions write. */
-extern int32_t (*nish_spawn_sandboxed)(const char *file, int low, const void *actions, char **argv);
+   that one exec, and answers its pid or a negative errno. The actions' `dup2`s
+   read the `n` descriptors of `dup` (null for none) and write `base` onward;
+   with the redirects of 1 and 2, nothing they write is above `base + n + 2`. */
+extern int32_t (*nish_spawn_sandboxed)(const char *file, const int *dup, int base, int n, const void *actions,
+                                       char **argv);
 void nish_cpu_prime(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
 /* Keeps every later region and join on threads created and joined per call,

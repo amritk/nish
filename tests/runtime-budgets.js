@@ -688,8 +688,8 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * Raised to 4,096, the next 256-byte boundary, for SBX-1's second part (WP37): the
  * one exec a spawn under an exec allowlist is held to, which is two threads, a
  * seccomp filter with a user-notification listener and the loop that answers it.
- * Measured 3,906 against 3,143 before it on 2026-11-12 with clang 18.1.3 on
- * linux-x64; `runtime-os.c` gave back 27 bytes (5,764 from 5,791), its spawn now
+ * Measured 4,067 against 3,143 before it on 2026-11-12 with clang 18.1.3 on
+ * linux-x64; `runtime-os.c` gave back 30 bytes (5,761 from 5,791), its spawn now
  * handed over whole.
  */
 const RUNTIME_SANDBOX_TEXT_BUDGET = 4096

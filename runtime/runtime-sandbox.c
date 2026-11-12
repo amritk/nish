@@ -571,6 +571,8 @@ extern char **environ;
 
 struct nish_sb_job {
   const char *file;
+  const int *dup; /* the `n` descriptors the actions read, or null */
+  int n;
   int low;
   const posix_spawn_file_actions_t *actions;
   char **argv;
@@ -578,6 +580,16 @@ struct nish_sb_job {
   int pipe[2]; /* the spawner's two answers: its listener, then its child */
   int32_t result;
 };
+
+/* `fd` moved to a close-on-exec descriptor at or above `low`, or -1 with
+ * errno. No descriptor this file makes for a spawn stays below `low`, where
+ * the child's file actions and this process's 0, 1 and 2 are. */
+static int nish_sb_lift(int fd, int low) {
+  int moved = fcntl(fd, F_DUPFD_CLOEXEC, low), e = errno;
+  close(fd);
+  errno = e;
+  return moved;
+}
 
 static void nish_sb_refuse_spawn(int e) {
   char buf[24];
@@ -603,6 +615,9 @@ static void *nish_sb_spawner(void *arg) {
   };
   struct sock_fprog fprog = {sizeof prog / sizeof prog[0], (struct sock_filter *)prog};
   int32_t said = (int32_t)syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, NISH_SB_NEW_LISTENER, &fprog);
+  /* The kernel gave the listener the lowest free number, which may be one
+   * the child's actions write, or this process's closed stderr. */
+  if (said >= 0) said = nish_sb_lift(said, job->low);
   if (said < 0) said = -errno;
   (void)!write(job->pipe[1], &said, sizeof said);
   if (said < 0) return 0;
@@ -625,8 +640,31 @@ static int32_t nish_sb_answer(int fd) {
 static void *nish_sb_supervisor(void *arg) {
   struct nish_sb_job *job = arg;
   pthread_t spawner;
-  if (unshare(CLONE_FILES) || pipe2(job->pipe, O_CLOEXEC)) {
-    job->result = -errno;
+  int made[2];
+  if (unshare(CLONE_FILES)) {
+    nish_sb_refuse_spawn(errno);
+    return 0;
+  }
+  /* The actions name their sources by number, and this table is now nobody
+   * else's. A source that is open here is the caller's, so no descriptor made
+   * below can take its number; one that is not would name whatever was made
+   * there, so the spawn is refused before anything is. */
+  for (int k = 0; job->dup && k < job->n; k++) {
+    if (fcntl(job->dup[k], F_GETFD) < 0) {
+      job->result = -EBADF;
+      return 0;
+    }
+  }
+  if (pipe2(made, O_CLOEXEC)) {
+    nish_sb_refuse_spawn(errno);
+    return 0;
+  }
+  /* Both ends are moved before either is tested, so that the line below is
+   * never written to an end still sitting on descriptor 2. */
+  job->pipe[0] = nish_sb_lift(made[0], job->low);
+  job->pipe[1] = nish_sb_lift(made[1], job->low);
+  if (job->pipe[0] < 0 || job->pipe[1] < 0) {
+    nish_sb_refuse_spawn(EMFILE);
     return 0;
   }
   int fd = nish_sb_spawn_open(job->file, job->low, job->proc);
@@ -662,10 +700,12 @@ static void *nish_sb_supervisor(void *arg) {
 }
 
 /* `nish_spawn_start`'s spawn under an exec allowlist: the child's pid, or a
- * negative errno. `actions` is its `posix_spawn_file_actions_t`, and `low` a
- * descriptor above every one those actions write. */
-static int32_t nish_sb_spawn_once(const char *file, int low, const void *actions, char **argv) {
-  struct nish_sb_job job = {.file = file, .low = low, .actions = actions, .argv = argv, .result = -EAGAIN};
+ * negative errno. `actions` is its `posix_spawn_file_actions_t`, whose `dup2`
+ * actions read the `n` descriptors of `dup` (null for none) and write `base`
+ * onward; the actions write nothing above `base + n + 2`. */
+static int32_t nish_sb_spawn_once(const char *file, const int *dup, int base, int n, const void *actions, char **argv) {
+  struct nish_sb_job job = {
+      .file = file, .dup = dup, .n = n, .low = base + n + 3, .actions = actions, .argv = argv, .result = -EAGAIN};
   pthread_t supervisor;
   if (pthread_create(&supervisor, 0, nish_sb_supervisor, &job)) return -EAGAIN;
   pthread_join(supervisor, 0);

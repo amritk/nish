@@ -183,15 +183,21 @@ refuses every later one in its subtree:
 2. The hook (`nish_sb_spawn_once`, `runtime/runtime-sandbox.c`) starts a
    **supervisor** thread and joins it. The supervisor calls
    `unshare(CLONE_FILES)`, so it works in a private copy of the descriptor
-   table, opens and identity-checks the target there, and starts a
-   **spawner** thread, which shares that private table.
+   table. Before it makes any descriptor it checks that each source the
+   file actions `dup2` from is open in that copy, and refuses the spawn
+   (`EBADF`) otherwise. It then makes its pipe, opens and identity-checks
+   the target, and starts a **spawner** thread, which shares that private
+   table. Every descriptor made here is moved to `base + n + 3` or above
+   (`nish_sb_lift`), where `base` onward are the `n` numbers the actions
+   write.
 3. The spawner installs a second seccomp filter on itself, with
    `SECCOMP_FILTER_FLAG_NEW_LISTENER`: `execve` and `execveat` answer
    `SECCOMP_RET_USER_NOTIF`, a `seccomp` call that asks for a listener
    answers `EBUSY`, everything else is allowed (after the same architecture
    and x32 checks as the process's filter). It then calls `posix_spawn` on
    the `/proc/self/fd/N` name with the caller's file actions, so the child
-   inherits the filter and a copy of the private table.
+   inherits the filter and a copy of the private table. The listener is
+   moved above the actions' numbers like the rest, before the spawn.
 4. The supervisor polls the listener and the spawner's pipe together. The
    first notification is the child's own `execve`: it answers
    `SECCOMP_USER_NOTIF_FLAG_CONTINUE` and closes the listener. A filter whose
@@ -216,7 +222,37 @@ target descriptor is checked there too. Another Nish thread can `fileClose`
 any number and `fileOpen` a path onto it, so a descriptor in the shared table
 is not the file that was checked by the time the child execs it by number.
 A thread that has unshared its table cannot hand a descriptor back, so the
-supervisor is a thread of its own inside the private table. A raw `clone`
+supervisor is a thread of its own inside the private table.
+
+**Why the hold's descriptors sit above the file actions.** File actions are
+numbers. `nish_spawn_start` builds `dup2(source, base + k)` for each
+descriptor a builtin passes and opens onto 1 and 2, and the child runs them
+in its copy of the private table. `pipe2`, the listener and the target's
+`open` each take the lowest free number, which is a source that another
+thread closed after the builtin read it, or 0, 1 or 2 in a program that
+closed them: the child would be handed the listener in place of a file. So
+the rule is about every descriptor the hold makes, in three parts. A source
+is checked open in the private table before anything is made there, so an
+open source is the caller's and stays that; a closed one refuses the spawn.
+Everything made is moved to `base + n + 3` or above before a child exists,
+past the sources' targets and past 0, 1 and 2. And both pipe ends are moved
+before either is tested, so the refusal line (a `write` to 2) cannot land in
+a pipe end sitting there. Nothing is closed afterwards: the table ends with
+the threads.
+
+**A private table without `unshare(2)`.** Docker's default seccomp profile
+answers `unshare` with `EPERM` unless the container holds `CAP_SYS_ADMIN`,
+so there the hold refuses every spawn (Fallbacks, below). The kernel gives
+a private table another way: a raw `clone` without `CLONE_FILES`, which
+that profile allows when no namespace flag is set. It is sound in
+principle and it is not cheap. The clone child is a process, not a thread
+of this one, so it cannot use `pthread_create` or rely on libc's state; it
+would make the listener and call `posix_spawn` itself in a single-threaded
+copy, need `CLONE_PARENT` for the granted program to remain the Nish
+program's child for `waitPid`, and report through a pipe the parent made in
+the shared table, which is the exposure the private table exists to remove.
+That is a second design, not a fallback, and it is not built or measured
+here; the refusal is. A raw `clone`
 child in place of the spawner was weighed: it would have to redo
 `posix_spawn`'s file actions, its signal resets and its exec-error report,
 which libc already gets right.
@@ -241,9 +277,12 @@ alike, with one line on stderr (`nish: --sandbox: cannot hold a spawned
 program to one exec, so the spawn is refused (<errno>)`) and the negative
 errno as the builtin's answer. That covers a kernel without the listener
 flag (`EINVAL`, before Linux 5.0), a launcher whose filters already hold a
-listener (`EBUSY`), and a kernel that has the listener but not "continue"
+listener (`EBUSY`), a kernel that has the listener but not "continue"
 (before 5.5: the answer is refused, the listener is closed and the child's
-exec is `ENOSYS`). A program with no exec allowlist installs nothing.
+exec is `ENOSYS`), and a launcher that denies `unshare` or `pipe2`: Docker's
+default seccomp profile is one (`unshare` is `EPERM` without
+`CAP_SYS_ADMIN`), so a default `docker run` refuses every spawn under an
+exec allowlist. A program with no exec allowlist installs nothing.
 
 **What it costs.** A granted program cannot start a second program, granted
 or not: `find -exec`, `xargs`, `git`'s helpers and every non-builtin command
@@ -256,7 +295,7 @@ The directions weighed, and what each leaves open:
 
 | Direction | Verdict | Leaves open |
 | --- | --- | --- |
-| One exec per spawn, by a closed listener (chosen) | Closes exec in the subtree with kernel-held state | A granted program cannot start a second program, granted or not; interpreters the grant names still run what they are told; needs seccomp user notification |
+| One exec per spawn, by a closed listener (chosen) | Closes exec in the subtree with kernel-held state | A granted program cannot start a second program, granted or not; an interpreter the grant names still runs in its own process the code it is handed (`python3 -c`), though a shell is left its builtins; needs seccomp user notification and `unshare(CLONE_FILES)`, which Docker's default profile denies |
 | `execveat(dirfd == N, AT_EMPTY_PATH)` allowed by number | Ruled out | `dirfd` is ignored for an absolute pathname, which seccomp cannot read, so the rule admits any path |
 | Allow `execve` by the caller's instruction pointer | Ruled out | Probabilistic: any address is mappable after the exec, and with ASLR off a shared libc sits at one address in both images |
 | A second Landlock layer in the child | Ruled out | The layer must still grant EXECUTE on the loader for the program's own start, and is inherited as is |

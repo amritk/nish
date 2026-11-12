@@ -1158,10 +1158,13 @@ declare function realpathSync(path: string): string | null;
  * an embedded NUL truncates one. A `wasm32` build and a WASI build have no
  * processes, and a WASI build always answers `-1`. Capability: process.spawn.
  *
- * Under `--sandbox`, when a dependency's `process.spawn=<program>` grants
- * list the programs the build may start, the program this and every other
- * spawn builtin starts cannot start another: an exec by it, or by anything it
- * forks, fails. A granted `#!` script runs its interpreter's builtins alone.
+ * Under `--sandbox`, a dependency's `process.spawn=<program>` grants can make
+ * a list of the only programs the build may start. A program this builtin
+ * starts under such a list cannot start another: an exec by it, or by
+ * anything it forks, fails, so a granted `#!` script runs its interpreter's
+ * builtins alone. Where the kernel or a container's seccomp profile refuses
+ * what that takes (Docker's default profile does), the spawn fails and one
+ * line on stderr says so.
  *
  * @param argv the program and its arguments.
  * @returns the exit status, or `128 + n` when signal `n` killed it (the shell's
@@ -1177,6 +1180,9 @@ declare function spawnSync(argv: string[]): number;
  * stderr through. The two paths must not name one file: each is opened
  * separately, with its own offset, so the streams would overwrite rather than
  * interleave; capture them apart and concatenate. Capability: process.spawn.
+ *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
  *
  * @param argv the program and its arguments.
  * @param stdoutPath the file the child's stdout goes to, or `""`.
@@ -1204,6 +1210,9 @@ declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: str
  * length is fixed. A `wasm32` build refuses it (NL2404). Capability:
  * process.spawn.
  *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
+ *
  * @param argv the program and its arguments.
  * @param stdin the bytes the child reads.
  * @param stdout receives what the child prints on stdout.
@@ -1229,6 +1238,9 @@ declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], 
  * and 16 MiB cap, `readonly` and typed-array spellings refused for the two
  * output arrays, refused by a `wasm32` build (NL2404). Capability:
  * process.spawn.
+ *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
  *
  * @param argv the program and its arguments.
  * @param stdin the bytes the child reads.
@@ -1259,6 +1271,9 @@ declare function spawnPipedWithin(
  * under Node, which throws. A `wasm32` build refuses it (NL2404).
  * Capability: process.spawn.
  *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
+ *
  * @param argv the program and its arguments.
  * @param fds the descriptors handed down, at most 64.
  * @returns the child's pid, or a negative errno: -22 more than 64 descriptors
@@ -1278,6 +1293,9 @@ declare function spawnWithFds(argv: string[], fds: readonly i32[]): i32;
  * that calls it is refused as any shared write is. Also exported by
  * `nish:process`.
  * Capability: process.spawn.
+ *
+ * Under `--sandbox` with a list of granted programs, the program started
+ * cannot start another, as for `spawnSync`.
  *
  * @param argv the program and its arguments.
  * @returns the child's pid, or a negative errno: -22 (EINVAL) for an empty

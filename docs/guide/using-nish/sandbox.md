@@ -190,8 +190,9 @@ under a grant of a `#!/bin/sh` script, unless the grant names `sh` as well.
 To make that check, a spawn under `--sandbox` opens the program first and
 runs the file it opened through `/proc/self/fd`, so `/proc` must be mounted,
 and a script started that way sees a `/proc/self/fd/N` path as its `$0`. A
-program the grant names may still be an interpreter (`sh`, `python3`) that
-runs whatever it is told: grant one only to a dependency you have read.
+program the grant names may still be an interpreter: `python3` runs any code
+it is handed inside its own process, and a shell runs its builtins. Grant
+one only to a dependency you have read.
 
 A program started under such a grant cannot start another. The kernel holds
 it, and everything it forks, to its own start, so `find -exec`, `xargs`,
@@ -203,7 +204,8 @@ all, because `env` starting `sh` is already the second program: name the
 interpreter's own path on the `#!` line. This needs Linux 5.5; on an older
 kernel, or inside a container that forbids the calls it takes, every spawn
 under such a grant fails and says so on stderr, in `--sandbox=best-effort`
-too. The same holds for a granted program that is itself a Nish program
+too. Docker's default seccomp profile is one that forbids them: there the
+line ends `(EPERM)`. The same holds for a granted program that is itself a Nish program
 built with `--sandbox` and such a grant: its own spawns fail. To let a
 dependency's program start others, grant the dependency `process.spawn`
 whole, which lifts the list of programs with it.

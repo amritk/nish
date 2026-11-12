@@ -436,7 +436,7 @@ _Bool nish_mkdir(const nish_str *path) {
 /* Set by `nish_sandbox` (runtime-sandbox.c) when the program has an exec
    allowlist (SBX-1); null otherwise, so a spawn outside `--sandbox` is the
    one `posix_spawnp` call it always was. */
-int32_t (*nish_spawn_sandboxed)(const char *file, int low, const void *actions, char **argv);
+int32_t (*nish_spawn_sandboxed)(const char *file, const int *dup, int base, int n, const void *actions, char **argv);
 #endif
 
 /* `posix_spawnp` is one libc call where fork/execvp/waitpid would be three,
@@ -501,10 +501,11 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
   }
   pid_t pid;
 #ifdef __linux__
-  /* The sandbox starts the child itself: it executes the file checked, through
-     a descriptor above every one a `dup` action writes, and nothing after. */
+  /* The sandbox starts the child itself: it executes the file checked, and
+     nothing after. It is told which descriptors the actions read and write,
+     and keeps every one of its own off those numbers. */
   if (nish_spawn_sandboxed) {
-    int32_t started = nish_spawn_sandboxed(v[0], base + n + 3, &fa, v);
+    int32_t started = nish_spawn_sandboxed(v[0], dup, base, n, &fa, v);
     posix_spawn_file_actions_destroy(&fa);
     return started;
   }

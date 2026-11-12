@@ -29099,8 +29099,13 @@ if (!only || "sandbox dependency grants".includes(only)) {
         const src = path.join(to, "exec-args.c")
         fs.writeFileSync(
           src,
-          "#include <stdio.h>\n#include <unistd.h>\n" +
-            'int main(int argc, char **argv) {\n  if (argc < 2) return 0;\n  execv(argv[1], argv + 1);\n  perror("exec-args");\n  return 111;\n}\n'
+          "#include <stdio.h>\n#include <string.h>\n#include <sys/stat.h>\n#include <unistd.h>\n" +
+            "int main(int argc, char **argv) {\n  if (argc < 2) return 0;\n" +
+            // `--fds`: how many descriptors from 3 up this program was started
+            // with that are not regular files (a pipe, a seccomp listener).
+            '  if (!strcmp(argv[1], "--fds")) {\n    int n = 0;\n    struct stat st;\n' +
+            "    for (int fd = 3; fd < 1024; fd++) n += !fstat(fd, &st) && !S_ISREG(st.st_mode);\n    return n;\n  }\n" +
+            '  execv(argv[1], argv + 1);\n  perror("exec-args");\n  return 111;\n}\n'
         )
         const cc = spawnSync("clang", ["-O2", src, "-o", path.join(to, "bin", "exec-args")], { encoding: "utf8" })
         const manifest = JSON.parse(fs.readFileSync(path.join(to, "package.json"), "utf8"))
@@ -29163,6 +29168,30 @@ if (!only || "sandbox dependency grants".includes(only)) {
           rPlainStart.status === 0 && rPlainStart.stdout === "0\n" && rPlainStart.stderr === "",
           said(rPlainStart)
         )
+        // What the granted program is started holding. The sandbox makes a
+        // pipe, a seccomp listener and the checked file's descriptor for each
+        // spawn, in a descriptor table where the lowest free numbers are the
+        // ones the child's redirects name; here 0 and 2 are free as well,
+        // closed by the shell that starts the program. The helper answers how
+        // many descriptors from 3 up it holds that are not regular files: the
+        // one `spawnWithFds` hands it (this check's stdout pipe) and no other,
+        // with `--sandbox` as without.
+        const closed = 'exec "$@" <&- 2>&-'
+        for (const [how, builtin, held] of [
+          ["sync", "spawnSync", "0\n"],
+          ["piped", "spawnPiped", "0 0\n"],
+          ["within", "spawnPipedWithin", "0 0\n"],
+          ["fds", "spawnWithFds", "1\n"],
+          ["spawn", "spawn", "0\n"],
+        ]) {
+          const rFds = run("/bin/sh", ["-c", closed, "sh", hAllow, how, helper, "--fds"])
+          const rFdsPlain = run("/bin/sh", ["-c", closed, "sh", hOpen, how, helper, "--fds"])
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} is started with no descriptor of the sandbox's, stdin and stderr closed (SBX-1)`,
+            rFds.status === 0 && rFds.signal === null && rFds.stdout === held && rFdsPlain.stdout === held,
+            `${said(rFds)}\n--- without --sandbox\n${said(rFdsPlain)}`
+          )
+        }
         // The child of `to` dies before its exec: this package has no
         // `fs.write`, so Landlock refuses the stdout file the child opens.
         // The spawn answers its error and does not wait for an exec that
@@ -29228,7 +29257,15 @@ if (!only || "sandbox dependency grants".includes(only)) {
           const rHeld = run(oAllow, ["sync", ...argv])
           check(
             `sandbox dependency grants: a granted ${tool} cannot hand the loader an ungranted binary (SBX-1)`,
-            rHeld !== null && rHeld.status === 0 && rHeld.signal === null && !rHeld.stdout.includes("sbx-1"),
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.signal === null &&
+              !rHeld.stdout.includes("sbx-1") &&
+              // The tool itself started (a refused spawn answers -1 and says
+              // nothing) and it is the tool's exec of the loader that failed;
+              // `find` exits 0 all the same.
+              /^\d+\n$/.test(rHeld.stdout) &&
+              new RegExp(`^${tool}: .*${path.basename(loader)}`, "m").test(rHeld.stderr),
             `${argv.join(" ")}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
           )
         }
@@ -29248,6 +29285,8 @@ if (!only || "sandbox dependency grants".includes(only)) {
               rOtherHeld.status === 0 &&
               rOtherHeld.stdout !== "0\n" &&
               /^\d+\n$/.test(rOtherHeld.stdout) &&
+              // `env` started and says its exec of `true` is what failed.
+              /^env: .*true/m.test(rOtherHeld.stderr) &&
               rTrueStill.stdout === "0\n",
             `${said(rOtherHeld)}\n--- true, spawned by the program itself\n${said(rTrueStill)}`
           )
