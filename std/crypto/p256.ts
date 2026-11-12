@@ -5413,6 +5413,144 @@ const p256SignExposed = (priv: u8[], digest: u8[]): u8[] | null => {
   return p256SignScalar(priv, z)
 }
 
+/** The width of `p256Verify`'s window: its digits are odd, in [-15, 15]. */
+const P256_WNAF_WIDTH: i32 = 5
+
+/** The bits of a scalar `p256Wnaf` reads; its form has one more digit, for the last carry. */
+const P256_WNAF_BITS: i32 = 256
+
+/** The number of odd multiples `p256OddMultiples` builds: 1, 3, ..., 15 times a point. */
+const P256_WNAF_TABLE: i32 = 8
+
+/**
+ * The width-5 non-adjacent form of the 32 big-endian bytes `k`: `out[i]`, for
+ * `i` from 0 to 256, is zero or an odd digit in [-15, 15], `k` is the sum of
+ * `out[i] * 2^i`, and of any five digits in a row at most one is nonzero. Read
+ * from the bottom bit up, a window opening at each bit that differs from the
+ * carry (libsecp256k1's `secp256k1_ecmult_wnaf`). Variable time: `k` is
+ * public wherever this is used.
+ */
+const p256Wnaf = (out: i32[], k: u8[]): void => {
+  if (toI32(out.length) <= P256_WNAF_BITS || toI32(k.length) < 32) {
+    return
+  }
+  let carry: i32 = 0
+  let bit: i32 = 0
+  while (bit < P256_WNAF_BITS) {
+    if (p256ByteBit(k, bit) === carry) {
+      bit++
+      continue
+    }
+    const left: i32 = P256_WNAF_BITS - bit
+    const now: i32 = left < P256_WNAF_WIDTH ? left : P256_WNAF_WIDTH
+    let word: i32 = carry
+    for (let j: i32 = 0; j < now; j++) {
+      word = word + (p256ByteBit(k, bit + j) << j)
+    }
+    carry = (word >> (P256_WNAF_WIDTH - 1)) & 1
+    if (bit >= 0 && bit < toI32(out.length)) {
+      out[bit] = word - (carry << P256_WNAF_WIDTH)
+    }
+    bit = bit + now
+  }
+  out[P256_WNAF_BITS] = carry
+}
+
+/** Bit `i` of the 32 big-endian bytes `k`, 0 the least significant. */
+const p256ByteBit = (k: u8[], i: i32): i32 => {
+  const at: i32 = (P256_WNAF_BITS >> 3) - 1 - (i >> 3)
+  if (at < 0 || at >= toI32(k.length)) {
+    return 0
+  }
+  return toI32((toU32(k[at]) >> toU32(i & 7)) & 1)
+}
+
+/** `table[j] = (2 j + 1) p` for each `j` in `table`, eight of them: one doubling and seven additions. */
+const p256OddMultiples = (table: P256ProjectivePoint[], p: P256ProjectivePoint, s: P256PointScratch): void => {
+  if (toI32(table.length) < P256_WNAF_TABLE) {
+    return
+  }
+  const twice = new P256ProjectivePoint()
+  p256PointDouble(twice, p, s)
+  p256PointCopy(table[0], p)
+  for (let j: i32 = 1; j < toI32(table.length); j++) {
+    p256PointAdd(table[j], table[j - 1], twice, s)
+  }
+}
+
+/**
+ * `acc += digit * p`, `digit` odd in [-15, 15], read from `p256OddMultiples`'
+ * `table`; a negative digit adds the entry's negation (X : -Y : Z), built in
+ * `neg`. Variable time: which entry is read, and its sign, follow the digit.
+ */
+const p256WnafAdd = (
+  acc: P256ProjectivePoint,
+  table: P256ProjectivePoint[],
+  digit: i32,
+  neg: P256ProjectivePoint,
+  s: P256PointScratch
+): void => {
+  const at: i32 = (digit < 0 ? -digit : digit) >> 1
+  if (at < 0 || at >= toI32(table.length)) {
+    return
+  }
+  if (digit > 0) {
+    p256PointAdd(acc, acc, table[at], s)
+    return
+  }
+  p256Copy(neg.x, table[at].x)
+  p256SetZero(neg.y)
+  p256FiatSub(neg.y, neg.y, table[at].y)
+  p256Copy(neg.z, table[at].z)
+  p256PointAdd(acc, acc, neg, s)
+}
+
+/**
+ * `out = a * G + b * q` for 32 big-endian bytes `a` and `b`, by Shamir's trick
+ * over width-5 NAFs: one shared chain of doublings from the top digit down,
+ * and an addition from the odd multiples of G or of `q` wherever a digit is
+ * nonzero. The doublings before the first nonzero digit are skipped. **Not
+ * constant time**: the additions, their table reads and their signs follow
+ * the scalars' digits, so this is only for public scalars and points, as in
+ * `p256Verify`.
+ */
+const p256DoubleMultPublic = (
+  out: P256ProjectivePoint,
+  a: u8[],
+  b: u8[],
+  q: P256ProjectivePoint,
+  s: P256PointScratch
+): void => {
+  const wa: i32[] = new Array<i32>(P256_WNAF_BITS + 1)
+  const wb: i32[] = new Array<i32>(P256_WNAF_BITS + 1)
+  p256Wnaf(wa, a)
+  p256Wnaf(wb, b)
+  const tableG: P256ProjectivePoint[] = []
+  const tableQ: P256ProjectivePoint[] = []
+  for (let j: i32 = 0; j < P256_WNAF_TABLE; j++) {
+    tableG.push(new P256ProjectivePoint())
+    tableQ.push(new P256ProjectivePoint())
+  }
+  p256OddMultiples(tableG, p256Generator(), s)
+  p256OddMultiples(tableQ, q, s)
+  const neg = new P256ProjectivePoint()
+  p256SetIdentity(out)
+  let started: boolean = false
+  for (let i: i32 = P256_WNAF_BITS; i >= 0; i--) {
+    if (started) {
+      p256PointDouble(out, out, s)
+    }
+    if (i < toI32(wa.length) && wa[i] !== 0) {
+      p256WnafAdd(out, tableG, wa[i], neg, s)
+      started = true
+    }
+    if (i < toI32(wb.length) && wb[i] !== 0) {
+      p256WnafAdd(out, tableQ, wb[i], neg, s)
+      started = true
+    }
+  }
+}
+
 /**
  * Whether `sig` (`r || s`) is a valid ECDSA signature of `digest` under the
  * public key `pub` (FIPS 186-4 §6.4.2): `r` and `s` in [1, n), and the
@@ -5420,7 +5558,10 @@ const p256SignExposed = (priv: u8[], digest: u8[]): u8[] | null => {
  * `u1 = z w` and `u2 = r w`. A key or signature of the wrong length, a key
  * that is not a point on the curve, and a sum that is the identity all answer
  * `false`. Every value here is public, so the answer may be reached by
- * branches; the multiplications are the constant-time ones all the same.
+ * branches, and `u1 * G + u2 * Q` is one variable-time Shamir pass over
+ * width-5 NAFs (`p256DoubleMultPublic`), not two constant-time
+ * multiplications: its time follows `u1` and `u2`, which the signature and
+ * digest already disclose.
  *
  * ECDSA is malleable, and so is this: when `(r, s)` verifies, `(r, n - s)`
  * verifies too, as FIPS 186-4 and SEC 1 have it. Nothing here asks for the
@@ -5472,10 +5613,7 @@ export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
 
   const scratch = new P256PointScratch()
   const sum = new P256ProjectivePoint()
-  const other = new P256ProjectivePoint()
-  p256ScalarMult(sum, u1Bytes, p256Generator(), scratch)
-  p256ScalarMult(other, u2Bytes, q, scratch)
-  p256PointAdd(sum, sum, other, scratch)
+  p256DoubleMultPublic(sum, u1Bytes, u2Bytes, q, scratch)
   if (p256FiatNonzero(sum.z) === 0) {
     return false
   }
