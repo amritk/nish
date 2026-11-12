@@ -168,7 +168,8 @@ would accept could overrun the copy:
   header section's. `Http1Server` bounds the whole head by
   `maxTarget + maxHeaderBytes + 44` (`H1_LINE_OVERHEAD`, the method, version
   and line ends; `std/net/http1-server.ts`). The check is
-  `config.maxTarget + config.maxHeaderBytes + 44 <= maxHead` and
+  `config.maxTarget + config.maxHeaderBytes + 44 <= maxHead`, summed in
+  `i64` so it cannot wrap near 2^30, and
   `config.maxHeaders <= maxFields`. At the defaults it is
   8192 + 16384 + 44 = 24620, under 32768; that sum is why `maxHead`
   defaults to 32768 and not 16384.
@@ -574,7 +575,7 @@ listen time, or on first use and then kept:
 | What | Made | Per warmed request |
 | --- | --- | --- |
 | request pool (`HttpServerRequest` × `requests`) | constructor | none |
-| each request's `head` (`maxHead` bytes), `spans` (4 × `maxFields` `i32`s), `params` (2 × the router's `maxParams` `i32`s) | constructor, at their caps; never grown | none |
+| each request's `head` (`maxHead` bytes), `spans` (4 × `maxFields` `i32`s), `params` (2 × the router's `maxParams` + 2 `i32`s, as `HttpHandler` makes it) | constructor, at their caps; never grown | none |
 | each request's `body` | grown in two tiers, below | none once at its tier |
 | each request's `pending` | grown to the largest remainder held, below | none once at that size |
 | HTTP/1.1 connections | `Http1Server`, reused per slot | none |
@@ -592,7 +593,7 @@ listen time, or on first use and then kept:
 **What the constructor makes.** The pool is made at its caps, so it is
 resident before the first request. At the defaults: heads
 1024 × 32 KiB = 32 MiB; spans 1024 × 400 × 4 bytes ≈ 1.56 MiB; params
-1024 × 32 × 4 bytes = 128 KiB; content-length digits 1024 × 20 bytes =
+1024 × 34 × 4 bytes = 136 KiB; content-length digits 1024 × 20 bytes =
 20 KiB; the JSON writer 64 KiB. That is under 34 MiB, plus the request
 objects themselves. `HttpHandler` instead grows `head` and `spans` to the
 largest request seen (`handler.ts`, `begin`), so it starts small and
