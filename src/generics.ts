@@ -2757,7 +2757,7 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
   // The arrow written for a reference argument reads the reference as the call
   // passes it, so a `let` it names is read once, at the call.
   const passed = ctx.arrowFns.length > 0 && (ctx.arrowFns[0].decl.flags & FLAG_REFERENCE_ARROW) !== 0
-  if (name === "this" && !passed) {
+  if (name === "this") {
     refuseOnce(ctx, expr, thisCaptureMessageFor(mode))
     return null
   }

@@ -3762,8 +3762,7 @@ export const main = (): void => {
   (NL2744, `reject_fnref_result`, `reject_fnref_result_generic`); an array of references in an arm holds the
   element place and compiles (`fnref_result_array`). An assignment used as a value,
   `k((r = inc))`, stores into its target and hands the same function on
-  (`fnref_assign_value`); a value the compiler does not follow, such as a
-  module constant, can hold every function of its type. A set past
+  (`fnref_assign_value`). A set past
   eight members is warning NL9017, a `switch` where a direct call would not
   branch (`tests/wordings/nl9017_fnref_wide_set`). Under `--profile debug` the
   dispatcher first checks that the tag is in its set and panics with

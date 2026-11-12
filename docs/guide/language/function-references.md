@@ -212,8 +212,8 @@ export const main = (): i32 => {
 
 If one of those functions keeps an argument and another does not, a call
 through `get` is refused (NL2736): call the one that keeps it by name, or
-hold it in a variable or field of its own, which the compiler follows apart
-from the `Map`.
+hold it in a variable or field of its own and do not also store it in the
+`Map`, so the compiler follows it apart from the `Map`'s values.
 
 A reference cannot be a `Map` key.
 
@@ -223,7 +223,7 @@ A reference cannot sit directly in a `Result`, in either arm, nullable or not:
 `Result<Op, string>` is refused (`NL2744`). Return an array of references
 (`Result<Op[], string>`), or a class with a reference field, instead:
 
-```ts
+```ts nish:ok
 type Op = (x: i32) => i32;
 
 const plus1 = (x: i32): i32 => x + 1;

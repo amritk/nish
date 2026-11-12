@@ -70,7 +70,6 @@ import { T_ERROR, T_I32, T_VOID, TypeTable } from "./types"
 const isRefAssignment = (op: string): boolean => op === "=" || op === "??=" || op === "||=" || op === "&&="
 
 /** One module as the pass sees it: what it checked, its context, its tree and its parents. */
-
 export class RefModule {
   program: CheckedProgram
   ctx: CheckContext
