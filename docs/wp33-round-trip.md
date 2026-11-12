@@ -7,7 +7,8 @@ names every refusal's rule, #292 to #337), R2 (the typed-array names refuse
 R4 (`fix` in `--json` and `nish --fix`, #421, #429, #431, #459, #460), R3,
 the runtime split by host (#848, #851), and R4, `--emit-ts <dir>` with its
 live differential (#853, #859, #864, #866, #867, and the oracle that holds
-it). Next: R5's `review` tier and R6. §9 has each stage's state.** This is the plan of record for one
+it), and R5's `review` tier (`review` in `--json`, NL8006's rewrite). Next:
+R6, which waits on WP28. §9 has each stage's state.** This is the plan of record for one
 requirement with two directions, and one constraint on both:
 
 **2026-10-30:** an arrow passed to a function-typed parameter of a top-level
@@ -380,9 +381,44 @@ is left as a plain run would. The rewrites so far are loose equality (#421);
 truthiness, `String(n)`, `Map.get` and call-site type arguments (#431); the
 `--unchecked-indexing` migration to `uncheckedGet` and `uncheckedSet`,
 NL7002 (#459); and the range guard for NL9007 (#460). `tests/fix/` pins each,
-and [AI.md](AI.md) states the loop. The `review` tier is not built: a fix that
-touches a class-C row would need a key of its own, which is a change to the
-`--json` contract and is still this section's plan.
+and [AI.md](AI.md) states the loop.
+
+**The `review` tier shipped as a key of its own** (WP33 R5), not as a
+`safety` value, so that every line without one stays byte for byte what it
+was and a consumer that applies `fix` blindly cannot apply a `review` by
+accident. `review` is a sibling of `fix` with the same edit list, printed
+after it, and absent rather than empty. For `const half = (n: i32): i32 => n / 2;`:
+
+```json
+{"file":"half.ts","line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this `/` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}
+```
+
+`nish --fix` never applies it: the applier reads `fix` alone. The bar for an
+edit is tighter than the plan above: it is attached only where the rewritten
+site compiles, no longer warns, gives IR byte for byte the input's, and reads
+under Node as it runs natively, which `tests/fix/`'s `port-` cases check
+case by case, `.ll` and stdout both. Of the class-C rows, only NL8006 meets
+it: an integer `/` wrapped in its own type's conversion, `toI32(a / b)`,
+`toU8`, `toU16` or `toU32` (`q /= d` as `q = toI32(q / d)`), so `n / 2` reads `toI32(n / 2)`, which
+emits nothing here and truncates the double quotient under Node. It declines
+in a generic body, for `/=` on an element or field, for `/=` on a ranged
+target, for a `/=` whose divisor holds a `/` or with a comment before its
+`/=`, where an operand's type is not the conversion's, in a module that
+binds the conversion's name itself (an import, renamed or not, a function,
+`const`, parameter or loop variable, which the edit would call), and for
+`i64` and `u64`. A ranged operand's `/` takes the edit: the
+range analysis reads a quotient's conversion to its own type as the quotient, so
+`toI32(a / 4) + 1` keeps the proof that drops `a / 4 + 1`'s overflow check,
+whether the edit or a hand wrote it.
+Edits compose: `a / b / c` gets two, both inserting `toI32(` at one offset,
+and applied together they nest, `toI32(toI32(a / b) / c)`. NL8007 and NL8008 decline everywhere: a mask or a
+`| 0` still warns and costs an instruction, and the conversions saturate
+under Node where the native value wraps. The other rows have no spelling
+that keeps the native meaning: NL8001 to NL8005 change what the program
+computes in one reading or the other, NL8009 has no `i64` Node can hold, and
+NL8012 is a stub `--emit-ts` writes, not a site in the source.
+[LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags)'s portability
+table states NL8006's edit and NL8007's and NL8008's reasons in their rows.
 
 ### 5.2 The `portability` diagnostic class
 
@@ -430,7 +466,8 @@ where it meets an outside fact. Both are warnings, so neither changes the IR
 [AI.md](AI.md)'s "The loop: compile, read the code, fix" states steps 1, 2
 and 4 against strict today, with `nish --fix` as step 2, names
 `--warn-portability`, step 3's warnings, and states step 6 with `--emit-ts`
-(R4). The rest of step 3 waits on the `review` tier, and step 7 on wp28's
+(R4), and step 3's `review` edits, which an agent applies by hand after
+reading them (R5). Step 7 waits on wp28's
 compat mode; an agent skill that wraps the whole loop waits with them.
 
 ---
@@ -573,8 +610,17 @@ meaning, which the compiler decides on its own. The `review` tier, whose
 rewrites touch class-C rows, is the half that does need one, and it waited
 for R4. R4 came before it on purpose: the way out is what makes the way in
 low-risk, and it is also what gives R5's `review` fixes their differential.
-R4 is built, so the `review` tier waits on nothing but its own `--json` key
+R4 is built, so the `review` tier waited on nothing but its own `--json` key
 (§5.1).
+
+**R5's `review` tier is built.** `review` is a sibling of `fix` in `--json`,
+printed after it in the same edit shape, and `nish --fix` never applies it
+(§5.1). NL8006 carries one where the rewrite compiles to the same IR; NL8007
+and NL8008 decline, and so do NL8001 to NL8005, NL8009 and NL8012, each for
+the reason §5.1 gives (NL8007's and NL8008's are also in their LANGUAGE.md
+rows). The `port-` cases of `tests/fix/` hold
+every edit to the input's `.ll` byte for byte and to the native stdout under
+Node, and the `port-nofix-` cases hold every decline.
 
 Every stage is held to §1 rule 6 by the tests `npm test` already runs: no
 `.ll` golden moves, and the instruction gate stays green without its baseline
