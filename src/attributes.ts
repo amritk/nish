@@ -42,6 +42,7 @@ import { isRegionIntrinsic } from "./region-check"
 import { isShmSource, isShmWindowIntrinsic } from "./shm-window"
 import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
 import { openedHandle } from "./handles"
+import { layoutClass } from "./structs"
 import {
   builtinCalleesNamed,
   checksRangesInPrologue,
@@ -3333,6 +3334,20 @@ class FactCollector {
     let b = 0
     while (b < args.length && b < callee.paramTypes.length) {
       const buffer = args[b]
+      // WP27 S4.1: C fills a `declare class` it is lent, and `o.inner` is
+      // `o`'s own memory, so the write is to the argument and to every
+      // object that embeds it.
+      if (
+        !host &&
+        layoutClass(this.unit.program, this.table, this.table.stripNull(callee.paramTypes[b])) !== null
+      ) {
+        let held = unwrapParens(buffer)
+        this.noteSlotWrite(call, held)
+        while (held.kind === N_MEMBER) {
+          held = unwrapParens(held.children[0])
+          this.noteSlotWrite(call, held)
+        }
+      }
       if (lentBuffer(this.table, callee, b)) {
         if (!this.table.isReadonlyArray(callee.paramTypes[b])) {
           this.noteSlotWrite(call, buffer)
@@ -4135,7 +4150,8 @@ const collectStatedFacts = (
   // (WP53 B1.2) are borrowed for the call and never kept, by the rule
   // `docs/wp27-ffi.md` §8b decides rather than proves. A buffer is a pointer
   // parameter, so the borrow is written as its facts: `captured` stays
-  // `false`, and a `u8[]` one is `writesThrough`, because C fills it. The
+  // `false`, and a `u8[]` one is `writesThrough`, because C fills it. A
+  // `declare class` one (WP27 S4.1) is the same loan of a struct C fills. The
   // call site records the same write on the caller's side (`noteSlotWrite`
   // in `addCallee`); a `readonly u8[]` one is neither.
   if (sig.foreign()) {
@@ -4143,7 +4159,7 @@ const collectStatedFacts = (
     let p = 0
     while (p < sig.paramTypes.length) {
       if (isPointerParam(table, sig.paramTypes[p])) {
-        if (lentBuffer(table, sig, p) && !table.isReadonlyArray(sig.paramTypes[p])) {
+        if (filledByC(program, table, sig, p)) {
           facts.pointerParams[at].writesThrough = true
           facts.pointerParams[at].writesShared = true
         }
@@ -6768,6 +6784,11 @@ export const hostFunction = (sig: FunctionSig): boolean => {
  */
 export const lentBuffer = (table: TypeTable, sig: FunctionSig, i: i32): boolean =>
   hostFunction(sig) ? isHostWindow(table, sig.paramTypes[i]) : isForeignBuffer(table, sig.paramTypes[i])
+
+/** Whether C writes through pointer parameter `i` of the foreign `sig`: a `u8[]` buffer, or a `declare class` it fills (WP27 S4.1). */
+const filledByC = (program: CheckedProgram, table: TypeTable, sig: FunctionSig, i: i32): boolean =>
+  (lentBuffer(table, sig, i) && !table.isReadonlyArray(sig.paramTypes[i])) ||
+  layoutClass(program, table, table.stripNull(sig.paramTypes[i])) !== null
 
 /**
  * Whether the window check of buffer argument `index` of the host call `call`

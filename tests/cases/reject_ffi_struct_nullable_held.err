@@ -1,0 +1,1 @@
+a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`

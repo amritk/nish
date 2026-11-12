@@ -22,8 +22,8 @@
  * space (RFC 9001 §4.1.3). Neither needs anything else from here.
  *
  * **Sans-IO.** Nothing here reads a socket, a clock or the random device. The
- * server random and the ephemeral x25519 private key are constructor
- * arguments, so a test injects RFC 8448's and a server draws them with
+ * server random and the ephemeral private key (32 bytes, the x25519 key or,
+ * its top bit cleared, the secp256r1 scalar) are constructor arguments, so a test injects RFC 8448's and a server draws them with
  * `crypto.getRandomValues`. Signing is handed off the same way: once the
  * Certificate is written the server stops at `TLS_STATE_WAIT_SIGNATURE`, the
  * caller signs `signatureInput()` with its own key (`tlsSignEcdsaP256` for a
@@ -33,10 +33,13 @@
  *
  * **What is negotiated.** TLS 1.3 only. The suites `TLS_AES_128_GCM_SHA256`,
  * `TLS_CHACHA20_POLY1305_SHA256` and `TLS_AES_256_GCM_SHA384`, the first of
- * them the client lists; the group x25519; the configuration's one signature
- * scheme. A client that offers x25519 in `supported_groups` without a share
- * gets one HelloRetryRequest (§4.1.4), and a second ClientHello still without
- * the share is refused. `server_name` is read and exposed as `serverName`.
+ * them the client lists; the group x25519 whenever the client lists it, and
+ * secp256r1 for a client that lists only that; the configuration's one
+ * signature scheme. A client that lists the chosen group in `supported_groups`
+ * without a share for it gets one HelloRetryRequest (§4.1.4), and a second
+ * ClientHello still without the share is refused. A secp256r1 share must be
+ * an uncompressed point on the curve (§4.2.8.2); any other is
+ * `illegal_parameter`. `server_name` is read and exposed as `serverName`.
  * ALPN picks the first of the configuration's protocols the client offers.
  * `quic_transport_parameters` is read and written only when the configuration
  * says the carrier is QUIC. 0-RTT and client authentication are not here:
@@ -91,7 +94,14 @@ import { HkdfScratch } from "nish/crypto/hkdf"
 import { hmacSha256, hmacSha384 } from "nish/crypto/hmac"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
-import { P256SignScratch, P256_SIGNATURE_SIZE, p256SignSha256, p256SignSha256Into } from "nish/crypto/p256"
+import {
+  P256SignScratch,
+  P256_SIGNATURE_SIZE,
+  p256Ecdh,
+  p256PublicKey,
+  p256SignSha256,
+  p256SignSha256Into,
+} from "nish/crypto/p256"
 import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct"
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519"
 import {
@@ -104,11 +114,15 @@ import {
   TLS_ALERT_NO_APPLICATION_PROTOCOL,
   TLS_ALERT_PROTOCOL_VERSION,
   TLS_ALERT_UNEXPECTED_MESSAGE,
+  TLS_GROUP_SECP256R1,
   TLS_GROUP_X25519,
   TLS_HANDSHAKE_CLIENT_HELLO,
   TLS_HANDSHAKE_FINISHED,
+  TLS_EXT_RECORD_SIZE_LIMIT,
   TLS_RANDOM_SIZE,
+  TLS_RECORD_SIZE_LIMIT_MAX,
   TLS_VERSION_13,
+  TLS_P256_SHARE_SIZE,
   TLS_X25519_SHARE_SIZE,
   TlsClientHelloView,
   tlsHexInto,
@@ -206,8 +220,10 @@ export interface TlsServerConfig {
   quicTransportParameters: u8[]
   /**
    * Extensions this module does not interpret, already encoded (each a type,
-   * a length and a body), written first in EncryptedExtensions:
-   * `record_size_limit` is the record layer's, for one. Empty for none.
+   * a length and a body), written first in EncryptedExtensions. Empty for
+   * none. Not for ALPN, `server_name` or `quic_transport_parameters`, which
+   * the server writes itself: a client refuses a repeated extension. A
+   * `record_size_limit` here replaces the one the server would write.
    */
   extraExtensions: u8[]
   /**
@@ -246,10 +262,11 @@ const tlsConfigFits = (config: TlsServerConfig): boolean => {
     certificate = certificate + 5 + n
   }
   // ALPN's type, lengths and the one name (at most 4 + 2 + 1 + 255), the
-  // server_name acknowledgement (4), and the transport parameters' type and
-  // length (4), beside what the caller passes through.
+  // server_name acknowledgement (4), the transport parameters' type and
+  // length (4), and `record_size_limit` (6), beside what the caller passes
+  // through.
   const extensions: i32 =
-    266 + toI32(config.extraExtensions.length) + toI32(config.quicTransportParameters.length)
+    272 + toI32(config.extraExtensions.length) + toI32(config.quicTransportParameters.length)
   for (const protocol of config.alpn) {
     const n: i32 = toI32(protocol.length)
     if (n < 1 || n > 255) {
@@ -257,6 +274,23 @@ const tlsConfigFits = (config: TlsServerConfig): boolean => {
     }
   }
   return extensions <= 65535
+}
+
+/**
+ * Whether the encoded extensions `extensions` (each a type, a 16-bit length
+ * and a body) carry one of `type`. A length that runs past the end stops the
+ * walk.
+ */
+const tlsExtensionsHave = (extensions: u8[], type: i32): boolean => {
+  const end: i32 = toI32(extensions.length)
+  let at: i32 = 0
+  while (at >= 0 && at + 3 < end) {
+    if (((toI32(extensions[at]) << 8) | toI32(extensions[at + 1])) === type) {
+      return true
+    }
+    at = at + 4 + ((toI32(extensions[at + 2]) << 8) | toI32(extensions[at + 3]))
+  }
+  return false
 }
 
 /**
@@ -517,10 +551,12 @@ export const tlsHeldCopyOver = (from: u8[], to: Secret<u8[]>): i32 => exposeWith
 // ---- The exchange, in a scope of its own --------------------------------------
 
 /**
- * The x25519 exchange's inputs and answers as big-endian 64-bit words: the
- * ephemeral private key and the client's share in, the server's public key
- * and the handshake secret out, and the alert. It is a class of numbers and
- * nothing else on purpose. `x25519` answers its shared secret as a `Secret`,
+ * The ECDHE exchange's inputs and answers as big-endian 64-bit words: the
+ * group, the ephemeral private key and the client's share in (32 bytes for
+ * x25519, a 65-byte point for secp256r1, so nine share words), the server's
+ * public key and the handshake secret out, and the alert. It is a class of
+ * numbers and nothing else on purpose. `x25519` and `p256Ecdh` answer their
+ * shared secret as a `Secret`,
  * which is an allocation it stores, so neither an automatic arena scope nor a
  * `using a = arena()` block may be put around a call to it (NL2424). A
  * function whose every parameter is an object of numbers can be handed no
@@ -546,10 +582,20 @@ class TlsExchangeWords {
   share1: u64 = 0
   share2: u64 = 0
   share3: u64 = 0
+  share4: u64 = 0
+  share5: u64 = 0
+  share6: u64 = 0
+  share7: u64 = 0
+  share8: u64 = 0
   public0: u64 = 0
   public1: u64 = 0
   public2: u64 = 0
   public3: u64 = 0
+  public4: u64 = 0
+  public5: u64 = 0
+  public6: u64 = 0
+  public7: u64 = 0
+  public8: u64 = 0
   secret0: u64 = 0
   secret1: u64 = 0
   secret2: u64 = 0
@@ -574,6 +620,8 @@ class TlsExchangeWords {
   salt4: u64 = 0
   /** @internal Read by the free functions of this module; `TlsServer.exchangeKeys` writes it. */
   salt5: u64 = 0
+  /** `TLS_GROUP_X25519` or `TLS_GROUP_SECP256R1`: which exchange to run. */
+  group: i32 = 0
   /** 32 or 48: which handshake secret to extract. */
   hashLength: i32 = 0
 }
@@ -610,11 +658,14 @@ const tlsHandshakeFromWords = (held: u8[], w: TlsExchangeWords): i32 => {
 }
 
 /**
- * The exchange of RFC 8446 §7.4.2 on `w`: the server's public key and the
- * handshake secret from the ephemeral key and the client's share, both
- * written back as words; the caller wipes the words. Answers 0,
- * `illegal_parameter` for a share whose shared secret is all zeros (§7.4.2,
- * RFC 7748 §6.1), or `internal_error` when the exchange answers nothing. The
+ * The exchange of RFC 8446 §7.4.2 on `w`, in `w.group`: the server's public
+ * key and the handshake secret from the ephemeral key and the client's share,
+ * both written back as words; the caller wipes the words. Answers 0;
+ * `illegal_parameter` for an x25519 share whose shared secret is all zeros
+ * (§7.4.2, RFC 7748 §6.1) or a secp256r1 share that is not a point on the
+ * curve (§4.2.8.2, which `p256Ecdh` checks); or `internal_error` when the
+ * server's own public key cannot be made. A secp256r1 key is the same 32
+ * bytes with the top bit cleared, so the scalar is below the group order. The
  * copy of the key and the ECDHE secret are `Secret`s wiped on every path, and
  * the handshake secret's bytes with `secureZero` once they are words. The
  * compiler brackets this function with an arena scope of its own (see
@@ -629,30 +680,43 @@ const tlsExchange = (w: TlsExchangeWords): i32 => {
   tlsWordInto(salt, 24, w.salt3)
   tlsWordInto(salt, 32, w.salt4)
   tlsWordInto(salt, 40, w.salt5)
+  const p256: boolean = w.group === TLS_GROUP_SECP256R1
   const raw: u8[] = new Array<u8>(X25519_SIZE)
   tlsWordInto(raw, 0, w.key0)
   tlsWordInto(raw, 8, w.key1)
   tlsWordInto(raw, 16, w.key2)
   tlsWordInto(raw, 24, w.key3)
-  const share: u8[] = new Array<u8>(X25519_SIZE)
+  if (p256) {
+    // Below 2^255, so below the order n: only all zeros is refused.
+    raw[0] = raw[0] & toU8(0x7f)
+  }
+  const share: u8[] = new Array<u8>(p256 ? TLS_P256_SHARE_SIZE : X25519_SIZE)
   tlsWordInto(share, 0, w.share0)
   tlsWordInto(share, 8, w.share1)
   tlsWordInto(share, 16, w.share2)
   tlsWordInto(share, 24, w.share3)
+  tlsWordInto(share, 32, w.share4)
+  tlsWordInto(share, 40, w.share5)
+  tlsWordInto(share, 48, w.share6)
+  tlsWordInto(share, 56, w.share7)
+  tlsWordInto(share, 64, w.share8)
   const key: Secret<u8[]> = secret(raw)
-  const serverPublic: u8[] | null = x25519Base(key)
-  const shared: Secret<u8[]> | null = x25519(key, share)
+  const serverPublic: u8[] | null = p256 ? p256PublicKey(key) : x25519Base(key)
+  const shared: Secret<u8[]> | null = p256 ? p256Ecdh(key, share) : x25519(key, share)
   wipe(key)
   let alert: i32 = 0
   if (shared === null) {
-    alert = TLS_ALERT_INTERNAL_ERROR
+    // x25519 answers for every share; `p256Ecdh` refuses a point off the
+    // curve (§4.2.8.2), or a key `p256PublicKey` refused too.
+    alert = p256 && serverPublic !== null ? TLS_ALERT_ILLEGAL_PARAMETER : TLS_ALERT_INTERNAL_ERROR
   } else {
     // RFC 7748 §6.1 leaves the all-zero check to the protocol, and RFC 8446
     // §7.4.2 makes it: a low-order client share gives the zero secret, which
     // anybody can compute. The secret is secret, so the compare reads it all.
+    // RFC 8446 asks it of x25519 alone: a secp256r1 share is checked as a point.
     if (serverPublic === null) {
       alert = TLS_ALERT_INTERNAL_ERROR
-    } else if (expose(shared, tlsIsZeroSecret)) {
+    } else if (!p256 && expose(shared, tlsIsZeroSecret)) {
       alert = TLS_ALERT_ILLEGAL_PARAMETER
     } else {
       const handshake: u8[] =
@@ -663,6 +727,11 @@ const tlsExchange = (w: TlsExchangeWords): i32 => {
       w.public1 = tlsWordAt(serverPublic, 8)
       w.public2 = tlsWordAt(serverPublic, 16)
       w.public3 = tlsWordAt(serverPublic, 24)
+      w.public4 = tlsWordAt(serverPublic, 32)
+      w.public5 = tlsWordAt(serverPublic, 40)
+      w.public6 = tlsWordAt(serverPublic, 48)
+      w.public7 = tlsWordAt(serverPublic, 56)
+      w.public8 = tlsWordAt(serverPublic, 64)
       w.secret0 = tlsWordAt(handshake, 0)
       w.secret1 = tlsWordAt(handshake, 8)
       w.secret2 = tlsWordAt(handshake, 16)
@@ -683,7 +752,7 @@ const tlsExchange = (w: TlsExchangeWords): i32 => {
 
 /** The first input buffer: room for the ClientHello of every common client. It grows only for a longer one. */
 const TLS_INPUT_START: i32 = 2048
-/** The Initial output: a HelloRetryRequest and a ServerHello, each with a 32-byte session id, fit with room. */
+/** The Initial output: a HelloRetryRequest and a ServerHello with a 32-byte session id, a 65-byte secp256r1 share and a PSK, about 250 bytes; it grows for more. */
 const TLS_INITIAL_OUTPUT_SIZE: i32 = 256
 /** The longest DER ECDSA P-256 signature, what the flight is first sized for: two 33-byte integers and their headers. */
 const TLS_ECDSA_SIGNATURE_MAX: i32 = 72
@@ -852,7 +921,8 @@ const tlsFlightCapacity = (config: TlsServerConfig): i32 => {
     config.extraExtensions,
     longest,
     true,
-    config.quic ? config.quicTransportParameters : null
+    config.quic ? config.quicTransportParameters : null,
+    config.quic ? 0 : TLS_RECORD_SIZE_LIMIT_MAX
   )
   const certificate: i32 = tlsWriteCertificate(none, TLS_FROM, config.certificateChain)
   return extensions + certificate + 8 + TLS_ECDSA_SIGNATURE_MAX + 4 + SHA384_SIZE
@@ -958,7 +1028,7 @@ export class TlsServer {
   /** The configuration this server was built with: its certificate chain, ALPN list and QUIC transport parameters. */
   config: TlsServerConfig
   private serverRandom: u8[]
-  /** The connection's x25519 private key, copied in by `restart` and wiped by the record layer once the ServerHello is written. */
+  /** The connection's 32-byte ephemeral private key (x25519, or the secp256r1 scalar with its top bit cleared), copied in by `restart` and wiped by the record layer once the ServerHello is written. */
   readonly ephemeral: Secret<u8[]>
   /** The client's `host_name`, or empty. */
   serverName: string = ""
@@ -997,8 +1067,15 @@ export class TlsServer {
   private kdf: HkdfScratch
   /** The exchange's words (`tlsExchange`). */
   exchange: TlsExchangeWords
-  /** The server's x25519 public key, unpacked from the exchange's words for the ServerHello. */
+  /**
+   * The server's public key for the ServerHello, unpacked from the
+   * exchange's words: `publicX25519` or `publicP256`, whichever `group` names.
+   */
   private serverPublic: u8[]
+  /** Room for an x25519 public key, 32 bytes, made once. */
+  private publicX25519: u8[]
+  /** Room for a secp256r1 public key, a 65-byte uncompressed point, made once. */
+  private publicP256: u8[]
   /** A transcript hash on its way into the schedule: HashLen bytes of it. */
   private hashes: u8[]
   /**
@@ -1048,10 +1125,17 @@ export class TlsServer {
   outputHandshakeLength: i32 = 0
   /** @internal Read by `net/tls/record-server.ts`. */
   outputApplicationLength: i32 = 0
+  /**
+   * The key exchange group: `TLS_GROUP_X25519` or `TLS_GROUP_SECP256R1` once
+   * the ClientHello chose it or a HelloRetryRequest asked for it, 0 before.
+   */
+  group: i32 = 0
   /** Whether a HelloRetryRequest was sent, so a second miss is fatal. */
   retried: boolean = false
   /** Whether `config` passed `tlsConfigFits`, decided once by the constructor. */
   private configFits: boolean = false
+  /** Whether `config.extraExtensions` carries its own `record_size_limit`, which the server then does not write. */
+  private extraRecordSizeLimit: boolean = false
   /** Whether the carrier turned resumption on with `enableTickets`; kept across `restart`. */
   tickets: boolean = false
   /**
@@ -1070,17 +1154,24 @@ export class TlsServer {
   issued: boolean = false
   /** Whether this connection resumed a ticket (row 1 of the record's table). */
   resumed: boolean = false
+  /**
+   * The client's `record_size_limit` (RFC 8449): the most plaintext, content
+   * type and padding included, a protected record to it may carry, from
+   * `TLS_RECORD_SIZE_LIMIT_MIN` to `TLS_RECORD_SIZE_LIMIT_MAX`. 0 when the
+   * client sent none, and always over QUIC, which has no TLS records.
+   */
+  peerRecordSizeLimit: i32 = 0
 
   /**
    * A server for one connection under `config`, with the 32-byte server
-   * random and the 32-byte x25519 private key drawn for it. A random or key of
+   * random and the 32-byte ephemeral private key drawn for it. A random or key of
    * another length, or a configuration `tlsConfigFits` refuses, leaves the
    * server failed with `internal_error` before it reads anything.
    *
    * @param config What the server offers and answers with; held, not copied, and checked by `tlsConfigFits`.
    * @param serverRandom The 32 random bytes of the ServerHello's `random`; the array itself is kept, so the
    *   caller hands over a fresh one.
-   * @param ephemeralPrivate The 32-byte x25519 private key; copied into the server's `Secret` and then zeroed
+   * @param ephemeralPrivate The 32-byte ephemeral private key, for x25519 or secp256r1; copied into the server's `Secret` and then zeroed
    *   in the caller's array, as `restart` does.
    */
   constructor(config: TlsServerConfig, serverRandom: u8[], ephemeralPrivate: u8[]) {
@@ -1092,6 +1183,7 @@ export class TlsServer {
     this.clientParameters = []
     this.transcript = new TlsTranscript(0)
     this.configFits = tlsConfigFits(config)
+    this.extraRecordSizeLimit = tlsExtensionsHave(config.extraExtensions, TLS_EXT_RECORD_SIZE_LIMIT)
     this.input = new Array<u8>(TLS_INPUT_START)
     this.outputInitial = new Array<u8>(TLS_INITIAL_OUTPUT_SIZE)
     this.outputHandshake = new Array<u8>(this.configFits ? tlsFlightCapacity(config) : TLS_FROM)
@@ -1100,7 +1192,9 @@ export class TlsServer {
     this.hello = new TlsClientHelloView()
     this.kdf = new HkdfScratch()
     this.exchange = new TlsExchangeWords()
-    this.serverPublic = new Array<u8>(X25519_SIZE)
+    this.publicX25519 = new Array<u8>(X25519_SIZE)
+    this.publicP256 = new Array<u8>(TLS_P256_SHARE_SIZE)
+    this.serverPublic = this.publicX25519
     this.hashes = new Array<u8>(SHA384_SIZE)
     this.salt = new Array<u8>(SHA384_SIZE)
     this.binderHash = new Array<u8>(SHA384_SIZE)
@@ -1115,7 +1209,7 @@ export class TlsServer {
 
   /**
    * Starts the next connection in this server's buffers, with its own
-   * 32-byte random and x25519 private key, as a fresh `TlsServer` would:
+   * 32-byte random and ephemeral private key, as a fresh `TlsServer` would:
    * every secret the last connection left is wiped (`wipe`) and none is
    * held. The random is kept, as the constructor keeps it; the key is copied
    * into `ephemeral` and the caller's array zeroed with `secureZero`, so the
@@ -1124,7 +1218,7 @@ export class TlsServer {
    * failed with `internal_error`.
    *
    * @param serverRandom The next connection's 32 random bytes; the array itself is kept.
-   * @param ephemeralPrivate The next connection's 32-byte x25519 private key; zeroed once copied in.
+   * @param ephemeralPrivate The next connection's 32-byte ephemeral private key; zeroed once copied in.
    */
   restart(serverRandom: u8[], ephemeralPrivate: u8[]): void {
     const keyLength: i32 = toI32(ephemeralPrivate.length)
@@ -1138,8 +1232,10 @@ export class TlsServer {
     this.suite = 0
     this.hashLength = 0
     this.retried = false
+    this.group = 0
     this.serverName = ""
     this.alpn = ""
+    this.peerRecordSizeLimit = 0
     this.clientTransportParameters = this.none
     this.inputLength = 0
     this.outputInitialLength = 0
@@ -1429,6 +1525,16 @@ export class TlsServer {
   }
 
   /**
+   * The `record_size_limit` the server sends in EncryptedExtensions: the
+   * TLS 1.3 maximum, since this server reads any record the protocol allows,
+   * and only when the client sent one (RFC 8449 §4) and the configuration's
+   * `extraExtensions` do not carry their own; 0 for none.
+   */
+  private ownRecordSizeLimit(): i32 {
+    return this.peerRecordSizeLimit !== 0 && !this.extraRecordSizeLimit ? TLS_RECORD_SIZE_LIMIT_MAX : 0
+  }
+
+  /**
    * ALPN (RFC 7301 §3.2): the first configured protocol the client offers.
    * Answers 0 with `alpn` set, or empty when nothing is negotiated, or
    * `no_application_protocol`.
@@ -1485,6 +1591,9 @@ export class TlsServer {
     if (hello.alert !== 0) {
       return hello.alert
     }
+    // RFC 8449 §4: taken from the hello the server answers, so a second
+    // ClientHello's replaces the first's.
+    this.peerRecordSizeLimit = this.config.quic ? 0 : hello.recordSizeLimit
     // §4.2.1: the version is negotiated by `supported_versions` alone, and
     // `legacy_version` is not consulted for it. The one exception is SSL 3.0
     // or below, which §D.5 lets a server refuse outright. Without
@@ -1525,7 +1634,11 @@ export class TlsServer {
     if (this.config.quic && !hello.hasQuicTransportParameters) {
       return TLS_ALERT_MISSING_EXTENSION
     }
-    if (!tlsWindowHasU16(data, hello.groupsAt, hello.groupsLength, TLS_GROUP_X25519)) {
+    // x25519 first, then secp256r1: a client that lists neither shares no
+    // group with this server (§4.1.1).
+    const offersX25519: boolean = tlsWindowHasU16(data, hello.groupsAt, hello.groupsLength, TLS_GROUP_X25519)
+    const offersP256: boolean = tlsWindowHasU16(data, hello.groupsAt, hello.groupsLength, TLS_GROUP_SECP256R1)
+    if (!offersX25519 && !offersP256) {
       return TLS_ALERT_HANDSHAKE_FAILURE
     }
     if (
@@ -1549,13 +1662,23 @@ export class TlsServer {
     } else {
       this.transcript.update(data, TLS_FROM, 4 + length)
     }
-    if (!hello.hasX25519Share) {
-      // §4.1.4: one HelloRetryRequest; a second ClientHello without the share
-      // the first one asked for is `illegal_parameter`.
+    // The group is the server's choice, not the client's: x25519 whenever the
+    // client lists it, secp256r1 only for a client that does not. A hello
+    // without a share of that group gets one HelloRetryRequest asking for it
+    // (§4.1.4), and the second hello must carry that share or is
+    // `illegal_parameter`; after a retry `group` is fixed already.
+    const preferred: i32 = offersX25519 ? TLS_GROUP_X25519 : TLS_GROUP_SECP256R1
+    const group: i32 = this.retried ? this.group : preferred
+    const p256Group: boolean = group === TLS_GROUP_SECP256R1
+    const hasShare: boolean = p256Group
+      ? offersP256 && hello.hasP256Share
+      : offersX25519 && hello.hasX25519Share
+    if (!hasShare) {
       if (this.retried) {
         return TLS_ALERT_ILLEGAL_PARAMETER
       }
       this.retried = true
+      this.group = group
       const none: u8[] = []
       this.reserveOutput(
         TLS_LEVEL_INITIAL,
@@ -1566,7 +1689,7 @@ export class TlsServer {
           hello.sessionIdAt,
           hello.sessionIdLength,
           suite,
-          TLS_GROUP_X25519
+          this.group
         )
       )
       using _scope = arena()
@@ -1579,12 +1702,14 @@ export class TlsServer {
         hello.sessionIdAt,
         hello.sessionIdLength,
         this.suite,
-        TLS_GROUP_X25519
+        this.group
       )
       this.sent(TLS_LEVEL_INITIAL, at, end)
       return 0
     }
-    if (hello.x25519ShareLength !== TLS_X25519_SHARE_SIZE) {
+    this.group = group
+    const shareLength: i32 = p256Group ? hello.p256ShareLength : hello.x25519ShareLength
+    if (shareLength !== (p256Group ? TLS_P256_SHARE_SIZE : TLS_X25519_SHARE_SIZE)) {
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
     const alpnAlert: i32 = this.chooseAlpn(hello)
@@ -1884,7 +2009,8 @@ export class TlsServer {
       this.config.extraExtensions,
       this.alpn,
       hello.hasServerName,
-      this.config.quic ? this.config.quicTransportParameters : null
+      this.config.quic ? this.config.quicTransportParameters : null,
+      this.ownRecordSizeLimit()
     )
     this.reserveOutput(TLS_LEVEL_HANDSHAKE, extensionsEnd + 4 + this.hashLength)
     // The secrets' pool is the slot's, chosen before the blocks open.
@@ -1924,14 +2050,15 @@ export class TlsServer {
       this.config.extraExtensions,
       this.alpn,
       hello.hasServerName,
-      this.config.quic ? this.config.quicTransportParameters : null
+      this.config.quic ? this.config.quicTransportParameters : null,
+      this.ownRecordSizeLimit()
     )
     this.sent(TLS_LEVEL_HANDSHAKE, extensionsAt, written)
   }
 
   /**
-   * Runs the x25519 exchange on the caller's ephemeral key and the client's
-   * share (`tlsExchange`), outside any arena block since its scope is its
+   * Runs the exchange in `group` on the caller's ephemeral key and the
+   * client's share (`tlsExchange`), outside any arena block since its scope is its
    * own, and unpacks the server's public key and the handshake secret from
    * the words. The words, the ephemeral key's and the handshake secret's
    * among them, are wiped with one `wipe` after the branch on the alert, so
@@ -1943,7 +2070,11 @@ export class TlsServer {
   private exchangeKeys(): i32 {
     const w: TlsExchangeWords = this.exchange
     const share: u8[] = this.input
-    const at: i32 = this.hello.x25519ShareAt
+    const p256: boolean = this.group === TLS_GROUP_SECP256R1
+    const at: i32 = p256 ? this.hello.p256ShareAt : this.hello.x25519ShareAt
+    // A 65-byte secp256r1 point fills nine words, an x25519 share four; the
+    // rest stay zero from the last `wipe`.
+    w.group = this.group
     w.key0 = exposeWith(this.ephemeral, TLS_FROM, tlsWordAt)
     w.key1 = exposeWith(this.ephemeral, TLS_FROM + 8, tlsWordAt)
     w.key2 = exposeWith(this.ephemeral, TLS_FROM + 16, tlsWordAt)
@@ -1952,6 +2083,13 @@ export class TlsServer {
     w.share1 = tlsWordAt(share, at + 8)
     w.share2 = tlsWordAt(share, at + 16)
     w.share3 = tlsWordAt(share, at + 24)
+    if (p256) {
+      w.share4 = tlsWordAt(share, at + 32)
+      w.share5 = tlsWordAt(share, at + 40)
+      w.share6 = tlsWordAt(share, at + 48)
+      w.share7 = tlsWordAt(share, at + 56)
+      w.share8 = tlsWordAt(share, at + 64)
+    }
     w.hashLength = this.hashLength
     w.salt0 = tlsWordAt(this.salt, 0)
     w.salt1 = tlsWordAt(this.salt, 8)
@@ -1962,11 +2100,17 @@ export class TlsServer {
     secureZero(this.salt)
     const alert: i32 = tlsExchange(w)
     if (alert === 0) {
-      const pub: u8[] = this.serverPublic
+      const pub: u8[] = p256 ? this.publicP256 : this.publicX25519
       tlsWordInto(pub, 0, w.public0)
       tlsWordInto(pub, 8, w.public1)
       tlsWordInto(pub, 16, w.public2)
       tlsWordInto(pub, 24, w.public3)
+      tlsWordInto(pub, 32, w.public4)
+      tlsWordInto(pub, 40, w.public5)
+      tlsWordInto(pub, 48, w.public6)
+      tlsWordInto(pub, 56, w.public7)
+      tlsWordInto(pub, 64, w.public8)
+      this.serverPublic = pub
       exposeWith(this.secrets().handshake, w, tlsHandshakeFromWords)
       this.held = this.held | (1 << TLS_SECRET_HANDSHAKE)
     }
@@ -2005,7 +2149,8 @@ export class TlsServer {
       this.config.extraExtensions,
       this.alpn,
       hello.hasServerName,
-      this.config.quic ? this.config.quicTransportParameters : null
+      this.config.quic ? this.config.quicTransportParameters : null,
+      this.ownRecordSizeLimit()
     )
     this.reserveOutput(
       TLS_LEVEL_HANDSHAKE,
@@ -2041,7 +2186,8 @@ export class TlsServer {
       this.config.extraExtensions,
       this.alpn,
       hello.hasServerName,
-      this.config.quic ? this.config.quicTransportParameters : null
+      this.config.quic ? this.config.quicTransportParameters : null,
+      this.ownRecordSizeLimit()
     )
     this.sent(TLS_LEVEL_HANDSHAKE, extensionsAt, written)
     const certificateEnd: i32 = tlsWriteCertificate(

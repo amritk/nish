@@ -50,10 +50,12 @@
  * a root: one that reached a root beats any that did not, a longer one a
  * shorter, and the first found a later one of the same length.
  *
+ * An extension marked against RFC 5280 §4.2 refuses the chain, but for a
+ * non-critical nameConstraints, which binds as a critical one does.
  * Revocation (CRLs, OCSP, Certificate Transparency), certificate policies,
- * RFC 5280 §7.1's Name folding and an extension's criticality are not
- * checked; each is a finding of docs/security/crypto-pki.md. Nothing here is
- * secret — certificates, names and public keys — so nothing is wiped.
+ * RFC 5280 §7.1's Name folding and that nameConstraints are not checked;
+ * each is a finding of docs/security/crypto-pki.md. Nothing here is secret —
+ * certificates, names and public keys — so nothing is wiped.
  *
  * Written for this module from RFC 5280 (§4.2 and §6.1), RFC 6125 (§6.4),
  * RFC 4291 §2.2 and RFC 3986 §3.2.2 (address literals), RFC 5758, RFC 8017
@@ -852,12 +854,16 @@ const pkiTimeCode = (c: X509Certificate, nowMs: i64): i32 => {
  * The key identifiers an issuer `cand` must carry (RFC 5280 §4.2.1.1 and
  * §4.2.1.2), as a code: a subjectKeyIdentifier, which a root may lack, as
  * one Mozilla ships does, and an authorityKeyIdentifier unless it is
- * self-issued, even on a root. A self-issued root's authorityKeyIdentifier,
- * when present, is its own subjectKeyIdentifier.
+ * self-issued, even on a root. A root's authorityKeyIdentifier, when
+ * present, has a keyIdentifier and no authorityCertIssuer or serial, as
+ * webpki holds it; a self-issued root's is its own subjectKeyIdentifier.
  */
 const pkiKeyIdsCode = (cand: X509Certificate, root: boolean): i32 => {
   const skid: u8[] | null = cand.skid
   const akid: u8[] | null = cand.akid
+  if (root && cand.akiPresent && (akid === null || cand.akiIssuerSerial)) {
+    return PKI_ERR_MALFORMED
+  }
   if (skid === null) {
     return root ? PKI_OK : PKI_ERR_MALFORMED
   }
@@ -868,9 +874,17 @@ const pkiKeyIdsCode = (cand: X509Certificate, root: boolean): i32 => {
 }
 
 /**
+ * Whether the extensions RFC 5280 fixes the criticality of on every
+ * certificate are marked as it has them: authorityKeyIdentifier not critical
+ * (§4.2.1.1), policyConstraints critical (§4.2.1.11).
+ */
+const pkiCriticalitySound = (c: X509Certificate): boolean => !c.akiCritical && (!c.pcPresent || c.pcCritical)
+
+/**
  * The checks of the issuer `cand` added above the path, a root of the store
  * when `root` holds and an intermediate otherwise: its validity, its critical
- * extensions, that it is a CA, its extKeyUsage, its name constraints, its
+ * extensions and the criticality RFC 5280 fixes, among them a critical
+ * basicConstraints (§4.2.1.9), that it is a CA, its extKeyUsage, its name constraints, its
  * signature over `child` — the only check that costs — and, once that
  * verifies, its key identifiers, so a wrong key reads as a signature. An
  * intermediate also needs room for a root above it and a keyUsage that
@@ -892,6 +906,12 @@ const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certifica
   }
   if (cand.version !== 2 || !cand.bcPresent || !cand.bcCa) {
     return PKI_ERR_NOT_CA
+  }
+  // The root too: limbo refuses a root with a non-critical basicConstraints,
+  // and every root of Mozilla's store is marked as these rules ask
+  // (crypto-pki.md, "Each structural rule on a root").
+  if (!cand.bcCritical || !pkiCriticalitySound(cand)) {
+    return PKI_ERR_MALFORMED
   }
   if (!root && cand.keyUsage >= 0 && (cand.keyUsage & X509_KU_KEY_CERT_SIGN) === 0) {
     return PKI_ERR_KEY_USAGE
@@ -1042,7 +1062,9 @@ const pkiSubscriberKeyCode = (leaf: X509Certificate): i32 => {
  * The checks of the leaf's profile, once a path above it is found: no keyCertSign
  * and no nameConstraints, no `anyExtendedKeyUsage`, a key a server may
  * hold, a sound serial number, an authorityKeyIdentifier unless it is
- * self-issued, and dNSNames of letters, digits and hyphens. The common name
+ * self-issued, the criticality RFC 5280 fixes, a subjectAltName critical
+ * exactly when the subject is empty (§4.2.1.6), an extKeyUsage that is not
+ * critical, as webpki holds it, and dNSNames of letters, digits and hyphens. The common name
  * is not read: limbo's own passing cases carry ones their subjectAltName
  * lacks.
  */
@@ -1053,14 +1075,18 @@ const pkiLeafProfileCode = (leaf: X509Certificate): i32 => {
   if (leaf.ncPresent) {
     return PKI_ERR_NAME_CONSTRAINTS
   }
-  if (leaf.ekuAny) {
+  if (leaf.ekuAny || leaf.ekuCritical) {
     return PKI_ERR_EXT_KEY_USAGE
   }
   const key: i32 = pkiSubscriberKeyCode(leaf)
   if (key !== PKI_OK) {
     return key
   }
-  if (!pkiSerialSound(leaf) || (leaf.akid === null && !pkiSelfIssued(leaf))) {
+  if (!pkiSerialSound(leaf) || (leaf.akid === null && !pkiSelfIssued(leaf)) || !pkiCriticalitySound(leaf)) {
+    return PKI_ERR_MALFORMED
+  }
+  // An empty subject is the empty SEQUENCE, `30 00`.
+  if (leaf.sanPresent && leaf.sanCritical !== (leaf.subject.length === 2)) {
     return PKI_ERR_MALFORMED
   }
   for (const d of leaf.sanDns) {

@@ -83,8 +83,9 @@ become the `fs.read` and `fs.write` scopes and the programs, with their ELF or
 A capability is narrowed only when every dependency that reaches it is
 granted it with arguments, the root does not reach it itself, the command line
 gives it no scope and `main` does not reach `ffi`; otherwise it stays whole,
-the confinement it had before. The exec allowlist is not a complete
-control: the ELF loader it holds runs any program (SBX-1, open). Hosts are not enforced at run time: seccomp
+the confinement it had before. The ELF loader and `#!` interpreter the exec
+allowlist holds are refused as spawn targets unless granted too (SBX-1,
+fixed). Hosts are not enforced at run time: seccomp
 cannot read the address a socket call is given (CAPS-19, open).
 
 ## 3. What a dependency reaches

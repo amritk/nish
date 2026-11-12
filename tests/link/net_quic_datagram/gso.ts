@@ -4,19 +4,23 @@
 // segments, and a socket bound with UDP_GRO reads it back, coalesced, whose
 // segments the client opens; the other way, a client's flight of 1200-byte
 // packets sent the same way is handed to the server by
-// `quicListenerReceiveSegments`. Where the platform has no segmentation
+// `quicListenerReceiveSegments`. Once the flight is out, the idle connection
+// sends a 1452-byte path MTU probe, loopback carries it, the client's ACK
+// validates the path, and a 1420-byte DATAGRAM, past the 1,200-byte floor's
+// 1,168, goes out and arrives in one datagram past 1,200 bytes. Where the platform has no segmentation
 // offload (anything but Linux answers -95), each datagram is sent and read
 // on its own, and every line below reads the same.
 import { netAddress, netClose, netLocalPort, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
 import { Suite } from "nish/testing";
 import { quicPushPadding, quicPushStream } from "nish/net/quic-frame";
-import { QUIC_CONN_DATAGRAM_SIZE } from "nish/net/quic";
+import { QUIC_CONN_DATAGRAM_SIZE, QUIC_DATAGRAM_OK } from "nish/net/quic";
 import { QUIC_LISTENER_FLIGHT_MAX, QuicFlight, quicListenerReceiveSegments, quicListenerTakeFlight } from "nish/net/quic-listener";
 import { bytesOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { qcReceive, qcShort } from "../net_quic_conn/client";
-import { NqLimits, NqPair, NqRead, nqPair, nqReadAll, nqReceived, nqSend, nqText } from "../net_quic_stream/common";
+import { NqLimits, NqPair, NqRead, nqAck, nqPair, nqReadAll, nqReceived, nqSend, nqText } from "../net_quic_stream/common";
 import { qcStream } from "../net_quic_conn/data";
+import { datagramsReceived } from "./datagram";
 
 const WOULD_BLOCK: i32 = -11;
 const NOT_SUPPORTED: i32 = -95;
@@ -94,6 +98,8 @@ const receiveFlight = (loop: Loop, length: i32): Arrived => {
 const serverFlight = (t: Suite, loop: Loop): void => {
   const limits = new NqLimits();
   limits.maxStreamData = n64(16384);
+  limits.clientDatagram = n64(65535);
+  limits.maxDatagramFrameSize = n64(100);
   const p: NqPair = nqPair(limits);
   nqSend(p, qcStream(n64(0), n64(0), "send", false));
   nqReadAll(p.conn, n32(64), new NqRead());
@@ -120,7 +126,35 @@ const serverFlight = (t: Suite, loop: Loop): void => {
   t.ok("byte for byte", intact);
   t.eqStr("and the client opens them all: the stream arrives whole", nqReceived(p.c, n64(0)), `${nqText(n32(8000))} <fin>`);
   const more = new QuicFlight();
-  t.eqI32("with the flight out and nothing new, the next flight is empty", quicListenerTakeFlight(p.conn, p.c.now, buf, n32(0), toI32(buf.length), more), n32(0));
+  const probe: i32 = quicListenerTakeFlight(p.conn, p.c.now, buf, n32(0), toI32(buf.length), more);
+  t.eqI32("with the flight out and nothing new, the next flight is one path MTU probe of 1452 bytes", probe, n32(1452));
+  t.ok("a single datagram, its own segment", more.count === n32(1) && more.segment === n32(1452));
+  t.eqI32("counted as a probe", p.conn.pmtuProbes, n32(1));
+  t.eqI32("and the path is still held to 1200 bytes until it is acknowledged", p.conn.datagramSize(), n32(1200));
+  sendFlight(loop, buf, probe, more.segment);
+  const echo: Arrived = receiveFlight(loop, probe);
+  t.ok("over loopback the probe arrives whole, in one datagram", toI32(echo.datagrams.length) === n32(1) && echo.bytes === probe);
+  for (const d of echo.datagrams) {
+    qcReceive(p.c, d);
+  }
+  nqAck(p);
+  t.eqI32("once the client acknowledges it, the path is 1452 bytes", p.conn.pathMtu, n32(1452));
+  t.eqI32("and so is every datagram the connection sends", p.conn.datagramSize(), n32(1452));
+  t.eqI32("a DATAGRAM payload may now be 1420 bytes, past 1,164", p.conn.maxDatagramPayload(), n32(1420));
+  const big: u8[] = bytesOf(nqText(n32(1420)));
+  t.eqI32("one is queued", p.conn.sendDatagram(big, n32(0), n32(1420)), QUIC_DATAGRAM_OK);
+  const carry = new QuicFlight();
+  // A millisecond on: the pacer spent its credit on the flights before.
+  const sent: i32 = quicListenerTakeFlight(p.conn, p.c.now + n64(1), buf, n32(0), toI32(buf.length), carry);
+  t.eqI32("it goes out in one 1449-byte datagram: its packet number is one byte, not the four the bound allows for", sent, n32(1449));
+  t.eqI32("by itself", carry.count, n32(1));
+  sendFlight(loop, buf, sent, carry.segment);
+  const arrived: Arrived = receiveFlight(loop, sent);
+  t.ok("which loopback carries in one piece", toI32(arrived.datagrams.length) === n32(1) && arrived.bytes === sent);
+  for (const d of arrived.datagrams) {
+    qcReceive(p.c, d);
+  }
+  t.eqStr("and the client reads all 1420 bytes", datagramsReceived(p.c), nqText(n32(1420)));
 };
 
 /** The client's three 1200-byte packets go out in one GSO send; the server takes the GRO receive's segments. */

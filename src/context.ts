@@ -56,6 +56,24 @@ export class SwitchFrame {
 }
 
 /**
+ * One type an exported signature or an exported class's field writes, held
+ * until every struct of the module has its fields: whether it holds a
+ * `declare class` (WP27 S4.1) is a walk through the records it names, and a
+ * record declared further down has no fields yet (`checkExportedLayouts`).
+ */
+export class ExportedLayoutUse {
+  type: i32
+  position: string
+  node: Node
+
+  constructor(type: i32, position: string, node: Node) {
+    this.type = type
+    this.position = position
+    this.node = node
+  }
+}
+
+/**
  * One loop's dataflow pre-pass (`src/loop-flow.ts`): the union and enum
  * variables the loop assigns, and what each may hold at the loop's head, at
  * a `do`'s condition and after the loop, as bit sets — a union's variants in
@@ -149,6 +167,12 @@ export class CheckContext {
   source: SourceFile
   numberMode: i32
   /**
+   * How many annotations resolved here went through `number`, which is i32
+   * or f64 as `--number-mode` says. A reader that must not depend on the
+   * mode (a `declare class` field) compares it before and after resolving.
+   */
+  numberSpellings: i32
+  /**
    * `--strict-exports`, which is the default. Off, a non-exported function
    * keeps external linkage, and the WP15 §8 walk says so at a call inside a
    * loop; nothing else in the checker reads it, because linkage is the
@@ -234,6 +258,14 @@ export class CheckContext {
    */
   awaitedCall: i32
   /**
+   * WP27 S4.1: the id of the member expression that may read a nested layout
+   * field, or -1. A read of one is the address of a struct inside its object,
+   * so it is legal only as the receiver of a further member or as an
+   * argument a `declare function` borrows. Those callers set it before
+   * checking the read, standing in for a parent pointer as `forOfWalk` does.
+   */
+  embeddedRead: i32
+  /**
    * WP29: parallel to `arrowOuterScopes`, each arrow being checked, its own
    * parameter scope, and what it may read of its function's names, one of the
    * `CAPTURE_*` modes (`src/parallel.ts`): every arrow argument but one given
@@ -285,6 +317,8 @@ export class CheckContext {
    * been collected.
    */
   pendingFinish: StructInfo[]
+  /** The exported types `checkExportedLayouts` walks once the module's structs have their fields. */
+  exportedLayoutUses: ExportedLayoutUse[]
   /**
    * The loops, `switch`es and labelled blocks enclosing the statement being
    * checked, innermost last, each with its label or `""`. A plain `break`
@@ -348,6 +382,7 @@ export class CheckContext {
     this.sink = sink
     this.source = program.source
     this.numberMode = numberMode
+    this.numberSpellings = 0
     this.strictExports = strictExports
     this.wasm = false
     this.wasmFreestanding = false
@@ -367,6 +402,7 @@ export class CheckContext {
     this.awaitStatement = null
     this.awaitedCall = -1
     this.forOfWalk = null
+    this.embeddedRead = -1
     this.errored = false
     this.typeBindings = new StringMap()
     this.functionBindings = new FunctionBindings()
@@ -388,6 +424,7 @@ export class CheckContext {
     this.hygiene = []
     this.pending = []
     this.pendingFinish = []
+    this.exportedLayoutUses = []
   }
 
   /**

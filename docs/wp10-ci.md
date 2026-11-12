@@ -40,7 +40,8 @@ them for review.
 | `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
-| `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
+| `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs and `--emit-ts` holds them to the TypeScript round trip. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
+| `nish-cmp elision (<asset>)` | the row's `runner` | `tests/differential/soundness.js`: the same candidate, linked by the same seed, builds the corpus and 600 generated programs with and without every proof-backed elision, and both must print and exit alike (the generated ones under ASan too). It ran after the byte compare in `nish-cmp` until that job was among the last to finish (330 s of compare and 221 s of elision); beside it, each is about half. Same rows and gating as `nish-cmp` |
 | `runner (shard <i>/3)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
 | `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3 --delegate-ir-checks` ([shards](#shards-and-time-limits)), which links and runs each program and delegates the checks of its compile (goldens, `llvm-as`, `opt`, declares, `--emit-panics`, rejections) to `test`, which makes them on Linux. Each run's summary line and every skip, with its reason, go to the job summary |
 | `lint` | Ubuntu | `npm ls --package-lock-only`, `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
@@ -120,7 +121,14 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   runs it runs none of the others it used to run beside.
 
   Regenerate the table when a shard drifts more than about a fifth from the
-  others: the costs are the gaps between consecutive programs' last lines in a
+  others, with `scripts/shard-costs.mjs` over at least three green `ci.yml`
+  runs of `main` (each unzipped from its run page's "Download log archive"):
+  `node scripts/shard-costs.mjs --write <dir> <dir> <dir>` takes each piece's
+  median, so one slow runner does not set it, and fails rather than guess at
+  a section it cannot find by its first check (`RECOGNIZERS`, one per
+  `DEALT_SECTIONS` key) or a shard whose link programs do not number what
+  shard 1 says it dealt it. It reads the same spans this paragraph names: the
+  costs are the gaps between consecutive programs' last lines in a
   CI shard's log, `shardOne` the span of shard 1's sections after the link
   programs that are not dealt, plus its steps after the suite, and each dealt
   section's entry the span of its lines in the shard that ran it. Runners
@@ -170,6 +178,16 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   A filtered run sends every `tail` group to shard 1, as it sent all of
   that, and counts none of them in its deal.
 
+  Hand-written from one run, that table drifted until shard 8 was the
+  longest job of every run: in
+  [run 43116599932](https://github.com/amritk/nish/actions/runs/43116599932)
+  its four sections took 333 s against the 221 s the table gave them
+  (`sanitizers` alone 152 s against 80 s), and the shards took 7.2 to 12.5
+  minutes. `scripts/shard-costs.mjs` regenerated it from the median of that
+  run and runs 43109728024 and 43114281714; dealt on it, the old deal's
+  pieces measure 5.0 to 8.4 minutes a shard after the setup every shard
+  runs, and the new deal's 6.5 minutes each.
+
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
   rather than running their section again, so those sections stay in shard
@@ -179,8 +197,20 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   check in `tests/run.js` holds their `if:` to it.
 - **`runner`**, three ways, and one process per core in each.
   `build/nish-runner --shard <i>/<n>` starts itself `--jobs` times (the core
-  count up to 8 by default), each on a slice it deals round-robin, so job `i`
-  runs exactly the programs `--shard <i>/<n>` names. Each process keeps its
+  count up to 8 by default) as `--shard <i>/<n> --part <k>/<p>`, so job `i`
+  runs exactly the programs `--shard <i>/<n>` names. Cases are dealt
+  round-robin by position; link programs, most of the time, are dealt by
+  their `link` cost in `tests/shard-costs.json`, dearest first to the
+  lightest piece, first among the shards and then among a shard's parts. By
+  position, shard 3 drew `net_handler`, `crypto_p384` and
+  `std_postgres_carrier` (about 50 s each) and was the longest of every run:
+  351, 398 and 504 s of link programs on the table's costs, the median of
+  the three runs above, against 417.9 s each dealt by cost. The CI step runs
+  `node scripts/shard-costs.mjs --check-runner build/nish-runner 3 $(nproc)`
+  before the corpus: it reads the deal through the runner's `--list`, which
+  prints what the flags would run, and fails when a piece misses or repeats
+  a program or carries more than its siblings' mean plus the dearest
+  program. Each process keeps its
   work under `build/nish-runner-jobs/<slice>-of-<total>/`; `build/test`,
   which cases write into by literal path, is shared, and `io_nish_import` and
   `io_nish_import_global`, which write the same file there by design, are

@@ -58,4 +58,9 @@ PASS  and answers the connection that waited: Content-Length is the body's lengt
 PASS  and answers the connection that waited: one Content-Length
 PASS  and answers the connection that waited: Server is present
 PASS  and answers the connection that waited: Date is an IMF-fixdate
-tfb entry: 60 passed, 0 failed, 0 skipped
+PASS  tfbMain with two workers starts both on one port
+PASS  a connection made on CPU 0 is answered
+PASS  a connection made on CPU 1 is answered
+PASS  two worker processes answered on the one port
+PASS  SIGTERM stops both and the supervisor exits 0
+tfb entry: 65 passed, 0 failed, 0 skipped

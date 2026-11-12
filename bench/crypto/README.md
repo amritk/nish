@@ -244,18 +244,45 @@ with both a default column and a portable one, `--validate` does two things:
 
 A twin listed in `portableRounds` gets one more measurement when both ratios
 fall short: 48 interleaved rounds of the two columns, each round a pair run
-back to back. The portable column must be the slower of the pair in at least
-36 of them. A count short of that prints `retry …` and the 48 rounds are
-measured once more, as a short ratio is; the second count decides. A mask that
-changed nothing runs the same code on both sides, so each pair is a coin toss
-whatever the machine's noise: 36 of 48 or more comes up by chance with
-probability 3.6e-4 a set, 7.2e-4 over the two. A real cost makes the portable
-column the slower of a pair with some probability p above one half, and the
-count misses with probability 0.15 a set at p = 0.8, 0.022 at p = 0.85 and
-6.6e-4 at p = 0.9; with the second set, 0.022, 4.7e-4 and 4.4e-7. The line
-reads `portable <family> <column>: <ratio> the time of <twin> at <case>,
-slower in <n> of 48 paired rounds (needs <ratio>, or 36 of 48)`, or
-`NOT PORTABLE …` when short.
+back to back. A set proves the portable column when two things hold:
+
+- The portable column is the slower of the pair in enough rounds.
+- Its fastest round takes at least 1.01 times its twin's fastest.
+
+A set that falls short prints `retry …`, and the 48 rounds are measured once
+more, as a short ratio is. The second set decides.
+
+The count comes from the chance of a false pass. A mask that changed nothing
+runs the same code on both sides, so each pair is a coin toss whatever the
+machine's noise. The proof may time two sets for each of its cases (see the
+list below), and the 1e-3 it allows a false pass is split evenly over all of
+them. The curves family has two cases, so it may time four sets:
+
+- Each set needs 37 of 48, which comes up by chance with probability 1.1e-4.
+- Over the four sets that is 4.4e-4.
+
+At 36 of 48 the bound covered two sets, not the four the proof can run. CI
+once passed a mask that changed nothing on its fourth set: 36 of 48 at 1.000x.
+
+The ratio is there because at a tie the count is all chance. A mask that
+changed nothing measures 0.998x to 1.002x on GitHub's runners. The curves
+family's real mask measures 1.029x to 1.046x there, three times the 1.01
+margin.
+
+A real cost makes the portable column the slower of a pair with some
+probability p above one half. The count then misses a set with probability:
+
+| p | one set | both sets |
+| --- | --- | --- |
+| 0.8 | 0.24 | 0.058 |
+| 0.85 | 0.048 | 2.3e-3 |
+| 0.9 | 2.2e-3 | 5.0e-6 |
+
+The line reads `portable <family> <column>: <ratio> the time of <twin> at
+<case>, slower in <n> of 48 paired rounds and <ratio> at their fastest (needs
+<ratio>, or 37 of 48 and 1.010x)`. A short result reads `NOT PORTABLE …`
+instead. The decision lives in `paired.mjs`, which `tests/run.js` checks
+against CI's numbers.
 It is for a mask whose cost on some CI machines is about the size of the
 ratio's noise: on GitHub's runners OpenSSL's X25519 under the curves family's
 mask measured 1.029x to 1.046x against its 1.05x floor, while a reference

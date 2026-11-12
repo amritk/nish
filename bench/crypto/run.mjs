@@ -49,6 +49,7 @@ import { fileURLToPath } from "node:url"
 import { compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 import { sideOf, times3 } from "../par-reading.mjs"
+import { PAIRED_MIN_RATIO, PAIRED_ROUNDS, pairedProves, pairedWant } from "./paired.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..", "..")
@@ -81,12 +82,6 @@ const TARGET_NS = 200e6
 const RUN_TIMEOUT_MS = 120e3
 /** The portable proof's default: a portable column at least this much slower than its twin's default one. */
 const PORTABLE_MIN_RATIO = 1.2
-/**
- * The paired-rounds proof (README.md, "portableRounds"): how many rounds, and
- * the chance it may give a portable column that changed nothing a pass.
- */
-const PAIRED_ROUNDS = 48
-const PAIRED_ALPHA = 0.001
 const TWINS = ["openssl", "go", "rust", "node"]
 const TWIN_LABELS = { openssl: "OpenSSL", go: "Go", rust: "Rust", node: "Node" }
 const PORTABLE_IDS = { openssl: "openssl-portable", go: "go-purego", rust: "rust-soft" }
@@ -975,24 +970,6 @@ const interleave = (variants, kernel, size, iterations, rounds) => {
   return { times, sums }
 }
 
-/**
- * The fewest of `n` paired rounds the portable column must lose for a mask
- * that changed nothing to reach it with probability at most `alpha`: with the
- * same code on both sides each round is a coin toss, whatever the noise.
- */
-const roundsNeeded = (n, alpha) => {
-  let choose = 1
-  let tail = 0
-  for (let k = n; k >= 0; k--) {
-    tail += choose / 2 ** n
-    if (tail > alpha) {
-      return k + 1
-    }
-    choose = (choose * k) / (n - k + 1)
-  }
-  return 0
-}
-
 // ---- --validate ------------------------------------------------------------------
 
 if (opts.validate) {
@@ -1176,25 +1153,30 @@ if (opts.validate) {
           // A twin whose mask costs about as much as the ratio's noise on some
           // CPUs: the portable column must lose nearly every paired round.
           if (ratio < need && family.rounds.has(twin)) {
-            // How many of the paired rounds the portable column lost.
+            // How many of the paired rounds the portable column lost, and
+            // its fastest round over its twin's.
             const pairs = () => {
               const { times } = interleave([fast, slow], kernel, size, iterations, PAIRED_ROUNDS)
               const fastNs = times.get(fast.id)
-              return times.get(slow.id).filter((ns, r) => ns > fastNs[r]).length
+              const slowNs = times.get(slow.id)
+              return {
+                lost: slowNs.filter((ns, r) => ns > fastNs[r]).length,
+                fastest: Math.min(...slowNs) / Math.min(...fastNs),
+              }
             }
             const n = PAIRED_ROUNDS
-            const want = roundsNeeded(n, PAIRED_ALPHA)
-            let lost = pairs()
+            const want = pairedWant(cases.length)
+            let set = pairs()
             // One more set on a miss, as the ratio gets: a real cost near the
             // noise misses one set now and then, and rarely two.
-            if (lost < want) {
+            if (!pairedProves(set.lost, want, set.fastest)) {
               console.log(
-                `retry ${family.name} ${slow.id}: slower in ${lost} of ${n} paired rounds at ${kernel}@${size}`
+                `retry ${family.name} ${slow.id}: slower in ${set.lost} of ${n} paired rounds, ${times3(set.fastest)} at their fastest, at ${kernel}@${size}`
               )
-              lost = pairs()
+              set = pairs()
             }
-            const line = `${family.name} ${slow.id}: ${times3(ratio)} the time of ${fast.id} at ${kernel}@${size}, slower in ${lost} of ${n} paired rounds (needs ${times3(need)}, or ${want} of ${n})`
-            if (lost >= want) {
+            const line = `${family.name} ${slow.id}: ${times3(ratio)} the time of ${fast.id} at ${kernel}@${size}, slower in ${set.lost} of ${n} paired rounds and ${times3(set.fastest)} at their fastest (needs ${times3(need)}, or ${want} of ${n} and ${times3(PAIRED_MIN_RATIO)})`
+            if (pairedProves(set.lost, want, set.fastest)) {
               console.log(`portable ${line}`)
               break
             }

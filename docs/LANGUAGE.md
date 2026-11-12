@@ -2977,7 +2977,10 @@ class Point {
   (`` Index signatures are not supported in class `Point` (object layout is fixed) ``,
   `reject_cls_index_signature`), `!` assertions, `abstract` on the class or a
   member (`Abstract classes are not supported`, `reject_generic_abstract`),
-  `declare class` (`` `declare class` is not supported ``, `reject_cls_declare`),
+  a `declare class` that is not a C struct layout (a method, accessor,
+  constructor or initializer in one is refused as the
+  [`declare class` section](#a-declare-class-a-c-struct-lent-by-pointer) lists,
+  `reject_cls_declare`, `reject_ffi_struct_*`),
   a class with no name — `export default class { }` or a class expression —
   (`Classes must be named`, `reject_cls_anonymous`; a named class expression is
   `Unsupported expression in Phase 1: ClassExpression`), a member named by a
@@ -3257,9 +3260,11 @@ export const main = (): i32 => {
   (`tests/cases/reject_generic_type_param_args`).
 - **A template obeys every rule a declared class obeys.** Type parameters
   change what a declaration *means*, not what it may be written with, so
-  `declare class Box<T>`, `export default class Box<T>`, `abstract class
-  Box<T>` and `interface Box<T> extends Base` are refused in the same words as
-  their non-generic spellings (`tests/cases/reject_generic_declare_class`,
+  `export default class Box<T>`, `abstract class Box<T>` and `interface
+  Box<T> extends Base` are refused in the same words as their non-generic
+  spellings, and `declare class Box<T>` is
+  `` A generic `declare class` is not supported `` (a C struct has one layout;
+  `tests/cases/reject_generic_declare_class`,
   `reject_generic_export_default`, `reject_generic_abstract`,
   `reject_generic_interface_extends`).
 - **A template claims its name in the one declaration namespace.** `class
@@ -6206,14 +6211,17 @@ declare i32 @abs(i32)
 The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
-**A parameter is a scalar, a `CPtr`, a borrowed `string` or a `u8[]` buffer
-with its count; a return is a scalar, a `CPtr` or a copied `string`** — `i32`,
+**A parameter is a scalar, a `CPtr`, a borrowed `string`, a `u8[]` buffer
+with its count or a borrowed `declare class`; a return is a scalar, a `CPtr` or
+a copied `string`** — `i32`,
 `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `boolean`, `void`, the foreign
 pointer below, `string` and `string | null` in either position, and
-[a buffer](#a-u8-parameter-a-buffer-and-its-count) as a parameter. A class
-or an interface is rejected with
+[a buffer](#a-u8-parameter-a-buffer-and-its-count) and
+[a C struct](#a-declare-class-a-c-struct-lent-by-pointer) as a parameter. Any
+other class or an interface is rejected with
 `` and a declared C function takes scalars, `CPtr`, a `string` it borrows as
-`const char *` and a `u8[]` buffer followed by its `u64` count `` in a
+`const char *` and a `u8[]` buffer followed by its `u64` count, or a `declare
+class` it borrows by pointer `` in a
 parameter (`reject_ffi_class_param`), any other array with
 `` the only array a declared C function takes is a `u8[]` or a `readonly u8[]` ``
 (`tests/cases/reject_ffi_string_array_param`: a `string[]` too, which would be
@@ -6354,8 +6362,8 @@ declare function free(block: CPtr): void;
   for an address whose provenance and lifetime are unknown. The type-argument
   clause is stated where a generic function or class is instantiated
   (`reject_ffi_pointer_type_argument`), so `new Empty<CPtr>()` is refused even
-  when no member of `Empty<T>` names `T`. The one field that may hold a `CPtr`
-  is a handle class's, below.
+  when no member of `Empty<T>` names `T`. The fields that may hold a `CPtr`
+  are a handle class's and a [`declare class`](#a-declare-class-a-c-struct-lent-by-pointer)'s, below.
 - **A `null` reaches C only as the literal.** A `declare function` may return
   `CPtr | null` and may take one, and a call passes a `CPtr | null` parameter
   either the literal `null` — `realpath(path, null)`, `getcwd(null, 0)`, the
@@ -6672,6 +6680,128 @@ another name, `close(fileno(p))`, or a C function returning its argument are
 not seen by the rules above. And the constructor's foreign call returns a
 pointer the object owns: two objects built from one shared pointer would both
 close it.
+
+#### A `declare class`: a C struct, lent by pointer
+
+**A `declare class` is a C struct: its fields are laid out in declaration order,
+each at its natural alignment, and the size is rounded up to the widest
+alignment, as a C compiler lays out the same fields. `new Name()` takes no
+arguments and zero-fills it, and a `declare function` parameter typed `Name`
+borrows it as a `struct Name *`** (`tests/cases/ffi_struct_param`,
+`ffi_struct_layout`, [cookbook](IR_COOKBOOK.md#declare-class-a-c-struct-lent-by-pointer),
+`docs/wp27-ffi.md` §9b):
+
+```ts
+declare class Timespec {
+  sec: i64
+  nsec: i64
+}
+declare function clock_gettime(clock: i32, ts: Timespec): i32
+
+const now = new Timespec()
+clock_gettime(1, now)
+console.log(now.sec)
+```
+
+```llvm
+%struct.Timespec = type { i64, i64 }
+declare i32 @clock_gettime(i32, %struct.Timespec*)
+  %Timespec.obj = alloca %struct.Timespec, align 8
+  %0 = bitcast %struct.Timespec* %Timespec.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 16, i1 false)
+  store %struct.Timespec* %Timespec.obj, %struct.Timespec** %now.addr, align 8
+  %1 = load %struct.Timespec*, %struct.Timespec** %now.addr, align 8
+  %2 = call i32 @clock_gettime(i32 1, %struct.Timespec* %1)
+```
+
+- **`new` zero-fills every byte, padding included**, with one `llvm.memset` of
+  the struct's size: C may compare or hash the whole struct, and a
+  `zeroinitializer` store need not write the padding (`ffi_struct_layout`).
+- **A `CPtr` field is the target's `void *`**: eight bytes natively, four under
+  `--profile wasi` (wasm32), where the struct's size and offsets are the ones
+  clang gives the same C struct for that target (`tests/ffi-struct.js`).
+- **A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
+  `CPtr | null`, or another `declare class`, embedded by value** — C's
+  `struct timespec it_value;`, not a pointer to one. A `number` field is
+  refused whatever the mode and however it is spelled — in parentheses, through a
+  `type` alias or a chain of them, imported or not — since `--number-mode` picks
+  its width and a C struct has one layout. The resolver decides it where it meets
+  `number`, so no spelling escapes; an alias of `i32` stays a field: `` has type
+  `number`, whose width `--number-mode` chooses `` (NL2755,
+  `reject_ffi_struct_field_number`, `_paren`, `_alias`, `_alias_paren`,
+  `_alias_chain`; `tests/ffi-struct.js`: the imported alias, the `i32` alias). Any other type is
+  `` Field `ok` of `declare class Flags` has type `boolean`, which has no C
+  layout `` (NL2752, `reject_ffi_struct_field_type`, `reject_cls_declare`,
+  `reject_ffi_struct_field_array`, `reject_ffi_struct_field_class`): a
+  `boolean`, a `string`, an array and a Nish class have no C spelling the
+  compiler could promise. A struct cannot embed
+  itself, directly or through another (NL2749, `reject_ffi_struct_self`,
+  `reject_ffi_struct_cycle`).
+- **A field is plain and has no initializer, and the class has nothing but
+  fields**: no `readonly`, `static` or optional field (NL2747), no initializer,
+  because `new` zero-fills (NL2748), no constructor, method, accessor or other
+  member such as an index signature (NL2751, `reject_ffi_struct_index_signature`), no type parameter (NL2741, `reject_generic_declare_class`), no `extends` or `implements` (NL2750),
+  and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
+- **It stays in its module.** It cannot be a parameter or the return type of an
+  exported function or an exported class's method, or a field of an exported
+  class or interface: `` `declare class Point` cannot be a parameter of an
+  exported function `` (`reject_ffi_struct_export_param`, `_return`, `_method`,
+  `_field`, `_interface`). A type that holds one is refused there too, however deep —
+  through `Result`, `T | null`, an array, a generic instance or a class of
+  this program: `` `Wrap` holds a `declare class Point` and cannot be a
+  parameter of an exported function `` (NL2756,
+  `reject_ffi_struct_export_result`, `_generic`, `_holder`, `_holder_nullable`). So no `.d.ts`
+  or N-API binding ever describes one, and `--emit-header`, which lists every
+  class of the program, declares a class that holds one only as an opaque
+  `typedef struct Holder Holder;` (`tests/ffi-struct.js`, `docs/wp27-ffi.md`
+  §9g).
+- **It is a native build's.** A wasm module a page loads — freestanding wasm,
+  or any build that writes `--emit-dts` — links no C to lend a struct to, and
+  its IR is laid out for wasm32 later: `` `declare class Point` declares a C
+  struct, and a wasm module a page loads links no C to lend it to `` (NL2757,
+  `tests/wordings/nl2757_declare_class_emit_dts`, `nl2757_declare_class_wasm32`).
+  A `--profile wasi` build is wasm32 from the start and keeps it.
+- **It is built with `new` and nothing else.** `new Point(1)` is refused as for
+  any class without a constructor (`reject_ffi_struct_new_args`), and an object
+  literal typed as one is
+  `` an object literal cannot lay out a C struct `` (NL2744,
+  `reject_ffi_struct_literal`).
+- **C borrows it for the length of the call**, as it borrows a `string`: it may
+  read and write the fields until it returns, and may not keep the address. The
+  escape analysis treats the argument as a read, so an instance that does not
+  otherwise escape stays in the caller's stack frame; a C function that keeps
+  the pointer (an `aio_read` control block, a struct handed to a thread) is
+  outside the contract. Its accesses carry no TBAA tag, so a field read after
+  the call sees what C wrote, and a function of this program that passes its
+  parameter on to C writes through that parameter, so the parameter is not
+  `readonly` and its caller's read sees the write too (`ffi_struct_param`).
+- **`Name | null` passes `NULL` for `null`**, under the rule a `CPtr | null`
+  parameter follows: the literal `null`, or a value narrowed with `!== null`
+  (NL2539, `reject_ffi_struct_nullable_held`).
+- **An embedded struct is part of its owner.** `stamp.at.sec` reads and writes a
+  field in place, and `clock_gettime(1, stamp.at)` lends C the address inside
+  `stamp`; those are the only two uses. Holding it — `const at = stamp.at`, or
+  passing it to a function this program defines — is
+  `` cannot be held as a value `` (NL2743, `reject_ffi_struct_nested_bind`,
+  `reject_ffi_struct_nested_nish_arg`), and replacing it is
+  `` a `declare class` embedded in its object is written field by field ``
+  (NL2745, `reject_ffi_struct_nested_assign`).
+- **It is not a return type or an array element.** C returning a struct by
+  value, or a pointer into memory it owns, leaves the copy with no owner on
+  this side: `` a C struct is only lent to C by pointer: take a `Point`
+  parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); an array of
+  them would be a C array the program lays out element by element, and is
+  `` cannot be an array element `` (NL2740, `reject_ffi_struct_array`,
+  `reject_ffi_struct_array_literal`, `reject_ffi_struct_array_new`), however
+  the array's type is spelled.
+- **Its fields are C's to fill.** Typed JSON does not decode into one or
+  encode one: `` a `declare class`: C reads and writes its fields `` (NL2753,
+  `reject_ffi_struct_json`). A spread copies a flat one's fields into a class
+  of this program, but not one that embeds another, whose embedded struct is
+  not a value: `` which a spread cannot copy `` (NL2754,
+  `reject_ffi_struct_spread`).
+- **`--emit-ts` refuses a module that declares one**, with the same message as
+  for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
 
 #### What a declaration cannot say
 
@@ -7784,7 +7914,10 @@ and both come from the program as written:
   - **Any other integer index is proved by its range.** Where none of the
     rules above proves `w[e]`, the values `e` can take decide: every local's
     bounds from the facts above and its declared range, carried through
-    `+`, `-`, `*`, a mask, a conversion and a call's known return range. If
+    `+`, `-`, `*`, a mask, a conversion and a call's known return range;
+    a quotient converted to its own type, `toI32(a / 4)` of `i32` operands
+    (or `toU8`, `toU16`, `toU32` of theirs), keeps the quotient's range,
+    since that conversion emits nothing. If
     the lowest is not negative and the highest is below a length `w` is
     known to have (`w.length >= n`, from an array literal, a
     `new Array(n)`, a guard or a check that ran), the access needs no
@@ -14326,9 +14459,9 @@ by the caller.
   | NL8003 | a record copied in (3.3) | a local record `p` copied into a record array `ps` (`ps.push(p)`, an element of an array literal, `ps[i] = p`), when a field of one copy is written after the copy and the other copy is read after that write; the exact predicate is below the table | stores the same object, so a write through one is seen through the other |
   | NL8004 | a store over a live element (3.3) | a whole-slot store `ps[i] = v` into a record array while an element reference into the same array (`const r = ps[j]`, or `r` of `for (const r of ps)`) is still read afterwards; `i` and `j` are not compared, and a field store `ps[i].x = v` is not a whole-slot store | puts a new object in the slot and leaves `r` holding the old one |
   | NL8005 | zero-fill (3.3) | `new Array<T>(n)` of a number or a boolean, unless `n`'s value is zero, however it is spelled: `0x0`, `-0`, `0.0` or a `const` that folds to 0 (`tests/cases/port_array_zero_fill`; `[]`, a zero length and the typed arrays are silent, `port_array_quiet`, `port_array_quiet_f64`) | fills it with holes, which read back as `undefined` |
-  | NL8006 | integer `/` (3.1) | `/` or `/=` on an integer type | divides exactly and keeps the fraction |
-  | NL8007 | wrapping (3.1) | `+ - *`, their `op=` forms, `++` and `--` on `u8`/`u16`/`u32`; a ranged integer is left out, because every write into its range is checked | keeps counting past the range |
-  | NL8008 | `i32 >>>` (3.1) | `>>>` or `>>>=` whose result is `i32`, unless the count is a constant `k` — a literal, or a `const` that folds to one — with `k & 31` not 0: such a shift is at most 2^31 − 1, so it reads back the same both ways (`-16 >>> 2` is `1073741820` in each), and `x >>> 0` or a count that is not a constant is reported | reads the result back unsigned |
+  | NL8006 | integer `/` (3.1) | `/` or `/=` on an integer type, not already the argument of its own type's conversion (`toI32(a / b)` does not warn) | divides exactly and keeps the fraction. **`review`:** the division wrapped in its type's own conversion, `toI32(a / b)`, `toU8`, `toU16` or `toU32` (`q /= d` becomes `q = toI32(q / d)`), which emits no instruction here and truncates the quotient under Node; none in a generic body, whose one rewrite would serve every instantiation, for `/=` on anything but a name (`p.x /= 2`), which the rewrite would evaluate twice, for a `/=` on a ranged target, whose type is the range and not the conversion's, for a `/=` whose divisor holds a `/` (`q /= a / b`), whose own edit would land inside this one, or with a comment before its `/=`, which the rewrite would drop, where the quotient's type or an operand's is not exactly the conversion's (a `u8` divided into an `i32`), whose conversion would change a value, in a module that binds the conversion's name as anything but the builtin (a `const`, function, parameter, loop variable, member or import named `toI32`, renamed imports included), where the edit would call that binding, or for `i64` and `u64`, which no conversion leaves alone here and truncates there. A ranged operand's `/` takes the edit: its quotient is the base type, and a quotient's conversion to its own type keeps the quotient's proven range, so `toI32(a / 4) + 1` skips the overflow check `a / 4 + 1` skips. The edits compose: `a / b / c` warns twice, both edits insert `toI32(` at one offset, and applied together from the end they nest, `toI32(toI32(a / b) / c)` (`tests/fix/port-div-*`, `port-nofix-div-*`) |
+  | NL8007 | wrapping (3.1) | `+ - *`, their `op=` forms, `++` and `--` on `u8`/`u16`/`u32`; a ranged integer is left out, because every write into its range is checked | keeps counting past the range. **No `review`:** a mask (`(a + b) & 0xff`) or `>>> 0` still warns and adds an `and` or `lshr` here, and `toU8` and its kin saturate under Node where the native value wraps (`tests/fix/port-nofix-wrap`) |
+  | NL8008 | `i32 >>>` (3.1) | `>>>` or `>>>=` whose result is `i32`, unless the count is a constant `k` — a literal, or a `const` that folds to one — with `k & 31` not 0: such a shift is at most 2^31 − 1, so it reads back the same both ways (`-16 >>> 2` is `1073741820` in each), and `x >>> 0` or a count that is not a constant is reported | reads the result back unsigned. **No `review`:** `(x >>> k) \| 0` still warns and adds an `or` here, and `toI32` saturates under Node where the native bits read back signed (`tests/fix/port-nofix-shift`) |
   | NL8009 | 64-bit integers (3.1) | a binding, parameter, field or return type declared `i64` or `u64` | holds a double, which rounds past 2^53 |
   | NL8010 | *retired* | nothing: the row was `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32`, when `min` and `max` dropped a NaN operand and `round` answered `0` for a negative number that rounds to zero. They lower to a NaN test and a sign-bit pick (`llvm.minimum`/`llvm.maximum` on wasm) and a `llvm.copysign.f64` now, which answer NaN and `-0` as JavaScript does, so no site diverges (`tests/cases/port_num_libm` is quiet). The code stays reserved and is never reused | — |
   | NL8011 | *retired* | nothing: the row was `console.log` or `console.error` of a float printing `-0`, and it marks no divergence in the reading the class is defined against. `runtime/nish.mjs` replaces both with shims that print `String(x)`, and `String(-0)` is `0`, which is what the native build prints. The code stays reserved and is never reused | — |
@@ -14497,7 +14630,16 @@ by the caller.
   `pkg_broken` 0.3.1, not in this program's own source `` (WP21 S3,
   `tests/link/package_dependency_error`). A
   failure with no source position — an unusable C toolchain, an internal
-  compiler error, a bad `-o` layout — is `{"severity","code","message"}`. The
+  compiler error, a bad `-o` layout — is `{"severity","code","message"}`. Two
+  optional keys follow `message`, each a list of edits
+  `[{"line","column","endLine","endColumn","text"}]` placed as the diagnostic
+  is, and each absent rather than empty: `fix`, the rewrite that removes the
+  diagnostic and keeps the program's meaning, which `nish --fix` applies; and
+  then `review`, printed after `fix` (WP33 R5), on a portability warning whose
+  rewrite makes the site read the same under Node and compiles to the same IR
+  byte for byte, but changes what the source says, so a person or an agent
+  decides: `nish --fix` never applies it. Which rows carry one is the
+  portability table's last column. The
   bands and the registry are in
   [wp10-ci.md](wp10-ci.md#code). A clean compile with no warnings prints
   nothing.
@@ -15426,8 +15568,10 @@ messages are exact for the cases cited; other entries quote the checker
   `Classes must be named` (a named class expression:
   `Unsupported expression in Phase 1: ClassExpression`)
   (`reject_cls_anonymous`, `nl2018_anonymous_class`)
-- **`declare class`, `declare interface`; `abstract` on a class or a member**:
-  `` `declare class` is not supported `` /
+- **a `declare class` that is not a C struct layout, a generic one, `declare
+  interface`; `abstract` on a class or a member**: the refusals the
+  [`declare class` section](#a-declare-class-a-c-struct-lent-by-pointer) lists /
+  `` A generic `declare class` is not supported `` /
   `Abstract classes are not supported` (`reject_cls_declare`,
   `reject_generic_declare_class`, `reject_generic_abstract`)
 - **a method or a constructor with no body, a constructor's return type**:

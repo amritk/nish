@@ -30,6 +30,8 @@ export class NqLimits {
   clientStreamsBidi: i64 = 8;
   clientStreamsUni: i64 = 8;
   clientDatagram: i64 = 0;
+  /** The client's max_udp_payload_size: RFC 9000's default, 65527, unless a case lowers it. */
+  clientUdpPayload: i64 = 65527;
 }
 
 /** The server configuration `limits` describes, for the echo's ALPN. */
@@ -66,6 +68,7 @@ export const nqParams = (limits: NqLimits): QuicTransportParameters => {
   p.initialMaxStreamsBidi = limits.clientStreamsBidi;
   p.initialMaxStreamsUni = limits.clientStreamsUni;
   p.maxDatagramFrameSize = limits.clientDatagram;
+  p.maxUdpPayloadSize = limits.clientUdpPayload;
   p.activeConnectionIdLimit = n64(4);
   return p;
 };

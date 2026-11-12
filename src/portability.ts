@@ -38,12 +38,13 @@
 
 import { AnalysisUnit } from "./attributes"
 import { CLI } from "./branding"
+import { Edit } from "./diagnostics"
 import { numericLiteralValue } from "./constants"
 import { StringSet } from "./map"
 import { FLAG_PREFIX, N_ARROW, N_IDENT, N_NEW, N_NUMBER, N_PAREN, N_UNARY, Node } from "./nodes"
 import { Options } from "./options"
 import { ParentTable } from "./parents"
-import { numberFindings } from "./portability-numbers"
+import { boundConversionNames, numberFindings } from "./portability-numbers"
 import { recordFindings } from "./portability-records"
 import { stringFindings } from "./portability-strings"
 import { CheckedProgram, FunctionSig } from "./program"
@@ -58,10 +59,16 @@ import { isFloat, isNumeric, T_BOOL, TypeTable } from "./types"
 export class PortabilityFinding {
   node: Node
   message: string
+  /**
+   * The `review` edits (WP33 R5), empty unless the row knows a rewrite that
+   * compiles to the same IR and quiets the site; set after construction.
+   */
+  review: Edit[]
 
   constructor(node: Node, message: string) {
     this.node = node
     this.message = message
+    this.review = []
   }
 }
 
@@ -84,6 +91,9 @@ export class PortabilityFinding {
  * - `parents` finds a node's parent, which the tree itself does not carry.
  * - `sig` and `body` are the function being walked and its body, which is
  *   the root to scan when a row needs what happens before or after a node.
+ * - `bound` holds each of `toI32`, `toU8`, `toU16` and `toU32` that the
+ *   module names as anything but the builtin (`boundConversionNames`), where
+ *   a review edit that writes the name would call the module's own.
  */
 export class PortabilityWalk {
   program: CheckedProgram
@@ -92,6 +102,7 @@ export class PortabilityWalk {
   parents: ParentTable
   sig: FunctionSig
   body: Node
+  bound: StringSet
 
   constructor(
     program: CheckedProgram,
@@ -99,7 +110,8 @@ export class PortabilityWalk {
     opts: Options,
     parents: ParentTable,
     sig: FunctionSig,
-    body: Node
+    body: Node,
+    bound: StringSet
   ) {
     this.program = program
     this.table = table
@@ -107,6 +119,7 @@ export class PortabilityWalk {
     this.parents = parents
     this.sig = sig
     this.body = body
+    this.bound = bound
   }
 
   /** The source text of `node`, as a message quotes it. */
@@ -138,6 +151,7 @@ export const portabilityFindings = (
     return out
   }
   const seen = new StringSet()
+  const bound = boundConversionNames(program, unit.parents)
   for (const sig of program.functions) {
     const body = sig.body()
     if (body === null || sig.poisoned || !sig.definedIn(program.source)) {
@@ -148,7 +162,7 @@ export const portabilityFindings = (
       program.enterInstance(instance)
     }
     const found: PortabilityFinding[] = []
-    walkPortability(new PortabilityWalk(program, table, opts, unit.parents, sig, body), body, found)
+    walkPortability(new PortabilityWalk(program, table, opts, unit.parents, sig, body, bound), body, found)
     if (instance !== null) {
       program.leaveInstance()
     }
