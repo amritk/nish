@@ -35,7 +35,6 @@ and where it is specified.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
 - [WP27: Calling C](wp27-ffi.md): whether S4 (C structs) and S5 (`errno`) happen at all.
 - [WP28: Compatibility mode](wp28-compatibility-mode.md): whether to accept compatibility mode, and its open questions.
-- [WP38: SIMD](wp38-simd.md): whether `--cpu` takes `x86-64-v4`, which clears S2's bar against the baseline but gains nothing over `x86-64-v3`.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
 
 ## Picking up a work package

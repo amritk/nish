@@ -17,7 +17,7 @@
 
 ## Next
 
-Nothing is scheduled. Whether `--cpu` takes `x86-64-v4` is pending the owner's decision: it clears S2's bar against the baseline but gains nothing over `x86-64-v3` ([§7](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear)).
+Nothing is scheduled. `x86-64-v4` is kept out of `--cpu` (decided 2026-11-12): it clears S2's bar against the baseline but gains nothing over `x86-64-v3` ([§7](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear)).
 
 ## Not planned
 
