@@ -215,15 +215,6 @@ export class TlsTcpServer {
    */
   private lastActive: i64[]
   /**
-   * How long, in milliseconds, a slot may go without activity before
-   * `expire` closes it: a client that opens a connection and sends nothing,
-   * stalls its handshake, or never hangs up after the close holds its slot
-   * this long and no longer (`docs/security/tls.md`, TLS-4). 60 seconds by
-   * default, as `nish/net/http1-server`'s `idleTimeout`; 0 or less turns the
-   * timeout off.
-   */
-  idleTimeout: i32 = 60000
-  /**
    * The slots closed since they were used, a stack whose top `accept` takes
    * before it builds a slot past the high-water mark, so finding one costs
    * the same with every slot free as with all but one busy.
@@ -264,6 +255,15 @@ export class TlsTcpServer {
   pools: TlsRecordPools
   /** The listening socket, which the program made with `tcpListen` and still owns. */
   private listener: i32 = -1
+  /**
+   * How long, in milliseconds, a slot may go without activity before
+   * `expire` closes it: a client that opens a connection and sends nothing,
+   * stalls its handshake, or never hangs up after the close holds its slot
+   * this long and no longer (`docs/security/tls.md`, TLS-4). 60 seconds by
+   * default, as `nish/net/http1-server`'s `idleTimeout`; 0 or less turns the
+   * timeout off.
+   */
+  idleTimeout: i32 = 60000
 
   /**
    * A pool of `size` slots, at least one, serving `config` on `listener`, a
@@ -866,7 +866,12 @@ export class TlsTcpServer {
    * than `idleTimeout` at `now`, and answers how many it closed. The pool
    * reads no clock of its own for this: a program calls it from its loop,
    * between `pollWait`s whose timeout is at most `idleTimeout`, so a slot
-   * idles out within about twice the timeout.
+   * idles out within about twice the timeout. Call it once a batch of events
+   * from `pollWait` has been dispatched, not in the middle of one: an event
+   * already taken for a slot this closes would otherwise be read as the next
+   * connection's, once `accept` reuses the slot. It is an idle limit, not a
+   * handshake deadline: a client that sends a byte inside every
+   * `idleTimeout` keeps its slot.
    *
    * @param now The time now, in `monotonicNanos()`, which each slot's last activity is judged against.
    * @returns How many slots this call closed; 0 while `idleTimeout` is 0 or less.

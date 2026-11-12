@@ -101,14 +101,14 @@ import {
 } from "nish/net/tls/codec";
 
 // `body` is a ClientHello without its four-byte handshake header;
-// `random`, `suite` and `x25519Public` are the server's own.
+// `random`, `suite` and `serverShare` are the server's own.
 const hello = new TlsClientHelloView()
 tlsReadClientHello(hello, body, 0, toI32(body.length))
 if (hello.alert !== 0) {
   // send hello.alert, such as TLS_ALERT_DECODE_ERROR (50), and close
 } else if (tlsWindowHasU16(hello.data, hello.versionsAt, hello.versionsLength, TLS_VERSION_13)) {
   const sessionId: u8[] = tlsCopyWindow(hello.data, hello.sessionIdAt, hello.sessionIdLength)
-  const reply: u8[] = tlsEncodeServerHello(random, sessionId, suite, x25519Public)
+  const reply: u8[] = tlsEncodeServerHello(random, sessionId, suite, serverShare)
 }
 ```
 
@@ -322,7 +322,7 @@ Writes a NewSessionTicket (§4.6.1) at `out[at]` and answers where it ends: `lif
 
 <scalar-card title="tls​Write​Server​Hello" icon="phosphor/regular/function" href="#tlswriteserverhello">
 
-Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends: choosing `suite` and TLS 1.3, echoing the session id `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying the server's key share, secp256r1 when `x25519Public` is a 65-byte point and x25519 otherwise.
+Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends: choosing `suite` and TLS 1.3, echoing the session id `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying the server's key share, secp256r1 when `serverShare` is a 65-byte point and x25519 otherwise.
 
 </scalar-card>
 
@@ -819,7 +819,7 @@ function tlsEncodeServerHello(
   random: u8[],
   sessionId: u8[],
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
 ): u8[]
 ```
 
@@ -841,9 +841,9 @@ The cipher suite the server chose.
 
 </scalar-field>
 
-<scalar-field name="x25519Public" type="u8[]" required>
+<scalar-field name="serverShare" type="u8[]" required>
 
-The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+The server's key share, its `key_exchange`: 32 bytes of x25519, or a
   65-byte uncompressed secp256r1 point.
 
 </scalar-field>
@@ -864,7 +864,7 @@ function tlsEncodeServerHelloPsk(
   random: u8[],
   sessionId: u8[],
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
   selectedIdentity: i32,
 ): u8[]
 ```
@@ -887,9 +887,9 @@ The cipher suite the server chose.
 
 </scalar-field>
 
-<scalar-field name="x25519Public" type="u8[]" required>
+<scalar-field name="serverShare" type="u8[]" required>
 
-The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+The server's key share, its `key_exchange`: 32 bytes of x25519, or a
   65-byte uncompressed secp256r1 point.
 
 </scalar-field>
@@ -1915,7 +1915,7 @@ Where the message ends in `out`: `at` plus its length, written or not.
 Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends:
 choosing `suite` and TLS 1.3, echoing the session id
 `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying
-the server's key share, secp256r1 when `x25519Public` is a 65-byte point
+the server's key share, secp256r1 when `serverShare` is a 65-byte point
 and x25519 otherwise. The extensions are `key_share` then
 `supported_versions`, the order RFC 8448 §3 shows.
 
@@ -1928,7 +1928,7 @@ function tlsWriteServerHello(
   sessionIdOff: i32,
   sessionIdLength: i32,
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
 ): i32
 ```
 
@@ -1974,9 +1974,9 @@ The cipher suite the server chose, such as `nish/net/tls/schedule`'s `TLS_AES_12
 
 </scalar-field>
 
-<scalar-field name="x25519Public" type="u8[]" required>
+<scalar-field name="serverShare" type="u8[]" required>
 
-The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+The server's key share, its `key_exchange`: 32 bytes of x25519, or a
   65-byte uncompressed secp256r1 point.
 
 </scalar-field>
@@ -2004,7 +2004,7 @@ function tlsWriteServerHelloPsk(
   sessionIdOff: i32,
   sessionIdLength: i32,
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
   selectedIdentity: i32,
 ): i32
 ```
@@ -2051,9 +2051,9 @@ The cipher suite the server chose.
 
 </scalar-field>
 
-<scalar-field name="x25519Public" type="u8[]" required>
+<scalar-field name="serverShare" type="u8[]" required>
 
-The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+The server's key share, its `key_exchange`: 32 bytes of x25519, or a
   65-byte uncompressed secp256r1 point.
 
 </scalar-field>

@@ -1,7 +1,8 @@
 // secp256r1 on the TLS 1.3 server (`nish/net/tls`): the group it takes from a
-// client that does not list x25519, directly from that client's share or
+// client that sends no x25519 share, directly from that client's share or
 // through a HelloRetryRequest asking for one, and the shares it refuses — a
-// point off the curve and one of the wrong length — with `illegal_parameter`.
+// point off the curve, one of the wrong length, a compressed one and one with
+// the wrong prefix — with `illegal_parameter`.
 // The direct case is a whole handshake against `nish/net/tls/client`, whose
 // traffic secrets must agree with the server's.
 import { Suite } from "nish/testing";
@@ -55,6 +56,15 @@ const p256Share = (): u8[] => {
 const offCurve = (): u8[] => {
   const out: u8[] = [toU8(4)];
   for (let k: i32 = 0; k < 64; k++) {
+    out.push(toU8(0x11));
+  }
+  return out;
+};
+
+/** `length` bytes: `prefix`, then 0x11 for the rest. */
+const filled = (prefix: i32, length: i32): u8[] => {
+  const out: u8[] = [toU8(prefix)];
+  for (let k: i32 = 1; k < length; k++) {
     out.push(toU8(0x11));
   }
   return out;
@@ -123,6 +133,18 @@ export const main = (): i32 => {
     zero
   );
   t.eqI32("over x25519, the server's preference", both.group, TLS_GROUP_X25519);
+  const bothGroups: i32[] = [TLS_GROUP_X25519, TLS_GROUP_SECP256R1];
+  const p256Shared = newServer(tcpConfig([]));
+  t.eqI32(
+    "a client listing both groups and sharing only secp256r1 gets an answer",
+    sendHello(p256Shared, hello(bothGroups, p256Only, [p256Share()])),
+    zero
+  );
+  t.ok("a HelloRetryRequest, since x25519 is listed", p256Shared.retried);
+  t.contains("whose key_share names x25519", toHex(p256Shared.takeOutput(TLS_LEVEL_INITIAL)), "00330002001d");
+  const neither = newServer(tcpConfig([]));
+  t.eqI32("a client listing both groups and sharing neither gets an answer", sendHello(neither, hello(bothGroups, noGroups, none)), zero);
+  t.contains("a HelloRetryRequest whose key_share names x25519", toHex(neither.takeOutput(TLS_LEVEL_INITIAL)), "00330002001d");
 
   // --- A HelloRetryRequest for secp256r1 ------------------------------------
   const retry = newServer(tcpConfig([]));
@@ -153,8 +175,18 @@ export const main = (): i32 => {
     TLS_ALERT_ILLEGAL_PARAMETER
   );
   t.eqI32(
-    "a 33-byte secp256r1 share is illegal_parameter",
-    refusal(hello(p256Only, p256Only, [cat([bytes(2), [toU8(0)]])])),
+    "a 64-byte secp256r1 share is illegal_parameter",
+    refusal(hello(p256Only, p256Only, [filled(4, 64)])),
+    TLS_ALERT_ILLEGAL_PARAMETER
+  );
+  t.eqI32(
+    "a 66-byte secp256r1 share is illegal_parameter",
+    refusal(hello(p256Only, p256Only, [cat([p256Share(), [toU8(0)]])])),
+    TLS_ALERT_ILLEGAL_PARAMETER
+  );
+  t.eqI32(
+    "a 65-byte secp256r1 share whose prefix is not 0x04 is illegal_parameter",
+    refusal(hello(p256Only, p256Only, [filled(6, 65)])),
     TLS_ALERT_ILLEGAL_PARAMETER
   );
   t.eqI32(

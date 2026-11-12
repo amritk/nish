@@ -8,14 +8,14 @@
  *     } from "nish/net/tls/codec";
  *
  *     // `body` is a ClientHello without its four-byte handshake header;
- *     // `random`, `suite` and `x25519Public` are the server's own.
+ *     // `random`, `suite` and `serverShare` are the server's own.
  *     const hello = new TlsClientHelloView()
  *     tlsReadClientHello(hello, body, 0, toI32(body.length))
  *     if (hello.alert !== 0) {
  *       // send hello.alert, such as TLS_ALERT_DECODE_ERROR (50), and close
  *     } else if (tlsWindowHasU16(hello.data, hello.versionsAt, hello.versionsLength, TLS_VERSION_13)) {
  *       const sessionId: u8[] = tlsCopyWindow(hello.data, hello.sessionIdAt, hello.sessionIdLength)
- *       const reply: u8[] = tlsEncodeServerHello(random, sessionId, suite, x25519Public)
+ *       const reply: u8[] = tlsEncodeServerHello(random, sessionId, suite, serverShare)
  *     }
  *
  * **One reader and eight writers.** `tlsParseClientHello` reads a ClientHello
@@ -1301,7 +1301,7 @@ const tlsPutServerHello = (
  * Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends:
  * choosing `suite` and TLS 1.3, echoing the session id
  * `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying
- * the server's key share, secp256r1 when `x25519Public` is a 65-byte point
+ * the server's key share, secp256r1 when `serverShare` is a 65-byte point
  * and x25519 otherwise. The extensions are `key_share` then
  * `supported_versions`, the order RFC 8448 §3 shows.
  *
@@ -1312,7 +1312,7 @@ const tlsPutServerHello = (
  * @param sessionIdOff Where the session id starts in `sessionId`.
  * @param sessionIdLength How many bytes the session id is, 0 to 32.
  * @param suite The cipher suite the server chose, such as `nish/net/tls/schedule`'s `TLS_AES_128_GCM_SHA256`.
- * @param x25519Public The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+ * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
  * @returns Where the message ends in `out`: `at` plus its length, written or not.
  */
@@ -1324,9 +1324,8 @@ export const tlsWriteServerHello = (
   sessionIdOff: i32,
   sessionIdLength: i32,
   suite: i32,
-  x25519Public: u8[]
-): i32 =>
-  tlsPutServerHello(out, at, random, sessionId, sessionIdOff, sessionIdLength, suite, x25519Public, -1)
+  serverShare: u8[]
+): i32 => tlsPutServerHello(out, at, random, sessionId, sessionIdOff, sessionIdLength, suite, serverShare, -1)
 
 /**
  * Writes the ServerHello of a resumed handshake (§4.1.3, §4.2.11) at
@@ -1342,7 +1341,7 @@ export const tlsWriteServerHello = (
  * @param sessionIdOff Where the session id starts in `sessionId`.
  * @param sessionIdLength How many bytes the session id is, 0 to 32.
  * @param suite The cipher suite the server chose.
- * @param x25519Public The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+ * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
  * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
  *   16 bits are written.
@@ -1356,7 +1355,7 @@ export const tlsWriteServerHelloPsk = (
   sessionIdOff: i32,
   sessionIdLength: i32,
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
   selectedIdentity: i32
 ): i32 =>
   tlsPutServerHello(
@@ -1367,7 +1366,7 @@ export const tlsWriteServerHelloPsk = (
     sessionIdOff,
     sessionIdLength,
     suite,
-    x25519Public,
+    serverShare,
     selectedIdentity & 0xffff
   )
 
@@ -1601,11 +1600,11 @@ const tlsBytesString = (name: u8[]): string => tlsWindowString(name, TLS_CODEC_F
  * @param random The server's 32-byte `random` (§4.1.3), written as it is.
  * @param sessionId The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
  * @param suite The cipher suite the server chose.
- * @param x25519Public The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+ * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
  * @returns The whole message, handshake header included.
  */
-export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, x25519Public: u8[]): u8[] => {
+export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, serverShare: u8[]): u8[] => {
   const none: u8[] = []
   const sessionIdLength: i32 = toI32(sessionId.length)
   const out: u8[] = new Array<u8>(
@@ -1617,7 +1616,7 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
       TLS_CODEC_FROM,
       sessionIdLength,
       suite,
-      x25519Public
+      serverShare
     )
   )
   tlsWriteServerHello(
@@ -1628,7 +1627,7 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
     TLS_CODEC_FROM,
     sessionIdLength,
     suite,
-    x25519Public
+    serverShare
   )
   return out
 }
@@ -1640,7 +1639,7 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
  * @param random The server's 32-byte `random` (§4.1.3), written as it is.
  * @param sessionId The client's whole `legacy_session_id`, 0 to 32 bytes, echoed.
  * @param suite The cipher suite the server chose.
- * @param x25519Public The server's public key, the share's `key_exchange`: 32 bytes of x25519, or a
+ * @param serverShare The server's key share, its `key_exchange`: 32 bytes of x25519, or a
  *   65-byte uncompressed secp256r1 point.
  * @param selectedIdentity The index, from 0, of the client's PSK identity the server accepts; only its low
  *   16 bits are written.
@@ -1650,7 +1649,7 @@ export const tlsEncodeServerHelloPsk = (
   random: u8[],
   sessionId: u8[],
   suite: i32,
-  x25519Public: u8[],
+  serverShare: u8[],
   selectedIdentity: i32
 ): u8[] => {
   const none: u8[] = []
@@ -1664,7 +1663,7 @@ export const tlsEncodeServerHelloPsk = (
       TLS_CODEC_FROM,
       sessionIdLength,
       suite,
-      x25519Public,
+      serverShare,
       selectedIdentity
     )
   )
@@ -1676,7 +1675,7 @@ export const tlsEncodeServerHelloPsk = (
     TLS_CODEC_FROM,
     sessionIdLength,
     suite,
-    x25519Public,
+    serverShare,
     selectedIdentity
   )
   return out

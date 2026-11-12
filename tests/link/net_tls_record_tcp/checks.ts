@@ -20,8 +20,8 @@
 //      built, a closed slot taken again with its state kept; a pool of
 //      16,384 with no slot built.
 //   6. The idle timeout (TLS-4): `expire` closes the slots idle past
-//      `idleTimeout` and no other, a readable socket restarts a slot's
-//      clock, and an `idleTimeout` of 0 turns it off.
+//      `idleTimeout` and no other, a readable or writable socket restarts
+//      a slot's clock, and an `idleTimeout` of 0 turns it off.
 //
 // openssl s_client and Node's https drive the same server in `serve` mode from the
 // `net_tls_tcp` block of tests/run.js.
@@ -172,6 +172,12 @@ const idleExpiry = (t: Suite): void => {
   const later: i64 = start + toI64(1000000) * toI64(1000) + toI64(1);
   t.eqI32("a readable socket restarts its slot's clock: at a second past it only the quiet slot is closed", server.expire(later), toI32(1));
   t.ok("the active slot is still busy, the quiet one free", server.holds(active) && !server.holds(quiet));
+  clients.push(tcpConnect(addr));
+  const stale: i32 = acceptWaiting(server, loop, ready, random, key);
+  const wrote: i64 = monotonicNanos();
+  server.writable(active);
+  t.eqI32("a writable socket restarts its slot's clock too: a second after it only the slot that did not write is closed", server.expire(wrote + toI64(1000000) * toI64(1000)), toI32(1));
+  t.ok("the writing slot is still busy, the other free", server.holds(active) && !server.holds(stale));
   server.idleTimeout = ZERO;
   t.eqI32("an idleTimeout of 0 closes nothing however long", server.expire(later + toI64(3600) * second), ZERO);
   t.ok("and the slot stays busy", server.holds(active));

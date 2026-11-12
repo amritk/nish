@@ -552,8 +552,6 @@ export const tlsHeldCopyOver = (from: u8[], to: Secret<u8[]>): i32 => exposeWith
  * the failure path too (TLS-1 in `docs/security/tls.md`).
  */
 class TlsExchangeWords {
-  /** `TLS_GROUP_X25519` or `TLS_GROUP_SECP256R1`: which exchange to run. */
-  group: i32 = 0
   key0: u64 = 0
   key1: u64 = 0
   key2: u64 = 0
@@ -600,6 +598,8 @@ class TlsExchangeWords {
   salt4: u64 = 0
   /** @internal Read by the free functions of this module; `TlsServer.exchangeKeys` writes it. */
   salt5: u64 = 0
+  /** `TLS_GROUP_X25519` or `TLS_GROUP_SECP256R1`: which exchange to run. */
+  group: i32 = 0
   /** 32 or 48: which handshake secret to extract. */
   hashLength: i32 = 0
 }
@@ -1102,13 +1102,13 @@ export class TlsServer {
   outputHandshakeLength: i32 = 0
   /** @internal Read by `net/tls/record-server.ts`. */
   outputApplicationLength: i32 = 0
-  /** Whether a HelloRetryRequest was sent, so a second miss is fatal. */
-  retried: boolean = false
   /**
    * The key exchange group: `TLS_GROUP_X25519` or `TLS_GROUP_SECP256R1` once
    * the ClientHello chose it or a HelloRetryRequest asked for it, 0 before.
    */
   group: i32 = 0
+  /** Whether a HelloRetryRequest was sent, so a second miss is fatal. */
+  retried: boolean = false
   /** Whether `config` passed `tlsConfigFits`, decided once by the constructor. */
   private configFits: boolean = false
   /** Whether the carrier turned resumption on with `enableTickets`; kept across `restart`. */
