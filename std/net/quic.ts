@@ -360,12 +360,19 @@ import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 /** The length of every connection ID this server issues; a short header's DCID is read at this length. */
 export const QUIC_CONN_CID_LENGTH: i32 = 8
 /**
- * The largest datagram the server sends, and the smallest a client's first
- * Initial may arrive in (RFC 9000 §14.1): 1200 bytes, which every QUIC path
- * carries, so no path MTU discovery is needed. `takeDatagramInto` needs this
- * much room.
+ * The datagram size every QUIC path carries, and the smallest a client's
+ * first Initial may arrive in (RFC 9000 §14.1): 1200 bytes. The server sends
+ * no larger datagram until path MTU discovery has validated one (`pathMtu`),
+ * and falls back to it when a validated path stops carrying larger ones.
+ * `takeDatagramInto` needs this much room.
  */
 export const QUIC_CONN_DATAGRAM_SIZE: i32 = 1200
+/**
+ * The largest datagram path MTU discovery searches for: 1452 bytes, what a
+ * 1500-byte Ethernet MTU carries under an IPv6 and a UDP header. The search
+ * also stops at `pathMtuLimit` and at the client's `max_udp_payload_size`.
+ */
+export const QUIC_CONN_DATAGRAM_MAX: i32 = 1452
 /**
  * How many random bytes the constructor and `reset` take: 32 for the TLS
  * server random, 32 for the x25519 key, 8 for the first connection ID and
@@ -1664,6 +1671,49 @@ export class QuicConnection {
   /** Whether the packet being read carries a non-probing frame (§9.1), and whether a packet of the datagram moves the connection (§9.3). */
   private nonProbing: boolean = false
   private migrateOwed: boolean = false
+  /** The packet number of the probe in flight. */
+  private pmtuProbePn: i64 = -1
+  /**
+   * Path MTU discovery (RFC 9000 §14.3, RFC 8899): once the handshake is
+   * confirmed and the path validated, the server probes for a datagram
+   * larger than 1200 bytes with a PING padded to the size being tried, sent
+   * only when nothing else is due, so a probe never holds data back. An
+   * acknowledged probe validates its size as `pathMtu`, which every later
+   * datagram may then fill; three lost probes of a size end the search below
+   * it. A lost probe is no congestion signal (§14.4). Three loss events that
+   * each lose a packet larger than 1200 bytes, with none of that size
+   * acknowledged between, are taken for a black hole: `pathMtu` falls back
+   * to 1200 and the search resumes below the size that stopped getting
+   * through. A new address starts again from 1200.
+   *
+   * `pathMtuLimit` is the carrier's to lower, for an interface whose MTU
+   * carries less than `QUIC_CONN_DATAGRAM_MAX`: before the first datagram
+   * by setting it, and at any time through `setPathMtuLimit`, which also
+   * takes a `pathMtu` above it down to it. The next probe keeps under it,
+   * and an acknowledged probe raises `pathMtu` no higher than it. 1200 or
+   * less turns discovery off. `reset` keeps it.
+   */
+  pathMtuLimit: i32 = 1452
+  /** The largest datagram validated on the current path: 1200 until a probe is acknowledged. */
+  pathMtu: i32 = 1200
+  /** Path MTU probes sent. */
+  pmtuProbes: i32 = 0
+  /** Path MTU probes declared lost. */
+  pmtuProbesLost: i32 = 0
+  /** Times a black hole sent `pathMtu` back to 1200. */
+  pmtuBlackHoles: i32 = 0
+  /** The search's validated floor and the largest size not yet ruled out. */
+  private pmtuLow: i32 = 0
+  private pmtuHigh: i32 = 0
+  /** The size the next probe tries, 0 when the search is over, and the size of the probe in flight, 0 for none. */
+  private pmtuNext: i32 = 0
+  private pmtuProbeSize: i32 = 0
+  /** Probes of `pmtuNext` lost so far, and loss events in a row that lost a packet larger than 1200 bytes. */
+  private pmtuTries: i32 = 0
+  private pmtuSuspect: i32 = 0
+  /** Whether the search has its bounds for this path, and whether the packet being sealed is a probe. */
+  private pmtuStarted: boolean = false
+  private pmtuSealing: boolean = false
 
   /**
    * A connection under `config`, with `entropy` its `QUIC_CONN_ENTROPY_SIZE`
@@ -1708,7 +1758,7 @@ export class QuicConnection {
     this.streams = new QuicStreams(streams, uni, local, buffer, fits ? config.maxData : QUIC_CONN_NONE)
     // The rings are made only when DATAGRAM frames are offered at all.
     const datagrams: i32 = fits && config.maxDatagramFrameSize > 0 ? QUIC_CONN_DATAGRAM_QUEUE : 0
-    this.datagramsOut = new QuicDatagramQueue(datagrams, QUIC_CONN_DATAGRAM_SIZE)
+    this.datagramsOut = new QuicDatagramQueue(datagrams, QUIC_CONN_DATAGRAM_MAX)
     this.datagramsIn = new QuicDatagramQueue(
       datagrams,
       fits ? toI32(config.maxDatagramFrameSize) : QUIC_CONN_FROM
@@ -1833,6 +1883,10 @@ export class QuicConnection {
     this.writePhase = false
     this.cryptoArrived = false
     this.topUpOwed = false
+    this.pmtuProbes = 0
+    this.pmtuProbesLost = 0
+    this.pmtuBlackHoles = 0
+    this.pmtuReset()
     this.begin(entropy)
   }
 
@@ -2824,7 +2878,11 @@ export class QuicConnection {
       return
     }
     for (let k: i32 = 0; k < sent.ackedCount; k += 1) {
-      this.untrack(space, sent.ackedSlot(k))
+      const slot: i32 = sent.ackedSlot(k)
+      this.untrack(space, slot)
+      if (space.level === TLS_LEVEL_APPLICATION) {
+        this.pmtuAcked(sent, slot)
+      }
     }
     this.packetsLost(space, sent)
   }
@@ -2867,9 +2925,222 @@ export class QuicConnection {
 
   /** Every packet of `space` that loss recovery's last call declared lost: what each carried is queued again. */
   private packetsLost(space: QuicConnSpace, sent: QuicSentPackets): void {
+    let large: boolean = false
     for (let k: i32 = 0; k < sent.lostCount; k += 1) {
-      this.requeue(space, sent.lostSlot(k))
+      const slot: i32 = sent.lostSlot(k)
+      this.requeue(space, slot)
+      if (space.level !== TLS_LEVEL_APPLICATION) {
+        continue
+      }
+      if (sent.probeAt(slot)) {
+        this.pmtuProbeLost(sent.pnAt(slot))
+      } else if (sent.sizeAt(slot) > QUIC_CONN_DATAGRAM_SIZE) {
+        large = true
+      }
     }
+    if (large) {
+      this.pmtuLargeLost()
+    }
+  }
+
+  // ---- Path MTU discovery -------------------------------------------------------
+
+  /**
+   * The largest datagram the server sends now: `pathMtu`, or 1200 while a
+   * new path is being validated.
+   *
+   * @returns The size in bytes, from 1200 to `QUIC_CONN_DATAGRAM_MAX`.
+   */
+  datagramSize(): i32 {
+    return this.pathValidating ? QUIC_CONN_DATAGRAM_SIZE : this.pathMtu
+  }
+
+  /**
+   * Sets `pathMtuLimit`, for a carrier whose interface MTU changed. A
+   * `pathMtu` above the new limit falls to it, no lower than 1200, and
+   * recovery's datagram size with it; the search goes on below it.
+   *
+   * @param limit The largest datagram the interface carries, in bytes; 1200 or less turns discovery off.
+   */
+  setPathMtuLimit(limit: i32): void {
+    this.pathMtuLimit = limit
+    if (this.pathMtu > limit) {
+      this.pathMtu = limit > QUIC_CONN_DATAGRAM_SIZE ? limit : QUIC_CONN_DATAGRAM_SIZE
+      this.pmtuLow = this.pathMtu
+      this.recovery.setDatagramSize(toI64(this.pathMtu))
+    }
+  }
+
+  /**
+   * Forgets what discovery learnt of the path: `pathMtu` is 1200 again, and
+   * the search starts afresh. Each caller has just reset loss recovery's
+   * path, whose datagram size that puts back to 1200 too.
+   */
+  private pmtuReset(): void {
+    this.pathMtu = QUIC_CONN_DATAGRAM_SIZE
+    this.pmtuStarted = false
+    this.pmtuLow = QUIC_CONN_DATAGRAM_SIZE
+    this.pmtuHigh = QUIC_CONN_DATAGRAM_SIZE
+    this.pmtuNext = 0
+    this.pmtuProbeSize = 0
+    this.pmtuProbePn = -1
+    this.pmtuTries = 0
+    this.pmtuSuspect = 0
+  }
+
+  /**
+   * Whether a probe of `pmtuNext` bytes is due in `room` bytes: the
+   * handshake confirmed, the path validated, the search not over, no probe
+   * in flight, no loss-recovery probe owed, and room in the record and the
+   * congestion window. The search's bounds are taken the first time:
+   * `pathMtuLimit`, `QUIC_CONN_DATAGRAM_MAX` and the client's
+   * `max_udp_payload_size`, whichever is least.
+   */
+  private pmtuDue(room: i32): boolean {
+    if (!this.handshakeComplete || this.state !== QUIC_STATE_CONNECTED || this.pathValidating) {
+      return false
+    }
+    if (!this.pmtuStarted) {
+      this.pmtuStarted = true
+      let high: i64 = toI64(this.pathMtuLimit)
+      if (high > toI64(QUIC_CONN_DATAGRAM_MAX)) {
+        high = toI64(QUIC_CONN_DATAGRAM_MAX)
+      }
+      if (high > this.peerParameters.maxUdpPayloadSize) {
+        high = this.peerParameters.maxUdpPayloadSize
+      }
+      this.pmtuLow = this.pathMtu
+      this.pmtuHigh = high > toI64(this.pathMtu) ? toI32(high) : this.pathMtu
+      this.pmtuNext = this.pmtuHigh > this.pmtuLow ? this.pmtuHigh : 0
+    }
+    // A limit the carrier lowered after the search began holds from the next probe.
+    if (this.pmtuHigh > this.pathMtuLimit && this.pmtuHigh > this.pmtuLow) {
+      this.pmtuHigh = this.pathMtuLimit > this.pmtuLow ? this.pathMtuLimit : this.pmtuLow
+      this.pmtuNext = this.pmtuHigh > this.pmtuLow ? this.pmtuHigh : 0
+      this.pmtuTries = 0
+    }
+    const size: i32 = this.pmtuNext
+    const sent: QuicSentPackets | null = this.recovery.space(TLS_LEVEL_APPLICATION)
+    return (
+      size > 0 &&
+      size <= room &&
+      this.pmtuProbeSize === 0 &&
+      this.application.probes === 0 &&
+      sent !== null &&
+      !sent.full() &&
+      this.recovery.bytesInFlight() + toI64(size) <= this.recovery.congestionWindow
+    )
+  }
+
+  /**
+   * A path MTU probe of `size` bytes into `out` at `at`: a 1-RTT packet of
+   * a PING and PADDING to `size`, sealed and recorded as a probe. Answers
+   * its length, or 0 when it could not be sealed.
+   */
+  private buildPmtuProbe(out: u8[], at: i32, size: i32): i32 {
+    const space: QuicConnSpace = this.application
+    const overhead: i32 = this.overhead(space)
+    if (overhead === 0 || overhead + 1 > size) {
+      return 0
+    }
+    space.clearStaged()
+    const payloadStart: i32 = at + overhead - QUIC_AEAD_TAG_SIZE
+    const payloadEnd: i32 = at + size - QUIC_AEAD_TAG_SIZE
+    const ping: i32 = quicPutTypeOnly(out, payloadStart, payloadEnd, QUIC_FRAME_PING)
+    if (ping < 0) {
+      return 0
+    }
+    space.stagedEliciting = true
+    const pn: i64 = space.nextPn
+    this.pmtuSealing = true
+    const n: i32 = this.sealAt(space, out, at, quicPutPadding(out, ping, payloadEnd - ping))
+    this.pmtuSealing = false
+    if (n <= 0) {
+      return 0
+    }
+    this.pmtuProbeSize = n
+    this.pmtuProbePn = pn
+    if (this.pmtuProbes < 2147483647) {
+      this.pmtuProbes = this.pmtuProbes + 1
+    }
+    if (!this.elicitingSent) {
+      this.idleSince = this.now
+      this.elicitingSent = true
+    }
+    this.bytesSent = this.bytesSent + toI64(n)
+    this.notePathSent(n)
+    return n
+  }
+
+  /**
+   * An acknowledged 1-RTT packet in `sent`'s slot `slot`: the probe in
+   * flight validates its size, no more than `pathMtuLimit` (which may have
+   * fallen while it flew), and a packet larger than 1200 bytes shows the
+   * path still carries one, which clears the black-hole count.
+   */
+  private pmtuAcked(sent: QuicSentPackets, slot: i32): void {
+    if (sent.probeAt(slot)) {
+      if (this.pmtuProbeSize > 0 && sent.pnAt(slot) === this.pmtuProbePn) {
+        const probed: i32 = this.pmtuProbeSize
+        const size: i32 = probed < this.pathMtuLimit ? probed : this.pathMtuLimit
+        this.pmtuProbeSize = 0
+        this.pmtuSuspect = 0
+        if (size > this.pathMtu) {
+          this.pathMtu = size
+          this.recovery.setDatagramSize(toI64(size))
+        }
+        this.pmtuLow = size > this.pmtuLow ? size : this.pmtuLow
+        this.pmtuStep()
+      }
+    } else if (sent.sizeAt(slot) > QUIC_CONN_DATAGRAM_SIZE) {
+      this.pmtuSuspect = 0
+    }
+  }
+
+  /** The probe numbered `pn` was lost: after three of one size, the search goes on below it. */
+  private pmtuProbeLost(pn: i64): void {
+    if (this.pmtuProbesLost < 2147483647) {
+      this.pmtuProbesLost = this.pmtuProbesLost + 1
+    }
+    if (this.pmtuProbeSize === 0 || pn !== this.pmtuProbePn) {
+      return
+    }
+    const size: i32 = this.pmtuProbeSize
+    this.pmtuProbeSize = 0
+    this.pmtuTries = this.pmtuTries + 1
+    if (this.pmtuTries >= 3) {
+      this.pmtuHigh = size - 1
+      this.pmtuStep()
+    }
+  }
+
+  /**
+   * A loss event lost a packet larger than 1200 bytes: the third in a row
+   * with none of that size acknowledged takes the path for a black hole
+   * (RFC 8899 §4.3), and `pathMtu` falls back to 1200.
+   */
+  private pmtuLargeLost(): void {
+    this.pmtuSuspect = this.pmtuSuspect + 1
+    if (this.pmtuSuspect < 3 || this.pathMtu <= QUIC_CONN_DATAGRAM_SIZE) {
+      return
+    }
+    const failed: i32 = this.pathMtu
+    this.pathMtu = QUIC_CONN_DATAGRAM_SIZE
+    this.recovery.setDatagramSize(toI64(QUIC_CONN_DATAGRAM_SIZE))
+    this.pmtuSuspect = 0
+    this.pmtuProbeSize = 0
+    this.pmtuLow = QUIC_CONN_DATAGRAM_SIZE
+    this.pmtuHigh = failed - 1
+    if (this.pmtuBlackHoles < 2147483647) {
+      this.pmtuBlackHoles = this.pmtuBlackHoles + 1
+    }
+    this.pmtuStep()
+  }
+
+  /** The next size to try, halfway between the bounds, or 0 when they are within 16 bytes. */
+  private pmtuStep(): void {
+    this.pmtuTries = 0
+    this.pmtuNext = this.pmtuHigh - this.pmtuLow < 16 ? 0 : (this.pmtuLow + this.pmtuHigh + 1) / 2
   }
 
   /**
@@ -3758,6 +4029,7 @@ export class QuicConnection {
     this.endValidation()
     if (!portOnly) {
       this.recovery.resetPath()
+      this.pmtuReset()
     }
     this.recovery.restartEcn()
   }
@@ -4113,15 +4385,17 @@ export class QuicConnection {
   /**
    * The largest DATAGRAM payload `sendDatagram` takes now: what fits the
    * client's `max_datagram_frame_size` with the frame's type and Length, and
-   * a 1-RTT packet of `QUIC_CONN_DATAGRAM_SIZE` with the longest packet
-   * number; 0 when the client takes none, or the server sends none.
+   * a 1-RTT packet of `datagramSize()` with the longest packet number; 0
+   * when the client takes none, or the server sends none. It grows when
+   * path MTU discovery validates a larger datagram, and shrinks again on a
+   * fall back to 1200, which drops a queued payload that no longer fits.
    *
-   * @returns The payload size in bytes, 0 up to a little under `QUIC_CONN_DATAGRAM_SIZE`.
+   * @returns The payload size in bytes, 0 up to a little under `datagramSize()`.
    */
   maxDatagramPayload(): i32 {
     const entry: QuicCidEntry | null = this.cids.currentPeerEntry()
     const cid: i32 = entry !== null ? entry.length : QUIC_CONN_FROM
-    let limit: i64 = toI64(QUIC_CONN_DATAGRAM_SIZE - 1 - cid - 4 - QUIC_AEAD_TAG_SIZE)
+    let limit: i64 = toI64(this.datagramSize() - 1 - cid - 4 - QUIC_AEAD_TAG_SIZE)
     if (this.peerMaxDatagramFrame < limit) {
       limit = this.peerMaxDatagramFrame
     }
@@ -4195,6 +4469,8 @@ export class QuicConnection {
   /**
    * The next datagram to send, or `null` when nothing is due: the
    * allocating form of `takeDatagramInto`, which a test or a recording uses.
+   * It is held to `QUIC_CONN_DATAGRAM_SIZE` bytes, so it never sends a path
+   * MTU probe nor fills a larger validated path.
    *
    * @param now The caller's monotonic time in milliseconds.
    * @returns A new array the caller owns, at most `QUIC_CONN_DATAGRAM_SIZE` bytes, or `null`.
@@ -4207,7 +4483,8 @@ export class QuicConnection {
 
   /**
    * Writes the next datagram to send into `out` at `at`, which needs
-   * `QUIC_CONN_DATAGRAM_SIZE` bytes of room, and answers its length, or 0 when
+   * `QUIC_CONN_DATAGRAM_SIZE` bytes of room and may take up to `datagramSize()`,
+   * or a path MTU probe's size (see `takeDatagramWithin`), and answers its length, or 0 when
    * nothing is due (or the room is not there). Call it until it answers 0 after
    * every `receive`, `sign`, write and `close`. It coalesces an Initial, a
    * Handshake and a 1-RTT packet as each has something to carry, pads a
@@ -4229,19 +4506,49 @@ export class QuicConnection {
    * carrier that paces calls `nish/net/quic-listener`'s
    * `quicListenerTakeFlight` instead.
    *
+   * Its contract changed with path MTU discovery: it writes up to the
+   * room in `out` from `at`, capped at `datagramSize()` (never past
+   * `pathMtuLimit` or `QUIC_CONN_DATAGRAM_MAX`), where it once wrote at
+   * most 1200 bytes. A carrier that sizes its buffer from
+   * `QUIC_CONN_DATAGRAM_SIZE` keeps getting datagrams of at most that size
+   * and is never probed past it; one that hands over a larger buffer must
+   * send all of what comes back.
+   *
    * @param out Where the datagram is written.
    * @param at Where in `out` it starts; `out` needs `QUIC_CONN_DATAGRAM_SIZE` bytes from here.
    * @param now The caller's monotonic time in milliseconds; timers due by then run first.
-   * @returns The datagram's length in bytes, at most `QUIC_CONN_DATAGRAM_SIZE`, or 0.
+   * @returns The datagram's length in bytes, at most what `out` holds from `at` and `datagramSize()`, or 0.
    */
   takeDatagramInto(out: u8[], at: i32, now: i64): i32 {
+    return this.takeDatagramWithin(out, at, toI32(out.length) - at, now)
+  }
+
+  /**
+   * `takeDatagramInto` with the datagram held to `room` bytes: it is at
+   * most `room` and `datagramSize()`, whichever is less. When nothing else
+   * is due and `room` has space for it, the datagram is a path MTU probe
+   * (see `pathMtu`), so a carrier that wants probing gives at least
+   * `QUIC_CONN_DATAGRAM_MAX` bytes of room, and one that gives 1200 never
+   * probes. A probe never displaces data: a sender that always has
+   * something due does not probe until it runs out, and stays at 1200
+   * bytes until then.
+   *
+   * @param out Where the datagram is written.
+   * @param at Where in `out` it starts.
+   * @param room The most bytes the datagram may take from `at`; under `QUIC_CONN_DATAGRAM_SIZE`, or past the
+   *   end of `out`, nothing is written.
+   * @param now The caller's monotonic time in milliseconds; timers due by then run first.
+   * @returns The datagram's length in bytes, at most `room` and `QUIC_CONN_DATAGRAM_MAX`, or 0.
+   */
+  takeDatagramWithin(out: u8[], at: i32, room: i32, now: i64): i32 {
     this.handleTimer(now)
     if (
       this.state === QUIC_STATE_WAIT_INITIAL ||
       this.state === QUIC_STATE_DRAINING ||
       this.state === QUIC_STATE_TIMED_OUT ||
       at < 0 ||
-      at > toI32(out.length) - QUIC_CONN_DATAGRAM_SIZE
+      room < QUIC_CONN_DATAGRAM_SIZE ||
+      at > toI32(out.length) - room
     ) {
       return 0
     }
@@ -4262,9 +4569,13 @@ export class QuicConnection {
     }
     this.beforeDatagram()
     this.datagramEcn = this.ecnMarking ? this.recovery.ecnCodepoint() : 0
+    const size: i32 = this.datagramSize()
     {
       using _scope = arena()
-      n = this.buildDatagram(out, at)
+      n = this.buildDatagram(out, at, room < size ? room : size)
+      if (n === 0 && this.pmtuDue(room)) {
+        n = this.buildPmtuProbe(out, at, this.pmtuNext)
+      }
     }
     return n
   }
@@ -4301,8 +4612,8 @@ export class QuicConnection {
    * last padded when an Initial elicits, then each sealed where it lies.
    * Answers the datagram's length, or 0 when no space had anything.
    */
-  private buildDatagram(out: u8[], at: i32): i32 {
-    let remaining: i32 = QUIC_CONN_DATAGRAM_SIZE
+  private buildDatagram(out: u8[], at: i32, size: i32): i32 {
+    let remaining: i32 = size
     // A path being validated has its own 3x limit (§9.3.1), which the
     // datagram may not pass; `amplificationBlocked` kept it above the floor.
     const budget: i64 = this.pathBudget()
@@ -4625,11 +4936,19 @@ export class QuicConnection {
       space.stageControl(streams.lastKind, streams.lastValue)
     }
     // DATAGRAMs ride in any packet the window lets elicit, and are recorded
-    // only by size: a lost one is not sent again (RFC 9221 §5.2).
+    // only by size: a lost one is not sent again (RFC 9221 §5.2). One queued
+    // for a larger path than the datagram size allows now never fits: it is
+    // dropped rather than left to hold the rest back. While a new path is
+    // validated it is not dropped but moved behind the others, which go out
+    // ahead of it, since a path that keeps `pathMtu` carries it once
+    // validated (RFC 9221 §5 promises no order).
+    const most: i32 = this.maxDatagramPayload()
+    this.datagramsPassOversized(most)
     let datagram: i32 = this.datagramsOut.putFrame(out, at, end)
     while (datagram > at) {
       at = datagram
       space.stagedEliciting = true
+      this.datagramsPassOversized(most)
       datagram = this.datagramsOut.putFrame(out, at, end)
     }
     streams.beginPacket()
@@ -4642,6 +4961,24 @@ export class QuicConnection {
       space.stageChunk(streams.lastId, streams.lastOffset, streams.lastLength, streams.lastFin)
     }
     return at
+  }
+
+  /**
+   * Clears the head of the DATAGRAM queue of every payload over `most`
+   * bytes: dropped, or while a new path is validated, moved to the back, at
+   * most once each so a queue of nothing but large ones ends the pass.
+   */
+  private datagramsPassOversized(most: i32): void {
+    const queue: QuicDatagramQueue = this.datagramsOut
+    let passes: i32 = queue.count
+    while (passes > 0 && queue.peekLength() > most) {
+      if (this.pathValidating) {
+        queue.deferOldest()
+      } else {
+        queue.dropOldest()
+      }
+      passes = passes - 1
+    }
   }
 
   /**
@@ -4702,6 +5039,9 @@ export class QuicConnection {
       this.sealedUnderKey = this.sealedUnderKey + 1
     }
     const slot: i32 = this.recordSent(space, pn, end - start)
+    if (this.pmtuSealing) {
+      this.recovery.onProbeSent(space.level, slot)
+    }
     if (this.datagramEcn !== 0) {
       this.recovery.onEctSent(space.level, slot)
     }

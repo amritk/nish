@@ -756,6 +756,21 @@ function convertedRange(walk: BoundsWalk, expr: Node): DeclaredRange | null -> @
   callee +1:29 isBuiltinToI32 -> @isBuiltinToI32
   local +4:9 declared: DeclaredRange | null (const)
   callee +4:20 TypeTable.declaredRange -> @TypeTable.declaredRange
+function identityConversionOf(program: CheckedProgram, table: TypeTable, e: Node, type: i32): Node | null -> @identityConversionOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.baseOf isBuiltinConversion nish_panic_index nish_str_eq
+  pointer program: size=800 writesThrough=false captured=false passedTo=isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0 isBuiltinConversion#0
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.baseOf#0
+  pointer e: size=40 writesThrough=false captured=false passedTo=isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1 isBuiltinConversion#1
+  stackSites=0 stackLocals=0
+  local +0:9 own: boolean (const)
+  callee +1:24 isBuiltinConversion -> @isBuiltinConversion
+  callee +2:23 isBuiltinConversion -> @isBuiltinConversion
+  callee +3:24 isBuiltinConversion -> @isBuiltinConversion
+  callee +4:24 isBuiltinConversion -> @isBuiltinConversion
+  local +8:9 arg: Node (const)
+  local +12:9 argType: i32 (const)
+  callee +13:26 TypeTable.baseOf -> @TypeTable.baseOf
 function lengthOf(walk: BoundsWalk, expr: Node): Local | null -> @lengthOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holderOf
@@ -1274,18 +1289,19 @@ function initialiserFacts(walk: BoundsWalk, state: State, v: Local, init: Node):
 function rangeFacts(walk: BoundsWalk, state: State, v: Local, e: Node, out: Fact[]): void -> @rangeFacts
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: Fact.constructor TypeTable.baseOf isBuiltinConversion nish_alloc_struct nish_array_grow nish_panic_overflow valueRange writesAnyLocal
+  calls: Fact.constructor TypeTable.baseOf identityConversionOf isBuiltinConversion nish_alloc_struct nish_array_grow nish_panic_overflow valueRange writesAnyLocal
   pointer walk: size=184 writesThrough=false captured=false passedTo=valueRange#0
   pointer state: size=120 writesThrough=false captured=false passedTo=valueRange#1
   pointer v: size=64 writesThrough=true captured=true passedTo=Fact.constructor#2 Fact.constructor#2
-  pointer e: size=40 writesThrough=true captured=true passedTo=isBuiltinConversion#1 writesAnyLocal#1 valueRange#2
+  pointer e: size=40 writesThrough=true captured=true passedTo=isBuiltinConversion#1 identityConversionOf#2 writesAnyLocal#1 valueRange#2
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -11:9 ctx: CheckContext (const)
-  local -10:9 base: i32 (const)
-  callee -10:16 TypeTable.baseOf -> @TypeTable.baseOf
-  local -9:9 computed: boolean (const)
-  callee -9:65 isBuiltinConversion -> @isBuiltinConversion
+  local -14:9 ctx: CheckContext (const)
+  local -13:9 base: i32 (const)
+  callee -13:16 TypeTable.baseOf -> @TypeTable.baseOf
+  local -12:9 computed: boolean (const)
+  callee -10:27 isBuiltinConversion -> @isBuiltinConversion
+  callee -9:5 identityConversionOf -> @identityConversionOf
   callee -5:7 writesAnyLocal -> @writesAnyLocal
   local -2:9 range: Interval (const)
   callee -2:17 valueRange -> @valueRange
@@ -2708,9 +2724,9 @@ function valueRange(walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via lengthOf
   escaping: type
-  calls: Interval.constructor TypeTable.baseOf TypeTable.declaredRange anyLiteral bitCountRange callRange checkedArithmeticType combinedRange convertedRange lengthOf localOf localRange maskedRange nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_eq typeMax typeMin unwrapBoundsParens valueRange widenedRange
-  pointer walk: size=184 writesThrough=false captured=false passedTo=lengthOf#0 convertedRange#0 widenedRange#0 maskedRange#0 valueRange#0 valueRange#0 valueRange#0 callRange#0
-  pointer state: size=120 writesThrough=false captured=false passedTo=widenedRange#1 localRange#0 maskedRange#1 valueRange#1 valueRange#1 valueRange#1 callRange#1
+  calls: Interval.constructor TypeTable.baseOf TypeTable.declaredRange anyLiteral bitCountRange callRange checkedArithmeticType combinedRange convertedRange identityConversionOf lengthOf localOf localRange maskedRange nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_eq typeMax typeMin unwrapBoundsParens valueRange widenedRange
+  pointer walk: size=184 writesThrough=false captured=false passedTo=lengthOf#0 convertedRange#0 valueRange#0 widenedRange#0 maskedRange#0 valueRange#0 valueRange#0 valueRange#0 callRange#0
+  pointer state: size=120 writesThrough=false captured=false passedTo=valueRange#1 widenedRange#1 localRange#0 maskedRange#1 valueRange#1 valueRange#1 valueRange#1 callRange#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
   local +0:9 ctx: CheckContext (const)
@@ -2734,35 +2750,38 @@ function valueRange(walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
   local +24:9 converted: DeclaredRange | null (const)
   callee +24:21 convertedRange -> @convertedRange
   callee +26:12 new Interval -> @Interval.constructor
-  local +28:9 widened: Interval | null (const)
-  callee +28:19 widenedRange -> @widenedRange
-  local +32:9 v: Local | null (const)
-  callee +32:13 localOf -> @localOf
-  callee +33:21 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +34:12 localRange -> @localRange
-  local +36:9 masked: Interval | null (const)
-  callee +36:18 maskedRange -> @maskedRange
-  callee +41:5 checkedArithmeticType -> @checkedArithmeticType
-  local +45:11 a: Interval (const)
-  callee +45:15 valueRange -> @valueRange
-  local +46:11 b: Interval (const)
-  callee +46:15 valueRange -> @valueRange
-  callee +47:12 combinedRange -> @combinedRange
-  callee +49:47 checkedArithmeticType -> @checkedArithmeticType
-  local +50:11 a: Interval (const)
+  local +28:9 kept: Node | null (const)
+  callee +28:16 identityConversionOf -> @identityConversionOf
+  callee +30:12 valueRange -> @valueRange
+  local +32:9 widened: Interval | null (const)
+  callee +32:19 widenedRange -> @widenedRange
+  local +36:9 v: Local | null (const)
+  callee +36:13 localOf -> @localOf
+  callee +37:21 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +38:12 localRange -> @localRange
+  local +40:9 masked: Interval | null (const)
+  callee +40:18 maskedRange -> @maskedRange
+  callee +45:5 checkedArithmeticType -> @checkedArithmeticType
+  local +49:11 a: Interval (const)
+  callee +49:15 valueRange -> @valueRange
+  local +50:11 b: Interval (const)
   callee +50:15 valueRange -> @valueRange
   callee +51:12 combinedRange -> @combinedRange
-  local +53:9 counted: Interval | null (const)
-  callee +53:19 bitCountRange -> @bitCountRange
-  local +58:11 returned: Interval | null (const)
-  callee +58:22 callRange -> @callRange
-  local +64:9 declared: DeclaredRange | null (const)
-  callee +64:20 TypeTable.declaredRange -> @TypeTable.declaredRange
-  callee +65:28 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +66:12 new Interval -> @Interval.constructor
-  callee +68:10 new Interval -> @Interval.constructor
-  callee +68:23 typeMin -> @typeMin
-  callee +68:38 typeMax -> @typeMax
+  callee +53:47 checkedArithmeticType -> @checkedArithmeticType
+  local +54:11 a: Interval (const)
+  callee +54:15 valueRange -> @valueRange
+  callee +55:12 combinedRange -> @combinedRange
+  local +57:9 counted: Interval | null (const)
+  callee +57:19 bitCountRange -> @bitCountRange
+  local +62:11 returned: Interval | null (const)
+  callee +62:22 callRange -> @callRange
+  local +68:9 declared: DeclaredRange | null (const)
+  callee +68:20 TypeTable.declaredRange -> @TypeTable.declaredRange
+  callee +69:28 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +70:12 new Interval -> @Interval.constructor
+  callee +72:10 new Interval -> @Interval.constructor
+  callee +72:23 typeMin -> @typeMin
+  callee +72:38 typeMax -> @typeMax
 function bitCountRange(program: CheckedProgram, e: Node, type: i32): Interval | null -> @bitCountRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Interval.constructor nish_alloc_struct nish_panic_index nish_str_eq

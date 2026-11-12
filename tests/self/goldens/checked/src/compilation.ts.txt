@@ -1624,13 +1624,13 @@ function Compilation.reportArenaLoops(this: Compilation): void -> @Compilation.r
 function Compilation.reportPortability(this: Compilation): void -> @Compilation.reportPortability [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via portabilityFindings
-  calls: DiagnosticSink.reportPortability portabilityFindings
+  calls: DiagnosticSink.reportPortabilityReview portabilityFindings
   pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 unit: AnalysisUnit (const)
   local +1:18 finding: PortabilityFinding (const)
   callee +1:29 portabilityFindings -> @portabilityFindings
-  callee +2:9 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
+  callee +2:9 DiagnosticSink.reportPortabilityReview -> @DiagnosticSink.reportPortabilityReview
 function Compilation.rejectAsync(this: Compilation): void -> @Compilation.rejectAsync [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rejectAwaitCycles
@@ -2203,7 +2203,7 @@ function parentDirectory(dir: string): string -> @parentDirectory
 function restatedBy(warning: Diagnostic, refused: PanicSite[]): boolean -> @restatedBy
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_index_of nish_str_index_of_from
-  pointer warning: size=48 writesThrough=false captured=false
+  pointer warning: size=56 writesThrough=false captured=false
   pointer refused: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 text: string (const)

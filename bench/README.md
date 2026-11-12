@@ -634,13 +634,21 @@ same bytes, through either its vector kernel (SSSE3 on x86-64, NEON on
 AArch64, picked at run time) or a scalar C copy of the Nish loop. `adler32.mjs`
 builds both, with clang at `-O2` and no CPU flag. It holds the kernel to the
 scalar reference (`kernel verify`), then runs four columns in interleaved
-rounds: `nish`, `nish (copy)` (the same binary again, the noise band),
-`kernel ssse3` or `kernel neon`, and `scalar C`:
+rounds: `nish` (under `NISH_ADLER32=soft`, the Nish loop), `nish (copy)` (the
+same binary again, the noise band), `kernel ssse3` or `kernel neon`, and
+`scalar C`. kernel.c keeps its own copies of the kernels rather than including
+runtime/runtime-checksum.c, so this table is the measurement #1078 made.
+
+`--self` times the `adler32Update` that ships instead: `default` (the same
+binary with `NISH_ADLER32` unset, so runtime-checksum.c's kernel runs where the
+CPU has one), `default (copy)` and `soft`, and judges the kernel against the
+loop the same way:
 
 ```bash
 npm run build
-node bench/adler32.mjs --check          # one short run per column; each checksum against the pinned one
+node bench/adler32.mjs --check          # one short run per column of both modes; each checksum against the pinned one (refuses --self)
 node bench/adler32.mjs --runs 16        # every column, minimum and median, then the verdict
+node bench/adler32.mjs --self --runs 9  # the shipped path against NISH_ADLER32=soft
 ```
 
 Each call's answer is the next call's starting value, and its window moves a
@@ -659,6 +667,14 @@ at 2.10 GHz, at 9046339. The AArch64 run is CI's `simd-arm64` job on
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | adler-64k | 22,719 | 22,691 | 3,199 | 20,806 | 21,699 | 21,691 | 2,878 | 33,096 |
 | adler-1m | 375,586 | 368,880 | 53,562 | 343,377 | 347,110 | 347,366 | 48,164 | 530,742 |
+
+The shipped path, `--self --runs 9` on the same Xeon at 925c5fb4, median ns/op
+(WP38 S8). The AArch64 figures are CI's `simd-arm64` log.
+
+| Workload | default | default (copy) | soft | soft over default |
+| --- | ---: | ---: | ---: | ---: |
+| adler-64k | 3,297 | 3,112 | 22,409 | 6.80x |
+| adler-1m | 57,671 | 54,770 | 364,945 | 6.33x |
 
 ## ChaCha20 on vectors
 

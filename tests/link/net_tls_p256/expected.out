@@ -1,0 +1,35 @@
+PASS  a secp256r1-only client starts
+PASS  the server takes its ClientHello
+PASS  and selects secp256r1
+PASS  its ServerHello's key_share is secp256r1 with a 65-byte point
+PASS  the server signs
+PASS  the client reads the ServerHello
+PASS  and the flight
+PASS  the client authenticates
+PASS  the client is connected
+PASS  the server reads Finished
+PASS  the server is connected
+PASS  both sides derive the same client traffic secret
+PASS  and the same server traffic secret
+PASS  nothing is left at the application level
+PASS  a client listing both groups and sharing both is answered
+PASS  over x25519, the server's preference
+PASS  a client listing both groups and sharing only secp256r1 gets an answer
+PASS  a HelloRetryRequest, since x25519 is listed
+PASS  whose key_share names x25519
+PASS  a client listing both groups and sharing neither gets an answer
+PASS  a HelloRetryRequest whose key_share names x25519
+PASS  a secp256r1-only client with no share gets an answer
+PASS  a HelloRetryRequest whose key_share names secp256r1
+PASS  the second ClientHello, with a secp256r1 share, is answered
+PASS  over secp256r1
+PASS  with a ServerHello sharing a 65-byte point
+PASS  and it signs
+PASS  a second ClientHello still without a secp256r1 share is illegal_parameter
+PASS  a secp256r1 share off the curve is illegal_parameter
+PASS  a 64-byte secp256r1 share is illegal_parameter
+PASS  a 66-byte secp256r1 share is illegal_parameter
+PASS  a 65-byte secp256r1 share whose prefix is not 0x04 is illegal_parameter
+PASS  a compressed secp256r1 point is illegal_parameter
+PASS  a client listing neither group is handshake_failure
+tls p256: 34 passed, 0 failed, 0 skipped

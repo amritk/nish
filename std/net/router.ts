@@ -156,9 +156,13 @@ export class Router {
   private maxMethods: i32 = 0
   /** The most segments any route has: a path is split no further than one past it. */
   private deepest: i32 = 0
-  /** During a match: how many segments the path has, where it ends, the method's index, and the pairs in `found`. */
+  /** During a match: how many segments the path has, the method's index, and the pairs in `found`. */
   private segments: i32 = 0
-  private pathEnd: i32 = 0
+  /**
+   * Where the last `match`'s path ends in its target: the first `?`, or the target's end.
+   * @internal Read by std/net/handler.ts, so a request's path is not scanned twice.
+   */
+  pathEnd: i32 = 0
   private wanted: i32 = 0
   private foundCount: i32 = 0
   /** During a match: whether a route of another method ended at the path's end. */
@@ -449,28 +453,39 @@ export class Router {
     }
     this.visited = 0
     if (tStart === tEnd || toI32(target[tStart]) !== 47) {
+      let end: i32 = tStart
+      while (end < tEnd && toI32(target[end]) !== 63) {
+        end += 1
+      }
+      this.pathEnd = end
       return ROUTER_NOT_FOUND
     }
     // One pass over the path: where it ends, and each segment's span up to one
     // past the deepest route, which is as far as any edge can reach.
-    let end: i32 = tStart
-    while (end < tEnd && toI32(target[end]) !== 63) {
-      end += 1
-    }
     const keep: i32 = this.deepest + 1
     let segments: i32 = 0
     let start: i32 = tStart + 1
-    for (let i: i32 = tStart + 1; i <= end; i++) {
-      if (i >= 0 && i < end && i < toI32(target.length) && toI32(target[i]) !== 47) {
-        continue
+    let end: i32 = start
+    while (end < tEnd) {
+      const c: i32 = toI32(target[end])
+      if (c === 63) {
+        break
       }
-      if (segments < keep) {
-        this.segStart[segments] = start
-        this.segEnd[segments] = i
+      if (c === 47) {
+        if (segments < keep) {
+          this.segStart[segments] = start
+          this.segEnd[segments] = end
+        }
+        segments += 1
+        start = end + 1
       }
-      segments += 1
-      start = i + 1
+      end += 1
     }
+    if (segments < keep) {
+      this.segStart[segments] = start
+      this.segEnd[segments] = end
+    }
+    segments += 1
     this.segments = segments
     this.pathEnd = end
     this.wanted = -1
@@ -698,12 +713,19 @@ const routerLabelIsText = (bytes: u8[], at: i32, text: string, from: i32, length
   return true
 }
 
-/** Whether `a[at .. at + length)` and `b[from .. from + length)` hold the same bytes. */
+/** Whether `a[at .. at + length)` and `b[from .. from + length)` hold the same bytes; a range outside its array does not. */
 const routerSameBytes = (a: u8[], at: i32, b: u8[], from: i32, length: i32): boolean => {
-  for (let k: i32 = 0; k < length; k++) {
-    if (a[at + k] !== b[from + k]) {
+  // Two cursors, so no index is a sum that must be checked for overflow. `stop`
+  // is one sum, but every caller passes a label's or a method's offset and
+  // length inside an array whose length is an i32, so it cannot overflow; a
+  // range past either end fails the per-byte checks and answers false.
+  const stop: i32 = at + length
+  let j: i32 = from
+  for (let i: i32 = at; i < stop; i++) {
+    if (i < 0 || i >= toI32(a.length) || j < 0 || j >= toI32(b.length) || a[i] !== b[j]) {
       return false
     }
+    j++
   }
   return true
 }

@@ -472,7 +472,10 @@ and both come from the program as written:
   - **Any other integer index is proved by its range.** Where none of the
     rules above proves `w[e]`, the values `e` can take decide: every local's
     bounds from the facts above and its declared range, carried through
-    `+`, `-`, `*`, a mask, a conversion and a call's known return range. If
+    `+`, `-`, `*`, a mask, a conversion and a call's known return range;
+    a quotient converted to its own type, `toI32(a / 4)` of `i32` operands
+    (or `toU8`, `toU16`, `toU32` of theirs), keeps the quotient's range,
+    since that conversion emits nothing. If
     the lowest is not negative and the highest is below a length `w` is
     known to have (`w.length >= n`, from an array literal, a
     `new Array(n)`, a guard or a check that ran), the access needs no

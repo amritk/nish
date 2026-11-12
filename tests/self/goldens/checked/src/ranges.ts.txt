@@ -535,7 +535,7 @@ function answeredBy(ctx: CheckContext, warning: Diagnostic, proved: Node[]): boo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_index_of nish_str_index_of_from
   pointer ctx: size=336 writesThrough=false captured=false
-  pointer warning: size=48 writesThrough=false captured=false
+  pointer warning: size=56 writesThrough=false captured=false
   pointer proved: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 access: Node (const)

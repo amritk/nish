@@ -332,6 +332,18 @@ NISH_CRC32=soft ./my-program
 Under Node, in wasm, on 32-bit targets, on big-endian AArch64, and on
 AArch64 under an OS other than Linux and macOS, the tables always run.
 
+Adler-32 works the same way: `adler32Update` (and so zlib's trailer) runs on
+SSSE3 on x86-64 and on NEON on AArch64, chosen when the program first sums.
+Set `NISH_ADLER32=soft` to run the Nish loop instead; again only the exact
+value `soft` is read:
+
+```bash
+NISH_ADLER32=soft ./my-program
+```
+
+Under Node, in wasm, on 32-bit targets and on big-endian AArch64, the Nish
+loop always runs.
+
 These modules read and write arrays through `nish:unsafe`'s unchecked access
 in their inner loops (each site is justified in the record), so a program
 built with `--deny unsafe` cannot import them.
