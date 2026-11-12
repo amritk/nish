@@ -12,7 +12,7 @@ fix, run by the "Machine-applicable fixes" block of `tests/run.js`
 | `<name>.ts` and `<name>.reviewed.ts` | a `port-` case of WP33 R5's review tier: `--json` on the input reports a diagnostic with a `review` and none with a `fix`; the `review` edits, applied the way `fix`'s are, leave exactly the bytes of `<name>.reviewed.ts`; `nish --fix` leaves the input byte-identical, since it applies `fix` alone; and `<name>.reviewed.ts` compiles with no `review`, `fix` or error left, no `<name>.code`, and an `.ll` byte for byte the input's. With `<name>.stdout`, the input prints it natively (skipped without clang) and `<name>.reviewed.ts` prints it under Node |
 | `<name>.nofix.ts` | `--json` reports at least one diagnostic and none of them has a `fix` or a `review` key; `nish --fix` on a copy exits as the plain compile does and leaves the file byte-identical |
 | `<name>.reviewed-keeps` (optional) | beside a `.reviewed.ts`: the `line:column` sites, one per line, of the `<name>.code` diagnostics whose own edit was declined (`port-div-assign-nested`'s `/=` around a reviewed `/`). Every other site of that code must carry a `review`, these none, and the reviewed file reports the code at exactly these sites; without the file, at none |
-| `<name>.ll-lacks` (optional) | beside a `.reviewed.ts`: one `<function> <text>` per line, a check the input's IR must not hold in that function (`port-div-range`: `addI32 with.overflow`, `atI32 panic_index`), so a case about the edit keeping a proof fails when the proof is lost |
+| `<name>.ll-lacks` (optional) | beside a `.reviewed.ts`: one `<function> <text>` per line, a check the input's IR must not hold in that function (`port-div-range` lists every function whose check its input skips: `addI32`'s overflow, `atI32`'s bounds and `sumU8`'s overflow; the unsigned `add` functions have no check to skip, and the others keep theirs), so a case about the edit keeping a proof fails when the proof is lost |
 | `<name>.plain-exit` (optional) | the plain `--json` run's exit status, for either form above, default 1 (0 for a `port-` case, whose diagnostics are warnings); a program whose only diagnostics are warnings exits 0 |
 | `<name>.code` | a code the plain `--json` run must report, so a case whose diagnostic stopped firing, or that another diagnostic now stops first, fails rather than passing with nothing to fix; beside a `.fixed.ts`, the fixed program must no longer report it. Required beside a `.nofix.ts`, optional beside a `.fixed.ts` |
 | `<name>.stdout` (optional) | beside a `.fixed.ts`: the input and the fixed program are each linked and run, and both must print exactly this and exit with `<name>.run-exit` (default 0). Skipped without clang |
@@ -158,8 +158,12 @@ rewrite would serve every instantiation; `/=` on an element
 (`-div-element`) or a field (`-div-field`), which the rewrite would evaluate
 twice; `/=` on a ranged target (`-div-ranged`), whose type is the range; an
 `i64` or `u64` division (`-div-i64`, `-div-u64`), which has no conversion
-that is the identity here and a truncation under Node; and every NL8007 (`-wrap`) and NL8008 (`-shift`)
-site, whose spellings either add an instruction here or saturate under Node
+that is the identity here and a truncation under Node; a `/=` with a comment
+before it (`-div-comment`), which the rewrite would drop; any division in a
+module that binds the conversion's name as anything but the builtin
+(`-div-shadow-local`, `-param`, `-function`, `-loop`, `-import`, `-scoped`,
+`-member`), where the edit would call that binding; and every NL8007
+(`-wrap`) and NL8008 (`-shift`) site, whose spellings either add an instruction here or saturate under Node
 where the native value wraps. The reasons are `docs/LANGUAGE.md`'s, row by
 row.
 
