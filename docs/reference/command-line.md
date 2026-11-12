@@ -219,7 +219,7 @@ what a bare number is; i32 by default
 
 <scalar-field name="--compat">
 
-the compatibility dialect; accepts nothing yet
+compatibility dialect; accepts nothing yet
 
 </scalar-field>
 
