@@ -144,26 +144,53 @@ export const main = (): i32 => {
 };
 ```
 
-It cannot be ordered with `<`, joined, encoded as JSON, or made nullable
-(`Op | null`); store an index or an enum beside it when you need one of
-those.
+It cannot be ordered with `<`, joined or encoded as JSON; store an index or
+an enum beside it when you need one of those.
 
-It cannot be a `Map` value yet either (`NL2738`), nor can a value that holds
-one, such as an array of references (`Map<string, Op[]>`) or a nullable one
-(`Map<string, Op[] | null>`). Keep the references in an array and store each
-one's index in the `Map`:
+## A reference that may be `null`
 
-```ts nish:err NL2738
+`Op | null` holds a function or nothing. A field of that type starts as
+`null`, and `new Array<Op | null>(n)` holds `n` of them. Call it only after a
+test proves it holds a function; a nullable field is read into a `const`
+first, and the test is on the `const`:
+
+```ts nish:ok
 type Op = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
 
+class Slot {
+  op: Op | null = null;
+}
+
 export const main = (): i32 => {
-  const byName = new Map<string, Op>();
-  byName.set("inc", inc);
-  return byName.size;
+  const s = new Slot();
+  s.op = inc;
+  const h = s.op;
+  if (h !== null) {
+    console.log(`${h(4)}`);              // 5
+  }
+  return 0;
 };
 ```
+
+`??` gives a function in place of `null`, as in `const f: Op = s.op ?? inc`.
+
+A call with no test before it is refused (`NL2758`):
+
+```ts nish:err NL2758
+type Op = (x: i32) => i32;
+
+export const run = (h: Op | null): i32 => h(1);
+
+export const main = (): i32 => run(null);
+```
+
+## In a `Map`
+
+A `Map` value can be a reference, an array of them, or a nullable of either.
+A call through what `get` returns can reach every function of that type that
+any `Map` or array in the program holds, so it is a choice among all of them:
 
 ```ts nish:ok
 type Op = (x: i32) => i32;
@@ -172,21 +199,53 @@ const inc = (x: i32): i32 => x + 1;
 const dec = (x: i32): i32 => x - 1;
 
 export const main = (): i32 => {
-  const ops: Op[] = [inc, dec];
-  const byName = new Map<string, i32>();
-  byName.set("inc", 0);
-  byName.set("dec", 1);
-  const at = byName.get("dec") ?? 0;
-  return ops[at](5);
+  const byName = new Map<string, Op>();
+  byName.set("inc", inc);
+  byName.set("dec", dec);
+  const f = byName.get("dec");
+  if (f !== undefined) {
+    console.log(`${f(5)}`);              // 4
+  }
+  return 0;
 };
 ```
 
-A reference is not a function argument either. A parameter whose function
-type is written out in the parameter list, as in `apply` below, is filled in
-when the call is compiled, so it takes a function's name or an arrow, never
-a variable holding one (`NL2734`):
+If one of those functions keeps an argument and another does not, a call
+through `get` is refused (NL2736): call the one that keeps it by name, or
+hold it in a variable or field of its own and do not also store it in the
+`Map`, so the compiler follows it apart from the `Map`'s values.
 
-```ts nish:err NL2734
+A reference cannot be a `Map` key.
+
+## Not in a `Result`
+
+A reference cannot sit directly in a `Result`, in either arm, nullable or not:
+`Result<Op, string>` is refused (`NL2762`). Return an array of references
+(`Result<Op[], string>`), or a class with a reference field, instead:
+
+```ts nish:ok
+type Op = (x: i32) => i32;
+
+const plus1 = (x: i32): i32 => x + 1;
+
+const pick = (): Result<Op[], string> => Ok([plus1]);
+
+export const main = (): void => {
+  const r = pick();
+  if (r.ok) {
+    const f = r.value[0];
+    console.log(`${f(10)}`);
+  }
+};
+```
+
+## As a function argument
+
+A parameter whose function type is written out in the parameter list, as in
+`apply` below, takes a function's name, an arrow, or a variable holding a
+reference. The call passes an arrow that calls the reference:
+
+```ts nish:ok
 type F = (x: i32) => i32;
 
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
@@ -194,12 +253,23 @@ const inc = (x: i32): i32 => x + 1;
 
 export const main = (): i32 => {
   const h: F = inc;
-  return apply(h, 1);
+  console.log(`${apply(h, 1)}`);         // 2
+  return 0;
 };
 ```
 
-Write the parameter's type as the alias, `f: F`, and `apply` takes a
-reference instead.
+A field or array element is refused (`NL2759`): the arrow would read it
+again each time the callee calls it, where JavaScript reads it once. Read it
+into a `const` first and pass the `const`, as in `const op = ops[0]` then
+`apply(op, 1)`. A variable that may be `null` is passed once a test such as
+`h !== null` has narrowed it (`NL2760`). And a variable that a later
+argument of the same call assigns, as in `apply(h, k((h = inc)))`, is
+refused (`NL2761`): the call would read it after that assignment, where
+JavaScript reads it before; read it into a `const` first.
+
+The builtins that check the body they are handed, such as `parallelMap`, a
+scope's `spawn`, `expose` and `region`, take only a function's name or an
+arrow (`NL2734`).
 
 ## Calls through a reference
 
@@ -211,6 +281,16 @@ then a branch over all of them where a direct call would not branch.
 
 Built with `--profile debug`, a call through a reference also checks that
 the reference holds one of those functions, and panics if it does not.
+
+Under a debugger, a program built with `-g` prints a reference as the
+function it holds. Stepping into a call through one takes two steps: the
+first stops in the generated chooser, named `$ref.` and the call's signature,
+the second in the function. To step straight through, tell gdb to skip the
+choosers:
+
+```
+(gdb) skip -rfu '^\$ref\.'
+```
 
 A reference stays inside your program. A library built with `-o` cannot
 export a function whose parameter or return type holds one, or whose

@@ -23,6 +23,7 @@ import N_THIS from "./nodes" -> const N_THIS
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
 import StringSet from "./map" -> struct StringSet
+import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
 const WIDE_SET: i32 = 8 [exported]
 function genericReferenceMessage(name: string): string -> @genericReferenceMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -143,6 +144,24 @@ function referenceTypeOf(table: TypeTable, sig: FunctionSig): i32 -> @referenceT
   local +1:7 i: i32 (let)
   callee +2:14 FunctionSig.writtenArity -> @FunctionSig.writtenArity
   callee +6:10 TypeTable.fnRefOf -> @TypeTable.fnRefOf
+function nullableReference(ctx: CheckContext, type: i32): boolean -> @nullableReference [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: TypeTable.isFnRef TypeTable.isNullable TypeTable.stripNull
+  pointer ctx: size=336 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +0:33 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +0:51 TypeTable.stripNull -> @TypeTable.stripNull
+function refuseNullableCall(ctx: CheckContext, callee: Node, shown: string): i32 -> @refuseNullableCall [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.errorType
+  calls: CheckContext.errorType nish_str_concat
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.errorType#0
+  pointer callee: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
+  stackSites=0 stackLocals=0
+  local +0:9 test: string (const)
+  callee +1:10 CheckContext.errorType -> @CheckContext.errorType
 function checkReferenceCall(ctx: CheckContext, expr: Node, type: i32, shown: string, scope: Scope): i32 -> @checkReferenceCall [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -174,14 +193,15 @@ function checkReferenceCall(ctx: CheckContext, expr: Node, type: i32, shown: str
 function outerReference(ctx: CheckContext, name: string): boolean -> @outerReference [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: Scope.lookup Scope.typeOf TypeTable.isFnRef
+  calls: Scope.lookup Scope.typeOf TypeTable.isFnRef TypeTable.stripNull
   pointer ctx: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 scope: Scope (const)
   local +1:11 local: Local | null (const)
   callee +1:19 Scope.lookup -> @Scope.lookup
-  callee +3:14 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +3:32 Scope.typeOf -> @Scope.typeOf
+  callee +4:14 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +4:32 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +4:52 Scope.typeOf -> @Scope.typeOf
 function hostReferenceMessage(what: string): string -> @hostReferenceMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -230,7 +250,7 @@ function paramList(decl: Node): Node | null -> @paramList
 function refuseHostReferences(contexts: CheckContext[], mode: BuildMode): void -> @refuseHostReferences [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
-  calls: CheckContext.error FunctionSig.compileTimeOnly FunctionSig.definedIn FunctionSig.foreign FunctionSig.isCompileTime classesOf fieldNode holdsFnRef hostReferenceMessage hostVisible nish_panic_index nish_str_concat paramList
+  calls: CheckContext.error FunctionSig.compileTimeOnly FunctionSig.definedIn FunctionSig.foreign FunctionSig.isCompileTime classesOf fieldNode holdsFnRef hostReferenceMessage hostVisible nish_panic_index nish_str_concat nish_str_eq paramList
   pointer contexts: size=0 writesThrough=false captured=false
   pointer mode: size=4 writesThrough=false captured=false passedTo=hostVisible#0
   stackSites=1 stackLocals=1
@@ -238,42 +258,44 @@ function refuseHostReferences(contexts: CheckContext[], mode: BuildMode): void -
   local +1:14 ctx: CheckContext (const)
   local +2:11 program: CheckedProgram (const)
   local +3:11 table: TypeTable (const)
-  local +4:16 sig: FunctionSig (const)
-  local +5:13 owner: StructInfo | null (const)
-  local +6:13 exported: boolean (const)
-  local +7:13 main: FunctionSig | null (const)
-  local +8:13 entry: boolean (const)
-  callee +10:10 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee +12:9 FunctionSig.compileTimeOnly -> @FunctionSig.compileTimeOnly
-  callee +13:11 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +13:29 hostVisible -> @hostVisible
-  local +17:13 params: Node | null (const)
-  callee +17:22 paramList -> @paramList
-  local +18:11 i: i32 (let)
-  callee +20:14 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  local +21:17 at: Node (const)
-  callee +22:15 holdsFnRef -> @holdsFnRef
-  callee +23:13 CheckContext.error -> @CheckContext.error
-  callee +23:27 hostReferenceMessage -> @hostReferenceMessage
-  callee +25:11 classesOf -> @classesOf
-  callee +29:11 holdsFnRef -> @holdsFnRef
-  local +30:15 at: Node (const)
-  callee +32:9 CheckContext.error -> @CheckContext.error
-  callee +32:23 hostReferenceMessage -> @hostReferenceMessage
-  callee +34:7 classesOf -> @classesOf
-  local +38:7 k: i32 (let)
-  local +40:11 cls: i32 (const)
-  local +41:16 ctx: CheckContext (const)
-  local +42:18 info: StructInfo (const)
-  local +44:22 field: FieldInfo (const)
-  callee +45:13 classesOf -> @classesOf
-  local +52:14 ctx: CheckContext (const)
-  local +53:16 info: StructInfo (const)
-  local +57:18 field: FieldInfo (const)
-  callee +58:13 holdsFnRef -> @holdsFnRef
-  callee +59:11 CheckContext.error -> @CheckContext.error
-  callee +60:13 fieldNode -> @fieldNode
-  callee +61:13 hostReferenceMessage -> @hostReferenceMessage
+  local +7:11 rootPackage: boolean (const)
+  local +8:16 sig: FunctionSig (const)
+  local +9:13 owner: StructInfo | null (const)
+  local +10:13 exported: boolean (const)
+  local +11:13 main: FunctionSig | null (const)
+  local +12:13 entry: boolean (const)
+  callee +14:10 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee +16:9 FunctionSig.compileTimeOnly -> @FunctionSig.compileTimeOnly
+  callee +17:11 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +17:46 hostVisible -> @hostVisible
+  local +21:13 params: Node | null (const)
+  callee +21:22 paramList -> @paramList
+  local +22:11 i: i32 (let)
+  callee +24:14 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  local +25:17 at: Node (const)
+  callee +26:15 holdsFnRef -> @holdsFnRef
+  callee +27:13 CheckContext.error -> @CheckContext.error
+  callee +27:27 hostReferenceMessage -> @hostReferenceMessage
+  callee +29:11 classesOf -> @classesOf
+  callee +33:11 holdsFnRef -> @holdsFnRef
+  local +34:15 at: Node (const)
+  callee +36:9 CheckContext.error -> @CheckContext.error
+  callee +36:23 hostReferenceMessage -> @hostReferenceMessage
+  callee +38:7 classesOf -> @classesOf
+  local +42:7 k: i32 (let)
+  local +44:11 cls: i32 (const)
+  local +45:16 ctx: CheckContext (const)
+  local +46:18 info: StructInfo (const)
+  local +48:22 field: FieldInfo (const)
+  callee +49:13 classesOf -> @classesOf
+  local +56:14 ctx: CheckContext (const)
+  local +57:16 info: StructInfo (const)
+  local +60:13 everyLayout: boolean (const)
+  local +64:18 field: FieldInfo (const)
+  callee +65:13 holdsFnRef -> @holdsFnRef
+  callee +66:11 CheckContext.error -> @CheckContext.error
+  callee +67:13 fieldNode -> @fieldNode
+  callee +68:13 hostReferenceMessage -> @hostReferenceMessage
 function fieldNode(info: StructInfo, name: string): Node -> @fieldNode
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index nish_str_eq

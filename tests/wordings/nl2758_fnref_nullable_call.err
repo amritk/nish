@@ -1,0 +1,1 @@
+`h` may be `null`: a nullable function reference is called only after a test such as `h !== null` proves it holds a function

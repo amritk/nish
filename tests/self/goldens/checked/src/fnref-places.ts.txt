@@ -4,6 +4,7 @@ entry: src/fnref-places.ts src/checker.ts src/annotations.ts src/secret.ts src/a
 import checkSignatureBody from "./checker" -> function @checkSignatureBody
 import CheckContext from "./context" -> struct CheckContext
 import referenceTypeOf from "./fnrefs" -> function @referenceTypeOf
+import isMapOwner from "./generics" -> function @isMapOwner
 import StringMap from "./map" -> struct StringMap
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
@@ -87,6 +88,7 @@ struct RefPass (class) size=192 align=8
   field module: i32 index=24 offset=188
   constructor -> @RefPass.constructor
   method refType -> @RefPass.refType
+  method stripType -> @RefPass.stripType
   method isRef -> @RefPass.isRef
   method typeOf -> @RefPass.typeOf
   method newPlace -> @RefPass.newPlace
@@ -102,6 +104,7 @@ struct RefPass (class) size=192 align=8
   method storeOf -> @RefPass.storeOf
   method flow -> @RefPass.flow
   method arrayMethod -> @RefPass.arrayMethod
+  method mapGet -> @RefPass.mapGet
   method scanCall -> @RefPass.scanCall
   method scanRefArgs -> @RefPass.scanRefArgs
   method scanArgs -> @RefPass.scanArgs
@@ -119,6 +122,10 @@ struct Builder (class) size=8 align=8
   method empty -> @Builder.empty
   method ident -> @Builder.ident
   method arm -> @Builder.arm
+function isRefAssignment(op: string): boolean -> @isRefAssignment
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
 function RefModule.constructor(this: RefModule, program: CheckedProgram, ctx: CheckContext, file: Node, parents: ParentTable, nodeCount: i32): void -> @RefModule.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: ctx file nodeCount parents program
@@ -149,24 +156,32 @@ function RefPass.constructor(this: RefPass, table: TypeTable, first: CheckedProg
   callee +0:17 new StringMap -> @StringMap.constructor
 function RefPass.refType(this: RefPass, node: Node): i32 -> @RefPass.refType [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: RefPass.typeOf TypeTable.isFnRef TypeTable.isMaybe TypeTable.isNullable TypeTable.refOf
-  pointer this: size=192 writesThrough=false captured=false passedTo=RefPass.typeOf#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=RefPass.typeOf#1
+  escaping: node
+  calls: RefPass.stripType RefPass.typeOf TypeTable.isFnRef isRefAssignment nish_panic_index
+  pointer this: size=192 writesThrough=false captured=false passedTo=RefPass.stripType#0 RefPass.typeOf#0
+  pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local +0:11 type: i32 (const)
-  callee +0:18 RefPass.typeOf -> @RefPass.typeOf
-  callee +1:9 TypeTable.isFnRef -> @TypeTable.isFnRef
-  local +4:11 holder: boolean (const)
-  callee +4:20 TypeTable.isNullable -> @TypeTable.isNullable
-  callee +4:51 TypeTable.isMaybe -> @TypeTable.isMaybe
-  callee +5:19 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +5:38 TypeTable.refOf -> @TypeTable.refOf
-  callee +6:14 TypeTable.refOf -> @TypeTable.refOf
+  local +0:11 typed: Node (const)
+  callee +0:45 isRefAssignment -> @isRefAssignment
+  local +1:11 type: i32 (const)
+  callee +1:18 RefPass.stripType -> @RefPass.stripType
+  callee +1:33 RefPass.typeOf -> @RefPass.typeOf
+  callee +2:12 TypeTable.isFnRef -> @TypeTable.isFnRef
+function RefPass.stripType(this: RefPass, type: i32): i32 -> @RefPass.stripType [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: TypeTable.isMaybe TypeTable.isNullable TypeTable.refOf
+  pointer this: size=192 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 inner: i32 (let)
+  callee +1:12 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +1:44 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee +2:15 TypeTable.refOf -> @TypeTable.refOf
 function RefPass.isRef(this: RefPass, node: Node): boolean -> @RefPass.isRef [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: RefPass.refType
   pointer this: size=192 writesThrough=false captured=false passedTo=RefPass.refType#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=RefPass.refType#1
+  pointer node: size=40 writesThrough=true captured=true passedTo=RefPass.refType#1
   stackSites=0 stackLocals=0
   callee +0:12 RefPass.refType -> @RefPass.refType
 function RefPass.typeOf(this: RefPass, node: Node): i32 -> @RefPass.typeOf [method]
@@ -287,59 +302,79 @@ function RefPass.flow(this: RefPass, node: Node, target: i32): void -> @RefPass.
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: target
-  calls: RefPass.arrayMethod RefPass.elementPlace RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.localPlace RefPass.refType RefPass.returnPlace RefPass.scan RefPass.scanCall RefPass.storeFrom RefPass.storeOne nish_panic_index nish_str_eq
-  pointer this: size=192 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.scan#0 RefPass.refType#0 RefPass.flow#0 RefPass.scan#0 RefPass.flow#0 RefPass.flow#0 RefPass.flow#0 RefPass.flow#0 RefPass.scan#0 RefPass.flow#0 RefPass.storeOne#0 RefPass.storeFrom#0 RefPass.localPlace#0 RefPass.scan#0 RefPass.storeFrom#0 RefPass.fieldPlace#0 RefPass.scan#0 RefPass.scan#0 RefPass.storeFrom#0 RefPass.elementPlace#0 RefPass.scanCall#0 RefPass.storeFrom#0 RefPass.returnPlace#0 RefPass.arrayMethod#0 RefPass.storeFrom#0 RefPass.elementPlace#0 RefPass.scan#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=RefPass.isRef#1 RefPass.scan#1 RefPass.refType#1 RefPass.scan#1 RefPass.storeOne#3 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.scanCall#1 RefPass.storeFrom#3 RefPass.arrayMethod#1 RefPass.storeFrom#3 RefPass.scan#1
+  calls: RefPass.arrayMethod RefPass.elementPlace RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.localPlace RefPass.mapGet RefPass.newPlace RefPass.refType RefPass.returnPlace RefPass.scan RefPass.scanCall RefPass.storeFrom RefPass.storeOne RefPass.stripType RefPass.target isRefAssignment nish_panic_index nish_str_eq
+  pointer this: size=192 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.scan#0 RefPass.refType#0 RefPass.flow#0 RefPass.scan#0 RefPass.flow#0 RefPass.flow#0 RefPass.flow#0 RefPass.flow#0 RefPass.newPlace#0 RefPass.flow#0 RefPass.target#0 RefPass.storeFrom#0 RefPass.storeFrom#0 RefPass.storeFrom#0 RefPass.storeOne#0 RefPass.storeFrom#0 RefPass.localPlace#0 RefPass.scan#0 RefPass.storeFrom#0 RefPass.fieldPlace#0 RefPass.scan#0 RefPass.scan#0 RefPass.storeFrom#0 RefPass.elementPlace#0 RefPass.scanCall#0 RefPass.stripType#0 RefPass.storeFrom#0 RefPass.returnPlace#0 RefPass.arrayMethod#0 RefPass.mapGet#0 RefPass.storeFrom#0 RefPass.elementPlace#0 RefPass.scan#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RefPass.isRef#1 RefPass.scan#1 RefPass.refType#1 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.storeOne#3 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.storeFrom#3 RefPass.scanCall#1 RefPass.storeFrom#3 RefPass.arrayMethod#1 RefPass.mapGet#1 RefPass.storeFrom#3 RefPass.scan#1
   stackSites=0 stackLocals=0
-  callee -66:24 RefPass.isRef -> @RefPass.isRef
-  callee -65:7 RefPass.scan -> @RefPass.scan
-  local -62:11 type: i32 (const)
-  callee -62:18 RefPass.refType -> @RefPass.refType
-  callee -58:9 RefPass.flow -> @RefPass.flow
-  callee -55:9 RefPass.scan -> @RefPass.scan
-  callee -54:9 RefPass.flow -> @RefPass.flow
-  callee -53:9 RefPass.flow -> @RefPass.flow
-  callee -49:11 RefPass.flow -> @RefPass.flow
-  callee -48:11 RefPass.flow -> @RefPass.flow
-  callee -44:11 RefPass.scan -> @RefPass.scan
-  callee -43:11 RefPass.flow -> @RefPass.flow
-  local -36:15 named: FunctionSig | null (const)
-  callee -34:11 RefPass.storeOne -> @RefPass.storeOne
-  local -31:15 local: Local | null (const)
-  callee -29:11 RefPass.storeFrom -> @RefPass.storeFrom
-  callee -29:34 RefPass.localPlace -> @RefPass.localPlace
-  callee -23:9 RefPass.scan -> @RefPass.scan
-  callee -22:9 RefPass.storeFrom -> @RefPass.storeFrom
-  callee -22:32 RefPass.fieldPlace -> @RefPass.fieldPlace
-  callee -19:9 RefPass.scan -> @RefPass.scan
-  callee -18:9 RefPass.scan -> @RefPass.scan
-  callee -17:9 RefPass.storeFrom -> @RefPass.storeFrom
-  callee -17:32 RefPass.elementPlace -> @RefPass.elementPlace
-  local -14:15 site: boolean (const)
-  callee -14:22 RefPass.scanCall -> @RefPass.scanCall
-  local -12:17 callee: FunctionSig | null (const)
+  callee -80:24 RefPass.isRef -> @RefPass.isRef
+  callee -79:7 RefPass.scan -> @RefPass.scan
+  local -76:11 type: i32 (const)
+  callee -76:18 RefPass.refType -> @RefPass.refType
+  callee -72:9 RefPass.flow -> @RefPass.flow
+  callee -69:9 RefPass.scan -> @RefPass.scan
+  callee -68:9 RefPass.flow -> @RefPass.flow
+  callee -67:9 RefPass.flow -> @RefPass.flow
+  callee -63:11 RefPass.flow -> @RefPass.flow
+  callee -62:11 RefPass.flow -> @RefPass.flow
+  callee -59:13 isRefAssignment -> @isRefAssignment
+  local -54:17 value: i32 (const)
+  callee -54:25 RefPass.newPlace -> @RefPass.newPlace
+  callee -53:11 RefPass.flow -> @RefPass.flow
+  local -52:17 stored: i32 (const)
+  callee -52:26 RefPass.target -> @RefPass.target
+  callee -50:13 RefPass.storeFrom -> @RefPass.storeFrom
+  callee -48:15 RefPass.storeFrom -> @RefPass.storeFrom
+  callee -45:11 RefPass.storeFrom -> @RefPass.storeFrom
+  local -38:15 named: FunctionSig | null (const)
+  callee -36:11 RefPass.storeOne -> @RefPass.storeOne
+  local -33:15 local: Local | null (const)
+  callee -31:11 RefPass.storeFrom -> @RefPass.storeFrom
+  callee -31:34 RefPass.localPlace -> @RefPass.localPlace
+  callee -25:9 RefPass.scan -> @RefPass.scan
+  callee -24:9 RefPass.storeFrom -> @RefPass.storeFrom
+  callee -24:32 RefPass.fieldPlace -> @RefPass.fieldPlace
+  callee -21:9 RefPass.scan -> @RefPass.scan
+  callee -20:9 RefPass.scan -> @RefPass.scan
+  callee -19:9 RefPass.storeFrom -> @RefPass.storeFrom
+  callee -19:32 RefPass.elementPlace -> @RefPass.elementPlace
+  local -16:15 site: boolean (const)
+  callee -16:22 RefPass.scanCall -> @RefPass.scanCall
+  local -14:17 callee: FunctionSig | null (const)
+  callee -9:56 RefPass.stripType -> @RefPass.stripType
   callee -8:13 RefPass.storeFrom -> @RefPass.storeFrom
   callee -8:36 RefPass.returnPlace -> @RefPass.returnPlace
   callee -5:15 RefPass.arrayMethod -> @RefPass.arrayMethod
+  callee -5:53 RefPass.mapGet -> @RefPass.mapGet
   callee -4:13 RefPass.storeFrom -> @RefPass.storeFrom
   callee -4:36 RefPass.elementPlace -> @RefPass.elementPlace
   callee +6:5 RefPass.scan -> @RefPass.scan
 function RefPass.arrayMethod(this: RefPass, call: Node, takes: boolean): i32 -> @RefPass.arrayMethod [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: RefPass.typeOf TypeTable.isArray TypeTable.isFnRef TypeTable.refOf nish_panic_index nish_str_eq
-  pointer this: size=192 writesThrough=false captured=false passedTo=RefPass.typeOf#0
+  calls: RefPass.stripType RefPass.typeOf TypeTable.isArray TypeTable.isFnRef TypeTable.refOf nish_panic_index nish_str_eq
+  pointer this: size=192 writesThrough=false captured=false passedTo=RefPass.typeOf#0 RefPass.stripType#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 callee: Node (const)
   local +4:11 receiver: i32 (const)
   callee +4:22 RefPass.typeOf -> @RefPass.typeOf
   callee +5:10 TypeTable.isArray -> @TypeTable.isArray
-  local +8:11 element: i32 (const)
-  callee +8:21 TypeTable.refOf -> @TypeTable.refOf
-  callee +9:10 TypeTable.isFnRef -> @TypeTable.isFnRef
-  local +12:11 name: string (const)
-  local +14:13 writes: boolean (const)
-  local +24:11 reads: boolean (const)
+  local +10:11 element: i32 (const)
+  callee +10:21 RefPass.stripType -> @RefPass.stripType
+  callee +10:36 TypeTable.refOf -> @TypeTable.refOf
+  callee +11:10 TypeTable.isFnRef -> @TypeTable.isFnRef
+  local +14:11 name: string (const)
+  local +16:13 writes: boolean (const)
+  local +26:11 reads: boolean (const)
+function RefPass.mapGet(this: RefPass, call: Node): boolean -> @RefPass.mapGet [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isMapOwner nish_panic_index nish_str_eq
+  pointer this: size=192 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 access: Node (const)
+  local +1:11 callee: FunctionSig | null (const)
+  local +5:11 owner: StructInfo | null (const)
+  callee +6:30 isMapOwner -> @isMapOwner
 function RefPass.scanCall(this: RefPass, call: Node): boolean -> @RefPass.scanCall [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -424,8 +459,8 @@ function RefPass.scan(this: RefPass, node: Node): void -> @RefPass.scan [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefPass.flow
   escaping: node
-  calls: RefPass.elementPlace RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.localPlace RefPass.refType RefPass.returnPlace RefPass.scan RefPass.scanArgs RefPass.scanCall RefPass.storeFrom RefPass.target TypeTable.isFnRef nish_panic_index nish_str_eq
-  pointer this: size=192 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.flow#0 RefPass.localPlace#0 RefPass.refType#0 RefPass.scan#0 RefPass.isRef#0 RefPass.target#0 RefPass.refType#0 RefPass.flow#0 RefPass.scanCall#0 RefPass.scan#0 RefPass.scanArgs#0 RefPass.isRef#0 RefPass.flow#0 RefPass.returnPlace#0 RefPass.refType#0 RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.elementPlace#0 RefPass.refType#0 RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.fieldPlace#0 RefPass.refType#0 RefPass.storeFrom#0 RefPass.localPlace#0 RefPass.elementPlace#0 RefPass.scan#0 RefPass.scan#0 RefPass.scan#0
+  calls: RefPass.elementPlace RefPass.fieldPlace RefPass.flow RefPass.isRef RefPass.localPlace RefPass.refType RefPass.returnPlace RefPass.scan RefPass.scanArgs RefPass.scanCall RefPass.storeFrom RefPass.stripType RefPass.target TypeTable.isFnRef isRefAssignment nish_panic_index
+  pointer this: size=192 writesThrough=true captured=false passedTo=RefPass.isRef#0 RefPass.flow#0 RefPass.localPlace#0 RefPass.refType#0 RefPass.scan#0 RefPass.isRef#0 RefPass.target#0 RefPass.refType#0 RefPass.flow#0 RefPass.scanCall#0 RefPass.scan#0 RefPass.scanArgs#0 RefPass.isRef#0 RefPass.flow#0 RefPass.returnPlace#0 RefPass.refType#0 RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.elementPlace#0 RefPass.refType#0 RefPass.scan#0 RefPass.isRef#0 RefPass.flow#0 RefPass.fieldPlace#0 RefPass.refType#0 RefPass.stripType#0 RefPass.storeFrom#0 RefPass.localPlace#0 RefPass.elementPlace#0 RefPass.scan#0 RefPass.scan#0 RefPass.scan#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RefPass.scanCall#1 RefPass.storeFrom#3
   stackSites=0 stackLocals=0
   local +0:15 init: Node (const)
@@ -436,7 +471,8 @@ function RefPass.scan(this: RefPass, node: Node): void -> @RefPass.scan [method]
   callee +3:50 RefPass.refType -> @RefPass.refType
   callee +5:11 RefPass.scan -> @RefPass.scan
   local +10:15 op: string (const)
-  callee +11:77 RefPass.isRef -> @RefPass.isRef
+  callee +11:13 isRefAssignment -> @isRefAssignment
+  callee +11:36 RefPass.isRef -> @RefPass.isRef
   local +12:17 place: i32 (const)
   callee +12:25 RefPass.target -> @RefPass.target
   callee +12:55 RefPass.refType -> @RefPass.refType
@@ -464,14 +500,16 @@ function RefPass.scan(this: RefPass, node: Node): void -> @RefPass.scan [method]
   local +52:15 head: Node (const)
   local +54:17 decl: Node (const)
   local +55:17 local: Local | null (const)
-  callee +56:33 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +57:13 RefPass.storeFrom -> @RefPass.storeFrom
-  callee +57:28 RefPass.localPlace -> @RefPass.localPlace
-  callee +57:64 RefPass.elementPlace -> @RefPass.elementPlace
-  callee +60:9 RefPass.scan -> @RefPass.scan
+  local +56:17 type: i32 (const)
+  callee +56:46 RefPass.stripType -> @RefPass.stripType
+  callee +57:33 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +58:13 RefPass.storeFrom -> @RefPass.storeFrom
+  callee +58:28 RefPass.localPlace -> @RefPass.localPlace
+  callee +58:58 RefPass.elementPlace -> @RefPass.elementPlace
   callee +61:9 RefPass.scan -> @RefPass.scan
-  local +67:16 child: Node (const)
-  callee +68:7 RefPass.scan -> @RefPass.scan
+  callee +62:9 RefPass.scan -> @RefPass.scan
+  local +68:16 child: Node (const)
+  callee +69:7 RefPass.scan -> @RefPass.scan
 function RefPass.enter(this: RefPass, program: CheckedProgram, module: i32, sig: FunctionSig | null): void -> @RefPass.enter [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
