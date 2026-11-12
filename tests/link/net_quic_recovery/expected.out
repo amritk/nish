@@ -300,4 +300,13 @@ PASS  and the path with it
 PASS  and recovery's datagram size
 PASS  a full datagram is then 1300 bytes
 PASS  a limit under 1200 takes the path to 1200, no lower
-quic recovery: 302 passed, 0 failed, 0 skipped
+PASS  a 1452-byte probe goes out
+PASS  a limit lowered while it flies leaves a 1200 path as it is
+PASS  acknowledged after, the probe raises the path only to the limit
+PASS  and recovery's datagram size with it
+PASS  the oldest goes behind the others
+PASS  and is not counted as dropped
+PASS  in a full ring the oldest becomes the newest
+PASS  and the rest keep their order
+PASS  a ring of one is left as it is
+quic recovery: 311 passed, 0 failed, 0 skipped

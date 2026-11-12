@@ -131,6 +131,25 @@ export class QuicDatagramQueue {
     this.drop()
   }
 
+  /**
+   * Moves the oldest datagram behind the newest, unsent and not counted as
+   * dropped, so the ones queued after it go out first; for one too large
+   * for now that a later packet may carry. A ring of one is left as it is.
+   */
+  deferOldest(): void {
+    const entries: i32 = this.capacity()
+    if (this.count < 2) {
+      return
+    }
+    if (this.count < entries) {
+      const k: i32 = (this.head + this.count) % entries
+      const length: i32 = this.lengths[this.head]
+      quicPacketCopy(this.data, k * this.entrySize, this.data, this.head * this.entrySize, length)
+      this.lengths[k] = length
+    }
+    this.head = (this.head + 1) % entries
+  }
+
   /** Forgets the oldest datagram. */
   private drop(): void {
     if (this.count > 0) {

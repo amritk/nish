@@ -6,10 +6,13 @@
 // fall back to 1200 and drop a queued DATAGRAM that no longer fits, and
 // the carrier's limit and the client's max_udp_payload_size bound the
 // search; a lost probe is passed over by persistent congestion, an
-// acknowledged one breaks its run, and a lowered limit clamps the path.
+// acknowledged one breaks its run, a lowered limit clamps the path and
+// any probe acknowledged after it, and a DATAGRAM too large for now is
+// moved behind the rest.
 import { Suite } from "nish/testing";
 import { QUIC_RECOVERY_APPLICATION, QuicRecovery } from "nish/net/quic-recovery";
 import { QUIC_DATAGRAM_OK } from "nish/net/quic";
+import { QuicDatagramQueue } from "nish/net/quic-datagram";
 import { bytesOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { qcDrain, qcReceive } from "../net_quic_conn/client";
@@ -205,14 +208,54 @@ const pmClampChecks = (t: Suite): void => {
   qcReceive(p.c, pmTake(p));
   nqAck(p);
   t.eqI32("a validated probe makes the path 1452", p.conn.pathMtu, n32(1452));
-  p.conn.pathMtuLimit = n32(1300);
+  p.conn.setPathMtuLimit(n32(1300));
   t.eqI32("a limit lowered to 1300 holds the next datagram to 1300", p.conn.datagramSize(), n32(1300));
   t.eqI32("and the path with it", p.conn.pathMtu, n32(1300));
   t.eqI64("and recovery's datagram size", p.conn.recovery.datagramSize, n64(1300));
   pmWrite(p, n32(3000));
   t.eqI32("a full datagram is then 1300 bytes", toI32(pmTake(p).length), n32(1300));
-  p.conn.pathMtuLimit = n32(1000);
+  p.conn.setPathMtuLimit(n32(1000));
   t.eqI32("a limit under 1200 takes the path to 1200, no lower", p.conn.datagramSize(), n32(1200));
+
+  const late: NqPair = pmPair(new NqLimits());
+  const probe: u8[] = pmTake(late);
+  t.eqI32("a 1452-byte probe goes out", toI32(probe.length), n32(1452));
+  late.conn.setPathMtuLimit(n32(1300));
+  t.eqI32("a limit lowered while it flies leaves a 1200 path as it is", late.conn.pathMtu, n32(1200));
+  qcReceive(late.c, probe);
+  nqAck(late);
+  t.eqI32("acknowledged after, the probe raises the path only to the limit", late.conn.pathMtu, n32(1300));
+  t.eqI64("and recovery's datagram size with it", late.conn.recovery.datagramSize, n64(1300));
+};
+
+/** A DATAGRAM too large for now is moved behind the rest, not dropped, when it may fit later. */
+const pmDeferChecks = (t: Suite): void => {
+  const q = new QuicDatagramQueue(n32(4), n32(8));
+  const bytes: u8[] = bytesOf("abcdefgh");
+  q.push(bytes, n32(0), n32(8));
+  q.push(bytes, n32(0), n32(2));
+  q.push(bytes, n32(0), n32(3));
+  q.deferOldest();
+  const out: u8[] = new Array<u8>(8);
+  const order: string[] = [];
+  for (let k: i32 = 0; k < 3; k++) {
+    order.push(`${q.pop(out, n32(0), n32(8))}`);
+  }
+  t.eqStr("the oldest goes behind the others", order.join(" "), "2 3 8");
+  t.eqI32("and is not counted as dropped", q.dropped, n32(0));
+  for (let k: i32 = 0; k < 4; k++) {
+    q.push(bytes, n32(0), n32(k + 1));
+  }
+  q.deferOldest();
+  t.eqI32("in a full ring the oldest becomes the newest", q.peekLength(), n32(2));
+  const full: string[] = [];
+  for (let k: i32 = 0; k < 4; k++) {
+    full.push(`${q.pop(out, n32(0), n32(8))}`);
+  }
+  t.eqStr("and the rest keep their order", full.join(" "), "2 3 4 1");
+  q.push(bytes, n32(0), n32(5));
+  q.deferOldest();
+  t.eqI32("a ring of one is left as it is", q.peekLength(), n32(5));
 };
 
 /** Every path MTU check. */
@@ -223,4 +266,5 @@ export const recoveryPmtuChecks = (t: Suite): void => {
   pmSearchChecks(t);
   pmBlackHoleChecks(t);
   pmClampChecks(t);
+  pmDeferChecks(t);
 };

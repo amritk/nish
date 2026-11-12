@@ -341,8 +341,10 @@ each of which also runs under `--number-mode f64`.
   search never goes above the smallest of the carrier's `pathMtuLimit`, the
   room the carrier hands `takeDatagramWithin`, 1,452 bytes
   (`QUIC_CONN_DATAGRAM_MAX`) and the client's `max_udp_payload_size`. A
-  limit the carrier lowers after the search began holds from the next
-  datagram and the next probe: a validated `pathMtu` above it falls to it.
+  limit the carrier lowers through `setPathMtuLimit` after the search began
+  holds from the next datagram and the next probe: a validated `pathMtu`
+  above it falls to it, and a probe acknowledged after it raises the path
+  no higher than it.
   1,200 bytes is the floor and the size every connection starts at, and a
   limit of 1,200 or less turns discovery off.
 - **Only an acknowledgement validates a size.** A probe is a PING padded
@@ -369,7 +371,8 @@ each of which also runs under `--number-mode f64`.
 - **A new path starts again at 1,200.** A migration resets the search, and
   a path still being validated sends 1,200-byte datagrams whatever the old
   path had validated. A queued DATAGRAM past that size is held, not dropped,
-  until validation ends.
+  until validation ends: it is moved behind the others, which go out ahead of
+  it, so it never blocks the queue.
 - **Open: a busy sender does not probe.** A probe goes only in a datagram
   that would otherwise not be sent, so a sender that always has stream or
   DATAGRAM data due stays at 1,200 bytes until it runs dry. That costs
