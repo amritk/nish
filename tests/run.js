@@ -23121,12 +23121,273 @@ if (dealtHere("cliChecks")) {
     }
   }
 
+  // ---- WP28 C0: the compatibility dialect's machinery --------------------------------
+  // Everything a feature of the dialect plugs into, with no feature built: the
+  // allow-list on the flag, `nish.compat` in the root manifest and the ceiling
+  // it puts on a dependency, the mark in every module, and the number the
+  // dialect implies. The refusals with a code are `tests/link/compat_*`; what
+  // is here is the flag, the files a build writes, and the pairs of builds that
+  // have to agree. Like the section after it, it rides in this group's tail.
+  if (!only || "compat".includes(only)) {
+    const work = path.join(buildDir, "compat")
+    fs.rmSync(work, { recursive: true, force: true })
+    fs.mkdirSync(work, { recursive: true })
+    const nish = (args, cwd = root) => spawnSync(NISH, args, { cwd, encoding: "utf8" })
+    const shown = (r) => `exit ${r.status}\n${r.stderr}${r.stdout}`
+    const smoke = path.join(casesDir, "add_plain.ts")
+    /** One compile of `source` to `work/<name>.ll`: the run, and the IR it wrote (empty when it wrote none). */
+    const built = (name, source, flags, cwd = root) => {
+      const out = path.join(work, `${name}.ll`)
+      const r = nish([source, "-o", out, ...flags], cwd)
+      return { r, ir: fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "" }
+    }
+    /** The dialect's mark in a module's IR: the number mode it names, or null for a module without one. */
+    const markOf = (ir) => {
+      const named = /^!nish\.compat = !\{(!\d+)\}$/m.exec(ir)
+      const node = named === null ? null : new RegExp(`^${named[1]} = !\\{!"(\\w+)"\\}$`, "m").exec(ir)
+      return node === null ? null : node[1]
+    }
+    const NOTE = "`--number-mode i32` beside the compatibility dialect"
+
+    // The flag.
+    const strict = built("strict", smoke, [])
+    const bare = built("bare", smoke, ["--compat"])
+    check(
+      "compat: a bare `--compat` builds, marks the module `!nish.compat` and makes a bare `number` the double",
+      bare.r.status === 0 && markOf(bare.ir) === "f64" && bare.ir.includes("double @add(double noundef %a"),
+      shown(bare.r) + bare.ir
+    )
+    check(
+      "compat: a strict build carries no `!nish.compat`, and its `number` is the 32-bit integer",
+      strict.r.status === 0 && !strict.ir.includes("nish.compat") && strict.ir.includes("i32 @add(i32 noundef %a"),
+      shown(strict.r) + strict.ir
+    )
+    for (const [flag, name] of [
+      ["--compat=async", "async"],
+      ["--compat=async,decorators", "async"],
+      ["--compat=", ""],
+    ]) {
+      const refused = built(`refused${flag.length}`, smoke, [flag])
+      check(
+        `compat: \`${flag}\` names a feature this compiler has not built: a usage error that names it, and no IR`,
+        refused.r.status === 2 &&
+          refused.r.stderr.includes(
+            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: this compiler has built none yet, and a bare \`--compat\` allows every one`
+          ) &&
+          refused.ir === "",
+        shown(refused.r)
+      )
+    }
+
+    // The checked form opens with the dialect, and only under it.
+    const checkedStrict = nish([smoke, "--emit-checked"])
+    const checkedCompat = nish([smoke, "--emit-checked", "--compat"])
+    const checkedPinned = nish([smoke, "--emit-checked", "--compat", "--number-mode", "i32"])
+    check(
+      "compat: `--emit-checked` opens with the dialect, its number and its features, and a strict build's does not",
+      checkedStrict.status === 0 &&
+        checkedCompat.status === 0 &&
+        checkedPinned.status === 0 &&
+        checkedCompat.stdout.startsWith("compat number=f64 features=[]\n") &&
+        checkedPinned.stdout === `compat number=i32 features=[]\n${checkedStrict.stdout}` &&
+        !checkedStrict.stdout.includes("compat "),
+      shown(checkedCompat) + shown(checkedPinned)
+    )
+
+    // The number: f64 is implied, a named mode wins wherever it is written, and
+    // i32 beside the dialect is priced by one note that a flag silences.
+    const pinned = built("pinned", smoke, ["--compat", "--number-mode", "i32"])
+    const pinnedFirst = built("pinned-first", smoke, ["--number-mode", "i32", "--compat"])
+    const pinnedJson = built("pinned-json", smoke, ["--compat", "--number-mode", "i32", "--json"])
+    const pinnedQuiet = built("pinned-quiet", smoke, ["--compat", "--number-mode", "i32", "--no-warn-performance"])
+    const double = built("double", smoke, ["--compat", "--number-mode", "f64"])
+    check(
+      "compat: `--number-mode i32` beside `--compat` keeps the 32-bit integer, on either side of it, and the mark says so",
+      pinned.r.status === 0 &&
+        markOf(pinned.ir) === "i32" &&
+        pinned.ir.includes("i32 @add(i32 noundef %a") &&
+        pinnedFirst.r.status === 0 &&
+        pinnedFirst.ir === pinned.ir,
+      shown(pinned.r) + shown(pinnedFirst.r)
+    )
+    const noteObjects = pinnedJson.r.stdout.split("\n").filter((line) => line.includes('"code":"NL9018"'))
+    check(
+      "compat: that build is priced by one performance note (NL9018) at the entry, and `--no-warn-performance` silences it",
+      pinned.r.stderr.includes(`add_plain.ts:1:1: performance: ${NOTE}`) &&
+        pinnedFirst.r.stderr.includes(NOTE) &&
+        noteObjects.length === 1 &&
+        noteObjects[0].includes('"severity":"performance"') &&
+        pinnedQuiet.r.status === 0 &&
+        !pinnedQuiet.r.stderr.includes(NOTE) &&
+        pinnedQuiet.ir === pinned.ir,
+      shown(pinned.r) + shown(pinnedJson.r) + shown(pinnedQuiet.r)
+    )
+    check(
+      "compat: the dialect's own number draws no note, implied or named",
+      double.r.status === 0 &&
+        double.ir === bare.ir &&
+        !double.r.stderr.includes(NOTE) &&
+        !bare.r.stderr.includes(NOTE) &&
+        !strict.r.stderr.includes(NOTE),
+      shown(double.r) + shown(bare.r)
+    )
+    // WP28 S5: a bare `number` in `main`'s return type is the double under the
+    // dialect, and is refused by the rule `--number-mode f64` already has, in
+    // the same words. The dialect adds no diagnostic of its own here.
+    const mainNumber = path.join(work, "main_number.ts")
+    fs.writeFileSync(mainNumber, "export const main = (): number => 0\n")
+    const underDouble = nish([mainNumber, "-o", path.join(work, "main_number.ll"), "--number-mode", "f64", "--json"])
+    const underCompat = nish([mainNumber, "-o", path.join(work, "main_number.ll"), "--compat", "--json"])
+    const underStrict = nish([mainNumber, "-o", path.join(work, "main_number.ll")])
+    check(
+      "compat: `main` returning a bare `number` is refused as `--number-mode f64` refuses it (NL2140), word for word",
+      underStrict.status === 0 &&
+        underDouble.status === 1 &&
+        underCompat.status === 1 &&
+        underDouble.stdout.includes('"code":"NL2140"') &&
+        underCompat.stdout === underDouble.stdout &&
+        underCompat.stderr === underDouble.stderr,
+      shown(underDouble) + shown(underCompat)
+    )
+
+    // The manifest: `nish.compat` in the root package, found from the entry.
+    const packageWith = (name, nishField) => {
+      const dir = path.join(work, name)
+      fs.mkdirSync(path.join(dir, "src"), { recursive: true })
+      fs.writeFileSync(
+        path.join(dir, "package.json"),
+        `${JSON.stringify({ name, private: true, ...(nishField === null ? {} : { nish: nishField }) }, null, 2)}\n`
+      )
+      fs.writeFileSync(path.join(dir, "src", "main.ts"), "export const half = (n: number): number => n / 2\n")
+      return path.join(dir, "src", "main.ts")
+    }
+    const HALF_DOUBLE = "double @half(double noundef %n)"
+    /** A module's IR without the name of the package directory it was built from. */
+    const anywhere = (built, name) => built.ir.replaceAll(name, "ROOT")
+    const rootAll = built("root-all", packageWith("root-all", { compat: true }), [])
+    const rootNone = built("root-none", packageWith("root-none", { compat: [] }), [])
+    const rootStrict = built("root-strict", packageWith("root-strict", null), [])
+    const rootOther = built("root-other", packageWith("root-other", { noPanic: [] }), [])
+    check(
+      "compat: `nish.compat` in the root manifest -- `true`, or a list of features -- is `--compat` without the flag",
+      rootAll.r.status === 0 &&
+        markOf(rootAll.ir) === "f64" &&
+        rootAll.ir.includes(HALF_DOUBLE) &&
+        rootNone.r.status === 0 &&
+        markOf(rootNone.ir) === "f64" &&
+        rootNone.ir.includes(HALF_DOUBLE),
+      shown(rootAll.r) + shown(rootNone.r)
+    )
+    check(
+      "compat: a root manifest without `nish.compat` builds the strict dialect",
+      rootStrict.r.status === 0 &&
+        !rootStrict.ir.includes("nish.compat") &&
+        rootOther.r.status === 0 &&
+        !rootOther.ir.includes("nish.compat") &&
+        anywhere(rootOther, "root-other") === anywhere(rootStrict, "root-strict"),
+      shown(rootStrict.r) + shown(rootOther.r)
+    )
+    const rootPinned = built("root-pinned", path.join(work, "root-all", "src", "main.ts"), ["--number-mode", "i32"])
+    check(
+      "compat: `--number-mode i32` on the command line overrides the number a manifest's dialect implies, at the same price",
+      rootPinned.r.status === 0 &&
+        markOf(rootPinned.ir) === "i32" &&
+        rootPinned.ir.includes("i32 @half(i32 noundef %n)") &&
+        rootPinned.r.stderr.includes(NOTE),
+      shown(rootPinned.r)
+    )
+    // The flag is the build's own word and the manifest is the package's: a
+    // flag on a strict root builds the dialect, as NL3057's message promises.
+    const flagged = built("root-flagged", path.join(work, "root-strict", "src", "main.ts"), ["--compat"])
+    check(
+      "compat: `--compat` on a root whose manifest asks for nothing builds what the manifest's `true` builds",
+      flagged.r.status === 0 && anywhere(flagged, "root-strict") === anywhere(rootAll, "root-all"),
+      shown(flagged.r)
+    )
+
+    // The ceiling and the mark, over a program of several modules: every
+    // module carries the mark, the dependency's as well as the root's.
+    const modulesOf = (name, program, flags) => {
+      const dir = path.join(work, name)
+      const r = nish([path.join(linkDir, program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags])
+      const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".ll")) : []
+      return { r, marks: files.map((f) => markOf(fs.readFileSync(path.join(dir, f), "utf8"))) }
+    }
+    const program = modulesOf("program", "compat_manifest_program", [])
+    check(
+      "compat: every module of a compat build carries `!nish.compat`, a dependency's as well as the root's",
+      program.r.status === 0 && program.marks.length >= 2 && program.marks.every((mark) => mark === "f64"),
+      shown(program.r) + JSON.stringify(program.marks)
+    )
+    const lifted = modulesOf("lifted", "compat_ceiling_dialect", ["--compat"])
+    const featureLifted = modulesOf("feature-lifted", "compat_ceiling_feature", ["--compat"])
+    check(
+      "compat: a dependency the root's manifest refuses (NL3057) builds when the build itself passes `--compat`",
+      lifted.r.status === 0 && lifted.marks.length >= 2 && lifted.marks.every((mark) => mark === "f64"),
+      shown(lifted.r) + JSON.stringify(lifted.marks)
+    )
+    check(
+      "compat: `--compat` allows every feature this compiler has built, and a dependency that asks for another is still refused",
+      featureLifted.r.status === 1 &&
+        featureLifted.r.stderr.includes("asks for the compatibility feature `async`") &&
+        featureLifted.marks.length === 0,
+      shown(featureLifted.r)
+    )
+
+    // `--help` groups the flags by what they are an axis of, and the dialect
+    // is the first axis.
+    const help = nish(["--help"])
+    const axes = ["Dialect", "Build", "Output", "Diagnostics", "Policy"]
+    const helpLines = help.stdout.split("\n")
+    const axisAt = axes.map((axis) => helpLines.indexOf(axis))
+    // The axes end at "Agents", which repeats two flags as advice.
+    const axesEnd = helpLines.indexOf("Agents")
+    const flagRows = helpLines
+      .map((line, i) => ({ flag: /^ {2}(-[\w-]+)/.exec(line)?.[1], i }))
+      .filter((row) => row.flag !== undefined && row.i < axesEnd)
+    const axisOf = (flag) => {
+      const row = flagRows.find((r) => r.flag === flag)
+      return row === undefined ? "" : (axes.findLast((_, a) => axisAt[a] >= 0 && axisAt[a] < row.i) ?? "")
+    }
+    const repeated = flagRows.filter((row, i) => flagRows.findIndex((other) => other.flag === row.flag) !== i)
+    check(
+      "compat: `--help` lists the flags under Dialect, Build, Output, Diagnostics and Policy, in that order, each flag once",
+      help.status === 0 &&
+        axisAt.every((at, a) => at >= 0 && (a === 0 || at > axisAt[a - 1])) &&
+        axesEnd > axisAt[axes.length - 1] &&
+        repeated.length === 0 &&
+        flagRows.length > 30,
+      `${JSON.stringify(axisAt)} ${repeated.map((row) => row.flag).join(" ")}\n${help.stdout}`
+    )
+    const placed = [
+      ["--compat", "Dialect"],
+      ["--number-mode", "Dialect"],
+      ["--link", "Build"],
+      ["--plain", "Build"],
+      ["-o", "Output"],
+      ["--emit-checked", "Output"],
+      ["--json", "Diagnostics"],
+      ["--no-warn-performance", "Diagnostics"],
+      ["--deny-panics", "Policy"],
+      ["--sandbox", "Policy"],
+    ]
+    const misplaced = placed.filter(([flag, axis]) => axisOf(flag) !== axis)
+    check(
+      "compat: `--compat` and `--number-mode` are the Dialect axis, and a flag of each other axis is under its own",
+      misplaced.length === 0 &&
+        helpLines.some((line) => /^ {2}--compat\[=<feature>,\.\.\.\] +compatibility dialect; implies f64 numbers$/.test(line)),
+      `${misplaced.map(([flag, axis]) => `${flag}: ${axisOf(flag) || "nowhere"}, not ${axis}`).join("\n")}\n${help.stdout}`
+    )
+  }
+
   // ---- WP28 S3: `--compat` erases to the strict dialect ---------------------------------
   // The compatibility dialect is allowed to accept more programs as it grows and
   // is never allowed to change one the strict dialect already has an answer for.
   // `tests/compat-erasure.js` compiles every program in `tests/cases` with and
-  // without the flag and compares the two answers byte for byte; this section
-  // runs it over the whole corpus, then proves that it can fail.
+  // without the flag and compares the two answers byte for byte, the dialect's
+  // mark aside, under the case's own number mode and under the one the dialect
+  // implies; this section runs it over the whole corpus, then proves that it
+  // can fail.
   //
   // It closes this group rather than taking a key of its own in
   // `DEALT_SECTIONS`: the group is a tail every shard deal already carries, and
@@ -23149,30 +23410,14 @@ if (dealtHere("cliChecks")) {
         { cwd: root, encoding: "utf8", env: { ...process.env, ...env }, maxBuffer: 64 * 1024 * 1024 }
       )
 
-    const smoke = path.join(casesDir, "add_plain.ts")
-    const bare = spawnSync(NISH, [smoke, "--compat", "-o", path.join(buildDir, "compat-bare.ll")], {
-      cwd: root,
-      encoding: "utf8",
-    })
-    check("compat-erasure: a bare `--compat` is accepted", bare.status === 0, bare.stderr)
-    const valuedOut = path.join(buildDir, "compat-valued.ll")
-    fs.rmSync(valuedOut, { force: true })
-    const valued = spawnSync(NISH, [smoke, "--compat=async", "-o", valuedOut], { cwd: root, encoding: "utf8" })
-    check(
-      "compat-erasure: `--compat=<value>` is a usage error that names the bare flag and writes no IR",
-      valued.status === 2 &&
-        valued.stderr.includes("`--compat` takes no value, and `--compat=async` gives it one") &&
-        valued.stderr.includes("write a bare `--compat`") &&
-        !fs.existsSync(valuedOut),
-      `exit ${valued.status}\n${valued.stderr}`
-    )
-
     const corpus = erasure(NISH, "")
     const counts =
-      /^compat-erasure: (\d+) positive cases byte-identical under --compat \((\d+) files\), (\d+) reject cases rejected alike \((\d+) coded diagnostics\), (\d+) skipped$/m.exec(
+      /^compat-erasure: (\d+) positive cases byte-identical under --compat \((\d+) files\), (\d+) reject cases rejected alike \((\d+) coded diagnostics\), (\d+) cases the same under --compat as under `--number-mode f64`, (\d+) skipped$/m.exec(
         corpus.stdout
       )
-    const [positiveCount, fileCount, rejectCount, codedCount, skippedCount] = (counts ?? []).slice(1).map(Number)
+    const [positiveCount, fileCount, rejectCount, codedCount, numberedCount, skippedCount] = (counts ?? [])
+      .slice(1)
+      .map(Number)
     const rejectCases = cases.filter((name) => fs.existsSync(path.join(casesDir, `${name}.err`))).length
     check(
       "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",
@@ -23182,7 +23427,8 @@ if (dealtHere("cliChecks")) {
     // A run that compared nothing would agree with itself: the counts are the
     // corpus's own, files were written and compared (a case that asks for
     // `--emit-ast` prints instead), the reject cases gave at least a coded
-    // diagnostic each, and none was skipped.
+    // diagnostic each, some case was compared under the dialect's own number,
+    // and none was skipped.
     check(
       `compat-erasure: the run covered the corpus (${cases.length} cases) and skipped none`,
       counts !== null &&
@@ -23190,13 +23436,16 @@ if (dealtHere("cliChecks")) {
         rejectCount === rejectCases &&
         fileCount > 0 &&
         codedCount >= rejectCount &&
+        numberedCount > 0 &&
+        numberedCount <= cases.length &&
         skippedCount === 0,
       corpus.stdout
     )
 
     // The negative test: a compiler that is the real one until it is handed
     // `--compat`, and then changes one thing, named by COMPAT_TAMPER -- one line
-    // of the IR it wrote, one word of a diagnostic, or the code of one in its
+    // of the IR it wrote, that line only where the dialect picks the number,
+    // the mark itself, one word of a diagnostic, or the code of one in its
     // `--json` form. The runner has to catch each, and name where.
     const tamperer = path.join(erasureDir, "tampering-nish.cjs")
     fs.mkdirSync(erasureDir, { recursive: true })
@@ -23209,9 +23458,15 @@ const args = process.argv.slice(2)
 const r = spawnSync(${JSON.stringify(NISH)}, args, { maxBuffer: 64 * 1024 * 1024 })
 let [out, err] = [r.stdout.toString("latin1"), r.stderr.toString("latin1")]
 const mode = args.includes("--compat") ? process.env.COMPAT_TAMPER : undefined
-if (mode === "ir" && r.status === 0) {
+const rewrite = (pattern, to) => {
   const ll = args[args.indexOf("-o") + 1]
-  fs.writeFileSync(ll, fs.readFileSync(ll, "latin1").replace(/^define .*$/m, (line) => line + " ; tampered"), "latin1")
+  fs.writeFileSync(ll, fs.readFileSync(ll, "latin1").replace(pattern, to), "latin1")
+}
+if ((mode === "ir" || (mode === "number" && !args.includes("--number-mode"))) && r.status === 0) {
+  rewrite(/^define .*$/m, (line) => line + " ; tampered")
+}
+if (mode === "mark" && r.status === 0) {
+  rewrite(/^!nish\\.compat = .*\\n/m, "")
 }
 if (mode === "word" && !args.includes("--json")) {
   err = err.replace("requires", "wants")
@@ -23234,6 +23489,20 @@ process.exitCode = r.status ?? 1
         "one changed line of IR",
         `compat-erasure: ${positiveCase}: --compat changed the file ${positiveCase}.ll, first at line `,
         " ; tampered",
+      ],
+      [
+        "number",
+        positiveCase,
+        "one line of IR that `--number-mode f64` does not have",
+        `compat-erasure: ${positiveCase}: --compat is not \`--number-mode f64\` in the file ${positiveCase}.ll, first at line `,
+        " ; tampered",
+      ],
+      [
+        "mark",
+        positiveCase,
+        "a module without its `!nish.compat` mark",
+        `compat-erasure: ${positiveCase}: --compat left the module ${positiveCase}.ll without its \`!nish.compat\` mark, first at line 1\n`,
+        "; ModuleID",
       ],
       [
         "word",

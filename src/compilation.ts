@@ -1715,6 +1715,9 @@ export class Compilation {
           allowed = true
         }
       }
+      if (!compatHasFeature(feature)) {
+        return `Package \`${name}\` asks for the compatibility feature \`${feature}\`, which the root package's \`compat\` does not allow: a program is compiled in its root package's dialect, and \`${feature}\` is no feature of it that this compiler has built, so \`${specifier}\` cannot be part of this program`
+      }
       if (!allowed) {
         return `Package \`${name}\` asks for the compatibility feature \`${feature}\`, which ${tail}`
       }

@@ -1,0 +1,7 @@
+{
+  "name": "compat-ceiling-feature",
+  "private": true,
+  "nish": {
+    "compat": []
+  }
+}

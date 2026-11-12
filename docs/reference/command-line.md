@@ -13,13 +13,21 @@ nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
 nish -v, --version | -h, --help
 ```
 
-## Build
+## Dialect
 
-<scalar-field name="-o, --output" type="&lt;file.ll&gt;|&lt;dir&gt;/">
+<scalar-field name="--compat[=&lt;feature&gt;,...]">
 
-where the IR goes; a dir gets one per module
+compatibility dialect; implies f64 numbers
 
 </scalar-field>
+
+<scalar-field name="--number-mode" type="i32|f64">
+
+what a bare number is; i32 by default
+
+</scalar-field>
+
+## Build
 
 <scalar-field name="--link" type="&lt;exe&gt;">
 
@@ -45,101 +53,55 @@ stamp the IR with a target's data layout
 
 </scalar-field>
 
-<scalar-field name="-g">
-
-DWARF debug info, for gdb and lldb
-
-</scalar-field>
-
 <scalar-field name="--threads">
 
 an arena per thread, for --emit-napi-async
 
 </scalar-field>
 
-## Check
+<scalar-field name="--host" type="&lt;file.ts&gt;">
 
-<scalar-field name="--fix">
-
-apply the safe fixes in place, then recheck
+a page module whose functions wasm imports
 
 </scalar-field>
 
-<scalar-field name="--json">
+<scalar-field name="--plain">
 
-each diagnostic as one JSON line on stdout
-
-</scalar-field>
-
-<scalar-field name="--warn-portability">
-
-warn where TypeScript would answer otherwise
+the IR without LLVM's attributes
 
 </scalar-field>
 
-<scalar-field name="--no-warn-performance">
+<scalar-field name="--no-strict-exports">
 
-silence the performance warnings
-
-</scalar-field>
-
-<scalar-field name="--deny-panics">
-
-refuse an unproven panic in your package
+keep every function externally visible
 
 </scalar-field>
 
-<scalar-field name="--deny-retention">
+<scalar-field name="--no-stack-alloc">
 
-refuse retained arena memory in your package
-
-</scalar-field>
-
-## Capabilities
-
-<scalar-field name="--capabilities">
-
-print what the program can reach, on stderr
+keep every value off the stack
 
 </scalar-field>
 
-<scalar-field name="--allow" type="&lt;cap&gt;[,&lt;cap&gt;...]">
+## Output
 
-refuse a program that reaches more
+<scalar-field name="-o, --output" type="&lt;file.ll&gt;|&lt;dir&gt;/">
 
-</scalar-field>
-
-<scalar-field name="--deny" type="&lt;cap&gt;[,&lt;cap&gt;...]">
-
-refuse a program that reaches these
+where the IR goes; a dir gets one per module
 
 </scalar-field>
 
-<scalar-field name="--deterministic">
+<scalar-field name="-g">
 
-same float bits everywhere, no clock or I/O
-
-</scalar-field>
-
-<scalar-field name="--sandbox[=best-effort]">
-
-confine a Linux binary to what main reaches
+DWARF debug info, for gdb and lldb
 
 </scalar-field>
 
-<scalar-field name="--emit-capabilities" type="&lt;file.json&gt;">
+<scalar-field name="--runtime-decls">
 
-write the capability report
-
-</scalar-field>
-
-<scalar-field name="--update-capability-lock">
-
-record what each dependency reaches
+declare the runtime even when unused
 
 </scalar-field>
-
-## Interop
 
 <scalar-field name="--emit-header" type="&lt;file.h&gt;">
 
@@ -150,12 +112,6 @@ a C header for the exports
 <scalar-field name="--emit-dts" type="&lt;file.d.ts&gt;">
 
 their typings, and a &lt;file>.mjs loader
-
-</scalar-field>
-
-<scalar-field name="--host" type="&lt;file.ts&gt;">
-
-a page module whose functions wasm imports
 
 </scalar-field>
 
@@ -176,8 +132,6 @@ the same, plus a promise for each export
 the program as TypeScript, instead of IR
 
 </scalar-field>
-
-## Inspect
 
 <scalar-field name="--emit-ast">
 
@@ -203,47 +157,91 @@ write the arena retention report
 
 </scalar-field>
 
+<scalar-field name="--emit-capabilities" type="&lt;file.json&gt;">
+
+write the capability report
+
+</scalar-field>
+
+## Diagnostics
+
+<scalar-field name="--fix">
+
+apply the safe fixes in place, then recheck
+
+</scalar-field>
+
+<scalar-field name="--json">
+
+each diagnostic as one JSON line on stdout
+
+</scalar-field>
+
+<scalar-field name="--warn-portability">
+
+warn where TypeScript would answer otherwise
+
+</scalar-field>
+
+<scalar-field name="--no-warn-performance">
+
+silence the performance warnings
+
+</scalar-field>
+
 <scalar-field name="--explain-memory">
 
 why loops and functions keep their memory
 
 </scalar-field>
 
-## Code generation
+<scalar-field name="--capabilities">
 
-<scalar-field name="--number-mode" type="i32|f64">
-
-what a bare number is; i32 by default
+print what the program can reach, on stderr
 
 </scalar-field>
 
-<scalar-field name="--compat">
+## Policy
 
-compatibility dialect; accepts nothing yet
+<scalar-field name="--allow" type="&lt;cap&gt;[,&lt;cap&gt;...]">
 
-</scalar-field>
-
-<scalar-field name="--plain">
-
-the IR without LLVM's attributes
+refuse a program that reaches more
 
 </scalar-field>
 
-<scalar-field name="--no-strict-exports">
+<scalar-field name="--deny" type="&lt;cap&gt;[,&lt;cap&gt;...]">
 
-keep every function externally visible
-
-</scalar-field>
-
-<scalar-field name="--no-stack-alloc">
-
-keep every value off the stack
+refuse a program that reaches these
 
 </scalar-field>
 
-<scalar-field name="--runtime-decls">
+<scalar-field name="--deny-panics">
 
-declare the runtime even when unused
+refuse an unproven panic in your package
+
+</scalar-field>
+
+<scalar-field name="--deny-retention">
+
+refuse retained arena memory in your package
+
+</scalar-field>
+
+<scalar-field name="--deterministic">
+
+same float bits everywhere, no clock or I/O
+
+</scalar-field>
+
+<scalar-field name="--sandbox[=best-effort]">
+
+confine a Linux binary to what main reaches
+
+</scalar-field>
+
+<scalar-field name="--update-capability-lock">
+
+record what each dependency reaches
 
 </scalar-field>
 

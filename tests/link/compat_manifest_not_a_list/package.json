@@ -1,0 +1,7 @@
+{
+  "name": "compat-manifest-not-a-list",
+  "private": true,
+  "nish": {
+    "compat": "async"
+  }
+}
