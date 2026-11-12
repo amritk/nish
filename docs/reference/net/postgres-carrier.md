@@ -126,7 +126,8 @@ server's `statement_timeout`.
 A connection that is refused, reset, closed or past its connect
 timeout fails every query on it with `PG_CARRIER_FAILED`, `failure` the
 connection's `PG_ERR_*` and `socketError` the socket's negative errno
-(`-110` for the timeout, 0 when the server closed cleanly). A plain query
+(`-110` for the timeout, 0 when the server closed cleanly; under TLS, see
+below). A plain query
 the server refuses answers `PG_CARRIER_ERROR`, then `PG_CARRIER_FAILED`
 with `failure` `PG_ERR_NONE`; a batched query the server refuses answers
 only `PG_CARRIER_FAILED` with `failure` `PG_ERR_NONE`.
@@ -135,9 +136,28 @@ with no build open) panic.
 
 </scalar-detail>
 
-`tests/link/std_postgres_carrier` runs one against a loopback backend;
-`tests/postgres/carrier.ts` against a live server. Caps and findings:
-`docs/security/postgres.md`.
+<scalar-detail title="TLS">
+
+With `PgConfig.tls` set to `PG_TLS_REQUIRE` or `PG_TLS_VERIFY_FULL`,
+each connection opens with an SSLRequest and reads exactly the one byte of
+its answer, so nothing the server sends in the clear reaches the protocol:
+after `N` nothing more is read, and after `S` the next bytes are the
+handshake's, so anything else fails it. `S` goes on to a TLS 1.3 handshake
+(`nish/net/tls/record-client`) driven on the same loop without blocking, the
+StartupMessage held until it is done; any other answer fails the connection
+with `PG_ERR_TLS`. Under `PG_TLS_VERIFY_FULL` the server's chain is checked
+with `nish/net/tls/verify` against `PgConfig.tlsRootsPath` (or the system's
+store) and its name against `tlsServerName` (or the target's host);
+`PG_TLS_REQUIRE` encrypts without checking who answered. A refused
+certificate or failed handshake is `PG_ERR_TLS` with `socketError` the TLS
+alert (positive); a refused SSLRequest has `socketError` 0. TLS needs a TCP
+target.
+
+</scalar-detail>
+
+`tests/link/std_postgres_carrier` runs one against a loopback backend,
+`tests/link/std_postgres_tls` one over TLS; `tests/postgres/carrier.ts`
+against a live server. Caps and findings: `docs/security/postgres.md`.
 
 Written for this module; not ported from another implementation.
 
@@ -171,7 +191,7 @@ class PgCarrier
 
 | Member | |
 | --- | --- |
-| `new PgCarrier(limits: PgCarrierLimits, pool: PgPool, target: PgTarget, handler: HttpHandler)` | A carrier for `pool`'s connections to `target`, its descriptor watched on `handler` as `limits.watch`. Panics on a cap or watch id out of range, a target that failed or is not a numeric address, or a poll set the system will not create. It allocates every table here and opens its poll set, but connects nothing until the first `next()`. |
+| `new PgCarrier(limits: PgCarrierLimits, pool: PgPool, target: PgTarget, handler: HttpHandler)` | A carrier for `pool`'s connections to `target`, its descriptor watched on `handler` as `limits.watch`. Panics on a cap or watch id out of range, a target that failed or is not a numeric address, TLS asked for on a Unix socket, `PG_TLS_VERIFY_FULL` with no root certificate to read from `tlsRootsPath` (or the system's store), or a poll set the system will not create. It allocates every table here and opens its poll set, but connects nothing until the first `next()`. |
 | `failure: i32` | Behind a `PG_CARRIER_FAILED`: the connection's `PG_ERR_*` failure when it was lost, else `PG_ERR_NONE` (the server's error, or a bind with no room). |
 | `query: i32` | The query the last event is about, as `run` answered it; -1 for none. |
 | `socketError: i32` | Behind a `PG_CARRIER_FAILED` for a lost connection: the socket error that ended it (`-110` for a connect timeout), or 0. |

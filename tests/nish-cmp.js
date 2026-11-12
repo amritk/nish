@@ -1147,7 +1147,30 @@ const pathMtu = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: PATH_MTU, why }))
   )
 
+/** The changelog words of the WP39 G2 server-clock fixes (H1-2, H2-3, WT-2). */
+const byFinding = (changelog) => (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog, why }))
+  )
+const lingeringClose = byFinding("lingering close")
+const http2Timeouts = byFinding("SETTINGS and idle timeouts for HTTP/2")
+const sessionClock = byFinding("session clock")
+
+/** The changelog line of the stage that runs TLS in the Postgres carrier. */
+const PG_TLS = "Postgres over TLS in the carrier"
+const pgTls = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: PG_TLS, why }))
+  )
+
 const DECLARED = [
+  // #1430: std/crypto/p256.ts inverts field elements by safegcd and verifies
+  // by one interleaved wNAF pass, so the module every importer writes moves.
+  ...["p256.ll", "std_crypto_p256.ll"].map((file) => ({
+    file,
+    changelog: "safegcd",
+    why: "std/crypto/p256.ts inverts field elements by safegcd and verifies signatures by one interleaved width-5 wNAF pass, so the module every importer of nish/crypto/p256 writes has new functions and renumbered values; no importer's own module moves",
+  })),
   // The TLS server takes secp256r1 key shares and its carrier an idle
   // timeout: four TLS classes gain fields, which moves every module laying
   // one out (TLS_SERVER_MOVED), and three tests use the new fields.
@@ -1200,6 +1223,14 @@ const DECLARED = [
     changelog: "Ship the SSSE3 and NEON Adler-32 kernels (WP38 S8)",
     why: "std/compress/checksum.ts's adler32Update now calls nish_adler32_hw and nish_adler32_update on one arm and the extracted walk on the other, so the module every importer of nish/compress writes declares two runtime functions and gains a function; no importer's own module moves",
   },
+  // WP34 N6: std/crypto/x25519.ts is split so tests/ct-asm.js can read it
+  // (f25519DecodeInto, f25519EncodeInto, x25519LadderStep, x25519LadderLoop,
+  // f25519MulRow), and ed25519.ts compiles the field arithmetic it imports.
+  ...["x25519.ll", "std_crypto_x25519.ll", "ed25519.ll"].map((file) => ({
+    file,
+    changelog: "the X25519 ladder",
+    why: "std/crypto/x25519.ts's decode, encode, ladder and multiply are split into helpers the disassembly check reads, so the module every importer of nish/crypto/x25519 writes, and ed25519.ll, which compiles that field arithmetic, gain functions and renumber; no importer's own module moves",
+  })),
   // std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd.
   {
     file: "text.ll",
@@ -3797,6 +3828,209 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts",
     ]
   ),
+  // WP39 G2: the HTTP/1.1 lingering close, the HTTP/2 SETTINGS and idle timeouts, the WebTransport session clock.
+  ...lingeringClose(
+    'Http1Config gains lingerTimeout and lingerBytes and Http1Connection a lingering state, so every program that reaches nish/net/http1-server (HttpDate included) declares wider structs in main.h, and the 0.38.0 seed refuses a program that sets lingerTimeout with "Unknown field"',
+    {
+      "bench/http1-request/main.ts": ["main.h"],
+      "bench/techempower/main.ts": ["main.h"],
+      "examples/prefork-server.ts": ["prefork-server.h"],
+      "tests/link/net_http1_server/main.ts": ["exit"],
+      "tests/link/net_http1_server_bad_config/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_head/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_head_timeout/main.ts": ["main.h"],
+      "tests/link/net_http1_server_bad_linger/main.ts": ["exit"],
+      "tests/link/net_http1_server_bad_linger_bytes/main.ts": ["exit"],
+      "tests/link/net_http1_server_bad_message/main.ts": ["main.h"],
+      "tests/link/net_http1_server_f64/main.ts": ["exit"],
+      "tests/link/net_http1_server_feed_window/main.ts": ["main.h"],
+      "tests/link/net_http1_server_frame_window/main.ts": ["main.h"],
+      "tests/link/net_http1_server_send_body/main.ts": ["main.h"],
+      "tests/link/net_http1_server_send_body_window/main.ts": ["main.h"],
+      "tests/link/net_http1_server_write_window/main.ts": ["main.h"],
+      "tests/link/net_http3/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_body_chunk/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_config/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_credit/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_local_limit/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_uni_limit/main.ts": ["main.h"],
+      "tests/link/net_http3_bad_write_chunk/main.ts": ["main.h"],
+      "tests/link/net_http3_ecn/main.ts": ["main.h"],
+      "tests/link/net_http3_ecn_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_errors/main.ts": ["main.h"],
+      "tests/link/net_http3_errors_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_server/main.ts": ["main.h"],
+      "tests/link/net_http3_server_bad_config/main.ts": ["main.h"],
+      "tests/link/net_http3_server_f64/main.ts": ["main.h"],
+      "tests/link/net_http3_write_window/main.ts": ["main.h"],
+      "tests/link/net_http_date/main.ts": ["main.h"],
+      "tests/link/net_http_date_f64/main.ts": ["main.h"],
+      "tests/link/net_quic_server_wipes/main.ts": ["main.h"],
+      "tests/link/net_quic_server_wipes_f64/main.ts": ["main.h"],
+      "tests/link/std_http1_end_head/main.ts": ["main.h"],
+      "tests/link/std_http1_mss/main.ts": ["main.h"],
+      "tests/link/std_http_compress/main.ts": ["main.h"],
+      "tests/link/tfb_entry/main.ts": ["main.h"],
+    }
+  ),
+  ...http2Timeouts(
+    "Http2Config gains settingsTimeout and idleTimeout, the connection a clock, and Http2TlsServer an expire method, so http2.ll, http2-tls.ll and every importer's structs and calls move, and the 0.38.0 seed refuses a program that sets them or calls expire",
+    {
+      "tests/link/net_http2/main.ts": ["exit"],
+      "tests/link/net_http2_bad_config/main.ts": ["http2.ll", "main.h", "main.ll"],
+      "tests/link/net_http2_bad_config_tls/main.ts": ["http2-tls.ll", "http2.ll", "main.h", "main.ll"],
+      "tests/link/net_http2_bad_idle/main.ts": ["exit"],
+      "tests/link/net_http2_bad_timeout/main.ts": ["exit"],
+      "tests/link/net_http2_errors/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_errors_f64/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_f64/main.ts": ["exit"],
+      "tests/link/net_http2_hpack_bomb/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_hpack_bomb_f64/main.ts": ["checks.ll", "http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_hpack_table/main.ts": ["http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_hpack_table_f64/main.ts": ["http2.ll", "main.h", "peer.ll"],
+      "tests/link/net_http2_reset/main.ts": ["http2.ll", "main.h", "main.ll", "peer.ll"],
+      "tests/link/net_http2_tls/main.ts": ["exit"],
+      "tests/link/net_http2_tls_f64/main.ts": ["exit"],
+    }
+  ),
+  ...sessionClock(
+    'WebTransportConfig gains idleTimeout and maxDatagramsPerSecond and the layer a session clock and a datagram window, so webtransport.ll and the relay\'s structs move, and the 0.38.0 seed refuses a program that sets idleTimeout with "Unknown field"',
+    {
+      "examples/relay/main.ts": ["main.h", "main.ll", "relay.ll", "webtransport.ll"],
+      "tests/link/net_interop_server/main.ts": ["exit"],
+      "tests/link/net_interop_server_f64/main.ts": ["exit"],
+      "tests/link/net_loopback/main.ts": ["exit"],
+      "tests/link/net_loopback_f64/main.ts": ["exit"],
+      "tests/link/net_relay/main.ts": ["exit"],
+      "tests/link/net_relay_bad_hello/main.ts": ["exit"],
+      "tests/link/net_relay_bad_idle/main.ts": ["exit"],
+      "tests/link/net_relay_bad_path/main.ts": ["exit"],
+      "tests/link/net_relay_bad_per_peer/main.ts": ["exit"],
+      "tests/link/net_relay_bad_pool/main.ts": ["exit"],
+      "tests/link/net_relay_bad_rate/main.ts": ["exit"],
+      "tests/link/net_relay_bad_sessions/main.ts": ["exit"],
+      "tests/link/net_relay_bad_spare/main.ts": ["exit"],
+      "tests/link/net_relay_bad_stats/main.ts": ["exit"],
+      "tests/link/net_relay_f64/main.ts": ["exit"],
+      "tests/link/net_relay_forged/main.ts": ["exit"],
+      "tests/link/net_relay_soak/main.ts": ["exit"],
+      "tests/link/net_webtransport/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_datagrams/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_idle/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_layer/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_pending/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_pending_high/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_rate/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_sessions/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_streams/main.ts": ["exit"],
+      "tests/link/net_webtransport_bad_streams_high/main.ts": ["exit"],
+      "tests/link/net_webtransport_close_window/main.ts": ["exit"],
+      "tests/link/net_webtransport_datagram_window/main.ts": ["exit"],
+      "tests/link/net_webtransport_f64/main.ts": ["exit"],
+      "tests/link/net_webtransport_stream_window/main.ts": ["exit"],
+      "tests/link/net_webtransport_whole_window/main.ts": ["exit"],
+    }
+  ),
+  ...pgTls(
+    "PgConfig gains tls, tlsRootsPath and tlsServerName and the carrier a TLS session per slot, so the config struct grows by 24 bytes and every module that lays it out or reaches the carrier moves; the new TLS tests use exports the reference does not have, so only the candidate compiles them",
+    {
+      "bench/pg-batch-clock.ts": ["pg-batch-clock.h", "postgres.ll"],
+      "bench/pg-decode/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/net_serve_pg/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_bindend_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_element_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_end_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_int_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_bytes_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_int_array_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_null_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_param_text_array_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_start_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_array_window_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_async_flat/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_batch/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_add_int_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_add_text_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_add_text_window_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock_config_panic/main.ts": ["main.h", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock_started_panic/main.ts": ["main.h", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock_take_due_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_clock_turns_panic/main.ts": ["main.h", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_cap_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_empty_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_key_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_name_empty_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_name_nul_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_query_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_queue_size_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_requests_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_runs_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_config_select_nul_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_pending_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_row_pending_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_run_negative_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_run_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_scale/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_batch_unsorted/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_element_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_int_none_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_int_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_null_none_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_oid_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_start_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_array_text_element_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_int4_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_window_count_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_window_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_binary_window_start_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_caps/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_carrier/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": ["postgres.ll"],
+      "tests/link/std_postgres_config_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_decimal/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_int_array_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_nonce_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_nul_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connect_dispose_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connect_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connect_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connection_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_connection_range_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_inflight_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_next_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_queue_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_pool_size_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_receive_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_replay/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/std_postgres_tls/main.ts": ["exit"],
+      "tests/link/std_postgres_tls_connection_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_tls_pool_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_tls_roots_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_tls_unix_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_unix_target/main.ts": ["main.h", "postgres.ll"],
+      "tests/link/std_postgres_user_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
+      "tests/link/tfb_db/main.ts": ["postgres.ll"],
+    }
+  ),
   // #1416: the HTTP/1 parser reads a header section a vector at a time and
   // classifies each framing field as it keeps it. Two causes: Http1Parser
   // gains fields, so every module that names the class and every header that
@@ -5119,6 +5353,24 @@ const DECLARED = [
     "tests/link/net_webtransport_stream_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
     "tests/link/net_webtransport_whole_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
   }),
+  {
+    program: "tests/link/net_http2_cleartext/main.ts",
+    file: "exit",
+    changelog: "Cleartext HTTP/2 with prior knowledge",
+    why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
+  },
+  {
+    program: "tests/link/net_http2_cleartext_bad_slots/main.ts",
+    file: "exit",
+    changelog: "Cleartext HTTP/2 with prior knowledge",
+    why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
+  },
+  {
+    program: "tests/link/net_http2_cleartext_bad_timeout/main.ts",
+    file: "exit",
+    changelog: "Cleartext HTTP/2 with prior knowledge",
+    why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
+  },
 ]
 
 /**

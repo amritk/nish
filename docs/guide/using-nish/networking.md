@@ -87,6 +87,20 @@ until `netRead` does, and holds on to what `netWrite` could not send yet. The
 loop is level-triggered: anything you leave unread is reported again on the
 next `pollWait`.
 
+The protocol servers in `nish/net` keep no timer of their own: your loop owns
+the clock. Call their `expire(monotonicNanos())` once a turn, with a
+`pollWait` timeout no longer than the shortest deadline, and they close what
+has gone on too long. `Http1Server` closes an idle slot, a head past
+`headTimeout`, and a refused client still draining past `lingerTimeout`
+(it shuts its write side and reads what the client still sends, up to
+`lingerBytes`, so the error response is not lost to a reset).
+`Http2TlsServer` closes a client that has not acknowledged its SETTINGS
+within `settingsTimeout`, or is quiet past `idleTimeout`. A WebTransport
+layer ends a session quiet past its `idleTimeout` and drops datagrams past
+`maxDatagramsPerSecond`. Each limit has a default and is checked at start-up;
+[the standard library's `nish/net` section](standard-library.md#nishnet) has
+the details.
+
 ## Sharing a port and turning Nagle off: `tcpListenFlags`
 
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with one more
@@ -629,6 +643,67 @@ with no loop of its own. Their answers, and how to drive the client from
 your own loop instead, are on
 [TLS client](tls-client.md#connecting-tlsconnect), with how to trust roots
 other than the system's.
+
+## HTTP/2 without TLS: `nish/net/http2-cleartext`
+
+> **Cleartext has no confidentiality and no integrity.** Anyone on the path
+> reads every request and response, cookies included, and can change them.
+> Serve h2c only behind a proxy that terminates TLS, on loopback, or on a
+> private network. For an open network use `nish/net/http2-tls`.
+
+`Http2CleartextServer` serves HTTP/2 over plain TCP to a client that already
+knows the port speaks it ("prior knowledge", RFC 9113 §3.3): the client's
+first bytes are HTTP/2's 24-byte connection preface. There is no
+`Upgrade: h2c`, which RFC 9113 deprecates, and no HTTP/1.1 on the same port.
+It is `nish/net/http2-tls`'s loop with TCP in place of TLS: the same
+`accept`, `readable`, `writable`, `next`, `flush`, `close` and `rest`, and
+the same interest bits (read 1, write 2, done 16).
+
+```ts
+import { pollAdd, pollModify, tcpListen } from "nish:net";
+import { H2_ERROR, H2_NEED_MORE, H2_REQUEST, Http2Config, Http2Connection } from "nish/net/http2";
+import { H2C_DONE, Http2CleartextServer } from "nish/net/http2-cleartext";
+
+const LISTENER: i32 = 64; // past every slot's token
+
+const start = (loop: i32): Http2CleartextServer => {
+  const listener: i32 = tcpListen("127.0.0.1", 8080, 128);
+  pollAdd(loop, listener, 1, LISTENER);
+  // 64 slots; a client has 10 seconds to send its preface.
+  return new Http2CleartextServer(new Http2Config(), listener, 64, 10000);
+};
+
+const serve = (loop: i32, server: Http2CleartextServer, slot: i32, events: i32): void => {
+  let wants: i32 = (events & 5) !== 0 ? server.readable(slot) : server.writable(slot);
+  const none: u8[][] = [];
+  let event: i32 = server.next(slot);
+  while (event !== H2_NEED_MORE && event !== H2_ERROR) {
+    const conn: Http2Connection = server.connection(slot);
+    if (event === H2_REQUEST) {
+      conn.respond(conn.stream, 200, none, none, true);
+    }
+    event = server.next(slot);
+  }
+  wants = server.flush(slot);
+  if ((wants & H2C_DONE) !== 0) {
+    server.close(slot);
+  } else {
+    pollModify(loop, server.fd(slot), wants & 3, slot);
+  }
+};
+```
+
+When the listener's token comes back, `server.accept()` answers the new
+slot, which you `pollAdd` under its own number as the token, or `-105`
+(`H2C_POOL_FULL`) when every slot is busy, having closed that connection.
+A client that sends anything but the preface, an HTTP/1.1 request line
+included, is closed at the first byte that differs and is sent nothing.
+One that sends part of it and stops holds its slot until you call
+`server.expire(monotonicNanos())` past the timeout the constructor took;
+call it every so often, say whenever `pollWait` returns. Once the preface is
+in, the slot has no clock of its own: close one you judge idle yourself.
+`curl --http2-prior-knowledge http://127.0.0.1:8080/` talks to it. What it
+refuses and why is its [security record](../../security/http2-cleartext.md).
 
 ## Trusting a peer's address
 

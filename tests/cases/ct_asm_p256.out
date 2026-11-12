@@ -21,3 +21,6 @@ ok    RFC 6979 A.2.5 SHA-256 "test", by the comb: k G has x = r
 ok    p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / 2 mod n is (n + 1) / 2
 ok    p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / (n - 1) mod n is n - 1
 ok    p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / k mod n, RFC 6979 A.2.5's SHA-256 "sample" nonce
+ok    p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / 2 mod p
+ok    p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / (p - 1) mod p is p - 1
+ok    p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / x mod p, x the generator's x
