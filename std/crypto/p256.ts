@@ -64,18 +64,23 @@
  * of field operations, so there is no case to branch on.
  *
  * **Constant time where a secret is involved.** A private key and a nonce are
- * only ever multiplied by G, and that by `p256BaseMult`, a comb over a
- * precomputed table: 4 teeth 64 bits apart, 16 sub-tables of the 15 non-zero
- * sums of a tooth's multiples of G, one per 4-bit offset, as affine points in
- * the Montgomery domain (`p256BaseTable`, 15 KiB, written by
- * `scripts/gen-p256-table.mjs`). Four rows of 16 mixed additions with a
- * doubling between rows replace the 256 doublings and 64 additions of a window,
- * whatever the scalar.
+ * only ever multiplied by G, and that by `p256BaseMult`, a signed
+ * all-bits-set comb (Hamburg, "Fast and compact elliptic-curve
+ * cryptography", 2012) over a precomputed table: 11 combs of 6 teeth 4 bits
+ * apart, 32 entries each, every entry the top tooth plus or minus each of the
+ * five below it, as affine points in the Montgomery domain (`p256BaseTable`,
+ * 22 KiB, written by `scripts/gen-p256-table.mjs`; ECC-7). The scalar is
+ * recoded to m = (k + 2^264 - 1) / 2 mod n, so that every bit of m stands for
+ * plus or minus its power of two; four rows of 11 mixed additions with a
+ * doubling between rows replace the 256 doublings and 64 additions of a
+ * window, whatever the scalar.
  *
- *  Each addition reads all fifteen entries of its sub-table and keeps one with
- *  fiat's conditional move, steered by `ctEq` on the digit; a zero digit keeps
- *  none, and the sum is then discarded by the same conditional move rather than
- *  skipped, so neither a branch nor an address depends on the scalar.
+ *  Every digit names an entry, none of them the identity, so every addition is
+ *  kept. Each addition reads all 32 entries of its comb and keeps one by an
+ *  all-ones mask from `ctEq` on the digit's low five bits (flipped when the top
+ *  tooth is clear), ORing every entry's limbs under its mask, and negates its Y
+ *  by fiat's conditional move on the top tooth, so neither a branch nor an
+ *  address depends on the scalar.
  *  `p256ScalarMult`, a fixed 4-bit window over sixteen multiples of a point, is
  *  what ECDH multiplies the peer's key by, and the reference the comb is held
  *  to bit for bit (`tests/link/crypto_p256_agree`).
@@ -100,8 +105,9 @@
  *  `tests/cases/ct_asm_p256` holds copies of fiat's field multiply, square, add
  *  and subtract, its scalar multiply and its conditional move, the table read by
  *  a secret digit, the complete doubling and addition, one window step of
- *  `p256ScalarMult`, the comb's digit, entry read, mixed addition, conditional
- *  keep and one whole comb step, and safegcd's thirty divsteps and its two
+ *  `p256ScalarMult`, the comb's recoding (with fiat's scalar add), digit,
+ *  masked entry move, signed entry read, mixed addition and one whole comb
+ *  step, and safegcd's thirty divsteps and its two
  *  matrix updates, to the check of `tests/ct-asm.js`, which refuses any branch,
  *  call it cannot follow or secret-indexed access in them on x86-64 and aarch64,
  *  following each call into the field functions.
@@ -112,7 +118,7 @@
  *  A.2.5 through them, by the window and by the comb, and three inverses through
  *  the safegcd copies. The 64-window and 4-row loops, the table build, the
  *  inversions (safegcd's twenty-batch loop, its conversions, normalisation and
- *  limb loops among them), the encodings and the nonce derivation are constant
+ *  limb loops among them), the recoding's byte read, the encodings and the nonce derivation are constant
  *  time by construction rather than by that proof.
  *
  * **Verification is variable time, on public values only.** `p256Verify`
@@ -5180,7 +5186,8 @@ const p256BaseDigit = (m: u32[], c: i32, i: i32): u32 => {
     const limb: i32 = bit >> 5
     // `limb` is below 16 (the comb covers fewer than 512 bits), so
     // `(limb >> 3) - 1` is all ones below 8 and 0 past the top, with no branch.
-    const word: u32 = m[limb & 7] & toU32((limb >> 3) - 1)
+    const at: i32 = limb & 7
+    const word: u32 = m[at] & toU32((limb >> 3) - 1)
     digit = digit | (((word >> toU32(bit & 31)) & 1) << toU32(j))
   }
   return digit

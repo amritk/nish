@@ -146,15 +146,14 @@ for (let c = 0; c < COMBS; c++) {
 }
 
 /** `a^e mod n`. */
-const powN = (a, e) => {
+const powN = (a, exponent) => {
   let result = 1n
   let base = a % N
-  while (e > 0n) {
+  for (let e = exponent; e > 0n; e >>= 1n) {
     if (e & 1n) {
       result = (result * base) % N
     }
     base = (base * base) % N
-    e >>= 1n
   }
   return result
 }
@@ -198,9 +197,17 @@ const region = [
   `const P256_COMBS: i32 = ${COMBS}`,
   `const P256_COMB_ENTRIES: i32 = ${ENTRIES}`,
   "",
-  ...setter("p256BaseOffset", `/** \`2^${BITS} - 1 mod n\`, plain: the recoding adds it before it halves (ECC-7). */`, OFFSET),
+  ...setter(
+    "p256BaseOffset",
+    `/** \`2^${BITS} - 1 mod n\`, plain: the recoding adds it before it halves (ECC-7). */`,
+    OFFSET
+  ),
   "",
-  ...setter("p256BaseHalf", "/** `2^-1 R mod n`: a scalar Montgomery multiply by it halves mod n (ECC-7). */", HALF),
+  ...setter(
+    "p256BaseHalf",
+    "/** `2^-1 R mod n`: a scalar Montgomery multiply by it halves mod n (ECC-7). */",
+    HALF
+  ),
   "",
   "/**",
   ` * The signed comb table \`p256BaseMult\` reads: comb \`c\` (0 to ${COMBS - 1}), entry \`u\``,
