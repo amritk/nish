@@ -1171,7 +1171,7 @@ const DECLARED = [
     changelog: "safegcd",
     why: "std/crypto/p256.ts inverts field elements by safegcd and verifies signatures by one interleaved width-5 wNAF pass, so the module every importer of nish/crypto/p256 writes has new functions and renumbered values; no importer's own module moves",
   })),
-  // WP39 G4: P256PointScratch holds the signed comb's selected entry, so
+  // WP39 G4: P256PointScratch gains `comb`, the recoded scalar m, so
   // every module laying it out (a C header, or a test that makes its own
   // scratch) has a wider struct and renumbered fields.
   ...[
@@ -1190,7 +1190,7 @@ const DECLARED = [
       program,
       file,
       changelog: "fixed-base table for P-256",
-      why: "P256PointScratch gains the signed comb's selected entry, so every module laying it out has a wider struct (64 to 72 bytes) and renumbered field indices",
+      why: "P256PointScratch gains `comb`, the recoded scalar the signed comb reads its digits from, so every module laying it out has a wider struct (64 to 72 bytes) and renumbered field indices",
     }))
   ),
   // The TLS server takes secp256r1 key shares and its carrier an idle

@@ -19,7 +19,7 @@
 //
 // - RFC 6979 A.2.5's private key and its two SHA-256 nonces, against the
 //   published public key and `r`s;
-// - edges: 0, 1, 2, 15, 16, n - 2, n - 1, n, n + 1 and p; then, for each comb
+// - edges: 0, 1, 2, 15, 16, n - 3, n - 2, n - 1, n, n + 1 and p; then, for each comb
 //   and for all combs at once, the scalar whose recoded m (k = 2m - (2^B - 1)
 //   mod n, `p256SeamUnrecode`) has one digit value at every column of that comb
 //   and every other bit clear, for each of the 64 values. It counts the table
@@ -276,6 +276,9 @@ const edges = (hash: u64[], tally: Tally, n: u8[]): i32 => {
     k[31] = toU8(small[i])
     agree(hash, tally, n, `${small[i]}`, k)
   }
+  const nMinus3: u8[] = fromHex(N)
+  nMinus3[31] = toU8(toI32(nMinus3[31]) - 3)
+  agree(hash, tally, n, "n - 3", nMinus3)
   const nMinus2: u8[] = fromHex(N)
   nMinus2[31] = toU8(toI32(nMinus2[31]) - 2)
   agree(hash, tally, n, "n - 2", nMinus2)

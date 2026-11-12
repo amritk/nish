@@ -51,6 +51,14 @@ if (!(TEETH >= 2 && SPACING >= 1 && COMBS >= 1 && BITS >= 256)) {
   console.error(`gen-p256-table: ${COMBS} combs of ${TEETH} teeth ${SPACING} apart do not cover 256 bits`)
   process.exit(1)
 }
+if (BITS >= 512) {
+  // p256BaseDigit masks a column's word with `(limb >> 3) - 1`, which reads
+  // limb 8 and up of the 16-limb recoded scalar as zero and assumes limb < 16.
+  console.error(
+    `gen-p256-table: ${COMBS} combs of ${TEETH} teeth ${SPACING} apart span ${BITS} bits; p256BaseDigit reads below 512`
+  )
+  process.exit(1)
+}
 const ENTRIES = 1 << (TEETH - 1)
 
 /** The group order n (SEC 2 §2.4.2). */

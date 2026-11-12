@@ -348,7 +348,7 @@ What follows describes it; the 4-tooth comb's 15-entry read and masked keep
 are gone.
 
 - **Agreement.** The comb answers what `p256ScalarMult(G, k)` answers, byte for
-  byte, on RFC 6979 A.2.5's three scalars, 778 edge and per-digit scalars
+  byte, on RFC 6979 A.2.5's three scalars, 779 edge and per-digit scalars
   (each comb's 64 digits swept through the recoding, so that all 656 reachable
   (comb, entry, sign) choices are read), the `r` and `s` of all 1,104 64-byte
   signatures of Wycheproof's two P1363 files taken as scalars, the 355 private
