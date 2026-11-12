@@ -928,10 +928,135 @@ static void test_udp(void) {
   nish_array word = {1, 1, (char *)words};
   expect_i64(nish_udp_recv_from(fd, &buf, 0, 4096, &from, &word), -22, "a one-word meta");
   expect_i64(nish_udp_send_to(fd, &data, 0, 3, &to, 0, 4), -22, "ECN bits past 3");
-  expect_i64(nish_udp_bind(loopback, 0, 4), -22, "an unknown flag");
+  expect_i64(nish_udp_bind(loopback, 0, 4), -22, "steering without SO_REUSEPORT");
+  expect_i64(nish_udp_bind(loopback, 0, 8), -22, "an unknown flag");
   expect_i64(nish_net_close(fd), 0, "the socket closed");
 #else
   expect_i64(fd, -95, "UDP_GRO where there is none");
+#endif
+}
+
+#if defined(__linux__)
+#include <linux/audit.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <stddef.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+/* runtime-net.c's define; a header older than the kernel may not name it. */
+#define SO_ATTACH_REUSEPORT_CBPF_TEST 51
+
+/* One datagram of `n` bytes from `from` to 127.0.0.1:`port`, and the index of
+   the group socket in `group` that received it, or -1 if none did. */
+static int steer_lands(int32_t from, int32_t port, const char *bytes, int n, const int32_t *group, int count) {
+  char space[18];
+  nish_array to = {18, 18, space};
+  const nish_str *loopback = nish_str_new("127.0.0.1", 9);
+  assert(nish_net_address(&to, loopback, port) == 0);
+  nish_array data = {n, n, (char *)bytes};
+  assert(nish_udp_send_to(from, &data, 0, n, &to, 0, 0) == n);
+  static char into[64];
+  nish_array buf = {64, 64, into};
+  char who[18];
+  nish_array peer = {18, 18, who};
+  int32_t words[2];
+  nish_array meta = {2, 2, (char *)words};
+  for (int spin = 0; spin < 1000000; spin++) {
+    for (int i = 0; i < count; i++) {
+      if (nish_udp_recv_from(group[i], &buf, 0, 64, &peer, &meta) == n) return i;
+    }
+  }
+  return -1;
+}
+#endif
+
+/* WP39 G6: `udpBind` flag 4 (docs/h3-multicore.md §3.1, §7 rows 1 and 14).
+   Three sockets steered as one group: a datagram whose DCID byte 0 is k
+   reaches socket k, short header or long, a byte at or above 3 reaches
+   socket byte mod 3, and a runt reaches socket 0. Every malformed flags word
+   is -22, before any socket. A child whose seccomp filter refuses the attach
+   gets -1 with no socket left bound, and the port binds again with flag 1. */
+static void test_udp_steer(void) {
+  const nish_str *loopback = nish_str_new("127.0.0.1", 9);
+  int32_t steer3 = 1 | 4 | (3 << 8);
+  expect_i64(nish_udp_bind(loopback, 0, 1 | 4 | (3 << 8) | (1 << 16)), -22, "a bit above the count");
+  expect_i64(nish_udp_bind(loopback, 0, 8 | 1), -22, "bit 3");
+  expect_i64(nish_udp_bind(loopback, 0, steer3 | 2), -22, "steering with GRO");
+  expect_i64(nish_udp_bind(loopback, 0, 4 | (3 << 8)), -22, "steering without SO_REUSEPORT");
+  expect_i64(nish_udp_bind(loopback, 0, 1 | 4), -22, "steering a group of 0");
+  expect_i64(nish_udp_bind(loopback, 0, 1 | (3 << 8)), -22, "a count without steering");
+  expect_i64(nish_udp_bind(loopback, 0, -1), -22, "a negative flags word");
+#if defined(__linux__)
+  int32_t group[3];
+  group[0] = nish_udp_bind(loopback, 0, steer3);
+  assert(group[0] >= 0);
+  int32_t port = nish_net_local_port(group[0]);
+  for (int i = 1; i < 3; i++) {
+    group[i] = nish_udp_bind(loopback, port, steer3);
+    assert(group[i] >= 0);
+  }
+  int32_t client = nish_udp_bind(loopback, 0, 0);
+  assert(client >= 0);
+  char shortpkt[20] = {0x40};
+  char longpkt[20] = {(char)0xc0, 0, 0, 0, 1, 8};
+  for (int k = 0; k < 3; k++) {
+    shortpkt[1] = (char)k;
+    expect_i64(steer_lands(client, port, shortpkt, 20, group, 3), k, "a short header names its socket");
+    longpkt[6] = (char)k;
+    expect_i64(steer_lands(client, port, longpkt, 20, group, 3), k, "a long header names its socket");
+  }
+  shortpkt[1] = (char)200;
+  expect_i64(steer_lands(client, port, shortpkt, 20, group, 3), 200 % 3, "a byte above the count, mod 3");
+  longpkt[6] = (char)7;
+  expect_i64(steer_lands(client, port, longpkt, 20, group, 3), 7 % 3, "a long header above the count, mod 3");
+  char runt[1] = {(char)0xc0};
+  expect_i64(steer_lands(client, port, runt, 1, group, 3), 0, "a runt reaches socket 0");
+  /* A second client: the address plays no part. */
+  int32_t other = nish_udp_bind(loopback, 0, 0);
+  assert(other >= 0);
+  shortpkt[1] = 2;
+  expect_i64(steer_lands(other, port, shortpkt, 20, group, 3), 2, "another address, the same socket");
+  nish_net_close(other);
+  nish_net_close(client);
+  for (int i = 0; i < 3; i++) nish_net_close(group[i]);
+
+  /* Row 14: the attach refused. The child's filter fails
+     setsockopt(SO_ATTACH_REUSEPORT_CBPF) with EPERM and allows the rest. */
+  int32_t free_port = 0;
+  {
+    int32_t probe = nish_udp_bind(loopback, 0, 1);
+    assert(probe >= 0);
+    free_port = nish_net_local_port(probe);
+    nish_net_close(probe);
+  }
+  pid_t child = fork();
+  assert(child >= 0);
+  if (child == 0) {
+    struct sock_filter deny[] = {
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_setsockopt, 0, 3),
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2])),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SO_ATTACH_REUSEPORT_CBPF_TEST, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+    };
+    struct sock_fprog prog = {(unsigned short)(sizeof deny / sizeof deny[0]), deny};
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 || prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) != 0) _exit(3);
+    if (nish_udp_bind(loopback, free_port, steer3) != -1) _exit(4);
+    int32_t again = nish_udp_bind(loopback, free_port, 1);
+    if (again < 0) _exit(5);
+    /* Nothing of the refused bind holds the port: a bind without
+       SO_REUSEPORT beside `again` would clash only with `again`. */
+    nish_net_close(again);
+    if (nish_udp_bind(loopback, free_port, 0) < 0) _exit(6);
+    _exit(0);
+  }
+  int status = 0;
+  assert(waitpid(child, &status, 0) == child);
+  expect_i64(WIFEXITED(status) ? WEXITSTATUS(status) : 100 + WTERMSIG(status), 0,
+             "a refused attach answers -1 and leaves the port free");
+#else
+  expect_i64(nish_udp_bind(loopback, 0, 1 | 4 | (3 << 8)), -95, "steering where there is none");
 #endif
 }
 
@@ -2286,6 +2411,7 @@ int main(void) {
   test_tcp_reuseport();
   test_tcp_nodelay();
   test_udp();
+  test_udp_steer();
   test_poll();
   nish_free_arena();
   test_security();

@@ -1,0 +1,57 @@
+PASS  a server names its first ID and three more in NEW_CONNECTION_ID
+PASS  worker 3 of 8 writes 3 into byte 0 of each
+PASS  unset, byte 0 is the entropy's (0x80 for the first ID)
+PASS  and the other bytes are the same either way
+PASS  worker 254 of 255 writes 254
+PASS  a Retry's source connection ID is 8 bytes
+PASS  and worker 5 of 6 writes 5 into its byte 0
+PASS  unset, the Retry's byte 0 is the listener's random byte
+PASS  worker 0 of 2 drops a short packet for worker 1's ID, with no reset
+PASS  and resets one for its own ID
+PASS  and one whose byte 0 is no worker's (2)
+PASS  or 255
+PASS  unset, a listener resets the packet worker 0 of 2 dropped
+PASS  listener, workerIndex 2 and workerCount 2: the child exits 1
+PASS  and says why
+PASS  listener, workerIndex 0 and workerCount 0: the child exits 1
+PASS  and says why
+PASS  listener, workerIndex -2 and workerCount 2: the child exits 1
+PASS  and says why
+PASS  listener, workerIndex 0 and workerCount 256: the child exits 1
+PASS  and says why
+PASS  server, workerIndex 2 and workerCount 2: the child exits 1
+PASS  and says why
+PASS  server, workerIndex 0 and workerCount 0: the child exits 1
+PASS  and says why
+PASS  server, workerIndex -2 and workerCount 2: the child exits 1
+PASS  and says why
+PASS  server, workerIndex 0 and workerCount 256: the child exits 1
+PASS  and says why
+PASS  the unset pair, -1 and 0, builds
+PASS  as do 0 of 1 and 254 of 255
+PASS  a worker reads the UDP socket from `<fd>,<N>`
+PASS  and the group's size
+PASS  and finds the flag right before the worker flag
+PASS  preforkArgs strips it with the other flags
+PASS  a process with no worker flag has no UDP socket
+PASS  and no group
+PASS  a worker without the flag has none
+PASS  "5," is refused: no socket
+PASS  and no group
+PASS  ",2" is refused: no socket
+PASS  and no group
+PASS  "5" is refused: no socket
+PASS  and no group
+PASS  "5,0" is refused: no socket
+PASS  and no group
+PASS  "5,256" is refused: no socket
+PASS  and no group
+PASS  "-1,2" is refused: no socket
+PASS  and no group
+PASS  "5,2,1" is refused: no socket
+PASS  and no group
+PASS  "5,x" is refused: no socket
+PASS  and no group
+PASS  "" is refused: no socket
+PASS  and no group
+quic worker: 56 passed, 0 failed, 0 skipped

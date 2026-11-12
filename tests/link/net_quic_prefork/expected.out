@@ -1,0 +1,26 @@
+PASS  the group runs one worker per steered socket on one port (elsewhere one, and the supervisor says steering was refused)
+PASS  a request completes, served by the worker its connection ID names
+PASS  after the client rebinds its port, the next response reaches the new port from the same worker
+PASS  which validates the new path with a PATH_CHALLENGE
+PASS  and keeps serving the connection there
+PASS  Initials whose first DCID byte is below the count complete on the worker it names
+PASS  and those past it complete on the worker the byte names modulo the count
+PASS  a ClientHello in two Initials, the second first from another port: no worker answers that port, and it completes on worker 1
+PASS  two connections on one client socket, their IDs issued by worker 0 and worker 1
+PASS  each completes requests served by its own worker
+PASS  worker 1 killed, the supervisor starts it again
+PASS  its client gets a valid stateless reset from the new worker 1
+PASS  and worker 0's client finishes a request on the same connection
+PASS  SIGTERM stops the group
+PASS  a Retry from worker 1 carries its index
+PASS  and the retried Initial completes on worker 1
+PASS  SIGTERM stops the retrying group
+PASS  three workers, worker 1 killed: byte 0 = 1 reaches the new worker 1, not worker 2
+PASS  SIGTERM stops the light group
+PASS  NISH_WORKERS=256 panics in the supervisor with the count, before any worker starts
+PASS  255 starts, every worker on a socket of a group of 255
+PASS  and byte 0 = 254 reaches worker 254
+PASS  SIGTERM stops the group of 255
+PASS  NISH_WORKERS=1 runs one worker, whose count is 1
+PASS  SIGTERM stops the group of one
+quic prefork: 25 passed, 0 failed, 0 skipped

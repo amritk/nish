@@ -2,8 +2,9 @@
 // every platform, through the globals. Two sockets on 127.0.0.1 trade a
 // datagram, and the receiver learns the sender's port and the two `meta`
 // words, 0 and 0 for a datagram nobody coalesced or marked. A datagram longer
-// than the range it is read into is cut to it. -22 for each bad argument (a
-// flag past 3, a name, a short `to`, `from` or `meta`, a segment past 65535,
+// than the range it is read into is cut to it. -22 for each bad argument (flag
+// 4, QUIC steering, without flag 1 or a group count; bit 3, which no flag
+// names; a name, a short `to`, `from` or `meta`, a segment past 65535,
 // ECN past 3), -11 from a receive with nothing waiting, -98 from a second bind
 // to a port in use and none when both binds ask for `SO_REUSEPORT`, -95 from
 // `tcpAccept` on a datagram socket, and a socket on `::`, which on a kernel
@@ -45,6 +46,7 @@ export const main = (): number => {
   const short: u8[] = new Array<u8>(17);
   const one: i32[] = [0];
   console.log(udpBind("127.0.0.1", 0, 4));
+  console.log(udpBind("127.0.0.1", 0, 8));
   console.log(udpBind("localhost", 0, 0));
   console.log(udpSendTo(a, data, 0, 3, short, 0, 0));
   console.log(udpSendTo(a, data, 0, 3, toB, 65536, 0));
