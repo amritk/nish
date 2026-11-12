@@ -1580,13 +1580,19 @@ node bench/ring-inplace/run.mjs                         # 5 rounds, 16 MiB ring,
 node bench/ring-inplace/run.mjs --ring-bytes 1048576    # a 1 MiB ring
 node bench/ring-inplace/run.mjs --quick                 # 3,000 messages a run
 node bench/ring-inplace/run.mjs --rounds 9 --cpus 1,2,3
+node bench/ring-inplace/run.mjs --modes copy,inplace --n 20000
 ```
 
 `--ring-bytes` takes a power of two from 32,768 (twice the largest record
-and 8 more, `reserve`'s limit) to 2^30; the default is 16,777,216. Each
-round runs every size and mode twice in a seeded shuffled order. The table
-gives the consumer's p50 and p99 per message (its wait for the producer
-left out), the pipeline's ns a message, and the body bytes copied in user
+and 8 more, `reserve`'s limit) to 2^29, the largest ring whose region fits
+the 2^30 bytes a shared region holds; the default is 16,777,216. `--modes`
+runs only the modes it names (`copy`, `inplace`, `consumer`), and `--n`
+sends that many messages a run. An unknown option, or a value out of
+range, exits 2 before anything builds. Each round runs every size and mode
+twice in a seeded shuffled order. The table gives the consumer's p50 and
+p99 per message (its wait for the producer left out), the consumer's wait
+for the producer's record a message (how much of the pipeline the producer
+paces), the pipeline's ns a message, and the body bytes copied in user
 space a message, to two decimals. For `sendBody`, that count is only the
 tails it keeps when the socket does not take a body whole; the table gives
 how many messages had one. The kernel's copy into the socket, the output's

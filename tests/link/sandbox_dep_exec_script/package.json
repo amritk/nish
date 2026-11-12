@@ -1,0 +1,13 @@
+{
+  "name": "sandbox-dep-exec-script",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_runner": [
+          "process.spawn=./bin/hello.sh"
+        ]
+      }
+    }
+  }
+}

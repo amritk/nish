@@ -555,6 +555,30 @@ const SPAWN_PIPED_WITHIN = "spawnPipedWithin, a captured run with a deadline"
 const HELD_WRITE = "held HTTP/1 write keeps the write bit once a flush empties the output"
 const heldWrite = (why, moved) =>
   moved.map((program) => ({ program, file: "http1-server.ll", changelog: HELD_WRITE, why }))
+/** The changelog line of the stage that copies QUIC stream and packet bytes by slice (#699). */
+const QUIC_SLICE_COPY = "QUIC stream bytes by slice, not by byte"
+/** Why each module a #699 program writes moves; a module not named here is a program's own, renamed beside `std_bytes.ll`. */
+const QUIC_SLICE_COPY_WHY = {
+  "quic-stream.ll":
+    "std/net/quic-stream.ts copies stream bytes into and out of its rings a slice at a time through copyBytes from nish/bytes, and marks and scans the stream bitmaps a byte at a time",
+  "quic-packet.ll":
+    "std/net/quic-packet.ts copies packet bytes a slice at a time through copyBytes from nish/bytes",
+  "bytes.ll":
+    "the program now reaches nish/bytes through std/net/quic-stream.ts or std/net/quic-packet.ts, so it writes that module",
+  "std_bytes.ll":
+    "the program now reaches nish/bytes through std/net/quic-packet.ts and has a module named bytes of its own, so nish/bytes is written as std_bytes.ll",
+}
+const quicSliceCopy = (filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({
+      program,
+      file,
+      changelog: QUIC_SLICE_COPY,
+      why:
+        QUIC_SLICE_COPY_WHY[file] ??
+        "the program's own module named bytes is written under its program-prefixed name now that nish/bytes takes bytes.ll's place beside it",
+    }))
+  )
 
 /**
  * The modules the TLS server's secp256r1 key shares and carrier idle timeout
@@ -2514,6 +2538,107 @@ const DECLARED = [
       "tests/link/tfb_async_entry/main.ts",
     ]
   ),
+  // #699: std/net/quic-stream.ts and quic-packet.ts copy through copyBytes
+  // from nish/bytes, so every program reaching them writes that module too.
+  ...quicSliceCopy({
+    "examples/relay/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/crypto_held_derive/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_http3/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_body_chunk/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_config/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_credit/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_local_limit/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_uni_limit/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_bad_write_chunk/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_ecn/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_ecn_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_errors/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_errors_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_frame/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_http3_frame_bad_window/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_http3_frame_f64/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_http3_server/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_server_bad_config/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_server_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http3_write_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http_date/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_http_date_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_interop_server/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_interop_server_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_loopback/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_loopback_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_conn/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_conn_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_conn_parts/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_quic_conn_parts_f64/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_quic_conn_replay/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_conn_replay_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_datagram/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_datagram_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_ecn/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_ecn_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_frame/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_quic_frame_f64/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_quic_lifecycle/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_lifecycle_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_lifecycle_replay/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_lifecycle_replay_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_listener/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_listener_bad_window/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_listener_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_memory/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_memory_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_packet/main.ts": ["quic-packet.ll", "std_bytes.ll"],
+    "tests/link/net_quic_packet_f64/main.ts": [
+      "bytes.ll",
+      "net_quic_packet_bytes.ll",
+      "quic-packet.ll",
+      "std_bytes.ll",
+    ],
+    "tests/link/net_quic_path/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_path_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_recovery/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_recovery_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_server_wipes/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_server_wipes_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_stream/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_stream_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_wipes/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_quic_wipes_f64/main.ts": ["bytes.ll", "quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_hello/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_idle/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_path/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_peers/main.ts": ["bytes.ll", "quic-packet.ll"],
+    "tests/link/net_relay_bad_per_peer/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_pool/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_rate/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_sessions/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_spare/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_bad_stats/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_encode_window/main.ts": ["quic-packet.ll"],
+    "tests/link/net_relay_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_forged/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_relay_frame_window/main.ts": ["quic-packet.ll"],
+    "tests/link/net_relay_grant_window/main.ts": ["quic-packet.ll"],
+    "tests/link/net_relay_json_window/main.ts": ["quic-packet.ll"],
+    "tests/link/net_relay_soak/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_datagrams/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_datagrams_off/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_layer/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_pending/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_pending_high/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_sessions/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_streams/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_bad_streams_high/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_close_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_datagram_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_f64/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_stream_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+    "tests/link/net_webtransport_whole_window/main.ts": ["quic-packet.ll", "quic-stream.ll"],
+  }),
 ]
 
 /**
