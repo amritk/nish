@@ -1829,7 +1829,7 @@ const DEALT_SECTIONS = {
   },
   simd: { name: "the simd section and the kernels' lowerings", selected: true, tail: true, pinned: 2 },
   cliChecks: {
-    name: "the contract, interop, exit-code, secret, capabilities and run-command sections",
+    name: "the contract, interop, exit-code, secret, capabilities, run-command and compat-erasure sections",
     selected: true,
     tail: true,
   },
@@ -21605,6 +21605,7 @@ if (dealtHere("cliChecks")) {
       "--deny-retention",
       "--emit-arena",
       "--explain-memory",
+      "--compat",
       "--target",
       "--cpu",
       "--profile",
@@ -23163,6 +23164,160 @@ if (dealtHere("cliChecks")) {
         badLink.stderr + stubEntries.join(", ")
       )
     }
+  }
+
+  // ---- WP28 S3: `--compat` erases to the strict dialect ---------------------------------
+  // The compatibility dialect is allowed to accept more programs as it grows and
+  // is never allowed to change one the strict dialect already has an answer for.
+  // `tests/compat-erasure.js` compiles every program in `tests/cases` with and
+  // without the flag and compares the two answers byte for byte; this section
+  // runs it over the whole corpus, then proves that it can fail.
+  //
+  // It closes this group rather than taking a key of its own in
+  // `DEALT_SECTIONS`: the group is a tail every shard deal already carries, and
+  // `scripts/shard-costs.mjs` knows a group by its first check.
+  if (!only || "compat-erasure".includes(only)) {
+    const erasureDir = path.join(buildDir, "compat-erasure")
+    const erasure = (compiler, filter, env = {}) =>
+      spawnSync(
+        process.execPath,
+        [
+          path.join(root, "tests", "compat-erasure.js"),
+          "--compiler",
+          compiler,
+          "--out",
+          path.join(erasureDir, filter === "" ? "corpus" : `self-${filter}`),
+          "--jobs",
+          String(LINK_JOBS),
+          ...(filter === "" ? [] : [filter]),
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, ...env }, maxBuffer: 64 * 1024 * 1024 }
+      )
+
+    const smoke = path.join(casesDir, "add_plain.ts")
+    const bare = spawnSync(NISH, [smoke, "--compat", "-o", path.join(buildDir, "compat-bare.ll")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("compat-erasure: a bare `--compat` is accepted", bare.status === 0, bare.stderr)
+    const valuedOut = path.join(buildDir, "compat-valued.ll")
+    fs.rmSync(valuedOut, { force: true })
+    const valued = spawnSync(NISH, [smoke, "--compat=async", "-o", valuedOut], { cwd: root, encoding: "utf8" })
+    check(
+      "compat-erasure: `--compat=<value>` is a usage error that names the bare flag and writes no IR",
+      valued.status === 2 &&
+        valued.stderr.includes("`--compat` takes no value, and `--compat=async` gives it one") &&
+        valued.stderr.includes("write a bare `--compat`") &&
+        !fs.existsSync(valuedOut),
+      `exit ${valued.status}\n${valued.stderr}`
+    )
+
+    const corpus = erasure(NISH, "")
+    const counts =
+      /^compat-erasure: (\d+) positive cases byte-identical under --compat \((\d+) files\), (\d+) reject cases rejected alike \((\d+) coded diagnostics, (\d+) cases with none\), (\d+) skipped$/m.exec(
+        corpus.stdout
+      )
+    const [positiveCount, fileCount, rejectCount, codedCount, uncodedCases, skippedCount] = (counts ?? []).slice(1).map(Number)
+    const rejectCases = cases.filter((name) => fs.existsSync(path.join(casesDir, `${name}.err`))).length
+    check(
+      "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",
+      corpus.status === 0 && counts !== null,
+      corpus.stderr + corpus.stdout
+    )
+    // A run that compared nothing would agree with itself: the counts are the
+    // corpus's own, files were written and compared (a case that asks for
+    // `--emit-ast` prints instead), every reject case gave at least one coded
+    // diagnostic, and none was skipped.
+    check(
+      `compat-erasure: the run covered the corpus (${cases.length} cases) and skipped none`,
+      counts !== null &&
+        positiveCount === cases.length - rejectCases &&
+        rejectCount === rejectCases &&
+        fileCount > 0 &&
+        codedCount >= rejectCount &&
+        uncodedCases === 0 &&
+        skippedCount === 0,
+      corpus.stdout
+    )
+
+    // The negative test: a compiler that is the real one until it is handed
+    // `--compat`, and then changes one thing, named by COMPAT_TAMPER -- one line
+    // of the IR it wrote, one word of a diagnostic, or the code of one in its
+    // `--json` form. The runner has to catch each, and name where.
+    const tamperer = path.join(erasureDir, "tampering-nish.cjs")
+    fs.mkdirSync(erasureDir, { recursive: true })
+    fs.writeFileSync(
+      tamperer,
+      `#!/usr/bin/env node
+const { spawnSync } = require("node:child_process")
+const fs = require("node:fs")
+const args = process.argv.slice(2)
+const r = spawnSync(${JSON.stringify(NISH)}, args, { maxBuffer: 64 * 1024 * 1024 })
+let [out, err] = [r.stdout.toString("latin1"), r.stderr.toString("latin1")]
+const mode = args.includes("--compat") ? process.env.COMPAT_TAMPER : undefined
+if (mode === "ir" && r.status === 0) {
+  const ll = args[args.indexOf("-o") + 1]
+  fs.writeFileSync(ll, fs.readFileSync(ll, "latin1").replace(/^define .*$/m, (line) => line + " ; tampered"), "latin1")
+}
+if (mode === "word" && !args.includes("--json")) {
+  err = err.replace("requires", "wants")
+}
+if (mode === "code" && args.includes("--json")) {
+  out = out.replace(/"code":"NL\\d+"/, '"code":"NL0000"')
+}
+process.stdout.write(out, "latin1")
+process.stderr.write(err, "latin1")
+process.exitCode = r.status ?? 1
+`,
+      { mode: 0o755 }
+    )
+    const positiveCase = "add_plain"
+    const rejectCase = "reject_type_mismatch"
+    for (const [mode, filter, phrase, caught, tamperedLine] of [
+      [
+        "ir",
+        positiveCase,
+        "one changed line of IR",
+        `compat-erasure: ${positiveCase}: --compat changed the file ${positiveCase}.ll, first at line `,
+        " ; tampered",
+      ],
+      [
+        "word",
+        rejectCase,
+        "one changed word of a diagnostic",
+        `compat-erasure: ${rejectCase}: --compat changed stderr, first at line 1\n`,
+        "Operator `+` wants two",
+      ],
+      [
+        "code",
+        rejectCase,
+        "one changed diagnostic code",
+        `compat-erasure: ${rejectCase} (--json): --compat changed stdout, first at line 1\n`,
+        '"code":"NL0000"',
+      ],
+    ]) {
+      const honest = erasure(tamperer, filter)
+      const tampered = erasure(tamperer, filter, { COMPAT_TAMPER: mode })
+      const shown = tampered.stderr.split("\n")
+      check(
+        `compat-erasure: the runner fails on ${phrase} under \`--compat\`, and shows both answers`,
+        honest.status === 0 &&
+          tampered.status === 1 &&
+          tampered.stderr.includes(caught) &&
+          shown.some((line) => line.startsWith("  without: ") && !line.includes(tamperedLine)) &&
+          shown.some((line) => line.startsWith("  with:    ") && line.includes(tamperedLine)) &&
+          !tampered.stdout.includes("byte-identical"),
+        `honest: exit ${honest.status}\n${honest.stderr}tampered: exit ${tampered.status}\n${tampered.stderr}`
+      )
+    }
+    // Nothing to compile with is the runner's own failure (exit 2), never a
+    // corpus that agrees.
+    const noCompiler = erasure(path.join(erasureDir, "no-such-compiler"), positiveCase)
+    check(
+      "compat-erasure: the runner refuses a compiler that is not there (exit 2) instead of agreeing with nothing",
+      noCompiler.status === 2 && noCompiler.stderr.includes("no compiler at"),
+      noCompiler.stderr
+    )
   }
 }
 
