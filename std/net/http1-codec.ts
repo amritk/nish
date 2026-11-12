@@ -2121,29 +2121,14 @@ export const HTTP1_NO_ROOM: i32 = -1
 /** `http1WriteResponseHead`: a head the writer refuses to write. */
 export const HTTP1_REFUSED: i32 = -2
 
-/**
- * Whether `bytes` is a non-empty run of tchars: sixteen at a time, the last
- * vector ending at the last byte and overlapping the one before it, and one
- * at a time below sixteen.
- */
+/** Whether `bytes` is a non-empty run of tchars. */
 const http1BytesAreToken = (bytes: u8[]): boolean => {
-  const n: i32 = toI32(bytes.length)
-  if (n < 16) {
-    for (let k: i32 = 0; k < n; k += 1) {
-      if (!http1IsTokenByte(toI32(bytes[k]))) {
-        return false
-      }
-    }
-    return n > 0
-  }
-  let k: i32 = 0
-  while (k >= 0 && k <= n - 16) {
-    if (http1NonTokenLanes(loadU8x16(bytes, k)) !== 0) {
+  for (const b of bytes) {
+    if (!http1IsTokenByte(toI32(b))) {
       return false
     }
-    k += 16
   }
-  return k === n || http1NonTokenLanes(loadU8x16(bytes, n - 16)) === 0
+  return toI32(bytes.length) > 0
 }
 
 /**
