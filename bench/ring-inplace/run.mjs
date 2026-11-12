@@ -55,7 +55,10 @@ for (let k = 0; k < args.length; k++) {
     refuse(`unknown option ${args[k]}; the options are ${[...flags, ...valued].join(", ")}`)
   }
 }
-/** `text` as a whole number from 1 to 2^30, or refuses `name`: no sign, fraction or exponent. */
+/**
+ * `text` as a whole number from 1 to 2^30, or refuses `name`: no sign,
+ * fraction, exponent or leading zero, as `bench.ts`'s `wholeArg`.
+ */
 const whole = (name, text) => {
   if (text === undefined || !/^[1-9]\d{0,9}$/.test(text) || Number(text) > 2 ** 30) {
     refuse(`${name} wants a whole number from 1 to 1,073,741,824, not ${text}`)

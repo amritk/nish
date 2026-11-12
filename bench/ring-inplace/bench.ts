@@ -153,12 +153,13 @@ const WHOLE_MAX: i64 = 1073741824
 
 /**
  * `text` as a whole number from 1 to 2^30 (1,073,741,824), or -1 for
- * anything else: a sign, a fraction, an exponent, a blank, a stray character
- * or a larger number. `Number` alone would take "1.5" as 1 and "abc" as 0.
+ * anything else: a sign, a fraction, an exponent, a leading zero, a blank, a
+ * stray character or a larger number. `Number` alone would take "1.5" as 1
+ * and "abc" as 0. It takes what `run.mjs`'s `whole` takes.
  */
 const wholeArg = (text: string): i32 => {
   const len: i32 = toI32(text.length)
-  if (len < 1 || len > 10) {
+  if (len < 1 || len > 10 || text.charCodeAt(0) === 48) {
     return -1
   }
   let v: i64 = toI64(0)
@@ -587,17 +588,27 @@ const consumer = (
 
 export const main = (): i32 => {
   const args = process.argv
+  // The two children's arguments come from `consumer`, but are refused the
+  // same way as the parent's, so a child run by hand cannot run on a guess.
   if (args.length > 6 && args[1] === "producer") {
-    return producer(
-      openRegion(args[2]).expect("open"),
-      args[3],
-      toI32(Number(args[4])),
-      toI32(Number(args[5])),
-      toI32(Number(args[6]))
-    )
+    const size: i32 = wholeArg(args[4])
+    const n: i32 = wholeArg(args[5])
+    const cap: i32 = wholeArg(args[6])
+    if (size < 1 || n < 1 || cap < 1) {
+      console.log(
+        `bench/ring-inplace: producer size ${args[4]}, n ${args[5]} and ring-bytes ${args[6]} must each be a whole number`
+      )
+      return 2
+    }
+    return producer(openRegion(args[2]).expect("open"), args[3], size, n, cap)
   }
   if (args.length > 3 && args[1] === "reader") {
-    return reader(openRegion(args[2]).expect("open"), wholeArg(args[3]))
+    const port: i32 = wholeArg(args[3])
+    if (port < 1 || port > 65535) {
+      console.log(`bench/ring-inplace: the reader's port ${args[3]} is not from 1 to 65535`)
+      return 2
+    }
+    return reader(openRegion(args[2]).expect("open"), port)
   }
   if (args.length < 6) {
     console.log("usage: bench <copy|inplace|consumer> <size> <n> <producer-cpu> <reader-cpu> [ring-bytes]")
