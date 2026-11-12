@@ -58,13 +58,13 @@
  * when that chunk is at most 64 KiB (`NISH_ASYNC_KEEP`), so a task that fits
  * it asks `malloc` for nothing. The region keeps its handle and generation:
  * the handle never leaves this file, and a task's region has no children
- * (NL2351), so no copy of it is made stale by living on. A larger chunk is freed, and once the free
- * nodes keep 16 MiB between them (`NISH_ASYNC_KEEP_TOTAL`) a finishing task
- * keeps none and its region starts again from its first chunk size, so a
- * burst of large tasks does not pin its high-water mark.
- * The kept chunk is not zeroed: arena memory never is, and the compiler
- * initialises what the language promises (docs/security/async.md,
- * ASYNC-20).
+ * (NL2351), so no copy of it is made stale by living on. A larger chunk is
+ * freed, and once the free nodes keep 16 MiB between them
+ * (`NISH_ASYNC_KEEP_TOTAL`) a finishing task keeps none and its region starts
+ * again from its first chunk size, so a burst of large tasks does not pin its
+ * high-water mark. The kept chunk is not zeroed: arena memory never is, and
+ * the compiler initialises what the language promises
+ * (docs/security/async.md, ASYNC-20).
  *
  * **Cancellation.** `nish_async_cancel` marks a task cancelled
  * (`NISH_TASK_CANCELLED`, a bit beside the queued bit) and fails each wait it
@@ -119,7 +119,7 @@ typedef struct nish_task {
   struct nish_task *next; /* the ready queue's link, or the free list's */
   int32_t kind;           /* the spawned function's kind; -1 for `main` */
   uint32_t gen;           /* moves on each time the node is reused */
-  uint64_t region;        /* the task's region; 0 for `main` and a free node */
+  uint64_t region;        /* the task's region; 0 for `main` and a node never yet used */
   uint32_t index;         /* the node's place in the task table, for ever */
   uint32_t flags;         /* NISH_TASK_QUEUED, NISH_TASK_CANCELLED; on the free list, the kept bytes */
 } nish_task;
