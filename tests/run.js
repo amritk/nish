@@ -8816,6 +8816,19 @@ if (dealtHere("cryptoBench")) {
   const { pairedProves, pairedWant } = await import("../bench/crypto/paired.mjs")
   const want2 = pairedWant(2)
   const tie = [36, 48].map((lost) => pairedProves(lost, want2, 1.0))
+  // run.mjs splits the bound over the family's own cases (curves has two), and
+  // the ratio's margin is a hard floor.
+  const runSrc = fs.readFileSync(path.join(root, "bench", "crypto", "run.mjs"), "utf8")
+  const curvesCases = JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", "curves", "family.json"), "utf8")).portableProof
+  check(
+    "crypto-bench: run.mjs asks for the count over the family's cases, curves' two need 37, and the ratio floor is 1.01",
+    runSrc.includes("pairedWant(cases.length)") &&
+      curvesCases.length === 2 &&
+      pairedWant(curvesCases.length) === 37 &&
+      !pairedProves(48, want2, 1.009) &&
+      pairedProves(48, want2, 1.011),
+    `pairedWant(cases.length) in run.mjs ${runSrc.includes("pairedWant(cases.length)")}; curves cases ${curvesCases.length}; 1.009x ${pairedProves(48, want2, 1.009)}; 1.011x ${pairedProves(48, want2, 1.011)}`
+  )
   check(
     "crypto-bench: the paired rounds fail CI's tie (36 of 48 at 1.000x over two cases) and pass the real mask's 40 at 1.029x",
     want2 === 37 && tie.every((p) => !p) && !pairedProves(36, want2, 1.029) && pairedProves(40, want2, 1.029),
@@ -11011,9 +11024,10 @@ if (dealtHere("fileServer")) {
     }
     const serveOnce = (file, method) =>
       new Promise((resolve) => {
+        // Before the spawn, so that a throw here leaves no server running.
+        const cap = fetchCapMs(fs.statSync(file).size)
         const server = spawn(exe, [file, "0"], { stdio: ["ignore", "pipe", "pipe"] })
         const born = Date.now()
-        const cap = fetchCapMs(fs.statSync(file).size)
         let out = ""
         let fetching = false
         let settled = false
