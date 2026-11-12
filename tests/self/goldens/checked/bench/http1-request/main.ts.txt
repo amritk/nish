@@ -34813,25 +34813,33 @@ import now from "../crypto/lib/gen" -> function @now
 import report from "../crypto/lib/gen" -> function @report
 const API_BODY: string = "{\"article\":{\"title\":\"How to train your dragon\",\"tagList\":[]}}"
 const SHORT: string = "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"
-struct Case (class) size=16 align=8
+struct Case (class) size=24 align=8
   field reads: u8[][] index=0 offset=0
   field requests: i32 index=1 offset=8
   field jsonBytes: i32 index=2 offset=12
+  field varied: boolean index=3 offset=16 initialized
   constructor -> @Case.constructor
-struct Bench (class) size=72 align=8
+struct Bench (class) size=112 align=8
   field conn: Http1Connection index=0 offset=0
   field c: Case index=1 offset=8
   field names: u8[][] index=2 offset=16
   field values: u8[][] index=3 offset=24
-  field json: u8[] index=4 offset=32
-  field out: JsonWriter index=5 offset=40
-  field slug: u8[] index=6 offset=48
-  field clock: i64 index=7 offset=56 initialized
-  field sum: u32 index=8 offset=64 initialized
-  field full: boolean index=9 offset=68 initialized
+  field createdNames: u8[][] index=4 offset=32
+  field createdValues: u8[][] index=5 offset=40
+  field missingNames: u8[][] index=6 offset=48
+  field missingValues: u8[][] index=7 offset=56
+  field missingBody: u8[] index=8 offset=64
+  field json: u8[] index=9 offset=72
+  field out: JsonWriter index=10 offset=80
+  field slug: u8[] index=11 offset=88
+  field clock: i64 index=12 offset=96 initialized
+  field sum: u32 index=13 offset=104 initialized
+  field full: boolean index=14 offset=108 initialized
   constructor -> @Bench.constructor
   method answer -> @Bench.answer
   method run -> @Bench.run
+  method respond -> @Bench.respond
+  method answerVaried -> @Bench.answerVaried
   method small -> @Bench.small
 function ascii(text: string): u8[] -> @ascii
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -34886,7 +34894,7 @@ function apiRequest(): string -> @apiRequest
 function Case.constructor(this: Case, reads: u8[][], requests: i32, jsonBytes: i32): void -> @Case.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: jsonBytes reads requests
-  pointer this: size=16 writesThrough=true captured=false
+  pointer this: size=24 writesThrough=true captured=false
   pointer reads: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function caseNamed(name: string): Case | null -> @caseNamed
@@ -34923,6 +34931,11 @@ function caseNamed(name: string): Case | null -> @caseNamed
   callee +23:22 ascii -> @ascii
   callee +26:12 new Case -> @Case.constructor
   callee +26:22 ascii -> @ascii
+  local +29:11 c: Case (const)
+  callee +29:21 new Case -> @Case.constructor
+  callee +29:31 ascii -> @ascii
+  callee +29:45 ascii -> @ascii
+  callee +29:59 ascii -> @ascii
 function mix(h: u32, b: u32): u32 -> @mix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -34931,8 +34944,8 @@ function Bench.constructor(this: Bench, c: Case): void -> @Bench.constructor [co
   sharedWrite: +0:5
   escaping: c
   calls: ascii foldStart nish.Http1Connection.constructor nish.Http1OutputPool.constructor nish.HttpDate.constructor nish.HttpDate.pin nish.JsonWriter.constructor nish_alloc_struct nish_panic nish_panic_overflow
-  pointer this: size=72 writesThrough=true captured=false
-  pointer c: size=16 writesThrough=true captured=true
+  pointer this: size=112 writesThrough=true captured=false
+  pointer c: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -5:11 config: Http1Config (const)
   local -4:11 date: HttpDate (const)
@@ -34942,14 +34955,23 @@ function Bench.constructor(this: Bench, c: Case): void -> @Bench.constructor [co
   callee +0:22 new Http1OutputPool -> @nish.Http1OutputPool.constructor
   callee +3:19 ascii -> @ascii
   callee +4:20 ascii -> @ascii
-  callee +6:16 new JsonWriter -> @nish.JsonWriter.constructor
-  callee +7:17 ascii -> @ascii
-  callee +8:16 foldStart -> @foldStart
+  callee +5:26 ascii -> @ascii
+  callee +5:49 ascii -> @ascii
+  callee +5:68 ascii -> @ascii
+  callee +7:7 ascii -> @ascii
+  callee +8:7 ascii -> @ascii
+  callee +9:7 ascii -> @ascii
+  callee +11:26 ascii -> @ascii
+  callee +12:27 ascii -> @ascii
+  callee +13:24 ascii -> @ascii
+  callee +15:16 new JsonWriter -> @nish.JsonWriter.constructor
+  callee +16:17 ascii -> @ascii
+  callee +17:16 foldStart -> @foldStart
 function Bench.answer(this: Bench, n: i32): i32 -> @Bench.answer [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.reset
   calls: nish.JsonWriter.beginArray nish.JsonWriter.beginObject nish.JsonWriter.boolean nish.JsonWriter.complete nish.JsonWriter.endArray nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish.JsonWriter.stringBytes nish.JsonWriter.written nish_panic nish_panic_overflow
-  pointer this: size=72 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 w: JsonWriter (const)
   callee +1:5 JsonWriter.reset -> @nish.JsonWriter.reset
@@ -34987,8 +35009,8 @@ function Bench.run(this: Bench, n: i32): void -> @Bench.run [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: n
-  calls: Bench.answer Bench.small mix nish.Http1Connection.consume nish.Http1Connection.end nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.Http1Connection.isDone nish.Http1Connection.next nish.Http1Connection.park nish.Http1Connection.release nish.Http1Connection.respond nish.Http1Connection.wantsWrite nish.Http1Connection.write nish.Http1Parser.headerIndex nish.Http1Parser.methodIs nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer this: size=72 writesThrough=true captured=false passedTo=Bench.answer#0 Bench.small#0
+  calls: Bench.answer Bench.answerVaried Bench.respond Bench.small mix nish.Http1Connection.consume nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.Http1Connection.isDone nish.Http1Connection.next nish.Http1Connection.park nish.Http1Connection.release nish.Http1Connection.wantsWrite nish.Http1Parser.headerIndex nish.Http1Parser.methodIs nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=112 writesThrough=true captured=false passedTo=Bench.answerVaried#0 Bench.answer#0 Bench.small#0 Bench.respond#0
   stackSites=0 stackLocals=0
   local -2:11 conn: Http1Connection (const)
   local -1:9 served: i32 (let)
@@ -35013,30 +35035,66 @@ function Bench.run(this: Bench, n: i32): void -> @Bench.run [method]
   callee +28:22 mix -> @mix
   local +30:20 i: i32 (let)
   callee +31:24 mix -> @mix
-  local +34:17 body: i32 (const)
-  callee +34:52 Bench.answer -> @Bench.answer
-  local +35:17 len2: i32 (const)
-  callee +35:47 Bench.small -> @Bench.small
-  callee +37:13 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee +38:13 Http1Connection.write -> @nish.Http1Connection.write
-  callee +42:11 Http1Connection.end -> @nish.Http1Connection.end
-  callee +47:17 Http1Connection.next -> @nish.Http1Connection.next
-  local +54:11 pending: i32 (const)
-  callee +55:16 mix -> @mix
-  local +57:16 i: i32 (let)
-  callee +58:20 mix -> @mix
-  callee +62:5 Http1Connection.consume -> @nish.Http1Connection.consume
-  callee +63:5 Http1Connection.release -> @nish.Http1Connection.release
-  callee +64:9 Http1Connection.isDone -> @nish.Http1Connection.isDone
-  callee +67:5 Http1Connection.park -> @nish.Http1Connection.park
-  callee +68:9 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
-  callee +68:34 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  callee +35:13 Bench.answerVaried -> @Bench.answerVaried
+  local +37:19 body: i32 (const)
+  callee +37:54 Bench.answer -> @Bench.answer
+  local +38:19 len2: i32 (const)
+  callee +38:49 Bench.small -> @Bench.small
+  callee +39:13 Bench.respond -> @Bench.respond
+  callee +45:17 Http1Connection.next -> @nish.Http1Connection.next
+  local +52:11 pending: i32 (const)
+  callee +53:16 mix -> @mix
+  local +55:16 i: i32 (let)
+  callee +56:20 mix -> @mix
+  callee +60:5 Http1Connection.consume -> @nish.Http1Connection.consume
+  callee +61:5 Http1Connection.release -> @nish.Http1Connection.release
+  callee +62:9 Http1Connection.isDone -> @nish.Http1Connection.isDone
+  callee +65:5 Http1Connection.park -> @nish.Http1Connection.park
+  callee +66:9 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
+  callee +66:34 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+function Bench.respond(this: Bench, status: i32, names: u8[][], values: u8[][], len: i32): void -> @Bench.respond [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Http1Connection.respond
+  escaping: len status
+  calls: nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish_panic
+  pointer this: size=112 writesThrough=false captured=false
+  pointer names: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#2
+  pointer values: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#3
+  stackSites=0 stackLocals=0
+  local +0:11 conn: Http1Connection (const)
+  callee +1:9 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee +1:59 Http1Connection.write -> @nish.Http1Connection.write
+  callee +4:5 Http1Connection.end -> @nish.Http1Connection.end
+function Bench.answerVaried(this: Bench, n: i32, k: i32): void -> @Bench.answerVaried [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: n
+  calls: Bench.respond Bench.small nish.JsonWriter.beginObject nish.JsonWriter.boolean nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.stringBytes nish.JsonWriter.written nish_panic_index
+  pointer this: size=112 writesThrough=false captured=false passedTo=Bench.respond#0 Bench.small#0 Bench.respond#0 Bench.respond#0
+  stackSites=0 stackLocals=0
+  callee -16:7 Bench.respond -> @Bench.respond
+  callee -16:50 Bench.small -> @Bench.small
+  local -14:13 w: JsonWriter (const)
+  callee -13:7 JsonWriter.reset -> @nish.JsonWriter.reset
+  callee -12:7 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee -11:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee -10:7 JsonWriter.stringBytes -> @nish.JsonWriter.stringBytes
+  callee -9:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee -8:7 JsonWriter.i32 -> @nish.JsonWriter.i32
+  callee -7:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee -6:7 JsonWriter.boolean -> @nish.JsonWriter.boolean
+  callee -5:7 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  callee -4:7 Bench.respond -> @Bench.respond
+  callee -4:64 JsonWriter.written -> @nish.JsonWriter.written
+  local -2:13 body: u8[] (const)
+  local -1:16 i: i32 (let)
+  callee +2:7 Bench.respond -> @Bench.respond
 function Bench.small(this: Bench, n: i32): i32 -> @Bench.small [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.reset
   escaping: n
   calls: nish.JsonWriter.beginObject nish.JsonWriter.boolean nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.written
-  pointer this: size=72 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 w: JsonWriter (const)
   callee +1:5 JsonWriter.reset -> @nish.JsonWriter.reset

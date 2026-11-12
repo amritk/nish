@@ -9,6 +9,8 @@
 #   bash bench/techempower/run.sh --rounds 3 --duration 10 --only plaintext
 #   bash bench/techempower/run.sh --nodelay-compare   adds `entry-nodelay0`,
 #                                            the entry with its nodelay argument 0
+#   bash bench/techempower/run.sh --browser-head --only plaintext
+#                                            the browser-head gauge, below
 #
 # The method is bench/http.mjs's. The server runs on CPU 0 and the client on
 # every other CPU, so on a 4-core box the figures are client-shared: wrk and
@@ -26,6 +28,13 @@
 #   database     /db, /queries?queries=20, /updates?queries=20, /fortunes and
 #                /cached-queries?count=100, one request at a time, at 16, 64
 #                and 256 connections, against one throwaway local Postgres
+#
+# --browser-head times `entry`, `entry-copy`, `uws` and `go-fasthttp` at 256
+# connections on /plaintext and /json, one request at a time on both, each
+# request carrying the 759-byte head a browser sends (a Chrome User-Agent and
+# Accept, Accept-Language, Accept-Encoding, a six-cookie Cookie, Referer and
+# the Sec-Fetch headers) in place of TFB's three headers. It skips the
+# database tests and needs wrk, since h2load is not given the headers. docs/BENCHMARKS.md → "HTTP/1 codec baseline" records it.
 #
 # The async gate (WP49 stage 6) is read from the same run: `async` against
 # `entry` on plaintext and json, `async-db` against `db-entry` on the database
@@ -73,6 +82,7 @@ duration=10
 quick=0
 only=""
 compare=0
+browser=0
 while [ $# -gt 0 ]; do
   case $1 in
     --quick) quick=1 ;;
@@ -87,6 +97,7 @@ while [ $# -gt 0 ]; do
       case $only in plaintext | json | db) ;; *) echo "run.sh: --only takes plaintext, json or db, not $only" >&2; exit 2 ;; esac
       ;;
     --nodelay-compare) compare=1 ;;
+    --browser-head) browser=1 ;;
     -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echo "run.sh: unknown argument $1" >&2; exit 2 ;;
   esac
@@ -104,6 +115,10 @@ if [ "$quick" = 1 ]; then
   jsonLevels=(64)
   dbLevels=(64)
 fi
+if [ "$browser" = 1 ]; then
+  plainLevels=(256)
+  jsonLevels=(256)
+fi
 
 # The client: wrk, else apt-get's wrk, else h2load.
 client=wrk
@@ -112,6 +127,7 @@ if ! command -v wrk >/dev/null; then
   if ! command -v wrk >/dev/null; then
     command -v h2load >/dev/null || { echo "run.sh: neither wrk nor h2load is installed" >&2; exit 1; }
     client=h2load
+    if [ "$browser" = 1 ]; then echo "run.sh: --browser-head needs wrk" >&2; exit 1; fi
   fi
 fi
 
@@ -156,7 +172,10 @@ build() {
   }
 }
 # Whether the run times test $1: every test, or the one `--only` names.
-wants() { [ -z "$only" ] || [ "$only" = "$1" ]; }
+wants() {
+  if [ "$browser" = 1 ] && [ "$1" = db ]; then return 1; fi
+  [ -z "$only" ] || [ "$only" = "$1" ]
+}
 
 if wants plaintext || wants json; then
   build main.ts entry
@@ -171,9 +190,29 @@ fi
 # name=command, the command taking the port as its first argument.
 contestants=("entry=build/tfb/entry" "entry-copy=build/tfb/entry-copy" "async=build/tfb/async")
 [ "$compare" = 1 ] && contestants+=("entry-nodelay0=build/tfb/entry @0")
-for name in node-http uws bun bun-elysia bun-hono go-nethttp go-fasthttp rust-hyper rust-actix nginx; do
+twins=(node-http uws bun bun-elysia bun-hono go-nethttp go-fasthttp rust-hyper rust-actix nginx)
+if [ "$browser" = 1 ]; then
+  contestants=("entry=build/tfb/entry" "entry-copy=build/tfb/entry-copy")
+  twins=(uws go-fasthttp)
+fi
+for name in "${twins[@]}"; do
   contestants+=("$name=build/http-twins/$name/serve")
 done
+
+# The request head: TFB's three headers, or with --browser-head a browser's.
+head=(-H "Host: tfb-server" -H "Connection: keep-alive"
+  -H "Accept: text/plain,text/html;q=0.9,application/xhtml+xml;q=0.9,application/xml;q=0.8,*/*;q=0.7")
+if [ "$browser" = 1 ]; then
+  head=(-H "Host: tfb-server" -H "Connection: keep-alive"
+    -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+    -H "Accept-Language: en-GB,en-US;q=0.9,en;q=0.8"
+    -H "Accept-Encoding: gzip, deflate, br, zstd"
+    -H "Cookie: session=8f3a9c2e7b1d4f6a0e5c9b2d7f1a3e6c; csrftoken=Qm9vZ2llV29vZ2llQm9vZ2llV29vZ2llQm9v; _ga=GA1.1.1234567890.1731300000; _ga_XYZ123=GS1.1.1731300000.4.1.1731300456.0.0.0; theme=dark; lang=en"
+    -H "Referer: https://tfb-server/"
+    -H "Upgrade-Insecure-Requests: 1"
+    -H "Sec-Fetch-Dest: document" -H "Sec-Fetch-Mode: navigate" -H "Sec-Fetch-Site: same-origin")
+fi
 
 port=18080
 log=build/tfb/server.log
@@ -227,10 +266,8 @@ start() {
 measure() {
   local path=$1 conns=$2 secs=$3 url="http://127.0.0.1:$port$1" out
   if [ "$client" = wrk ]; then
-    local args=(-t "$threads" -c "$conns" -d "${secs}s" --timeout 8
-      -H "Host: tfb-server" -H "Connection: keep-alive"
-      -H "Accept: text/plain,text/html;q=0.9,application/xhtml+xml;q=0.9,application/xml;q=0.8,*/*;q=0.7")
-    if [ "$path" = /plaintext ]; then
+    local args=(-t "$threads" -c "$conns" -d "${secs}s" --timeout 8 "${head[@]}")
+    if [ "$path" = /plaintext ] && [ "$browser" = 0 ]; then
       out=$(${clientCpu[@]+"${clientCpu[@]}"} wrk "${args[@]}" -s "$here/pipeline.lua" "$url" -- 16 2>&1)
     else
       out=$(${clientCpu[@]+"${clientCpu[@]}"} wrk "${args[@]}" "$url" 2>&1)
@@ -244,7 +281,7 @@ measure() {
       END { printf "%s\t%d\t%s\n", rps == "" ? "-" : rps, non2xx, errors == "" ? "0/0/0/0" : errors }'
   else
     local depth=1
-    [ "$path" = /plaintext ] && depth=16
+    [ "$path" = /plaintext ] && [ "$browser" = 0 ] && depth=16
     out=$(${clientCpu[@]+"${clientCpu[@]}"} h2load --h1 -t "$threads" -c "$conns" -m "$depth" -D "$secs" "$url" 2>&1)
     echo "$out" | awk '
       /^finished in/ { gsub(",", "", $4); rps = $4 }
@@ -465,6 +502,7 @@ report() {
   echo "TechEmpower plaintext, json and database tests, $(lscpu | awk -F: '/Model name/ { gsub(/^ +/, "", $2); print $2; exit }'), $cpus CPUs, $(free -g | awk '/^Mem:/ { print $2 }') GiB, $(date -u +%Y-%m-%d)"
   echo "$pinning; client $client -t $httpThreads"
   echo "A relative A/B on one machine, not a TechEmpower rank."
+  if [ "$browser" = 1 ]; then echo "Browser head: a browser's request headers, one request at a time on /plaintext and /json."; fi
   lineup=(${contestants[@]+"${contestants[@]}"})
   if wants plaintext; then report /plaintext entry entry-copy async "${plainLevels[@]}"; fi
   if wants json; then
