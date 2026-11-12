@@ -1443,7 +1443,6 @@ async, top 12 user-space frames by self samples (perf, cpu-clock:u):
 
 </details>
 
-<!-- http-codec-baseline:begin -->
 ## TechEmpower: the async entry re-measured after the profile-led fixes (WP49 stage 6)
 
 The same gate as [the first measurement](#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6) and [the 2026-11-11 re-measurement](#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6), which stay above as the befores, run again once [the profile](#techempower-where-the-async-entrys-time-goes-a-profile-wp49-stage-6) (#1410) had ranked where the async entry's time goes and three PRs had acted on it: #1421 cut `serve`'s per-request copies and slot scans, #1419 cut the async Postgres pool's buffer fill and waits and batched the async entry's concurrent `/db` ids into one statement, and #1459 trimmed the router's walk and `serveTask`'s copies. The method, the pinning, the `*` rule and the caveats are the first measurement's: one 4-core VM shared by wrk, Postgres and the server, so a relative A/B and not a TechEmpower rank ([D6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#9-decisions-for-the-owner)). The cells are req/s, median (minimum) of 3 interleaved rounds of 10 s, and the band is the gap between each pair of identical builds' medians in this run. `run.sh`'s inside rule is one-sided: a delta `d` is inside when `d >= −band`. Peak RSS is the server's `VmHWM`, the largest over every round and concurrency of the test.
@@ -1453,7 +1452,7 @@ The tree measured is #1459's head `f9ffe352` merged locally with `main` at `7471
 | | |
 | --- | --- |
 | Date | 2026-11-12 |
-| nish | `build/nish` built from #1459's head `f9ffe352` merged with `main` at `747126db` (nish 0.38.0 sources), `--link --profile speed` |
+| nish | `build/nish` built from #1459's head `f9ffe352` merged locally with `main` at `747126db`, a merge that has no published SHA (nish 0.38.0 sources), `--link --profile speed` |
 | CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 15 GiB |
 | OS | linux 6.18.44 (x64) |
 | Postgres | 16, a throwaway cluster in `build/tfb/pg`, `fsync=off`, TFB's `world` (10,000 rows) and `fortune` tables |
@@ -1588,6 +1587,7 @@ No database cell has a `*`, and neither explicit build has one anywhere. The asy
 
 **What remains, as far as this run and the profiles go.** No new profile was taken for this run; #1459's callgrind tables, on its head, are the latest (its PR body has them). Per request, the async entry still runs about 3,100 (`plaintext`) and 3,300 (`json`) more instructions than the explicit one, about 8,500 against 5,400 and 9,900 against 6,600. About 750 of it is the task's memory in `runtime/runtime-async.c` (`malloc`/`free` of the frame and region, `nish_async_spawn`, `nish_async_done`, `nish_arena_release`), not the per-wait system calls #1374 ruled out; about 2,100 is the layered hand-off from `serveOn` through `HttpHandler` to `serveTask` and the router's walk; about 190 (`plaintext`) and 450 (`json`) is shared `std/net/http1-server.ts` and JSON-writer code. The database tests' remaining gap was not profiled after #1419.
 
+<!-- http-codec-baseline:begin -->
 ## HTTP/1 codec baseline
 
 The explicit TechEmpower entry ([bench/techempower/](https://github.com/amritk/nish/blob/main/bench/techempower/README.md): `main.ts` and `server.ts` on `Http1Server`), measured before the codec and head stages of [#1416](https://github.com/amritk/nish/issues/1416) change anything. It records where a request's instructions go, the throughput against `uws` and `go-fasthttp`, and a request shaped like a browser's, so each later stage is read against these figures. It measures; it fixes nothing.

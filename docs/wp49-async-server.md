@@ -5,8 +5,9 @@
 profile-led fixes (#1421, #1419, #1459), and still outside the band on
 `plaintext` 256/1024/4096, `json` 128/512 and `db` 64; the follow-up is the
 task memory in `runtime/runtime-async.c` and a redesign of the
-serve/handler/router hand-off (§6, §10).** The language half — `async`, `await`, `Promise<T>`, `spawn`,
-`awaitAll` and the frame lowering — compiles, and runs on the executor that
+serve/handler/router hand-off (§6, §10).** The language half — `async`,
+`await`, `Promise<T>`, `spawn`, `awaitAll` and the frame lowering — compiles,
+and runs on the executor that
 waits on sockets and timers (stage 5, part 1), with async `fetch` (part 2),
 tasks that share their spawner's objects (parts 3 and 8), `serve` (part 4), the
 async Postgres pool (part 5), async `fetch` over TLS (part 6) and
