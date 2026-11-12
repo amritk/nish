@@ -59,6 +59,7 @@ the record that found it. The notes below the table name each such finding.
 | Blocking HTTP client | [fetch.md](fetch.md) | `std/net/fetch.ts` | 0 / 0 / 0 / 10 | 0 / 0 / 0 / 2 |
 | Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
+| HTTP/2 over cleartext (h2c) | [http2-cleartext.md](http2-cleartext.md) | `std/net/http2-cleartext.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | QUIC on every core | [quic-multicore.md](quic-multicore.md) | the UDP path of `nish/net/prefork`; the worker byte in `std/net/quic.ts`, `std/net/quic-listener.ts` and `std/net/quic-conn-cid.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ²⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
@@ -75,7 +76,7 @@ the record that found it. The notes below the table name each such finding.
 | Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts`, `src/shm-window.ts`, `src/emit-shm-window.ts` | 0 / 0 / 1 / 3 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
-| PostgreSQL client, its handler carrier and async pool | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts` | 0 / 0 / 9 / 7 | 0 / 0 / 0 / 0 ¹⁷ |
+| PostgreSQL client, its handler carrier and async pool | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts` | 0 / 0 / 10 / 7 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
@@ -88,7 +89,7 @@ the record that found it. The notes below the table name each such finding.
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
-| **Total** ⁸ | | | **3 / 16 / 82 / 179** | **0 / 0 / 3 / 40** |
+| **Total** ⁸ | | | **3 / 16 / 82 / 179** | **0 / 0 / 3 / 41** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -303,10 +304,11 @@ the record that found it. The notes below the table name each such finding.
     every package, are accepted and not counted, and CAPS-19 (Medium), a
     `net=<host>` grant that binds no computed host at run time, is open.
 17. PG-1 to PG-8 are the shapes a hostile server's bytes can take, checked
-    and found to hold, and are not findings. PG-9 (Medium), no TLS, PG-10
-    (Low), no way to require SCRAM, and PG-11 (Low), MD5 and cleartext
-    refused, are accepted, with the reason in their record, and are not
-    counted. PG-12 (Low), ClientKey left in a hasher, and PG-13 (Low), an
+    and found to hold, and are not findings. PG-9 (Medium), no TLS, is
+    fixed for `PgCarrier`, and every other path refuses a `PgConfig` that
+    asks for TLS. PG-10 (Low), no way to require SCRAM, and PG-11 (Low),
+    MD5 and cleartext refused, are accepted, with the reason in their
+    record, and are not counted. PG-12 (Low), ClientKey left in a hasher, and PG-13 (Low), an
     unbounded send buffer, were found by the module's first review and fixed
     before it merged.
 
@@ -489,6 +491,7 @@ only.
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
 | HC-1 | Low | `std/net/http1-client-codec.ts` (`http1ClientFieldLine`) | In the default strings mode each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes`. Spans mode (`fieldsAsSpans`) allocates nothing per response | Move `fetch.ts` and `websocket.ts` to spans mode |
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
+| H2C-1 | Low | `std/net/http2-cleartext.ts` | Cleartext by design: no confidentiality or integrity on the path. Serve h2c only behind a TLS-terminating proxy, on loopback or a private network | — |
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |

@@ -8,7 +8,8 @@
 // TFB's World and Fortune tables (`tfb`), the same checks against its async
 // twin on the async pool (bench/techempower/async-db-main.ts, `tfb-async`),
 // and `../serve-pool.ts`, a serve handler that awaits the async pool `main`
-// owns (`servepool`).
+// owns (`servepool`), and `tls.ts`, the carrier's TLS against the server's
+// certificate (`tls`).
 //
 //   node tests/postgres/live/run.mjs [--update] [scenario ...]
 //
@@ -25,6 +26,12 @@
 // by `peer`, and a server under `$PG_TEST_URL` must `trust` local
 // connections, with `$PG_TEST_SOCKET_DIR` naming its socket directory. With
 // `$PG_TEST_URL` and no `$PG_TEST_SOCKET_DIR`, `unix` is skipped.
+//
+// The `tls` check needs the server to speak TLS with a certificate
+// `tls-certs.sh` made: the throwaway cluster makes its own and turns `ssl` on,
+// and a server under `$PG_TEST_URL` is named with `$PG_TEST_TLS_DIR`, the
+// directory `tls-certs.sh` wrote. With `$PG_TEST_URL` and no
+// `$PG_TEST_TLS_DIR`, `tls` is skipped.
 import { spawn, spawnSync } from "node:child_process";
 import {
   chownSync,
@@ -46,7 +53,7 @@ const ROOT = join(HERE, "..", "..", "..");
 const NISH = join(ROOT, "build", "nish");
 const BIN = process.env.PG_BIN ?? "/usr/lib/postgresql/18/bin";
 const SCENARIOS = ["auth", "groups", "terminate", "pipeline", "arrays", "intarrays", "binary", "conduit", "batch", "explain", "batchscale", "unix"];
-const CHECKS = [...SCENARIOS, "carrier", "refused", "reset", "tfb", "tfb-async", "servepool"];
+const CHECKS = [...SCENARIOS, "carrier", "refused", "reset", "tfb", "tfb-async", "servepool", "tls"];
 const UPDATE = process.argv.includes("--update");
 const ONLY = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 for (const name of ONLY) {
@@ -111,7 +118,16 @@ const startCluster = async () => {
   const ident = join(data, "pg_ident.conf");
   writeFileSync(ident, `live ${userInfo().username} nish_live\n`);
   if (owner) chownSync(ident, owner.uid, owner.gid);
-  const opts = `-c listen_addresses=127.0.0.1 -c port=${port} -c unix_socket_directories=${dir} -c fsync=off`;
+  // TLS with a leaf for 127.0.0.1 from a root of this run's own.
+  const tls = join(dir, "tls");
+  run("bash", [join(HERE, "tls-certs.sh"), tls]);
+  if (owner) {
+    for (const f of ["", "ca.pem", "stranger.pem", "server.pem", "server.key"]) {
+      chownSync(join(tls, f), owner.uid, owner.gid);
+    }
+  }
+  const ssl = `-c ssl=on -c ssl_cert_file=${join(tls, "server.pem")} -c ssl_key_file=${join(tls, "server.key")}`;
+  const opts = `-c listen_addresses=127.0.0.1 -c port=${port} -c unix_socket_directories=${dir} -c fsync=off ${ssl}`;
   run(
     join(BIN, "pg_ctl"),
     ["-D", data, "-o", opts, "-l", join(dir, "log"), "-w", "start"],
@@ -142,6 +158,7 @@ const startCluster = async () => {
     password: "nish-live",
     database: "nish_live",
     socket: dir,
+    tls,
     stop,
   };
 };
@@ -161,6 +178,7 @@ const fromUrl = (text) => {
     password: decodeURIComponent(url.password),
     database: url.pathname.slice(1),
     socket: process.env.PG_TEST_SOCKET_DIR || null,
+    tls: process.env.PG_TEST_TLS_DIR || null,
     stop: () => {},
   };
 };
@@ -332,6 +350,41 @@ const servepool = async (exe, db) => {
     ok: status === 0 && out === wantOut && got.every((g, k) => g === want[k]),
     detail: `status ${status}, answers ${JSON.stringify(got)}, stdout ${JSON.stringify(out)}, stderr ${JSON.stringify(err)}`,
   };
+};
+
+/**
+ * The carrier's TLS (`tls.ts`) against the server's certificate, a leaf for
+ * 127.0.0.1 and localhost under `ca.pem`: verify-full against `ca.pem` runs
+ * its query over TLS 1.3, by the address and by `localhost`, and so does
+ * require; disable runs it in the clear. verify-full fails with
+ * `PG_ERR_TLS` (11) before any StartupMessage, sending `unknown_ca` (48)
+ * against `stranger.pem` and `bad_certificate` (42) under a name the leaf
+ * does not carry; the carrier reports the alert as its socket error.
+ */
+const tls = (exe, db) => {
+  const ca = join(db.tls, "ca.pem");
+  const stranger = join(db.tls, "stranger.pem");
+  const over = "ssl true TLSv1.3\n";
+  const cases = [
+    ["verify-full", ca, "-", 0, over],
+    ["verify-full", ca, "localhost", 0, over],
+    ["require", "-", "-", 0, over],
+    ["disable", "-", "-", 0, "ssl false none\n"],
+    ["verify-full", stranger, "-", 1, "failed: failure 11, socket 48\n"],
+    ["verify-full", ca, "db.example", 1, "failed: failure 11, socket 42\n"],
+  ];
+  const wrong = [];
+  for (const [mode, roots, name, status, want] of cases) {
+    const r = spawnSync(
+      exe,
+      [String(db.port), db.user, db.password, db.database, mode, roots, name],
+      { encoding: "utf8", timeout: 60_000 },
+    );
+    if (r.status !== status || r.stdout !== want) {
+      wrong.push(`${mode} ${roots} ${name}: status ${r.status}, stdout ${JSON.stringify(r.stdout)}`);
+    }
+  }
+  return { ok: wrong.length === 0, detail: wrong.join("; ") };
 };
 
 /** With nothing listening on its PostgreSQL port, the carrier must fail the query at once with the connect's error, not wait. */
@@ -655,6 +708,7 @@ const main = async () => {
     compile(join(HERE, "..", "carrier.ts"), join(work, "carrier"));
     if (wanted("servepool")) compile(join(HERE, "..", "serve-pool.ts"), join(work, "serve-pool"));
     if (wanted("tfb")) compile(join(ROOT, "bench", "techempower", "db-main.ts"), join(work, "tfb"));
+    if (wanted("tls")) compile(join(HERE, "tls.ts"), join(work, "tls"));
     if (wanted("tfb-async")) compile(join(ROOT, "bench", "techempower", "async-db-main.ts"), join(work, "tfb-async"));
 
     const setup = [
@@ -700,9 +754,15 @@ const main = async () => {
       ["tfb", () => tfb(exe, join(work, "tfb"), db)],
       ["tfb-async", () => tfb(exe, join(work, "tfb-async"), db)],
       ["servepool", () => servepool(join(work, "serve-pool"), db)],
+      ["tls", () => tls(join(work, "tls"), db)],
     ];
     for (const [name, check] of checks) {
       if (!wanted(name)) continue;
+      if (name === "tls" && !db.tls) {
+        skipped += 1;
+        console.log("skip tls: $PG_TEST_URL without $PG_TEST_TLS_DIR");
+        continue;
+      }
       const c = await check();
       if (c.ok) {
         passed += 1;

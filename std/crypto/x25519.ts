@@ -54,21 +54,21 @@
  * an input length.
  *
  * WP34 N6's disassembly check (`tests/ct-asm.js`) verifies the part a secret
- * flows through: `tests/cases/ct_asm_x25519` holds copies of `f25519Mul`,
- * `f25519Square`, `f25519MulA24`, `f25519Add`, `f25519Sub`, `f25519Swap` and
- * one pass of `x25519Ladder`'s loop, and the check reads each one's `clang -O2`
- * machine code for x86-64 and aarch64 and finds no branch and no load or store
- * at an address the scalar bit or a limb reaches.
+ * flows through: `tests/cases/ct_asm_x25519` holds copies of the field
+ * arithmetic, `f25519Swap`, the encodings and both halves of the ladder, and
+ * the check reads each one's `clang -O2` machine code for x86-64 and aarch64
+ * and finds no branch on a secret and no load or store at an address the
+ * scalar bit or a limb reaches. The rolled loops (the ladder's 255 steps, the
+ * inversion's square chains, the encodings) are read whole, back edge included.
  *
- * They are copies because the check refuses every branch, loop back-edges
- * included, and this module's own functions keep their loops and the early
- * `return`s below; the copies drop the guards and write `f25519Mul`'s outer
- * loop out a row at a time, and the fixture's `main` holds them to the same RFC
- * 7748 vectors as this module. A change to one of those functions belongs in
- * that fixture too. What stays discipline rather than proof is the rest: the
- * loops around the step, `f25519Decode`, `f25519Encode` and `f25519Invert`,
- * whose branches are all on public positions. Weekly, `tests/ct-timing.js`
- * times the fixture's functions on real x86-64 and aarch64 hardware as well.
+ * They are copies because a case compiles to one module. `tests/run.js` holds
+ * each to this module's text, with the early `return`s dropped (each guards a
+ * public length, but is a branch) and every index unchecked, so a change here
+ * that the copies miss fails that check. What stays outside the check is
+ * the allocation and wiping around the work in `x25519Ladder`, `f25519Decode`
+ * and `f25519Encode`, whose branches are all on public positions. Weekly,
+ * `tests/ct-timing.js` times the fixture's functions on real x86-64 and
+ * aarch64 hardware as well.
  *
  * **Loop bounds are literals.** A field element is always ten limbs and an
  * encoding always 32 bytes, and each function that indexes one opens with an
@@ -281,6 +281,24 @@ export const f25519Sub = (out: i64[], f: i64[], g: i64[]): void => {
 }
 
 /**
+ * Row `i` of `f25519Mul`'s product: `f[i]` (doubled where both limbs are odd)
+ * times each limb of `g`, added into `wide[i + j]`. The ten rows are written
+ * out rather than looped: `clang -O2` then keeps `wide` in registers and
+ * stack slots it can name, where a rolled row loop indexes it by a counter,
+ * and an indexed store into the frame is one tests/ct-asm.js cannot place
+ * (`docs/security/ct-verification.md`).
+ */
+const f25519MulRow = (wide: i64[], f: i64[], doubled: i64[], g: i64[], i: i32): void => {
+  for (let j: i32 = 0; j < 10; j++) {
+    const k: i32 = i + j
+    const fi: i64 = (i & j & 1) === 1 ? doubled[i] : f[i]
+    if (k >= 0 && k < 19) {
+      wide[k] = f25519Add64(wide[k], f25519Mul64(fi, g[j]))
+    }
+  }
+}
+
+/**
  * `out = f * g`, reduced. `out` may be `f` or `g`: the product is built in
  * scratch arrays and only copied out at the end.
  *
@@ -312,17 +330,18 @@ export const f25519Mul = (out: i64[], f: i64[], g: i64[]): void => {
   for (let i: i32 = 0; i < 10; i++) {
     doubled[i] = f25519Mul64(f[i], toI64((i & 1) + 1))
   }
-  // The plain product, limb `i + j` of nineteen.
+  // The plain product, limb `i + j` of nineteen, a row of `f` at a time.
   const wide: i64[] = new Array<i64>(19)
-  for (let i: i32 = 0; i < 10; i++) {
-    for (let j: i32 = 0; j < 10; j++) {
-      const k: i32 = i + j
-      const fi: i64 = (i & j & 1) === 1 ? doubled[i] : f[i]
-      if (k >= 0 && k < 19) {
-        wide[k] = f25519Add64(wide[k], f25519Mul64(fi, g[j]))
-      }
-    }
-  }
+  f25519MulRow(wide, f, doubled, g, 0)
+  f25519MulRow(wide, f, doubled, g, 1)
+  f25519MulRow(wide, f, doubled, g, 2)
+  f25519MulRow(wide, f, doubled, g, 3)
+  f25519MulRow(wide, f, doubled, g, 4)
+  f25519MulRow(wide, f, doubled, g, 5)
+  f25519MulRow(wide, f, doubled, g, 6)
+  f25519MulRow(wide, f, doubled, g, 7)
+  f25519MulRow(wide, f, doubled, g, 8)
+  f25519MulRow(wide, f, doubled, g, 9)
   // Limbs 10 to 18 are past bit 255, and 2^255 = 19 (mod p): fold them down.
   const h: i64[] = new Array<i64>(10)
   for (let k: i32 = 0; k < 9; k++) {
@@ -488,6 +507,16 @@ export const f25519Decode = (bytes: u8[]): i64[] => {
   if (toI32(bytes.length) < 32) {
     return f
   }
+  f25519DecodeInto(f, bytes)
+  return f
+}
+
+/**
+ * `f25519Decode`'s loop, into `f`: the 32 bytes of `bytes` streamed into ten
+ * limbs. Apart so that tests/cases/ct_asm_x25519 can read this loop in the
+ * assembly as the module has it (`docs/security/ct-verification.md`).
+ */
+const f25519DecodeInto = (f: i64[], bytes: u8[]): void => {
   let acc: i64 = 0
   let bits: i64 = 0
   let limb: i32 = 0
@@ -508,7 +537,6 @@ export const f25519Decode = (bytes: u8[]): i64[] => {
       }
     }
   }
-  return f
 }
 
 /**
@@ -530,6 +558,16 @@ export const f25519Decode = (bytes: u8[]): i64[] => {
  * @internal Imported by `nish/crypto/ed25519`, which works over the same field.
  */
 export const f25519Encode = (f: i64[]): u8[] => {
+  const out: u8[] = new Array<u8>(32)
+  f25519EncodeInto(out, f)
+  return out
+}
+
+/**
+ * `f25519Encode`'s reduction and packing, into `out`, 32 bytes. Apart for the
+ * same reason as `f25519DecodeInto`.
+ */
+const f25519EncodeInto = (out: u8[], f: i64[]): void => {
   const h: i64[] = new Array<i64>(10)
   f25519Copy(h, f)
   f25519Carry(h)
@@ -543,7 +581,6 @@ export const f25519Encode = (f: i64[]): u8[] => {
   f25519CarryChain(h)
   h[9] = h[9] & f25519LimbMask(9)
 
-  const out: u8[] = new Array<u8>(32)
   let acc: i64 = 0
   let bits: i64 = 0
   let at: i32 = 0
@@ -561,7 +598,94 @@ export const f25519Encode = (f: i64[]): u8[] => {
   if (at >= 0 && at < 32) {
     out[at] = toU8(acc & toI64(0xff))
   }
-  return out
+}
+
+/**
+ * One step of the ladder, from its two swaps on: `swap` is the bit the loop
+ * has just folded into its swap state, a secret that only feeds the swaps'
+ * masks. `a` to `t` are scratch, passed in so that `x25519Ladder` can wipe
+ * them (ECC-2).
+ */
+const x25519LadderStep = (
+  x2: i64[],
+  z2: i64[],
+  x3: i64[],
+  z3: i64[],
+  u: i64[],
+  swap: i64,
+  a: i64[],
+  aa: i64[],
+  b: i64[],
+  bb: i64[],
+  e: i64[],
+  c: i64[],
+  d: i64[],
+  da: i64[],
+  cb: i64[],
+  t: i64[]
+): void => {
+  f25519Swap(x2, x3, swap)
+  f25519Swap(z2, z3, swap)
+  f25519Add(a, x2, z2)
+  f25519Square(aa, a)
+  f25519Sub(b, x2, z2)
+  f25519Square(bb, b)
+  f25519Sub(e, aa, bb)
+  f25519Add(c, x3, z3)
+  f25519Sub(d, x3, z3)
+  f25519Mul(da, d, a)
+  f25519Mul(cb, c, b)
+  f25519Add(t, da, cb)
+  f25519Square(x3, t)
+  f25519Sub(t, da, cb)
+  f25519Square(t, t)
+  f25519Mul(z3, u, t)
+  f25519Mul(x2, aa, bb)
+  f25519MulA24(t, e)
+  f25519Add(t, aa, t)
+  f25519Mul(z2, e, t)
+}
+
+/**
+ * The ladder's 255 steps on a clamped `k`, and the two swaps after them. The
+ * scratch is `x25519LadderStep`'s. Apart from `x25519Ladder` so that
+ * tests/cases/ct_asm_x25519 can read this loop in the assembly as the module
+ * has it (`docs/security/ct-verification.md`).
+ */
+const x25519LadderLoop = (
+  x2: i64[],
+  z2: i64[],
+  x3: i64[],
+  z3: i64[],
+  u: i64[],
+  k: u8[],
+  a: i64[],
+  aa: i64[],
+  b: i64[],
+  bb: i64[],
+  e: i64[],
+  c: i64[],
+  d: i64[],
+  da: i64[],
+  cb: i64[],
+  t: i64[]
+): void => {
+  let swap: i64 = 0
+  // Bit 254 down to bit 0: the position is public and picks the byte and the
+  // shift; the bit itself is secret and only ever feeds a mask.
+  for (let byte: i32 = 31; byte >= 0; byte--) {
+    for (let shift: i32 = 7; shift >= 0; shift--) {
+      if (byte === 31 && shift === 7) {
+        continue
+      }
+      const bit: i64 = toI64(k[byte] >> toU8(shift)) & toI64(1)
+      swap = swap ^ bit
+      x25519LadderStep(x2, z2, x3, z3, u, swap, a, aa, b, bb, e, c, d, da, cb, t)
+      swap = bit
+    }
+  }
+  f25519Swap(x2, x3, swap)
+  f25519Swap(z2, z3, swap)
 }
 
 /**
@@ -594,42 +718,7 @@ const x25519Ladder = (k: u8[], u: i64[]): u8[] => {
   const cb: i64[] = f25519Zero()
   const t: i64[] = f25519Zero()
 
-  let swap: i64 = 0
-  // Bit 254 down to bit 0: the position is public and picks the byte and the
-  // shift; the bit itself is secret and only ever feeds a mask.
-  for (let byte: i32 = 31; byte >= 0; byte--) {
-    for (let shift: i32 = 7; shift >= 0; shift--) {
-      if (byte === 31 && shift === 7) {
-        continue
-      }
-      const bit: i64 = toI64(k[byte] >> toU8(shift)) & toI64(1)
-      swap = swap ^ bit
-      f25519Swap(x2, x3, swap)
-      f25519Swap(z2, z3, swap)
-      swap = bit
-
-      f25519Add(a, x2, z2)
-      f25519Square(aa, a)
-      f25519Sub(b, x2, z2)
-      f25519Square(bb, b)
-      f25519Sub(e, aa, bb)
-      f25519Add(c, x3, z3)
-      f25519Sub(d, x3, z3)
-      f25519Mul(da, d, a)
-      f25519Mul(cb, c, b)
-      f25519Add(t, da, cb)
-      f25519Square(x3, t)
-      f25519Sub(t, da, cb)
-      f25519Square(t, t)
-      f25519Mul(z3, u, t)
-      f25519Mul(x2, aa, bb)
-      f25519MulA24(t, e)
-      f25519Add(t, aa, t)
-      f25519Mul(z2, e, t)
-    }
-  }
-  f25519Swap(x2, x3, swap)
-  f25519Swap(z2, z3, swap)
+  x25519LadderLoop(x2, z2, x3, z3, u, k, a, aa, b, bb, e, c, d, da, cb, t)
 
   f25519Invert(t, z2)
   f25519Mul(x2, x2, t)

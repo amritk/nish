@@ -667,6 +667,11 @@
                         "title": "http2",
                         "filepath": "docs/reference/net/http2.md"
                       },
+                      "/http2-cleartext": {
+                        "type": "page",
+                        "title": "http2-cleartext",
+                        "filepath": "docs/reference/net/http2-cleartext.md"
+                      },
                       "/http2-frame": {
                         "type": "page",
                         "title": "http2-frame",
@@ -1178,6 +1183,11 @@
                     "filepath": "docs/security/http1-client-codec.md"
                   },
                   "/http2": { "type": "page", "title": "HTTP/2", "filepath": "docs/security/http2.md" },
+                  "/http2-cleartext": {
+                    "type": "page",
+                    "title": "HTTP/2 over cleartext",
+                    "filepath": "docs/security/http2-cleartext.md"
+                  },
                   "/http3": { "type": "page", "title": "HTTP/3", "filepath": "docs/security/http3.md" },
                   "/quic-multicore": {
                     "type": "page",

@@ -4172,6 +4172,111 @@ if (!only || "net_tls_tcp".includes(only)) {
   }
 }
 
+// ---- `nish/net/http2-cleartext`, against curl and h2load (WP39 G7) --------------
+//
+// What the Nish clients in `tests/link/net_http2_cleartext` cannot say: that an
+// HTTP/2 stack somebody else wrote speaks to the carrier by prior knowledge,
+// with no TLS and no Upgrade. The same program run as `serve 5` listens, prints
+// its port and serves five connections: one from `curl --http2-prior-knowledge`,
+// whose GET must come back 200 over HTTP/2 with the short body, then four from
+// `h2load -n 1000 -c 4`, every one of whose thousand requests must succeed. The
+// server prints one line per connection it closed; each must end with no error.
+// Either client missing is a skip, named, rather than a pass.
+if (!only || "net_http2_cleartext".includes(only)) {
+  const h2cDir = path.join(buildDir, "net-h2c")
+  fs.rmSync(h2cDir, { recursive: true, force: true })
+  fs.mkdirSync(h2cDir, { recursive: true })
+  const exe = path.join(h2cDir, "app")
+  const built = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "net_http2_cleartext", "main.ts"),
+      "-o",
+      h2cDir + path.sep,
+      "--link",
+      exe,
+      ...linkProfile("net_http2_cleartext"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  // A curl built without nghttp2 refuses --http2-prior-knowledge before it
+  // connects, and the server would wait out its timer for that connection.
+  const curlFound = has("curl")
+  const hasCurl = curlFound && /\bHTTP2\b/.test(String(spawnSync("curl", ["--version"], { encoding: "utf8" }).stdout))
+  const hasH2load = has("h2load")
+  if (!curlFound) skip("net_http2_cleartext: curl is not installed, so no third-party client speaks h2c to the carrier")
+  else if (!hasCurl) skip("net_http2_cleartext: curl was built without HTTP2 (curl --version), so it cannot speak h2c to the carrier")
+  if (!hasH2load) skip("net_http2_cleartext: h2load is not installed (nghttp2-client), so the carrier is not loaded by one")
+  if (check("net_http2_cleartext: the server links", built.status === 0, String(built.stderr)) && (hasCurl || hasH2load)) {
+    const connections = (hasCurl ? 1 : 0) + (hasH2load ? 4 : 0)
+    const server = spawn(exe, ["serve", String(connections)], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let served = ""
+    let serverErr = ""
+    const serverTimer = setTimeout(() => server.kill("SIGKILL"), 60000)
+    const serverDone = new Promise((resolve) =>
+      server.on("close", (code, signal) => {
+        clearTimeout(serverTimer)
+        resolve({ code, signal })
+      })
+    )
+    server.stderr.on("data", (chunk) => {
+      serverErr += chunk
+    })
+    const port = await new Promise((resolve) => {
+      server.stdout.on("data", (chunk) => {
+        served += chunk
+        const m = /^port (\d+)\n/.exec(served)
+        if (m !== null) {
+          resolve(Number(m[1]))
+        }
+      })
+      server.on("close", () => resolve(0))
+    })
+    // Each client runs to its end before the next, asynchronously, so that the
+    // server's output keeps arriving while it does.
+    const run = (tool, args) =>
+      new Promise((resolve) => {
+        const child = spawn(tool, args, { stdio: ["ignore", "pipe", "pipe"] })
+        let out = ""
+        const timer = setTimeout(() => child.kill("SIGKILL"), 30000)
+        child.stdout.on("data", (chunk) => {
+          out += chunk
+        })
+        child.stderr.on("data", (chunk) => {
+          out += chunk
+        })
+        child.on("close", (code, signal) => {
+          clearTimeout(timer)
+          resolve({ code, signal, out })
+        })
+      })
+    const url = `http://127.0.0.1:${port}/hello`
+    if (hasCurl) {
+      const r = port > 0 ? await run("curl", ["-sS", "--max-time", "10", "--http2-prior-knowledge", url, "-w", "\n%{http_version} %{http_code}\n"]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: curl --http2-prior-knowledge GETs the page over HTTP/2, 200 with the short body",
+        r.code === 0 && r.out === "hello from nish/net/http2\n\n2 200\n",
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    if (hasH2load) {
+      const r = port > 0 ? await run("h2load", ["-n", "1000", "-c", "4", url]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: h2load -n 1000 -c 4 over prior knowledge: every request succeeds with a 2xx",
+        r.code === 0 && /requests: 1000 total, 1000 started, 1000 done, 1000 succeeded, 0 failed, 0 errored, 0 timeout/.test(r.out) && /status codes: 1000 2xx/.test(r.out),
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    const ended = await serverDone
+    const lines = served.replace(/^port \d+\n/, "").split("\n").filter((line) => line !== "")
+    check(
+      `net_http2_cleartext: the server closes all ${connections} connections, each with no error, and exits 0`,
+      ended.code === 0 && lines.length === connections && lines.every((line) => /^closed: streams \d+ error 0$/.test(line)),
+      `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(served)}\nstderr: ${serverErr}`
+    )
+  }
+}
+
 // ---- record_size_limit (RFC 8449) against openssl s_client (WP39 G3) ------------
 //
 // `tests/link/net_tls_record_size_limit` reads the record lengths the server
@@ -11665,7 +11770,11 @@ if (dealtHere("p256Seams")) {
   // 10,000 scalars. Neither inversion is exported, so the program reaches them
   // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
   // std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
-  // Its expected.out ends in a checksum of every inverse. Natively, and as a
+  // #1430 adds the field: `p256FieldInvert` (safegcd) against Fermat's a^(p-2)
+  // on 0, 1, p-1, p, every 2^k and 2^k-1 and 1,000 seeded values, and the
+  // verify's width-5 wNAF pass (`p256DoubleMultPublic`) against two
+  // `p256ScalarMult`s and a `p256PointAdd`, on n-1, n-2, zero, the identity
+  // and seeded sums. Its expected.out ends in a checksum of every result. Natively, and as a
   // `--profile wasi` module under Node.
   if (!only || ["p256 inverse", "crypto_p256_inverse", "wasi"].some((name) => name.includes(only))) {
     p256SeamProgram({
@@ -11675,7 +11784,7 @@ if (dealtHere("p256Seams")) {
       source: "inverse.ts",
       extra: [],
       nativeName:
-        "p256 inverse: safegcd and Fermat give the same inverse for every scalar of tests/link/crypto_p256_inverse, natively",
+        "p256 inverse: safegcd and Fermat give the same inverse for every scalar and field element, and the wNAF pass the comb's sum, in tests/link/crypto_p256_inverse, natively",
     })
   }
 
@@ -12092,19 +12201,20 @@ if (dealtHere("cryptoChecks")) {
   // group is and how a root's wipes are counted).
   runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
 
-  // The two wipes of `p256ScalarInverse` (#758) that `tests/wipes/` cannot count:
-  // `opt` promotes g, the signed-30 copy of the nonce, and t, the matrix derived
-  // from it, to stack slots, and their wipes reach -O2 as one volatile `i32` zero
-  // store per limb rather than as a memset. Each array's stores share an SROA base
-  // (`%arr.data.N.sroa.*`), so the body must hold a group of nine for g and one of
-  // four for t; deleting `wipe(g)` or `wipe(t)` removes its group. The `p256`,
+  // The three wipes of `p256Safegcd` (#758) that `tests/wipes/` cannot count:
+  // `opt` promotes f, the modulus, g, the signed-30 copy of the secret, and t,
+  // the matrix derived from them, to stack slots, and their wipes reach -O2 as
+  // one volatile `i32` zero store per limb rather than as a memset. Each array's
+  // stores share an SROA base (`%arr.data.N.sroa.*`), so the body must hold two
+  // groups of nine for f and g and one of four for t; deleting `wipe(f)`,
+  // `wipe(g)` or `wipe(t)` removes its group. The `p256`,
   // `crypto`, `wipe` and `crypto_p256` filters all run it.
   {
     const name =
-      "crypto: the wipes survive opt -O2 (p256ScalarInverse's g and t, nine and four volatile i32 zero stores)"
+      "crypto: the wipes survive opt -O2 (p256Safegcd's f, g and t, nine, nine and four volatile i32 zero stores)"
     if (!only || [name, "crypto_p256"].some((selector) => selector.includes(only))) {
       if (!has("opt")) {
-        skip("crypto: no opt to show p256ScalarInverse's promoted wipes survive -O2")
+        skip("crypto: no opt to show p256Safegcd's promoted wipes survive -O2")
       } else {
         const dir = path.join(buildDir, "wipes-o2", "p256-scalar-inverse")
         fs.rmSync(dir, { recursive: true, force: true })
@@ -12122,7 +12232,7 @@ if (dealtHere("cryptoChecks")) {
             : c
         const body =
           o.status === 0
-            ? (o.stdout.match(/^define [^\n]*@"?nish\.p256ScalarInverse"?\([\s\S]*?\n\}/m) ?? [""])[0]
+            ? (o.stdout.match(/^define [^\n]*@"?nish\.p256Safegcd"?\([\s\S]*?\n\}/m) ?? [""])[0]
             : ""
         const groups = new Map()
         for (const m of body.matchAll(/store volatile i32 0, ptr %([\w.]+?)\.sroa\.\d+,/g)) {
@@ -12133,9 +12243,9 @@ if (dealtHere("cryptoChecks")) {
         if (o.status !== 0) {
           detail = o.stderr
         } else if (body === "") {
-          detail = "nish.p256ScalarInverse: not in the optimised p256.ll"
+          detail = "nish.p256Safegcd: not in the optimised p256.ll"
         }
-        check(name, sizes.length === 2 && sizes[0] === 9 && sizes[1] === 4, detail)
+        check(name, sizes.length === 3 && sizes[0] === 9 && sizes[1] === 9 && sizes[2] === 4, detail)
       }
     }
   }
@@ -12618,7 +12728,7 @@ if (dealtHere("cryptoChecks")) {
           // A spec that could not be read exactly fails below, in the fixture check,
           // rather than being run here with a secret it lost.
           for (const spec of specs.filter((sp) => sp.problems.length === 0)) {
-            const body = functionBody(lines, spec.name, target)
+            const body = functionBody(lines, spec.name, target, { labels: spec.loops })
             const found = body === null ? [] : ctViolations(body, spec, target)
             const kinds = [...new Set(found.map((v) => v.kind))]
             check(
@@ -12775,6 +12885,125 @@ if (dealtHere("cryptoChecks")) {
         loopBody === undefined
           ? "no `for (let i: i32 = 0; i < 30; i++)` loop in std/crypto/p256.ts's p256Divsteps30"
           : `${blocks.length} blocks, ${stray.length} unlike the module's loop body:\n${stray[0] ?? ""}\n--- module:\n${loopBody}`
+      )
+
+      // ct_asm_chacha20poly1305's loop copies are the module's text with a `ct`
+      // prefix and an `export`, so a module edit the copy misses fails here, not
+      // silently. `ctPoly1305AbsorbWhole` is the head of poly1305Absorb up to the
+      // end of its whole-blocks loop; the padded tail stays discipline.
+      const chachaSource = fs.readFileSync(path.join(root, "std", "crypto", "chacha20poly1305.ts"), "utf8")
+      const chachaFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_chacha20poly1305.ts"), "utf8")
+        .replace(/\bct(Chacha20|Poly1305)/g, (_m, word) => word.toLowerCase())
+        .replace(/\bCT_POLY1305_/g, "POLY1305_")
+        .replace(/\nexport const /g, "\nconst ")
+      const bodyOf = (source, name) =>
+        source.match(new RegExp(`\\nconst ${name} = (?:[^\\n]*\\{\\n[\\s\\S]*?\\n\\}\\n|[^\\n]*[^{\\n]\\n)`))?.[0]
+      const drifted = []
+      for (const name of ["chacha20Rotl", "chacha20Core", "chacha20XorInto"]) {
+        const copy = bodyOf(chachaFixture, name)
+        if (copy === undefined || copy !== bodyOf(chachaSource, name)) {
+          drifted.push(name)
+        }
+      }
+      const absorbHead = bodyOf(chachaFixture, "poly1305AbsorbWhole")
+        ?.replace("poly1305AbsorbWhole", "poly1305Absorb")
+        .replace(", len: i32): void", ", len: i32, zeroPad: boolean): void")
+        .replace(/\}\n$/, "")
+      if (absorbHead === undefined || !bodyOf(chachaSource, "poly1305Absorb")?.startsWith(absorbHead)) {
+        drifted.push("poly1305Absorb's whole-blocks loop")
+      }
+      if (!chachaSource.includes("\nconst POLY1305_HIGH_BIT: i32 = 0x1000000\n")) {
+        drifted.push("POLY1305_HIGH_BIT")
+      }
+      check(
+        "ct_asm: ct_asm_chacha20poly1305's loop copies match std/crypto/chacha20poly1305.ts",
+        drifted.length === 0,
+        `differs from the module: ${drifted.join(", ")}`
+      )
+
+      // ct_asm_aes's loop copies keep the module's names, so only `export` differs.
+      const aesSource = fs.readFileSync(path.join(root, "std", "crypto", "aes.ts"), "utf8")
+      const aesFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_aes.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const aesDrifted = [
+        "aesBytes",
+        "aesSwapBits",
+        "aesTranspose",
+        "aesPack",
+        "aesUnpack",
+        "aesEncryptBatch",
+        "aesSubWord",
+      ].filter((name) => {
+        const copy = bodyOf(aesFixture, name)
+        return copy === undefined || copy !== bodyOf(aesSource, name)
+      })
+      check(
+        "ct_asm: ct_asm_aes's loop copies match std/crypto/aes.ts",
+        aesDrifted.length === 0,
+        `differs from the module: ${aesDrifted.join(", ")}`
+      )
+
+      // ct_asm_x25519's copies are std/crypto/x25519.ts put through the rewrites
+      // the fixture's header names: the module's names mapped to the fixture's,
+      // the short-array early returns, comments and blank lines dropped, and
+      // each `a[i]` written through `nish:unsafe`. `ladderStep` and `ladderLoop`
+      // put their parameters on lines of their own, which `bodyOf`'s one-line
+      // form would stop at, so a line ending in `(` opens a block here.
+      const x25519Body = (source, name) =>
+        source.match(new RegExp(`\\nconst ${name} = (?:[^\\n]*[^{(\\n]\\n|[\\s\\S]*?\\n\\}\\n)`))?.[0]
+      const x25519Module = fs
+        .readFileSync(path.join(root, "std", "crypto", "x25519.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+        .replace(/\bf25519Swap\b/g, "condSwap")
+        .replace(/\bx25519Ladder(Step|Loop)\b/g, (_m, word) => `ladder${word}`)
+        .replace(/\bf25519(\w)/g, (_m, c) => `field${c}`)
+        .replace(/\bX25519_A24\b/g, "toI64(121665)")
+        .replace(/\bfieldZero\(\)/g, "new Array<i64>(10)")
+      const x25519Fixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_x25519.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const x25519Drifted = [
+        "fieldAdd64",
+        "fieldSub64",
+        "fieldMul64",
+        "fieldWidth",
+        "fieldLimbMask",
+        "fieldCopy",
+        "fieldCarryChain",
+        "fieldCarry",
+        "fieldAdd",
+        "fieldSub",
+        "fieldMulRow",
+        "fieldMul",
+        "fieldSquare",
+        "fieldSquareTimes",
+        "fieldMulA24",
+        "fieldPow250",
+        "fieldInvert",
+        "condSwap",
+        "fieldDecode",
+        "fieldDecodeInto",
+        "fieldEncode",
+        "fieldEncodeInto",
+        "ladderStep",
+        "ladderLoop",
+      ].filter((name) => {
+        const copy = x25519Body(x25519Fixture, name)
+        const want = x25519Body(x25519Module, name)
+          ?.replace(/\n {2}if \(toI32\([^\n]*\.length\) < \d+[^\n]*\{\n {4}return[^\n]*\n {2}\}/g, "")
+          .replace(/\n\s*\/\/[^\n]*/g, "")
+          .replace(/ \/\/ [^\n]*/g, "")
+          .replace(/\n\s*(?=\n)/g, "")
+          .replace(/^(\s*)(\w+)\[([^\]\n]+)\] = ([^\n]*)$/gm, "$1uncheckedSet($2, $3, $4);")
+          .replace(/\b(\w+)\[([^[\]\n]+)\]/g, "uncheckedGet($1, $2)")
+        return copy === undefined || want === undefined || copy !== want
+      })
+      check(
+        "ct_asm: ct_asm_x25519's copies match std/crypto/x25519.ts",
+        x25519Drifted.length === 0,
+        `differs from the module: ${x25519Drifted.join(", ")}`
       )
     }
   }
