@@ -459,9 +459,9 @@ the caller, so the connection itself reads no randomness.
 The connection accepts `trust` and `scram-sha-256`, PostgreSQL's default
 since version 14, and checks the server's signature before it believes the
 server. It refuses a server that asks for a cleartext or `md5` password, and
-fails with `PG_ERR_AUTH_UNSUPPORTED`: there is no TLS here, so the first would
-send the password as it is, and the second sends a hash anyone who sees it can
-replay. Set the role's password with `password_encryption = scram-sha-256`.
+fails with `PG_ERR_AUTH_UNSUPPORTED`, over TLS as well: the first
+sends the password as it is, and the second a hash anyone who sees it can
+replay, where SCRAM proves the password without sending it. Set the role's password with `password_encryption = scram-sha-256`.
 
 The password's bytes are used as they are, without SASLprep (RFC 4013), the
 normalisation PostgreSQL applies to a non-ASCII password. An ASCII password
@@ -930,7 +930,7 @@ yourself. After it, `run`, `runInt` and `runText` answer `PG_CARRIER_FULL`
 and `next()` answers `PG_CARRIER_NONE`, and a second `close()` does nothing.
 
 The constructor panics on a cap or `watch` id out of range, a target that failed or a host
-name; `attach` past 8 batchers, after the pool connected, on a NUL in the
+name, TLS on a Unix socket, or `PG_TLS_VERIFY_FULL` with no root certificate to read; `attach` past 8 batchers, after the pool connected, on a NUL in the
 batcher's name or SQL, or past 256 statements; `runInt` and
 `runText` on an id `attach` never gave; `request()` for a query run with no
 request; `connection()` before an event named one; `send()` with no build
@@ -938,6 +938,51 @@ open; and `next()` with one still open.
 
 [`tests/postgres/carrier.ts`](https://github.com/amritk/nish/blob/main/tests/postgres/carrier.ts) is a whole
 program that serves HTTP while a query sleeps on a live server.
+
+### Over TLS
+
+The carrier can speak TLS 1.3 to the server. Set `PgConfig.tls` before the
+pool is made:
+
+```ts
+import { PG_TLS_VERIFY_FULL, PgConfig } from "nish/net/postgres"
+
+const config = new PgConfig()
+config.user = "app"
+config.database = "app"
+config.tls = PG_TLS_VERIFY_FULL
+config.tlsRootsPath = "/etc/app/db-ca.pem" // "" reads the system's store
+config.tlsServerName = "db.internal"       // "" checks the target's host
+```
+
+| `tls` | What it does |
+| --- | --- |
+| `PG_TLS_DISABLE` (the default) | No TLS: the connection is in the clear, as before. |
+| `PG_TLS_REQUIRE` | TLS or no connection, with the certificate unchecked: it stops an eavesdropper, not a machine in the middle. |
+| `PG_TLS_VERIFY_FULL` | TLS, with the server's chain checked to a root in `tlsRootsPath` and its certificate checked for `tlsServerName`. |
+
+Use `PG_TLS_VERIFY_FULL` whenever the database is across a network you do
+not control; it is `libpq`'s `sslmode=verify-full`. The default stays
+`PG_TLS_DISABLE` so that a program connecting in the clear today keeps
+connecting, and a Unix socket, where TLS buys nothing, keeps working; TLS on
+a Unix socket target is a panic. Since the carrier resolves no names, a
+target is an address: set `tlsServerName` to the name on the server's
+certificate when it does not carry the address.
+
+The carrier sends PostgreSQL's SSLRequest, and a server that answers no
+fails each query with `PG_ERR_TLS` and `carrier.socketError` 0. A handshake
+that fails is `PG_ERR_TLS` too, with `socketError` the TLS alert the
+carrier sent: 48 for a certificate under a root you did not give, 42 for
+one that names another host. The server needs `ssl = on` and a certificate
+and key, and must speak TLS 1.3, which the carrier requires: PostgreSQL
+built with OpenSSL 1.1.1 or later does.
+
+Only the carrier speaks TLS: the [async pool](#awaiting-a-query-from-a-task)
+and a `PgPool` you drive yourself do not, and neither does a client
+certificate. Rather than connect in the clear, they refuse a `PgConfig` that
+asks for TLS: the `PgConnection` constructor, `pgAsyncConnect` and
+`PgPool.connect` on a pool no carrier drives panic on a `tls` other than
+`PG_TLS_DISABLE`.
 
 ## Awaiting a query from a task
 
@@ -1110,7 +1155,7 @@ export async function main(): Promise<i32> {
 
 ## What it does not do
 
-TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), a CancelRequest
+TLS outside [the carrier](#over-tls), `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), a CancelRequest
 for a cancelled query, binary-format parameters other than `int4[]` and `int8[]`,
 binary results for a type other
 than an integer, `bool`, `float8`, time, text or a one-dimensional `int2[]`,
