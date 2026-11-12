@@ -275,6 +275,14 @@ export class Options {
    * of holding the build to it (`Compilation.checkCapabilityLock`).
    */
   updateCapabilityLock: boolean
+  /**
+   * WP28: `--compat`, the dialect. The compatibility dialect is where a
+   * program written for a JavaScript engine will be met part way, and in this
+   * release it accepts nothing the strict dialect does not: no rule of the
+   * checker and no lowering reads this, so the flag changes no diagnostic and
+   * no byte of the IR (`tests/compat-erasure.js` holds that over the corpus).
+   */
+  compat: boolean
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32
@@ -317,6 +325,7 @@ export class Options {
     this.sandboxWrite = []
     this.sandboxExec = []
     this.updateCapabilityLock = false
+    this.compat = false
   }
 
   /**
