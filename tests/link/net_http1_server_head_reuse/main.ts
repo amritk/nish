@@ -1,7 +1,7 @@
 // `Http1Connection.respond` keeps a final head it has written twice running
 // (the same status, framing, `Connection` and number of fields) and copies it
-// when the next is the same: the same fields too, in the same second. These checks drive one connection with
-// no socket and read every response byte for byte against
+// when the next is the same: the same fields too, in the same second. These
+// checks drive connections with no socket and read every response byte for byte against
 // `http1WriteResponseHead` called directly, so a copied head is shown to be
 // the head the writer would have written, and a head that differs in any
 // input (a status, a field's name or value, its order, a length, the
@@ -94,6 +94,7 @@ const answer = (conn: Http1Connection, status: i32, names: u8[][], values: u8[][
 };
 
 const GET: string = "GET /plaintext HTTP/1.1\r\nHost: a\r\n\r\n";
+const BODY: string = "Hello, World!";
 
 /** `n` copies of `text`. */
 const times = (text: string, n: i32): string => {
@@ -113,11 +114,25 @@ const check = (t: Suite, conn: Http1Connection, what: string, status: i32, ns: u
   t.ok(`${what}: ${copied ? "copied" : "written"}`, conn.headCopies === before + (copied ? 1 : 0));
 };
 
+/**
+ * A fresh connection that answers `ns`/`vs` three times (written, kept, then
+ * copied), then `status` with `vn`/`vv` and `text`: checked against that
+ * kept head alone, so nothing an earlier variant left decides it.
+ */
+const against = (t: Suite, what: string, ns: u8[][], vs: u8[][], status: i32, vn: u8[][], vv: u8[][], text: string, reason: string, copied: boolean): void => {
+  const conn = fed(times(GET, 4));
+  check(t, conn, `${what}: the base head`, 200, ns, vs, BODY, "OK", false);
+  check(t, conn, `${what}: the base head, kept`, 200, ns, vs, BODY, "OK", false);
+  check(t, conn, `${what}: the base head, copied`, 200, ns, vs, BODY, "OK", true);
+  check(t, conn, what, status, vn, vv, text, reason, copied);
+};
+
 export const main = (): i32 => {
   const t = new Suite("http1 head reuse");
   const names: u8[][] = fields(["Server", "Content-Type"]);
   const values: u8[][] = fields(["Nish", "text/plain"]);
-  const body: string = "Hello, World!";
+  const body: string = BODY;
+  const none: u8[][] = [];
 
   // A repeated head, pipelined: written twice, the second kept, copied after.
   const piped = fed(times(GET, 5));
@@ -133,28 +148,41 @@ export const main = (): i32 => {
   t.eqStr("each with the head the writer writes, then its body", drained(piped), times(`${plain}${body}`, 5));
   t.ok("the first two heads are written and the three after them copied", piped.headCopies === 3);
 
-  // Every input of the head, changed one at a time, is a head written fresh.
-  const changes = fed(times(GET, 13));
-  check(t, changes, "the first head", 200, names, values, body, "OK", false);
-  check(t, changes, "the same head again, kept", 200, names, values, body, "OK", false);
-  check(t, changes, "and once more", 200, names, values, body, "OK", true);
-  check(t, changes, "another status", 404, names, values, body, "Not Found", false);
-  check(t, changes, "back to 200", 200, names, values, body, "OK", false);
-  check(t, changes, "another body length", 200, names, values, "Hello, World!!", "OK", false);
-  check(t, changes, "a value of the same length, changed", 200, names, fields(["Nish", "text/plaim"]), body, "OK", false);
-  check(t, changes, "a name of the same length in another case", 200, fields(["server", "Content-Type"]), fields(["Nish", "text/plaim"]), body, "OK", false);
-  check(t, changes, "a field more", 200, fields(["server", "Content-Type", "X-A"]), fields(["Nish", "text/plaim", "1"]), body, "OK", false);
-  check(t, changes, "a field fewer, its value never carried over", 200, fields(["server", "Content-Type"]), fields(["Nish", "text/plaim"]), body, "OK", false);
-  check(t, changes, "the fields in another order", 200, fields(["Content-Type", "server"]), fields(["text/plaim", "Nish"]), body, "OK", false);
+  // Every input of the head, changed one at a time against a kept head, is a head written fresh.
+  const three: u8[][] = fields(["Server", "Content-Type", "X-A"]);
+  const threeValues: u8[][] = fields(["Nish", "text/plain", "1"]);
+  against(t, "another status", names, values, 404, names, values, body, "Not Found", false);
+  against(t, "another body length", names, values, 200, names, values, "Hello, World!!", "OK", false);
+  against(t, "a value of the same length, changed", names, values, 200, names, fields(["Nish", "text/plaim"]), body, "OK", false);
+  against(t, "a name of the same length in another case", names, values, 200, fields(["server", "Content-Type"]), values, body, "OK", false);
+  against(t, "a field more", names, values, 200, three, threeValues, body, "OK", false);
+  against(t, "a field fewer, its value never carried over", three, threeValues, 200, names, values, body, "OK", false);
+  against(t, "the fields in another order", names, values, 200, fields(["Content-Type", "Server"]), fields(["text/plain", "Nish"]), body, "OK", false);
+  against(t, "fresh arrays with the kept head's bytes", names, values, 200, fields(["Server", "Content-Type"]), fields(["Nish", "text/plain"]), body, "OK", true);
   // The same arrays, their bytes changed in place: compared by content, not identity.
-  const live: u8[][] = fields(["Content-Type", "server"]);
-  const liveValues: u8[][] = fields(["text/plaim", "Nish"]);
-  check(t, changes, "fresh arrays with the kept head's bytes", 200, live, liveValues, body, "OK", true);
-  liveValues[0][9] = toU8(110);
-  check(t, changes, "one byte changed in place in the same array", 200, live, liveValues, body, "OK", false);
+  const live: u8[][] = fields(["Server", "Content-Type"]);
+  const liveValues: u8[][] = fields(["Nish", "text/plain"]);
+  const inPlace = fed(times(GET, 4));
+  check(t, inPlace, "arrays answered in place", 200, live, liveValues, body, "OK", false);
+  check(t, inPlace, "arrays answered in place, kept", 200, live, liveValues, body, "OK", false);
+  check(t, inPlace, "arrays answered in place, copied", 200, live, liveValues, body, "OK", true);
+  liveValues[1][9] = toU8(109);
+  check(t, inPlace, "one byte changed in place in the same array", 200, live, liveValues, body, "OK", false);
+
+  // Any status is kept like 200, and 200 after it is written.
+  const statuses: i32[] = [201, 301, 302, 404, 500, 503];
+  const reasons: string[] = ["Created", "Moved Permanently", "Found", "Not Found", "Internal Server Error", "Service Unavailable"];
+  for (let k: i32 = 0; k < toI32(statuses.length); k++) {
+    const conn = fed(times(GET, 4));
+    const status: i32 = statuses[k];
+    check(t, conn, `a ${status}`, status, names, values, body, reasons[k], false);
+    check(t, conn, `a ${status}, kept`, status, names, values, body, reasons[k], false);
+    check(t, conn, `a ${status}, copied`, status, names, values, body, reasons[k], true);
+    check(t, conn, `a 200 after ${status}s`, 200, names, values, body, "OK", false);
+  }
 
   // A second that turns is a new head; the next in that second is copied.
-  const ticking = fed(times(GET, 4));
+  const ticking = fed(times(GET, 5));
   nextRequest(ticking);
   answer(ticking, 200, names, values, body);
   nextRequest(ticking);
@@ -172,7 +200,9 @@ export const main = (): i32 => {
   t.ok("the turn writes a head, the next is copied", ticking.headCopies === 1 && laterHead !== plain);
   // Within a second the pinned clock does not reformat: a later millisecond is the same head.
   ticking.date.pin(PINNED_MS + 1999);
-  t.ok("a later millisecond of the same second reformats nothing", latin1(ticking.date.current(), ZERO, 29) === latin1(later, ZERO, 29));
+  const current: u8[] = ticking.date.current();
+  t.eqStr("a later millisecond of the same second reformats nothing", latin1(current, ZERO, toI32(current.length)), "Fri, 16 Oct 2026 08:11:55 GMT");
+  check(t, ticking, "and its head is copied", 200, names, values, body, "OK", true);
 
   // Keep-alive, then close: the close is a head of its own.
   const closing = fed(`${GET}${GET}${GET}GET /plaintext HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n`);
@@ -203,6 +233,17 @@ export const main = (): i32 => {
   }
   t.eqStr("GET, GET, HEAD, GET", drained(heading), `${plain}${body}${plain}${body}${plain}${plain}${body}`);
   t.ok("the HEAD's head and the GET's after it are copied", heading.headCopies === 2);
+  // A HEAD whose length differs from the kept head's is written.
+  const headLonger = fed(`${GET}${GET}${GET}HEAD /plaintext HTTP/1.1\r\nHost: a\r\n\r\n`);
+  for (let k: i32 = 0; k < 3; k++) {
+    nextRequest(headLonger);
+    answer(headLonger, 200, names, values, body);
+  }
+  nextRequest(headLonger);
+  answer(headLonger, 200, names, values, "Hello, World!!");
+  const longer: string = head(200, "OK", names, values, 14, "", date);
+  t.eqStr("three GETs, then a HEAD with another length", drained(headLonger), `${times(`${plain}${body}`, 3)}${longer}`);
+  t.ok("the third GET's head is copied, the HEAD's written", headLonger.headCopies === 1);
 
   // 100 Continue is never kept, and does not end the kept head.
   const expecting = fed(`${GET}${GET}POST /p HTTP/1.1\r\nHost: a\r\nContent-Length: 0\r\nExpect: 100-continue\r\n\r\n`);
@@ -211,7 +252,6 @@ export const main = (): i32 => {
     answer(expecting, 200, names, values, body);
   }
   nextRequest(expecting);
-  const none: u8[][] = [];
   const interim: i32 = expecting.respond(100, none, none, HTTP1_NO_BODY);
   answer(expecting, 200, names, values, body);
   t.eqStr("a 100 after two answers and before a third", drained(expecting), `${plain}${body}${plain}${body}HTTP/1.1 100 Continue\r\n\r\n${plain}${body}`);
@@ -230,44 +270,56 @@ export const main = (): i32 => {
   t.eqStr("three chunked answers, then one to HTTP/1.0", drained(chunked), `${times(`${chunkedHead}0\r\n\r\n`, 3)}${tenChunked}`);
   t.ok("the third chunked head is copied", chunkedOk && chunked.headCopies === 1);
 
-  // A 204 with no body: kept too.
-  const empty = fed(times(GET, 3));
-  for (let k: i32 = 0; k < 3; k++) {
-    nextRequest(empty);
-    empty.respond(204, names, values, HTTP1_NO_BODY);
-    empty.end();
+  // A 204 or a 304 with no body: kept too.
+  const bodiless: i32[] = [204, 304];
+  const bodilessReasons: string[] = ["No Content", "Not Modified"];
+  for (let s: i32 = 0; s < 2; s++) {
+    const empty = fed(times(GET, 3));
+    for (let k: i32 = 0; k < 3; k++) {
+      nextRequest(empty);
+      empty.respond(bodiless[s], names, values, HTTP1_NO_BODY);
+      empty.end();
+    }
+    const noContent: string = head(bodiless[s], bodilessReasons[s], names, values, HTTP1_NO_BODY, "", date);
+    t.eqStr(`three ${bodiless[s]}s`, drained(empty), times(noContent, 3));
+    t.ok(`the third ${bodiless[s]} is copied`, empty.headCopies === 1);
   }
-  const noContent: string = head(204, "No Content", names, values, HTTP1_NO_BODY, "", date);
-  t.eqStr("three 204s", drained(empty), times(noContent, 3));
-  t.ok("the third 204 is copied", empty.headCopies === 1);
 
-  // An error answer after a kept head carries none of its fields.
-  const erring = fed(`${GET}GET /x HTTP/9.9\r\n\r\n`);
-  nextRequest(erring);
-  answer(erring, 200, fields(["X-Secret", "Content-Type"]), fields(["kept", "text/plain"]), body);
+  // An error answer after a copied head carries none of its fields.
+  const secret: u8[][] = fields(["X-Secret", "Content-Type"]);
+  const secretValues: u8[][] = fields(["kept", "text/plain"]);
+  const erring = fed(`${GET}${GET}${GET}GET /x HTTP/9.9\r\n\r\n`);
+  for (let k: i32 = 0; k < 3; k++) {
+    nextRequest(erring);
+    answer(erring, 200, secret, secretValues, body);
+  }
+  t.ok("three answers before the error, the third copied", erring.headCopies === 1);
   for (let k: i32 = 0; k < 4; k++) {
     erring.next();
   }
-  const kept: string = head(200, "OK", fields(["X-Secret", "Content-Type"]), fields(["kept", "text/plain"]), 13, "", date);
+  const kept: string = head(200, "OK", secret, secretValues, 13, "", date);
+  const refusal: string = head(505, "HTTP Version Not Supported", none, none, 0, "close", date);
   const fresh = fed("GET /x HTTP/9.9\r\n\r\n");
   fresh.next();
-  const refusal: string = drained(fresh);
-  t.ok("a refused request is answered", refusal.startsWith("HTTP/1.1 ") && refusal.length > 0);
-  t.eqStr("an error after a kept head is the error a fresh connection answers", drained(erring), `${kept}${body}${refusal}`);
+  t.eqStr("a refused version is answered 505 and closed", drained(fresh), refusal);
+  t.eqStr("an error after a copied head is that same 505", drained(erring), `${times(`${kept}${body}`, 3)}${refusal}`);
 
   // A request past a limit, likewise.
   const target: string = `GET /${times("a", 300)} HTTP/1.1\r\nHost: a\r\n\r\n`;
-  const limited = fed(`${GET}${target}`);
-  nextRequest(limited);
-  answer(limited, 200, names, values, body);
+  const limited = fed(`${GET}${GET}${GET}${target}`);
+  for (let k: i32 = 0; k < 3; k++) {
+    nextRequest(limited);
+    answer(limited, 200, names, values, body);
+  }
+  t.ok("three answers before the long target, the third copied", limited.headCopies === 1);
   for (let k: i32 = 0; k < 4; k++) {
     limited.next();
   }
+  const tooLong: string = head(414, "URI Too Long", none, none, 0, "close", date);
   const alone = fed(target);
   alone.next();
-  const tooLong: string = drained(alone);
-  t.ok("a target past maxTarget is answered 414", tooLong.startsWith("HTTP/1.1 414 "));
-  t.eqStr("and so after a kept head", drained(limited), `${plain}${body}${tooLong}`);
+  t.eqStr("a target past maxTarget is answered 414 and closed", drained(alone), tooLong);
+  t.eqStr("and so after a copied head", drained(limited), `${times(`${plain}${body}`, 3)}${tooLong}`);
 
   // A field the writer refuses is refused even when its bytes line up with the kept head.
   const split = fed(times(GET, 8));
@@ -281,6 +333,8 @@ export const main = (): i32 => {
   const dateText: string = latin1(date, ZERO, toI32(date.length));
   const shifted: i32 = split.respond(200, fields(["A: 1\r\nB", "Date"]), fields(["2", dateText]), 13);
   t.eqI32("a name spanning two kept lines is refused", shifted, H1_INVALID);
+  const spanning: i32 = split.respond(200, fields(["A", "B"]), fields(["1", `2\r\nDate: ${dateText}\r\nContent-Length: 13`]), 13);
+  t.eqI32("a last value spanning the kept Date and Content-Length is refused", spanning, H1_INVALID);
   for (let k: i32 = 0; k < 3; k++) {
     answer(split, 200, fields(["A"]), fields(["b: c"]), body);
     nextRequest(split);
@@ -331,28 +385,19 @@ export const main = (): i32 => {
   t.ok("written both times", wide.headCopies === 0);
 
   // Every length class of the kept-field compare (a byte at a time, four-,
-  // eight- and sixteen-byte loads): a name and a value of each length, then
-  // one byte changed at its start, middle and end, each written fresh.
+  // eight- and sixteen-byte loads): a name and a value of each length kept,
+  // then one byte changed at its start, middle and end, each against a
+  // freshly kept head and written fresh.
   const lengths: i32[] = [1, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33];
   for (const n of lengths) {
-    const kept: string = times("v", n);
-    const sizes = fed(times(GET, 6));
-    const at: i32[] = n === 1 ? [0] : [0, n / 2, n - 1];
-    check(t, sizes, `a value of ${n}, first`, 200, fields(["X-L"]), fields([kept]), body, "OK", false);
-    check(t, sizes, `a value of ${n}, kept`, 200, fields(["X-L"]), fields([kept]), body, "OK", false);
-    check(t, sizes, `a value of ${n}, again`, 200, fields(["X-L"]), fields([kept]), body, "OK", true);
-    for (const k of at) {
-      const changed: string = `${times("v", k)}w${times("v", n - k - 1)}`;
-      check(t, sizes, `a value of ${n} changed at ${k}`, 200, fields(["X-L"]), fields([changed]), body, "OK", false);
-    }
-    const named = fed(times(GET, 6));
+    const value: string = times("v", n);
     const name: string = times("n", n);
-    check(t, named, `a name of ${n}, first`, 200, fields([name]), fields(["v"]), body, "OK", false);
-    check(t, named, `a name of ${n}, kept`, 200, fields([name]), fields(["v"]), body, "OK", false);
-    check(t, named, `a name of ${n}, again`, 200, fields([name]), fields(["v"]), body, "OK", true);
+    const at: i32[] = n === 1 ? [0] : [0, n / 2, n - 1];
     for (const k of at) {
-      const changed: string = `${times("n", k)}m${times("n", n - k - 1)}`;
-      check(t, named, `a name of ${n} changed at ${k}`, 200, fields([changed]), fields(["v"]), body, "OK", false);
+      const changedValue: string = `${times("v", k)}w${times("v", n - k - 1)}`;
+      against(t, `a value of ${n} changed at ${k}`, fields(["X-L"]), fields([value]), 200, fields(["X-L"]), fields([changedValue]), body, "OK", false);
+      const changedName: string = `${times("n", k)}m${times("n", n - k - 1)}`;
+      against(t, `a name of ${n} changed at ${k}`, fields([name]), fields(["v"]), 200, fields([changedName]), fields(["v"]), body, "OK", false);
     }
   }
 

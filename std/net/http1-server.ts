@@ -835,8 +835,11 @@ export class Http1Connection {
   private headConnection: i32 = 0
   /** How many of the program's fields the kept head carries. */
   private headFields: i32 = 0
-  /** The length of each of the kept head's field names, in order: `H1_HEAD_FIELDS` of them, made with `headBytes`. */
-  private headNames: i32[]
+  /**
+   * The length of each of the kept head's field names and values, in order,
+   * name then value: `2 * H1_HEAD_FIELDS` of them, made with `headBytes`.
+   */
+  private headLengths: i32[]
   /** The `HttpDate` the kept head's `Date` came from. */
   private headDate: HttpDate
   /** `headDate.formats()` when the kept head was written: a later format is a new second. */
@@ -896,7 +899,7 @@ export class Http1Connection {
     this.noFields = []
     this.headBytes = this.noOutput
     this.headDate = this.date
-    this.headNames = []
+    this.headLengths = []
     // A line must fit whole before the parser can read it, so the buffer
     // holds the longest request line or field line however small a chunk is.
     let limit: i32 = config.chunkSize
@@ -1502,7 +1505,7 @@ export class Http1Connection {
     if (interim) {
       return 0
     }
-    this.keepHead(start, end, status, reason, names, framing, connection)
+    this.keepHead(start, end, status, reason, names, values, framing, connection)
     return this.begin(close, framing, empty)
   }
 
@@ -1540,9 +1543,11 @@ export class Http1Connection {
     const kept: u8[] = this.headBytes
     const limit: i32 = this.headLength
     let at: i32 = this.headFieldsAt
-    const lengths: i32[] = this.headNames
+    const lengths: i32[] = this.headLengths
     for (let i: i32 = 0; i < count && at >= 0; i += 1) {
-      if (toI32(names[i].length) !== lengths[i]) {
+      // Both lengths, so that a value cannot match the kept bytes past its
+      // own field and pass for the kept head without its text checks.
+      if (toI32(names[i].length) !== lengths[2 * i] || toI32(values[i].length) !== lengths[2 * i + 1]) {
         return false
       }
       at = http1ServerKept(kept, at, limit, names[i], 58)
@@ -1567,6 +1572,7 @@ export class Http1Connection {
     status: i32,
     reason: string,
     names: u8[][],
+    values: u8[][],
     framing: i32,
     connection: i32
   ): void {
@@ -1587,13 +1593,14 @@ export class Http1Connection {
     }
     if (toI32(this.headBytes.length) < H1_HEAD_KEEP) {
       this.headBytes = new Array<u8>(H1_HEAD_KEEP)
-      this.headNames = new Array<i32>(H1_HEAD_FIELDS)
+      this.headLengths = new Array<i32>(2 * H1_HEAD_FIELDS)
     }
     if (!again) {
       return
     }
     for (let i: i32 = 0; i < fields; i += 1) {
-      this.headNames[i] = toI32(names[i].length)
+      this.headLengths[2 * i] = toI32(names[i].length)
+      this.headLengths[2 * i + 1] = toI32(values[i].length)
     }
     copyBytes(this.headBytes, H1_ZERO, this.output, start, n)
     // The field lines start past "HTTP/1.1 NNN " reason CRLF.
