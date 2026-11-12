@@ -1,0 +1,1 @@
+`h` is assigned by a later argument of `apply`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const`

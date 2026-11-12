@@ -63,7 +63,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 12 of 27 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
-| [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 2 of 4 |
+| [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | Proposed | 2 of 13 |
 
 ## Landed

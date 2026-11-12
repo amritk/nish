@@ -1,0 +1,1 @@
+`Result<(i32) => i32, string>` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array

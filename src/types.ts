@@ -1316,6 +1316,10 @@ export class TypeTable {
         return 4 // an i32
       case K_FNREF:
         return 4 // an i32 tag
+      case K_NULLABLE:
+        return this.alignOf(this.refs[type]) // its llvmType is its inner type's
+      case K_MAYBE:
+        return this.alignOf(this.refs[type]) // the payload's; the found bit is apart
       case K_VECTOR:
         return 16 // and sixteen bytes in size, as clang's `vector_size(16)` is
       default:

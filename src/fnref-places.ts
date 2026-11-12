@@ -7,7 +7,8 @@
 // a generated function whose `switch` on the tag makes the direct calls.
 //
 // A place is a local or parameter, a function's return, a field (by name and
-// reference type), or the elements of every array of one reference type. A
+// reference type), or the elements of every array, and the values of every
+// `Map`, of one reference type (`m.get(k)` reads them, `m.set` stores them). A
 // value flows into a place by a declaration, an assignment, an argument, a
 // `return`, an array or object literal or a `for...of`; a place's set is the
 // union of what flows into it, iterated until nothing moves. A value the
@@ -17,6 +18,7 @@
 import { checkSignatureBody } from "./checker"
 import { CheckContext } from "./context"
 import { referenceTypeOf } from "./fnrefs"
+import { isMapOwner } from "./generics"
 import { StringMap } from "./map"
 import {
   N_ARRAY,
@@ -63,6 +65,9 @@ import {
 } from "./program"
 import { Local, Scope, STORAGE_PARAM } from "./symbols"
 import { T_ERROR, T_I32, T_VOID, TypeTable } from "./types"
+
+/** Whether `op` stores a reference into its left side: `=` or a logical assignment. */
+const isRefAssignment = (op: string): boolean => op === "=" || op === "??=" || op === "||=" || op === "&&="
 
 /** One module as the pass sees it: what it checked, its context, its tree and its parents. */
 export class RefModule {
@@ -158,18 +163,23 @@ class RefPass {
    * The reference type `node`'s value holds: its own, or the one under a
    * nullable or a maybe such as `Map.get`'s `Op | undefined`; -1 for any
    * other value. A nullable reference is followed as the reference it holds,
-   * so a place it reaches is not left empty.
+   * so a place it reaches is not left empty, through every layer: a
+   * `Map<K, F | null>`'s `get` gives `(F | null) | undefined` (WP51 stage 2).
    */
   refType(node: Node): i32 {
-    const type = this.typeOf(node)
-    if (this.table.isFnRef(type)) {
-      return type
+    // An assignment used as a value, `k(r = plus1)`, is the value it stores.
+    const typed = node.kind === N_BINARY && isRefAssignment(node.text) ? node.children[1] : node
+    const type = this.stripType(this.typeOf(typed))
+    return this.table.isFnRef(type) ? type : -1
+  }
+
+  /** `type` without its `| null` or `| undefined` layers. */
+  stripType(type: i32): i32 {
+    let inner = type
+    while (this.table.isNullable(inner) || this.table.isMaybe(inner)) {
+      inner = this.table.refOf(inner)
     }
-    const holder = this.table.isNullable(type) || this.table.isMaybe(type)
-    if (holder && this.table.isFnRef(this.table.refOf(type))) {
-      return this.table.refOf(type)
-    }
-    return -1
+    return inner
   }
 
   isRef(node: Node): boolean {
@@ -340,9 +350,21 @@ class RefPass {
           this.flow(node.children[1], target)
           return
         }
-        if (node.text === "=") {
-          this.scan(node)
-          this.flow(node.children[0], target)
+        if (isRefAssignment(node.text)) {
+          // `k(r = plus1)`: the value stored is the value passed on. Its
+          // target carries no type of its own, so the stored value goes
+          // through one place into both. `r ??= plus1` may keep what `r`
+          // held, so that is in the value too.
+          const value = this.newPlace(type)
+          this.flow(node.children[1], value)
+          const stored = this.target(node.children[0], type)
+          if (stored >= 0) {
+            this.storeFrom(stored, value, node)
+            if (node.text !== "=") {
+              this.storeFrom(value, stored, node)
+            }
+          }
+          this.storeFrom(target, value, node)
           return
         }
         break
@@ -374,13 +396,15 @@ class RefPass {
         const site = this.scanCall(node)
         if (!site) {
           const callee = this.callees[node.id]
-          // A call whose callee returns something else, such as the probe
-          // `Map.get` lowers to, has no return place to read: it widens.
-          if (callee !== null && !callee.dispatcher && callee.returnType === type) {
+          // A call whose callee returns something else has no return place
+          // to read: it widens. A callee returning `F | null` stores its
+          // returns under `F`, as `return` does. `Map.get` lowers to a probe,
+          // and reads the element place its values are stored in.
+          if (callee !== null && !callee.dispatcher && this.stripType(callee.returnType) === type) {
             this.storeFrom(target, this.returnPlace(callee, type), node)
             return
           }
-          if (this.arrayMethod(node, false) >= 0) {
+          if (this.arrayMethod(node, false) >= 0 || this.mapGet(node)) {
             this.storeFrom(target, this.elementPlace(type), node)
             return
           }
@@ -410,7 +434,9 @@ class RefPass {
     if (!this.table.isArray(receiver)) {
       return -1
     }
-    const element = this.table.refOf(receiver)
+    // An array of `F | null` stores and yields `F`'s element place too: a
+    // `push` into it must reach the place `hs[i]` reads.
+    const element = this.stripType(this.table.refOf(receiver))
     if (!this.table.isFnRef(element)) {
       return -1
     }
@@ -429,6 +455,21 @@ class RefPass {
     const reads =
       name === "pop" || name === "shift" || name === "at" || name === "find" || name === "findLast"
     return reads ? element : -1
+  }
+
+  /**
+   * Whether `call` is `m.get(k)` on a `Map`: its value is read out of the
+   * map's `entryValues`, an array of the value type, so it is the element
+   * place of that type, which every `set` stores into (WP51 stage 2).
+   */
+  mapGet(call: Node): boolean {
+    const access = call.children[0]
+    const callee = this.callees[call.id]
+    if (access.kind !== N_MEMBER || access.text !== "get" || callee === null) {
+      return false
+    }
+    const owner = callee.owner
+    return owner !== null && isMapOwner(owner)
   }
 
   /** A call: a call through a reference is recorded; arguments flow to their parameters. Whether it was one. */
@@ -548,7 +589,7 @@ class RefPass {
       }
       case N_BINARY: {
         const op = node.text
-        if ((op === "=" || op === "??=" || op === "||=" || op === "&&=") && this.isRef(node.children[1])) {
+        if (isRefAssignment(op) && this.isRef(node.children[1])) {
           const place = this.target(node.children[0], this.refType(node.children[1]))
           this.flow(node.children[1], place)
           return
@@ -593,8 +634,9 @@ class RefPass {
         if (head.kind === N_VAR && head.children.length > 0 && head.children[0].children.length > 0) {
           const decl = head.children[0].children[0]
           const local = this.locals[decl.id]
-          if (local !== null && this.table.isFnRef(local.type)) {
-            this.storeFrom(this.localPlace(local, local.type), this.elementPlace(local.type), node)
+          const type = local === null ? -1 : this.stripType(local.type)
+          if (local !== null && this.table.isFnRef(type)) {
+            this.storeFrom(this.localPlace(local, type), this.elementPlace(type), node)
           }
         }
         this.scan(node.children[1])

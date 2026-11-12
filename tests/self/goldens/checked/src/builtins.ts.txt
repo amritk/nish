@@ -23,6 +23,7 @@ import netSignature from "./nish-modules" -> function @netSignature
 import unsafeModule from "./nish-modules" -> function @unsafeModule
 import N_CALL from "./nodes" -> const N_CALL
 import N_IDENT from "./nodes" -> const N_IDENT
+import N_INDEX from "./nodes" -> const N_INDEX
 import N_MEMBER from "./nodes" -> const N_MEMBER
 import N_PAREN from "./nodes" -> const N_PAREN
 import Node from "./nodes" -> struct Node
@@ -253,6 +254,24 @@ function checkNamespaceProperty(ctx: CheckContext, expr: Node, namespace: string
   callee +23:8 isNamespace -> @isNamespace
   callee +24:12 CheckContext.errorType -> @CheckContext.errorType
   callee +26:10 CheckContext.errorType -> @CheckContext.errorType
+function namesReference(ctx: CheckContext, arg: Node, scope: Scope): boolean -> @namesReference
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkExpression
+  calls: CheckContext.signature Scope.lookup Scope.typeOf TypeTable.isFnRef TypeTable.stripNull checkExpression
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.signature#0
+  pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 Scope.lookup#0 Scope.typeOf#0
+  stackSites=0 stackLocals=0
+  local +0:11 got: i32 (const)
+  callee +0:17 checkExpression -> @checkExpression
+  callee +1:31 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +1:49 TypeTable.stripNull -> @TypeTable.stripNull
+  local +6:9 local: Local | null (const)
+  callee +6:17 Scope.lookup -> @Scope.lookup
+  callee +8:12 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +8:30 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +8:50 Scope.typeOf -> @Scope.typeOf
+  callee +10:10 CheckContext.signature -> @CheckContext.signature
 function unknownBuiltin(ctx: CheckContext, at: Node, name: string): i32 -> @unknownBuiltin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -274,10 +293,10 @@ function checkImportedDottedBuiltin(ctx: CheckContext, call: Node, scope: Scope,
 function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i32 -> @checkBuiltinCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
-  calls: CheckContext.errorType checkArena checkBuiltinArity checkConsole checkCrypto checkDate checkFromBytes checkIndexArgument checkMath checkProcess isNamespace nish_panic_index nish_str_concat nish_str_eq unknownBuiltin
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.errorType#0 unknownBuiltin#0 checkConsole#0 checkMath#0 checkProcess#0 checkArena#0 checkDate#0 checkCrypto#0 checkBuiltinArity#0 checkIndexArgument#0 checkFromBytes#0 unknownBuiltin#0
+  calls: CheckContext.errorType CheckContext.textOf checkArena checkBuiltinArity checkConsole checkCrypto checkDate checkFromBytes checkIndexArgument checkMath checkProcess isNamespace namesReference nish_panic_index nish_str_concat nish_str_eq opaqueReferenceMessage unknownBuiltin
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.errorType#0 namesReference#0 CheckContext.errorType#0 CheckContext.textOf#0 unknownBuiltin#0 checkConsole#0 checkMath#0 checkProcess#0 checkArena#0 checkDate#0 checkCrypto#0 checkBuiltinArity#0 checkIndexArgument#0 checkFromBytes#0 unknownBuiltin#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkConsole#1 checkMath#1 checkProcess#1 checkArena#1 checkDate#1 checkCrypto#1 checkBuiltinArity#1 checkFromBytes#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkConsole#5 checkMath#5 checkProcess#5 checkCrypto#5 checkIndexArgument#2 checkFromBytes#3
+  pointer scope: size=56 writesThrough=true captured=true passedTo=namesReference#2 checkConsole#5 checkMath#5 checkProcess#5 checkCrypto#5 checkIndexArgument#2 checkFromBytes#3
   stackSites=0 stackLocals=0
   local +0:9 access: Node (const)
   local +1:9 receiver: Node (const)
@@ -287,17 +306,21 @@ function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i32 -> @
   local +7:9 member: string (const)
   local +8:9 name: string (const)
   callee +9:8 isNamespace -> @isNamespace
-  callee +12:12 unknownBuiltin -> @unknownBuiltin
-  callee +15:12 checkConsole -> @checkConsole
-  callee +18:12 checkMath -> @checkMath
-  callee +21:12 checkProcess -> @checkProcess
-  callee +24:12 checkArena -> @checkArena
-  callee +27:12 checkDate -> @checkDate
-  callee +30:12 checkCrypto -> @checkCrypto
-  callee +33:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +34:7 checkIndexArgument -> @checkIndexArgument
-  callee +39:12 checkFromBytes -> @checkFromBytes
-  callee +41:10 unknownBuiltin -> @unknownBuiltin
+  callee +13:7 namesReference -> @namesReference
+  callee +15:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +15:46 opaqueReferenceMessage -> @opaqueReferenceMessage
+  callee +15:69 CheckContext.textOf -> @CheckContext.textOf
+  callee +19:12 unknownBuiltin -> @unknownBuiltin
+  callee +22:12 checkConsole -> @checkConsole
+  callee +25:12 checkMath -> @checkMath
+  callee +28:12 checkProcess -> @checkProcess
+  callee +31:12 checkArena -> @checkArena
+  callee +34:12 checkDate -> @checkDate
+  callee +37:12 checkCrypto -> @checkCrypto
+  callee +40:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +41:7 checkIndexArgument -> @checkIndexArgument
+  callee +46:12 checkFromBytes -> @checkFromBytes
+  callee +48:10 unknownBuiltin -> @unknownBuiltin
 function checkFromBytes(ctx: CheckContext, call: Node, args: Node, scope: Scope): i32 -> @checkFromBytes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
@@ -323,7 +346,7 @@ function checkConsole(ctx: CheckContext, call: Node, args: Node, name: string, m
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via unknownBuiltin
   escaping: name
-  calls: CheckContext.error CheckContext.errorType CheckContext.textOf TypeTable.isFnRef TypeTable.typeName checkExpression isStringifiable nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 opaqueReferenceMessage requireStatementPosition unknownBuiltin
+  calls: CheckContext.error CheckContext.errorType CheckContext.textOf TypeTable.isFnRef TypeTable.stripNull TypeTable.typeName checkExpression isStringifiable nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 opaqueReferenceMessage requireStatementPosition unknownBuiltin
   pointer ctx: size=336 writesThrough=true captured=true passedTo=unknownBuiltin#0 CheckContext.errorType#0 checkExpression#0 CheckContext.error#0 CheckContext.textOf#0 CheckContext.error#0 requireStatementPosition#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 requireStatementPosition#1
   pointer args: size=40 writesThrough=false captured=false
@@ -334,6 +357,7 @@ function checkConsole(ctx: CheckContext, call: Node, args: Node, name: string, m
   local +5:9 got: i32 (const)
   callee +5:15 checkExpression -> @checkExpression
   callee +6:26 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +6:44 TypeTable.stripNull -> @TypeTable.stripNull
   callee +7:5 CheckContext.error -> @CheckContext.error
   callee +7:33 opaqueReferenceMessage -> @opaqueReferenceMessage
   callee +7:56 CheckContext.textOf -> @CheckContext.textOf
