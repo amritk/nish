@@ -534,11 +534,11 @@ export const refusalChecks = (): i32 => {
     TLS_ALERT_MISSING_EXTENSION
   );
   t.eqI32(
-    "supported_groups without x25519 is handshake_failure",
+    "supported_groups with neither x25519 nor secp256r1 is handshake_failure",
     refusal(
       hello([
         extSupportedVersions([TLS_VERSION_13]),
-        extSupportedGroups([toI32(0x0017)]),
+        extSupportedGroups([toI32(0x0018)]),
         extSignatureAlgorithms([TLS_SIGNATURE_ECDSA_SECP256R1_SHA256]),
         extKeyShare([TLS_GROUP_X25519], [clientShare()]),
       ])

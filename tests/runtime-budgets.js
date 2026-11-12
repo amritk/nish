@@ -585,7 +585,8 @@ const RUNTIME_CHACHA20_TEXT_BUDGET = 3840
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-checksum.c`
  * -- CRC-32 on the CPU's carry-less multiply (WP38 CRC): `nish_crc32_hw`, its CPUID
- * question and `NISH_CRC32` pin, and the PCLMULQDQ folding kernel.
+ * question and `NISH_CRC32` pin, and the PCLMULQDQ folding kernel; and Adler-32 on
+ * SSSE3 (WP38 S8): `nish_adler32_hw`, its pin `NISH_ADLER32`, and the kernel.
  *
  * Measured **718 bytes** on 2026-10-30 with clang 18.1.3 on linux-x64, all of it
  * `.text`: the folding kernel with its Barrett reduction 514, the nibble-table tail
@@ -595,8 +596,18 @@ const RUNTIME_CHACHA20_TEXT_BUDGET = 3840
  * AArch64 build is the CRC32 instructions and is smaller; the ceiling is measured
  * where the gate runs. The budget is the next 256-byte boundary above the
  * measurement, as every ceiling here was set.
+ *
+ * Raised to 1,280 on 2026-11-11 by Adler-32 on SSSE3 (WP38 S8), measured **1,153
+ * bytes**: the SSSE3 kernel with its scalar tail inlined 297, `nish_adler32_hw` with
+ * its CPUID question and `NISH_ADLER32` pin 113, and the entry point 22. Raised in
+ * place rather than split into a file of its own because both checksums are the
+ * same seam over the same `nish_array` window, and a program that inflates zlib or
+ * gzip already links this unit. The gate measures the x86-64 build only: the test
+ * shards run on x86-64, and the AArch64 CI job runs the kernel sections, not this
+ * one. The AArch64 build, NEON Adler-32 and the CRC32 instructions, measured **752
+ * bytes** (`--target=aarch64-linux-gnu -ffreestanding`, clang 18), under the ceiling.
  */
-const RUNTIME_CHECKSUM_TEXT_BUDGET = 768
+const RUNTIME_CHECKSUM_TEXT_BUDGET = 1280
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
  * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
@@ -666,8 +677,15 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * strict refusal and best-effort line for a directory gone since the build, and the
  * metadata rows kept for a scoped write. Measured 2,545 against 2,264 before it on
  * 2026-10-30 with clang 18 on linux-x64. Only a sandboxed build links any of it.
+ *
+ * Raised to 3,328, the next 256-byte boundary, for SBX-1 (WP37): the identities of
+ * the interpreters the exec allowlist marks, and the spawn-target check that
+ * resolves a spawn's program as `posix_spawnp` would and refuses one of them.
+ * Measured 3,143 against 2,558 before it on 2026-11-11 with clang 18.1.3 on
+ * linux-x64. Here rather than in `runtime-os.c`, whose spawn reaches it through a
+ * pointer only `nish_sandbox` sets, so a build without `--sandbox` links none of it.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 2560
+const RUNTIME_SANDBOX_TEXT_BUDGET = 3328
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
  * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`

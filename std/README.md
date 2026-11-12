@@ -328,8 +328,9 @@ accept into the slot, and after its handshake a connection allocates nothing
 that outlives a record. The handshake keeps its state in the slot, which
 `accept` restarts, and a KeyUpdate installs its keys in place, so neither
 leaves anything in the arena (TLS-3); a connection still takes at most
-`TLS_RECORD_MAX_KEY_UPDATES` (64) KeyUpdates from its client. The carrier has
-no clock, so closing quiet slots is the program's (TLS-4). On this path the
+`TLS_RECORD_MAX_KEY_UPDATES` (64) KeyUpdates from its client. The program's
+loop calls `expire(monotonicNanos())`, which closes slots idle past
+`idleTimeout`, a minute by default (TLS-4). On this path the
 record layer wipes `TlsServer`'s traffic and handshake secrets and the
 ephemeral key once it has what it needs from them, which narrows TLS-1.
 `tests/link/net_tls_record_*` are its programs, and the `net_tls_tcp` block of

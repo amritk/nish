@@ -8,6 +8,7 @@
 // side only (`tryPush`, then `peek`, `sendBody`, `release`).
 //
 //   npm run build && node bench/ring-inplace/run.mjs [--quick] [--rounds 5] [--cpus 0,1,2] [--ring-bytes 16777216]
+//     [--modes copy,inplace,consumer] [--n 50000]
 //
 // Each round runs every (size, mode) pair twice, in an order shuffled afresh
 // for the round (a seeded shuffle, so a rerun repeats it). A figure is the
@@ -18,46 +19,79 @@
 // one inside it is not one. Every run must deliver what it sent, byte for
 // byte (the reader's FNV-1a over the bodies equals the producer's), or the
 // whole run fails. `--ring-bytes` is a power of two from 32,768 (which
-// `reserve` needs for a 10 KB record) to 2^30. The consumer runs under
+// `reserve` needs for a 10 KB record) to 2^29: a shared region holds at most
+// 2^30 bytes, headers included. The consumer runs under
 // `taskset -c <first cpu>`, the producer and the reader on the second and
 // third. `--quick` sends 3,000 messages a run rather than 50,000 and
-// finishes in seconds.
+// finishes in seconds; `--n` sends that many instead, and `--modes` runs only
+// the modes it names. An unknown option, or one out of range, exits 2 before
+// anything builds.
+//
+// The waiting column is the consumer's time a message before the ring held
+// the record: time the producer set the pace, not the consumer. Set against
+// the pipeline column, it says how much of each message that is.
 //
 // Linux only (taskset), run from the repository root.
 import { execFileSync } from "node:child_process"
 import { mkdirSync } from "node:fs"
 
 const args = process.argv.slice(2)
+/** The options that take a value, and the one that does not. */
+const valued = ["--rounds", "--n", "--modes", "--cpus", "--ring-bytes"]
+const flags = ["--quick"]
 const opt = (name, fallback) => {
   const at = args.indexOf(name)
   return at >= 0 ? args[at + 1] : fallback
 }
-const quick = args.includes("--quick")
-const rounds = Number(opt("--rounds", "5"))
-if (!Number.isInteger(rounds) || rounds < 1) {
-  throw new Error(`--rounds wants a whole number of at least 1, not ${opt("--rounds")}`)
+/** Prints why an option is refused and exits 2, before anything is built or run. */
+const refuse = (why) => {
+  console.error(`bench/ring-inplace: ${why}`)
+  process.exit(2)
 }
-const n = quick ? 3000 : 50000
-const cpus = opt("--cpus", "0,1,2").split(",")
+for (let k = 0; k < args.length; k++) {
+  if (valued.includes(args[k])) {
+    k++
+  } else if (!flags.includes(args[k])) {
+    refuse(`unknown option ${args[k]}; the options are ${[...flags, ...valued].join(", ")}`)
+  }
+}
+/**
+ * `text` as a whole number from 1 to 2^30, or refuses `name`: no sign,
+ * fraction, exponent or leading zero, as `bench.ts`'s `wholeArg`.
+ */
+const whole = (name, text) => {
+  if (text === undefined || !/^[1-9]\d{0,9}$/.test(text) || Number(text) > 2 ** 30) {
+    refuse(`${name} wants a whole number from 1 to 1,073,741,824, not ${text}`)
+  }
+  return Number(text)
+}
+const quick = args.includes("--quick")
+const rounds = whole("--rounds", opt("--rounds", "5"))
+const n = whole("--n", opt("--n", quick ? "3000" : "50000"))
+const known = ["copy", "inplace", "consumer"]
+const modes = [...new Set((opt("--modes", known.join(",")) ?? "").split(","))]
+for (const m of modes) {
+  if (!known.includes(m)) {
+    refuse(`unknown mode ${m === "" ? "(none)" : m} in --modes; the modes are ${known.join(", ")}`)
+  }
+}
+const cpus = (opt("--cpus", "0,1,2") ?? "").split(",")
 if (cpus.length !== 3 || cpus.some((c) => !/^\d+$/.test(c))) {
-  throw new Error(`--cpus wants three cpu numbers, consumer,producer,reader, not ${cpus.join(",")}`)
+  refuse(`--cpus wants three cpu numbers, consumer,producer,reader, not ${cpus.join(",")}`)
 }
 const [consumerCpu, producerCpu, readerCpu] = cpus
 const sizes = [1024, 4096, 10240]
-const ringBytes = Number(opt("--ring-bytes", "16777216"))
+const ringBytes = whole("--ring-bytes", opt("--ring-bytes", "16777216"))
 // SpscRing's capacity is a power of two, and `reserve` lends at most half of
 // it less 4, which the largest record must fit: 32,768 at the least.
 let leastRing = 8
 while (leastRing / 2 - 4 < Math.max(...sizes)) {
   leastRing *= 2
 }
-if (
-  !Number.isInteger(ringBytes) ||
-  ringBytes < leastRing ||
-  ringBytes > 2 ** 30 ||
-  (ringBytes & (ringBytes - 1)) !== 0
-) {
-  throw new Error(`--ring-bytes wants a power of two from ${leastRing} to 2^30, not ${opt("--ring-bytes")}`)
+// A shared region holds at most 2^30 bytes, the ring's header included, so
+// the largest ring is 2^29.
+if (ringBytes < leastRing || ringBytes > 2 ** 29 || (ringBytes & (ringBytes - 1)) !== 0) {
+  refuse(`--ring-bytes wants a power of two from ${leastRing} to 2^29, not ${opt("--ring-bytes")}`)
 }
 const out = "build/ring-inplace"
 mkdirSync(out, { recursive: true })
@@ -95,7 +129,6 @@ const field = (line, name) => {
   return Number(m[1])
 }
 
-const modes = ["copy", "inplace", "consumer"]
 const label = { copy: "copied", inplace: "in place", consumer: "consumer" }
 const pairs = sizes.flatMap((s) =>
   modes.flatMap((m) => [
@@ -142,9 +175,9 @@ console.log(
 const band = (s, m, name) => median(gaps(s, m, name))
 const pct = (x) => `±${x.toFixed(1)}%`
 console.log(
-  "| record | mode | body (bytes) | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | bytes copied/msg | messages with a tail | wrapped records popped | noise band p50 / p99 / pipeline |"
+  "| record | mode | body (bytes) | consumer p50 (ns) | consumer p99 (ns) | pipeline (ns/msg) | consumer waiting for a record (ns/msg) | bytes copied/msg | messages with a tail | wrapped records popped | noise band p50 / p99 / pipeline |"
 )
-console.log("| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+console.log("| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
 for (const s of sizes) {
   for (const m of modes) {
     const lines = both(s, m)
@@ -157,6 +190,7 @@ for (const s of sizes) {
       spread(lines.map((l) => field(l, "p50_ns"))),
       spread(lines.map((l) => field(l, "p99_ns"))),
       spread(lines.map((l) => field(l, "wall_ns"))),
+      spread(lines.map((l) => field(l, "waited_ns"))),
       f2(median(copied) / n),
       m === "copy"
         ? "—"
@@ -182,7 +216,7 @@ const comparisons = [
   ["copy", "inplace"],
   ["copy", "consumer"],
   ["inplace", "consumer"],
-]
+].filter(([from, to]) => modes.includes(from) && modes.includes(to))
 for (const s of sizes) {
   for (const [from, to] of comparisons) {
     const cols = ["p50_ns", "p99_ns", "wall_ns"].map((name) => change(s, from, to, name))

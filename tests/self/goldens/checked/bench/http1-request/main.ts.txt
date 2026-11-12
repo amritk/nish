@@ -2381,14 +2381,14 @@ function exposeWith<u8[], TlsExchangeWords, i32, tlsHandshakeFromWords>(s: Secre
   sharedWrite: via nish.tlsHandshakeFromWords
   calls: nish.tlsHandshakeFromWords
   pointer s: size=8 writesThrough=false captured=false
-  pointer arg: size=200 writesThrough=false captured=false passedTo=nish.tlsHandshakeFromWords#1
+  pointer arg: size=280 writesThrough=false captured=false passedTo=nish.tlsHandshakeFromWords#1
   stackSites=0 stackLocals=0
   callee +0:93 tlsHandshakeFromWords -> @nish.tlsHandshakeFromWords
 function wipe<TlsExchangeWords>(_target: TlsExchangeWords): void -> @nish.wipe$$TlsExchangeWords [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via llvm.memset.p0i8.i64
   calls: llvm.memset.p0i8.i64
-  pointer _target: size=200 writesThrough=true captured=false
+  pointer _target: size=280 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function exposeWith<u8[], u8[], u8[], hkdfExtractSha256Exposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.hkdfExtractSha256Exposed [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -4901,11 +4901,11 @@ unsafe call 146:11 uncheckedSet (node 818)
 unsafe call 146:44 uncheckedGet (node 828)
 unsafe call 261:9 uncheckedGet (node 1414)
 unsafe call 261:42 uncheckedGet (node 1429)
-unsafe call 304:19 uncheckedGet (node 1591)
-unsafe call 306:19 uncheckedGet (node 1608)
-unsafe call 308:19 uncheckedGet (node 1627)
-unsafe call 310:19 uncheckedGet (node 1646)
-unsafe call 315:19 uncheckedGet (node 1674)
+unsafe call 317:19 uncheckedGet (node 1624)
+unsafe call 319:19 uncheckedGet (node 1641)
+unsafe call 321:19 uncheckedGet (node 1660)
+unsafe call 323:19 uncheckedGet (node 1679)
+unsafe call 328:19 uncheckedGet (node 1707)
 const CRC32_POLY: i64 = 3988292384
 const CRC32_TABLE_SIZE: i32 = 2048
 const CRC32_BRAIDS: i32 = 5
@@ -5017,17 +5017,24 @@ function crc32(buf: u8[], off: i32, len: i32): u32 -> @nish.crc32 [exported]
   callee +0:62 Crc32.update -> @nish.Crc32.update
   callee +0:62 new Crc32 -> @nish.Crc32.constructor
 function adler32Update(adler: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.adler32Update [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: len off
-  calls: nish.checksumWindow nish_panic_div nish_panic_overflow
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: adler len off
+  calls: nish.adler32Walk nish.checksumWindow
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1 nish.adler32Walk#1
   stackSites=0 stackLocals=0
   callee +0:3 checksumWindow -> @nish.checksumWindow
-  local +1:7 s1: u32 (let)
-  local +2:7 s2: u32 (let)
-  local +3:7 p: i32 (let)
-  local +4:9 end: i32 (const)
-  local +6:9 stop: i32 (let)
+  callee +1:10 adler32Walk -> @nish.adler32Walk
+function adler32Walk(adler: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.adler32Walk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_div nish_panic_overflow
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 s1: u32 (let)
+  local +1:7 s2: u32 (let)
+  local +2:7 p: i32 (let)
+  local +3:9 end: i32 (const)
+  local +5:9 stop: i32 (let)
 function adler32(buf: u8[], off: i32, len: i32): u32 -> @nish.adler32 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
@@ -7256,6 +7263,8 @@ import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
 import SHA384_SIZE from "nish/crypto/sha512" -> const SHA384_SIZE
 import P256SignScratch from "nish/crypto/p256" -> struct P256SignScratch
 import P256_SIGNATURE_SIZE from "nish/crypto/p256" -> const P256_SIGNATURE_SIZE
+import p256Ecdh from "nish/crypto/p256" -> function @nish.p256Ecdh
+import p256PublicKey from "nish/crypto/p256" -> function @nish.p256PublicKey
 import p256SignSha256 from "nish/crypto/p256" -> function @nish.p256SignSha256
 import p256SignSha256Into from "nish/crypto/p256" -> function @nish.p256SignSha256Into
 import timingSafeEqual from "nish/crypto/ct" -> function @nish.timingSafeEqual
@@ -7272,11 +7281,13 @@ import TLS_ALERT_MISSING_EXTENSION from "nish/net/tls/codec" -> const TLS_ALERT_
 import TLS_ALERT_NO_APPLICATION_PROTOCOL from "nish/net/tls/codec" -> const TLS_ALERT_NO_APPLICATION_PROTOCOL
 import TLS_ALERT_PROTOCOL_VERSION from "nish/net/tls/codec" -> const TLS_ALERT_PROTOCOL_VERSION
 import TLS_ALERT_UNEXPECTED_MESSAGE from "nish/net/tls/codec" -> const TLS_ALERT_UNEXPECTED_MESSAGE
+import TLS_GROUP_SECP256R1 from "nish/net/tls/codec" -> const TLS_GROUP_SECP256R1
 import TLS_GROUP_X25519 from "nish/net/tls/codec" -> const TLS_GROUP_X25519
 import TLS_HANDSHAKE_CLIENT_HELLO from "nish/net/tls/codec" -> const TLS_HANDSHAKE_CLIENT_HELLO
 import TLS_HANDSHAKE_FINISHED from "nish/net/tls/codec" -> const TLS_HANDSHAKE_FINISHED
 import TLS_RANDOM_SIZE from "nish/net/tls/codec" -> const TLS_RANDOM_SIZE
 import TLS_VERSION_13 from "nish/net/tls/codec" -> const TLS_VERSION_13
+import TLS_P256_SHARE_SIZE from "nish/net/tls/codec" -> const TLS_P256_SHARE_SIZE
 import TLS_X25519_SHARE_SIZE from "nish/net/tls/codec" -> const TLS_X25519_SHARE_SIZE
 import TlsClientHelloView from "nish/net/tls/codec" -> struct TlsClientHelloView
 import tlsHexInto from "nish/net/tls/codec" -> function @nish.tlsHexInto
@@ -7364,7 +7375,7 @@ struct TlsP256Signer (class) size=24 align=8 exported
   field ders: u8[][] index=2 offset=16
   constructor -> @nish.TlsP256Signer.constructor
   method sign -> @nish.TlsP256Signer.sign
-struct TlsExchangeWords (class) size=200 align=8
+struct TlsExchangeWords (class) size=280 align=8
   field key0: u64 index=0 offset=0 initialized
   field key1: u64 index=1 offset=8 initialized
   field key2: u64 index=2 offset=16 initialized
@@ -7373,23 +7384,34 @@ struct TlsExchangeWords (class) size=200 align=8
   field share1: u64 index=5 offset=40 initialized
   field share2: u64 index=6 offset=48 initialized
   field share3: u64 index=7 offset=56 initialized
-  field public0: u64 index=8 offset=64 initialized
-  field public1: u64 index=9 offset=72 initialized
-  field public2: u64 index=10 offset=80 initialized
-  field public3: u64 index=11 offset=88 initialized
-  field secret0: u64 index=12 offset=96 initialized
-  field secret1: u64 index=13 offset=104 initialized
-  field secret2: u64 index=14 offset=112 initialized
-  field secret3: u64 index=15 offset=120 initialized
-  field secret4: u64 index=16 offset=128 initialized
-  field secret5: u64 index=17 offset=136 initialized
-  field salt0: u64 index=18 offset=144 initialized
-  field salt1: u64 index=19 offset=152 initialized
-  field salt2: u64 index=20 offset=160 initialized
-  field salt3: u64 index=21 offset=168 initialized
-  field salt4: u64 index=22 offset=176 initialized
-  field salt5: u64 index=23 offset=184 initialized
-  field hashLength: i32 index=24 offset=192 initialized
+  field share4: u64 index=8 offset=64 initialized
+  field share5: u64 index=9 offset=72 initialized
+  field share6: u64 index=10 offset=80 initialized
+  field share7: u64 index=11 offset=88 initialized
+  field share8: u64 index=12 offset=96 initialized
+  field public0: u64 index=13 offset=104 initialized
+  field public1: u64 index=14 offset=112 initialized
+  field public2: u64 index=15 offset=120 initialized
+  field public3: u64 index=16 offset=128 initialized
+  field public4: u64 index=17 offset=136 initialized
+  field public5: u64 index=18 offset=144 initialized
+  field public6: u64 index=19 offset=152 initialized
+  field public7: u64 index=20 offset=160 initialized
+  field public8: u64 index=21 offset=168 initialized
+  field secret0: u64 index=22 offset=176 initialized
+  field secret1: u64 index=23 offset=184 initialized
+  field secret2: u64 index=24 offset=192 initialized
+  field secret3: u64 index=25 offset=200 initialized
+  field secret4: u64 index=26 offset=208 initialized
+  field secret5: u64 index=27 offset=216 initialized
+  field salt0: u64 index=28 offset=224 initialized
+  field salt1: u64 index=29 offset=232 initialized
+  field salt2: u64 index=30 offset=240 initialized
+  field salt3: u64 index=31 offset=248 initialized
+  field salt4: u64 index=32 offset=256 initialized
+  field salt5: u64 index=33 offset=264 initialized
+  field group: i32 index=34 offset=272 initialized
+  field hashLength: i32 index=35 offset=276 initialized
 struct TlsSecretPool (class) size=96 align=8 exported
   field handshake: Secret<u8[]> index=0 offset=0 readonly
   field clientHandshake: Secret<u8[]> index=1 offset=8 readonly
@@ -7406,7 +7428,7 @@ struct TlsSecretPool (class) size=96 align=8 exported
   constructor -> @nish.TlsSecretPool.constructor
   method zero -> @nish.TlsSecretPool.zero
   method wipe -> @nish.TlsSecretPool.wipe
-struct TlsServer (class) size=272 align=8 exported
+struct TlsServer (class) size=288 align=8 exported
   field config: TlsServerConfig index=0 offset=0
   field serverRandom: u8[] index=1 offset=8
   field ephemeral: Secret<u8[]> index=2 offset=16 readonly
@@ -7426,30 +7448,33 @@ struct TlsServer (class) size=272 align=8 exported
   field kdf: HkdfScratch index=16 offset=128
   field exchange: TlsExchangeWords index=17 offset=136
   field serverPublic: u8[] index=18 offset=144
-  field hashes: u8[] index=19 offset=152
-  field salt: u8[] index=20 offset=160
-  field binderHash: u8[] index=21 offset=168
-  field opened: TlsTicketState index=22 offset=176
-  field issuing: TlsTicketState index=23 offset=184
-  field ticketScratch: u8[] index=24 offset=192
-  field outputApplication: u8[] index=25 offset=200
-  field ticketNonce: u8[] index=26 offset=208
-  field ageAddBytes: u8[] index=27 offset=216
-  field held: i32 index=28 offset=224 initialized
-  field state: i32 index=29 offset=228 initialized
-  field alert: i32 index=30 offset=232 initialized
-  field suite: i32 index=31 offset=236 initialized
-  field hashLength: i32 index=32 offset=240 initialized
-  field inputLength: i32 index=33 offset=244 initialized
-  field outputInitialLength: i32 index=34 offset=248 initialized
-  field outputHandshakeLength: i32 index=35 offset=252 initialized
-  field outputApplicationLength: i32 index=36 offset=256 initialized
-  field retried: boolean index=37 offset=260 initialized
-  field configFits: boolean index=38 offset=261 initialized
-  field tickets: boolean index=39 offset=262 initialized
-  field ticketWanted: boolean index=40 offset=263 initialized
-  field issued: boolean index=41 offset=264 initialized
-  field resumed: boolean index=42 offset=265 initialized
+  field publicX25519: u8[] index=19 offset=152
+  field publicP256: u8[] index=20 offset=160
+  field hashes: u8[] index=21 offset=168
+  field salt: u8[] index=22 offset=176
+  field binderHash: u8[] index=23 offset=184
+  field opened: TlsTicketState index=24 offset=192
+  field issuing: TlsTicketState index=25 offset=200
+  field ticketScratch: u8[] index=26 offset=208
+  field outputApplication: u8[] index=27 offset=216
+  field ticketNonce: u8[] index=28 offset=224
+  field ageAddBytes: u8[] index=29 offset=232
+  field held: i32 index=30 offset=240 initialized
+  field state: i32 index=31 offset=244 initialized
+  field alert: i32 index=32 offset=248 initialized
+  field suite: i32 index=33 offset=252 initialized
+  field hashLength: i32 index=34 offset=256 initialized
+  field inputLength: i32 index=35 offset=260 initialized
+  field outputInitialLength: i32 index=36 offset=264 initialized
+  field outputHandshakeLength: i32 index=37 offset=268 initialized
+  field outputApplicationLength: i32 index=38 offset=272 initialized
+  field group: i32 index=39 offset=276 initialized
+  field retried: boolean index=40 offset=280 initialized
+  field configFits: boolean index=41 offset=281 initialized
+  field tickets: boolean index=42 offset=282 initialized
+  field ticketWanted: boolean index=43 offset=283 initialized
+  field issued: boolean index=44 offset=284 initialized
+  field resumed: boolean index=45 offset=285 initialized
   constructor -> @nish.TlsServer.constructor
   method restart -> @nish.TlsServer.restart
   method fail -> @nish.TlsServer.fail
@@ -7661,7 +7686,7 @@ function tlsHandshakeFromWords(held: u8[], w: TlsExchangeWords): i32 -> @nish.tl
   sharedWrite: via nish.tlsWordInto
   calls: nish.tlsWordInto
   pointer held: size=0 writesThrough=true captured=false passedTo=nish.tlsWordInto#0 nish.tlsWordInto#0 nish.tlsWordInto#0 nish.tlsWordInto#0 nish.tlsWordInto#0 nish.tlsWordInto#0
-  pointer w: size=200 writesThrough=false captured=false
+  pointer w: size=280 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 tlsWordInto -> @nish.tlsWordInto
   callee +1:3 tlsWordInto -> @nish.tlsWordInto
@@ -7672,35 +7697,43 @@ function tlsHandshakeFromWords(held: u8[], w: TlsExchangeWords): i32 -> @nish.tl
 function tlsExchange(w: TlsExchangeWords): i32 -> @nish.tlsExchange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe256 nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe384 nish.secret$arr.u8 nish.tlsWordAt nish.tlsWordInto nish.wipe$$Secret$arr.u8 nish.x25519 nish.x25519Base nish_arena_mark nish_arena_release nish_panic nish_wipe
-  pointer w: size=200 writesThrough=true captured=false
+  calls: nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe256 nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe384 nish.p256Ecdh nish.p256PublicKey nish.secret$arr.u8 nish.tlsWordAt nish.tlsWordInto nish.wipe$$Secret$arr.u8 nish.x25519 nish.x25519Base nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_wipe
+  pointer w: size=280 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -37:9 salt: u8[] (const)
-  callee -36:3 tlsWordInto -> @nish.tlsWordInto
-  callee -35:3 tlsWordInto -> @nish.tlsWordInto
-  callee -34:3 tlsWordInto -> @nish.tlsWordInto
-  callee -33:3 tlsWordInto -> @nish.tlsWordInto
+  local -50:9 salt: u8[] (const)
+  callee -49:3 tlsWordInto -> @nish.tlsWordInto
+  callee -48:3 tlsWordInto -> @nish.tlsWordInto
+  callee -47:3 tlsWordInto -> @nish.tlsWordInto
+  callee -46:3 tlsWordInto -> @nish.tlsWordInto
+  callee -45:3 tlsWordInto -> @nish.tlsWordInto
+  callee -44:3 tlsWordInto -> @nish.tlsWordInto
+  local -43:9 p256: boolean (const)
+  local -42:9 raw: u8[] (const)
+  callee -41:3 tlsWordInto -> @nish.tlsWordInto
+  callee -40:3 tlsWordInto -> @nish.tlsWordInto
+  callee -39:3 tlsWordInto -> @nish.tlsWordInto
+  callee -38:3 tlsWordInto -> @nish.tlsWordInto
+  local -33:9 share: u8[] (const)
   callee -32:3 tlsWordInto -> @nish.tlsWordInto
   callee -31:3 tlsWordInto -> @nish.tlsWordInto
-  local -30:9 raw: u8[] (const)
+  callee -30:3 tlsWordInto -> @nish.tlsWordInto
   callee -29:3 tlsWordInto -> @nish.tlsWordInto
   callee -28:3 tlsWordInto -> @nish.tlsWordInto
   callee -27:3 tlsWordInto -> @nish.tlsWordInto
   callee -26:3 tlsWordInto -> @nish.tlsWordInto
-  local -25:9 share: u8[] (const)
+  callee -25:3 tlsWordInto -> @nish.tlsWordInto
   callee -24:3 tlsWordInto -> @nish.tlsWordInto
-  callee -23:3 tlsWordInto -> @nish.tlsWordInto
-  callee -22:3 tlsWordInto -> @nish.tlsWordInto
-  callee -21:3 tlsWordInto -> @nish.tlsWordInto
-  local -20:9 key: Secret<u8[]> (const)
-  callee -20:29 secret<u8[]> -> @nish.secret$arr.u8
-  local -19:9 serverPublic: u8[] | null (const)
-  callee -19:37 x25519Base -> @nish.x25519Base
-  local -18:9 shared: Secret<u8[]> | null (const)
-  callee -18:39 x25519 -> @nish.x25519
-  callee -17:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  local -16:7 alert: i32 (let)
-  callee -7:16 expose<u8[], boolean, tlsIsZeroSecret> -> @nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret
+  local -23:9 key: Secret<u8[]> (const)
+  callee -23:29 secret<u8[]> -> @nish.secret$arr.u8
+  local -22:9 serverPublic: u8[] | null (const)
+  callee -22:44 p256PublicKey -> @nish.p256PublicKey
+  callee -22:65 x25519Base -> @nish.x25519Base
+  local -21:9 shared: Secret<u8[]> | null (const)
+  callee -21:46 p256Ecdh -> @nish.p256Ecdh
+  callee -21:69 x25519 -> @nish.x25519
+  callee -20:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  local -19:7 alert: i32 (let)
+  callee -7:25 expose<u8[], boolean, tlsIsZeroSecret> -> @nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret
   local -4:13 handshake: u8[] (const)
   callee -2:13 exposeWith<u8[], u8[], u8[], tlsHandshakeFromEcdhe384> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe384
   callee -1:13 exposeWith<u8[], u8[], u8[], tlsHandshakeFromEcdhe256> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe256
@@ -7714,7 +7747,12 @@ function tlsExchange(w: TlsExchangeWords): i32 -> @nish.tlsExchange
   callee +7:19 tlsWordAt -> @nish.tlsWordAt
   callee +8:19 tlsWordAt -> @nish.tlsWordAt
   callee +9:19 tlsWordAt -> @nish.tlsWordAt
-  callee +12:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee +10:19 tlsWordAt -> @nish.tlsWordAt
+  callee +11:19 tlsWordAt -> @nish.tlsWordAt
+  callee +12:19 tlsWordAt -> @nish.tlsWordAt
+  callee +13:19 tlsWordAt -> @nish.tlsWordAt
+  callee +14:19 tlsWordAt -> @nish.tlsWordAt
+  callee +17:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
 function TlsSecretPool.constructor(this: TlsSecretPool, hashLength: i32): void -> @nish.TlsSecretPool.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: hashLength
@@ -7801,7 +7839,7 @@ function TlsServer.constructor(this: TlsServer, config: TlsServerConfig, serverR
   sharedWrite: via nish.tlsServerTicketCapacity
   escaping: config serverRandom
   calls: nish.HkdfScratch.constructor nish.TlsClientHelloView.constructor nish.TlsSecretPool.constructor nish.TlsServer.restart nish.TlsTicketState.constructor nish.TlsTranscript.constructor nish.secret$arr.u8 nish.tlsConfigFits nish.tlsFlightCapacity nish.tlsServerTicketCapacity nish_alloc_struct nish_panic nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.restart#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.restart#0
   pointer config: size=40 writesThrough=true captured=true passedTo=nish.tlsConfigFits#0 nish.tlsFlightCapacity#0
   pointer serverRandom: size=0 writesThrough=true captured=true passedTo=nish.TlsServer.restart#1
   pointer ephemeralPrivate: size=0 writesThrough=true captured=false passedTo=nish.TlsServer.restart#2
@@ -7814,16 +7852,16 @@ function TlsServer.constructor(this: TlsServer, config: TlsServerConfig, serverR
   callee +10:23 new TlsSecretPool -> @nish.TlsSecretPool.constructor
   callee +11:18 new TlsClientHelloView -> @nish.TlsClientHelloView.constructor
   callee +12:16 new HkdfScratch -> @nish.HkdfScratch.constructor
-  callee +18:19 new TlsTicketState -> @nish.TlsTicketState.constructor
-  callee +19:20 new TlsTicketState -> @nish.TlsTicketState.constructor
-  callee +20:40 tlsServerTicketCapacity -> @nish.tlsServerTicketCapacity
-  callee +24:5 TlsServer.restart -> @nish.TlsServer.restart
+  callee +20:19 new TlsTicketState -> @nish.TlsTicketState.constructor
+  callee +21:20 new TlsTicketState -> @nish.TlsTicketState.constructor
+  callee +22:40 tlsServerTicketCapacity -> @nish.tlsServerTicketCapacity
+  callee +26:5 TlsServer.restart -> @nish.TlsServer.restart
 function TlsServer.restart(this: TlsServer, serverRandom: u8[], ephemeralPrivate: u8[]): void -> @nish.TlsServer.restart [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: serverRandom
   calls: nish.TlsServer.wipe nish.exposeWith$arr.u8$arr.u8$i32$fn.18.nish.tlsHeldCopyIn nish_wipe
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.wipe#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.wipe#0
   pointer serverRandom: size=0 writesThrough=true captured=true
   pointer ephemeralPrivate: size=0 writesThrough=true captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$i32$fn.18.nish.tlsHeldCopyIn#1
   stackSites=0 stackLocals=0
@@ -7835,7 +7873,7 @@ function TlsServer.fail(this: TlsServer, alert: i32): i32 -> @nish.TlsServer.fai
   sharedWrite: +0:5
   escaping: alert
   calls: nish.TlsSecretPool.zero nish.TlsServer.secrets nish.TlsServer.wipeResumption nish_wipe
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.wipeResumption#0 nish.TlsServer.secrets#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.wipeResumption#0 nish.TlsServer.secrets#0
   stackSites=0 stackLocals=0
   callee -5:5 TlsServer.wipeResumption -> @nish.TlsServer.wipeResumption
   local -4:11 pool: TlsSecretPool (const)
@@ -7847,29 +7885,29 @@ function TlsServer.wipeResumption(this: TlsServer): void -> @nish.TlsServer.wipe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsSecretPool.zero
   calls: nish.TlsSecretPool.zero nish.TlsServer.secrets
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
   stackSites=0 stackLocals=0
   callee +0:5 TlsSecretPool.zero -> @nish.TlsSecretPool.zero
   callee +0:5 TlsServer.secrets -> @nish.TlsServer.secrets
 function TlsServer.secrets(this: TlsServer): TlsSecretPool -> @nish.TlsServer.secrets [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=96
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsServer.known(this: TlsServer, index: i32): boolean -> @nish.TlsServer.known [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsServer.readKnown(this: TlsServer, level: i32): boolean -> @nish.TlsServer.readKnown [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.TlsServer.known
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.TlsServer.known#0 nish.TlsServer.known#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.TlsServer.known#0 nish.TlsServer.known#0
   stackSites=0 stackLocals=0
   callee +0:14 TlsServer.known -> @nish.TlsServer.known
   callee +2:47 TlsServer.known -> @nish.TlsServer.known
 function TlsServer.writeKnown(this: TlsServer, level: i32): boolean -> @nish.TlsServer.writeKnown [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.TlsServer.known
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.TlsServer.known#0 nish.TlsServer.known#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.TlsServer.known#0 nish.TlsServer.known#0
   stackSites=0 stackLocals=0
   callee +0:14 TlsServer.known -> @nish.TlsServer.known
   callee +2:47 TlsServer.known -> @nish.TlsServer.known
@@ -7878,7 +7916,7 @@ function TlsServer.wipeSecret(this: TlsServer, index: i32): void -> @nish.TlsSer
   sharedWrite: via nish.TlsSecretPool.zero
   escaping: index
   calls: nish.TlsSecretPool.zero nish.TlsServer.secrets
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
   stackSites=0 stackLocals=0
   callee +0:5 TlsSecretPool.zero -> @nish.TlsSecretPool.zero
   callee +0:5 TlsServer.secrets -> @nish.TlsServer.secrets
@@ -7886,27 +7924,27 @@ function TlsServer.wipeEphemeral(this: TlsServer): void -> @nish.TlsServer.wipeE
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.exposeWith$arr.u8$i32$i32$fn.16.nish.tlsZeroHeld
   calls: nish.exposeWith$arr.u8$i32$i32$fn.16.nish.tlsZeroHeld
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 exposeWith<u8[], i32, i32, tlsZeroHeld> -> @nish.exposeWith$arr.u8$i32$i32$fn.16.nish.tlsZeroHeld
 function TlsServer.wipe(this: TlsServer): void -> @nish.TlsServer.wipe [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$$Secret$arr.u8
   calls: nish.TlsSecretPool.wipe nish.wipe$$Secret$arr.u8
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
   callee +1:5 TlsSecretPool.wipe -> @nish.TlsSecretPool.wipe
   callee +2:5 TlsSecretPool.wipe -> @nish.TlsSecretPool.wipe
 function TlsServer.expectedLevel(this: TlsServer): i32 -> @nish.TlsServer.expectedLevel [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsServer.reserveInput(this: TlsServer, need: i32): void -> @nish.TlsServer.reserveInput [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -13:11 capacity: i32 (const)
   local -9:9 size: i32 (let)
@@ -7918,7 +7956,7 @@ function TlsServer.reserveOutput(this: TlsServer, level: i32, need: i32): void -
   sharedWrite: +0:7
   escaping: need
   calls: nish_panic
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -12:11 initial: boolean (const)
   local -11:11 buffer: u8[] (const)
@@ -7930,7 +7968,7 @@ function TlsServer.receive(this: TlsServer, level: i32, data: u8[], off: i32, le
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.TlsServer.expectedLevel nish.TlsServer.fail nish.TlsServer.handleMessage nish.TlsServer.reserveInput nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.expectedLevel#0 nish.TlsServer.fail#0 nish.TlsServer.fail#0 nish.TlsServer.reserveInput#0 nish.TlsServer.fail#0 nish.TlsServer.fail#0 nish.TlsServer.handleMessage#0 nish.TlsServer.fail#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.expectedLevel#0 nish.TlsServer.fail#0 nish.TlsServer.fail#0 nish.TlsServer.reserveInput#0 nish.TlsServer.fail#0 nish.TlsServer.fail#0 nish.TlsServer.handleMessage#0 nish.TlsServer.fail#0
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -19:14 TlsServer.fail -> @nish.TlsServer.fail
@@ -7951,7 +7989,7 @@ function TlsServer.handleMessage(this: TlsServer, length: i32): i32 -> @nish.Tls
   sharedWrite: via nish.TlsServer.handleClientHello
   escaping: length
   calls: nish.TlsServer.handleClientHello nish.TlsServer.handleFinished nish_panic_index
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.handleClientHello#0 nish.TlsServer.handleFinished#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.handleClientHello#0 nish.TlsServer.handleFinished#0
   stackSites=0 stackLocals=0
   local +0:11 type: i32 (const)
   callee +3:11 TlsServer.handleClientHello -> @nish.TlsServer.handleClientHello
@@ -7959,8 +7997,8 @@ function TlsServer.handleMessage(this: TlsServer, length: i32): i32 -> @nish.Tls
 function TlsServer.chooseSuite(this: TlsServer, hello: TlsClientHelloView): i32 -> @nish.TlsServer.chooseSuite [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsSuiteHashLength nish_panic_overflow
-  pointer this: size=272 writesThrough=false captured=false
-  pointer hello: size=200 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
+  pointer hello: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 data: u8[] (const)
   local +1:11 end: i32 (const)
@@ -7971,8 +8009,8 @@ function TlsServer.chooseAlpn(this: TlsServer, hello: TlsClientHelloView): i32 -
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.tlsBytesSpell nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false
-  pointer hello: size=200 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=true captured=false
+  pointer hello: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +2:13 data: u8[] (const)
   local +3:13 end: i32 (const)
@@ -7984,8 +8022,8 @@ function TlsServer.takeServerName(this: TlsServer, hello: TlsClientHelloView): v
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.tlsBytesSpell nish.tlsWindowString
-  pointer this: size=272 writesThrough=true captured=false
-  pointer hello: size=200 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=true captured=false
+  pointer hello: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +3:10 tlsBytesSpell -> @nish.tlsBytesSpell
   callee +4:29 tlsWindowString -> @nish.tlsWindowString
@@ -7994,16 +8032,19 @@ function TlsServer.handleClientHello(this: TlsServer, length: i32): i32 -> @nish
   sharedWrite: +0:7
   escaping: length
   calls: nish.TlsServer.answerHello nish.TlsServer.chooseAlpn nish.TlsServer.chooseSuite nish.TlsServer.reserveOutput nish.TlsServer.sent nish.TlsServer.takeServerName nish.TlsTranscript.hashInto nish.TlsTranscript.reset nish.TlsTranscript.restartWithMessageHash nish.TlsTranscript.update nish.tlsReadClientHello nish.tlsSuiteHashLength nish.tlsWindowHasU16 nish.tlsWriteHelloRetryRequest nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.chooseSuite#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.sent#0 nish.TlsServer.chooseAlpn#0 nish.TlsServer.takeServerName#0 nish.TlsServer.answerHello#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.chooseSuite#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.sent#0 nish.TlsServer.chooseAlpn#0 nish.TlsServer.takeServerName#0 nish.TlsServer.answerHello#0
   stackSites=1 stackLocals=1
-  local -56:11 hello: TlsClientHelloView (const)
-  local -55:11 data: u8[] (const)
-  callee -54:5 tlsReadClientHello -> @nish.tlsReadClientHello
-  callee -40:8 tlsWindowHasU16 -> @nish.tlsWindowHasU16
-  local -33:11 suite: i32 (const)
-  callee -33:24 TlsServer.chooseSuite -> @nish.TlsServer.chooseSuite
-  local -21:11 offersTicket: boolean (const)
-  callee -10:10 tlsWindowHasU16 -> @nish.tlsWindowHasU16
+  local -60:11 hello: TlsClientHelloView (const)
+  local -59:11 data: u8[] (const)
+  callee -58:5 tlsReadClientHello -> @nish.tlsReadClientHello
+  callee -44:8 tlsWindowHasU16 -> @nish.tlsWindowHasU16
+  local -37:11 suite: i32 (const)
+  callee -37:24 TlsServer.chooseSuite -> @nish.TlsServer.chooseSuite
+  local -25:11 offersTicket: boolean (const)
+  local -12:11 offersX25519: boolean (const)
+  callee -12:35 tlsWindowHasU16 -> @nish.tlsWindowHasU16
+  local -11:11 offersP256: boolean (const)
+  callee -11:33 tlsWindowHasU16 -> @nish.tlsWindowHasU16
   callee -5:8 tlsWindowHasU16 -> @nish.tlsWindowHasU16
   callee +1:25 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
   callee +2:7 TlsTranscript.reset -> @nish.TlsTranscript.reset
@@ -8012,30 +8053,35 @@ function TlsServer.handleClientHello(this: TlsServer, length: i32): i32 -> @nish
   callee +9:7 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
   callee +10:7 TlsTranscript.update -> @nish.TlsTranscript.update
   callee +12:7 TlsTranscript.update -> @nish.TlsTranscript.update
-  local +21:13 none: u8[] (const)
-  callee +22:7 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
-  callee +24:9 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
-  local +34:13 _scope: i64 (const)
-  callee +35:7 TlsTranscript.restartWithMessageHash -> @nish.TlsTranscript.restartWithMessageHash
-  local +36:13 at: i32 (const)
-  local +37:13 end: i32 (const)
-  callee +37:24 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
-  callee +46:7 TlsServer.sent -> @nish.TlsServer.sent
-  local +52:11 alpnAlert: i32 (const)
-  callee +52:28 TlsServer.chooseAlpn -> @nish.TlsServer.chooseAlpn
-  callee +56:5 TlsServer.takeServerName -> @nish.TlsServer.takeServerName
-  local +62:11 name: u8[] (const)
-  local +63:11 nameLength: i32 (const)
-  local +65:11 k: i32 (let)
-  local +77:13 parameters: u8[] (const)
-  local +82:13 k: i32 (let)
-  callee +95:12 TlsServer.answerHello -> @nish.TlsServer.answerHello
+  local +19:11 preferred: i32 (const)
+  local +20:11 group: i32 (const)
+  local +21:11 p256Group: boolean (const)
+  local +22:11 hasShare: boolean (const)
+  local +31:13 none: u8[] (const)
+  callee +32:7 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
+  callee +34:9 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
+  local +44:13 _scope: i64 (const)
+  callee +45:7 TlsTranscript.restartWithMessageHash -> @nish.TlsTranscript.restartWithMessageHash
+  local +46:13 at: i32 (const)
+  local +47:13 end: i32 (const)
+  callee +47:24 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
+  callee +56:7 TlsServer.sent -> @nish.TlsServer.sent
+  local +60:11 shareLength: i32 (const)
+  local +64:11 alpnAlert: i32 (const)
+  callee +64:28 TlsServer.chooseAlpn -> @nish.TlsServer.chooseAlpn
+  callee +68:5 TlsServer.takeServerName -> @nish.TlsServer.takeServerName
+  local +74:11 name: u8[] (const)
+  local +75:11 nameLength: i32 (const)
+  local +77:11 k: i32 (let)
+  local +89:13 parameters: u8[] (const)
+  local +94:13 k: i32 (let)
+  callee +107:12 TlsServer.answerHello -> @nish.TlsServer.answerHello
 function TlsServer.answerHello(this: TlsServer, index: i32): i32 -> @nish.TlsServer.answerHello [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsHexInto
   escaping: index
   calls: nish.TlsServer.exchangeKeys nish.TlsServer.writeResumedFlight nish.TlsServer.writeServerFlight nish.tlsHexInto nish.tlsWindowHasU16
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.exchangeKeys#0 nish.TlsServer.writeResumedFlight#0 nish.TlsServer.writeServerFlight#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.exchangeKeys#0 nish.TlsServer.writeResumedFlight#0 nish.TlsServer.writeServerFlight#0
   stackSites=0 stackLocals=0
   local +0:11 hello: TlsClientHelloView (const)
   callee +5:12 tlsWindowHasU16 -> @nish.tlsWindowHasU16
@@ -8047,12 +8093,12 @@ function TlsServer.answerHello(this: TlsServer, index: i32): i32 -> @nish.TlsSer
 function TlsServer.enableTickets(this: TlsServer): void -> @nish.TlsServer.enableTickets [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function TlsServer.ticketFits(this: TlsServer): boolean -> @nish.TlsServer.ticketFits [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.timingSafeEqualAt nish.tlsSuiteHashLength
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 hello: TlsClientHelloView (const)
   local +1:11 opened: TlsTicketState (const)
@@ -8064,7 +8110,7 @@ function TlsServer.selectTicket(this: TlsServer, current: Secret<u8[]>, currentI
   sharedWrite: +0:11
   escaping: now
   calls: nish.TlsServer.ticketFits nish.TlsTicketState.expiresAt nish.TlsTicketStrikes.take nish.tlsSelectPskIdentity nish.tlsServerStrikeProbe nish.tlsTicketOpen nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_wipe
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.TlsServer.ticketFits#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.TlsServer.ticketFits#0
   pointer current: size=8 writesThrough=false captured=false passedTo=nish.tlsTicketOpen#0
   pointer currentInfo: size=32 writesThrough=false captured=false passedTo=nish.tlsTicketOpen#1
   pointer previous: size=8 writesThrough=false captured=false passedTo=nish.tlsTicketOpen#0
@@ -8093,7 +8139,7 @@ function TlsServer.bindTicket(this: TlsServer): boolean -> @nish.TlsServer.bindT
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsSecretPool.zero nish.TlsServer.secrets nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone nish.exposeWith$arr.u8$arr.u8$i32$fn.18.nish.tlsHeldCopyIn nish.tlsBinderKeyInto nish.tlsBinderVerify nish.tlsPskEarlySecretInto nish_arena_mark nish_arena_release nish_panic nish_wipe
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
   stackSites=0 stackLocals=0
   local -4:11 hello: TlsClientHelloView (const)
   local -3:11 pool: TlsSecretPool (const)
@@ -8117,7 +8163,7 @@ function TlsServer.saltFromEarly(this: TlsServer): void -> @nish.TlsServer.saltF
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsServer.secrets nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone nish.tlsHandshakeSaltInto nish_arena_mark nish_arena_release nish_wipe
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
   stackSites=0 stackLocals=0
   local -4:11 pool: TlsSecretPool (const)
   callee -4:33 TlsServer.secrets -> @nish.TlsServer.secrets
@@ -8130,7 +8176,7 @@ function TlsServer.resume(this: TlsServer, current: Secret<u8[]>, currentInfo: T
   sharedWrite: +0:7
   escaping: now
   calls: nish.TlsSecretPool.zero nish.TlsServer.answerHello nish.TlsServer.bindTicket nish.TlsServer.fail nish.TlsServer.saltFromEarly nish.TlsServer.secrets nish.TlsServer.selectTicket nish.TlsTicketState.expiresAt nish.TlsTicketStrikes.take nish_wipe
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.selectTicket#0 nish.TlsServer.bindTicket#0 nish.TlsServer.saltFromEarly#0 nish.TlsServer.secrets#0 nish.TlsServer.fail#0 nish.TlsServer.answerHello#0 nish.TlsServer.fail#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.selectTicket#0 nish.TlsServer.bindTicket#0 nish.TlsServer.saltFromEarly#0 nish.TlsServer.secrets#0 nish.TlsServer.fail#0 nish.TlsServer.answerHello#0 nish.TlsServer.fail#0
   pointer current: size=8 writesThrough=false captured=false passedTo=nish.TlsServer.selectTicket#1
   pointer currentInfo: size=32 writesThrough=false captured=false passedTo=nish.TlsServer.selectTicket#2
   pointer previous: size=8 writesThrough=false captured=false passedTo=nish.TlsServer.selectTicket#3
@@ -8157,7 +8203,7 @@ function TlsServer.writeResumedFlight(this: TlsServer, index: i32): void -> @nis
   sharedWrite: via nish.TlsServer.reserveOutput
   escaping: index
   calls: nish.TlsServer.masterSecretStep nish.TlsServer.reserveOutput nish.TlsServer.secrets nish.TlsServer.writeResumedHello nish.TlsServer.writeServerFinished nish.tlsWriteEncryptedExtensions nish.tlsWriteServerHelloPsk nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.reserveOutput#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secrets#0 nish.TlsServer.writeResumedHello#0 nish.TlsServer.writeServerFinished#0 nish.TlsServer.masterSecretStep#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.reserveOutput#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secrets#0 nish.TlsServer.writeResumedHello#0 nish.TlsServer.writeServerFinished#0 nish.TlsServer.masterSecretStep#0
   stackSites=1 stackLocals=1
   local +0:11 hello: TlsClientHelloView (const)
   local +1:11 none: u8[] (const)
@@ -8176,7 +8222,7 @@ function TlsServer.writeResumedHello(this: TlsServer, pool: TlsSecretPool, index
   sharedWrite: +0:5
   escaping: index
   calls: nish.TlsServer.deriveInto nish.TlsServer.sent nish.TlsTranscript.hashInto nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone nish.tlsWriteEncryptedExtensions nish.tlsWriteServerHelloPsk nish_arena_mark nish_arena_release nish_wipe
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.sent#0 nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0 nish.TlsServer.sent#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.sent#0 nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0 nish.TlsServer.sent#0
   pointer pool: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -19:11 hello: TlsClientHelloView (const)
@@ -8198,40 +8244,51 @@ function TlsServer.exchangeKeys(this: TlsServer): i32 -> @nish.TlsServer.exchang
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsServer.secrets nish.exposeWith$arr.u8$$TlsExchangeWords$i32$fn.26.nish.tlsHandshakeFromWords nish.exposeWith$arr.u8$i32$u64$fn.14.nish.tlsWordAt nish.tlsExchange nish.tlsWordAt nish.tlsWordInto nish.wipe$$TlsExchangeWords nish_panic_overflow nish_wipe
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.secrets#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.secrets#0
   stackSites=0 stackLocals=0
-  local -3:11 w: TlsExchangeWords (const)
-  local -2:11 share: u8[] (const)
-  local -1:11 at: i32 (const)
-  callee +0:14 exposeWith<u8[], i32, u64, tlsWordAt> -> @nish.exposeWith$arr.u8$i32$u64$fn.14.nish.tlsWordAt
+  local -6:11 w: TlsExchangeWords (const)
+  local -5:11 share: u8[] (const)
+  local -4:11 p256: boolean (const)
+  local -3:11 at: i32 (const)
   callee +1:14 exposeWith<u8[], i32, u64, tlsWordAt> -> @nish.exposeWith$arr.u8$i32$u64$fn.14.nish.tlsWordAt
   callee +2:14 exposeWith<u8[], i32, u64, tlsWordAt> -> @nish.exposeWith$arr.u8$i32$u64$fn.14.nish.tlsWordAt
   callee +3:14 exposeWith<u8[], i32, u64, tlsWordAt> -> @nish.exposeWith$arr.u8$i32$u64$fn.14.nish.tlsWordAt
-  callee +4:16 tlsWordAt -> @nish.tlsWordAt
+  callee +4:14 exposeWith<u8[], i32, u64, tlsWordAt> -> @nish.exposeWith$arr.u8$i32$u64$fn.14.nish.tlsWordAt
   callee +5:16 tlsWordAt -> @nish.tlsWordAt
   callee +6:16 tlsWordAt -> @nish.tlsWordAt
   callee +7:16 tlsWordAt -> @nish.tlsWordAt
-  callee +9:15 tlsWordAt -> @nish.tlsWordAt
-  callee +10:15 tlsWordAt -> @nish.tlsWordAt
-  callee +11:15 tlsWordAt -> @nish.tlsWordAt
-  callee +12:15 tlsWordAt -> @nish.tlsWordAt
-  callee +13:15 tlsWordAt -> @nish.tlsWordAt
-  callee +14:15 tlsWordAt -> @nish.tlsWordAt
-  local +16:11 alert: i32 (const)
-  callee +16:24 tlsExchange -> @nish.tlsExchange
-  local +18:13 pub: u8[] (const)
-  callee +19:7 tlsWordInto -> @nish.tlsWordInto
-  callee +20:7 tlsWordInto -> @nish.tlsWordInto
-  callee +21:7 tlsWordInto -> @nish.tlsWordInto
-  callee +22:7 tlsWordInto -> @nish.tlsWordInto
-  callee +23:7 exposeWith<u8[], TlsExchangeWords, i32, tlsHandshakeFromWords> -> @nish.exposeWith$arr.u8$$TlsExchangeWords$i32$fn.26.nish.tlsHandshakeFromWords
-  callee +23:18 TlsServer.secrets -> @nish.TlsServer.secrets
-  callee +26:5 wipe<TlsExchangeWords> -> @nish.wipe$$TlsExchangeWords
+  callee +8:16 tlsWordAt -> @nish.tlsWordAt
+  callee +10:18 tlsWordAt -> @nish.tlsWordAt
+  callee +11:18 tlsWordAt -> @nish.tlsWordAt
+  callee +12:18 tlsWordAt -> @nish.tlsWordAt
+  callee +13:18 tlsWordAt -> @nish.tlsWordAt
+  callee +14:18 tlsWordAt -> @nish.tlsWordAt
+  callee +17:15 tlsWordAt -> @nish.tlsWordAt
+  callee +18:15 tlsWordAt -> @nish.tlsWordAt
+  callee +19:15 tlsWordAt -> @nish.tlsWordAt
+  callee +20:15 tlsWordAt -> @nish.tlsWordAt
+  callee +21:15 tlsWordAt -> @nish.tlsWordAt
+  callee +22:15 tlsWordAt -> @nish.tlsWordAt
+  local +24:11 alert: i32 (const)
+  callee +24:24 tlsExchange -> @nish.tlsExchange
+  local +26:13 pub: u8[] (const)
+  callee +27:7 tlsWordInto -> @nish.tlsWordInto
+  callee +28:7 tlsWordInto -> @nish.tlsWordInto
+  callee +29:7 tlsWordInto -> @nish.tlsWordInto
+  callee +30:7 tlsWordInto -> @nish.tlsWordInto
+  callee +31:7 tlsWordInto -> @nish.tlsWordInto
+  callee +32:7 tlsWordInto -> @nish.tlsWordInto
+  callee +33:7 tlsWordInto -> @nish.tlsWordInto
+  callee +34:7 tlsWordInto -> @nish.tlsWordInto
+  callee +35:7 tlsWordInto -> @nish.tlsWordInto
+  callee +37:7 exposeWith<u8[], TlsExchangeWords, i32, tlsHandshakeFromWords> -> @nish.exposeWith$arr.u8$$TlsExchangeWords$i32$fn.26.nish.tlsHandshakeFromWords
+  callee +37:18 TlsServer.secrets -> @nish.TlsServer.secrets
+  callee +40:5 wipe<TlsExchangeWords> -> @nish.wipe$$TlsExchangeWords
 function TlsServer.writeServerFlight(this: TlsServer): void -> @nish.TlsServer.writeServerFlight [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsServer.deriveInto nish.TlsServer.reserveOutput nish.TlsServer.secrets nish.TlsServer.sent nish.TlsTranscript.hashInto nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone nish.tlsWriteCertificate nish.tlsWriteCertificateVerifyContent nish.tlsWriteEncryptedExtensions nish.tlsWriteServerHello nish_arena_release nish_wipe
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.reserveOutput#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secrets#0 nish.TlsServer.sent#0 nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0 nish.TlsServer.sent#0 nish.TlsServer.sent#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.reserveOutput#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secrets#0 nish.TlsServer.sent#0 nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0 nish.TlsServer.sent#0 nish.TlsServer.sent#0
   stackSites=1 stackLocals=1
   local -51:11 hello: TlsClientHelloView (const)
   local -50:11 h: i32 (const)
@@ -8268,7 +8325,7 @@ function TlsServer.deriveInto(this: TlsServer, prk: u8[], label: string, dst: Se
   sharedWrite: via nish.tlsDeriveSecretInto
   escaping: label
   calls: nish.exposeWith$arr.u8$arr.u8$i32$fn.18.nish.tlsHeldCopyIn nish.tlsDeriveSecretInto nish_arena_mark nish_arena_release nish_panic nish_wipe
-  pointer this: size=272 writesThrough=false captured=false
+  pointer this: size=288 writesThrough=false captured=false
   pointer prk: size=0 writesThrough=false captured=false passedTo=nish.tlsDeriveSecretInto#2
   pointer dst: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$i32$fn.18.nish.tlsHeldCopyIn#0
   stackSites=0 stackLocals=0
@@ -8278,14 +8335,14 @@ function TlsServer.deriveInto(this: TlsServer, prk: u8[], label: string, dst: Se
 function TlsServer.signatureInput(this: TlsServer): u8[] | null -> @nish.TlsServer.signatureInput [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.TlsServer.secrets
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
   stackSites=0 stackLocals=0
   callee +0:12 TlsServer.secrets -> @nish.TlsServer.secrets
 function TlsServer.sign(this: TlsServer, signature: u8[]): i32 -> @nish.TlsServer.sign [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsServer.fail nish.TlsServer.masterSecretStep nish.TlsServer.reserveOutput nish.TlsServer.secrets nish.TlsServer.writeCertificateVerify nish.TlsServer.writeServerFinished nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secrets#0 nish.TlsServer.writeCertificateVerify#0 nish.TlsServer.writeServerFinished#0 nish.TlsServer.masterSecretStep#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secrets#0 nish.TlsServer.writeCertificateVerify#0 nish.TlsServer.writeServerFinished#0 nish.TlsServer.masterSecretStep#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.TlsServer.writeCertificateVerify#1
   stackSites=0 stackLocals=0
   local -11:11 signatureLength: i32 (const)
@@ -8301,7 +8358,7 @@ function TlsServer.writeCertificateVerify(this: TlsServer, signature: u8[]): voi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_arena_release
   calls: nish.TlsServer.sent nish.tlsWriteCertificateVerify nish_arena_release
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.sent#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.sent#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteCertificateVerify#3
   stackSites=0 stackLocals=0
   local +0:11 _scope: i64 (const)
@@ -8313,7 +8370,7 @@ function TlsServer.writeServerFinished(this: TlsServer, pool: TlsSecretPool): vo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsServer.sent nish.TlsTranscript.hashInto nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone nish.tlsFinishedVerifyDataInto nish.tlsWriteFinished nish_arena_mark nish_arena_release nish_panic_overflow nish_wipe
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.sent#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.sent#0
   pointer pool: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -14:11 h: i32 (const)
@@ -8330,7 +8387,7 @@ function TlsServer.masterSecretStep(this: TlsServer, pool: TlsSecretPool): void 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsServer.deriveInto nish.TlsTranscript.hashInto nish.TlsTranscript.update nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone nish.tlsFinishedVerifyDataInto nish.tlsMasterSecretInto nish.tlsWriteFinished nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_wipe
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0 nish.TlsServer.deriveInto#0
   pointer pool: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -6:11 h: i32 (const)
@@ -8357,7 +8414,7 @@ function TlsServer.issue(this: TlsServer, key: Secret<u8[]>, info: TlsTicketKeyI
   sharedWrite: +0:5
   escaping: now
   calls: nish.TlsServer.wipeResumption nish.TlsServer.writeTicket
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.writeTicket#0 nish.TlsServer.wipeResumption#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.writeTicket#0 nish.TlsServer.wipeResumption#0
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.TlsServer.writeTicket#1
   pointer info: size=32 writesThrough=true captured=false passedTo=nish.TlsServer.writeTicket#2
   stackSites=0 stackLocals=0
@@ -8368,7 +8425,7 @@ function TlsServer.resumptionPsk(this: TlsServer): void -> @nish.TlsServer.resum
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsServer.secrets nish.expose$arr.u8$arr.u8$fn.17.nish.tlsHeldClone nish.tlsResumptionPskInto nish_arena_mark nish_arena_release nish_wipe
-  pointer this: size=272 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
+  pointer this: size=288 writesThrough=false captured=false passedTo=nish.TlsServer.secrets#0
   stackSites=0 stackLocals=0
   local -12:11 pool: TlsSecretPool (const)
   callee -12:33 TlsServer.secrets -> @nish.TlsServer.secrets
@@ -8381,7 +8438,7 @@ function TlsServer.writeTicket(this: TlsServer, key: Secret<u8[]>, info: TlsTick
   sharedWrite: +0:5
   escaping: now
   calls: nish.TlsServer.resumptionPsk nish.tlsTicketSeal nish.tlsWriteNewSessionTicket nish_panic_index nish_random_fill nish_wipe
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.resumptionPsk#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.resumptionPsk#0
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.tlsTicketSeal#0
   pointer info: size=32 writesThrough=true captured=false passedTo=nish.tlsTicketSeal#1
   stackSites=0 stackLocals=0
@@ -8396,7 +8453,7 @@ function TlsServer.handleFinished(this: TlsServer, length: i32): i32 -> @nish.Tl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsSecretPool.zero nish.TlsServer.secrets nish.timingSafeEqualAt
-  pointer this: size=272 writesThrough=true captured=false passedTo=nish.TlsServer.secrets#0
+  pointer this: size=288 writesThrough=true captured=false passedTo=nish.TlsServer.secrets#0
   stackSites=0 stackLocals=0
   local -6:11 pool: TlsSecretPool (const)
   callee -6:33 TlsServer.secrets -> @nish.TlsServer.secrets
@@ -8407,7 +8464,7 @@ function TlsServer.sent(this: TlsServer, level: i32, at: i32, end: i32): void ->
   sharedWrite: +0:7
   escaping: at end
   calls: nish.TlsTranscript.update nish_panic_overflow
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -1:7 TlsTranscript.update -> @nish.TlsTranscript.update
   callee +2:7 TlsTranscript.update -> @nish.TlsTranscript.update
@@ -8416,7 +8473,7 @@ function TlsServer.takeOutput(this: TlsServer, level: i32): u8[] -> @nish.TlsSer
   sharedWrite: +0:9
   escaping: level
   calls: nish_panic
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -7:11 none: u8[] (const)
   local -4:15 out: u8[] (const)
@@ -8428,7 +8485,7 @@ function TlsServer.takeOutput(this: TlsServer, level: i32): u8[] -> @nish.TlsSer
 function TlsServer.clearOutput(this: TlsServer, level: i32): void -> @nish.TlsServer.clearOutput [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  pointer this: size=272 writesThrough=true captured=false
+  pointer this: size=288 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 module std/crypto/hkdf.ts [package nish]
 import HmacSha256 from "nish/crypto/hmac" -> struct HmacSha256
@@ -16969,7 +17026,7 @@ struct TlsReader (class) size=24 align=8
   field end: i32 index=2 offset=12
   field failed: boolean index=3 offset=16 initialized
   constructor -> @nish.TlsReader.constructor
-struct TlsClientHelloView (class) size=200 align=8 exported
+struct TlsClientHelloView (class) size=216 align=8 exported
   field data: u8[] index=0 offset=0
   field extensionSeen: u32[] index=1 offset=8
   field shareSeen: u32[] index=2 offset=16
@@ -16991,40 +17048,43 @@ struct TlsClientHelloView (class) size=200 align=8 exported
   field sharesLength: i32 index=18 offset=88 initialized
   field x25519ShareAt: i32 index=19 offset=92 initialized
   field x25519ShareLength: i32 index=20 offset=96 initialized
-  field serverNameAt: i32 index=21 offset=100 initialized
-  field serverNameLength: i32 index=22 offset=104 initialized
-  field alpnAt: i32 index=23 offset=108 initialized
-  field alpnLength: i32 index=24 offset=112 initialized
-  field quicAt: i32 index=25 offset=116 initialized
-  field quicLength: i32 index=26 offset=120 initialized
-  field extensionsAt: i32 index=27 offset=124 initialized
-  field extensionsLength: i32 index=28 offset=128 initialized
-  field pskIdentitiesAt: i32 index=29 offset=132 initialized
-  field pskIdentitiesLength: i32 index=30 offset=136 initialized
-  field pskIdentityCount: i32 index=31 offset=140 initialized
-  field pskBindersPrefixAt: i32 index=32 offset=144 initialized
-  field pskBindersAt: i32 index=33 offset=148 initialized
-  field pskBindersLength: i32 index=34 offset=152 initialized
-  field pskBinderCount: i32 index=35 offset=156 initialized
-  field pskModesAt: i32 index=36 offset=160 initialized
-  field pskModesLength: i32 index=37 offset=164 initialized
-  field pskIdentityAt: i32 index=38 offset=168 initialized
-  field pskIdentityLength: i32 index=39 offset=172 initialized
-  field pskTicketAge: u32 index=40 offset=176 initialized
-  field pskBinderAt: i32 index=41 offset=180 initialized
-  field pskBinderLength: i32 index=42 offset=184 initialized
-  field pskDheKe: boolean index=43 offset=188 initialized
-  field nullCompressionOnly: boolean index=44 offset=189 initialized
-  field hasSupportedVersions: boolean index=45 offset=190 initialized
-  field hasSupportedGroups: boolean index=46 offset=191 initialized
-  field hasKeyShare: boolean index=47 offset=192 initialized
-  field hasX25519Share: boolean index=48 offset=193 initialized
-  field hasSignatureAlgorithms: boolean index=49 offset=194 initialized
-  field hasServerName: boolean index=50 offset=195 initialized
-  field hasAlpn: boolean index=51 offset=196 initialized
-  field hasQuicTransportParameters: boolean index=52 offset=197 initialized
-  field hasPreSharedKey: boolean index=53 offset=198 initialized
-  field hasPskModes: boolean index=54 offset=199 initialized
+  field p256ShareAt: i32 index=21 offset=100 initialized
+  field p256ShareLength: i32 index=22 offset=104 initialized
+  field serverNameAt: i32 index=23 offset=108 initialized
+  field serverNameLength: i32 index=24 offset=112 initialized
+  field alpnAt: i32 index=25 offset=116 initialized
+  field alpnLength: i32 index=26 offset=120 initialized
+  field quicAt: i32 index=27 offset=124 initialized
+  field quicLength: i32 index=28 offset=128 initialized
+  field extensionsAt: i32 index=29 offset=132 initialized
+  field extensionsLength: i32 index=30 offset=136 initialized
+  field pskIdentitiesAt: i32 index=31 offset=140 initialized
+  field pskIdentitiesLength: i32 index=32 offset=144 initialized
+  field pskIdentityCount: i32 index=33 offset=148 initialized
+  field pskBindersPrefixAt: i32 index=34 offset=152 initialized
+  field pskBindersAt: i32 index=35 offset=156 initialized
+  field pskBindersLength: i32 index=36 offset=160 initialized
+  field pskBinderCount: i32 index=37 offset=164 initialized
+  field pskModesAt: i32 index=38 offset=168 initialized
+  field pskModesLength: i32 index=39 offset=172 initialized
+  field pskIdentityAt: i32 index=40 offset=176 initialized
+  field pskIdentityLength: i32 index=41 offset=180 initialized
+  field pskTicketAge: u32 index=42 offset=184 initialized
+  field pskBinderAt: i32 index=43 offset=188 initialized
+  field pskBinderLength: i32 index=44 offset=192 initialized
+  field pskDheKe: boolean index=45 offset=196 initialized
+  field nullCompressionOnly: boolean index=46 offset=197 initialized
+  field hasSupportedVersions: boolean index=47 offset=198 initialized
+  field hasSupportedGroups: boolean index=48 offset=199 initialized
+  field hasKeyShare: boolean index=49 offset=200 initialized
+  field hasX25519Share: boolean index=50 offset=201 initialized
+  field hasP256Share: boolean index=51 offset=202 initialized
+  field hasSignatureAlgorithms: boolean index=52 offset=203 initialized
+  field hasServerName: boolean index=53 offset=204 initialized
+  field hasAlpn: boolean index=54 offset=205 initialized
+  field hasQuicTransportParameters: boolean index=55 offset=206 initialized
+  field hasPreSharedKey: boolean index=56 offset=207 initialized
+  field hasPskModes: boolean index=57 offset=208 initialized
   constructor -> @nish.TlsClientHelloView.constructor
   method clear -> @nish.TlsClientHelloView.clear
 struct TlsClientHello (class) size=152 align=8 exported
@@ -17141,16 +17201,16 @@ function tlsReadSkipTo(r: TlsReader, to: i32): void -> @nish.tlsReadSkipTo
 function TlsClientHelloView.constructor(this: TlsClientHelloView): void -> @nish.TlsClientHelloView.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.TlsReader.constructor nish_alloc_struct nish_panic
-  pointer this: size=200 writesThrough=true captured=false
+  pointer this: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:19 new TlsReader -> @nish.TlsReader.constructor
 function TlsClientHelloView.clear(this: TlsClientHelloView): void -> @nish.TlsClientHelloView.clear [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=200 writesThrough=true captured=false
+  pointer this: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +51:14 k: i32 (let)
   local +54:14 k: i32 (let)
+  local +57:14 k: i32 (let)
 function tlsMarkSeen(bits: u32[], value: i32): boolean -> @nish.tlsMarkSeen
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -17163,7 +17223,7 @@ function tlsHelloRefuse(hello: TlsClientHelloView, alert: i32): void -> @nish.tl
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: alert
-  pointer hello: size=200 writesThrough=true captured=false
+  pointer hello: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function tlsReadU16Vector(r: TlsReader, width: i32, min: i32, max: i32): i32 -> @nish.tlsReadU16Vector
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -17191,7 +17251,7 @@ function tlsReadServerName(r: TlsReader, hello: TlsClientHelloView): void -> @ni
   sharedWrite: +0:7
   calls: nish.tlsHelloRefuse nish.tlsReadList nish.tlsReadSkipTo nish.tlsReadU8 nish.tlsReadVector nish_panic_overflow
   pointer r: size=24 writesThrough=true captured=false passedTo=nish.tlsReadVector#0 nish.tlsReadList#0 nish.tlsReadU8#0 nish.tlsReadVector#0 nish.tlsReadU8#0 nish.tlsReadSkipTo#0
-  pointer hello: size=200 writesThrough=true captured=false passedTo=nish.tlsHelloRefuse#0 nish.tlsHelloRefuse#0
+  pointer hello: size=216 writesThrough=true captured=false passedTo=nish.tlsHelloRefuse#0 nish.tlsHelloRefuse#0
   stackSites=0 stackLocals=0
   local -10:9 listEnd: i32 (const)
   callee -10:24 tlsReadVector -> @nish.tlsReadVector
@@ -17211,7 +17271,7 @@ function tlsReadKeyShare(r: TlsReader, hello: TlsClientHelloView): void -> @nish
   sharedWrite: +0:3
   calls: nish.tlsHelloRefuse nish.tlsMarkSeen nish.tlsReadList nish.tlsReadSkipTo nish.tlsReadU16 nish.tlsReadVector nish_panic_overflow
   pointer r: size=24 writesThrough=true captured=false passedTo=nish.tlsReadVector#0 nish.tlsReadList#0 nish.tlsReadU16#0 nish.tlsReadVector#0 nish.tlsReadSkipTo#0
-  pointer hello: size=200 writesThrough=true captured=false passedTo=nish.tlsHelloRefuse#0
+  pointer hello: size=216 writesThrough=true captured=false passedTo=nish.tlsHelloRefuse#0
   stackSites=0 stackLocals=0
   local +1:9 listEnd: i32 (const)
   callee +1:24 tlsReadVector -> @nish.tlsReadVector
@@ -17223,13 +17283,13 @@ function tlsReadKeyShare(r: TlsReader, hello: TlsClientHelloView): void -> @nish
   callee +8:27 tlsReadVector -> @nish.tlsReadVector
   callee +9:9 tlsMarkSeen -> @nish.tlsMarkSeen
   callee +10:7 tlsHelloRefuse -> @nish.tlsHelloRefuse
-  callee +17:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +22:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
 function tlsReadAlpn(r: TlsReader, hello: TlsClientHelloView): void -> @nish.tlsReadAlpn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: nish.tlsReadList nish.tlsReadSkipTo nish.tlsReadVector nish_panic_overflow
   pointer r: size=24 writesThrough=true captured=false passedTo=nish.tlsReadVector#0 nish.tlsReadList#0 nish.tlsReadVector#0 nish.tlsReadSkipTo#0
-  pointer hello: size=200 writesThrough=true captured=false
+  pointer hello: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +1:9 listEnd: i32 (const)
   callee +1:24 tlsReadVector -> @nish.tlsReadVector
@@ -17243,7 +17303,7 @@ function tlsReadPreSharedKey(r: TlsReader, hello: TlsClientHelloView): void -> @
   sharedWrite: +0:3
   calls: nish.tlsReadList nish.tlsReadSkipTo nish.tlsReadVector nish_panic_overflow
   pointer r: size=24 writesThrough=true captured=false passedTo=nish.tlsReadVector#0 nish.tlsReadList#0 nish.tlsReadVector#0 nish.tlsReadSkipTo#0 nish.tlsReadSkipTo#0 nish.tlsReadVector#0 nish.tlsReadList#0 nish.tlsReadVector#0 nish.tlsReadSkipTo#0
-  pointer hello: size=200 writesThrough=true captured=false
+  pointer hello: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +1:9 identitiesEnd: i32 (const)
   callee +1:30 tlsReadVector -> @nish.tlsReadVector
@@ -17264,7 +17324,7 @@ function tlsReadPskModes(r: TlsReader, hello: TlsClientHelloView): void -> @nish
   sharedWrite: +0:3
   calls: nish.tlsReadU8 nish.tlsReadVector nish_panic_overflow
   pointer r: size=24 writesThrough=true captured=false passedTo=nish.tlsReadVector#0 nish.tlsReadU8#0
-  pointer hello: size=200 writesThrough=true captured=false
+  pointer hello: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +1:9 modesEnd: i32 (const)
   callee +1:25 tlsReadVector -> @nish.tlsReadVector
@@ -17275,7 +17335,7 @@ function tlsReadExtension(r: TlsReader, type: i32, end: i32, hello: TlsClientHel
   escaping: end type
   calls: nish.tlsReadAlpn nish.tlsReadKeyShare nish.tlsReadPreSharedKey nish.tlsReadPskModes nish.tlsReadServerName nish.tlsReadSkipTo nish.tlsReadU16Vector nish_panic_overflow
   pointer r: size=24 writesThrough=true captured=false passedTo=nish.tlsReadServerName#0 nish.tlsReadU16Vector#0 nish.tlsReadU16Vector#0 nish.tlsReadAlpn#0 nish.tlsReadU16Vector#0 nish.tlsReadKeyShare#0 nish.tlsReadPreSharedKey#0 nish.tlsReadPskModes#0 nish.tlsReadSkipTo#0 nish.tlsReadSkipTo#0
-  pointer hello: size=200 writesThrough=true captured=false passedTo=nish.tlsReadServerName#1 nish.tlsReadAlpn#1 nish.tlsReadKeyShare#1 nish.tlsReadPreSharedKey#1 nish.tlsReadPskModes#1
+  pointer hello: size=216 writesThrough=true captured=false passedTo=nish.tlsReadServerName#1 nish.tlsReadAlpn#1 nish.tlsReadKeyShare#1 nish.tlsReadPreSharedKey#1 nish.tlsReadPskModes#1
   stackSites=0 stackLocals=0
   callee -3:7 tlsReadServerName -> @nish.tlsReadServerName
   callee +2:28 tlsReadU16Vector -> @nish.tlsReadU16Vector
@@ -17292,7 +17352,7 @@ function tlsReadClientHello(hello: TlsClientHelloView, data: u8[], off: i32, len
   sharedWrite: +0:3
   escaping: data off
   calls: nish.TlsClientHelloView.clear nish.tlsHelloRefuse nish.tlsMarkSeen nish.tlsReadExtension nish.tlsReadList nish.tlsReadSkipTo nish.tlsReadU16 nish.tlsReadU16Vector nish.tlsReadU8 nish.tlsReadVector nish_panic_overflow
-  pointer hello: size=200 writesThrough=true captured=false passedTo=nish.TlsClientHelloView.clear#0 nish.tlsHelloRefuse#0 nish.tlsHelloRefuse#0 nish.tlsReadExtension#3 nish.tlsHelloRefuse#0 nish.tlsHelloRefuse#0 nish.tlsHelloRefuse#0
+  pointer hello: size=216 writesThrough=true captured=false passedTo=nish.TlsClientHelloView.clear#0 nish.tlsHelloRefuse#0 nish.tlsHelloRefuse#0 nish.tlsReadExtension#3 nish.tlsHelloRefuse#0 nish.tlsHelloRefuse#0 nish.tlsHelloRefuse#0
   pointer data: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -1:3 TlsClientHelloView.clear -> @nish.TlsClientHelloView.clear
@@ -17329,7 +17389,7 @@ function tlsSelectPskIdentity(hello: TlsClientHelloView, index: i32): boolean ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: nish_panic_overflow
-  pointer hello: size=200 writesThrough=true captured=false
+  pointer hello: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +8:9 data: u8[] (const)
   local +9:7 at: i32 (let)
@@ -17514,15 +17574,15 @@ function tlsPutHelloHead(out: u8[], at: i32, random: u8[], retry: boolean, sessi
   callee +3:7 tlsPutWindow -> @nish.tlsPutWindow
   callee +4:7 tlsPutU16 -> @nish.tlsPutU16
   callee +5:10 tlsPutU8 -> @nish.tlsPutU8
-function tlsPutServerHello(out: u8[], at: i32, random: u8[], sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, x25519Public: u8[], selectedIdentity: i32): i32 -> @nish.tlsPutServerHello
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function tlsPutServerHello(out: u8[], at: i32, random: u8[], sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, publicKey: u8[], selectedIdentity: i32): i32 -> @nish.tlsPutServerHello
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutHelloHead
   escaping: at selectedIdentity sessionIdLength sessionIdOff suite
   calls: nish.tlsPutBytes nish.tlsPutHeader nish.tlsPutHelloHead nish.tlsPutLength nish.tlsPutSelectedVersion nish.tlsPutU16 nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutHelloHead#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutSelectedVersion#0 nish.tlsPutLength#0 nish.tlsPutHeader#0
   pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsPutHelloHead#2
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsPutHelloHead#4
-  pointer x25519Public: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
+  pointer publicKey: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
   stackSites=0 stackLocals=0
   local +0:7 p: i32 (let)
   callee +0:16 tlsPutHelloHead -> @nish.tlsPutHelloHead
@@ -17532,15 +17592,16 @@ function tlsPutServerHello(out: u8[], at: i32, random: u8[], sessionId: u8[], se
   callee +4:39 tlsPutU16 -> @nish.tlsPutU16
   callee +6:7 tlsPutU16 -> @nish.tlsPutU16
   local +7:9 share: i32 (const)
-  callee +8:7 tlsPutU16 -> @nish.tlsPutU16
-  local +9:9 key: i32 (const)
-  callee +10:7 tlsPutBytes -> @nish.tlsPutBytes
-  callee +11:3 tlsPutLength -> @nish.tlsPutLength
+  local +8:9 group: i32 (const)
+  callee +9:7 tlsPutU16 -> @nish.tlsPutU16
+  local +10:9 key: i32 (const)
+  callee +11:7 tlsPutBytes -> @nish.tlsPutBytes
   callee +12:3 tlsPutLength -> @nish.tlsPutLength
-  callee +13:7 tlsPutSelectedVersion -> @nish.tlsPutSelectedVersion
-  callee +14:3 tlsPutLength -> @nish.tlsPutLength
-  callee +15:3 tlsPutHeader -> @nish.tlsPutHeader
-function tlsWriteServerHello(out: u8[], at: i32, random: u8[], sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, x25519Public: u8[]): i32 -> @nish.tlsWriteServerHello [exported]
+  callee +13:3 tlsPutLength -> @nish.tlsPutLength
+  callee +14:7 tlsPutSelectedVersion -> @nish.tlsPutSelectedVersion
+  callee +15:3 tlsPutLength -> @nish.tlsPutLength
+  callee +16:3 tlsPutHeader -> @nish.tlsPutHeader
+function tlsWriteServerHello(out: u8[], at: i32, random: u8[], sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, serverShare: u8[]): i32 -> @nish.tlsWriteServerHello [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutServerHello
   escaping: at sessionIdLength sessionIdOff suite
@@ -17548,10 +17609,10 @@ function tlsWriteServerHello(out: u8[], at: i32, random: u8[], sessionId: u8[], 
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutServerHello#0
   pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsPutServerHello#2
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsPutServerHello#3
-  pointer x25519Public: size=0 writesThrough=false captured=false passedTo=nish.tlsPutServerHello#7
+  pointer serverShare: size=0 writesThrough=false captured=false passedTo=nish.tlsPutServerHello#7
   stackSites=0 stackLocals=0
-  callee +0:3 tlsPutServerHello -> @nish.tlsPutServerHello
-function tlsWriteServerHelloPsk(out: u8[], at: i32, random: u8[], sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, x25519Public: u8[], selectedIdentity: i32): i32 -> @nish.tlsWriteServerHelloPsk [exported]
+  callee +0:11 tlsPutServerHello -> @nish.tlsPutServerHello
+function tlsWriteServerHelloPsk(out: u8[], at: i32, random: u8[], sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, serverShare: u8[], selectedIdentity: i32): i32 -> @nish.tlsWriteServerHelloPsk [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsPutServerHello
   escaping: at sessionIdLength sessionIdOff suite
@@ -17559,7 +17620,7 @@ function tlsWriteServerHelloPsk(out: u8[], at: i32, random: u8[], sessionId: u8[
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutServerHello#0
   pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsPutServerHello#2
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsPutServerHello#3
-  pointer x25519Public: size=0 writesThrough=false captured=false passedTo=nish.tlsPutServerHello#7
+  pointer serverShare: size=0 writesThrough=false captured=false passedTo=nish.tlsPutServerHello#7
   stackSites=0 stackLocals=0
   callee +0:3 tlsPutServerHello -> @nish.tlsPutServerHello
 function tlsWriteHelloRetryRequest(out: u8[], at: i32, sessionId: u8[], sessionIdOff: i32, sessionIdLength: i32, suite: i32, group: i32): i32 -> @nish.tlsWriteHelloRetryRequest [exported]
@@ -17692,26 +17753,26 @@ function tlsBytesString(name: u8[]): string -> @nish.tlsBytesString
   pointer name: size=0 writesThrough=false captured=false passedTo=nish.tlsWindowString#0
   stackSites=0 stackLocals=0
   callee +0:48 tlsWindowString -> @nish.tlsWindowString
-function tlsEncodeServerHello(random: u8[], sessionId: u8[], suite: i32, x25519Public: u8[]): u8[] -> @nish.tlsEncodeServerHello [exported]
+function tlsEncodeServerHello(random: u8[], sessionId: u8[], suite: i32, serverShare: u8[]): u8[] -> @nish.tlsEncodeServerHello [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: suite
   calls: nish.tlsWriteServerHello nish_panic
   pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHello#2 nish.tlsWriteServerHello#2
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHello#3 nish.tlsWriteServerHello#3
-  pointer x25519Public: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHello#7 nish.tlsWriteServerHello#7
+  pointer serverShare: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHello#7 nish.tlsWriteServerHello#7
   stackSites=1 stackLocals=1
   local +0:9 none: u8[] (const)
   local +1:9 sessionIdLength: i32 (const)
   local +2:9 out: u8[] (const)
   callee +3:5 tlsWriteServerHello -> @nish.tlsWriteServerHello
   callee +14:3 tlsWriteServerHello -> @nish.tlsWriteServerHello
-function tlsEncodeServerHelloPsk(random: u8[], sessionId: u8[], suite: i32, x25519Public: u8[], selectedIdentity: i32): u8[] -> @nish.tlsEncodeServerHelloPsk [exported]
+function tlsEncodeServerHelloPsk(random: u8[], sessionId: u8[], suite: i32, serverShare: u8[], selectedIdentity: i32): u8[] -> @nish.tlsEncodeServerHelloPsk [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: selectedIdentity suite
   calls: nish.tlsWriteServerHelloPsk nish_panic
   pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHelloPsk#2 nish.tlsWriteServerHelloPsk#2
   pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHelloPsk#3 nish.tlsWriteServerHelloPsk#3
-  pointer x25519Public: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHelloPsk#7 nish.tlsWriteServerHelloPsk#7
+  pointer serverShare: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteServerHelloPsk#7 nish.tlsWriteServerHelloPsk#7
   stackSites=1 stackLocals=1
   local +0:9 none: u8[] (const)
   local +1:9 sessionIdLength: i32 (const)
@@ -19935,7 +19996,7 @@ function TlsRecordServer.constructor(this: TlsRecordServer, tls: TlsServer): voi
   escaping: tls
   calls: nish.TlsRecordPools.constructor nish.TlsRecordProtection.constructor nish.TlsRecordReader.borrowFrom nish.TlsRecordReader.constructor nish.TlsRecordServer.start nish.secret$arr.u8 nish_alloc_struct nish_panic
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.start#0
-  pointer tls: size=272 writesThrough=true captured=true passedTo=nish.TlsRecordServer.start#1
+  pointer tls: size=288 writesThrough=true captured=true passedTo=nish.TlsRecordServer.start#1
   stackSites=0 stackLocals=0
   callee +0:19 new TlsRecordReader -> @nish.TlsRecordReader.constructor
   callee +1:27 new TlsRecordProtection -> @nish.TlsRecordProtection.constructor
@@ -19953,7 +20014,7 @@ function TlsRecordServer.start(this: TlsRecordServer, tls: TlsServer): void -> @
   escaping: tls
   calls: nish.TlsRecordReader.reset nish.TlsRecordServer.dropOutput nish.TlsRecordServer.dropPlain nish.TlsRecordServer.fail nish.TlsRecordServer.giveBackIdle nish.TlsRecordServer.wipeTraffic
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.wipeTraffic#0 nish.TlsRecordServer.dropOutput#0 nish.TlsRecordServer.dropPlain#0 nish.TlsRecordServer.giveBackIdle#0 nish.TlsRecordServer.fail#0
-  pointer tls: size=272 writesThrough=true captured=true
+  pointer tls: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -1:5 TlsRecordServer.wipeTraffic -> @nish.TlsRecordServer.wipeTraffic
   callee +6:5 TlsRecordReader.reset -> @nish.TlsRecordReader.reset
@@ -21730,21 +21791,23 @@ const TLS_TCP_READ_EVENTS: i32 = 5
 const TLS_TCP_POLL_EVENTS: i32 = 3
 const TLS_TCP_TOKEN: i32 = 1
 const TLS_TCP_NANOS_PER_MS: i64 = 1000000
-struct TlsTcpServer (class) size=104 align=8 exported
+struct TlsTcpServer (class) size=112 align=8 exported
   field config: TlsServerConfig index=0 offset=0
   field connections: TlsRecordServer[] index=1 offset=8
   field fds: i32[] index=2 offset=16
   field lingered: i32[] index=3 offset=24
-  field free: i32[] index=4 offset=32
-  field scratch: u8[] index=5 offset=40
-  field peer: u8[] index=6 offset=48
-  field signer: TlsP256Signer index=7 offset=56
-  field randoms: u8[][] index=8 offset=64
-  field slots: i32 index=9 offset=72 initialized
-  field tickets: boolean index=10 offset=76 initialized
-  field vacant: TlsRecordServer | null index=11 offset=80 initialized
-  field pools: TlsRecordPools index=12 offset=88
-  field listener: i32 index=13 offset=96 initialized
+  field lastActive: i64[] index=4 offset=32
+  field free: i32[] index=5 offset=40
+  field scratch: u8[] index=6 offset=48
+  field peer: u8[] index=7 offset=56
+  field signer: TlsP256Signer index=8 offset=64
+  field randoms: u8[][] index=9 offset=72
+  field slots: i32 index=10 offset=80 initialized
+  field tickets: boolean index=11 offset=84 initialized
+  field vacant: TlsRecordServer | null index=12 offset=88 initialized
+  field pools: TlsRecordPools index=13 offset=96
+  field listener: i32 index=14 offset=104 initialized
+  field idleTimeout: i32 index=15 offset=108 initialized
   constructor -> @nish.TlsTcpServer.constructor
   method build -> @nish.TlsTcpServer.build
   method make -> @nish.TlsTcpServer.make
@@ -21774,6 +21837,7 @@ struct TlsTcpServer (class) size=104 align=8 exported
   method keyUpdate -> @nish.TlsTcpServer.keyUpdate
   method shutdown -> @nish.TlsTcpServer.shutdown
   method close -> @nish.TlsTcpServer.close
+  method expire -> @nish.TlsTcpServer.expire
 struct TlsTcpClient (class) size=40 align=8 exported
   field conn: TlsRecordClient index=0 offset=0
   field trust: TlsClientTrust index=1 offset=8
@@ -21806,7 +21870,7 @@ function TlsTcpServer.constructor(this: TlsTcpServer, config: TlsServerConfig, l
   sharedWrite: via nish.TlsP256Signer.constructor
   escaping: config listener size
   calls: nish.TlsP256Signer.constructor nish.TlsRecordPools.constructor nish_alloc_struct nish_panic
-  pointer this: size=104 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   pointer config: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:18 new TlsRecordPools -> @nish.TlsRecordPools.constructor
@@ -21815,7 +21879,7 @@ function TlsTcpServer.build(this: TlsTcpServer): TlsRecordServer -> @nish.TlsTcp
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=200
   sharedWrite: +0:5
   calls: nish.TlsServer.enableTickets nish.TlsTcpServer.make nish_array_grow nish_panic
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.make#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.make#0
   stackSites=0 stackLocals=0
   local -1:11 random: u8[] (const)
   local +1:11 conn: TlsRecordServer (const)
@@ -21825,7 +21889,7 @@ function TlsTcpServer.make(this: TlsTcpServer, random: u8[]): TlsRecordServer ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=200
   sharedWrite: via nish.TlsRecordServer.constructor
   calls: nish.TlsRecordServer.borrowFrom nish.TlsRecordServer.constructor nish.TlsServer.constructor nish_alloc_struct nish_panic
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   pointer random: size=0 writesThrough=true captured=true passedTo=nish.TlsServer.constructor#2
   stackSites=0 stackLocals=0
   local +0:11 zeros: u8[] (const)
@@ -21835,25 +21899,25 @@ function TlsTcpServer.make(this: TlsTcpServer, random: u8[]): TlsRecordServer ->
   callee +2:5 TlsRecordServer.borrowFrom -> @nish.TlsRecordServer.borrowFrom
 function TlsTcpServer.size(this: TlsTcpServer): i32 -> @nish.TlsTcpServer.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsTcpServer.busy(this: TlsTcpServer): i32 -> @nish.TlsTcpServer.busy [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (let)
   local +1:16 fd: i32 (const)
 function TlsTcpServer.holds(this: TlsTcpServer, slot: i32): boolean -> @nish.TlsTcpServer.holds [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsTcpServer.fd(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.fd [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
   stackSites=0 stackLocals=0
   callee +0:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
 function TlsTcpServer.connection(this: TlsTcpServer, slot: i32): TlsRecordServer -> @nish.TlsTcpServer.connection [exported method]
@@ -21861,7 +21925,7 @@ function TlsTcpServer.connection(this: TlsTcpServer, slot: i32): TlsRecordServer
   sharedWrite: +0:5
   escaping: slot
   calls: nish.TlsTcpServer.make nish_panic
-  pointer this: size=104 writesThrough=true captured=false passedTo=nish.TlsTcpServer.make#0
+  pointer this: size=112 writesThrough=true captured=false passedTo=nish.TlsTcpServer.make#0
   stackSites=0 stackLocals=0
   local -9:11 index: i32 (const)
   local -5:11 vacant: TlsRecordServer | null (const)
@@ -21870,53 +21934,53 @@ function TlsTcpServer.connection(this: TlsTcpServer, slot: i32): TlsRecordServer
 function TlsTcpServer.accept(this: TlsTcpServer, serverRandom: u8[], ephemeralPrivate: u8[]): i32 -> @nish.TlsTcpServer.accept [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:21
-  calls: nish.TlsRecordServer.start nish.TlsServer.restart nish.TlsTcpServer.build nish_array_grow nish_net_close nish_panic_index nish_tcp_accept
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.build#0
+  calls: nish.TlsRecordServer.start nish.TlsServer.restart nish.TlsTcpServer.build nish_array_grow nish_monotonic_nanos nish_net_close nish_panic_index nish_tcp_accept
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.build#0
   pointer serverRandom: size=0 writesThrough=false captured=false
   pointer ephemeralPrivate: size=0 writesThrough=true captured=false passedTo=nish.TlsServer.restart#2
   stackSites=0 stackLocals=0
   local +0:11 fd: i32 (const)
   local +7:9 slot: i32 (let)
-  local +20:11 conn: TlsRecordServer (const)
-  callee +21:72 TlsTcpServer.build -> @nish.TlsTcpServer.build
-  local +24:11 random: u8[] (const)
-  local +26:11 k: i32 (let)
-  callee +33:5 TlsServer.restart -> @nish.TlsServer.restart
-  callee +34:5 TlsRecordServer.start -> @nish.TlsRecordServer.start
+  local +21:11 conn: TlsRecordServer (const)
+  callee +22:72 TlsTcpServer.build -> @nish.TlsTcpServer.build
+  local +26:11 random: u8[] (const)
+  local +28:11 k: i32 (let)
+  callee +35:5 TlsServer.restart -> @nish.TlsServer.restart
+  callee +36:5 TlsRecordServer.start -> @nish.TlsRecordServer.start
 function TlsTcpServer.readable(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.readable [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:22
+  sharedWrite: +0:5
   escaping: slot
-  calls: nish.TlsRecordServer.abort nish.TlsRecordServer.end nish.TlsRecordServer.receive nish.TlsRecordServer.space nish.TlsTcpServer.drain nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_net_read nish_panic_index nish_panic_slice
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.drain#0 nish.TlsTcpServer.flush#0
+  calls: nish.TlsRecordServer.abort nish.TlsRecordServer.end nish.TlsRecordServer.receive nish.TlsRecordServer.space nish.TlsTcpServer.drain nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_monotonic_nanos nish_net_read nish_panic_index nish_panic_slice
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.drain#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee -14:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee -10:14 TlsTcpServer.drain -> @nish.TlsTcpServer.drain
-  local -8:11 fd: i32 (const)
-  local -7:11 conn: TlsRecordServer (const)
-  local -5:13 room: i32 (const)
-  callee -5:25 TlsRecordServer.space -> @nish.TlsRecordServer.space
-  local -4:13 want: i32 (const)
-  local +0:13 n: i32 (const)
-  callee +3:11 TlsRecordServer.end -> @nish.TlsRecordServer.end
-  callee +5:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
-  callee +9:7 TlsRecordServer.receive -> @nish.TlsRecordServer.receive
-  callee +11:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee -6:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee -2:14 TlsTcpServer.drain -> @nish.TlsTcpServer.drain
+  local +1:11 fd: i32 (const)
+  local +2:11 conn: TlsRecordServer (const)
+  local +4:13 room: i32 (const)
+  callee +4:25 TlsRecordServer.space -> @nish.TlsRecordServer.space
+  local +5:13 want: i32 (const)
+  local +9:13 n: i32 (const)
+  callee +12:11 TlsRecordServer.end -> @nish.TlsRecordServer.end
+  callee +14:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
+  callee +18:7 TlsRecordServer.receive -> @nish.TlsRecordServer.receive
+  callee +20:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.writable(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.writable [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.TlsTcpServer.flush
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
   escaping: slot
-  calls: nish.TlsTcpServer.flush nish.TlsTcpServer.holds
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
+  calls: nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_monotonic_nanos nish_panic_index
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee +0:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee +3:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee -6:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee +2:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.flush(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.flush [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsTcpServer.send
   escaping: slot
   calls: nish.TlsTcpServer.holds nish.TlsTcpServer.linger nish.TlsTcpServer.lingerInterest nish.TlsTcpServer.send nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.lingerInterest#0 nish.TlsTcpServer.send#0 nish.TlsTcpServer.linger#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.lingerInterest#0 nish.TlsTcpServer.send#0 nish.TlsTcpServer.linger#0
   stackSites=0 stackLocals=0
   callee +0:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
   callee +4:14 TlsTcpServer.lingerInterest -> @nish.TlsTcpServer.lingerInterest
@@ -21928,7 +21992,7 @@ function TlsTcpServer.send(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpSe
   sharedWrite: via nish_net_write
   escaping: slot
   calls: nish.TlsRecordServer.abort nish.TlsRecordServer.consume nish.TlsRecordServer.interest nish_net_write nish_panic_index nish_panic_overflow nish_panic_slice
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 fd: i32 (const)
   local +1:11 conn: TlsRecordServer (const)
@@ -21941,7 +22005,7 @@ function TlsTcpServer.linger(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcp
   sharedWrite: +0:7
   escaping: slot
   calls: nish.TlsRecordServer.release nish.TlsRecordServer.wipeKeys nish.TlsTcpServer.drain nish_net_shutdown nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.drain#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.drain#0
   stackSites=0 stackLocals=0
   local -7:11 conn: TlsRecordServer (const)
   callee +4:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
@@ -21952,27 +22016,27 @@ function TlsTcpServer.drain(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpS
   sharedWrite: +0:22
   escaping: slot
   calls: nish_net_read nish_panic_index nish_panic_overflow nish_panic_slice
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:13 n: i32 (const)
 function TlsTcpServer.lingering(this: TlsTcpServer, slot: i32): boolean -> @nish.TlsTcpServer.lingering [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
   stackSites=0 stackLocals=0
   callee +0:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
 function TlsTcpServer.lingerInterest(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.lingerInterest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsTcpServer.interest(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.interest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish.TlsRecordServer.interest nish.TlsTcpServer.holds nish.TlsTcpServer.lingerInterest nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.lingerInterest#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.lingerInterest#0
   stackSites=0 stackLocals=0
   callee +0:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
   callee +4:9 TlsTcpServer.lingerInterest -> @nish.TlsTcpServer.lingerInterest
@@ -21981,7 +22045,7 @@ function TlsTcpServer.signatureInput(this: TlsTcpServer, slot: i32): u8[] | null
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish.TlsRecordServer.signatureInput nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
   stackSites=0 stackLocals=0
   callee +0:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
   callee +0:31 TlsRecordServer.signatureInput -> @nish.TlsRecordServer.signatureInput
@@ -21990,7 +22054,7 @@ function TlsTcpServer.sign(this: TlsTcpServer, slot: i32, signature: u8[]): i32 
   sharedWrite: via nish.TlsRecordServer.sign
   escaping: slot
   calls: nish.TlsRecordServer.sign nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.sign#1
   stackSites=0 stackLocals=0
   callee +0:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
@@ -22001,7 +22065,7 @@ function TlsTcpServer.signP256(this: TlsTcpServer, slot: i32, key: Secret<u8[]>)
   sharedWrite: via nish.TlsP256Signer.sign
   escaping: slot
   calls: nish.TlsP256Signer.sign nish.TlsRecordServer.fail nish.TlsTcpServer.flush nish.TlsTcpServer.interest nish.TlsTcpServer.sign nish.TlsTcpServer.signatureInput nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.signatureInput#0 nish.TlsTcpServer.interest#0 nish.TlsTcpServer.flush#0 nish.TlsTcpServer.sign#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.signatureInput#0 nish.TlsTcpServer.interest#0 nish.TlsTcpServer.flush#0 nish.TlsTcpServer.sign#0
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.TlsP256Signer.sign#1
   stackSites=0 stackLocals=0
   local +0:11 input: u8[] | null (const)
@@ -22016,7 +22080,7 @@ function TlsTcpServer.enableTickets(this: TlsTcpServer): void -> @nish.TlsTcpSer
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.TlsServer.enableTickets
-  pointer this: size=104 writesThrough=true captured=false
+  pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +1:14 k: i32 (let)
   callee +2:7 TlsServer.enableTickets -> @nish.TlsServer.enableTickets
@@ -22025,7 +22089,7 @@ function TlsTcpServer.resume(this: TlsTcpServer, slot: i32, current: Secret<u8[]
   sharedWrite: via nish.TlsRecordServer.resume
   escaping: now slot
   calls: nish.TlsRecordServer.resume nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer current: size=8 writesThrough=false captured=false passedTo=nish.TlsRecordServer.resume#1
   pointer currentInfo: size=32 writesThrough=false captured=false passedTo=nish.TlsRecordServer.resume#2
   pointer previous: size=8 writesThrough=false captured=false passedTo=nish.TlsRecordServer.resume#3
@@ -22040,7 +22104,7 @@ function TlsTcpServer.issue(this: TlsTcpServer, slot: i32, key: Secret<u8[]>, in
   sharedWrite: via nish.TlsRecordServer.issue
   escaping: now slot
   calls: nish.TlsRecordServer.issue nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.TlsRecordServer.issue#1
   pointer info: size=32 writesThrough=true captured=false passedTo=nish.TlsRecordServer.issue#2
   stackSites=0 stackLocals=0
@@ -22052,7 +22116,7 @@ function TlsTcpServer.read(this: TlsTcpServer, slot: i32, buf: u8[], off: i32, l
   sharedWrite: via nish.TlsRecordServer.read
   escaping: len off slot
   calls: nish.TlsRecordServer.read nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.TlsRecordServer.read#1
   stackSites=0 stackLocals=0
   callee +0:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
@@ -22064,7 +22128,7 @@ function TlsTcpServer.write(this: TlsTcpServer, slot: i32, data: u8[], off: i32,
   sharedWrite: via nish.TlsRecordServer.write
   escaping: len off slot
   calls: nish.TlsRecordServer.write nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.write#1
   stackSites=0 stackLocals=0
   callee +0:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
@@ -22076,7 +22140,7 @@ function TlsTcpServer.keyUpdate(this: TlsTcpServer, slot: i32, requestPeer: bool
   sharedWrite: via nish.TlsRecordServer.keyUpdate
   escaping: requestPeer slot
   calls: nish.TlsRecordServer.keyUpdate nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
   callee +0:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
   local +3:11 r: i32 (const)
@@ -22087,7 +22151,7 @@ function TlsTcpServer.shutdown(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsT
   sharedWrite: via nish.TlsRecordServer.close
   escaping: slot
   calls: nish.TlsRecordServer.close nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
   callee +0:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
   callee +3:5 TlsRecordServer.close -> @nish.TlsRecordServer.close
@@ -22097,14 +22161,25 @@ function TlsTcpServer.close(this: TlsTcpServer, slot: i32): void -> @nish.TlsTcp
   sharedWrite: +0:5
   escaping: slot
   calls: nish.TlsRecordServer.close nish.TlsRecordServer.release nish.TlsRecordServer.wipeKeys nish.TlsTcpServer.holds nish.TlsTcpServer.send nish_array_grow nish_net_close nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.send#0
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.send#0
   stackSites=0 stackLocals=0
   callee -9:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
   local -6:11 conn: TlsRecordServer (const)
   callee -4:7 TlsRecordServer.close -> @nish.TlsRecordServer.close
   callee -3:7 TlsTcpServer.send -> @nish.TlsTcpServer.send
-  callee +3:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
-  callee +5:5 TlsRecordServer.release -> @nish.TlsRecordServer.release
+  callee +4:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
+  callee +6:5 TlsRecordServer.release -> @nish.TlsRecordServer.release
+function TlsTcpServer.expire(this: TlsTcpServer, now: i64): i32 -> @nish.TlsTcpServer.expire [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.TlsTcpServer.close
+  calls: nish.TlsTcpServer.close nish.TlsTcpServer.holds nish_panic_index nish_panic_overflow
+  pointer this: size=112 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.close#0
+  stackSites=0 stackLocals=0
+  local +0:11 limit: i64 (const)
+  local +1:9 n: i32 (let)
+  local +2:14 k: i32 (let)
+  callee +3:11 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee +4:9 TlsTcpServer.close -> @nish.TlsTcpServer.close
 function TlsTcpClient.constructor(this: TlsTcpClient, addr: u8[], config: TlsClientConfig, trust: TlsClientTrust): void -> @nish.TlsTcpClient.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish_random_fill
@@ -23743,7 +23818,7 @@ function tlsVerifyCertificateVerify(leaf: X509Certificate, scheme: i32, content:
   sharedWrite: via nish.p256VerifySha256
   escaping: scheme
   calls: nish.p256VerifySha256 nish.p384VerifySha384 nish.rsaParsePublicKey nish.rsaVerifyPss nish.x509DerSignatureRSWidth
-  pointer leaf: size=168 writesThrough=false captured=false
+  pointer leaf: size=176 writesThrough=false captured=false
   pointer content: size=0 writesThrough=false captured=false passedTo=nish.p256VerifySha256#1 nish.p384VerifySha384#1 nish.rsaVerifyPss#3 nish.rsaVerifyPss#3 nish.rsaVerifyPss#3
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.x509DerSignatureRSWidth#0 nish.x509DerSignatureRSWidth#0 nish.rsaVerifyPss#4 nish.rsaVerifyPss#4 nish.rsaVerifyPss#4
   stackSites=0 stackLocals=0
@@ -23761,7 +23836,7 @@ function tlsVerifyCertificateVerify(leaf: X509Certificate, scheme: i32, content:
 function tlsVerifyKeyUsable(leaf: X509Certificate): boolean -> @nish.tlsVerifyKeyUsable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.rsaParsePublicKey
-  pointer leaf: size=168 writesThrough=false captured=false
+  pointer leaf: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 key: RsaPublicKey | null (const)
   callee +0:36 rsaParsePublicKey -> @nish.rsaParsePublicKey
@@ -31627,7 +31702,7 @@ function pkiMatchHostname(leaf: X509Certificate, hostname: string): boolean -> @
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: hostname
   calls: nish.pkiBytesEqual nish.pkiDnsMatch nish.pkiHostDns nish.pkiParseIp nish.pkiStripDot
-  pointer leaf: size=168 writesThrough=false captured=false
+  pointer leaf: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ip: u8[] | null (const)
   callee +0:27 pkiParseIp -> @nish.pkiParseIp
@@ -31646,8 +31721,8 @@ function pkiRsaCode(cert: X509Certificate, issuer: X509Certificate): i32 -> @nis
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rsaVerifyPss
   calls: nish.pkiRsaKeyCode nish.rsaParsePublicKey nish.rsaVerifyPkcs1v15 nish.rsaVerifyPss
-  pointer cert: size=168 writesThrough=false captured=false
-  pointer issuer: size=168 writesThrough=false captured=false
+  pointer cert: size=176 writesThrough=false captured=false
+  pointer issuer: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 key: RsaPublicKey | null (const)
   callee +0:36 rsaParsePublicKey -> @nish.rsaParsePublicKey
@@ -31661,8 +31736,8 @@ function pkiEcdsaCode(cert: X509Certificate, issuer: X509Certificate): i32 -> @n
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sha256
   calls: nish.p256Verify nish.p384Verify nish.sha256 nish.sha384 nish.x509DerSignatureRSWidth
-  pointer cert: size=168 writesThrough=false captured=false
-  pointer issuer: size=168 writesThrough=false captured=false
+  pointer cert: size=176 writesThrough=false captured=false
+  pointer issuer: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 digest: u8[] (const)
   callee +0:64 sha256 -> @nish.sha256
@@ -31677,8 +31752,8 @@ function pkiSignatureCode(cert: X509Certificate, issuer: X509Certificate): i32 -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.pkiEcdsaCode
   calls: nish.ed25519Verify nish.pkiEcdsaCode nish.pkiRsaCode
-  pointer cert: size=168 writesThrough=false captured=false passedTo=nish.pkiEcdsaCode#0 nish.pkiRsaCode#0
-  pointer issuer: size=168 writesThrough=false captured=false passedTo=nish.pkiEcdsaCode#1 nish.pkiRsaCode#1
+  pointer cert: size=176 writesThrough=false captured=false passedTo=nish.pkiEcdsaCode#0 nish.pkiRsaCode#0
+  pointer issuer: size=176 writesThrough=false captured=false passedTo=nish.pkiEcdsaCode#1 nish.pkiRsaCode#1
   stackSites=0 stackLocals=0
   local +0:9 alg: i32 (const)
   local +1:9 key: i32 (const)
@@ -31689,8 +31764,8 @@ function pkiVerifySignature(cert: X509Certificate, issuer: X509Certificate): boo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.pkiSignatureCode
   calls: nish.pkiSignatureCode
-  pointer cert: size=168 writesThrough=false captured=false passedTo=nish.pkiSignatureCode#0
-  pointer issuer: size=168 writesThrough=false captured=false passedTo=nish.pkiSignatureCode#1
+  pointer cert: size=176 writesThrough=false captured=false passedTo=nish.pkiSignatureCode#0
+  pointer issuer: size=176 writesThrough=false captured=false passedTo=nish.pkiSignatureCode#1
   stackSites=0 stackLocals=0
   callee +0:3 pkiSignatureCode -> @nish.pkiSignatureCode
 function pkiCheckSignature(s: PkiSearch, cert: X509Certificate, issuer: X509Certificate): i32 -> @nish.pkiCheckSignature
@@ -31698,8 +31773,8 @@ function pkiCheckSignature(s: PkiSearch, cert: X509Certificate, issuer: X509Cert
   sharedWrite: +0:5
   calls: nish.pkiSignatureCode nish_panic_overflow
   pointer s: size=64 writesThrough=true captured=false
-  pointer cert: size=168 writesThrough=false captured=false passedTo=nish.pkiSignatureCode#0
-  pointer issuer: size=168 writesThrough=false captured=false passedTo=nish.pkiSignatureCode#1
+  pointer cert: size=176 writesThrough=false captured=false passedTo=nish.pkiSignatureCode#0
+  pointer issuer: size=176 writesThrough=false captured=false passedTo=nish.pkiSignatureCode#1
   stackSites=0 stackLocals=0
   callee +4:10 pkiSignatureCode -> @nish.pkiSignatureCode
 function pkiDnsWithin(name: string, base: string): boolean -> @nish.pkiDnsWithin
@@ -31723,7 +31798,7 @@ function pkiDnsAllowed(issuer: X509Certificate, dns: string): boolean -> @nish.p
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: dns
   calls: nish.pkiDnsWithin nish.pkiStripDot nish.pkiSubtreeRoot nish_panic_slice nish_str_at nish_str_new
-  pointer issuer: size=168 writesThrough=false captured=false
+  pointer issuer: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
   callee +0:24 pkiStripDot -> @nish.pkiStripDot
@@ -31751,7 +31826,7 @@ function pkiIpWithin(ip: u8[], t: X509GeneralSubtree): boolean -> @nish.pkiIpWit
 function pkiIpAllowed(issuer: X509Certificate, ip: u8[]): boolean -> @nish.pkiIpAllowed
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.pkiIpWithin
-  pointer issuer: size=168 writesThrough=false captured=false
+  pointer issuer: size=176 writesThrough=false captured=false
   pointer ip: size=0 writesThrough=false captured=false passedTo=nish.pkiIpWithin#0 nish.pkiIpWithin#0
   stackSites=0 stackLocals=0
   local +0:7 listed: boolean (let)
@@ -31763,7 +31838,7 @@ function pkiIpAllowed(issuer: X509Certificate, ip: u8[]): boolean -> @nish.pkiIp
 function pkiDirAllowed(issuer: X509Certificate, subject: u8[]): boolean -> @nish.pkiDirAllowed
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.x509NameIsPrefix
-  pointer issuer: size=168 writesThrough=false captured=false
+  pointer issuer: size=176 writesThrough=false captured=false
   pointer subject: size=0 writesThrough=false captured=false passedTo=nish.x509NameIsPrefix#1
   stackSites=0 stackLocals=0
   local +0:7 listed: boolean (let)
@@ -31772,7 +31847,7 @@ function pkiDirAllowed(issuer: X509Certificate, subject: u8[]): boolean -> @nish
 function pkiSelfIssued(c: X509Certificate): boolean -> @nish.pkiSelfIssued
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.x509NameEqual
-  pointer c: size=168 writesThrough=false captured=false
+  pointer c: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:56 x509NameEqual -> @nish.x509NameEqual
 function pkiConstraintsCode(s: PkiSearch, issuer: X509Certificate): i32 -> @nish.pkiConstraintsCode
@@ -31780,7 +31855,7 @@ function pkiConstraintsCode(s: PkiSearch, issuer: X509Certificate): i32 -> @nish
   sharedWrite: +0:5
   calls: nish.pkiDirAllowed nish.pkiDnsAllowed nish.pkiIpAllowed nish.pkiSelfIssued nish_panic_overflow
   pointer s: size=64 writesThrough=true captured=false
-  pointer issuer: size=168 writesThrough=false captured=false passedTo=nish.pkiDnsAllowed#0 nish.pkiDnsAllowed#0 nish.pkiIpAllowed#0 nish.pkiDirAllowed#0
+  pointer issuer: size=176 writesThrough=false captured=false passedTo=nish.pkiDnsAllowed#0 nish.pkiDnsAllowed#0 nish.pkiIpAllowed#0 nish.pkiDirAllowed#0
   stackSites=0 stackLocals=0
   local -11:14 e: X509GeneralSubtree (const)
   local -6:7 names: i32 (let)
@@ -31797,36 +31872,41 @@ function pkiConstraintsCode(s: PkiSearch, issuer: X509Certificate): i32 -> @nish
   callee +19:44 pkiDirAllowed -> @nish.pkiDirAllowed
 function pkiTimeCode(c: X509Certificate, nowMs: i64): i32 -> @nish.pkiTimeCode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer c: size=168 writesThrough=false captured=false
+  pointer c: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function pkiKeyIdsCode(cand: X509Certificate, root: boolean): i32 -> @nish.pkiKeyIdsCode
   facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.pkiBytesEqual nish.pkiSelfIssued
-  pointer cand: size=168 writesThrough=false captured=false passedTo=nish.pkiSelfIssued#0
+  pointer cand: size=176 writesThrough=false captured=false passedTo=nish.pkiSelfIssued#0
   stackSites=0 stackLocals=0
   local +0:9 skid: u8[] | null (const)
   local +1:9 akid: u8[] | null (const)
-  callee +5:8 pkiSelfIssued -> @nish.pkiSelfIssued
-  callee +8:36 pkiBytesEqual -> @nish.pkiBytesEqual
+  callee +8:8 pkiSelfIssued -> @nish.pkiSelfIssued
+  callee +11:36 pkiBytesEqual -> @nish.pkiBytesEqual
+function pkiCriticalitySound(c: X509Certificate): boolean -> @nish.pkiCriticalitySound
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer c: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function pkiIssuerCode(s: PkiSearch, child: X509Certificate, cand: X509Certificate, root: boolean): i32 -> @nish.pkiIssuerCode
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.pkiConstraintsCode
   escaping: root
-  calls: nish.pkiCheckSignature nish.pkiConstraintsCode nish.pkiKeyIdsCode nish.pkiSelfIssued nish.pkiTimeCode nish_panic_overflow
+  calls: nish.pkiCheckSignature nish.pkiConstraintsCode nish.pkiCriticalitySound nish.pkiKeyIdsCode nish.pkiSelfIssued nish.pkiTimeCode nish_panic_overflow
   pointer s: size=64 writesThrough=true captured=false passedTo=nish.pkiConstraintsCode#0 nish.pkiCheckSignature#0
-  pointer child: size=168 writesThrough=false captured=false passedTo=nish.pkiCheckSignature#1
-  pointer cand: size=168 writesThrough=false captured=false passedTo=nish.pkiTimeCode#0 nish.pkiConstraintsCode#1 nish.pkiCheckSignature#2 nish.pkiKeyIdsCode#0
+  pointer child: size=176 writesThrough=false captured=false passedTo=nish.pkiCheckSignature#1
+  pointer cand: size=176 writesThrough=false captured=false passedTo=nish.pkiTimeCode#0 nish.pkiCriticalitySound#0 nish.pkiConstraintsCode#1 nish.pkiCheckSignature#2 nish.pkiKeyIdsCode#0
   stackSites=0 stackLocals=0
   local +0:9 time: i32 (const)
   callee +0:21 pkiTimeCode -> @nish.pkiTimeCode
-  local +17:9 below: i32 (let)
-  local +18:14 i: i32 (let)
-  callee +19:12 pkiSelfIssued -> @nish.pkiSelfIssued
-  local +27:9 names: i32 (const)
-  callee +27:22 pkiConstraintsCode -> @nish.pkiConstraintsCode
-  local +31:9 signature: i32 (const)
-  callee +31:26 pkiCheckSignature -> @nish.pkiCheckSignature
-  callee +32:45 pkiKeyIdsCode -> @nish.pkiKeyIdsCode
+  callee +13:28 pkiCriticalitySound -> @nish.pkiCriticalitySound
+  local +23:9 below: i32 (let)
+  local +24:14 i: i32 (let)
+  callee +25:12 pkiSelfIssued -> @nish.pkiSelfIssued
+  local +33:9 names: i32 (const)
+  callee +33:22 pkiConstraintsCode -> @nish.pkiConstraintsCode
+  local +37:9 signature: i32 (const)
+  callee +37:26 pkiCheckSignature -> @nish.pkiCheckSignature
+  callee +38:45 pkiKeyIdsCode -> @nish.pkiKeyIdsCode
 function pkiNote(s: PkiSearch, code: i32, score: i32): void -> @nish.pkiNote
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -31837,8 +31917,8 @@ function pkiCandidate(s: PkiSearch, child: X509Certificate, cand: X509Certificat
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.pkiBytesEqual
   pointer s: size=64 writesThrough=false captured=false
-  pointer child: size=168 writesThrough=false captured=false
-  pointer cand: size=168 writesThrough=false captured=false
+  pointer child: size=176 writesThrough=false captured=false
+  pointer cand: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 akid: u8[] | null (const)
   local +1:9 skid: u8[] | null (const)
@@ -31850,7 +31930,7 @@ function pkiExtend(s: PkiSearch, child: X509Certificate): boolean -> @nish.pkiEx
   sharedWrite: +0:13
   calls: nish.Map$str$arr.$X509Certificate.probe nish.Map$str$arr.$X509Certificate.valueAt nish.pkiCandidate nish.pkiExtend nish.pkiHex nish.pkiIssuerCode nish.pkiNote nish.x509NameEqual nish_array_grow nish_panic_index nish_panic_overflow
   pointer s: size=64 writesThrough=true captured=false passedTo=nish.pkiCandidate#0 nish.pkiIssuerCode#0 nish.pkiNote#0 nish.pkiCandidate#0 nish.pkiIssuerCode#0 nish.pkiNote#0 nish.pkiExtend#0 nish.pkiNote#0
-  pointer child: size=168 writesThrough=false captured=false passedTo=nish.pkiCandidate#1 nish.pkiIssuerCode#1 nish.pkiCandidate#1 nish.pkiIssuerCode#1
+  pointer child: size=176 writesThrough=false captured=false passedTo=nish.pkiCandidate#1 nish.pkiIssuerCode#1 nish.pkiCandidate#1 nish.pkiIssuerCode#1
   stackSites=0 stackLocals=0
   local -11:9 depth: i32 (const)
   local -9:11 roots: X509Certificate[] | undefined (const)
@@ -31871,7 +31951,7 @@ function pkiExtend(s: PkiSearch, child: X509Certificate): boolean -> @nish.pkiEx
   callee +28:3 pkiNote -> @nish.pkiNote
 function pkiSerialSound(c: X509Certificate): boolean -> @nish.pkiSerialSound
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer c: size=168 writesThrough=false captured=false
+  pointer c: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +4:12 i: i32 (let)
@@ -31888,27 +31968,28 @@ function pkiSanDnsSound(san: string): boolean -> @nish.pkiSanDnsSound
 function pkiSubscriberKeyCode(leaf: X509Certificate): i32 -> @nish.pkiSubscriberKeyCode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.pkiRsaKeyCode nish.rsaParsePublicKey
-  pointer leaf: size=168 writesThrough=false captured=false
+  pointer leaf: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
   callee +2:12 pkiRsaKeyCode -> @nish.pkiRsaKeyCode
   callee +2:26 rsaParsePublicKey -> @nish.rsaParsePublicKey
 function pkiLeafProfileCode(leaf: X509Certificate): i32 -> @nish.pkiLeafProfileCode
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.pkiSanDnsSound nish.pkiSelfIssued nish.pkiSerialSound nish.pkiSubscriberKeyCode
-  pointer leaf: size=168 writesThrough=false captured=false passedTo=nish.pkiSubscriberKeyCode#0 nish.pkiSerialSound#0 nish.pkiSelfIssued#0
+  calls: nish.pkiCriticalitySound nish.pkiSanDnsSound nish.pkiSelfIssued nish.pkiSerialSound nish.pkiSubscriberKeyCode
+  pointer leaf: size=176 writesThrough=false captured=false passedTo=nish.pkiSubscriberKeyCode#0 nish.pkiSerialSound#0 nish.pkiSelfIssued#0 nish.pkiCriticalitySound#0
   stackSites=0 stackLocals=0
   local +0:9 key: i32 (const)
   callee +0:20 pkiSubscriberKeyCode -> @nish.pkiSubscriberKeyCode
   callee +4:8 pkiSerialSound -> @nish.pkiSerialSound
   callee +4:56 pkiSelfIssued -> @nish.pkiSelfIssued
-  local +7:14 d: string (const)
-  callee +8:10 pkiSanDnsSound -> @nish.pkiSanDnsSound
+  callee +4:81 pkiCriticalitySound -> @nish.pkiCriticalitySound
+  local +11:14 d: string (const)
+  callee +12:10 pkiSanDnsSound -> @nish.pkiSanDnsSound
 function pkiLeafCode(leaf: X509Certificate, hostname: string, nowMs: i64): i32 -> @nish.pkiLeafCode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: hostname nowMs
   calls: nish.pkiMatchHostname nish.pkiTimeCode
-  pointer leaf: size=168 writesThrough=false captured=false passedTo=nish.pkiTimeCode#0 nish.pkiMatchHostname#0
+  pointer leaf: size=176 writesThrough=false captured=false passedTo=nish.pkiTimeCode#0 nish.pkiMatchHostname#0
   stackSites=0 stackLocals=0
   local +0:9 time: i32 (const)
   callee +0:21 pkiTimeCode -> @nish.pkiTimeCode
@@ -33009,6 +33090,7 @@ const X509_CE_BASIC_CONSTRAINTS: i32 = 19
 const X509_CE_NAME_CONSTRAINTS: i32 = 30
 const X509_CE_AUTHORITY_KEY_ID: i32 = 35
 const X509_CE_EXT_KEY_USAGE: i32 = 37
+const X509_CE_POLICY_CONSTRAINTS: i32 = 36
 const X509_EXT_UNKNOWN: i32 = 0
 const X509_EXT_SOUND: i32 = 1
 const X509_EXT_MALFORMED: i32 = 2
@@ -33019,7 +33101,7 @@ struct X509GeneralSubtree (class) size=40 align=8 exported
   field mask: u8[] index=3 offset=24
   field dirName: u8[] index=4 offset=32
   constructor -> @nish.X509GeneralSubtree.constructor
-struct X509Certificate (class) size=168 align=8 exported
+struct X509Certificate (class) size=176 align=8 exported
   field der: u8[] index=0 offset=0
   field tbs: u8[] index=1 offset=8
   field serial: u8[] index=2 offset=16
@@ -33054,6 +33136,17 @@ struct X509Certificate (class) size=168 align=8 exported
   field ncPresent: boolean index=31 offset=160 initialized
   field ncUnsupported: boolean index=32 offset=161 initialized
   field unknownCritical: boolean index=33 offset=162 initialized
+  field akiPresent: boolean index=34 offset=163 initialized
+  field akiIssuerSerial: boolean index=35 offset=164 initialized
+  field akiCritical: boolean index=36 offset=165 initialized
+  field skiCritical: boolean index=37 offset=166 initialized
+  field kuCritical: boolean index=38 offset=167 initialized
+  field sanCritical: boolean index=39 offset=168 initialized
+  field bcCritical: boolean index=40 offset=169 initialized
+  field ekuCritical: boolean index=41 offset=170 initialized
+  field ncCritical: boolean index=42 offset=171 initialized
+  field pcPresent: boolean index=43 offset=172 initialized
+  field pcCritical: boolean index=44 offset=173 initialized
   constructor -> @nish.X509Certificate.constructor
 struct X509DerElement (class) size=16 align=4
   field tag: i32 index=0 offset=0
@@ -33071,7 +33164,7 @@ function X509GeneralSubtree.constructor(this: X509GeneralSubtree): void -> @nish
   stackSites=0 stackLocals=0
 function X509Certificate.constructor(this: X509Certificate): void -> @nish.X509Certificate.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=168 writesThrough=true captured=false
+  pointer this: size=176 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function X509DerElement.constructor(this: X509DerElement, tag: i32, at: i32, start: i32, end: i32): void -> @nish.X509DerElement.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -33290,6 +33383,11 @@ function x509OidNistHash(n: i32): u8[] -> @nish.x509OidNistHash
   calls: nish.x509DerOidContents
   stackSites=1 stackLocals=0
   callee +0:43 x509DerOidContents -> @nish.x509DerOidContents
+function x509OidAuthorityInfoAccess(): u8[] -> @nish.x509OidAuthorityInfoAccess
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.x509DerOidContents
+  stackSites=1 stackLocals=0
+  callee +0:48 x509DerOidContents -> @nish.x509DerOidContents
 function x509OidServerAuth(): u8[] -> @nish.x509OidServerAuth
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.x509DerOidContents
@@ -33774,7 +33872,7 @@ function x509ReadSubjectAltName(der: u8[], start: i32, end: i32, out: X509Certif
   escaping: end start
   calls: nish.X509DerElement.constructor nish.x509DerExpect nish.x509DerReadInto nish.x509DerSlice nish.x509DerText nish.x509GeneralNameKind nish_array_grow nish_panic_overflow
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerReadInto#0 nish.x509GeneralNameKind#0 nish.x509DerText#0 nish.x509DerSlice#0
-  pointer out: size=168 writesThrough=true captured=false
+  pointer out: size=176 writesThrough=true captured=false
   stackSites=1 stackLocals=1
   local -14:9 seq: X509DerElement | null (const)
   callee -14:38 x509DerExpect -> @nish.x509DerExpect
@@ -33809,7 +33907,7 @@ function x509ReadBasicConstraints(der: u8[], start: i32, end: i32, out: X509Cert
   escaping: end start
   calls: nish.x509DerExpect nish.x509DerIsTrue nish.x509DerNonNegative nish.x509DerPeek nish.x509DerRead nish_arena_mark nish_arena_release
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerIsTrue#0 nish.x509DerRead#0 nish.x509DerNonNegative#0
-  pointer out: size=168 writesThrough=true captured=false
+  pointer out: size=176 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -10:9 seq: X509DerElement | null (const)
   callee -10:38 x509DerExpect -> @nish.x509DerExpect
@@ -33827,7 +33925,7 @@ function x509ReadKeyUsage(der: u8[], start: i32, end: i32, out: X509Certificate)
   escaping: end start
   calls: nish.x509DerBitStringSound nish.x509DerExpect nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerBitStringSound#0
-  pointer out: size=168 writesThrough=true captured=false
+  pointer out: size=176 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -28:9 bits: X509DerElement | null (const)
   callee -28:39 x509DerExpect -> @nish.x509DerExpect
@@ -33845,7 +33943,7 @@ function x509ReadExtKeyUsage(der: u8[], start: i32, end: i32, out: X509Certifica
   escaping: end start
   calls: nish.x509DerContentsAre nish.x509DerExpect nish.x509DerOidSound nish.x509OidAnyEku nish.x509OidServerAuth nish_arena_mark nish_arena_release
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerOidSound#0 nish.x509DerContentsAre#0 nish.x509DerContentsAre#0
-  pointer out: size=168 writesThrough=true captured=false
+  pointer out: size=176 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -13:9 seq: X509DerElement | null (const)
   callee -13:38 x509DerExpect -> @nish.x509DerExpect
@@ -33882,7 +33980,7 @@ function x509ReadSubtrees(der: u8[], e: X509DerElement, into: X509GeneralSubtree
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpectInto#0 nish.x509DerReadInto#0 nish.x509GeneralNameKind#0 nish.x509DerText#0 nish.x509DerSlice#0 nish.x509DerSlice#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509DerBoundSound#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509DerBoundSound#0
   pointer e: size=16 writesThrough=false captured=false
   pointer into: size=0 writesThrough=true captured=false
-  pointer out: size=168 writesThrough=true captured=false
+  pointer out: size=176 writesThrough=true captured=false
   stackSites=4 stackLocals=4
   local -29:9 tree: X509DerElement (const)
   callee -29:16 new X509DerElement -> @nish.X509DerElement.constructor
@@ -33917,7 +34015,7 @@ function x509ReadNameConstraints(der: u8[], start: i32, end: i32, out: X509Certi
   escaping: end start
   calls: nish.x509DerExpect nish.x509DerPeek nish.x509DerRead nish.x509ReadSubtrees
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509ReadSubtrees#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509ReadSubtrees#0
-  pointer out: size=168 writesThrough=true captured=false passedTo=nish.x509ReadSubtrees#3 nish.x509ReadSubtrees#3
+  pointer out: size=176 writesThrough=true captured=false passedTo=nish.x509ReadSubtrees#3 nish.x509ReadSubtrees#3
   stackSites=0 stackLocals=0
   local -19:9 seq: X509DerElement | null (const)
   callee -19:38 x509DerExpect -> @nish.x509DerExpect
@@ -33936,7 +34034,7 @@ function x509ReadSubjectKeyId(der: u8[], start: i32, end: i32, out: X509Certific
   escaping: end start
   calls: nish.x509DerExpect nish.x509DerSlice
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerSlice#0
-  pointer out: size=168 writesThrough=true captured=false
+  pointer out: size=176 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:9 id: X509DerElement | null (const)
   callee -4:37 x509DerExpect -> @nish.x509DerExpect
@@ -33953,33 +34051,55 @@ function x509GeneralNamesSound(der: u8[], e: X509DerElement): boolean -> @nish.x
   callee +3:26 x509GeneralNameKind -> @nish.x509GeneralNameKind
 function x509ReadAuthorityKeyId(der: u8[], start: i32, end: i32, out: X509Certificate): boolean -> @nish.x509ReadAuthorityKeyId
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:3
   escaping: end start
   calls: nish.x509DerExpect nish.x509DerIntegerMinimal nish.x509DerPeek nish.x509DerRead nish.x509DerSlice nish.x509GeneralNamesSound
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerRead#0 nish.x509DerExpect#0 nish.x509GeneralNamesSound#0 nish.x509DerIntegerMinimal#0
-  pointer out: size=168 writesThrough=true captured=false
+  pointer out: size=176 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -10:9 seq: X509DerElement | null (const)
-  callee -10:38 x509DerExpect -> @nish.x509DerExpect
-  local -6:7 at: i32 (let)
-  callee -5:7 x509DerPeek -> @nish.x509DerPeek
-  local -4:11 id: X509DerElement | null (const)
-  callee -4:39 x509DerRead -> @nish.x509DerRead
-  callee +0:16 x509DerSlice -> @nish.x509DerSlice
-  callee +3:7 x509DerPeek -> @nish.x509DerPeek
-  local +4:11 issuer: X509DerElement | null (const)
-  callee +4:43 x509DerRead -> @nish.x509DerRead
-  local +5:11 serial: X509DerElement | null (const)
-  callee +6:32 x509DerExpect -> @nish.x509DerExpect
-  callee +10:8 x509GeneralNamesSound -> @nish.x509GeneralNamesSound
-  callee +11:8 x509DerIntegerMinimal -> @nish.x509DerIntegerMinimal
+  local -4:9 seq: X509DerElement | null (const)
+  callee -4:38 x509DerExpect -> @nish.x509DerExpect
+  local +1:7 at: i32 (let)
+  callee +2:7 x509DerPeek -> @nish.x509DerPeek
+  local +3:11 id: X509DerElement | null (const)
+  callee +3:39 x509DerRead -> @nish.x509DerRead
+  callee +7:16 x509DerSlice -> @nish.x509DerSlice
+  callee +10:7 x509DerPeek -> @nish.x509DerPeek
+  local +11:11 issuer: X509DerElement | null (const)
+  callee +11:43 x509DerRead -> @nish.x509DerRead
+  local +12:11 serial: X509DerElement | null (const)
+  callee +13:32 x509DerExpect -> @nish.x509DerExpect
+  callee +17:8 x509GeneralNamesSound -> @nish.x509GeneralNamesSound
+  callee +18:8 x509DerIntegerMinimal -> @nish.x509DerIntegerMinimal
+function x509AuthorityInfoAccessSound(der: u8[], start: i32, end: i32): boolean -> @nish.x509AuthorityInfoAccessSound
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: end start
+  calls: nish.x509DerExpect nish.x509DerOidSound nish.x509DerRead nish.x509GeneralNameKind nish_arena_mark nish_arena_release
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerExpect#0 nish.x509DerRead#0 nish.x509DerOidSound#0 nish.x509GeneralNameKind#0
+  stackSites=0 stackLocals=0
+  local +0:9 seq: X509DerElement | null (const)
+  callee +0:38 x509DerExpect -> @nish.x509DerExpect
+  local +4:7 at: i32 (let)
+  local +6:11 desc: X509DerElement | null (const)
+  callee +6:41 x509DerExpect -> @nish.x509DerExpect
+  local +7:11 method: X509DerElement | null (const)
+  callee +8:30 x509DerExpect -> @nish.x509DerExpect
+  local +9:11 location: X509DerElement | null (const)
+  callee +10:49 x509DerRead -> @nish.x509DerRead
+  callee +16:8 x509DerOidSound -> @nish.x509DerOidSound
+  callee +17:7 x509GeneralNameKind -> @nish.x509GeneralNameKind
+function x509NoteCritical(ce: i32, out: X509Certificate): void -> @nish.x509NoteCritical
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer out: size=176 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function x509ReadExtension(der: u8[], ce: i32, start: i32, end: i32, out: X509Certificate): i32 -> @nish.x509ReadExtension
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.x509ReadSubjectAltName
   escaping: end start
   calls: nish.x509ReadAuthorityKeyId nish.x509ReadBasicConstraints nish.x509ReadExtKeyUsage nish.x509ReadKeyUsage nish.x509ReadNameConstraints nish.x509ReadSubjectAltName nish.x509ReadSubjectKeyId
   pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509ReadSubjectAltName#0 nish.x509ReadBasicConstraints#0 nish.x509ReadKeyUsage#0 nish.x509ReadExtKeyUsage#0 nish.x509ReadNameConstraints#0 nish.x509ReadSubjectKeyId#0 nish.x509ReadAuthorityKeyId#0
-  pointer out: size=168 writesThrough=true captured=false passedTo=nish.x509ReadSubjectAltName#3 nish.x509ReadBasicConstraints#3 nish.x509ReadKeyUsage#3 nish.x509ReadExtKeyUsage#3 nish.x509ReadNameConstraints#3 nish.x509ReadSubjectKeyId#3 nish.x509ReadAuthorityKeyId#3
+  pointer out: size=176 writesThrough=true captured=false passedTo=nish.x509ReadSubjectAltName#3 nish.x509ReadBasicConstraints#3 nish.x509ReadKeyUsage#3 nish.x509ReadExtKeyUsage#3 nish.x509ReadNameConstraints#3 nish.x509ReadSubjectKeyId#3 nish.x509ReadAuthorityKeyId#3
   stackSites=0 stackLocals=0
   local +0:7 sound: boolean (let)
   callee +2:13 x509ReadSubjectAltName -> @nish.x509ReadSubjectAltName
@@ -33999,39 +34119,45 @@ function x509ExtensionArc(der: u8[], id: X509DerElement): i32 -> @nish.x509Exten
 function x509ReadExtensions(der: u8[], e: X509DerElement, out: X509Certificate): boolean -> @nish.x509ReadExtensions
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.X509DerElement.constructor nish.x509BytesEqual nish.x509DerExpect nish.x509DerExpectInto nish.x509DerIsTrue nish.x509DerOidSound nish.x509DerPeek nish.x509DerReadInto nish.x509DerSlice nish.x509ExtensionArc nish.x509ReadExtension nish_array_grow
-  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerExpectInto#0 nish.x509DerExpectInto#0 nish.x509DerOidSound#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509DerIsTrue#0 nish.x509DerExpectInto#0 nish.x509ReadExtension#0 nish.x509ExtensionArc#0
+  calls: nish.X509DerElement.constructor nish.x509AuthorityInfoAccessSound nish.x509BytesEqual nish.x509DerContentsAre nish.x509DerExpect nish.x509DerExpectInto nish.x509DerIsTrue nish.x509DerOidSound nish.x509DerPeek nish.x509DerReadInto nish.x509DerSlice nish.x509ExtensionArc nish.x509NoteCritical nish.x509OidAuthorityInfoAccess nish.x509ReadExtension nish_array_grow
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509DerExpect#0 nish.x509DerExpectInto#0 nish.x509DerExpectInto#0 nish.x509DerOidSound#0 nish.x509DerSlice#0 nish.x509DerPeek#0 nish.x509DerReadInto#0 nish.x509DerIsTrue#0 nish.x509DerExpectInto#0 nish.x509ExtensionArc#0 nish.x509ReadExtension#0 nish.x509DerContentsAre#0 nish.x509AuthorityInfoAccessSound#0
   pointer e: size=16 writesThrough=false captured=false
-  pointer out: size=168 writesThrough=true captured=false passedTo=nish.x509ReadExtension#4
+  pointer out: size=176 writesThrough=true captured=false passedTo=nish.x509ReadExtension#4 nish.x509NoteCritical#1
   stackSites=5 stackLocals=5
-  local -47:9 seq: X509DerElement | null (const)
-  callee -47:38 x509DerExpect -> @nish.x509DerExpect
-  local -41:9 seen: u8[][] (const)
-  local -39:9 ext: X509DerElement (const)
-  callee -39:15 new X509DerElement -> @nish.X509DerElement.constructor
-  local -38:9 id: X509DerElement (const)
-  callee -38:14 new X509DerElement -> @nish.X509DerElement.constructor
-  local -37:9 flag: X509DerElement (const)
-  callee -37:16 new X509DerElement -> @nish.X509DerElement.constructor
-  local -36:9 value: X509DerElement (const)
-  callee -36:17 new X509DerElement -> @nish.X509DerElement.constructor
-  local -35:7 at: i32 (let)
-  callee -31:8 x509DerExpectInto -> @nish.x509DerExpectInto
-  callee -27:10 x509DerExpectInto -> @nish.x509DerExpectInto
-  callee -27:75 x509DerOidSound -> @nish.x509DerOidSound
-  local -24:11 oid: u8[] (const)
-  callee -24:23 x509DerSlice -> @nish.x509DerSlice
-  local -23:16 other: u8[] (const)
-  callee -22:11 x509BytesEqual -> @nish.x509BytesEqual
-  local -17:9 next: i32 (let)
-  local -16:9 critical: boolean (let)
-  callee -15:9 x509DerPeek -> @nish.x509DerPeek
-  callee -14:12 x509DerReadInto -> @nish.x509DerReadInto
-  callee -14:58 x509DerIsTrue -> @nish.x509DerIsTrue
-  callee -8:10 x509DerExpectInto -> @nish.x509DerExpectInto
-  local -5:11 read: i32 (const)
-  callee -5:23 x509ReadExtension -> @nish.x509ReadExtension
-  callee -5:46 x509ExtensionArc -> @nish.x509ExtensionArc
+  local -52:9 seq: X509DerElement | null (const)
+  callee -52:38 x509DerExpect -> @nish.x509DerExpect
+  local -46:9 seen: u8[][] (const)
+  local -44:9 ext: X509DerElement (const)
+  callee -44:15 new X509DerElement -> @nish.X509DerElement.constructor
+  local -43:9 id: X509DerElement (const)
+  callee -43:14 new X509DerElement -> @nish.X509DerElement.constructor
+  local -42:9 flag: X509DerElement (const)
+  callee -42:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -41:9 value: X509DerElement (const)
+  callee -41:17 new X509DerElement -> @nish.X509DerElement.constructor
+  local -40:9 aia: u8[] (const)
+  callee -40:21 x509OidAuthorityInfoAccess -> @nish.x509OidAuthorityInfoAccess
+  local -39:7 at: i32 (let)
+  callee -35:8 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -31:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -31:75 x509DerOidSound -> @nish.x509DerOidSound
+  local -28:11 oid: u8[] (const)
+  callee -28:23 x509DerSlice -> @nish.x509DerSlice
+  local -27:16 other: u8[] (const)
+  callee -26:11 x509BytesEqual -> @nish.x509BytesEqual
+  local -21:9 next: i32 (let)
+  local -20:9 critical: boolean (let)
+  callee -19:9 x509DerPeek -> @nish.x509DerPeek
+  callee -18:12 x509DerReadInto -> @nish.x509DerReadInto
+  callee -18:58 x509DerIsTrue -> @nish.x509DerIsTrue
+  callee -12:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  local -9:11 ce: i32 (const)
+  callee -9:21 x509ExtensionArc -> @nish.x509ExtensionArc
+  local -8:11 read: i32 (const)
+  callee -8:23 x509ReadExtension -> @nish.x509ReadExtension
+  callee -4:9 x509DerContentsAre -> @nish.x509DerContentsAre
+  callee -4:46 x509AuthorityInfoAccessSound -> @nish.x509AuthorityInfoAccessSound
+  callee +3:7 x509NoteCritical -> @nish.x509NoteCritical
 function x509ParseCertificate(der: u8[]): X509Certificate | null -> @nish.x509ParseCertificate [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.x509ReadExtensions
@@ -34123,8 +34249,8 @@ function x509VerifySignature(cert: X509Certificate, issuer: X509Certificate): bo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256VerifySha256
   calls: nish.p256VerifySha256 nish.x509DerSignatureRS
-  pointer cert: size=168 writesThrough=false captured=false
-  pointer issuer: size=168 writesThrough=false captured=false
+  pointer cert: size=176 writesThrough=false captured=false
+  pointer issuer: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 rs: u8[] | null (const)
   callee +0:27 x509DerSignatureRS -> @nish.x509DerSignatureRS
@@ -34806,25 +34932,33 @@ import now from "../crypto/lib/gen" -> function @now
 import report from "../crypto/lib/gen" -> function @report
 const API_BODY: string = "{\"article\":{\"title\":\"How to train your dragon\",\"tagList\":[]}}"
 const SHORT: string = "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"
-struct Case (class) size=16 align=8
+struct Case (class) size=24 align=8
   field reads: u8[][] index=0 offset=0
   field requests: i32 index=1 offset=8
   field jsonBytes: i32 index=2 offset=12
+  field varied: boolean index=3 offset=16 initialized
   constructor -> @Case.constructor
-struct Bench (class) size=72 align=8
+struct Bench (class) size=112 align=8
   field conn: Http1Connection index=0 offset=0
   field c: Case index=1 offset=8
   field names: u8[][] index=2 offset=16
   field values: u8[][] index=3 offset=24
-  field json: u8[] index=4 offset=32
-  field out: JsonWriter index=5 offset=40
-  field slug: u8[] index=6 offset=48
-  field clock: i64 index=7 offset=56 initialized
-  field sum: u32 index=8 offset=64 initialized
-  field full: boolean index=9 offset=68 initialized
+  field createdNames: u8[][] index=4 offset=32
+  field createdValues: u8[][] index=5 offset=40
+  field missingNames: u8[][] index=6 offset=48
+  field missingValues: u8[][] index=7 offset=56
+  field missingBody: u8[] index=8 offset=64
+  field json: u8[] index=9 offset=72
+  field out: JsonWriter index=10 offset=80
+  field slug: u8[] index=11 offset=88
+  field clock: i64 index=12 offset=96 initialized
+  field sum: u32 index=13 offset=104 initialized
+  field full: boolean index=14 offset=108 initialized
   constructor -> @Bench.constructor
   method answer -> @Bench.answer
   method run -> @Bench.run
+  method respond -> @Bench.respond
+  method answerVaried -> @Bench.answerVaried
   method small -> @Bench.small
 function ascii(text: string): u8[] -> @ascii
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -34879,7 +35013,7 @@ function apiRequest(): string -> @apiRequest
 function Case.constructor(this: Case, reads: u8[][], requests: i32, jsonBytes: i32): void -> @Case.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: jsonBytes reads requests
-  pointer this: size=16 writesThrough=true captured=false
+  pointer this: size=24 writesThrough=true captured=false
   pointer reads: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function caseNamed(name: string): Case | null -> @caseNamed
@@ -34916,6 +35050,11 @@ function caseNamed(name: string): Case | null -> @caseNamed
   callee +23:22 ascii -> @ascii
   callee +26:12 new Case -> @Case.constructor
   callee +26:22 ascii -> @ascii
+  local +29:11 c: Case (const)
+  callee +29:21 new Case -> @Case.constructor
+  callee +29:31 ascii -> @ascii
+  callee +29:45 ascii -> @ascii
+  callee +29:59 ascii -> @ascii
 function mix(h: u32, b: u32): u32 -> @mix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -34924,8 +35063,8 @@ function Bench.constructor(this: Bench, c: Case): void -> @Bench.constructor [co
   sharedWrite: +0:5
   escaping: c
   calls: ascii foldStart nish.Http1Connection.constructor nish.Http1OutputPool.constructor nish.HttpDate.constructor nish.HttpDate.pin nish.JsonWriter.constructor nish_alloc_struct nish_panic nish_panic_overflow
-  pointer this: size=72 writesThrough=true captured=false
-  pointer c: size=16 writesThrough=true captured=true
+  pointer this: size=112 writesThrough=true captured=false
+  pointer c: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -5:11 config: Http1Config (const)
   local -4:11 date: HttpDate (const)
@@ -34935,14 +35074,23 @@ function Bench.constructor(this: Bench, c: Case): void -> @Bench.constructor [co
   callee +0:22 new Http1OutputPool -> @nish.Http1OutputPool.constructor
   callee +3:19 ascii -> @ascii
   callee +4:20 ascii -> @ascii
-  callee +6:16 new JsonWriter -> @nish.JsonWriter.constructor
-  callee +7:17 ascii -> @ascii
-  callee +8:16 foldStart -> @foldStart
+  callee +5:26 ascii -> @ascii
+  callee +5:49 ascii -> @ascii
+  callee +5:68 ascii -> @ascii
+  callee +7:7 ascii -> @ascii
+  callee +8:7 ascii -> @ascii
+  callee +9:7 ascii -> @ascii
+  callee +11:26 ascii -> @ascii
+  callee +12:27 ascii -> @ascii
+  callee +13:24 ascii -> @ascii
+  callee +15:16 new JsonWriter -> @nish.JsonWriter.constructor
+  callee +16:17 ascii -> @ascii
+  callee +17:16 foldStart -> @foldStart
 function Bench.answer(this: Bench, n: i32): i32 -> @Bench.answer [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.reset
   calls: nish.JsonWriter.beginArray nish.JsonWriter.beginObject nish.JsonWriter.boolean nish.JsonWriter.complete nish.JsonWriter.endArray nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish.JsonWriter.stringBytes nish.JsonWriter.written nish_panic nish_panic_overflow
-  pointer this: size=72 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 w: JsonWriter (const)
   callee +1:5 JsonWriter.reset -> @nish.JsonWriter.reset
@@ -34980,8 +35128,8 @@ function Bench.run(this: Bench, n: i32): void -> @Bench.run [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: n
-  calls: Bench.answer Bench.small mix nish.Http1Connection.consume nish.Http1Connection.end nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.Http1Connection.isDone nish.Http1Connection.next nish.Http1Connection.park nish.Http1Connection.release nish.Http1Connection.respond nish.Http1Connection.wantsWrite nish.Http1Connection.write nish.Http1Parser.headerIndex nish.Http1Parser.methodIs nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer this: size=72 writesThrough=true captured=false passedTo=Bench.answer#0 Bench.small#0
+  calls: Bench.answer Bench.answerVaried Bench.respond Bench.small mix nish.Http1Connection.consume nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.Http1Connection.isDone nish.Http1Connection.next nish.Http1Connection.park nish.Http1Connection.release nish.Http1Connection.wantsWrite nish.Http1Parser.headerIndex nish.Http1Parser.methodIs nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=112 writesThrough=true captured=false passedTo=Bench.answerVaried#0 Bench.answer#0 Bench.small#0 Bench.respond#0
   stackSites=0 stackLocals=0
   local -2:11 conn: Http1Connection (const)
   local -1:9 served: i32 (let)
@@ -35006,30 +35154,66 @@ function Bench.run(this: Bench, n: i32): void -> @Bench.run [method]
   callee +28:22 mix -> @mix
   local +30:20 i: i32 (let)
   callee +31:24 mix -> @mix
-  local +34:17 body: i32 (const)
-  callee +34:52 Bench.answer -> @Bench.answer
-  local +35:17 len2: i32 (const)
-  callee +35:47 Bench.small -> @Bench.small
-  callee +37:13 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee +38:13 Http1Connection.write -> @nish.Http1Connection.write
-  callee +42:11 Http1Connection.end -> @nish.Http1Connection.end
-  callee +47:17 Http1Connection.next -> @nish.Http1Connection.next
-  local +54:11 pending: i32 (const)
-  callee +55:16 mix -> @mix
-  local +57:16 i: i32 (let)
-  callee +58:20 mix -> @mix
-  callee +62:5 Http1Connection.consume -> @nish.Http1Connection.consume
-  callee +63:5 Http1Connection.release -> @nish.Http1Connection.release
-  callee +64:9 Http1Connection.isDone -> @nish.Http1Connection.isDone
-  callee +67:5 Http1Connection.park -> @nish.Http1Connection.park
-  callee +68:9 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
-  callee +68:34 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  callee +35:13 Bench.answerVaried -> @Bench.answerVaried
+  local +37:19 body: i32 (const)
+  callee +37:54 Bench.answer -> @Bench.answer
+  local +38:19 len2: i32 (const)
+  callee +38:49 Bench.small -> @Bench.small
+  callee +39:13 Bench.respond -> @Bench.respond
+  callee +45:17 Http1Connection.next -> @nish.Http1Connection.next
+  local +52:11 pending: i32 (const)
+  callee +53:16 mix -> @mix
+  local +55:16 i: i32 (let)
+  callee +56:20 mix -> @mix
+  callee +60:5 Http1Connection.consume -> @nish.Http1Connection.consume
+  callee +61:5 Http1Connection.release -> @nish.Http1Connection.release
+  callee +62:9 Http1Connection.isDone -> @nish.Http1Connection.isDone
+  callee +65:5 Http1Connection.park -> @nish.Http1Connection.park
+  callee +66:9 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
+  callee +66:34 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+function Bench.respond(this: Bench, status: i32, names: u8[][], values: u8[][], len: i32): void -> @Bench.respond [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Http1Connection.respond
+  escaping: len status
+  calls: nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish_panic
+  pointer this: size=112 writesThrough=false captured=false
+  pointer names: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#2
+  pointer values: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#3
+  stackSites=0 stackLocals=0
+  local +0:11 conn: Http1Connection (const)
+  callee +1:9 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee +1:59 Http1Connection.write -> @nish.Http1Connection.write
+  callee +4:5 Http1Connection.end -> @nish.Http1Connection.end
+function Bench.answerVaried(this: Bench, n: i32, k: i32): void -> @Bench.answerVaried [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: n
+  calls: Bench.respond Bench.small nish.JsonWriter.beginObject nish.JsonWriter.boolean nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.stringBytes nish.JsonWriter.written nish_panic_index
+  pointer this: size=112 writesThrough=false captured=false passedTo=Bench.respond#0 Bench.small#0 Bench.respond#0 Bench.respond#0
+  stackSites=0 stackLocals=0
+  callee -16:7 Bench.respond -> @Bench.respond
+  callee -16:50 Bench.small -> @Bench.small
+  local -14:13 w: JsonWriter (const)
+  callee -13:7 JsonWriter.reset -> @nish.JsonWriter.reset
+  callee -12:7 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee -11:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee -10:7 JsonWriter.stringBytes -> @nish.JsonWriter.stringBytes
+  callee -9:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee -8:7 JsonWriter.i32 -> @nish.JsonWriter.i32
+  callee -7:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee -6:7 JsonWriter.boolean -> @nish.JsonWriter.boolean
+  callee -5:7 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  callee -4:7 Bench.respond -> @Bench.respond
+  callee -4:64 JsonWriter.written -> @nish.JsonWriter.written
+  local -2:13 body: u8[] (const)
+  local -1:16 i: i32 (let)
+  callee +2:7 Bench.respond -> @Bench.respond
 function Bench.small(this: Bench, n: i32): i32 -> @Bench.small [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonWriter.reset
   escaping: n
   calls: nish.JsonWriter.beginObject nish.JsonWriter.boolean nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.written
-  pointer this: size=72 writesThrough=false captured=false
+  pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 w: JsonWriter (const)
   callee +1:5 JsonWriter.reset -> @nish.JsonWriter.reset
