@@ -12504,6 +12504,29 @@ if (dealtHere("cryptoChecks")) {
         drifted.length === 0,
         `differs from the module: ${drifted.join(", ")}`
       )
+
+      // ct_asm_aes's loop copies keep the module's names, so only `export` differs.
+      const aesSource = fs.readFileSync(path.join(root, "std", "crypto", "aes.ts"), "utf8")
+      const aesFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_aes.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const aesDrifted = [
+        "aesBytes",
+        "aesSwapBits",
+        "aesTranspose",
+        "aesPack",
+        "aesUnpack",
+        "aesEncryptBatch",
+        "aesSubWord",
+      ].filter((name) => {
+        const copy = bodyOf(aesFixture, name)
+        return copy === undefined || copy !== bodyOf(aesSource, name)
+      })
+      check(
+        "ct_asm: ct_asm_aes's loop copies match std/crypto/aes.ts",
+        aesDrifted.length === 0,
+        `differs from the module: ${aesDrifted.join(", ")}`
+      )
     }
   }
 

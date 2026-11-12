@@ -10,12 +10,20 @@
 // every function below is a copy of the one of the same name in
 // std/crypto/aes.ts, its comment aside and each `a[i]` written through
 // `nish:unsafe`; clang inlines the helpers into the
-// three exported functions, which are what the check reads.
-// tests/link/crypto_aes holds each exported copy to the module's own function
-// on generated inputs, so an edit to one and not the other fails there.
+// exported functions, which are what the check reads.
+// tests/link/crypto_aes holds the round, GHASH and tag copies to the module's
+// own functions on generated inputs, so an edit to one and not the other
+// fails there. The `loops` copies at the end keep the module's text, and
+// tests/run.js compares them with it.
 // ct-check: aesBitslicedRound secret=contents
 // ct-check: ghashMultiply secret=contents,hHi,hLo
 // ct-check: aesGcmTagMask secret=tagHi,tagLo,gotHi,gotLo
+// ct-check: aesPack secret=contents loops
+// ct-check: aesUnpack secret=contents loops
+// ct-check: aesEncryptBatch secret=contents loops
+// ct-check: aesSubWord secret=w,contents loops
+// ct-check: aesPackToZeroByte secret=contents loops expect=branch
+// ct-check: aesSubWordsByTable secret=contents loops expect=load
 
 import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
 
@@ -330,3 +338,126 @@ export const ghashMultiply = (y: u64[], hHi: u64, hLo: u64): void => {
 // Mirrors `aesGcmTagMask` in std/crypto/aes.ts.
 export const aesGcmTagMask = (tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 =>
   ctEq((tagHi ^ gotHi) | (tagLo ^ gotLo), toU64(0))
+
+// ---- The loops ----------------------------------------------------------------
+// Read with `loops`: the fallback's packing into and out of the bitsliced
+// layout, the block loop around the rounds, and SubWord, the one step of the
+// key schedule that touches a key bit through more than an XOR. These keep the
+// module's text exactly, checked indexing and early length returns included,
+// since a bounds check's panic ends the program and a length is public;
+// `export` is the one difference, and tests/run.js compares each with the
+// module's. They call the round copies above. The schedule and the CTR loop
+// around these allocate their scratch, a call into the arena this reading
+// does not follow, so they stay discipline (docs/security/ct-verification.md).
+
+const aesBytes = (pattern: u64): u64 => aesLanes(pattern | (pattern << toU64(8)))
+
+const aesSwapBits = (q: u64[], i: i32, j: i32, mask: u64, shift: u64): void => {
+  const t: u64 = ((q[i] >> shift) ^ q[j]) & mask
+  q[j] = q[j] ^ t
+  q[i] = q[i] ^ (t << shift)
+}
+
+const aesTranspose = (q: u64[]): void => {
+  const m1: u64 = aesBytes(toU64(0x55))
+  const m2: u64 = aesBytes(toU64(0x33))
+  const m4: u64 = aesBytes(toU64(0x0f))
+  aesSwapBits(q, 0, 1, m1, toU64(1))
+  aesSwapBits(q, 2, 3, m1, toU64(1))
+  aesSwapBits(q, 4, 5, m1, toU64(1))
+  aesSwapBits(q, 6, 7, m1, toU64(1))
+  aesSwapBits(q, 0, 2, m2, toU64(2))
+  aesSwapBits(q, 1, 3, m2, toU64(2))
+  aesSwapBits(q, 4, 6, m2, toU64(2))
+  aesSwapBits(q, 5, 7, m2, toU64(2))
+  aesSwapBits(q, 0, 4, m4, toU64(4))
+  aesSwapBits(q, 1, 5, m4, toU64(4))
+  aesSwapBits(q, 2, 6, m4, toU64(4))
+  aesSwapBits(q, 3, 7, m4, toU64(4))
+}
+
+export const aesPack = (q: u64[], buf: u8[]): void => {
+  if (toI32(q.length) < 8 || toI32(buf.length) < 64) {
+    return
+  }
+  for (let i: i32 = 0; i < 8; i++) {
+    q[i] = 0
+  }
+  for (let k: i32 = 0; k < 4; k++) {
+    const low: u64 = toU64(16 * k)
+    const high: u64 = toU64(16 * k + 8)
+    for (let c: i32 = 0; c < 4; c++) {
+      q[c] = q[c] | (toU64(buf[16 * k + 4 * c]) << low) | (toU64(buf[16 * k + 4 * c + 2]) << high)
+      q[c + 4] = q[c + 4] | (toU64(buf[16 * k + 4 * c + 1]) << low) | (toU64(buf[16 * k + 4 * c + 3]) << high)
+    }
+  }
+  aesTranspose(q)
+}
+
+export const aesUnpack = (buf: u8[], q: u64[]): void => {
+  if (toI32(q.length) < 8 || toI32(buf.length) < 64) {
+    return
+  }
+  aesTranspose(q)
+  // `toU8` keeps the low eight bits, so each byte needs no mask.
+  for (let k: i32 = 0; k < 4; k++) {
+    const low: u64 = toU64(16 * k)
+    const high: u64 = toU64(16 * k + 8)
+    for (let c: i32 = 0; c < 4; c++) {
+      buf[16 * k + 4 * c] = toU8(q[c] >> low)
+      buf[16 * k + 4 * c + 2] = toU8(q[c] >> high)
+      buf[16 * k + 4 * c + 1] = toU8(q[c + 4] >> low)
+      buf[16 * k + 4 * c + 3] = toU8(q[c + 4] >> high)
+    }
+  }
+}
+
+export const aesEncryptBatch = (rk: u64[], rounds: i32, buf: u8[], q: u64[]): void => {
+  aesPack(q, buf)
+  aesAddRoundKey(q, rk, 0)
+  for (let round: i32 = 1; round < rounds; round++) {
+    aesBitslicedRound(q, rk, 8 * round)
+  }
+  aesSbox(q)
+  aesShiftRows(q)
+  aesAddRoundKey(q, rk, 8 * rounds)
+  aesUnpack(buf, q)
+}
+
+export const aesSubWord = (w: u32, q: u64[]): u32 => {
+  if (toI32(q.length) < 8) {
+    return 0
+  }
+  for (let b: i32 = 0; b < 8; b++) {
+    let plane: u64 = 0
+    for (let m: i32 = 0; m < 4; m++) {
+      plane = plane | (toU64((w >> toU32(8 * m + b)) & toU32(1)) << toU64(m))
+    }
+    q[b] = plane
+  }
+  aesSbox(q)
+  let out: u32 = 0
+  for (let b: i32 = 0; b < 8; b++) {
+    for (let m: i32 = 0; m < 4; m++) {
+      out = out | (toU32((q[b] >> toU64(m)) & toU64(1)) << toU32(8 * m + b))
+    }
+  }
+  return out
+}
+
+// ---- Written to fail ----------------------------------------------------------
+// The loop checks' refusals. `aesPackToZeroByte` stops packing at the first
+// zero byte of the block, a secret-bound loop the reading refuses as a
+// branch; `aesSubWordsByTable` is SubWord through a table, each word's low
+// byte an index, which it refuses as a load.
+export const aesPackToZeroByte = (q: u64[], buf: u8[]): void => {
+  for (let i: i32 = 0; i < 8 && uncheckedGet(buf, i) !== 0; i++) {
+    uncheckedSet(q, i, toU64(uncheckedGet(buf, i)))
+  }
+}
+
+export const aesSubWordsByTable = (w: u32[], table: u8[], out: u32[], n: i32): void => {
+  for (let i: i32 = 0; i < n; i++) {
+    uncheckedSet(out, i, toU32(uncheckedGet(table, toI32(uncheckedGet(w, i) & toU32(0xff)))))
+  }
+}

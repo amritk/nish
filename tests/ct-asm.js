@@ -61,8 +61,12 @@
  * insert or a bit-set keeps the taint already in the register. A store whose
  * width or place this cannot tell only ever adds taint to the bytes it may
  * have written, and a read it cannot place is secret if any stack byte might
- * be. The pass runs once, in order, which is exact for straight-line code; code
- * with a conditional branch has already failed. Memory other than the stack
+ * be. A `set<cc>` writes the one byte it names. A read at an index this
+ * cannot place is a stack address only if it is eight bytes wide, so an
+ * element of an array built on the stack is not mistaken for the frame's
+ * pointer to it. The pass runs once, in order, which is exact for
+ * straight-line code; code with a conditional branch has already failed,
+ * unless the fixture asks for `loops` (below). Memory other than the stack
  * is not followed byte by byte: a secret stored there makes every element read
  * from then on secret, since it could come back through another pointer. `tests/run.js` holds each of these corners to a hand-written leak the
  * check must refuse; the stack and call rules' own corners are at the foot of
@@ -85,6 +89,18 @@
  * a fixture can show the following happens rather than that LLVM inlined it.
  * `tests/cases/ct_asm_refused` holds one such function for every rule, and
  * `SEEDED` at the foot of this file is the list it must keep.
+ *
+ * **`loops` reads a loop whole.** A function marked `loops` is read with its
+ * labels (`settle`): each label's state is the join of every edge into it,
+ * back edges included, and the walk repeats until no label's state grows, so
+ * a secret carried across the back edge reaches the top of the loop. A
+ * conditional branch is then refused only if its flags are secret, so a loop
+ * on a public counter passes and one that stops on a secret does not; the
+ * callees are read the same way. A `loops` function must hold a conditional
+ * branch of its own (`noloop`), since a check that read none would pass
+ * whatever the loop did. A call to a `nish_panic_*` runtime function ends its
+ * path: the branch that reaches it has been judged already, and a panic does
+ * not return.
  */
 
 import fs from "node:fs"
@@ -1490,6 +1506,100 @@ const STACK_CORNERS = [
   ],
   // The first slot of the same pair is the secret, and still refused.
   ["aarch64", "a", "load", ["sub sp, sp, #32", "stp x0, x1, [sp, #16]", "ldr x2, [sp, #16]", "ldr w3, [x2]"]],
+  // `seto` writes one byte (chacha20XorInto's overflow check spills one), so
+  // the public slot beside it stays public; the byte itself is secret.
+  [
+    "x86-64",
+    "a",
+    null,
+    [
+      "subq $24, %rsp",
+      "movq %rsi, 8(%rsp)",
+      "cmpl %edi, %esi",
+      "seto 7(%rsp)",
+      "movq 8(%rsp), %rax",
+      "movl (%rdx,%rax,4), %eax",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "subq $24, %rsp",
+      "movq %rsi, 8(%rsp)",
+      "cmpl %edi, %esi",
+      "seto 7(%rsp)",
+      "movzbl 7(%rsp), %eax",
+      "movl (%rdx,%rax,4), %eax",
+    ],
+  ],
+  // An element read at an index the model cannot place, from an array built
+  // on the stack beside a pointer into it: four bytes wide, it is an element,
+  // not that pointer, and may be stored anywhere; eight bytes wide, it may be
+  // the pointer, and storing it off the stack is refused.
+  [
+    "x86-64",
+    "a",
+    null,
+    [
+      "subq $40, %rsp",
+      "leaq 8(%rsp), %rax",
+      "movq %rax, (%rsp)",
+      "movl 8(%rsp,%rsi,4), %ecx",
+      "movq %rcx, (%rdx)",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "escape",
+    [
+      "subq $40, %rsp",
+      "leaq 8(%rsp), %rax",
+      "movq %rax, (%rsp)",
+      "movq 8(%rsp,%rsi,8), %rcx",
+      "movq %rcx, (%rdx)",
+    ],
+  ],
+  // Under `loops`, a bounds check's panic ends the path: one on a public index
+  // passes, one on a secret is refused as a branch, and any other call out is
+  // still refused.
+  [
+    "x86-64",
+    "a",
+    null,
+    [
+      "cmpl $16, %esi",
+      "jae .LBB0_2",
+      "movl (%rdx,%rsi,4), %eax",
+      "retq",
+      ".LBB0_2:",
+      "callq nish_panic_index@PLT",
+    ],
+    { loops: true },
+  ],
+  [
+    "x86-64",
+    "a",
+    "branch",
+    [
+      "cmpl $16, %edi",
+      "jae .LBB0_2",
+      "movl (%rdx,%rsi,4), %eax",
+      "retq",
+      ".LBB0_2:",
+      "callq nish_panic_index@PLT",
+    ],
+    { loops: true },
+  ],
+  [
+    "x86-64",
+    "a",
+    "call",
+    ["cmpl $16, %esi", "jae .LBB0_2", "movl (%rdx,%rsi,4), %eax", "retq", ".LBB0_2:", "callq nish_abort@PLT"],
+    { loops: true },
+  ],
 ]
 
 /**
