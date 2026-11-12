@@ -287,6 +287,8 @@ clientCpus="1-$((cpus - 1))"
 if wants plaintext || wants json; then
   build main.ts entry
   build async-main.ts async
+  # No worker count: `start` pins the entry to CPU 0, and main.ts's default of
+  # one worker for each CPU it may run on is then one process, as run.sh's is.
   explicitCmd=("$out/entry")
   asyncCmd=("$out/async")
 fi
