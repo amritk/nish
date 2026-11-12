@@ -181,15 +181,17 @@ your own code does not reach it, `--allow` gives it no scope of its own and
 before. The scopes hold for the whole process, not one package: any
 dependency that reads files may read every granted directory.
 
-A program grant does not hold a dependency that sets out to escape it.
 Starting a program that is not a static binary needs its loader, such as
-`/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`, so the sandbox lets that
-loader run too, and the loader runs any program it is handed:
-`spawnSync([loader, "/bin/echo", "x"])` runs `echo` under a
-`process.spawn=git` grant. Treat `process.spawn=<program>` as a check on
-the programs a dependency means to run, and grant `process.spawn` only to a
-dependency you have read. This is recorded open as SBX-1 in the sandbox's
-security record.
+`/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`, and a script needs the
+interpreter its `#!` line names, so the kernel may run those too. A
+dependency cannot start them itself: under a `process.spawn=git` grant,
+`spawnSync([loader, "/bin/echo", "x"])` fails, as does `spawnSync(["sh"])`
+under a grant of a `#!/bin/sh` script, unless the grant names `sh` as well.
+To make that check, a spawn under `--sandbox` opens the program first and
+runs the file it opened through `/proc/self/fd`, so `/proc` must be mounted,
+and a script started that way sees a `/proc/self/fd/N` path as its `$0`. A
+program the grant names may still be an interpreter (`sh`, `python3`) that
+runs whatever it is told: grant one only to a dependency you have read.
 
 Addresses are checked at build time only. The kernel cannot see which
 address a socket call is given, so a `net=<host>` grant does not stop a

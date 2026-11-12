@@ -12,7 +12,14 @@
 // the ids go as one `int8[]` parameter, read back in the order they were drawn,
 // repeats included. An update reads its rows that way, then writes every new
 // randomNumber in one statement over two `int8[]` parameters, each distinct id
-// once, ascending, a seat of its own once the read is answered. The first
+// once, ascending, a seat of its own once the read is answered. Single-row
+// reads (/db) go further, as `TfbDb`'s batcher does: the ids of every /db
+// request that arrives in one loop turn go out as one statement, sent by the
+// first of them, which hands each the number its row answered. Whether
+// batching /db reads across requests complies with TFB's rules is unresolved,
+// for this entry and db-server.ts alike (bench/techempower/README.md, "Reads
+// are batched across requests"); it is the owner's call before any
+// submission. The first
 // cached query reads the whole table, and every cached query answers from that
 // copy; one task reads it while the others that need it wait, and a read that
 // fails fails them all and leaves it to the next request. No response is
@@ -75,6 +82,12 @@ const TFB_ROW_JSON: i32 = 46
 /** The most bytes one id of an `int8[]` literal and its comma take. */
 const TFB_ROW_ARRAY: i32 = 12
 const TFB_ZERO: i32 = 0
+/** The most /db requests one batched World read answers. */
+const TFB_BATCH_MOST: i32 = 64
+/** The batches whose answers are kept at once, for their followers to read. */
+const TFB_BATCH_RING: i32 = 256
+/** Batch generations wrap below this. */
+const TFB_BATCH_GEN_WRAP: i32 = 1073741824
 /** The longest `tfbKeepPool` waits between dials while none succeeds. */
 const TFB_REDIAL_MOST_MS: i32 = 5000
 
@@ -96,6 +109,21 @@ export class TfbAsyncDb {
   readonly numbers: i64[]
   readonly updateIds: i64[]
   readonly updateNumbers: i64[]
+  /**
+   * Per kept batch (`gen % TFB_BATCH_RING`): its ids as its requests drew
+   * them, the generation its answer is for, 1 when it was read whole, and
+   * each row's randomNumber.
+   */
+  readonly batchIds: i64[]
+  readonly batchGens: i32[]
+  readonly batchOk: u8[]
+  readonly batchNumbers: i64[]
+  /** How many requests joined the open batch, and its generation. */
+  batchCount: i32 = 0
+  batchGen: i32 = 0
+  /** How many batched World reads went out, and how many /db requests they answered. */
+  batches: i32 = 0
+  batched: i32 = 0
   /** A fortunes answer's rows, and the page they render into. */
   readonly fortunes: TfbFortunes
   readonly html: u8[]
@@ -123,6 +151,13 @@ export class TfbAsyncDb {
     this.numbers = new Array<i64>(TFB_MAX_COUNT)
     this.updateIds = new Array<i64>(TFB_MAX_COUNT)
     this.updateNumbers = new Array<i64>(TFB_MAX_COUNT)
+    this.batchIds = new Array<i64>(TFB_BATCH_RING * TFB_BATCH_MOST)
+    this.batchGens = new Array<i32>(TFB_BATCH_RING)
+    for (let k: i32 = 0; k < TFB_BATCH_RING; k++) {
+      this.batchGens[k] = -1
+    }
+    this.batchOk = new Array<u8>(TFB_BATCH_RING)
+    this.batchNumbers = new Array<i64>(TFB_BATCH_RING * TFB_BATCH_MOST)
     this.fortunes = new TfbFortunes()
     this.html = new Array<u8>(TFB_HTML_BYTES)
   }
@@ -262,8 +297,85 @@ export const tfbServeDb = async (
         }
         return new Response(200).bytes("text/html; charset=utf-8", page, TFB_ZERO, end)
       }
+      if (route === TFB_DB) {
+        // The id joins the open batch. The first to join sends it once every
+        // task ready in this loop turn had its chance to join, and keeps each
+        // row's randomNumber for its follower; a follower yields a loop turn
+        // at a time until its batch is answered.
+        // A batch opens only once the batch before it in its place was
+        // answered: one connection's answer can lag a few milliseconds behind
+        // the others', long enough for a ring's worth of newer batches.
+        let open: boolean = true
+        while (true) {
+          if (db.batchCount === TFB_BATCH_MOST) {
+            // Full: this request opens a batch of its own.
+            db.batchCount = 0
+            db.batchGen = (db.batchGen + 1) % TFB_BATCH_GEN_WRAP
+          }
+          if (!open || db.batchCount > 0 || tfbBatchFree(db, db.batchGen)) {
+            break
+          }
+          open = await sleep(0)
+        }
+        if (!open) {
+          db.failures += 1
+          return new Response(503)
+        }
+        const id: i64 = tfbWorldId()
+        const gen: i32 = db.batchGen
+        const at: i32 = db.batchCount
+        const keep: i32 = gen % TFB_BATCH_RING
+        const base: i32 = keep * TFB_BATCH_MOST
+        db.batchIds[base + at] = id
+        db.batchCount += 1
+        if (at === 0) {
+          await sleep(0)
+          // Still open, it closes here; else it filled and the next one opened.
+          let joined: i32 = TFB_BATCH_MOST
+          if (db.batchGen === gen) {
+            joined = db.batchCount
+            db.batchGen = (db.batchGen + 1) % TFB_BATCH_GEN_WRAP
+            db.batchCount = 0
+          }
+          db.batches += 1
+          db.batched += joined
+          let read: boolean = false
+          const ticket: i32 = await pgAsyncSeat(db.pool, db.worldSql)
+          if (ticket >= 0) {
+            const sent: i32 = await pgAsyncSend(db.pool, ticket, tfbBatchParams(db, base, joined))
+            const turn: i32 = await pgAsyncTurn(db.pool, ticket, sent)
+            const rows = await pgAsyncAnswer(db.pool, ticket, turn)
+            pgAsyncDone(db.pool, ticket, turn, rows.reusable)
+            read = rows.ok() && rows.rows === joined
+            for (let k: i32 = 0; k < joined && read; k++) {
+              db.batchNumbers[base + k] = toI64(rows.int(k, 1, 0))
+            }
+          }
+          db.batchGens[keep] = gen
+          db.batchOk[keep] = read ? toU8(1) : toU8(0)
+        } else {
+          let waiting: boolean = true
+          // Its place still free holds the batch before it. Once taken, any
+          // generation but its own means the ring came round and its answer is gone.
+          while (waiting && tfbBatchFree(db, gen)) {
+            waiting = await sleep(0)
+          }
+          if (!waiting || db.batchGens[keep] !== gen) {
+            db.failures += 1
+            return new Response(503)
+          }
+        }
+        if (toI32(db.batchOk[keep]) !== 1) {
+          db.failures += 1
+          return new Response(503)
+        }
+        const row: u8[] = new Array<u8>(TFB_ROW_JSON)
+        const one = new JsonWriter(row, TFB_ZERO)
+        tfbWriteWorld(one, id, db.batchNumbers[base + at])
+        return new Response(200).bytes("application/json", row, TFB_ZERO, one.end)
+      }
       // The World read: `count` ids drawn now, one statement.
-      const count: i32 = route === TFB_DB ? 1 : tfbCount(req.raw, "queries")
+      const count: i32 = tfbCount(req.raw, "queries")
       const ids: u8[] = new Array<u8>(count * TFB_ROW_ARRAY + 2)
       ids[0] = toU8(123)
       let at: i32 = 1
@@ -291,10 +403,6 @@ export const tfbServeDb = async (
       }
       const body: u8[] = new Array<u8>(count * TFB_ROW_JSON + 2)
       const w = new JsonWriter(body, TFB_ZERO)
-      if (route === TFB_DB) {
-        tfbWriteWorld(w, toI64(r.int(0, 0, 0)), toI64(r.int(0, 1, 0)))
-        return new Response(200).bytes("application/json", body, TFB_ZERO, w.end)
-      }
       w.beginArray()
       if (route === TFB_QUERIES) {
         for (let k: i32 = 0; k < count; k++) {
@@ -355,6 +463,44 @@ export const tfbServeDb = async (
     },
     stats
   )
+
+/**
+ * Whether batch `gen`'s place in the ring is free for it: it holds the answer
+ * of the batch before it there, or none yet. Free, batch `gen` may open; once
+ * it opened, its followers wait while its place is still free.
+ * @param db what every request's task shares
+ * @param gen a batch generation
+ * @returns true when `gen`'s place holds the generation `TFB_BATCH_RING` before it, or -1
+ */
+const tfbBatchFree = (db: TfbAsyncDb, gen: i32): boolean => {
+  const held: i32 = db.batchGens[gen % TFB_BATCH_RING]
+  return held === -1 || held === (gen - TFB_BATCH_RING + TFB_BATCH_GEN_WRAP) % TFB_BATCH_GEN_WRAP
+}
+
+/**
+ * Batch `base / TFB_BATCH_MOST`'s first `count` ids as the World read's one
+ * `int8[]` parameter. It only reads `db`.
+ * @param db what every request's task shares
+ * @param base where the batch's ids start in `db.batchIds`
+ * @param count how many requests joined it
+ * @returns the read's parameters
+ */
+const tfbBatchParams = (db: TfbAsyncDb, base: i32, count: i32): PgAsyncParams => {
+  const ids: u8[] = new Array<u8>(count * TFB_ROW_ARRAY + 2)
+  ids[0] = toU8(123)
+  let at: i32 = 1
+  for (let k: i32 = 0; k < count; k++) {
+    if (k > 0) {
+      ids[at] = toU8(44)
+      at += 1
+    }
+    at = tfbDigits(ids, at, db.batchIds[base + k])
+  }
+  ids[at] = toU8(125)
+  const params = new PgAsyncParams()
+  params.text(tfbArrayText(ids, at + 1))
+  return params
+}
 
 /**
  * `tfbServeDb`, then `db.serving` set to 0 so `tfbKeepPool` stops: the two
