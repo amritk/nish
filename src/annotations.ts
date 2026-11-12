@@ -238,20 +238,31 @@ export const checkExportedLayouts = (ctx: CheckContext): void => {
     ctx.errored = false
     const direct = layoutClass(ctx.program, ctx.table, ctx.table.stripNull(use.type))
     const layout = direct !== null ? direct : heldLayout(ctx.program, ctx.table, use.type, new StringSet())
-    if (layout === null) {
-      continue
+    if (layout !== null) {
+      refuseExportedLayout(ctx, use, layout, direct !== null)
     }
-    const what =
-      direct !== null
-        ? `\`declare class ${layout.name}\``
-        : `\`${ctx.table.typeName(use.type)}\` holds a \`declare class ${layout.name}\` and`
-    ctx.error(
-      use.node,
-      `${what} cannot be ${use.position}: a C struct layout stays in the module that declares it and is lent only to a \`declare function\`, so no header, \`.d.ts\` or N-API binding describes it`
-    )
   }
   ctx.exportedLayoutUses = []
   ctx.errored = false
+}
+
+/**
+ * Reports one exported use of `layout`, which `use.type` is (`direct`) or holds.
+ * Its own function, so the loop over the uses allocates nothing per pass.
+ */
+const refuseExportedLayout = (
+  ctx: CheckContext,
+  use: ExportedLayoutUse,
+  layout: StructInfo,
+  direct: boolean
+): void => {
+  const what = direct
+    ? `\`declare class ${layout.name}\``
+    : `\`${ctx.table.typeName(use.type)}\` holds a \`declare class ${layout.name}\` and`
+  ctx.error(
+    use.node,
+    `${what} cannot be ${use.position}: a C struct layout stays in the module that declares it and is lent only to a \`declare function\`, so no header, \`.d.ts\` or N-API binding describes it`
+  )
 }
 
 /**

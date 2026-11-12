@@ -127,8 +127,8 @@ function deferExportedLayout(ctx: CheckContext, type: i32, position: string, nod
 function checkExportedLayouts(ctx: CheckContext): void -> @checkExportedLayouts [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: CheckContext.error StringSet.constructor TypeTable.stripNull TypeTable.typeName heldLayout layoutClass nish_str_concat
-  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
+  calls: StringSet.constructor TypeTable.stripNull heldLayout layoutClass refuseExportedLayout
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=refuseExportedLayout#0
   stackSites=1 stackLocals=0
   local -1:14 use: ExportedLayoutUse (const)
   local +1:11 direct: StructInfo | null (const)
@@ -137,9 +137,18 @@ function checkExportedLayouts(ctx: CheckContext): void -> @checkExportedLayouts 
   local +2:11 layout: StructInfo | null (const)
   callee +2:47 heldLayout -> @heldLayout
   callee +2:92 new StringSet -> @StringSet.constructor
-  local +6:11 what: string (const)
-  callee +9:16 TypeTable.typeName -> @TypeTable.typeName
-  callee +10:5 CheckContext.error -> @CheckContext.error
+  callee +4:7 refuseExportedLayout -> @refuseExportedLayout
+function refuseExportedLayout(ctx: CheckContext, use: ExportedLayoutUse, layout: StructInfo, direct: boolean): void -> @refuseExportedLayout
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error TypeTable.typeName nish_str_concat
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer use: size=24 writesThrough=false captured=false
+  pointer layout: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 what: string (const)
+  callee +2:12 TypeTable.typeName -> @TypeTable.typeName
+  callee +3:3 CheckContext.error -> @CheckContext.error
 function heldLayout(program: CheckedProgram, table: TypeTable, t: i32, seen: StringSet): StructInfo | null -> @heldLayout
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via heldLayout

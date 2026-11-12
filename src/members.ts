@@ -854,16 +854,22 @@ const checkSpreadSource = (
   }
   // WP27 S4.1: a nested layout is a struct inside its object, which the copy
   // would read as the pointer a class field holds.
+  // The field is found first and the refusal's words built after the loop.
+  let embedded: FieldInfo | null = null
   if (source.layout) {
     for (const field of source.fields) {
       if (field.nested !== null) {
-        ctx.error(
-          value,
-          `Spread of \`${ctx.table.typeName(got)}\` into \`${ctx.table.typeName(info.type)}\`: field \`${field.name}\` is a \`declare class\` embedded in its object, which a spread cannot copy, so set each field by name`
-        )
-        return null
+        embedded = field
+        break
       }
     }
+  }
+  if (embedded !== null) {
+    ctx.error(
+      value,
+      `Spread of \`${ctx.table.typeName(got)}\` into \`${ctx.table.typeName(info.type)}\`: field \`${embedded.name}\` is a \`declare class\` embedded in its object, which a spread cannot copy, so set each field by name`
+    )
+    return null
   }
   // Find the first field the copy cannot make, allocating nothing per pass;
   // the refusal's words are built once, after the loop.
