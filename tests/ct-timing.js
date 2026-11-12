@@ -122,15 +122,16 @@ const DOMAINS = {
     fieldAdd: { limbs: 26 },
     fieldSub: { limbs: 26 },
     condSwap: { limbs: 26, scalar: 1 },
-    ladderStep: { limbs: 26, scalar: 1 },
+    ladderStepScratch: { limbs: 26, scalar: 1 },
     // The loops read whole (`loops`) are handed reduced elements too: the square
     // chains and the encoding take what a multiply leaves, and the ladder its own
     // state and a decoded u. The decoder only writes its array.
     fieldSquareTimes: { limbs: 26 },
+    fieldPow250: { limbs: 26 },
     fieldInvert: { limbs: 26 },
     fieldDecodeInto: { limbs: 26 },
     fieldEncodeInto: { limbs: 26 },
-    ladderLoop: { limbs: 26 },
+    ladderLoopScratch: { limbs: 26 },
     ladderLoopToTopBit: { limbs: 26 },
   },
 }

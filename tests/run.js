@@ -12527,6 +12527,67 @@ if (dealtHere("cryptoChecks")) {
         aesDrifted.length === 0,
         `differs from the module: ${aesDrifted.join(", ")}`
       )
+
+      // ct_asm_x25519's copies are std/crypto/x25519.ts put through the rewrites
+      // the fixture's header names: the module's names mapped to the fixture's,
+      // the short-array early returns, comments and blank lines dropped, and
+      // each `a[i]` written through `nish:unsafe`. `ladderStep` and `ladderLoop`
+      // put their parameters on lines of their own, which `bodyOf`'s one-line
+      // form would stop at, so a line ending in `(` opens a block here.
+      const x25519Body = (source, name) =>
+        source.match(new RegExp(`\\nconst ${name} = (?:[^\\n]*[^{(\\n]\\n|[\\s\\S]*?\\n\\}\\n)`))?.[0]
+      const x25519Module = fs
+        .readFileSync(path.join(root, "std", "crypto", "x25519.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+        .replace(/\bf25519Swap\b/g, "condSwap")
+        .replace(/\bx25519Ladder(Step|Loop)\b/g, (_m, word) => `ladder${word}`)
+        .replace(/\bf25519(\w)/g, (_m, c) => `field${c}`)
+        .replace(/\bX25519_A24\b/g, "toI64(121665)")
+        .replace(/\bfieldZero\(\)/g, "new Array<i64>(10)")
+      const x25519Fixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_x25519.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const x25519Drifted = [
+        "fieldAdd64",
+        "fieldSub64",
+        "fieldMul64",
+        "fieldWidth",
+        "fieldLimbMask",
+        "fieldCopy",
+        "fieldCarryChain",
+        "fieldCarry",
+        "fieldAdd",
+        "fieldSub",
+        "fieldMulRow",
+        "fieldMul",
+        "fieldSquare",
+        "fieldSquareTimes",
+        "fieldMulA24",
+        "fieldPow250",
+        "fieldInvert",
+        "condSwap",
+        "fieldDecode",
+        "fieldDecodeInto",
+        "fieldEncode",
+        "fieldEncodeInto",
+        "ladderStep",
+        "ladderLoop",
+      ].filter((name) => {
+        const copy = x25519Body(x25519Fixture, name)
+        const want = x25519Body(x25519Module, name)
+          ?.replace(/\n {2}if \(toI32\([^\n]*\.length\) < \d+[^\n]*\{\n {4}return[^\n]*\n {2}\}/g, "")
+          .replace(/\n\s*\/\/[^\n]*/g, "")
+          .replace(/ \/\/ [^\n]*/g, "")
+          .replace(/\n\s*(?=\n)/g, "")
+          .replace(/^(\s*)(\w+)\[([^\]\n]+)\] = ([^\n]*)$/gm, "$1uncheckedSet($2, $3, $4);")
+          .replace(/\b(\w+)\[([^[\]\n]+)\]/g, "uncheckedGet($1, $2)")
+        return copy === undefined || want === undefined || copy !== want
+      })
+      check(
+        "ct_asm: ct_asm_x25519's copies match std/crypto/x25519.ts",
+        x25519Drifted.length === 0,
+        `differs from the module: ${x25519Drifted.join(", ")}`
+      )
     }
   }
 

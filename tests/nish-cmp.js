@@ -1165,6 +1165,14 @@ const DECLARED = [
     changelog: "Ship the SSSE3 and NEON Adler-32 kernels (WP38 S8)",
     why: "std/compress/checksum.ts's adler32Update now calls nish_adler32_hw and nish_adler32_update on one arm and the extracted walk on the other, so the module every importer of nish/compress writes declares two runtime functions and gains a function; no importer's own module moves",
   },
+  // WP34 N6: std/crypto/x25519.ts is split so tests/ct-asm.js can read it
+  // (f25519DecodeInto, f25519EncodeInto, x25519LadderStep, x25519LadderLoop,
+  // f25519MulRow), and ed25519.ts compiles the field arithmetic it imports.
+  ...["x25519.ll", "std_crypto_x25519.ll", "ed25519.ll"].map((file) => ({
+    file,
+    changelog: "the X25519 ladder",
+    why: "std/crypto/x25519.ts's decode, encode, ladder and multiply are split into helpers the disassembly check reads, so the module every importer of nish/crypto/x25519 writes, and ed25519.ll, which compiles that field arithmetic, gain functions and renumber; no importer's own module moves",
+  })),
   // std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd.
   {
     file: "text.ll",

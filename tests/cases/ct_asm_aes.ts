@@ -13,15 +13,15 @@
 // exported functions, which are what the check reads.
 // tests/link/crypto_aes holds the round, GHASH and tag copies to the module's
 // own functions on generated inputs, so an edit to one and not the other
-// fails there. The `loops` copies at the end keep the module's text, and
+// fails there. The copies read with labels at the end keep the module's text, and
 // tests/run.js compares them with it.
 // ct-check: aesBitslicedRound secret=contents
 // ct-check: ghashMultiply secret=contents,hHi,hLo
 // ct-check: aesGcmTagMask secret=tagHi,tagLo,gotHi,gotLo
-// ct-check: aesPack secret=contents loops
-// ct-check: aesUnpack secret=contents loops
+// ct-check: aesPack secret=contents branches
+// ct-check: aesUnpack secret=contents branches
 // ct-check: aesEncryptBatch secret=contents loops
-// ct-check: aesSubWord secret=w,contents loops
+// ct-check: aesSubWord secret=w,contents branches
 // ct-check: aesPackToZeroByte secret=contents loops expect=branch
 // ct-check: aesSubWordsByTable secret=contents loops expect=load
 
@@ -340,9 +340,12 @@ export const aesGcmTagMask = (tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u
   ctEq((tagHi ^ gotHi) | (tagLo ^ gotLo), toU64(0))
 
 // ---- The loops ----------------------------------------------------------------
-// Read with `loops`: the fallback's packing into and out of the bitsliced
+// Read with their labels: the fallback's packing into and out of the bitsliced
 // layout, the block loop around the rounds, and SubWord, the one step of the
-// key schedule that touches a key bit through more than an XOR. These keep the
+// key schedule that touches a key bit through more than an XOR. The block loop
+// is `loops`, its back edge read. clang unrolls the packing and SubWord whole,
+// leaving only the public length guard, so they are `branches`: no loop is
+// claimed for them, and what is read is that guard and straight code. These keep the
 // module's text exactly, checked indexing and early length returns included,
 // since a bounds check's panic ends the program and a length is public;
 // `export` is the one difference, and tests/run.js compares each with the

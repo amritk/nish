@@ -1,47 +1,43 @@
-// WP34 K4 under the N6 assembly check: X25519's field multiply, its
-// conditional swap and one step of its Montgomery ladder, held by
-// tests/run.js to "no branch, no call it cannot follow, no secret-indexed
-// access". Secret is the scalar bit (`swap`, `bit`) and every limb. The
-// `loops` checks read the rolled loops whole, back edge included: the
-// 255-step ladder (`ladderLoop`), the inversion's square chains
-// (`fieldSquareTimes`, `fieldInvert`) and the two encodings. Each loop's
-// condition must be public, and nothing secret may index a load on any pass.
+// WP34 K4 under the N6 assembly check: X25519's field arithmetic, its
+// conditional swap, its ladder and its encodings, held by tests/run.js to "no
+// branch, no call it cannot follow, no secret-indexed access". Secret is the
+// scalar bit (`swap`, `bit`) and every limb. The multiply, the swap and one
+// ladder step compile to straight-line code (the module writes the multiply's
+// ten rows out, so `clang -O2` unrolls each), and are read with no branch at
+// all. The `loops` checks read the rolled loops whole, back edge included: the
+// 255-step ladder (`ladderLoopScratch`), the inversion's square chains and the
+// two encodings. Each loop's condition must be public, and nothing secret may
+// index a load on any pass.
 // ct-check: fieldMul secret=contents
 // ct-check: fieldSquare secret=contents
 // ct-check: fieldMulA24 secret=contents
 // ct-check: fieldAdd secret=contents
 // ct-check: fieldSub secret=contents
 // ct-check: condSwap secret=bit,contents
-// ct-check: ladderStep secret=swap,contents
-// ct-check: indexAfterMul secret=contents expect=load
+// ct-check: ladderStepScratch secret=swap,contents
+// ct-check: indexAfterMul secret=contents loops expect=load
 // ct-check: fieldSquareTimes secret=contents loops
+// ct-check: fieldPow250 secret=contents loops
 // ct-check: fieldInvert secret=contents loops
 // ct-check: fieldDecodeInto secret=contents loops
 // ct-check: fieldEncodeInto secret=contents loops
-// ct-check: ladderLoop secret=contents loops
+// ct-check: ladderLoopScratch secret=contents loops
 // ct-check: ladderLoopToTopBit secret=contents loops expect=branch
 // ct-check: decodeThroughTable secret=bytes loops expect=load
 // ct-check: fieldAddUnrolled secret=contents loops expect=noloop
 //
-// **These are copies, not imports.** `std/crypto/x25519.ts` exports only
-// `x25519` and `x25519Base`, and a case compiles to one module, so its
-// cores are copied here, each under the name of the function it mirrors.
-// Three things differ, and none changes a value:
+// **These are copies, not imports.** A case compiles to one module, so the
+// functions of `std/crypto/x25519.ts` are copied here, each under the name of
+// the function it mirrors (`f25519X` as `fieldX`, `f25519Swap` as
+// `condSwap`, `x25519LadderX` as `ladderX`). tests/run.js holds every copy
+// to the module's text: it renames the module's functions so, drops the early
+// `return` on a short array (it guards a public length, but it is a branch),
+// drops comments and blank lines, writes `a[i]` as the `uncheckedGet` or
+// `uncheckedSet` of `nish:unsafe` (a bounds check is a branch too), and
+// requires the result. A module edit the copies miss fails there, not here.
 //
-// - The early `return` on a short array is gone. It guards a public length,
-//   but it is a branch, and the check refuses every branch.
-// - Every index is an `uncheckedGet` or `uncheckedSet` from `nish:unsafe`
-//   where the module writes `a[i]`: a bounds check is a branch too.
-// - `fieldMul` writes the ten rows of `f25519Mul`'s outer loop out by hand,
-//   calling `fieldMulRow` once per row. `clang -O2` unrolls the inner loop
-//   and leaves the outer one rolled, and without `loops` a rolled loop is a
-//   back-edge the check refuses.
-//
-// `main` is what keeps the copies honest: it runs the whole of X25519 on
-// them, on RFC 7748's vectors, and ct_asm_x25519.out requires every answer.
-// tests/link/crypto_x25519 holds the module to the same vectors, so the two
-// agree through the RFC. (A case here compiles to one `.ll`, so it cannot
-// import a `std/` module and compare with it directly.)
+// `main` runs the whole of X25519 on the copies, on RFC 7748's vectors, and
+// ct_asm_x25519.out requires every answer.
 
 import { uncheckedGet, uncheckedSet } from "nish:unsafe";
 
@@ -102,7 +98,7 @@ export const fieldSub = (out: i64[], f: i64[], g: i64[]): void => {
   }
 }
 
-/** Row `i` of `f25519Mul`'s product loop: the body of its outer `for`. */
+/** `f25519MulRow`: one row of the product. */
 const fieldMulRow = (wide: i64[], f: i64[], doubled: i64[], g: i64[], i: i32): void => {
   for (let j: i32 = 0; j < 10; j++) {
     const k: i32 = i + j
@@ -113,7 +109,7 @@ const fieldMulRow = (wide: i64[], f: i64[], doubled: i64[], g: i64[], i: i32): v
   }
 }
 
-/** `f25519Mul`, its outer loop written out a row at a time. */
+/** `f25519Mul`. */
 export const fieldMul = (out: i64[], f: i64[], g: i64[]): void => {
   const doubled: i64[] = new Array<i64>(10)
   for (let i: i32 = 0; i < 10; i++) {
@@ -144,12 +140,62 @@ export const fieldSquare = (out: i64[], f: i64[]): void => {
   fieldMul(out, f, f)
 }
 
+/** `f25519SquareTimes`. */
+export const fieldSquareTimes = (out: i64[], f: i64[], n: i32): void => {
+  fieldSquare(out, f)
+  for (let i: i32 = 1; i < n; i++) {
+    fieldSquare(out, out)
+  }
+}
+
 /** `f25519MulA24`, with a24 = 121665. */
 export const fieldMulA24 = (out: i64[], f: i64[]): void => {
   for (let i: i32 = 0; i < 10; i++) {
     uncheckedSet(out, i, fieldMul64(uncheckedGet(f, i), toI64(121665)));
   }
   fieldCarry(out)
+}
+
+/** `f25519Pow250`: z^(2^250 - 1) and z^11. */
+export const fieldPow250 = (out: i64[], z11: i64[], z: i64[]): void => {
+  const z2: i64[] = new Array<i64>(10)
+  const e2: i64[] = new Array<i64>(10)
+  const e5: i64[] = new Array<i64>(10)
+  const e10: i64[] = new Array<i64>(10)
+  const e50: i64[] = new Array<i64>(10)
+  const t: i64[] = new Array<i64>(10)
+  fieldSquare(z2, z)
+  fieldMul(e2, z2, z)
+  fieldSquareTimes(t, z2, 2)
+  fieldMul(z11, t, e2)
+  fieldSquareTimes(t, e2, 2)
+  fieldMul(t, t, e2)
+  fieldSquare(t, t)
+  fieldMul(e5, t, z)
+  fieldSquareTimes(t, e5, 5)
+  fieldMul(e10, t, e5)
+  fieldSquareTimes(t, e10, 10)
+  fieldMul(out, t, e10)
+  fieldSquareTimes(t, out, 20)
+  fieldMul(out, t, out)
+  fieldSquareTimes(t, out, 10)
+  fieldMul(e50, t, e10)
+  fieldSquareTimes(t, e50, 50)
+  fieldMul(out, t, e50)
+  fieldSquareTimes(t, out, 100)
+  fieldMul(out, t, out)
+  fieldSquareTimes(t, out, 50)
+  fieldMul(out, t, e50)
+}
+
+/** `f25519Invert`: z^(p - 2). */
+export const fieldInvert = (out: i64[], z: i64[]): void => {
+  const z11: i64[] = new Array<i64>(10)
+  const acc: i64[] = new Array<i64>(10)
+  const t: i64[] = new Array<i64>(10)
+  fieldPow250(acc, z11, z)
+  fieldSquareTimes(t, acc, 5)
+  fieldMul(out, t, z11)
 }
 
 /** `f25519Swap`: the masked xor, the same instructions for either bit. */
@@ -162,104 +208,17 @@ export const condSwap = (f: i64[], g: i64[], bit: i64): void => {
   }
 }
 
-/**
- * One pass of `x25519Ladder`'s inner loop, from the two swaps on: `swap` is
- * the bit the loop has just folded into its swap state. The bit itself is
- * read in `ladder` below, at a public position, and only ever feeds a mask.
- */
-export const ladderStep = (x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], swap: i64): void => {
-  const a: i64[] = new Array<i64>(10)
-  const aa: i64[] = new Array<i64>(10)
-  const b: i64[] = new Array<i64>(10)
-  const bb: i64[] = new Array<i64>(10)
-  const e: i64[] = new Array<i64>(10)
-  const c: i64[] = new Array<i64>(10)
-  const d: i64[] = new Array<i64>(10)
-  const da: i64[] = new Array<i64>(10)
-  const cb: i64[] = new Array<i64>(10)
-  const t: i64[] = new Array<i64>(10)
-  condSwap(x2, x3, swap)
-  condSwap(z2, z3, swap)
-  fieldAdd(a, x2, z2)
-  fieldSquare(aa, a)
-  fieldSub(b, x2, z2)
-  fieldSquare(bb, b)
-  fieldSub(e, aa, bb)
-  fieldAdd(c, x3, z3)
-  fieldSub(d, x3, z3)
-  fieldMul(da, d, a)
-  fieldMul(cb, c, b)
-  fieldAdd(t, da, cb)
-  fieldSquare(x3, t)
-  fieldSub(t, da, cb)
-  fieldSquare(t, t)
-  fieldMul(z3, u, t)
-  fieldMul(x2, aa, bb)
-  fieldMulA24(t, e)
-  fieldAdd(t, aa, t)
-  fieldMul(z2, e, t)
-}
-
-// ---- Written to fail --------------------------------------------------------
-
-// A multiply into an array on this function's own stack, then a table read at
-// a limb of the product. The check follows the call into `fieldMul`, and must
-// know afterwards that the limb it wrote is secret.
-export const indexAfterMul = (f: i64[], g: i64[], table: i64[]): i64 => {
-  const h: i64[] = new Array<i64>(10)
-  fieldMul(h, f, g)
-  return uncheckedGet(table, toI32(uncheckedGet(h, 0) & toI64(7)))
-}
-
-// A ladder whose loop stops at the scalar's highest set bit: the loop runs a
-// secret number of times, and its back edge tests a secret.
-export const ladderLoopToTopBit = (x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void => {
-  let top: i32 = 254
-  while (top > 0 && ((uncheckedGet(k, top >> 3) >> toU8(top & 7)) & toU8(1)) === toU8(0)) {
-    top = top - 1
-  }
-  let swap: i64 = 0
-  for (let at: i32 = top; at >= 0; at--) {
-    const bit: i64 = toI64(uncheckedGet(k, at >> 3) >> toU8(at & 7)) & toI64(1)
-    swap = swap ^ bit
-    ladderStep(x2, z2, x3, z3, u, swap)
-    swap = bit
-  }
-}
-
-// A decode that carries a secret round its loop and then reads a table at it:
-// a single walk in order reads the index at the loop's head as the public zero
-// it starts as, and only the back edge brings the byte round.
-export const decodeThroughTable = (f: i64[], bytes: u8[], table: i64[]): void => {
-  let acc: i64 = 0
-  for (let i: i32 = 0; i < 10; i++) {
-    uncheckedSet(f, i, uncheckedGet(table, toI32(acc & toI64(7))));
-    acc = toI64(uncheckedGet(bytes, i))
-  }
-}
-
-// A field add checked as a loop: clang unrolls its ten limbs, so there is no
-// loop left to read, and a `loops` check of it must say so rather than pass.
-export const fieldAddUnrolled = (out: i64[], f: i64[], g: i64[]): void => {
-  fieldAdd(out, f, g)
-}
-
-// ---- X25519 on the copies, for main ---------------------------------------------
-
-/**
- * `f25519Decode`, into `f` rather than a new array: an array that leaves the
- * function is allocated by a call, which the check does not follow.
- */
+/** `f25519DecodeInto`: the decode's loop. */
 export const fieldDecodeInto = (f: i64[], bytes: u8[]): void => {
   let acc: i64 = 0
   let bits: i64 = 0
   let limb: i32 = 0
   for (let i: i32 = 0; i < 32; i++) {
-    let v: i64 = toI64(uncheckedGet(bytes, i))
+    let b: i64 = toI64(uncheckedGet(bytes, i))
     if (i === 31) {
-      v = v & toI64(0x7f)
+      b = b & toI64(0x7f)
     }
-    acc = acc | (v << bits)
+    acc = acc | (b << bits)
     bits = bits + toI64(8)
     if (limb >= 0 && limb < 10) {
       const width: i64 = fieldWidth(limb)
@@ -280,7 +239,7 @@ const fieldDecode = (bytes: u8[]): i64[] => {
   return f
 }
 
-/** `f25519Encode`, into `out` rather than a new array, as `fieldDecodeInto`. */
+/** `f25519EncodeInto`: the encode's reduction and packing. */
 export const fieldEncodeInto = (out: u8[], f: i64[]): void => {
   const h: i64[] = new Array<i64>(10)
   fieldCopy(h, f)
@@ -311,7 +270,6 @@ export const fieldEncodeInto = (out: u8[], f: i64[]): void => {
   }
 }
 
-
 /** `f25519Encode`. */
 const fieldEncode = (f: i64[]): u8[] => {
   const out: u8[] = new Array<u8>(32)
@@ -319,56 +277,66 @@ const fieldEncode = (f: i64[]): u8[] => {
   return out
 }
 
-/** `f25519SquareTimes`. */
-export const fieldSquareTimes = (out: i64[], f: i64[], n: i32): void => {
-  fieldSquare(out, f)
-  for (let i: i32 = 1; i < n; i++) {
-    fieldSquare(out, out)
-  }
-}
-
-/** `f25519Invert`: z^(p - 2), the same chain. */
-export const fieldInvert = (out: i64[], z: i64[]): void => {
-  const z2: i64[] = new Array<i64>(10)
-  const z11: i64[] = new Array<i64>(10)
-  const e2: i64[] = new Array<i64>(10)
-  const e5: i64[] = new Array<i64>(10)
-  const e10: i64[] = new Array<i64>(10)
-  const e50: i64[] = new Array<i64>(10)
-  const t: i64[] = new Array<i64>(10)
-  const acc: i64[] = new Array<i64>(10)
-  fieldSquare(z2, z)
-  fieldMul(e2, z2, z)
-  fieldSquareTimes(t, z2, 2)
-  fieldMul(z11, t, e2)
-  fieldSquareTimes(t, e2, 2)
-  fieldMul(t, t, e2)
+/** `x25519LadderStep`: one step, from its two swaps on. */
+const ladderStep = (
+  x2: i64[],
+  z2: i64[],
+  x3: i64[],
+  z3: i64[],
+  u: i64[],
+  swap: i64,
+  a: i64[],
+  aa: i64[],
+  b: i64[],
+  bb: i64[],
+  e: i64[],
+  c: i64[],
+  d: i64[],
+  da: i64[],
+  cb: i64[],
+  t: i64[]
+): void => {
+  condSwap(x2, x3, swap)
+  condSwap(z2, z3, swap)
+  fieldAdd(a, x2, z2)
+  fieldSquare(aa, a)
+  fieldSub(b, x2, z2)
+  fieldSquare(bb, b)
+  fieldSub(e, aa, bb)
+  fieldAdd(c, x3, z3)
+  fieldSub(d, x3, z3)
+  fieldMul(da, d, a)
+  fieldMul(cb, c, b)
+  fieldAdd(t, da, cb)
+  fieldSquare(x3, t)
+  fieldSub(t, da, cb)
   fieldSquare(t, t)
-  fieldMul(e5, t, z)
-  fieldSquareTimes(t, e5, 5)
-  fieldMul(e10, t, e5)
-  fieldSquareTimes(t, e10, 10)
-  fieldMul(acc, t, e10)
-  fieldSquareTimes(t, acc, 20)
-  fieldMul(acc, t, acc)
-  fieldSquareTimes(t, acc, 10)
-  fieldMul(e50, t, e10)
-  fieldSquareTimes(t, e50, 50)
-  fieldMul(acc, t, e50)
-  fieldSquareTimes(t, acc, 100)
-  fieldMul(acc, t, acc)
-  fieldSquareTimes(t, acc, 50)
-  fieldMul(acc, t, e50)
-  fieldSquareTimes(t, acc, 5)
-  fieldMul(out, t, z11)
+  fieldMul(z3, u, t)
+  fieldMul(x2, aa, bb)
+  fieldMulA24(t, e)
+  fieldAdd(t, aa, t)
+  fieldMul(z2, e, t)
 }
 
-/**
- * `x25519Ladder`'s 255 steps and the two swaps after them, on a clamped `k`:
- * the loop's position is public and picks the byte and the shift, and the bit
- * it reads only ever feeds `ladderStep`'s masks.
- */
-export const ladderLoop = (x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void => {
+/** `x25519LadderLoop`: the 255 steps and the two swaps after them. */
+const ladderLoop = (
+  x2: i64[],
+  z2: i64[],
+  x3: i64[],
+  z3: i64[],
+  u: i64[],
+  k: u8[],
+  a: i64[],
+  aa: i64[],
+  b: i64[],
+  bb: i64[],
+  e: i64[],
+  c: i64[],
+  d: i64[],
+  da: i64[],
+  cb: i64[],
+  t: i64[]
+): void => {
   let swap: i64 = 0
   for (let byte: i32 = 31; byte >= 0; byte--) {
     for (let shift: i32 = 7; shift >= 0; shift--) {
@@ -377,7 +345,7 @@ export const ladderLoop = (x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[],
       }
       const bit: i64 = toI64(uncheckedGet(k, byte) >> toU8(shift)) & toI64(1)
       swap = swap ^ bit
-      ladderStep(x2, z2, x3, z3, u, swap)
+      ladderStep(x2, z2, x3, z3, u, swap, a, aa, b, bb, e, c, d, da, cb, t)
       swap = bit
     }
   }
@@ -385,7 +353,96 @@ export const ladderLoop = (x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[],
   condSwap(z2, z3, swap)
 }
 
-/** `x25519` and `x25519Ladder`: clamp a copy, then 255 `ladderStep`s, as the module does. */
+// ---- The checked ladder ---------------------------------------------------------
+// `ladderStep` and `ladderLoop` take their scratch as ten more arrays, past the
+// six parameters the check can place in registers, so these call them on
+// scratch of their own stack, as `x25519Ladder` does. The check follows the call.
+
+export const ladderStepScratch = (x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], swap: i64): void => {
+  const a: i64[] = new Array<i64>(10)
+  const aa: i64[] = new Array<i64>(10)
+  const b: i64[] = new Array<i64>(10)
+  const bb: i64[] = new Array<i64>(10)
+  const e: i64[] = new Array<i64>(10)
+  const c: i64[] = new Array<i64>(10)
+  const d: i64[] = new Array<i64>(10)
+  const da: i64[] = new Array<i64>(10)
+  const cb: i64[] = new Array<i64>(10)
+  const t: i64[] = new Array<i64>(10)
+  ladderStep(x2, z2, x3, z3, u, swap, a, aa, b, bb, e, c, d, da, cb, t)
+}
+
+export const ladderLoopScratch = (x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void => {
+  const a: i64[] = new Array<i64>(10)
+  const aa: i64[] = new Array<i64>(10)
+  const b: i64[] = new Array<i64>(10)
+  const bb: i64[] = new Array<i64>(10)
+  const e: i64[] = new Array<i64>(10)
+  const c: i64[] = new Array<i64>(10)
+  const d: i64[] = new Array<i64>(10)
+  const da: i64[] = new Array<i64>(10)
+  const cb: i64[] = new Array<i64>(10)
+  const t: i64[] = new Array<i64>(10)
+  ladderLoop(x2, z2, x3, z3, u, k, a, aa, b, bb, e, c, d, da, cb, t)
+}
+
+// ---- Written to fail --------------------------------------------------------
+
+// A multiply into an array on this function's own stack, then a table read at
+// a limb of the product. The check follows the call into `fieldMul`, and must
+// know afterwards that the limb it wrote is secret.
+export const indexAfterMul = (f: i64[], g: i64[], table: i64[]): i64 => {
+  const h: i64[] = new Array<i64>(10)
+  fieldMul(h, f, g)
+  return uncheckedGet(table, toI32(uncheckedGet(h, 0) & toI64(7)))
+}
+
+// A ladder whose loop stops at the scalar's highest set bit: the loop runs a
+// secret number of times, and its back edge tests a secret.
+export const ladderLoopToTopBit = (x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void => {
+  const a: i64[] = new Array<i64>(10)
+  const aa: i64[] = new Array<i64>(10)
+  const b: i64[] = new Array<i64>(10)
+  const bb: i64[] = new Array<i64>(10)
+  const e: i64[] = new Array<i64>(10)
+  const c: i64[] = new Array<i64>(10)
+  const d: i64[] = new Array<i64>(10)
+  const da: i64[] = new Array<i64>(10)
+  const cb: i64[] = new Array<i64>(10)
+  const t: i64[] = new Array<i64>(10)
+  let top: i32 = 254
+  while (top > 0 && ((uncheckedGet(k, top >> 3) >> toU8(top & 7)) & toU8(1)) === toU8(0)) {
+    top = top - 1
+  }
+  let swap: i64 = 0
+  for (let at: i32 = top; at >= 0; at--) {
+    const bit: i64 = toI64(uncheckedGet(k, at >> 3) >> toU8(at & 7)) & toI64(1)
+    swap = swap ^ bit
+    ladderStep(x2, z2, x3, z3, u, swap, a, aa, b, bb, e, c, d, da, cb, t)
+    swap = bit
+  }
+}
+
+// A decode that carries a secret round its loop and then reads a table at it:
+// a single walk in order reads the index at the loop's head as the public zero
+// it starts as, and only the back edge brings the byte round.
+export const decodeThroughTable = (f: i64[], bytes: u8[], table: i64[]): void => {
+  let acc: i64 = 0
+  for (let i: i32 = 0; i < 10; i++) {
+    uncheckedSet(f, i, uncheckedGet(table, toI32(acc & toI64(7))));
+    acc = toI64(uncheckedGet(bytes, i))
+  }
+}
+
+// A field add checked as a loop: clang unrolls its ten limbs, so there is no
+// loop left to read, and a `loops` check of it must say so rather than pass.
+export const fieldAddUnrolled = (out: i64[], f: i64[], g: i64[]): void => {
+  fieldAdd(out, f, g)
+}
+
+// ---- X25519 on the copies, for main ---------------------------------------------
+
+/** `x25519` and `x25519Ladder`: clamp a copy, then `ladderLoop`, as the module does. */
 const ladder = (scalar: u8[], uBytes: u8[]): u8[] => {
   const k: u8[] = new Array<u8>(32)
   for (let i: i32 = 0; i < 32; i++) {
@@ -401,8 +458,17 @@ const ladder = (scalar: u8[], uBytes: u8[]): u8[] => {
   fieldCopy(x3, u)
   const z3: i64[] = new Array<i64>(10)
   uncheckedSet(z3, 0, toI64(1));
-  ladderLoop(x2, z2, x3, z3, u, k)
+  const a: i64[] = new Array<i64>(10)
+  const aa: i64[] = new Array<i64>(10)
+  const b: i64[] = new Array<i64>(10)
+  const bb: i64[] = new Array<i64>(10)
+  const e: i64[] = new Array<i64>(10)
+  const c: i64[] = new Array<i64>(10)
+  const d: i64[] = new Array<i64>(10)
+  const da: i64[] = new Array<i64>(10)
+  const cb: i64[] = new Array<i64>(10)
   const t: i64[] = new Array<i64>(10)
+  ladderLoop(x2, z2, x3, z3, u, k, a, aa, b, bb, e, c, d, da, cb, t)
   fieldInvert(t, z2)
   fieldMul(x2, x2, t)
   return fieldEncode(x2)

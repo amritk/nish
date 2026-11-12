@@ -106,16 +106,16 @@ const listed = (found, separator = "\n") => found.map((v) => `${v.kind}: ${v.lin
  * Every violation in one kernel body, a listing with its labels kept
  * (`functionBody`'s `labels`): `{ kind, line }`, with `kind` as ct-asm.js
  * names them, `branch` meaning a conditional branch on a secret. Also counts
- * the conditional branches it judged public, so a caller can say that the
+ * the back edges it reached, so a caller can say that the
  * loops were read rather than absent. `secretArgs` are the argument positions
  * that are secret beside every array's elements.
  */
 const runtimeViolations = (body, secretArgs, target) => {
-  const { found, branches } = settle(
+  const { found, backEdges } = settle(
     new Taint({ contents: true, secretArgs, preciseFlags: true }, target),
     body
   )
-  return { found, branches }
+  return { found, backEdges }
 }
 
 /**
@@ -180,17 +180,17 @@ const exportGap = (lines, unit) => {
  */
 export const runtimeChecks = (root, march = "") => {
   const results = []
-  /** `fn` read from `asm` with `secretArgs`: its violations and loop branches, or why there is nothing to read. */
+  /** `fn` read from `asm` with `secretArgs`: its violations and back edges, or why there is nothing to read. */
   const read = (asm, fn, secretArgs, target) => {
     if (!asm.ok) {
-      return { why: asm.why, found: [], branches: 0 }
+      return { why: asm.why, found: [], backEdges: 0 }
     }
     const body = functionBody(asm.lines, fn, target, { labels: true })
     if (body === null) {
       return {
         why: `no symbol ${fn} in the ${target.name} assembly: a check that read nothing proves nothing`,
         found: [],
-        branches: 0,
+        backEdges: 0,
       }
     }
     return { why: null, ...runtimeViolations(body, secretArgs, target) }
@@ -212,15 +212,15 @@ export const runtimeChecks = (root, march = "") => {
           : real.why,
       })
       for (const spec of unit.kernels) {
-        const { why, found, branches } = read(real, spec.name, spec.secretArgs, target)
+        const { why, found, backEdges } = read(real, spec.name, spec.secretArgs, target)
         results.push({
           file: unit.file,
           fn: spec.name,
           target: ctTargetName(target),
           kind: "kernel",
           expect: null,
-          ok: why === null && found.length === 0 && branches > 0,
-          detail: why ?? (listed(found) || `${branches} conditional branches, all public`),
+          ok: why === null && found.length === 0 && backEdges > 0,
+          detail: why ?? (listed(found) || `${backEdges} back edges, every branch public`),
         })
       }
     }

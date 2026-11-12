@@ -98,12 +98,12 @@ unsafe call 287:19 uncheckedGet (node 2647)
 unsafe call 288:19 uncheckedGet (node 2659)
 unsafe call 327:3 uncheckedSet (node 3098)
 unsafe call 328:3 uncheckedSet (node 3131)
-unsafe call 454:33 uncheckedGet (node 4256)
-unsafe call 455:5 uncheckedSet (node 4269)
-unsafe call 455:30 uncheckedGet (node 4279)
-unsafe call 461:5 uncheckedSet (node 4326)
-unsafe call 461:32 uncheckedGet (node 4336)
-unsafe call 461:58 uncheckedGet (node 4345)
+unsafe call 457:33 uncheckedGet (node 4256)
+unsafe call 458:5 uncheckedSet (node 4269)
+unsafe call 458:30 uncheckedGet (node 4279)
+unsafe call 464:5 uncheckedSet (node 4326)
+unsafe call 464:32 uncheckedGet (node 4336)
+unsafe call 464:58 uncheckedGet (node 4345)
 function aesLanes(pattern: u64): u64 -> @aesLanes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

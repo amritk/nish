@@ -3,82 +3,82 @@
 entry: tests/cases/ct_asm_x25519.ts
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
-unsafe import 46:10 uncheckedGet from "nish:unsafe"
-unsafe import 46:24 uncheckedSet from "nish:unsafe"
-unsafe call 67:5 uncheckedSet (node 185)
-unsafe call 67:26 uncheckedGet (node 191)
-unsafe call 74:20 uncheckedGet (node 229)
-unsafe call 75:5 uncheckedSet (node 242)
-unsafe call 75:24 uncheckedGet (node 248)
-unsafe call 76:5 uncheckedSet (node 261)
-unsafe call 76:39 uncheckedGet (node 273)
-unsafe call 83:20 uncheckedGet (node 306)
-unsafe call 84:3 uncheckedSet (node 319)
-unsafe call 84:22 uncheckedGet (node 325)
-unsafe call 85:3 uncheckedSet (node 338)
-unsafe call 85:33 uncheckedGet (node 348)
-unsafe call 86:19 uncheckedGet (node 370)
-unsafe call 87:3 uncheckedSet (node 383)
-unsafe call 87:22 uncheckedGet (node 389)
-unsafe call 88:3 uncheckedSet (node 402)
-unsafe call 88:33 uncheckedGet (node 412)
-unsafe call 94:5 uncheckedSet (node 456)
-unsafe call 94:37 uncheckedGet (node 466)
-unsafe call 94:57 uncheckedGet (node 472)
-unsafe call 101:5 uncheckedSet (node 515)
-unsafe call 101:37 uncheckedGet (node 525)
-unsafe call 101:57 uncheckedGet (node 531)
-unsafe call 109:41 uncheckedGet (node 606)
-unsafe call 109:68 uncheckedGet (node 612)
-unsafe call 111:7 uncheckedSet (node 628)
-unsafe call 111:40 uncheckedGet (node 638)
-unsafe call 111:78 uncheckedGet (node 649)
-unsafe call 120:5 uncheckedSet (node 708)
-unsafe call 120:41 uncheckedGet (node 718)
-unsafe call 135:5 uncheckedSet (node 879)
-unsafe call 135:35 uncheckedGet (node 889)
-unsafe call 135:69 uncheckedGet (node 899)
-unsafe call 137:3 uncheckedSet (node 913)
-unsafe call 137:22 uncheckedGet (node 919)
-unsafe call 150:5 uncheckedSet (node 995)
-unsafe call 150:37 uncheckedGet (node 1005)
-unsafe call 159:28 uncheckedGet (node 1081)
-unsafe call 159:49 uncheckedGet (node 1087)
-unsafe call 160:5 uncheckedSet (node 1096)
-unsafe call 160:24 uncheckedGet (node 1102)
-unsafe call 161:5 uncheckedSet (node 1111)
-unsafe call 161:24 uncheckedGet (node 1117)
-unsafe call 211:10 uncheckedGet (node 1512)
-unsafe call 211:36 uncheckedGet (node 1521)
-unsafe call 218:23 uncheckedGet (node 1583)
-unsafe call 223:28 uncheckedGet (node 1650)
-unsafe call 236:5 uncheckedSet (node 1737)
-unsafe call 236:24 uncheckedGet (node 1743)
-unsafe call 237:17 uncheckedGet (node 1766)
-unsafe call 258:24 uncheckedGet (node 1864)
-unsafe call 267:9 uncheckedSet (node 1931)
-unsafe call 289:27 uncheckedGet (node 2062)
-unsafe call 291:20 uncheckedGet (node 2100)
-unsafe call 293:3 uncheckedSet (node 2114)
-unsafe call 293:33 uncheckedGet (node 2124)
-unsafe call 295:3 uncheckedSet (node 2147)
-unsafe call 295:22 uncheckedGet (node 2153)
-unsafe call 300:18 uncheckedGet (node 2205)
-unsafe call 303:7 uncheckedSet (node 2242)
-unsafe call 310:5 uncheckedSet (node 2295)
-unsafe call 378:30 uncheckedGet (node 2819)
-unsafe call 392:5 uncheckedSet (node 2922)
-unsafe call 392:24 uncheckedGet (node 2928)
-unsafe call 394:3 uncheckedSet (node 2935)
-unsafe call 394:22 uncheckedGet (node 2941)
-unsafe call 395:3 uncheckedSet (node 2954)
-unsafe call 395:24 uncheckedGet (node 2961)
-unsafe call 398:3 uncheckedSet (node 3007)
-unsafe call 403:3 uncheckedSet (node 3071)
-unsafe call 420:5 uncheckedSet (node 3245)
-unsafe call 431:26 uncheckedGet (node 3316)
-unsafe call 451:3 uncheckedSet (node 3447)
-unsafe call 453:3 uncheckedSet (node 3474)
+unsafe import 42:10 uncheckedGet from "nish:unsafe"
+unsafe import 42:24 uncheckedSet from "nish:unsafe"
+unsafe call 63:5 uncheckedSet (node 185)
+unsafe call 63:26 uncheckedGet (node 191)
+unsafe call 70:20 uncheckedGet (node 229)
+unsafe call 71:5 uncheckedSet (node 242)
+unsafe call 71:24 uncheckedGet (node 248)
+unsafe call 72:5 uncheckedSet (node 261)
+unsafe call 72:39 uncheckedGet (node 273)
+unsafe call 79:20 uncheckedGet (node 306)
+unsafe call 80:3 uncheckedSet (node 319)
+unsafe call 80:22 uncheckedGet (node 325)
+unsafe call 81:3 uncheckedSet (node 338)
+unsafe call 81:33 uncheckedGet (node 348)
+unsafe call 82:19 uncheckedGet (node 370)
+unsafe call 83:3 uncheckedSet (node 383)
+unsafe call 83:22 uncheckedGet (node 389)
+unsafe call 84:3 uncheckedSet (node 402)
+unsafe call 84:33 uncheckedGet (node 412)
+unsafe call 90:5 uncheckedSet (node 456)
+unsafe call 90:37 uncheckedGet (node 466)
+unsafe call 90:57 uncheckedGet (node 472)
+unsafe call 97:5 uncheckedSet (node 515)
+unsafe call 97:37 uncheckedGet (node 525)
+unsafe call 97:57 uncheckedGet (node 531)
+unsafe call 105:41 uncheckedGet (node 606)
+unsafe call 105:68 uncheckedGet (node 612)
+unsafe call 107:7 uncheckedSet (node 628)
+unsafe call 107:40 uncheckedGet (node 638)
+unsafe call 107:78 uncheckedGet (node 649)
+unsafe call 116:5 uncheckedSet (node 708)
+unsafe call 116:41 uncheckedGet (node 718)
+unsafe call 131:5 uncheckedSet (node 879)
+unsafe call 131:35 uncheckedGet (node 889)
+unsafe call 131:69 uncheckedGet (node 899)
+unsafe call 133:3 uncheckedSet (node 913)
+unsafe call 133:22 uncheckedGet (node 919)
+unsafe call 154:5 uncheckedSet (node 1044)
+unsafe call 154:37 uncheckedGet (node 1054)
+unsafe call 205:28 uncheckedGet (node 1502)
+unsafe call 205:49 uncheckedGet (node 1508)
+unsafe call 206:5 uncheckedSet (node 1517)
+unsafe call 206:24 uncheckedGet (node 1523)
+unsafe call 207:5 uncheckedSet (node 1532)
+unsafe call 207:24 uncheckedGet (node 1538)
+unsafe call 217:24 uncheckedGet (node 1608)
+unsafe call 226:9 uncheckedSet (node 1675)
+unsafe call 248:27 uncheckedGet (node 1806)
+unsafe call 250:20 uncheckedGet (node 1844)
+unsafe call 252:3 uncheckedSet (node 1858)
+unsafe call 252:33 uncheckedGet (node 1868)
+unsafe call 254:3 uncheckedSet (node 1891)
+unsafe call 254:22 uncheckedGet (node 1897)
+unsafe call 259:18 uncheckedGet (node 1949)
+unsafe call 262:7 uncheckedSet (node 1986)
+unsafe call 269:5 uncheckedSet (node 2039)
+unsafe call 346:30 uncheckedGet (node 2478)
+unsafe call 397:10 uncheckedGet (node 3004)
+unsafe call 397:36 uncheckedGet (node 3013)
+unsafe call 414:23 uncheckedGet (node 3225)
+unsafe call 419:28 uncheckedGet (node 3292)
+unsafe call 432:5 uncheckedSet (node 3389)
+unsafe call 432:24 uncheckedGet (node 3395)
+unsafe call 433:17 uncheckedGet (node 3418)
+unsafe call 449:5 uncheckedSet (node 3502)
+unsafe call 449:24 uncheckedGet (node 3508)
+unsafe call 451:3 uncheckedSet (node 3515)
+unsafe call 451:22 uncheckedGet (node 3521)
+unsafe call 452:3 uncheckedSet (node 3534)
+unsafe call 452:24 uncheckedGet (node 3541)
+unsafe call 455:3 uncheckedSet (node 3587)
+unsafe call 460:3 uncheckedSet (node 3651)
+unsafe call 486:5 uncheckedSet (node 3970)
+unsafe call 497:26 uncheckedGet (node 4041)
+unsafe call 517:3 uncheckedSet (node 4172)
+unsafe call 519:3 uncheckedSet (node 4199)
 const HEX_DIGITS: string = "0123456789abcdef"
 function fieldAdd64(a: i64, b: i64): i64 -> @fieldAdd64
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -202,6 +202,16 @@ function fieldSquare(out: i64[], f: i64[]): void -> @fieldSquare [exported]
   pointer f: size=0 writesThrough=false captured=false passedTo=fieldMul#1 fieldMul#2
   stackSites=0 stackLocals=0
   callee +0:3 fieldMul -> @fieldMul
+function fieldSquareTimes(out: i64[], f: i64[], n: i32): void -> @fieldSquareTimes [exported]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldSquare
+  calls: fieldSquare
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldSquare#0 fieldSquare#0 fieldSquare#1
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldSquare#1
+  stackSites=0 stackLocals=0
+  callee +0:3 fieldSquare -> @fieldSquare
+  local +1:12 i: i32 (let)
+  callee +2:5 fieldSquare -> @fieldSquare
 function fieldMulA24(out: i64[], f: i64[]): void -> @fieldMulA24 [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -212,6 +222,55 @@ function fieldMulA24(out: i64[], f: i64[]): void -> @fieldMulA24 [exported]
   local -1:12 i: i32 (let)
   callee +0:26 fieldMul64 -> @fieldMul64
   callee +2:3 fieldCarry -> @fieldCarry
+function fieldPow250(out: i64[], z11: i64[], z: i64[]): void -> @fieldPow250 [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldMul
+  calls: fieldMul fieldSquare fieldSquareTimes
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldMul#0 fieldSquareTimes#1 fieldMul#0 fieldMul#2 fieldSquareTimes#1 fieldMul#0 fieldSquareTimes#1 fieldMul#0 fieldMul#2 fieldSquareTimes#1 fieldMul#0
+  pointer z11: size=0 writesThrough=true captured=false passedTo=fieldMul#0
+  pointer z: size=0 writesThrough=false captured=false passedTo=fieldSquare#1 fieldMul#2 fieldMul#2
+  stackSites=6 stackLocals=6
+  local +0:9 z2: i64[] (const)
+  local +1:9 e2: i64[] (const)
+  local +2:9 e5: i64[] (const)
+  local +3:9 e10: i64[] (const)
+  local +4:9 e50: i64[] (const)
+  local +5:9 t: i64[] (const)
+  callee +6:3 fieldSquare -> @fieldSquare
+  callee +7:3 fieldMul -> @fieldMul
+  callee +8:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +9:3 fieldMul -> @fieldMul
+  callee +10:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +11:3 fieldMul -> @fieldMul
+  callee +12:3 fieldSquare -> @fieldSquare
+  callee +13:3 fieldMul -> @fieldMul
+  callee +14:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +15:3 fieldMul -> @fieldMul
+  callee +16:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +17:3 fieldMul -> @fieldMul
+  callee +18:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +19:3 fieldMul -> @fieldMul
+  callee +20:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +21:3 fieldMul -> @fieldMul
+  callee +22:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +23:3 fieldMul -> @fieldMul
+  callee +24:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +25:3 fieldMul -> @fieldMul
+  callee +26:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +27:3 fieldMul -> @fieldMul
+function fieldInvert(out: i64[], z: i64[]): void -> @fieldInvert [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldMul
+  calls: fieldMul fieldPow250 fieldSquareTimes
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldMul#0
+  pointer z: size=0 writesThrough=false captured=false passedTo=fieldPow250#2
+  stackSites=3 stackLocals=3
+  local +0:9 z11: i64[] (const)
+  local +1:9 acc: i64[] (const)
+  local +2:9 t: i64[] (const)
+  callee +3:3 fieldPow250 -> @fieldPow250
+  callee +4:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +5:3 fieldMul -> @fieldMul
 function condSwap(f: i64[], g: i64[], bit: i64): void -> @condSwap [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -224,90 +283,6 @@ function condSwap(f: i64[], g: i64[], bit: i64): void -> @condSwap [exported]
   callee -3:21 fieldSub64 -> @fieldSub64
   local -2:12 i: i32 (let)
   local -1:11 t: i64 (const)
-function ladderStep(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], swap: i64): void -> @ladderStep [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via condSwap
-  escaping: swap
-  calls: condSwap fieldAdd fieldMul fieldMulA24 fieldSquare fieldSub
-  pointer x2: size=0 writesThrough=true captured=false passedTo=condSwap#0 fieldAdd#1 fieldSub#1 fieldMul#0
-  pointer z2: size=0 writesThrough=true captured=false passedTo=condSwap#0 fieldAdd#2 fieldSub#2 fieldMul#0
-  pointer x3: size=0 writesThrough=true captured=false passedTo=condSwap#1 fieldAdd#1 fieldSub#1 fieldSquare#0
-  pointer z3: size=0 writesThrough=true captured=false passedTo=condSwap#1 fieldAdd#2 fieldSub#2 fieldMul#0
-  pointer u: size=0 writesThrough=false captured=false passedTo=fieldMul#1
-  stackSites=10 stackLocals=10
-  local +0:9 a: i64[] (const)
-  local +1:9 aa: i64[] (const)
-  local +2:9 b: i64[] (const)
-  local +3:9 bb: i64[] (const)
-  local +4:9 e: i64[] (const)
-  local +5:9 c: i64[] (const)
-  local +6:9 d: i64[] (const)
-  local +7:9 da: i64[] (const)
-  local +8:9 cb: i64[] (const)
-  local +9:9 t: i64[] (const)
-  callee +10:3 condSwap -> @condSwap
-  callee +11:3 condSwap -> @condSwap
-  callee +12:3 fieldAdd -> @fieldAdd
-  callee +13:3 fieldSquare -> @fieldSquare
-  callee +14:3 fieldSub -> @fieldSub
-  callee +15:3 fieldSquare -> @fieldSquare
-  callee +16:3 fieldSub -> @fieldSub
-  callee +17:3 fieldAdd -> @fieldAdd
-  callee +18:3 fieldSub -> @fieldSub
-  callee +19:3 fieldMul -> @fieldMul
-  callee +20:3 fieldMul -> @fieldMul
-  callee +21:3 fieldAdd -> @fieldAdd
-  callee +22:3 fieldSquare -> @fieldSquare
-  callee +23:3 fieldSub -> @fieldSub
-  callee +24:3 fieldSquare -> @fieldSquare
-  callee +25:3 fieldMul -> @fieldMul
-  callee +26:3 fieldMul -> @fieldMul
-  callee +27:3 fieldMulA24 -> @fieldMulA24
-  callee +28:3 fieldAdd -> @fieldAdd
-  callee +29:3 fieldMul -> @fieldMul
-function indexAfterMul(f: i64[], g: i64[], table: i64[]): i64 -> @indexAfterMul [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: fieldMul
-  pointer f: size=0 writesThrough=false captured=false passedTo=fieldMul#1
-  pointer g: size=0 writesThrough=false captured=false passedTo=fieldMul#2
-  pointer table: size=0 writesThrough=false captured=false
-  stackSites=1 stackLocals=1
-  local +0:9 h: i64[] (const)
-  callee +1:3 fieldMul -> @fieldMul
-function ladderLoopToTopBit(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void -> @ladderLoopToTopBit [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via ladderStep
-  calls: ladderStep
-  pointer x2: size=0 writesThrough=true captured=false passedTo=ladderStep#0
-  pointer z2: size=0 writesThrough=true captured=false passedTo=ladderStep#1
-  pointer x3: size=0 writesThrough=true captured=false passedTo=ladderStep#2
-  pointer z3: size=0 writesThrough=true captured=false passedTo=ladderStep#3
-  pointer u: size=0 writesThrough=false captured=false passedTo=ladderStep#4
-  pointer k: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:7 top: i32 (let)
-  local +4:7 swap: i64 (let)
-  local +5:12 at: i32 (let)
-  local +6:11 bit: i64 (const)
-  callee +8:5 ladderStep -> @ladderStep
-function decodeThroughTable(f: i64[], bytes: u8[], table: i64[]): void -> @decodeThroughTable [exported]
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  pointer f: size=0 writesThrough=true captured=false
-  pointer bytes: size=0 writesThrough=false captured=false
-  pointer table: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local -2:7 acc: i64 (let)
-  local -1:12 i: i32 (let)
-function fieldAddUnrolled(out: i64[], f: i64[], g: i64[]): void -> @fieldAddUnrolled [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via fieldAdd
-  calls: fieldAdd
-  pointer out: size=0 writesThrough=true captured=false passedTo=fieldAdd#0
-  pointer f: size=0 writesThrough=false captured=false passedTo=fieldAdd#1
-  pointer g: size=0 writesThrough=false captured=false passedTo=fieldAdd#2
-  stackSites=0 stackLocals=0
-  callee +0:3 fieldAdd -> @fieldAdd
 function fieldDecodeInto(f: i64[], bytes: u8[]): void -> @fieldDecodeInto [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -319,7 +294,7 @@ function fieldDecodeInto(f: i64[], bytes: u8[]): void -> @fieldDecodeInto [expor
   local -12:7 bits: i64 (let)
   local -11:7 limb: i32 (let)
   local -10:12 i: i32 (let)
-  local -9:9 v: i64 (let)
+  local -9:9 b: i64 (let)
   local -2:13 width: i64 (const)
   callee -2:26 fieldWidth -> @fieldWidth
   callee +0:37 fieldLimbMask -> @fieldLimbMask
@@ -362,56 +337,48 @@ function fieldEncode(f: i64[]): u8[] -> @fieldEncode
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   callee +1:3 fieldEncodeInto -> @fieldEncodeInto
-function fieldSquareTimes(out: i64[], f: i64[], n: i32): void -> @fieldSquareTimes [exported]
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via fieldSquare
-  calls: fieldSquare
-  pointer out: size=0 writesThrough=true captured=false passedTo=fieldSquare#0 fieldSquare#0 fieldSquare#1
-  pointer f: size=0 writesThrough=false captured=false passedTo=fieldSquare#1
-  stackSites=0 stackLocals=0
-  callee +0:3 fieldSquare -> @fieldSquare
-  local +1:12 i: i32 (let)
-  callee +2:5 fieldSquare -> @fieldSquare
-function fieldInvert(out: i64[], z: i64[]): void -> @fieldInvert [exported]
+function ladderStep(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], swap: i64, a: i64[], aa: i64[], b: i64[], bb: i64[], e: i64[], c: i64[], d: i64[], da: i64[], cb: i64[], t: i64[]): void -> @ladderStep
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via fieldMul
-  calls: fieldMul fieldSquare fieldSquareTimes
-  pointer out: size=0 writesThrough=true captured=false passedTo=fieldMul#0
-  pointer z: size=0 writesThrough=false captured=false passedTo=fieldSquare#1 fieldMul#2 fieldMul#2
-  stackSites=8 stackLocals=8
-  local +0:9 z2: i64[] (const)
-  local +1:9 z11: i64[] (const)
-  local +2:9 e2: i64[] (const)
-  local +3:9 e5: i64[] (const)
-  local +4:9 e10: i64[] (const)
-  local +5:9 e50: i64[] (const)
-  local +6:9 t: i64[] (const)
-  local +7:9 acc: i64[] (const)
-  callee +8:3 fieldSquare -> @fieldSquare
+  sharedWrite: via condSwap
+  escaping: swap
+  calls: condSwap fieldAdd fieldMul fieldMulA24 fieldSquare fieldSub
+  pointer x2: size=0 writesThrough=true captured=false passedTo=condSwap#0 fieldAdd#1 fieldSub#1 fieldMul#0
+  pointer z2: size=0 writesThrough=true captured=false passedTo=condSwap#0 fieldAdd#2 fieldSub#2 fieldMul#0
+  pointer x3: size=0 writesThrough=true captured=false passedTo=condSwap#1 fieldAdd#1 fieldSub#1 fieldSquare#0
+  pointer z3: size=0 writesThrough=true captured=false passedTo=condSwap#1 fieldAdd#2 fieldSub#2 fieldMul#0
+  pointer u: size=0 writesThrough=false captured=false passedTo=fieldMul#1
+  pointer a: size=0 writesThrough=true captured=false passedTo=fieldAdd#0 fieldSquare#1 fieldMul#2
+  pointer aa: size=0 writesThrough=true captured=false passedTo=fieldSquare#0 fieldSub#1 fieldMul#1 fieldAdd#1
+  pointer b: size=0 writesThrough=true captured=false passedTo=fieldSub#0 fieldSquare#1 fieldMul#2
+  pointer bb: size=0 writesThrough=true captured=false passedTo=fieldSquare#0 fieldSub#2 fieldMul#2
+  pointer e: size=0 writesThrough=true captured=false passedTo=fieldSub#0 fieldMulA24#1 fieldMul#1
+  pointer c: size=0 writesThrough=true captured=false passedTo=fieldAdd#0 fieldMul#1
+  pointer d: size=0 writesThrough=true captured=false passedTo=fieldSub#0 fieldMul#1
+  pointer da: size=0 writesThrough=true captured=false passedTo=fieldMul#0 fieldAdd#1 fieldSub#1
+  pointer cb: size=0 writesThrough=true captured=false passedTo=fieldMul#0 fieldAdd#2 fieldSub#2
+  pointer t: size=0 writesThrough=true captured=false passedTo=fieldAdd#0 fieldSquare#1 fieldSub#0 fieldSquare#0 fieldSquare#1 fieldMul#2 fieldMulA24#0 fieldAdd#0 fieldAdd#2 fieldMul#2
+  stackSites=0 stackLocals=0
+  callee +0:3 condSwap -> @condSwap
+  callee +1:3 condSwap -> @condSwap
+  callee +2:3 fieldAdd -> @fieldAdd
+  callee +3:3 fieldSquare -> @fieldSquare
+  callee +4:3 fieldSub -> @fieldSub
+  callee +5:3 fieldSquare -> @fieldSquare
+  callee +6:3 fieldSub -> @fieldSub
+  callee +7:3 fieldAdd -> @fieldAdd
+  callee +8:3 fieldSub -> @fieldSub
   callee +9:3 fieldMul -> @fieldMul
-  callee +10:3 fieldSquareTimes -> @fieldSquareTimes
-  callee +11:3 fieldMul -> @fieldMul
-  callee +12:3 fieldSquareTimes -> @fieldSquareTimes
-  callee +13:3 fieldMul -> @fieldMul
+  callee +10:3 fieldMul -> @fieldMul
+  callee +11:3 fieldAdd -> @fieldAdd
+  callee +12:3 fieldSquare -> @fieldSquare
+  callee +13:3 fieldSub -> @fieldSub
   callee +14:3 fieldSquare -> @fieldSquare
   callee +15:3 fieldMul -> @fieldMul
-  callee +16:3 fieldSquareTimes -> @fieldSquareTimes
-  callee +17:3 fieldMul -> @fieldMul
-  callee +18:3 fieldSquareTimes -> @fieldSquareTimes
+  callee +16:3 fieldMul -> @fieldMul
+  callee +17:3 fieldMulA24 -> @fieldMulA24
+  callee +18:3 fieldAdd -> @fieldAdd
   callee +19:3 fieldMul -> @fieldMul
-  callee +20:3 fieldSquareTimes -> @fieldSquareTimes
-  callee +21:3 fieldMul -> @fieldMul
-  callee +22:3 fieldSquareTimes -> @fieldSquareTimes
-  callee +23:3 fieldMul -> @fieldMul
-  callee +24:3 fieldSquareTimes -> @fieldSquareTimes
-  callee +25:3 fieldMul -> @fieldMul
-  callee +26:3 fieldSquareTimes -> @fieldSquareTimes
-  callee +27:3 fieldMul -> @fieldMul
-  callee +28:3 fieldSquareTimes -> @fieldSquareTimes
-  callee +29:3 fieldMul -> @fieldMul
-  callee +30:3 fieldSquareTimes -> @fieldSquareTimes
-  callee +31:3 fieldMul -> @fieldMul
-function ladderLoop(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void -> @ladderLoop [exported]
+function ladderLoop(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[], a: i64[], aa: i64[], b: i64[], bb: i64[], e: i64[], c: i64[], d: i64[], da: i64[], cb: i64[], t: i64[]): void -> @ladderLoop
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ladderStep
   calls: condSwap ladderStep
@@ -421,6 +388,16 @@ function ladderLoop(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[
   pointer z3: size=0 writesThrough=true captured=false passedTo=ladderStep#3 condSwap#1
   pointer u: size=0 writesThrough=false captured=false passedTo=ladderStep#4
   pointer k: size=0 writesThrough=false captured=false
+  pointer a: size=0 writesThrough=true captured=false passedTo=ladderStep#6
+  pointer aa: size=0 writesThrough=true captured=false passedTo=ladderStep#7
+  pointer b: size=0 writesThrough=true captured=false passedTo=ladderStep#8
+  pointer bb: size=0 writesThrough=true captured=false passedTo=ladderStep#9
+  pointer e: size=0 writesThrough=true captured=false passedTo=ladderStep#10
+  pointer c: size=0 writesThrough=true captured=false passedTo=ladderStep#11
+  pointer d: size=0 writesThrough=true captured=false passedTo=ladderStep#12
+  pointer da: size=0 writesThrough=true captured=false passedTo=ladderStep#13
+  pointer cb: size=0 writesThrough=true captured=false passedTo=ladderStep#14
+  pointer t: size=0 writesThrough=true captured=false passedTo=ladderStep#15
   stackSites=0 stackLocals=0
   local +0:7 swap: i64 (let)
   local +1:12 byte: i32 (let)
@@ -429,12 +406,109 @@ function ladderLoop(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[
   callee +8:7 ladderStep -> @ladderStep
   callee +12:3 condSwap -> @condSwap
   callee +13:3 condSwap -> @condSwap
+function ladderStepScratch(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], swap: i64): void -> @ladderStepScratch [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ladderStep
+  escaping: swap
+  calls: ladderStep
+  pointer x2: size=0 writesThrough=true captured=false passedTo=ladderStep#0
+  pointer z2: size=0 writesThrough=true captured=false passedTo=ladderStep#1
+  pointer x3: size=0 writesThrough=true captured=false passedTo=ladderStep#2
+  pointer z3: size=0 writesThrough=true captured=false passedTo=ladderStep#3
+  pointer u: size=0 writesThrough=false captured=false passedTo=ladderStep#4
+  stackSites=10 stackLocals=10
+  local +0:9 a: i64[] (const)
+  local +1:9 aa: i64[] (const)
+  local +2:9 b: i64[] (const)
+  local +3:9 bb: i64[] (const)
+  local +4:9 e: i64[] (const)
+  local +5:9 c: i64[] (const)
+  local +6:9 d: i64[] (const)
+  local +7:9 da: i64[] (const)
+  local +8:9 cb: i64[] (const)
+  local +9:9 t: i64[] (const)
+  callee +10:3 ladderStep -> @ladderStep
+function ladderLoopScratch(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void -> @ladderLoopScratch [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ladderLoop
+  calls: ladderLoop
+  pointer x2: size=0 writesThrough=true captured=false passedTo=ladderLoop#0
+  pointer z2: size=0 writesThrough=true captured=false passedTo=ladderLoop#1
+  pointer x3: size=0 writesThrough=true captured=false passedTo=ladderLoop#2
+  pointer z3: size=0 writesThrough=true captured=false passedTo=ladderLoop#3
+  pointer u: size=0 writesThrough=false captured=false passedTo=ladderLoop#4
+  pointer k: size=0 writesThrough=false captured=false passedTo=ladderLoop#5
+  stackSites=10 stackLocals=10
+  local +0:9 a: i64[] (const)
+  local +1:9 aa: i64[] (const)
+  local +2:9 b: i64[] (const)
+  local +3:9 bb: i64[] (const)
+  local +4:9 e: i64[] (const)
+  local +5:9 c: i64[] (const)
+  local +6:9 d: i64[] (const)
+  local +7:9 da: i64[] (const)
+  local +8:9 cb: i64[] (const)
+  local +9:9 t: i64[] (const)
+  callee +10:3 ladderLoop -> @ladderLoop
+function indexAfterMul(f: i64[], g: i64[], table: i64[]): i64 -> @indexAfterMul [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: fieldMul
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldMul#1
+  pointer g: size=0 writesThrough=false captured=false passedTo=fieldMul#2
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 h: i64[] (const)
+  callee +1:3 fieldMul -> @fieldMul
+function ladderLoopToTopBit(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], k: u8[]): void -> @ladderLoopToTopBit [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ladderStep
+  calls: ladderStep
+  pointer x2: size=0 writesThrough=true captured=false passedTo=ladderStep#0
+  pointer z2: size=0 writesThrough=true captured=false passedTo=ladderStep#1
+  pointer x3: size=0 writesThrough=true captured=false passedTo=ladderStep#2
+  pointer z3: size=0 writesThrough=true captured=false passedTo=ladderStep#3
+  pointer u: size=0 writesThrough=false captured=false passedTo=ladderStep#4
+  pointer k: size=0 writesThrough=false captured=false
+  stackSites=10 stackLocals=10
+  local +0:9 a: i64[] (const)
+  local +1:9 aa: i64[] (const)
+  local +2:9 b: i64[] (const)
+  local +3:9 bb: i64[] (const)
+  local +4:9 e: i64[] (const)
+  local +5:9 c: i64[] (const)
+  local +6:9 d: i64[] (const)
+  local +7:9 da: i64[] (const)
+  local +8:9 cb: i64[] (const)
+  local +9:9 t: i64[] (const)
+  local +10:7 top: i32 (let)
+  local +14:7 swap: i64 (let)
+  local +15:12 at: i32 (let)
+  local +16:11 bit: i64 (const)
+  callee +18:5 ladderStep -> @ladderStep
+function decodeThroughTable(f: i64[], bytes: u8[], table: i64[]): void -> @decodeThroughTable [exported]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer f: size=0 writesThrough=true captured=false
+  pointer bytes: size=0 writesThrough=false captured=false
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -2:7 acc: i64 (let)
+  local -1:12 i: i32 (let)
+function fieldAddUnrolled(out: i64[], f: i64[], g: i64[]): void -> @fieldAddUnrolled [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldAdd
+  calls: fieldAdd
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldAdd#0
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldAdd#1
+  pointer g: size=0 writesThrough=false captured=false passedTo=fieldAdd#2
+  stackSites=0 stackLocals=0
+  callee +0:3 fieldAdd -> @fieldAdd
 function ladder(scalar: u8[], uBytes: u8[]): u8[] -> @ladder
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: fieldCopy fieldDecode fieldEncode fieldInvert fieldMul ladderLoop
   pointer scalar: size=0 writesThrough=false captured=false
   pointer uBytes: size=0 writesThrough=false captured=false passedTo=fieldDecode#0
-  stackSites=6 stackLocals=6
+  stackSites=15 stackLocals=15
   local +0:9 k: u8[] (const)
   local +1:12 i: i32 (let)
   local +6:9 u: i64[] (const)
@@ -444,11 +518,20 @@ function ladder(scalar: u8[], uBytes: u8[]): u8[] -> @ladder
   local +10:9 x3: i64[] (const)
   callee +11:3 fieldCopy -> @fieldCopy
   local +12:9 z3: i64[] (const)
-  callee +14:3 ladderLoop -> @ladderLoop
-  local +15:9 t: i64[] (const)
-  callee +16:3 fieldInvert -> @fieldInvert
-  callee +17:3 fieldMul -> @fieldMul
-  callee +18:10 fieldEncode -> @fieldEncode
+  local +14:9 a: i64[] (const)
+  local +15:9 aa: i64[] (const)
+  local +16:9 b: i64[] (const)
+  local +17:9 bb: i64[] (const)
+  local +18:9 e: i64[] (const)
+  local +19:9 c: i64[] (const)
+  local +20:9 d: i64[] (const)
+  local +21:9 da: i64[] (const)
+  local +22:9 cb: i64[] (const)
+  local +23:9 t: i64[] (const)
+  callee +24:3 ladderLoop -> @ladderLoop
+  callee +25:3 fieldInvert -> @fieldInvert
+  callee +26:3 fieldMul -> @fieldMul
+  callee +27:10 fieldEncode -> @fieldEncode
 function hexNibble(code: i32): i32 -> @hexNibble
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
