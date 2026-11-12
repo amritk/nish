@@ -28057,10 +28057,10 @@ if (!only || "sandbox dependency grants".includes(only)) {
         trueReal !== null && ir(runner).includes(`@.sandbox.exec = `) && ir(runner).includes(`c"${trueReal}\\00`),
         `the first \`true\` on PATH resolves to ${trueReal}\n${ir(runner)}`
       )
-      // SBX-1, recorded open in docs/security/sandbox.md: the allowlist grants
-      // EXECUTE on the granted program's ELF loader, and the loader runs any
-      // binary it is handed. This pins that it still does; closing SBX-1
-      // turns this check red, and it then pins the refusal instead.
+      // SBX-1, fixed (docs/security/sandbox.md): the allowlist must grant
+      // EXECUTE on the granted program's ELF loader, which runs any binary it
+      // is handed, so the compiler marks the loader `//` and the runtime
+      // refuses it, by file identity, as a spawn target of its own.
       const execList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(runner))
       const loaders =
         execList === null ? [] : execList[1].split("\\00").filter((p) => p !== "" && p !== trueReal)
@@ -28074,16 +28074,68 @@ if (!only || "sandbox dependency grants".includes(only)) {
       const ungrantedCc = spawnSync("clang", ["-O2", ungrantedSrc, "-o", ungranted], { encoding: "utf8" })
       if (loaders.length === 0 || ungrantedCc.status !== 0) {
         skip(
-          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or clang could not build the ungranted program (${ungrantedCc.stderr ?? ungrantedCc.error}); SBX-1 is not pinned`
+          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or clang could not build the ungranted program (${ungrantedCc.stderr ?? ungrantedCc.error}); SBX-1 is not checked`
         )
       } else {
-        const rLoader = run(allow, [loaders[0], ungranted])
+        const loader = loaders[0].replace(/^\/\//, "/")
+        const second = path.join(dir, "sbx-1-loader")
+        fs.rmSync(second, { force: true })
+        fs.symlinkSync(loader, second)
+        const rLoader = run(allow, [loader, ungranted])
+        const rSecond = run(allow, [second, ungranted])
+        const rLoaderPlain = run(open, [loader, ungranted])
         check(
-          "sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)",
-          rLoader !== null && rLoader.status === 0 && rLoader.stdout === "sbx-1\n0\n",
-          `${loaders[0]} ${ungranted}\n${said(rLoader)}`
+          "sandbox dependency grants: a granted program's ELF loader is refused as a spawn target (SBX-1)",
+          loaders[0].startsWith("//") &&
+            rLoader !== null &&
+            rLoader.status === 0 &&
+            rLoader.stdout === "-1\n" &&
+            rLoaderPlain !== null &&
+            rLoaderPlain.status === 0 &&
+            rLoaderPlain.stdout === "sbx-1\n0\n",
+          `${loaders[0]} ${ungranted}\n${said(rLoader)}\n--- without --sandbox\n${said(rLoaderPlain)}`
+        )
+        check(
+          "sandbox dependency grants: a second name for the loader is refused too (SBX-1)",
+          rSecond !== null && rSecond.status === 0 && rSecond.stdout === "-1\n",
+          `${second} -> ${loader}\n${said(rSecond)}`
         )
       }
+      // A `#!` script's interpreter is on the allowlist for the script's sake
+      // and refused named directly, unless the grant names it as well.
+      const script = (fixture) => fs.realpathSync(path.join(linkDir, fixture, "bin", "hello.sh"))
+      const scripted = "sandbox_dep_exec_script"
+      const sAllow = build(scripted, ["--sandbox"])
+      const sOpen = build(scripted, [])
+      const rScript = run(sAllow, [script(scripted)])
+      const rSh = run(sAllow, ["sh", "-c", "echo sh-ran"])
+      const rShPlain = run(sOpen, ["sh", "-c", "echo sh-ran"])
+      check(
+        "sandbox dependency grants: a granted #! script runs and its interpreter is refused as a spawn target (SBX-1)",
+        rScript !== null &&
+          rScript.status === 0 &&
+          rScript.stdout === "script-ran\n0\n" &&
+          rSh !== null &&
+          rSh.status === 0 &&
+          rSh.stdout === "-1\n" &&
+          rShPlain !== null &&
+          rShPlain.stdout === "sh-ran\n0\n",
+        `${said(rScript)}\n--- sh\n${said(rSh)}\n--- without --sandbox\n${said(rShPlain)}\n${ir(scripted)}`
+      )
+      const both = "sandbox_dep_exec_interpreter_granted"
+      const bAllow = build(both, ["--sandbox"])
+      const rBothScript = run(bAllow, [script(both)])
+      const rBothSh = run(bAllow, ["sh", "-c", "echo sh-ran"])
+      check(
+        "sandbox dependency grants: a program the grant names stays spawnable when it is also another's interpreter (SBX-1)",
+        rBothScript !== null &&
+          rBothScript.status === 0 &&
+          rBothScript.stdout === "script-ran\n0\n" &&
+          rBothSh !== null &&
+          rBothSh.status === 0 &&
+          rBothSh.stdout === "sh-ran\n0\n",
+        `${said(rBothScript)}\n--- sh\n${said(rBothSh)}\n${ir(both)}`
+      )
     }
   }
 }
