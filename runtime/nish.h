@@ -157,12 +157,7 @@ uint64_t nish_arena_used(void);
  * on a child region or a region with children. `nish_region_child_new` makes
  * a region whose parent is the one entered last on this thread, and panics
  * when none is; freeing a region frees its children, deepest first, and
- * panics before freeing anything when any of them is entered.
- * `nish_region_recycle` empties a region as `nish_region_free` does, children
- * and all, but leaves its handle live: the region keeps its newest chunk,
- * rewound, when that chunk holds at most `keep` bytes, and answers the bytes
- * kept (0 when it kept none); a finished task's region, for the task that
- * next takes its node. The wasm
+ * panics before freeing anything when any of them is entered. The wasm
  * profile has none of these (scripts/build.sh refuses IR that names them);
  * wasi has. */
 uint64_t nish_region_new(void);
@@ -170,7 +165,6 @@ uint64_t nish_region_child_new(void);
 void *nish_region_enter(uint64_t r);
 void nish_region_leave(uint64_t r, void *root);
 void nish_region_free(uint64_t r);
-uint64_t nish_region_recycle(uint64_t r, uint64_t keep);
 void nish_region_adopt(uint64_t r);
 
 /* ---- The async executor (runtime-async.c) --------------------------------
@@ -180,8 +174,8 @@ void nish_region_adopt(uint64_t r);
  * in, with a region of its own; `nish_async_enter` makes a node the running
  * task and enters its region, answering the task it displaced, which
  * `nish_async_leave` restores; `nish_async_done` empties a finished task's
- * region and reuses its node, region and all. `nish_async_wait_fd` (`dir` 0 readable, 1
- * writable) and `nish_async_sleep` answer a token `nish_async_poll` reads: -1
+ * region and reuses its node, region and all. `nish_async_wait_fd` (`dir` 0
+ * readable, 1 writable) and `nish_async_sleep` answer a token `nish_async_poll` reads: -1
  * pending, 1 ready, 0 failed. `nish_async_next` answers the next task to
  * resume, blocking in the kernel until one is ready, or null when nothing is
  * ready and nothing waits. `nish_async_stat` answers 0: nodes allocated, 1:

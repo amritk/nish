@@ -1,0 +1,10 @@
+a node's first task starts with no chunk: yes
+of 100000 later tasks, entered with the kept chunk: 100000, entered empty: 100000
+peak resident size moved after round 100: no
+nodes: 4
+a chunk past 64 KiB is not kept: yes
+a small task after it keeps its chunk again: yes
+600 tasks of 60000 bytes at once, then again: fewer than all kept a chunk: yes
+what they kept is 16 MiB to 16 MiB and one chunk: yes
+a third burst found the same kept: yes
+live: 0

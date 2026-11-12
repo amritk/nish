@@ -52,13 +52,16 @@
  * whenever the task runs and emptied when it finishes, so whatever a task
  * allocates is given back when it ends. The driver enters and leaves around
  * each resume (`nish_async_enter`, `nish_async_leave`). A node keeps its
- * region from its first task on: `nish_async_done` recycles it
- * (`nish_region_recycle`) rather than freeing it, so the node's next task
- * makes no region, and bumps from the newest chunk the last one left when
- * that chunk is at most 64 KiB (`NISH_ASYNC_KEEP`), so a task that fits it
- * asks `malloc` for nothing. A larger chunk is freed, and once the free
+ * region from its first task on: `nish_async_done` enters it once more and
+ * rewinds it (`nish_reset_arena`) rather than freeing it, so the node's next
+ * task makes no region, and bumps from the newest chunk the last one left
+ * when that chunk is at most 64 KiB (`NISH_ASYNC_KEEP`), so a task that fits
+ * it asks `malloc` for nothing. The region keeps its handle and generation:
+ * the handle never leaves this file, and a task's region has no children
+ * (NL2351), so no copy of it is made stale by living on. A larger chunk is freed, and once the free
  * nodes keep 16 MiB between them (`NISH_ASYNC_KEEP_TOTAL`) a finishing task
- * keeps none, so a burst of large tasks does not pin its high-water mark.
+ * keeps none and its region starts again from its first chunk size, so a
+ * burst of large tasks does not pin its high-water mark.
  * The kept chunk is not zeroed: arena memory never is, and the compiler
  * initialises what the language promises (docs/security/async.md,
  * ASYNC-20).
@@ -193,6 +196,7 @@ static int32_t nish_async_live; /* spawned tasks not yet done, each holding a re
 #define NISH_ASYNC_KEEP_TOTAL ((uint64_t)1 << 24)
 #define NISH_TASK_KEPT_SHIFT 8
 static uint64_t nish_async_kept; /* bytes the free nodes' regions keep */
+extern NISH_TLS uint64_t nish_region_chunk; /* runtime.c: the entered region's next chunk size */
 
 enum { NISH_ASYNC_OOM, NISH_ASYNC_POLLER, NISH_ASYNC_TOO_MANY, NISH_ASYNC_WAIT };
 #define NISH_ASYNC_MSG(text) { sizeof text - 1, text }
@@ -333,7 +337,14 @@ void nish_async_done(void *node) {
     }
     t->flags &= ~NISH_TASK_QUEUED;
   }
-  uint64_t kept = nish_region_recycle(t->region, nish_async_kept < NISH_ASYNC_KEEP_TOTAL ? NISH_ASYNC_KEEP : 0);
+  nish_region_enter(t->region);
+  nish_reset_arena();
+  if (nish_arena.cap > (nish_async_kept < NISH_ASYNC_KEEP_TOTAL ? NISH_ASYNC_KEEP : 0)) {
+    nish_free_arena();
+    nish_region_chunk = 8;
+  }
+  uint64_t kept = nish_arena.cap;
+  nish_region_leave(t->region, NULL);
   nish_async_kept += kept;
   t->flags = (uint32_t)kept << NISH_TASK_KEPT_SHIFT;
   nish_async_live--;

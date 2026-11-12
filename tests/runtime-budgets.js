@@ -757,8 +757,15 @@ const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1792
  * and taking a task off the ready queue when it finishes queued (ASYNC-18). Measured
  * **3,797 bytes** against 2,627 on 2026-11-09 with clang 18.1.3 on linux-x64; the next
  * 256-byte boundary.
+ *
+ * Raised to 4,096 by recycling (stage 6, ASYNC-20): `nish_async_done` rewinds a finished
+ * task's region and the node keeps it, with the per-chunk and total bounds on what is
+ * kept and the count of kept bytes, in place of `nish_region_free` and a new region per
+ * spawn. Measured **3,910 bytes** against 3,797 on 2026-11-12 with clang 18.1.3 on
+ * linux-x64 (3,921 with `-DNISH_THREADS=1`, where the arena it rewinds is thread-local);
+ * the next 256-byte boundary. `runtime-region.c` did not move.
  */
-const RUNTIME_ASYNC_TEXT_BUDGET = 3840
+const RUNTIME_ASYNC_TEXT_BUDGET = 4096
 
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
