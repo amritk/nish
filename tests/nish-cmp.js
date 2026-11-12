@@ -1144,6 +1144,16 @@ const DECLARED = [
     changelog: "carrier idle timeout",
     why: "the program reads TlsServer.group or TlsTcpServer.idleTimeout, which the 0.38.0 seed's std/net does not have, so only the candidate compiles it",
   })),
+  // WP39 G3: the record_size_limit tests import TLS_RECORD_SIZE_LIMIT_MAX and
+  // read TlsServer.peerRecordSizeLimit, new in std/net.
+  ...["tests/link/net_tls_record_size_limit/main.ts", "tests/link/net_tls_record_size_limit_f64/main.ts"].map(
+    (program) => ({
+      program,
+      file: "exit",
+      changelog: "size_limit on the TLS server",
+      why: "the program imports TLS_RECORD_SIZE_LIMIT_MAX from nish/net/tls/codec, which the 0.38.0 seed's std/net does not export, so only the candidate compiles it",
+    })
+  ),
   // WP21 S3: a freestanding wasm32 build that reaches a hostless builtin is
   // refused by reachability, after every module is checked.
   ...["tests/link/package_wasm_hostless/main.ts", "tests/link/wasm_hostless_own/main.ts"].map((program) => ({
