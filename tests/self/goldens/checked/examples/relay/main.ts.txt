@@ -874,6 +874,7 @@ import exposeWith from "nish:secret" -> generic function exposeWith
 import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
 const QUIC_CONN_CID_LENGTH: i32 = 8 [exported]
+const QUIC_WORKER_MAX: i32 = 255 [exported]
 const QUIC_CONN_DATAGRAM_SIZE: i32 = 1200 [exported]
 const QUIC_CONN_DATAGRAM_MAX: i32 = 1452 [exported]
 const QUIC_CONN_ENTROPY_SIZE: i32 = 104 [exported]
@@ -925,7 +926,7 @@ const QUIC_CONN_ALERT_UNEXPECTED: i64 = 10
 const QUIC_CONN_SENT_HANDSHAKE_DONE: i32 = 1
 const QUIC_CONN_CONTROL_NEW_CID: i32 = 1
 const QUIC_CONN_CONTROL_RETIRE: i32 = 2
-struct QuicServerConfig (interface) size=112 align=8 exported
+struct QuicServerConfig (interface) size=120 align=8 exported
   field certificateChain: u8[][] index=0 offset=0
   field alpn: string[] index=1 offset=8
   field signatureScheme: i32 index=2 offset=16
@@ -941,6 +942,8 @@ struct QuicServerConfig (interface) size=112 align=8 exported
   field retryTokenLifetime: i64 index=12 offset=88
   field statelessResetKey: u8[] index=13 offset=96
   field retryTokenKey: u8[] index=14 offset=104
+  field workerIndex: i32 index=15 offset=112
+  field workerCount: i32 index=16 offset=116
 struct QuicStreamData (class) size=24 align=8 exported
   field streamId: i64 index=0 offset=0 initialized
   field data: u8[] index=1 offset=8
@@ -1258,6 +1261,17 @@ struct QuicConnection (class) size=752 align=8 exported
   method release -> @nish.QuicConnection.release
   method wipeAll -> @nish.QuicConnection.wipeAll
   method wipe -> @nish.QuicConnection.wipe
+function quicWorkerCheck(config: QuicServerConfig): void -> @nish.quicWorkerCheck [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  pointer config: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 k: i32 (const)
+  local +1:9 n: i32 (const)
+function quicWorkerByte(config: QuicServerConfig): i32 -> @nish.quicWorkerByte [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer config: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function QuicStreamData.constructor(this: QuicStreamData, streamId: i64, data: u8[], fin: boolean): void -> @nish.QuicStreamData.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: data fin streamId
@@ -1625,10 +1639,19 @@ function quicConnEphemeralIn(held: u8[], entropy: u8[]): i32 -> @nish.quicConnEp
   pointer entropy: size=0 writesThrough=false captured=false passedTo=nish.quicCidCopy#1
   stackSites=0 stackLocals=0
   callee +0:3 quicCidCopy -> @nish.quicCidCopy
+function quicWorkerMark(config: QuicServerConfig, cid: u8[]): void -> @nish.quicWorkerMark
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.quicWorkerByte
+  pointer config: size=120 writesThrough=false captured=false passedTo=nish.quicWorkerByte#0
+  pointer cid: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -2:9 k: i32 (const)
+  callee -2:18 quicWorkerByte -> @nish.quicWorkerByte
 function quicConnConfigFits(config: QuicServerConfig): boolean -> @nish.quicConnConfigFits
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer config: size=112 writesThrough=false captured=false
+  pointer config: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicConnection.constructor(this: QuicConnection, config: QuicServerConfig, entropy: u8[]): void -> @nish.QuicConnection.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
@@ -1636,7 +1659,7 @@ function QuicConnection.constructor(this: QuicConnection, config: QuicServerConf
   escaping: config
   calls: nish.HkdfScratch.constructor nish.QuicCidTable.constructor nish.QuicConnReassembly.constructor nish.QuicConnSpace.constructor nish.QuicConnection.begin nish.QuicDatagramQueue.constructor nish.QuicFrame.constructor nish.QuicHeader.constructor nish.QuicPacket.constructor nish.QuicRecovery.constructor nish.QuicStreams.constructor nish.QuicTransportParameters.constructor nish.quicConnConfigFits nish.quicConnForgetSkips nish.secret$arr.u8 nish_alloc_struct nish_panic
   pointer this: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.begin#0
-  pointer config: size=112 writesThrough=true captured=true passedTo=nish.quicConnConfigFits#0
+  pointer config: size=120 writesThrough=true captured=true passedTo=nish.quicConnConfigFits#0
   pointer entropy: size=0 writesThrough=true captured=false passedTo=nish.QuicConnection.begin#1
   stackSites=0 stackLocals=0
   callee +0:22 secret<u8[]> -> @nish.secret$arr.u8
@@ -1698,13 +1721,14 @@ function QuicConnection.reset(this: QuicConnection, entropy: u8[]): void -> @nis
 function QuicConnection.begin(this: QuicConnection, entropy: u8[]): void -> @nish.QuicConnection.begin [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.QuicConnection.startClosingPeriod nish.exposeWith$arr.u8$arr.u8$i32$fn.24.nish.quicConnEphemeralIn nish.quicCidCopy nish.quicConnConfigFits nish_wipe
+  calls: nish.QuicConnection.startClosingPeriod nish.exposeWith$arr.u8$arr.u8$i32$fn.24.nish.quicConnEphemeralIn nish.quicCidCopy nish.quicConnConfigFits nish.quicWorkerMark nish_wipe
   pointer this: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.startClosingPeriod#0
   pointer entropy: size=0 writesThrough=true captured=false passedTo=nish.quicCidCopy#1 nish.exposeWith$arr.u8$arr.u8$i32$fn.24.nish.quicConnEphemeralIn#1 nish.quicCidCopy#1 nish.quicCidCopy#1
   stackSites=0 stackLocals=0
-  callee -5:5 quicCidCopy -> @nish.quicCidCopy
-  callee -4:5 exposeWith<u8[], u8[], i32, quicConnEphemeralIn> -> @nish.exposeWith$arr.u8$arr.u8$i32$fn.24.nish.quicConnEphemeralIn
-  callee -3:5 quicCidCopy -> @nish.quicCidCopy
+  callee -6:5 quicCidCopy -> @nish.quicCidCopy
+  callee -5:5 exposeWith<u8[], u8[], i32, quicConnEphemeralIn> -> @nish.exposeWith$arr.u8$arr.u8$i32$fn.24.nish.quicConnEphemeralIn
+  callee -4:5 quicCidCopy -> @nish.quicCidCopy
+  callee -3:5 quicWorkerMark -> @nish.quicWorkerMark
   callee -2:5 quicCidCopy -> @nish.quicCidCopy
   local -1:11 fits: boolean (const)
   callee -1:79 quicConnConfigFits -> @nish.quicConnConfigFits
@@ -2519,12 +2543,13 @@ function QuicConnection.deriveConnectionId(this: QuicConnection, sequence: i64):
 function QuicConnection.topUpConnectionIds(this: QuicConnection): void -> @nish.QuicConnection.topUpConnectionIds [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.QuicCidTable.activeLocal nish.QuicCidTable.addLocal nish.QuicConnection.deriveConnectionId nish.quicConnResetTokenInto nish_wipe
+  calls: nish.QuicCidTable.activeLocal nish.QuicCidTable.addLocal nish.QuicConnection.deriveConnectionId nish.quicConnResetTokenInto nish.quicWorkerMark nish_wipe
   pointer this: size=752 writesThrough=false captured=false passedTo=nish.QuicConnection.deriveConnectionId#0
   stackSites=0 stackLocals=0
-  local -16:9 want: i64 (let)
-  callee -12:69 QuicCidTable.activeLocal -> @nish.QuicCidTable.activeLocal
-  callee -11:7 QuicConnection.deriveConnectionId -> @nish.QuicConnection.deriveConnectionId
+  local -17:9 want: i64 (let)
+  callee -13:69 QuicCidTable.activeLocal -> @nish.QuicCidTable.activeLocal
+  callee -12:7 QuicConnection.deriveConnectionId -> @nish.QuicConnection.deriveConnectionId
+  callee -11:7 quicWorkerMark -> @nish.quicWorkerMark
   callee -10:7 quicConnResetTokenInto -> @nish.quicConnResetTokenInto
   local -1:13 added: i64 (const)
   callee -1:26 QuicCidTable.addLocal -> @nish.QuicCidTable.addLocal
@@ -21054,6 +21079,8 @@ import QUIC_CONN_STATIC_KEY_SIZE from "nish/net/quic" -> const QUIC_CONN_STATIC_
 import QuicConnection from "nish/net/quic" -> struct QuicConnection
 import QuicServerConfig from "nish/net/quic" -> struct QuicServerConfig
 import quicConnResetTokenInto from "nish/net/quic" -> function @nish.quicConnResetTokenInto
+import quicWorkerByte from "nish/net/quic" -> function @nish.quicWorkerByte
+import quicWorkerCheck from "nish/net/quic" -> function @nish.quicWorkerCheck
 const QUIC_LISTEN_DROP: i32 = 0 [exported]
 const QUIC_LISTEN_ACCEPT: i32 = 1 [exported]
 const QUIC_LISTEN_VERSION_NEGOTIATION: i32 = 2 [exported]
@@ -21200,11 +21227,12 @@ function QuicListener.constructor(this: QuicListener, config: QuicServerConfig, 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: +0:5
   escaping: config
-  calls: nish.AesKey.constructor nish.HkdfScratch.constructor nish.QuicHeader.constructor nish.QuicKeysSlot.constructor nish.QuicListenerAnswer.constructor nish.QuicPacket.constructor nish.aesKeyInto nish.quicListenerRetryKey nish.quicPacketCopy nish_alloc_struct nish_panic nish_wipe
+  calls: nish.AesKey.constructor nish.HkdfScratch.constructor nish.QuicHeader.constructor nish.QuicKeysSlot.constructor nish.QuicListenerAnswer.constructor nish.QuicPacket.constructor nish.aesKeyInto nish.quicListenerRetryKey nish.quicPacketCopy nish.quicWorkerCheck nish_alloc_struct nish_panic nish_wipe
   pointer this: size=192 writesThrough=true captured=false
-  pointer config: size=112 writesThrough=true captured=true
+  pointer config: size=120 writesThrough=true captured=true passedTo=nish.quicWorkerCheck#0
   pointer entropy: size=0 writesThrough=true captured=false passedTo=nish.quicPacketCopy#2
   stackSites=0 stackLocals=0
+  callee -28:5 quicWorkerCheck -> @nish.quicWorkerCheck
   callee -25:5 quicPacketCopy -> @nish.quicPacketCopy
   callee -21:19 new QuicHeader -> @nish.QuicHeader.constructor
   callee -20:16 new HkdfScratch -> @nish.HkdfScratch.constructor
@@ -21260,7 +21288,7 @@ function QuicListener.handleWindow(this: QuicListener, datagram: u8[], at: i32, 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len now
-  calls: nish.QuicListener.invalidToken nish.QuicListener.retry nish.QuicListener.statelessReset nish.QuicListener.tokenValid nish.QuicListener.versionNegotiation nish.quicListenerRefill nish.quicListenerResize nish.quicListenerWindowFits nish.quicParseHeaderInto nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  calls: nish.QuicListener.invalidToken nish.QuicListener.retry nish.QuicListener.statelessReset nish.QuicListener.tokenValid nish.QuicListener.versionNegotiation nish.quicListenerRefill nish.quicListenerResize nish.quicListenerWindowFits nish.quicParseHeaderInto nish.quicWorkerByte nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
   pointer this: size=192 writesThrough=true captured=false passedTo=nish.QuicListener.versionNegotiation#0 nish.QuicListener.statelessReset#0 nish.QuicListener.retry#0 nish.QuicListener.tokenValid#0 nish.QuicListener.invalidToken#0
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.quicParseHeaderInto#1 nish.QuicListener.versionNegotiation#2 nish.QuicListener.statelessReset#3 nish.QuicListener.retry#2 nish.QuicListener.tokenValid#1 nish.quicListenerRefill#1 nish.quicListenerRefill#1 nish.QuicListener.invalidToken#2
   pointer address: size=0 writesThrough=false captured=false passedTo=nish.QuicListener.retry#4 nish.QuicListener.tokenValid#3
@@ -21273,13 +21301,15 @@ function QuicListener.handleWindow(this: QuicListener, datagram: u8[], at: i32, 
   local +11:11 header: QuicHeader (const)
   callee +12:5 quicParseHeaderInto -> @nish.quicParseHeaderInto
   callee +17:9 QuicListener.versionNegotiation -> @nish.QuicListener.versionNegotiation
-  callee +25:7 QuicListener.statelessReset -> @nish.QuicListener.statelessReset
-  local +33:11 tokenAt: i32 (const)
-  callee +39:7 QuicListener.retry -> @nish.QuicListener.retry
-  callee +42:9 QuicListener.tokenValid -> @nish.QuicListener.tokenValid
-  callee +45:7 quicListenerRefill -> @nish.quicListenerRefill
-  callee +51:7 quicListenerRefill -> @nish.quicListenerRefill
-  callee +54:5 QuicListener.invalidToken -> @nish.QuicListener.invalidToken
+  local +28:13 owner: i32 (const)
+  callee +30:9 quicWorkerByte -> @nish.quicWorkerByte
+  callee +36:7 QuicListener.statelessReset -> @nish.QuicListener.statelessReset
+  local +44:11 tokenAt: i32 (const)
+  callee +50:7 QuicListener.retry -> @nish.QuicListener.retry
+  callee +53:9 QuicListener.tokenValid -> @nish.QuicListener.tokenValid
+  callee +56:7 quicListenerRefill -> @nish.quicListenerRefill
+  callee +62:7 quicListenerRefill -> @nish.quicListenerRefill
+  callee +65:5 QuicListener.invalidToken -> @nish.QuicListener.invalidToken
 function QuicListener.handle(this: QuicListener, datagram: u8[], address: u8[], now: i64): QuicListenerAnswer -> @nish.QuicListener.handle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via nish.QuicListener.handleWindow
@@ -21362,32 +21392,34 @@ function QuicListener.tokenValid(this: QuicListener, datagram: u8[], header: Qui
   local +5:14 k: i32 (let)
 function QuicListener.retry(this: QuicListener, answer: QuicListenerAnswer, datagram: u8[], header: QuicHeader, address: u8[]): void -> @nish.QuicListener.retry [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish.QuicListener.randomByte nish.QuicListener.randomInto nish.QuicListener.retryTag nish.QuicListener.tokenMac nish.quicListenerPutNumber nish.quicListenerResize nish.quicPacketCopy nish_panic_index nish_panic_overflow nish_wipe
+  sharedWrite: +0:7
+  calls: nish.QuicListener.randomByte nish.QuicListener.randomInto nish.QuicListener.retryTag nish.QuicListener.tokenMac nish.quicListenerPutNumber nish.quicListenerResize nish.quicPacketCopy nish.quicWorkerByte nish_panic_index nish_panic_overflow nish_wipe
   pointer this: size=192 writesThrough=true captured=false passedTo=nish.QuicListener.randomInto#0 nish.QuicListener.tokenMac#0 nish.QuicListener.randomByte#0 nish.QuicListener.retryTag#0
   pointer answer: size=40 writesThrough=true captured=false
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2 nish.quicPacketCopy#2 nish.QuicListener.retryTag#3
   pointer header: size=88 writesThrough=false captured=false
   pointer address: size=0 writesThrough=false captured=false passedTo=nish.QuicListener.tokenMac#7
   stackSites=0 stackLocals=0
-  local -9:11 scidLength: i32 (const)
-  local -8:11 odcidLength: i32 (const)
-  local -7:11 retryScidAt: i32 (const)
-  local -6:11 tokenAt: i32 (const)
-  local -5:11 macAt: i32 (const)
-  local -4:11 tagAt: i32 (const)
-  local -3:11 reply: u8[] (const)
-  callee -2:5 quicListenerResize -> @nish.quicListenerResize
-  callee -1:5 QuicListener.randomInto -> @nish.QuicListener.randomInto
-  callee +1:5 quicListenerPutNumber -> @nish.quicListenerPutNumber
-  callee +3:5 quicPacketCopy -> @nish.quicPacketCopy
-  callee +4:5 QuicListener.tokenMac -> @nish.QuicListener.tokenMac
+  local -12:11 scidLength: i32 (const)
+  local -11:11 odcidLength: i32 (const)
+  local -10:11 retryScidAt: i32 (const)
+  local -9:11 tokenAt: i32 (const)
+  local -8:11 macAt: i32 (const)
+  local -7:11 tagAt: i32 (const)
+  local -6:11 reply: u8[] (const)
+  callee -5:5 quicListenerResize -> @nish.quicListenerResize
+  callee -4:5 QuicListener.randomInto -> @nish.QuicListener.randomInto
+  local -3:11 worker: i32 (const)
+  callee -3:25 quicWorkerByte -> @nish.quicWorkerByte
+  callee +3:5 quicListenerPutNumber -> @nish.quicListenerPutNumber
   callee +5:5 quicPacketCopy -> @nish.quicPacketCopy
-  callee +7:22 QuicListener.randomByte -> @nish.QuicListener.randomByte
-  callee +8:5 quicListenerPutNumber -> @nish.quicListenerPutNumber
-  callee +10:5 quicPacketCopy -> @nish.quicPacketCopy
-  callee +12:9 QuicListener.retryTag -> @nish.QuicListener.retryTag
-  callee +15:7 quicListenerResize -> @nish.quicListenerResize
+  callee +6:5 QuicListener.tokenMac -> @nish.QuicListener.tokenMac
+  callee +7:5 quicPacketCopy -> @nish.quicPacketCopy
+  callee +9:22 QuicListener.randomByte -> @nish.QuicListener.randomByte
+  callee +10:5 quicListenerPutNumber -> @nish.quicListenerPutNumber
+  callee +12:5 quicPacketCopy -> @nish.quicPacketCopy
+  callee +14:9 QuicListener.retryTag -> @nish.QuicListener.retryTag
+  callee +17:7 quicListenerResize -> @nish.quicListenerResize
 function QuicListener.retryTag(this: QuicListener, reply: u8[], tagAt: i32, datagram: u8[], odcidAt: i32, odcidLength: i32): boolean -> @nish.QuicListener.retryTag [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_arena_release
@@ -28035,7 +28067,7 @@ function Http3Server.constructor(this: Http3Server, quicConfig: QuicServerConfig
   escaping: config fd quicConfig size
   calls: nish.BufferPool.constructor nish.Http3CidIndex.constructor nish.Http3Wheel.constructor nish.HttpDate.constructor nish.HttpDate.current nish.QuicListener.constructor nish.QuicListenerAnswer.constructor nish.QuicStreamPools.constructor nish.TlsP256Signer.constructor nish.quicStreamGrowFree nish_alloc_struct nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
   pointer this: size=280 writesThrough=true captured=false
-  pointer quicConfig: size=112 writesThrough=true captured=true passedTo=nish.QuicListener.constructor#1
+  pointer quicConfig: size=120 writesThrough=true captured=true passedTo=nish.QuicListener.constructor#1
   pointer config: size=20 writesThrough=true captured=true
   pointer listenerEntropy: size=0 writesThrough=true captured=false passedTo=nish.Http3CidIndex.constructor#2 nish.QuicListener.constructor#2
   stackSites=0 stackLocals=0
