@@ -84,6 +84,7 @@
  *
  * Written from RFC 9113 §3 and §9.2, not ported from another implementation.
  */
+import { monotonicNanos } from "nish:process"
 import { Secret } from "nish:secret"
 import { HttpDate } from "nish/net/http1-server"
 import { H2_ERROR, H2_NEED_MORE, Http2Config, Http2Connection, Http2Pools } from "nish/net/http2"
@@ -124,6 +125,11 @@ export class Http2TlsServer {
   date: HttpDate
   /** The frame buffers every slot's connection borrows: one of each per slot at most, none made up front. */
   readonly pools: Http2Pools
+  /**
+   * No slot can expire before this (`monotonicNanos`), so `expire` called
+   * sooner answers 0 without walking the slots.
+   */
+  private expireAfter: i64 = 0
 
   /**
    * A pool of `size` slots, at least one, serving HTTP/2 under `config` over
@@ -254,6 +260,7 @@ export class Http2TlsServer {
       this.build()
     }
     this.connections[slot].restart()
+    this.connections[slot].begin(monotonicNanos())
     return slot
   }
 
@@ -334,6 +341,7 @@ export class Http2TlsServer {
         break
       }
       conn.received(n)
+      conn.lastActive = monotonicNanos()
     }
     const event: i32 = conn.next()
     // What the program answers to one event and the next shares a record:
@@ -373,6 +381,7 @@ export class Http2TlsServer {
         break
       }
       conn.consume(n)
+      conn.lastActive = monotonicNanos()
     }
     if (conn.isDone()) {
       return this.tls.shutdown(slot)
@@ -392,6 +401,45 @@ export class Http2TlsServer {
       this.connections[slot].drop()
     }
     this.tls.close(slot)
+  }
+
+  /**
+   * Ends every slot whose connection has outlived a timeout at `now`: a
+   * client that has not acknowledged the server's SETTINGS within
+   * `settingsTimeout` of its accept, the TLS handshake included, is sent
+   * GOAWAY SETTINGS_TIMEOUT (RFC 9113 §6.5.3) once its handshake is done, and
+   * one with nothing moved for `idleTimeout`, mid-stream or lingering after
+   * its `close_notify`, GOAWAY NO_ERROR; each frame goes as far as the socket
+   * takes it now, and the slot is closed. A program calls it from its loop, with
+   * `pollWait`'s timeout no longer than the shorter of the two.
+   *
+   * @param now the current time in `monotonicNanos`, which both timeouts are measured against
+   * @returns how many slots this call closed
+   */
+  expire(now: i64): i32 {
+    if (now < this.expireAfter) {
+      return 0
+    }
+    const config: Http2Config = this.config
+    const shorter: i32 =
+      config.settingsTimeout < config.idleTimeout ? config.settingsTimeout : config.idleTimeout
+    let soonest: i64 = now + toI64(shorter) * toI64(1000000)
+    let n: i32 = 0
+    for (let k: i32 = 0; k < toI32(this.connections.length); k++) {
+      if (this.tls.holds(k)) {
+        const conn: Http2Connection = this.connections[k]
+        if (conn.expired(now)) {
+          conn.timeOut(now)
+          this.flush(k)
+          this.close(k)
+          n = n + 1
+        } else if (conn.expiresNoSooner(now) < soonest) {
+          soonest = conn.expiresNoSooner(now)
+        }
+      }
+    }
+    this.expireAfter = soonest
+    return n
   }
 
   /**

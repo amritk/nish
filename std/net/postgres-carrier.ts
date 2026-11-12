@@ -73,16 +73,32 @@
  * **Errors.** A connection that is refused, reset, closed or past its connect
  * timeout fails every query on it with `PG_CARRIER_FAILED`, `failure` the
  * connection's `PG_ERR_*` and `socketError` the socket's negative errno
- * (`-110` for the timeout, 0 when the server closed cleanly). A plain query
+ * (`-110` for the timeout, 0 when the server closed cleanly; under TLS, see
+ * below). A plain query
  * the server refuses answers `PG_CARRIER_ERROR`, then `PG_CARRIER_FAILED`
  * with `failure` `PG_ERR_NONE`; a batched query the server refuses answers
  * only `PG_CARRIER_FAILED` with `failure` `PG_ERR_NONE`.
  * Programming errors (a cap out of range, an unknown batcher id, `send()`
  * with no build open) panic.
  *
- * `tests/link/std_postgres_carrier` runs one against a loopback backend;
- * `tests/postgres/carrier.ts` against a live server. Caps and findings:
- * `docs/security/postgres.md`.
+ * **TLS.** With `PgConfig.tls` set to `PG_TLS_REQUIRE` or `PG_TLS_VERIFY_FULL`,
+ * each connection opens with an SSLRequest and reads exactly the one byte of
+ * its answer, so nothing the server sends in the clear reaches the protocol:
+ * after `N` nothing more is read, and after `S` the next bytes are the
+ * handshake's, so anything else fails it. `S` goes on to a TLS 1.3 handshake
+ * (`nish/net/tls/record-client`) driven on the same loop without blocking, the
+ * StartupMessage held until it is done; any other answer fails the connection
+ * with `PG_ERR_TLS`. Under `PG_TLS_VERIFY_FULL` the server's chain is checked
+ * with `nish/net/tls/verify` against `PgConfig.tlsRootsPath` (or the system's
+ * store) and its name against `tlsServerName` (or the target's host);
+ * `PG_TLS_REQUIRE` encrypts without checking who answered. A refused
+ * certificate or failed handshake is `PG_ERR_TLS` with `socketError` the TLS
+ * alert (positive); a refused SSLRequest has `socketError` 0. TLS needs a TCP
+ * target.
+ *
+ * `tests/link/std_postgres_carrier` runs one against a loopback backend,
+ * `tests/link/std_postgres_tls` one over TLS; `tests/postgres/carrier.ts`
+ * against a live server. Caps and findings: `docs/security/postgres.md`.
  *
  * Written for this module; not ported from another implementation.
  */
@@ -103,10 +119,14 @@ import {
   PG_READY,
   PG_ROW,
   PG_TARGET_OK,
+  PG_TLS_DISABLE,
+  PG_TLS_VERIFY_FULL,
   PgBatcher,
+  PgConfig,
   PgConnection,
   PgPool,
   PgTarget,
+  pgSslRequest,
 } from "nish/net/postgres"
 import {
   connectResult,
@@ -122,7 +142,13 @@ import {
   tcpConnect,
   unixConnect,
 } from "nish:net"
-import { monotonicNanos } from "nish:process"
+import { monotonicNanos, wallClockNanos } from "nish:process"
+import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
+import { TlsClient, TlsClientConfig } from "nish/net/tls/client"
+import { TLS_GROUP_SECP256R1, TLS_GROUP_X25519 } from "nish/net/tls/codec"
+import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client"
+import { TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_OPEN } from "nish/net/tls/record-server"
+import { TlsClientTrust, tlsClientTrust, tlsClientVerdict } from "nish/net/tls/verify"
 
 /** The client nonce a SCRAM exchange starts with, as `PgPool.connect` takes it. */
 const PG_CARRIER_NONCE_BYTES: i32 = 18
@@ -163,6 +189,22 @@ const PG_CARRIER_DISPATCH: i32 = 2
 const PG_CARRIER_FLUSH: i32 = 3
 /** `pgCarrierDispatch`: look again, something is owed. */
 const PG_CARRIER_AGAIN_PASS: i32 = -1
+/** A slot's TLS phase: none, the connection is cleartext. */
+const PG_CARRIER_TLS_OFF: i32 = 0
+/** A slot's TLS phase: the SSLRequest is being sent, or its answer awaited. */
+const PG_CARRIER_TLS_ASK: i32 = 1
+/** A slot's TLS phase: the server said `S`; the handshake is under way. */
+const PG_CARRIER_TLS_HANDSHAKE: i32 = 2
+/** A slot's TLS phase: the handshake is done; the protocol runs inside it. */
+const PG_CARRIER_TLS_OPEN: i32 = 3
+/** The bytes of key material a TLS client starts from: its random, an x25519 and a P-256 private key. */
+const PG_CARRIER_TLS_KEY_BYTES: i32 = 32
+/** The most ciphertext read from a socket at once: one largest record and its header. */
+const PG_CARRIER_TLS_READ_BYTES: i32 = 16645
+/** A zero that stays `i32` under `--number-mode f64`: no bytes, no offset, no alert. */
+const PG_CARRIER_ZERO: i32 = 0
+/** The byte a server answers an SSLRequest with to go on with TLS. */
+const PG_CARRIER_TLS_YES: i32 = 83
 
 /**
  * The caps a `PgCarrier` is built with, all set before it starts: nothing
@@ -227,6 +269,18 @@ export class PgCarrier {
   private readonly made: boolean[]
   private readonly deadlines: i64[]
   private readonly errors: i32[]
+  // TLS (`PgConfig.tls`): the name checked and the roots it is checked
+  // against, each slot's phase (`PG_CARRIER_TLS_*`), its client, how much of
+  // the SSLRequest has gone out; the SSLRequest itself, the one byte its
+  // answer is read into, and the buffer ciphertext is read through.
+  private readonly tlsName: string
+  private readonly trust: TlsClientTrust | null
+  private readonly tlsPhase: i32[]
+  private readonly tlsConns: (TlsRecordClient | null)[]
+  private readonly tlsAsked: i32[]
+  private readonly sslRequest: u8[]
+  private readonly tlsAnswer: u8[]
+  private readonly tlsInput: u8[]
   // Each query's tag, request, pool ticket (-1 for a batched one), whether
   // the server failed it, and the stack of free ones.
   private readonly qTags: i32[]
@@ -256,6 +310,7 @@ export class PgCarrier {
   failure: i32 = 0
   /** Behind a `PG_CARRIER_FAILED` for a lost connection: the socket error that ended it (`-110` for a connect timeout), or 0. */
   socketError: i32 = 0
+  private readonly tlsMode: i32
   private readonly watchId: i32
   private readonly loop: i32
   private qFreeCount: i32 = 0
@@ -282,7 +337,9 @@ export class PgCarrier {
   /**
    * A carrier for `pool`'s connections to `target`, its descriptor watched on
    * `handler` as `limits.watch`. Panics on a cap or watch id out of range,
-   * a target that failed or is not a numeric address, or a poll set the
+   * a target that failed or is not a numeric address, TLS asked for on a Unix
+   * socket, `PG_TLS_VERIFY_FULL` with no root certificate to read from
+   * `tlsRootsPath` (or the system's store), or a poll set the
    * system will not create. It allocates every table here and opens its poll
    * set, but connects nothing until the first `next()`.
    *
@@ -315,6 +372,16 @@ export class PgCarrier {
     if (!target.unix && netAddress(this.address, target.host, target.port) < 0) {
       panic("nish/net/postgres-carrier: a PgCarrier's TCP host must be a numeric address")
     }
+    const config: PgConfig = pool.settings()
+    this.tlsMode = config.tls
+    if (this.tlsMode !== PG_TLS_DISABLE && target.unix) {
+      panic("nish/net/postgres-carrier: PgConfig.tls asks for TLS on a Unix socket")
+    }
+    if (this.tlsMode !== PG_TLS_DISABLE) {
+      pool.carryTls()
+    }
+    this.tlsName = config.tlsServerName.length > 0 ? config.tlsServerName : target.host
+    this.trust = this.tlsMode === PG_TLS_VERIFY_FULL ? pgCarrierTrust(config.tlsRootsPath) : null
     this.pool = pool
     this.handler = handler
     this.watchId = limits.watch
@@ -330,6 +397,14 @@ export class PgCarrier {
     this.made = new Array<boolean>(size)
     this.deadlines = new Array<i64>(size)
     this.errors = new Array<i32>(size)
+    this.tlsPhase = new Array<i32>(size)
+    this.tlsConns = new Array<TlsRecordClient | null>(size)
+    this.tlsAsked = new Array<i32>(size)
+    this.sslRequest = pgSslRequest()
+    this.tlsAnswer = new Array<u8>(1)
+    this.tlsInput = new Array<u8>(
+      this.tlsMode !== PG_TLS_DISABLE ? PG_CARRIER_TLS_READ_BYTES : PG_CARRIER_ZERO
+    )
     for (let s: i32 = 0; s < size && s < toI32(this.fds.length); s++) {
       this.fds[s] = -1
     }
@@ -646,8 +721,15 @@ export class PgCarrier {
       const fd: i32 = this.fds[s]
       if (fd >= 0) {
         const conn: PgConnection = this.pool.connection(s)
-        conn.terminate()
-        this.flush(conn, fd)
+        const tls: TlsRecordClient | null = this.tlsConns[s]
+        if (this.tlsPhase[s] === PG_CARRIER_TLS_OFF || this.tlsPhase[s] === PG_CARRIER_TLS_OPEN) {
+          conn.terminate()
+          this.flushSlot(s, conn, fd)
+        }
+        if (tls !== null) {
+          tls.close()
+          this.flushTls(tls, fd)
+        }
         this.dropSocket(s, fd)
       }
     }
@@ -700,6 +782,12 @@ export class PgCarrier {
       }
       this.connected[s] = true
     }
+    if (this.tlsPhase[s] !== PG_CARRIER_TLS_OFF) {
+      if ((bits & PG_CARRIER_READ_BITS) !== 0) {
+        this.serviceTls(s, fd, conn)
+      }
+      return
+    }
     const room: i32 = conn.inputRoom()
     if ((bits & PG_CARRIER_READ_BITS) !== 0 && room > 0) {
       const got: i32 = netRead(fd, conn.inputBuffer(), conn.inputEnd(), room)
@@ -716,6 +804,123 @@ export class PgCarrier {
     this.pool.connection(s).closed()
     this.errors[s] = error
     this.deadlines[s] = 0
+  }
+
+  // Reads slot `s`'s socket under TLS: the one byte answering the
+  // SSLRequest, else ciphertext for the record layer, whose plaintext is
+  // then moved into the connection's input.
+  private serviceTls(s: i32, fd: i32, conn: PgConnection): void {
+    if (this.tlsPhase[s] === PG_CARRIER_TLS_ASK) {
+      if (this.tlsAsked[s] < toI32(this.sslRequest.length)) {
+        // The answer is read only once the whole SSLRequest is out.
+        return
+      }
+      // Exactly one byte, so nothing the server sends in the clear around
+      // it reaches the backend parser (CVE-2021-23222): bytes after `N` are
+      // never read, and bytes after `S` go to the record layer as the start
+      // of the handshake, which a TLS server's ServerHello must be, so
+      // anything else fails it.
+      const got: i32 = netRead(fd, this.tlsAnswer, 0, 1)
+      if (got === PG_CARRIER_AGAIN) {
+        return
+      }
+      if (got <= 0) {
+        this.fail(s, got)
+      } else if (toI32(this.tlsAnswer[0]) !== PG_CARRIER_TLS_YES) {
+        this.failTls(s, PG_CARRIER_ZERO)
+      } else {
+        this.tlsConns[s] = pgCarrierTlsStart(this.tlsName)
+        this.tlsPhase[s] = PG_CARRIER_TLS_HANDSHAKE
+      }
+      return
+    }
+    const tls: TlsRecordClient | null = this.tlsConns[s]
+    if (tls === null) {
+      return
+    }
+    let room: i32 = tls.space()
+    if (room > toI32(this.tlsInput.length)) {
+      room = toI32(this.tlsInput.length)
+    }
+    if (room > 0) {
+      const got: i32 = netRead(fd, this.tlsInput, 0, room)
+      if (got > 0) {
+        tls.receive(this.tlsInput, PG_CARRIER_ZERO, got)
+      } else if (got === 0) {
+        tls.end()
+      } else if (got !== PG_CARRIER_AGAIN) {
+        tls.abort()
+        this.fail(s, got)
+        return
+      }
+    }
+    this.advanceTls(s, tls, conn)
+  }
+
+  // Gives slot `s`'s handshake the verdict it waits on, notes it open, and
+  // moves what plaintext `conn` has room for into its input: whether any
+  // moved, so that `next()` looks at the slot again.
+  private advanceTls(s: i32, tls: TlsRecordClient, conn: PgConnection): boolean {
+    if ((tls.interest() & TLS_RECORD_AUTH) !== 0) {
+      const trust: TlsClientTrust | null = this.trust
+      if (trust !== null) {
+        const verdict: i32 = tlsClientVerdict(tls.tls, trust, wallClockNanos() / toI64(1000000))
+        if (verdict !== 0) {
+          tls.reject(verdict)
+        } else {
+          tls.authenticate(true)
+        }
+      } else {
+        // PG_TLS_REQUIRE: encryption against a passive eavesdropper only,
+        // as libpq's `sslmode=require`; `docs/security/postgres.md` argues it.
+        tls.authenticate(true)
+      }
+    }
+    if (tls.state === TLS_RECORD_STATE_FAILED) {
+      this.failTls(s, tls.failure())
+      return false
+    }
+    if (this.tlsPhase[s] === PG_CARRIER_TLS_HANDSHAKE && tls.state === TLS_RECORD_STATE_OPEN) {
+      this.tlsPhase[s] = PG_CARRIER_TLS_OPEN
+    }
+    if (this.tlsPhase[s] !== PG_CARRIER_TLS_OPEN) {
+      return false
+    }
+    let moved: boolean = false
+    let room: i32 = conn.inputRoom()
+    while (room > 0) {
+      const got: i32 = tls.read(conn.inputBuffer(), conn.inputEnd(), room)
+      if (got > 0) {
+        conn.received(got)
+        moved = true
+      } else if (got === 0) {
+        // The server's close_notify: the stream ended cleanly.
+        this.fail(s, PG_CARRIER_ZERO)
+        return true
+      } else {
+        if (tls.state === TLS_RECORD_STATE_FAILED) {
+          this.failTls(s, tls.failure())
+          return true
+        }
+        return moved
+      }
+      room = conn.inputRoom()
+    }
+    return moved
+  }
+
+  // Fails slot `s` with `PG_ERR_TLS`: `alert` the TLS alert behind it, 0
+  // for a refused SSLRequest. One write sends the alert a refusal sealed,
+  // when the socket has room for it.
+  private failTls(s: i32, alert: i32): void {
+    this.pool.connection(s).tlsFailed()
+    this.errors[s] = alert
+    this.deadlines[s] = 0
+    const tls: TlsRecordClient | null = this.tlsConns[s]
+    const fd: i32 = this.fds[s]
+    if (tls !== null && fd >= 0) {
+      this.flushTls(tls, fd)
+    }
   }
 
   // The events of every slot's connection, resuming at `at`.
@@ -958,6 +1163,8 @@ export class PgCarrier {
         this.interest[slot] = H1_WANT_WRITE
         this.errors[slot] = 0
         this.deadlines[slot] = deadline
+        this.tlsPhase[slot] = this.tlsMode !== PG_TLS_DISABLE ? PG_CARRIER_TLS_ASK : PG_CARRIER_TLS_OFF
+        this.tlsAsked[slot] = 0
         const fd: i32 = this.unix ? unixConnect(this.path) : tcpConnect(this.address)
         this.fds[slot] = fd
         if (fd < 0) {
@@ -979,19 +1186,108 @@ export class PgCarrier {
       if (conn.failure !== PG_ERR_NONE) {
         continue
       }
-      const written: i32 = this.flush(conn, fd)
+      const tls: TlsRecordClient | null = this.tlsConns[s]
+      if (tls !== null && this.advanceTls(s, tls, conn)) {
+        // Plaintext the record layer held, which no poll would report.
+        failed = true
+      }
+      if (conn.failure !== PG_ERR_NONE) {
+        failed = true
+        continue
+      }
+      const written: i32 = this.flushSlot(s, conn, fd)
       if (written < 0) {
+        if (tls !== null) {
+          tls.abort()
+        }
         this.fail(s, written)
         failed = true
         continue
       }
-      const wants: i32 = conn.outputEnd() > conn.outputStart() ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
+      const wants: i32 = this.pending(s, conn) ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
       if (wants !== this.interest[s]) {
         pollModify(this.loop, fd, wants, s)
         this.interest[s] = wants
       }
     }
     return failed
+  }
+
+  // Whether slot `s` has bytes for the socket that it has not taken.
+  private pending(s: i32, conn: PgConnection): boolean {
+    const phase: i32 = this.tlsPhase[s]
+    if (phase === PG_CARRIER_TLS_ASK) {
+      return this.tlsAsked[s] < toI32(this.sslRequest.length)
+    }
+    const tls: TlsRecordClient | null = this.tlsConns[s]
+    if (tls !== null && tls.outputEnd > tls.outputStart) {
+      return true
+    }
+    return (
+      (phase === PG_CARRIER_TLS_OFF || phase === PG_CARRIER_TLS_OPEN) && conn.outputEnd() > conn.outputStart()
+    )
+  }
+
+  // Writes what slot `s` owes its socket, as its TLS phase has it: the
+  // SSLRequest, the handshake, `conn`'s bytes sealed, or `conn`'s bytes as
+  // they are. The socket error when it fails, else 0.
+  private flushSlot(s: i32, conn: PgConnection, fd: i32): i32 {
+    const phase: i32 = this.tlsPhase[s]
+    if (phase === PG_CARRIER_TLS_OFF) {
+      return this.flush(conn, fd)
+    }
+    if (phase === PG_CARRIER_TLS_ASK) {
+      const request: u8[] = this.sslRequest
+      while (this.tlsAsked[s] < toI32(request.length)) {
+        const n: i32 = netWrite(fd, request, this.tlsAsked[s], toI32(request.length) - this.tlsAsked[s])
+        if (n === PG_CARRIER_AGAIN) {
+          return 0
+        }
+        if (n <= 0) {
+          return n < 0 ? n : -1
+        }
+        this.tlsAsked[s] += n
+      }
+      return 0
+    }
+    const tls: TlsRecordClient | null = this.tlsConns[s]
+    if (tls === null) {
+      return 0
+    }
+    while (true) {
+      const written: i32 = this.flushTls(tls, fd)
+      if (written !== 0 || tls.outputEnd > tls.outputStart) {
+        return written
+      }
+      if (phase !== PG_CARRIER_TLS_OPEN || conn.outputEnd() <= conn.outputStart()) {
+        return 0
+      }
+      const sealed: i32 = tls.write(
+        conn.outputBuffer(),
+        conn.outputStart(),
+        conn.outputEnd() - conn.outputStart()
+      )
+      if (sealed <= 0) {
+        return 0
+      }
+      conn.sent(sealed)
+    }
+  }
+
+  // Writes the records `tls` has sealed until the socket takes no more; the
+  // socket error when it fails, else 0.
+  private flushTls(tls: TlsRecordClient, fd: i32): i32 {
+    while (tls.outputEnd > tls.outputStart) {
+      const n: i32 = netWrite(fd, tls.output, tls.outputStart, tls.outputEnd - tls.outputStart)
+      if (n === PG_CARRIER_AGAIN) {
+        return 0
+      }
+      if (n <= 0) {
+        return n < 0 ? n : -1
+      }
+      tls.consume(n)
+    }
+    return 0
   }
 
   // Writes what `conn` queued until the socket takes no more; the socket
@@ -1026,6 +1322,11 @@ export class PgCarrier {
     pollRemove(this.loop, fd)
     netClose(fd)
     this.fds[s] = -1
+    const tls: TlsRecordClient | null = this.tlsConns[s]
+    if (tls !== null) {
+      tls.wipe()
+      this.tlsConns[s] = null
+    }
   }
 
   // Answers query `q`'s final `event`; the query is freed on the next call.
@@ -1118,4 +1419,36 @@ export class PgCarrier {
     }
     this.mapKeys[i] = -1
   }
+}
+
+/**
+ * The roots `PG_TLS_VERIFY_FULL` checks a server's chain against: the PEM
+ * file at `path`, or the system's store when it is empty. Panics when no
+ * root could be read, since no server could then be trusted.
+ */
+const pgCarrierTrust = (path: string): TlsClientTrust => {
+  const roots: PkiRoots = path.length > 0 ? pkiLoadRoots(path, [], []) : pkiLoadSystemRoots()
+  if (toI32(roots.roots.length) === 0) {
+    panic("nish/net/postgres-carrier: PG_TLS_VERIFY_FULL with no root certificate to read")
+  }
+  return tlsClientTrust(roots)
+}
+
+/**
+ * A TLS 1.3 client for `name`, offering ALPN `postgresql` as libpq does,
+ * with fresh random and key shares; `TlsClient` copies the keys and zeroes
+ * the arrays they came in. It offers secp256r1 beside x25519: a server
+ * before PostgreSQL 18 accepts only `ssl_ecdh_curve`, prime256v1 unless
+ * set, and asks for that share with a HelloRetryRequest.
+ */
+const pgCarrierTlsStart = (name: string): TlsRecordClient => {
+  const random: u8[] = new Array<u8>(PG_CARRIER_TLS_KEY_BYTES)
+  const x25519: u8[] = new Array<u8>(PG_CARRIER_TLS_KEY_BYTES)
+  const p256: u8[] = new Array<u8>(PG_CARRIER_TLS_KEY_BYTES)
+  crypto.getRandomValues(random)
+  crypto.getRandomValues(x25519)
+  crypto.getRandomValues(p256)
+  const config = new TlsClientConfig(name, ["postgresql"])
+  config.groups = [TLS_GROUP_X25519, TLS_GROUP_SECP256R1]
+  return new TlsRecordClient(new TlsClient(config, random, x25519, p256))
 }

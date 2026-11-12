@@ -56,7 +56,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 51 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 52 modules.
 
 </scalar-card>
 
@@ -187,6 +187,7 @@ Every diagnostic code, what it means and a program that provokes it.
 | [`nish/net/http1-client-codec`](net/http1-client-codec.md) | The client side of HTTP/1.1, sans-IO: a request writer and an incremental response parser, bytes in, events and bytes out, and no socket anywhere. |
 | [`nish/net/http1-codec`](net/http1-codec.md) | An incremental HTTP/1.1 request parser and a response writer, sans-IO: bytes in, events and bytes out, and no socket anywhere. |
 | [`nish/net/http1-server`](net/http1-server.md) | The server side of HTTP/1.1 (RFC 9112): a sans-IO connection that drives `nish/net/http1-codec`'s parser, and two pools of them for a program that owns its readiness loop, one on `nish:net`'s plain TCP and one on `nish/net/tls-tcp` with ALPN `http/1.1`. |
+| [`nish/net/http2-cleartext`](net/http2-cleartext.md) | HTTP/2 over plain TCP with prior knowledge (h2c, RFC 9113 §3.3): a pool of `Http2Connection`s, one per accepted socket, for a program that owns its readiness loop. |
 | [`nish/net/http2-frame`](net/http2-frame.md) | The frames of HTTP/2 (RFC 9113 §4 and §6): the nine-byte header, every one of the ten frame types read and written, and the size, flag, padding and stream-identifier rules each one carries. |
 | [`nish/net/http2-tls`](net/http2-tls.md) | HTTP/2 over TLS 1.3 on TCP: a pool of `Http2Connection`s, one beside each slot of a `TlsTcpServer`, for a program that owns its readiness loop. |
 | [`nish/net/http2`](net/http2.md) | The server side of an HTTP/2 connection (RFC 9113): the connection preface, SETTINGS and their acknowledgement, the stream state machine of §5.1, flow control on the connection and on every stream with WINDOW_UPDATE, PING, RST_STREAM, GOAWAY with the last stream identifier, header blocks across CONTINUATION frames decoded by `nish/net/hpack`, and extended CONNECT (RFC 8441). |
