@@ -1,6 +1,6 @@
 You are implementing one stage of an accepted plan. Work only this stage.
 
-Repo: amritk/nish          Base: main at 60e5be7140e1201aaa0d9a589b00dc2bf3173f4f
+Repo: amritk/nish          Base: main at 7e241d75bba344b3b6daefbabedff844da4ef6d3
 Branch: feature/wp34-finish/quic-congestion   (already assigned — commit and push here, nothing else)
 Tracking issue: #1430
 
@@ -9,20 +9,25 @@ Read the repo's CLAUDE.md (and AGENTS.md, .claude/orientation.md and the guides 
 ## Your stage: quic-congestion
 Title: test(net): the interop runner's congestion cases
 Goal: Q3 — the quic-interop-runner job runs crosstraffic and goodput and they pass
-Owns (do not create or edit files outside these globs): `.github/workflows/interop.yml` (the `quic-interop-runner` job only), `tests/interop/runner-verdict.py`, `tests/interop/simulator.dockerfile`, `std/net/quic-recovery.ts`, `tests/link/net_quic_recovery*`
+Owns (do not create or edit files outside these globs): `.github/workflows/interop.yml` (the `quic-interop-runner` job and `RUNNER_CASES` only), `tests/interop/runner-verdict.py`, `tests/interop/runner-requirements.txt`, `tests/interop/simulator.dockerfile`, `std/net/quic-recovery.ts`, `tests/link/net_quic_recovery/**`, `tests/link/net_quic_recovery_f64/**`, `docs/security/quic.md`
 Verification: node tests/run.js net_quic_recovery && npm run check && npm run lint, then the interop workflow green on the PR head
 Targeted tests: node tests/run.js <filter> for the sections you touch
 Generated files (regenerate with the repo's tooling, never edit or hand-merge): tests/self/goldens/checked/**, tests/differential/** goldens, docs/reference/**, docs/cookbook/** regen outputs, tests/differential/emit-ts-known.txt (only under CI's pinned Node)
 
 Todos:
 - Add the congestion testcases to the quic-interop-runner job and runner-verdict.py — see quic-congestion
-- Fix what they expose in std/net/quic-recovery.ts — see quic-congestion
+- Fix what they expose in std/net/quic-recovery.ts, each fix pinned by a net_quic_recovery case that fails without it — see quic-congestion
 
 The plan's detail for this stage:
-**Owns:** `.github/workflows/interop.yml` (the `quic-interop-runner` job only), `tests/interop/runner-verdict.py`, `tests/interop/simulator.dockerfile`, `std/net/quic-recovery.ts`, `tests/link/net_quic_recovery*`
+**Owns:** `.github/workflows/interop.yml` (the `quic-interop-runner` job and `RUNNER_CASES` only), `tests/interop/runner-verdict.py`, `tests/interop/runner-requirements.txt`, `tests/interop/simulator.dockerfile`, `std/net/quic-recovery.ts`, `tests/link/net_quic_recovery/**`, `tests/link/net_quic_recovery_f64/**`, `docs/security/quic.md`
 
-Starts after `quic-pmtu` and `http1-interop` merge (it shares `quic-recovery.ts` with the first and `interop.yml` with the second). Proven only in CI.
+`RUNNER_CASES` today (interop.yml line 119) has no measurement case. Add `crosstraffic` and `goodput` (the runner's measurements) and teach `runner-verdict.py` to judge them. Proven only in CI: there is no docker daemon in a cloud session, so the PR's own Interop run is the evidence, and every tuning change to `quic-recovery.ts` is also pinned by a loopback `net_quic_recovery` case so it can fail without the runner. Do not weaken or drop an existing runner case to get green. `#1458` made the datagram size variable; keep the window and pacer correct for it.
 
+Lessons from the first run of this plan — each one cost a PR a red CI cycle or a review round:
+- A field added to a class in std/ goes in widest first. CI's performance gate refuses NL9010 padding in every program that links the class; run `node tests/run.js performance` before pushing any std/ change that adds a field.
+- A test that cannot fail is a blocking review finding. For every test you add, make the change it pins fail once (revert the fix locally, or break the property) and see the test go red before you trust it.
+- A std/ change that moves a nish-cmp corpus program's IR needs its DECLARED entries in tests/nish-cmp.js in the same push; run nish-cmp before pushing.
+- Another run (`wp39-complete`, issue #1433) is live in this repository and main moves often. Do not chase it: sync only on a conflict or when the lead says it is your turn to merge.
 
 
 Reproducing CI — each CI job and the local command that runs what it runs. A red
