@@ -287,10 +287,12 @@ const quicStreamScan = (bits: u8[], from: i32, to: i32, on: boolean): i32 => {
     }
     k = k + 1
   }
-  const length: i32 = toI32(bits.length) << 3
-  const whole: i32 = (to < length ? to : length) & ~7
+  const bytes: i32 = toI32(bits.length)
+  const whole: i32 = (to < bytes << 3 ? to : bytes << 3) & ~7
   let at: i32 = k >> 3
-  while (k >= 0 && k < whole && toI32(bits[at]) === full) {
+  // `at` is `k >> 3` and `whole` is within the array, so the bounds on `at` hold whenever `k`'s do; they
+  // are what the bounds pass reads to drop the check on `bits[at]`.
+  while (at >= 0 && at < bytes && k < whole && toI32(bits[at]) === full) {
     k = k + 8
     at = at + 1
   }
