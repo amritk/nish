@@ -234,6 +234,7 @@ import {
   Node,
   nodeName,
 } from "./nodes"
+import { compatMetadata } from "./compat"
 import { Options } from "./options"
 import { TbaaCache } from "./tbaa"
 import { irEscapeInto, StringBuilder } from "./strings"
@@ -551,6 +552,12 @@ export class Emitter {
       for (const flag of hardeningModuleFlags()) {
         this.module.addModuleFlag(flag)
       }
+    }
+    // WP28: the dialect, in every module of a compat build and in none of a
+    // strict one. After the flags, so it renumbers nothing either.
+    if (this.opts.compat) {
+      const node = this.module.addMetadata(compatMetadata(this.opts))
+      this.module.addNamedMetadata(`!nish.compat = !{${node}}`)
     }
     const sites = this.panicSites
     if (sites !== null) {

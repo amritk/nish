@@ -65,6 +65,7 @@ import { CLI, VERSION } from "./branding"
 import { agentDriven, Style, styleFor } from "../std/cli"
 import { helpHint, helpText } from "./cli-style"
 import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
+import { compatFeatureNames, compatHasFeature, compatKnownText } from "./compat"
 import { Compilation, EmittedModule } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
@@ -681,6 +682,7 @@ export const main = (): number => {
         return 2
       }
       opts.numberMode = mode === "f64" ? NUMBER_MODE_F64 : NUMBER_MODE_I32
+      opts.numberModeFlag = true
     } else if (value === "-o" || value === "--output") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -854,14 +856,24 @@ export const main = (): number => {
       opts.deterministic = true
     } else if (value === "--compat") {
       opts.compat = true
+      opts.compatFlag = true
+      opts.compatFeatures = compatFeatureNames()
     } else if (value.startsWith("--compat=")) {
-      // The dialect takes no value yet: a feature list is a later release's,
-      // and a value read as a bare `--compat` would compile today and mean
-      // something else then.
-      console.error(
-        `compile: \`--compat\` takes no value, and \`${value}\` gives it one: the compatibility dialect accepts nothing yet, so write a bare \`--compat\``
-      )
-      return 2
+      // Exactly the features named. A name this compiler has not built is
+      // refused rather than dropped: the build would otherwise succeed in a
+      // narrower dialect than the one that was asked for.
+      const asked = splitByte(value.substring("--compat=".length, value.length), COMMA)
+      for (const name of asked) {
+        if (!compatHasFeature(name)) {
+          console.error(
+            `compile: \`${value}\` names \`${name}\`, which is no feature of the compatibility dialect: ${compatKnownText()}, and a bare \`--compat\` allows every one`
+          )
+          return 2
+        }
+      }
+      opts.compat = true
+      opts.compatFlag = true
+      opts.compatFeatures = asked
     } else if (value === "--strict-exports") {
       opts.strictExports = true
     } else if (value === "--no-strict-exports") {

@@ -23,6 +23,7 @@
 // biggest single difference between the two compilers: 193 of its 206 rows.
 
 import { FactsTable, FunctionFacts } from "./attributes"
+import { compatCheckedLine } from "./compat"
 import { Compilation, isUnusedArrayImport, ModuleUnit } from "./compilation"
 import { SourceFile } from "./diagnostics"
 import { EFFECT_READ, EFFECT_WRITE } from "./runtime"
@@ -435,6 +436,10 @@ export const checkedText = (compilation: Compilation): string => {
   // memoised there and here so a compile that also emits does not pay twice.
   const facts = compilation.analyze()
   const out: string[] = []
+  // WP28: the dialect, for a compat build alone, so a strict dump is the one it was.
+  if (compilation.opts.compat) {
+    out.push(compatCheckedLine(compilation.opts))
+  }
   for (const unit of compilation.modules) {
     if (compilation.isUnusedArrayModule(unit)) {
       continue

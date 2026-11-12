@@ -36,6 +36,7 @@ export const main = (): number => {
       } else {
         opts.numberMode = NUMBER_MODE_I32
       }
+      opts.numberModeFlag = true
     } else if (value.startsWith("-")) {
       // Refused rather than taken as the path, which is what the `else` below
       // used to do with it: a flag this entry point does not know silently

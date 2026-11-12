@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 920
+export const RULE_COUNT: i32 = 923
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -533,6 +533,8 @@ const diagnosticRules = (): string[] => [
   "NL2566",
   "`case` label must be an integer literal, a module constant, or an enum member (LLVM's `switch` table holds constants)",
   "NL2284",
+  "` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host` and `compat`, each written once",
+  "NL3036",
   " has type `number`, whose width `--number-mode` chooses: a C struct field has one layout, so spell it `i32` or `f64`",
   "NL2755",
   "` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length",
@@ -595,8 +597,6 @@ const diagnosticRules = (): string[] => [
   "NL3039",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
   "NL2055",
-  "` field is one object, written once, whose keys are `noPanic`, `capabilities` and `host`, each written once",
-  "NL3036",
   "An `async` function's return type is `Promise<T>`: write the answer `T` inside it, `Promise<void>` for none",
   "NL2655",
   "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)",
@@ -629,6 +629,8 @@ const diagnosticRules = (): string[] => [
   "NL2278",
   "A `case` clause cannot declare a variable directly; wrap the clause body in a block (`case 1: { ... }`)",
   "NL2165",
+  ", which the root package's `compat` does not allow: a program is compiled in its root package's dialect",
+  "NL3057",
   "; a `declare function` binds the C symbol of its name in every package, so rename the defined function",
   "NL3040",
   "` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const`",
@@ -1195,6 +1197,8 @@ const diagnosticRules = (): string[] => [
   "NL2241",
   // The NL4002 fragment matches nothing now: the --emit-header comment it came from names runtime-text.c since WP50 stage 4.
   " modules listed below. Link the .ll module(s) and",
+  " is no feature of the compatibility dialect: `",
+  "NL3056",
   "NL4002",
   ", and a declared C function returns a scalar only",
   "NL2304",
@@ -1887,6 +1891,8 @@ const performanceRules = (): string[] => [
   "NL9014",
   " functions, more than eight, so it branches on a `switch` of them where a direct call would not",
   "NL9017",
+  "beside the compatibility dialect: a bare `number` is the 32-bit integer",
+  "NL9018",
   "so entering the range keeps its check on every iteration of this loop",
   "NL9013",
   "allocates a dynamically sized array on every iteration of this loop",
