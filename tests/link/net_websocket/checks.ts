@@ -182,6 +182,22 @@ const refusalOf = (hex: string, server: boolean): i32 => {
   return drain(d, log) === WS_ERROR ? d.closeCode : 0;
 };
 
+/** The transcript of a server's decoder fed `data` one byte at a time, ending at its last event. */
+const byteAtATime = (data: u8[]): string => {
+  const maxMessage: i32 = 300;
+  const d: WsDecoder = new WsDecoder(true, maxMessage);
+  const log: string[] = [];
+  const one: i32 = 1;
+  for (let k: i32 = 0; k < toI32(data.length); k += 1) {
+    d.feed(data, k, one);
+    const last: i32 = drain(d, log);
+    if (last !== WS_NEED_MORE) {
+      log.push(describe(d, last));
+    }
+  }
+  return log.join("\n");
+};
+
 /** `n` copies of `b` as hex. */
 const repeatHex = (b: string, n: i32): string => {
   const parts: string[] = [];
@@ -738,6 +754,18 @@ export const websocketChecks = (): i32 => {
   }
   // The bad byte in the first fragment is refused before the message ends.
   t.eqI32("refused with 1007 at the first fragment: c0 never starts a character", refusalOf("0101c0", false), WS_CLOSE_INVALID_DATA);
+  // §8.1 fails fast: a bad byte is refused as soon as it arrives, while the
+  // rest of its frame is still owed (Autobahn 6.4.3 and 6.4.4).
+  t.eqI32("refused with 1007 inside a frame still arriving", refusalOf("817e00c8 48656cc0", false), WS_CLOSE_INVALID_DATA);
+  t.eqI32("refused with 1007 inside a masked frame still arriving", refusalOf("81fe00c8 37fa213d 7f9f4dfd", true), WS_CLOSE_INVALID_DATA);
+  t.eqI32("refused with 1007 inside a continuation still arriving", refusalOf("010348656c 007e00c8 ff", false), WS_CLOSE_INVALID_DATA);
+  t.eqI32("a valid prefix of a frame still arriving is not refused", refusalOf("817e00c8 48656c6cce", false), zero);
+  t.eqStr("masked text fed a byte at a time", byteAtATime(fromHex("818537fa213d7f9f4d5158")), 'text "Hello"');
+  t.eqStr(
+    "masked text fragments fed a byte at a time",
+    byteAtATime(fromHex("018237fa213d7f9f 808337fa213d5b964e")),
+    'text "Hello"'
+  );
   t.eqI32("refused with 1009: a 301-byte message", refusalOf(`827e012d${repeatHex("00", 301)}`, false), WS_CLOSE_TOO_BIG);
   t.eqI32("refused with 1009 from the header alone", refusalOf("827e012d", false), WS_CLOSE_TOO_BIG);
   t.eqI32(
