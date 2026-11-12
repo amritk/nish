@@ -79,16 +79,17 @@ struct HttpRequest (class) size=120 align=8 exported
   field targetStart: i32 index=10 offset=64 initialized
   field targetEnd: i32 index=11 offset=68 initialized
   field pathEnd: i32 index=12 offset=72 initialized
-  field headerCount: i32 index=13 offset=76 initialized
-  field bodyLength: i32 index=14 offset=80 initialized
-  field slot: i32 index=15 offset=84 initialized
-  field gen: i32 index=16 offset=88 initialized
-  field index: i32 index=17 offset=92 initialized
-  field state: i32 index=18 offset=96 initialized
-  field pendingStart: i32 index=19 offset=100 initialized
-  field pendingEnd: i32 index=20 offset=104 initialized
-  field queryValueStart: i32 index=21 offset=108 initialized
-  field queryValueEnd: i32 index=22 offset=112 initialized
+  field headLength: i32 index=13 offset=76 initialized
+  field headerCount: i32 index=14 offset=80 initialized
+  field bodyLength: i32 index=15 offset=84 initialized
+  field slot: i32 index=16 offset=88 initialized
+  field gen: i32 index=17 offset=92 initialized
+  field index: i32 index=18 offset=96 initialized
+  field state: i32 index=19 offset=100 initialized
+  field pendingStart: i32 index=20 offset=104 initialized
+  field pendingEnd: i32 index=21 offset=108 initialized
+  field queryValueStart: i32 index=22 offset=112 initialized
+  field queryValueEnd: i32 index=23 offset=116 initialized
   constructor -> @nish.HttpRequest.constructor
   method methodIs -> @nish.HttpRequest.methodIs
   method pathIs -> @nish.HttpRequest.pathIs
@@ -471,10 +472,10 @@ function HttpHandler.roomy(this: HttpHandler, conn: Http1Connection): boolean ->
   pointer conn: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function HttpHandler.begin(this: HttpHandler, slot: i32, conn: Http1Connection): void -> @nish.HttpHandler.begin [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: slot
-  calls: nish.HttpHandler.obtain nish.HttpHandler.route nish.copyBytes nish.handlerGrown nish_panic nish_panic_index nish_panic_overflow
+  calls: nish.HttpHandler.obtain nish.HttpHandler.route nish.copyBytes nish.handlerGrown nish_panic nish_panic_index nish_panic_slice
   pointer this: size=264 writesThrough=false captured=false passedTo=nish.HttpHandler.obtain#0 nish.HttpHandler.route#0
   pointer conn: size=192 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -484,11 +485,8 @@ function HttpHandler.begin(this: HttpHandler, slot: i32, conn: Http1Connection):
   local +4:11 length: i32 (const)
   callee +6:30 handlerGrown -> @nish.handlerGrown
   callee +8:5 copyBytes -> @nish.copyBytes
-  local +9:11 spanCount: i32 (const)
-  callee +11:32 handlerGrown -> @nish.handlerGrown
-  local +13:14 k: i32 (let)
-  local +21:9 pathEnd: i32 (let)
-  callee +33:5 HttpHandler.route -> @nish.HttpHandler.route
+  callee +12:32 handlerGrown -> @nish.handlerGrown
+  callee +28:5 HttpHandler.route -> @nish.HttpHandler.route
 function HttpHandler.route(this: HttpHandler, r: HttpRequest): void -> @nish.HttpHandler.route [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -36061,19 +36059,20 @@ function Router.match(this: Router, method: u8[], mStart: i32, mEnd: i32, target
   pointer target: size=0 writesThrough=false captured=false passedTo=nish.Router.walk#1
   pointer params: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +6:9 end: i32 (let)
-  local +10:11 keep: i32 (const)
-  local +11:9 segments: i32 (let)
-  local +12:9 start: i32 (let)
-  local +13:14 i: i32 (let)
-  local +27:11 methodLength: i32 (const)
-  local +28:14 m: i32 (let)
-  local +29:13 at: i32 (const)
-  callee +32:9 routerSameBytes -> @nish.routerSameBytes
-  local +39:11 route: i32 (const)
-  callee +39:24 Router.walk -> @nish.Router.walk
-  local +43:11 pairs: i32 (const)
-  local +47:14 k: i32 (let)
+  local +2:11 end: i32 (let)
+  local +11:11 keep: i32 (const)
+  local +12:9 segments: i32 (let)
+  local +13:9 start: i32 (let)
+  local +14:9 end: i32 (let)
+  local +16:13 c: i32 (const)
+  local +38:11 methodLength: i32 (const)
+  local +39:14 m: i32 (let)
+  local +40:13 at: i32 (const)
+  callee +43:9 routerSameBytes -> @nish.routerSameBytes
+  local +50:11 route: i32 (const)
+  callee +50:24 Router.walk -> @nish.Router.walk
+  local +54:11 pairs: i32 (const)
+  local +58:14 k: i32 (let)
 function Router.walk(this: Router, target: u8[], node: i32, depth: i32): i32 -> @nish.Router.walk [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -36155,11 +36154,14 @@ function routerLabelIsText(bytes: u8[], at: i32, text: string, from: i32, length
   local +0:12 k: i32 (let)
 function routerSameBytes(a: u8[], at: i32, b: u8[], from: i32, length: i32): boolean -> @nish.routerSameBytes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
+  escaping: at from
+  calls: nish_panic_overflow
   pointer a: size=0 writesThrough=false captured=false
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:12 k: i32 (let)
+  local +0:9 stop: i32 (const)
+  local +1:7 j: i32 (let)
+  local +2:12 i: i32 (let)
 function routerHex(c: i32): i32 -> @nish.routerHex
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
