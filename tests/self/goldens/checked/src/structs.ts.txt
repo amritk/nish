@@ -503,6 +503,18 @@ function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): v
 function isLayoutScalar(t: i32): boolean -> @isLayoutScalar
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function spellsNumber(ctx: CheckContext, annotation: Node): boolean -> @spellsNumber
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: annotation ctx
+  calls: CheckedProgram.alias nish_panic_index nish_str_eq
+  pointer ctx: size=336 writesThrough=true captured=true
+  pointer annotation: size=40 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local +0:7 node: Node (let)
+  local +1:7 home: CheckContext (let)
+  local +4:7 hops: i32 (let)
+  local +9:11 alias: AliasInfo | null (const)
+  callee +9:19 CheckedProgram.alias -> @CheckedProgram.alias
 function layoutClass(program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null -> @layoutClass [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -517,8 +529,8 @@ function layoutClass(program: CheckedProgram, table: TypeTable, type: i32): Stru
 function collectLayoutField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectLayoutField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.stripNull TypeTable.typeName collectStructMembers isLayoutScalar layoutClass nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq resolveType
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 collectStructMembers#0 CheckContext.error#0
+  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.stripNull TypeTable.typeName collectStructMembers isLayoutScalar layoutClass nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat resolveType spellsNumber
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 spellsNumber#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 collectStructMembers#0 CheckContext.error#0
   pointer owner: size=176 writesThrough=false captured=false passedTo=StructInfo.hasMember#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
@@ -529,6 +541,7 @@ function collectLayoutField(ctx: CheckContext, owner: StructInfo, decl: Node): v
   callee -47:5 CheckContext.error -> @CheckContext.error
   callee -40:5 CheckContext.error -> @CheckContext.error
   local -35:9 annotation: Node (const)
+  callee -34:7 spellsNumber -> @spellsNumber
   callee -33:5 CheckContext.error -> @CheckContext.error
   local -27:9 type: i32 (const)
   callee -27:16 resolveType -> @resolveType

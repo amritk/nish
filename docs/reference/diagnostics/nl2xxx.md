@@ -14216,3 +14216,18 @@ export function f(): i32 {
 ```text
 `declare class Point` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the `declare function` that takes it in a native build
 ```
+
+[`nl2757_declare_class_wasm32.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2757_declare_class_wasm32.ts) (compiled with `--target wasm32`):
+
+```ts
+declare class Point {
+  x: i32
+}
+export function f(): i32 {
+  return 0
+}
+```
+
+```text
+`declare class Point` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the `declare function` that takes it in a native build
+```

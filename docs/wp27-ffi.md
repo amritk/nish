@@ -13,8 +13,9 @@ program that reaches C
 ([wp36-capability-policy.md](wp36-capability-policy.md)), and a declaration in
 a package or a `std/` module binds the bare C name rather than the package's
 prefixed one, with duplicate declarations required to agree
-(`tests/link/ffi_package_declare`). Whether S4 and S5
-should happen at all is a language question (§3); §8 answers it for S3. The rules are normative in
+(`tests/link/ffi_package_declare`). Whether S5
+should happen at all is a language question (§3); §8 answers it for S3 and
+§9 for S4, which is being built. The rules are normative in
 [LANGUAGE.md](LANGUAGE.md#calling-c) and the lowering is in
 [IR_COOKBOOK.md](IR_COOKBOOK.md#declare-function-calling-c).
 
@@ -105,8 +106,8 @@ stage is a real decision rather than a missing line:
   than know.
 - **S5, `errno`.** A thread-local the runtime does not model.
 
-Whether S4 and S5 should happen at all is a language question, not a
-schedule (§8 answers it for S3): a
+Whether S5 should happen at all is a language question, not a
+schedule (§8 answers it for S3, §9 for S4): a
 language whose selling point is that every value has one known layout may
 decide that the OS is reached through builtins on purpose.
 [wp34-hosting-cs.md](wp34-hosting-cs.md) weighed C crypto through FFI against
@@ -627,8 +628,10 @@ which is C's `= {0}`: one `llvm.memset` of the struct's size, not a
 `zeroinitializer` store, because LLVM may leave a store's padding bytes
 unwritten and arena memory is not cleared, while C may `memcmp` or hash the
 whole struct. Fields read and write as an ordinary class's do. A layout
-instance lives wherever an ordinary class instance may: in a local, a field of
-an ordinary class, a parameter, a return.
+instance lives in a local, a field of an ordinary class, or a parameter or
+return of a function the module keeps to itself. It is not an array element,
+and no exported signature holds one, however deep (§9g); a `declare function`
+borrows it and never returns it.
 
 A nested field is the one new shape: `o.inner` names bytes inside `o`, not a
 separate object. It may be the head of a member chain (`o.inner.tv_sec`,

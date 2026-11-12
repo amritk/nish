@@ -1498,10 +1498,49 @@ export const main = (): i32 => {
 };
 ```
 
-- **A parameter is a scalar, a `CPtr`, a borrowed `string` or a `u8[]` buffer
-  with its count; a return is a scalar, a `CPtr` or a copied `string`.** The
-  scalars are the integer and float widths, `boolean` and `void`. Any other
-  array, a class or an interface is rejected, in either position.
+- **A parameter is a scalar, a `CPtr`, a borrowed `string`, a `u8[]` buffer
+  with its count or a borrowed `declare class`; a return is a scalar, a `CPtr`
+  or a copied `string`.** The scalars are the integer and float widths,
+  `boolean` and `void`. Any other array, a Nish class or an interface is
+  rejected, in either position, and a `declare class` is never a return.
+- **A `declare class` is a C struct, lent by pointer.** Its fields are laid out
+  in declaration order at C's alignment, and `new Name()` zero-fills it. A
+  field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
+  `CPtr | null` or another `declare class`, embedded by value. `number` is
+  refused by any spelling, an alias included, because `--number-mode` picks
+  its width; spell `i32` or `f64`. Fields only: no initializer, `readonly`,
+  method or constructor. C borrows it for the call, may write its fields, and
+  may not keep the address. It stays in its module: no exported signature
+  holds one, however deep (NL2746, NL2756), and a page module (freestanding
+  wasm, `--emit-dts`) refuses one (NL2757).
+
+```ts nish:ok
+declare class Timespec {
+  sec: i64;
+  nsec: i64;
+}
+declare function clock_gettime(clock: i32, ts: Timespec): i32;
+
+export const main = (): i32 => {
+  const now = new Timespec();
+  clock_gettime(1, now);
+  console.log(`${now.sec >= 0}`);
+  return 0;
+};
+```
+
+```ts nish:err NL2755
+type Coord = number;
+
+declare class Point {
+  x: Coord;
+}
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
 - **A run of `u8[]` / `readonly u8[]` parameters is followed by exactly one
   `u64`**, the byte count C may touch in each (`memcpy(dst: u8[], src:
   readonly u8[], n: u64)`). `readonly` is C's `const`. A run without its count

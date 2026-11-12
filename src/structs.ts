@@ -968,6 +968,33 @@ const isLayoutScalar = (t: i32): boolean =>
   t === T_F64
 
 /**
+ * Whether `annotation` is `number`, written out or reached through a chain of
+ * `type` aliases, imported ones included: each alias's right-hand side is read
+ * in the module that declares it. A layout field refuses it by any spelling,
+ * since the resolved type would be i32 or f64 as `--number-mode` says.
+ */
+const spellsNumber = (ctx: CheckContext, annotation: Node): boolean => {
+  let node = annotation
+  let home = ctx
+  // A cycle is reported when the field's type is resolved; the bound stops
+  // this walk from following it.
+  let hops = 0
+  while (node.kind === N_TYPE_REF && hops < 64) {
+    if (node.text === "number") {
+      return true
+    }
+    const alias = home.program.alias(node.text)
+    if (alias === null) {
+      return false
+    }
+    node = alias.decl.children[1]
+    home = alias.home
+    hops = hops + 1
+  }
+  return false
+}
+
+/**
  * The `declare class` (WP27 S4.1) the non-null type `type` names, or `null`:
  * a C struct layout, which a field embeds by value and a `declare function`
  * takes by pointer.
@@ -1007,7 +1034,7 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
   // `number` is i32 or f64 as `--number-mode` says, and a C struct has one
   // layout whatever flag the program is built with.
   const annotation = decl.children[1]
-  if (annotation.kind === N_TYPE_REF && annotation.text === "number") {
+  if (spellsNumber(ctx, annotation)) {
     ctx.error(
       annotation,
       `${what} has type \`number\`, whose width \`--number-mode\` chooses: a C struct field has one layout, so spell it \`i32\` or \`f64\``

@@ -87,7 +87,7 @@ the record that found it. The notes below the table name each such finding.
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
-| **Total** ⁸ | | | **3 / 15 / 81 / 172** | **0 / 1 / 3 / 42** |
+| **Total** ⁸ | | | **3 / 15 / 82 / 172** | **0 / 1 / 3 / 42** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -114,7 +114,8 @@ the record that found it. The notes below the table name each such finding.
    (WP27 S3.2), is counted the same way. So is RT-16 (Medium), `readCString`
    and the literal `null` a `CPtr | null` parameter takes (WP27 S3.3), and
    RT-18 (Medium), a `u8[]` lent to C with its count checked (WP53 B1.2), and
-   RT-20 (Medium), the C resource a `using` owns (#861). RT-21 (Low),
+   RT-20 (Medium), the C resource a `using` owns (#861), and RT-51 (Medium),
+   a `declare class` lent to C by pointer (WP27 S4.1). RT-21 (Low),
    `nish_argv_init` testing `malloc`'s answer for null only after computing
    from it, was found by #888's harness stage while building the runtime under
    UBSan, fixed there, and is counted as a fixed Low.

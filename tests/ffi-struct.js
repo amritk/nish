@@ -196,10 +196,12 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
           filled !== null &&
           lent !== null &&
           Number(lent[1]) === size &&
-          (measured === null || measured[3] === size),
+          (!has("llc") || (measured !== null && measured[3] === size)),
         built.status === 0 ? `${ir}\nllc: ${measured}` : shown(built)
       )
-      if (measured !== null && has("clang")) {
+      if (!has("llc")) {
+        skip(`skipped: ffi_struct: no llc: the ${name} size is not measured, nor the C layout compared`)
+      } else if (measured !== null && has("clang")) {
         const c = spawnSync("clang", [`--target=${triple}`, "-fsyntax-only", "-x", "c", "-"], {
           input: cLayouts(measured),
           encoding: "utf8",
@@ -210,7 +212,9 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
           `llc: ${measured}\n${shown(c)}`
         )
       } else {
-        skip(`skipped: ffi_struct: no clang or llc: the ${name} C layout is not compared`)
+        skip(
+          `skipped: ffi_struct: no clang, or llc gave no four layout constants: the ${name} C layout is not compared`
+        )
       }
     }
     check(
