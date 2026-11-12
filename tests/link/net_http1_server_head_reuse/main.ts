@@ -8,7 +8,7 @@
 // `Connection` the request asked for, the second) to be written fresh.
 // `headCopies` tells the two apart.
 import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1WriteResponseHead } from "nish/net/http1-codec";
-import { H1_INVALID, H1_REQUEST, Http1Config, Http1Connection } from "nish/net/http1-server";
+import { H1_AGAIN, H1_INVALID, H1_REQUEST, H1_WRITE, Http1Config, Http1Connection } from "nish/net/http1-server";
 import { Suite } from "nish/testing";
 
 const ZERO: i32 = 0;
@@ -388,7 +388,7 @@ export const main = (): i32 => {
   // eight- and sixteen-byte loads): a name and a value of each length kept,
   // then one byte changed at its start, middle and end, each against a
   // freshly kept head and written fresh.
-  const lengths: i32[] = [1, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33];
+  const lengths: i32[] = [1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33];
   for (const n of lengths) {
     const value: string = times("v", n);
     const name: string = times("n", n);
@@ -400,6 +400,70 @@ export const main = (): i32 => {
       against(t, `a name of ${n} changed at ${k}`, fields([name]), fields(["v"]), 200, fields([changedName]), fields(["v"]), body, "OK", false);
     }
   }
+
+  // Exactly as many fields as are kept: written, kept, then copied.
+  const sixteen: string[] = [];
+  const sixteenValues: string[] = [];
+  for (let k: i32 = 0; k < 16; k++) {
+    sixteen.push(`X-F${k}`);
+    sixteenValues.push(`${k}`);
+  }
+  const full = fed(times(GET, 3));
+  check(t, full, "sixteen fields", 200, fields(sixteen), fields(sixteenValues), body, "OK", false);
+  check(t, full, "sixteen fields, kept", 200, fields(sixteen), fields(sixteenValues), body, "OK", false);
+  check(t, full, "sixteen fields, copied", 200, fields(sixteen), fields(sixteenValues), body, "OK", true);
+
+  // Names and values under four bytes, the empty value among them, are
+  // compared a byte at a time: kept and copied, then one byte changed.
+  const short: u8[][] = fields(["A", "Bb", "Ccc", "D"]);
+  const shortValues: u8[][] = fields(["", "1", "22", "333"]);
+  const bytewise = fed(times(GET, 4));
+  check(t, bytewise, "short fields", 200, short, shortValues, body, "OK", false);
+  check(t, bytewise, "short fields, kept", 200, short, shortValues, body, "OK", false);
+  check(t, bytewise, "short fields, copied", 200, short, shortValues, body, "OK", true);
+  check(t, bytewise, "short fields, one byte changed", 200, short, fields(["", "1", "23", "333"]), body, "OK", false);
+
+  // A restarted slot keeps nothing of its last connection's head: the next
+  // connection's first two heads are written, and only the third copied.
+  const reused = fed(times(GET, 3));
+  check(t, reused, "before the restart", 200, names, values, body, "OK", false);
+  check(t, reused, "before the restart, kept", 200, names, values, body, "OK", false);
+  check(t, reused, "before the restart, copied", 200, names, values, body, "OK", true);
+  reused.restart();
+  const again: u8[] = ascii(times(GET, 3));
+  reused.feed(again, ZERO, toI32(again.length));
+  check(t, reused, "after the restart", 200, names, values, body, "OK", false);
+  check(t, reused, "after the restart, kept", 200, names, values, body, "OK", false);
+  check(t, reused, "after the restart, copied", 200, names, values, body, "OK", true);
+
+  // A head the kept one matches but that no longer fits the output: the copy
+  // is refused and the write path holds the response (`H1_AGAIN`), queuing
+  // nothing; once the output drains the same head is copied.
+  // Any four-digit length: the head is as long as the one written for `fill`.
+  const tightHead: string = head(200, "OK", names, values, 1000, "", date);
+  // Room for the third head and body, and then one byte short of a fourth head.
+  const fill: i32 = 8192 - 256 - 2 * toI32(tightHead.length) + 1;
+  const fillBody: string = times("b", fill);
+  const fullHead: string = head(200, "OK", names, values, fill, "", date);
+  const tight = fed(times(GET, 4));
+  check(t, tight, "a full-sized body", 200, names, values, fillBody, "OK", false);
+  check(t, tight, "a full-sized body, kept", 200, names, values, fillBody, "OK", false);
+  nextRequest(tight);
+  t.eqI32("a full-sized body, copied", answer(tight, 200, names, values, fillBody), 0);
+  t.ok("a full-sized body, copied: copied", tight.headCopies === 1);
+  const queued: i32 = tight.outputEnd;
+  nextRequest(tight);
+  const bytes: u8[] = ascii(fillBody);
+  t.eqI32("the same head with one byte too little room is held", tight.respond(200, names, values, fill), H1_AGAIN);
+  t.ok("held: not copied", tight.headCopies === 1);
+  t.ok("held: nothing queued", tight.outputEnd === queued);
+  t.eqStr("held: the copied response is whole", drained(tight), `${fullHead}${fillBody}`);
+  t.eqI32("then the program is asked to write", tight.next(), H1_WRITE);
+  t.eqI32("the same head again", tight.respond(200, names, values, fill), 0);
+  tight.write(bytes, ZERO, toI32(bytes.length));
+  tight.end();
+  t.ok("now copied", tight.headCopies === 2);
+  t.eqStr("its bytes", drained(tight), `${fullHead}${fillBody}`);
 
   // A head copied across many responses, drained as it goes.
   const busy = fed(times(GET, 200));

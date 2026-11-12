@@ -818,8 +818,8 @@ export class Http1Connection {
    * so that a response asking for the same head is a copy of it: the same
    * status, the same field names and values byte for byte, the same framing
    * and `Connection`, and the same `date` not reformatted since (`formats`).
-   * Empty until the first head of at most `H1_HEAD_KEEP` bytes; then made
-   * once and kept for the slot's later peers, since what it holds is a
+   * Empty until the first head that is kept (one of at most `H1_HEAD_KEEP`
+   * bytes, after a head of the same shape); then made once and kept for the slot's later peers, since what it holds is a
    * function of those inputs alone.
    */
   private headBytes: u8[]
@@ -942,6 +942,10 @@ export class Http1Connection {
     this.inputEnded = false
     this.headTimed = false
     this.headSince = 0
+    // A slot's next connection starts with no kept head, and its first
+    // head is not taken for a repeat of the last connection's.
+    this.headLength = 0
+    this.headStatus = 0
     this.mss = 0
     this.socketMss = 0
     this.fd = -1
@@ -1566,8 +1570,8 @@ export class Http1Connection {
    * fields, so that a program whose every head differs pays a few stores per
    * response and no copy; a head longer than `H1_HEAD_KEEP`, or with more
    * than `H1_HEAD_FIELDS` fields, is never kept. The buffer is made at the
-   * first head that would fit, so a connection's first response, not a later
-   * one, is the one that grows the arena.
+   * first head that is kept, so a connection whose heads never repeat their
+   * shape holds none.
    */
   private keepHead(
     start: i32,
@@ -1594,12 +1598,12 @@ export class Http1Connection {
     if (n > H1_HEAD_KEEP || fields > H1_HEAD_FIELDS) {
       return
     }
+    if (!again) {
+      return
+    }
     if (toI32(this.headBytes.length) < H1_HEAD_KEEP) {
       this.headBytes = new Array<u8>(H1_HEAD_KEEP)
       this.headLengths = new Array<i32>(2 * H1_HEAD_FIELDS)
-    }
-    if (!again) {
-      return
     }
     for (let i: i32 = 0; i < fields && i < toI32(values.length); i += 1) {
       this.headLengths[2 * i] = toI32(names[i].length)

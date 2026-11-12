@@ -177,6 +177,54 @@ PASS  a name of 1 changed at 0: the base head, copied
 PASS  a name of 1 changed at 0: the base head, copied: copied
 PASS  a name of 1 changed at 0
 PASS  a name of 1 changed at 0: written
+PASS  a value of 2 changed at 0: the base head
+PASS  a value of 2 changed at 0: the base head: written
+PASS  a value of 2 changed at 0: the base head, kept
+PASS  a value of 2 changed at 0: the base head, kept: written
+PASS  a value of 2 changed at 0: the base head, copied
+PASS  a value of 2 changed at 0: the base head, copied: copied
+PASS  a value of 2 changed at 0
+PASS  a value of 2 changed at 0: written
+PASS  a name of 2 changed at 0: the base head
+PASS  a name of 2 changed at 0: the base head: written
+PASS  a name of 2 changed at 0: the base head, kept
+PASS  a name of 2 changed at 0: the base head, kept: written
+PASS  a name of 2 changed at 0: the base head, copied
+PASS  a name of 2 changed at 0: the base head, copied: copied
+PASS  a name of 2 changed at 0
+PASS  a name of 2 changed at 0: written
+PASS  a value of 2 changed at 1: the base head
+PASS  a value of 2 changed at 1: the base head: written
+PASS  a value of 2 changed at 1: the base head, kept
+PASS  a value of 2 changed at 1: the base head, kept: written
+PASS  a value of 2 changed at 1: the base head, copied
+PASS  a value of 2 changed at 1: the base head, copied: copied
+PASS  a value of 2 changed at 1
+PASS  a value of 2 changed at 1: written
+PASS  a name of 2 changed at 1: the base head
+PASS  a name of 2 changed at 1: the base head: written
+PASS  a name of 2 changed at 1: the base head, kept
+PASS  a name of 2 changed at 1: the base head, kept: written
+PASS  a name of 2 changed at 1: the base head, copied
+PASS  a name of 2 changed at 1: the base head, copied: copied
+PASS  a name of 2 changed at 1
+PASS  a name of 2 changed at 1: written
+PASS  a value of 2 changed at 1: the base head
+PASS  a value of 2 changed at 1: the base head: written
+PASS  a value of 2 changed at 1: the base head, kept
+PASS  a value of 2 changed at 1: the base head, kept: written
+PASS  a value of 2 changed at 1: the base head, copied
+PASS  a value of 2 changed at 1: the base head, copied: copied
+PASS  a value of 2 changed at 1
+PASS  a value of 2 changed at 1: written
+PASS  a name of 2 changed at 1: the base head
+PASS  a name of 2 changed at 1: the base head: written
+PASS  a name of 2 changed at 1: the base head, kept
+PASS  a name of 2 changed at 1: the base head, kept: written
+PASS  a name of 2 changed at 1: the base head, copied
+PASS  a name of 2 changed at 1: the base head, copied: copied
+PASS  a name of 2 changed at 1
+PASS  a name of 2 changed at 1: written
 PASS  a value of 3 changed at 0: the base head
 PASS  a value of 3 changed at 0: the base head: written
 PASS  a value of 3 changed at 0: the base head, kept
@@ -753,6 +801,46 @@ PASS  a name of 33 changed at 32: the base head, copied
 PASS  a name of 33 changed at 32: the base head, copied: copied
 PASS  a name of 33 changed at 32
 PASS  a name of 33 changed at 32: written
+PASS  sixteen fields
+PASS  sixteen fields: written
+PASS  sixteen fields, kept
+PASS  sixteen fields, kept: written
+PASS  sixteen fields, copied
+PASS  sixteen fields, copied: copied
+PASS  short fields
+PASS  short fields: written
+PASS  short fields, kept
+PASS  short fields, kept: written
+PASS  short fields, copied
+PASS  short fields, copied: copied
+PASS  short fields, one byte changed
+PASS  short fields, one byte changed: written
+PASS  before the restart
+PASS  before the restart: written
+PASS  before the restart, kept
+PASS  before the restart, kept: written
+PASS  before the restart, copied
+PASS  before the restart, copied: copied
+PASS  after the restart
+PASS  after the restart: written
+PASS  after the restart, kept
+PASS  after the restart, kept: written
+PASS  after the restart, copied
+PASS  after the restart, copied: copied
+PASS  a full-sized body
+PASS  a full-sized body: written
+PASS  a full-sized body, kept
+PASS  a full-sized body, kept: written
+PASS  a full-sized body, copied
+PASS  a full-sized body, copied: copied
+PASS  the same head with one byte too little room is held
+PASS  held: not copied
+PASS  held: nothing queued
+PASS  held: the copied response is whole
+PASS  then the program is asked to write
+PASS  the same head again
+PASS  now copied
+PASS  its bytes
 PASS  two hundred answers, each byte for byte
 PASS  two heads written, 198 copied
-http1 head reuse: 757 passed, 0 failed, 0 skipped
+http1 head reuse: 845 passed, 0 failed, 0 skipped
