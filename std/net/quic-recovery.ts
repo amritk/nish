@@ -1266,8 +1266,7 @@ export class QuicRecovery {
     if (this.congestionWindow < this.ssthresh) {
       this.congestionWindow = this.congestionWindow + size
     } else {
-      this.congestionWindow =
-        this.congestionWindow + (this.datagramSize * size) / this.congestionWindow
+      this.congestionWindow = this.congestionWindow + (this.datagramSize * size) / this.congestionWindow
     }
   }
 

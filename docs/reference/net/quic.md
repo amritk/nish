@@ -10,6 +10,7 @@ import {
   QUIC_CONN_CID_LENGTH,
   QUIC_CONN_CONFIDENTIALITY_LIMIT,
   QUIC_CONN_CRYPTO_WINDOW,
+  QUIC_CONN_DATAGRAM_MAX,
   QUIC_CONN_DATAGRAM_QUEUE,
   QUIC_CONN_DATAGRAM_SIZE,
   QUIC_CONN_EARLY_RESENDS,
@@ -514,11 +515,16 @@ class QuicConnection
 | `otherReadKeys: QuicKeys \| null` | The other read keys of the Application Data space (RFC 9001 §6.3): the next generation's while `otherIsNext`, and for a probe timeout after an update the previous one's, for reordered packets (§6.5). |
 | `pathCount: i32` | How many PATH_CHALLENGE payloads wait to be answered, 0 to 4. |
 | `pathKnown: boolean` | Whether `pathCurrent` holds the client's address: the carrier passes addresses, and a first Initial gave one. |
+| `pathMtu: i32` | The largest datagram validated on the current path: 1200 until a probe is acknowledged. |
+| `pathMtuLimit: i32` | Path MTU discovery (RFC 9000 §14.3, RFC 8899): once the handshake is confirmed and the path validated, the server probes for a datagram larger than 1200 bytes with a PING padded to the size being tried, sent only when nothing else is due, so a probe never holds data back. An acknowledged probe validates its size as `pathMtu`, which every later datagram may then fill; three lost probes of a size end the search below it. A lost probe is no congestion signal (§14.4). Three loss events that each lose a packet larger than 1200 bytes, with none of that size acknowledged between, are taken for a black hole: `pathMtu` falls back to 1200 and the search resumes below the size that stopped getting through. A new address starts again from 1200.<br><br>`pathMtuLimit` is the carrier's to lower, for an interface whose MTU carries less than `QUIC_CONN_DATAGRAM_MAX`, at any time: the next probe keeps under it. 1200 or less turns discovery off. `reset` keeps it. |
 | `pathReceived: i64` | Bytes received from and sent to the path being validated, for its own 3x limit (§9.3, §8.1). |
 | `pathSent: i64` | Bytes sent to the path being validated, at most three times `pathReceived`. |
 | `pathValidated: u8[]` | The last address the client proved it receives at, in `nish:net`'s 18-byte form (RFC 9000 §9): the handshake's, or one a PATH_RESPONSE answered. |
 | `pathValidating: boolean` | Whether `pathCurrent` is not validated yet: a PATH_CHALLENGE is out on it. |
 | `peerParameters: QuicTransportParameters` | The client's transport parameters, once the handshake has checked them; until then, every default. |
+| `pmtuBlackHoles: i32` | Times a black hole sent `pathMtu` back to 1200. |
+| `pmtuProbes: i32` | Path MTU probes sent. |
+| `pmtuProbesLost: i32` | Path MTU probes declared lost. |
 | `probeAddress: u8[]` | A PATH_CHALLENGE that came from another address in a datagram that moved nothing (§9.1): answered there by `takeProbeInto`, from `probeData`, within `probeBudget` bytes, three times what came from `probeAddress` (§8.1). Only the latest such challenge is kept. A response owed on `pathCurrent` when the connection moves goes back the same way (`sendResponsesBack`). |
 | `probeOwed: boolean` | Whether a PATH_RESPONSE is owed on `probeAddress`, and whether the datagram being read carried a challenge for it. |
 | `readPhase: boolean` | The Key Phase bit of the current read keys, and of the current write keys. |
@@ -541,10 +547,11 @@ class QuicConnection
 | `amplificationBlocked(): boolean` | Whether the anti-amplification limit stops the server sending (RFC 9000 §8.1): the client's address is not validated and three times what it sent leaves no room for a whole datagram. |
 | `close(code: i64): void` | Closes the connection from the application, with its own error `code` (CONNECTION_CLOSE 0x1d; RFC 9000 §10.2). The next `takeDatagram` answers the close, and nothing after it. Closing twice, or after the client closed, does nothing. |
 | `closed(): boolean` | Whether the connection has closed, either way. |
+| `datagramSize(): i32` | The largest datagram the server sends now: `pathMtu`, or 1200 while a new path is being validated. |
 | `deadline(): i64` | When `handleTimer` is next due, in the caller's milliseconds: the idle timeout, loss recovery's timer (a time-threshold loss or the probe timeout), the end of a key update's probe timeout, or, while a path is validated, its PATH_CHALLENGE's resend or the end of its validation, whichever comes first; once the connection has closed, the end of its closing or draining period, when its keys are wiped. -1 when nothing is timed: before the first packet, while a closed connection's own close has not gone out (`takeDatagram` sends it), once a closed connection's keys are wiped, and with no idle timeout, nothing in flight, no update pending and no path being validated. |
 | `handleTimer(now: i64): void` | Runs whatever is due by `now`, the caller's monotonic time in milliseconds; call it at `deadline()`, or any time. Past the idle timeout the connection closes silently (`QUIC_STATE_TIMED_OUT`, RFC 9000 §10.1): no CONNECTION_CLOSE, every key wiped. Past the closing or draining period of a connection that closed, every key is wiped (§10.2). Past a key update's probe timeout the previous read keys are wiped and the next generation's derived (RFC 9001 §6.5).<br><br>Past loss recovery's timer, packets lost by the time threshold have their frames queued again, or a probe timeout queues every space's packets in flight and asks for a probe (RFC 9002 §6.1.2, §6.2.4): `takeDatagram` then sends it. `receive` and `takeDatagram` run it themselves. Time never runs backwards here: an earlier `now` than one already given counts as that one. |
 | `idleDeadline(): i64` | When the idle timeout passes, or -1 when there is none or the timer has not started. |
-| `maxDatagramPayload(): i32` | The largest DATAGRAM payload `sendDatagram` takes now: what fits the client's `max_datagram_frame_size` with the frame's type and Length, and a 1-RTT packet of `QUIC_CONN_DATAGRAM_SIZE` with the longest packet number; 0 when the client takes none, or the server sends none. |
+| `maxDatagramPayload(): i32` | The largest DATAGRAM payload `sendDatagram` takes now: what fits the client's `max_datagram_frame_size` with the frame's type and Length, and a 1-RTT packet of `datagramSize()` with the longest packet number; 0 when the client takes none, or the server sends none. It grows when path MTU discovery validates a larger datagram, and shrinks again on a fall back to 1200, which drops a queued payload that no longer fits. |
 | `nextStreamEvent(): i64` | The ID of the next stream with something new for the application — the client opened it, it has bytes or its FIN to read, it was reset or stopped, or it has room to write again after a short write — or -1 when there is none. Each stream comes up once however much happened; read and write it until it has nothing more to say. |
 | `openStream(bidirectional: boolean): i64` | Opens a stream of the server's (RFC 9000 §2.1): bidirectional when `bidirectional`, else unidirectional. Answers its ID, or `QUIC_STREAM_ERR_STATE` when not connected, or `QUIC_STREAM_ERR_LIMIT` when the client's MAX_STREAMS is reached (STREAMS_BLOCKED then goes out) or `localStreams` of the server's are open. |
 | `ownsConnectionId(dcid: u8[]): boolean` | Whether a datagram whose first packet is sent to `dcid` belongs to this connection: one of its active connection IDs, or, until the handshake is done, the DCID of the client's first Initial. A closed connection still answers for its IDs; the caller drops it once it is done with it. |
@@ -564,8 +571,9 @@ class QuicConnection
 | `streamReset(id: i64, code: i64): i32` | Abandons stream `id`'s sending side with application error `code` (RESET_STREAM). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. |
 | `streamStopSending(id: i64, code: i64): i32` | Asks the client to stop sending on stream `id`, with application error `code` (STOP_SENDING). Answers `QUIC_STREAM_OK` or a `QUIC_STREAM_ERR_*`. |
 | `streamWrite(id: i64, buf: u8[], from: i32, length: i32, fin: boolean): i32` | Writes up to `length` bytes of `buf` from `from` to stream `id`, and finishes its sending side when `fin` and every byte fit. Answers how many bytes it took — fewer than `length` when the stream's buffer is full, in which case `nextStreamEvent` names it again once acknowledgements free room — or a `QUIC_STREAM_ERR_*`: not connected, an unknown stream, one only the client sends on, one already finished or reset, or one the client asked to stop (STOP_SENDING, which this side answered with RESET_STREAM). |
-| `takeDatagram(now: i64): u8[] \| null` | The next datagram to send, or `null` when nothing is due: the allocating form of `takeDatagramInto`, which a test or a recording uses. |
-| `takeDatagramInto(out: u8[], at: i32, now: i64): i32` | Writes the next datagram to send into `out` at `at`, which needs `QUIC_CONN_DATAGRAM_SIZE` bytes of room, and answers its length, or 0 when nothing is due (or the room is not there). Call it until it answers 0 after every `receive`, `sign`, write and `close`. It coalesces an Initial, a Handshake and a 1-RTT packet as each has something to carry, pads a datagram with an ack-eliciting Initial to 1200 bytes (RFC 9000 §14.1), and before the client's address is validated sends only while three times what was received allows (§8.1).<br><br>After a close it writes the CONNECTION_CLOSE once, then nothing. While the handshake waits for a signature it writes nothing, so the server's flight leaves whole. Lost data goes before new data. While the congestion window is full (RFC 9002 §7), or a space's record of packets in flight is, a space sends only an ACK, unless a probe timeout asked it for a probe.<br><br>`now` is the caller's time in milliseconds: a datagram that elicits an acknowledgement restarts the idle timer when it is the first since the client's last packet (RFC 9000 §10.1), and once the idle timeout has passed nothing goes out. The datagram is built and sealed in place, inside an arena block: nothing it does allocates past the call. This is not paced: a carrier that paces calls `nish/net/quic-listener`'s `quicListenerTakeFlight` instead. |
+| `takeDatagram(now: i64): u8[] \| null` | The next datagram to send, or `null` when nothing is due: the allocating form of `takeDatagramInto`, which a test or a recording uses. It is held to `QUIC_CONN_DATAGRAM_SIZE` bytes, so it never sends a path MTU probe nor fills a larger validated path. |
+| `takeDatagramInto(out: u8[], at: i32, now: i64): i32` | Writes the next datagram to send into `out` at `at`, which needs `QUIC_CONN_DATAGRAM_SIZE` bytes of room and may take up to `datagramSize()`, or a path MTU probe's size (see `takeDatagramWithin`), and answers its length, or 0 when nothing is due (or the room is not there). Call it until it answers 0 after every `receive`, `sign`, write and `close`. It coalesces an Initial, a Handshake and a 1-RTT packet as each has something to carry, pads a datagram with an ack-eliciting Initial to 1200 bytes (RFC 9000 §14.1), and before the client's address is validated sends only while three times what was received allows (§8.1).<br><br>After a close it writes the CONNECTION_CLOSE once, then nothing. While the handshake waits for a signature it writes nothing, so the server's flight leaves whole. Lost data goes before new data. While the congestion window is full (RFC 9002 §7), or a space's record of packets in flight is, a space sends only an ACK, unless a probe timeout asked it for a probe.<br><br>`now` is the caller's time in milliseconds: a datagram that elicits an acknowledgement restarts the idle timer when it is the first since the client's last packet (RFC 9000 §10.1), and once the idle timeout has passed nothing goes out. The datagram is built and sealed in place, inside an arena block: nothing it does allocates past the call. This is not paced: a carrier that paces calls `nish/net/quic-listener`'s `quicListenerTakeFlight` instead. |
+| `takeDatagramWithin(out: u8[], at: i32, room: i32, now: i64): i32` | `takeDatagramInto` with the datagram held to `room` bytes: it is at most `room` and `datagramSize()`, whichever is less. When nothing else is due and `room` has space for it, the datagram is a path MTU probe (see `pathMtu`), so a carrier that wants probing gives at least `QUIC_CONN_DATAGRAM_MAX` bytes of room, and one that gives 1200 never probes. |
 | `takeProbeInto(out: u8[], at: i32, now: i64): i32` | Writes the PATH_RESPONSE owed on another path (§8.2.2, §9.1) into `out` at `at`, which needs `QUIC_CONN_DATAGRAM_SIZE` bytes of room, and answers its length, or 0 when none is owed: a 1-RTT packet with that frame alone, padded to 1200 bytes or to three times what came from the path (§8.1), whichever is less. The carrier sends it to `probeAddress`, before `takeDatagramInto`'s datagrams. It is answered once and never sent again (§13.3). |
 | `updateKeys(): boolean` | Starts a key update from the server (RFC 9001 §6.1): the write keys move to the next generation and the Key Phase bit of every packet after toggles; the client follows when it reads one. Answers whether it did. It does not while it may not: before the handshake is confirmed, while an update is still in flight (the client has not answered the last one, or answered it less than a probe timeout ago, so the next read keys are not ready), and until the client has acknowledged a packet sent with the current keys. |
 | `writeStream(id: i64, data: u8[], fin: boolean): i32` | Queues all of `data` on stream `id`, finishing its sending side when `fin`: the all-or-nothing form of `streamWrite`. Answers `QUIC_STREAM_OK`, or `QUIC_STREAM_ERR_*`: the connection is not connected, the stream is unknown, its side is already finished (or the client stopped it), or the data would pass the credit the client gave for the stream or the connection, or the room in the stream's buffer. |
@@ -620,22 +628,21 @@ interface QuicServerConfig
 
 <scalar-grid cols="2">
 
+<scalar-card title="1,452" icon="phosphor/regular/hash">
+
+`QUIC_CONN_DATAGRAM_MAX: i32`
+
+The largest datagram path MTU discovery searches for: 1452 bytes, what a
+1500-byte Ethernet MTU carries under an IPv6 and a UDP header. The search
+also stops at `pathMtuLimit` and at the client's `max_udp_payload_size`.
+
+</scalar-card>
+
 <scalar-card title="8" icon="phosphor/regular/hash">
 
 `QUIC_CONN_DATAGRAM_QUEUE: i32`
 
 How many DATAGRAM payloads each way a connection holds, when it takes any.
-
-</scalar-card>
-
-<scalar-card title="1,200" icon="phosphor/regular/hash">
-
-`QUIC_CONN_DATAGRAM_SIZE: i32`
-
-The largest datagram the server sends, and the smallest a client's first
-Initial may arrive in (RFC 9000 §14.1): 1200 bytes, which every QUIC path
-carries, so no path MTU discovery is needed. `takeDatagramInto` needs this
-much room.
 
 </scalar-card>
 
@@ -782,6 +789,18 @@ How far ahead of what it has handed TLS the server buffers CRYPTO data.
 RFC 9000 §7.5 asks for at least 4096 bytes; a frame past this is
 CRYPTO_BUFFER_EXCEEDED. One buffer of this size serves every level, since
 the client's Initial flight is complete before its Handshake one starts.
+
+</scalar-card>
+
+<scalar-card title="1,200" icon="phosphor/regular/hash">
+
+`QUIC_CONN_DATAGRAM_SIZE: i32`
+
+The datagram size every QUIC path carries, and the smallest a client's
+first Initial may arrive in (RFC 9000 §14.1): 1200 bytes. The server sends
+no larger datagram until path MTU discovery has validated one (`pathMtu`),
+and falls back to it when a validated path stops carrying larger ones.
+`takeDatagramInto` needs this much room.
 
 </scalar-card>
 

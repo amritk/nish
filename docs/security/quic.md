@@ -8,7 +8,7 @@ loss recovery, `nish/net/quic-recovery` and its use in the connection and the
 listener's pacer (WP34 Q3), and for streams and datagrams,
 `nish/net/quic-stream` and `nish/net/quic-datagram`, the connection as a
 reusable slot that allocates nothing per packet, and the listener's GSO
-flight (WP34 Q4).
+flight (WP34 Q4), and for the connection's path MTU discovery.
 
 It says which functions hold secrets and which of them are wiped, as CLAUDE.md
 §Security asks, and it names the tests that pin the modules' refusals.
@@ -329,6 +329,42 @@ twins) are unchanged, byte for byte, with all of it in.
   byte for byte; each in-place derivation and parameter codec equals its
   allocating form and refuses what it does; and `reset` zeroes every key
   slot, AES schedule and secret the last connection left. See QUIC-3.
+
+### Path MTU discovery (WP34, after Q4)
+
+A connection sends 1,200-byte datagrams until DPLPMTUD (RFC 9000 §14.3,
+RFC 8899) validates a larger path. Each property is pinned by a check in
+`tests/link/net_quic_recovery/pmtu.ts` or `tests/link/net_quic_datagram/gso.ts`,
+each of which also runs under `--number-mode f64`.
+
+- **A peer cannot make the server send past what it was told it may.** The
+  search never goes above the smallest of the carrier's `pathMtuLimit`, the
+  room the carrier hands `takeDatagramWithin`, 1,452 bytes
+  (`QUIC_CONN_DATAGRAM_MAX`) and the client's `max_udp_payload_size`. A
+  limit the carrier lowers after the search began holds from the next probe.
+  1,200 bytes is the floor and the size every connection starts at, and a
+  limit of 1,200 or less turns discovery off.
+- **Only an acknowledgement validates a size.** A probe is a PING padded
+  to its size, ack-eliciting and sealed like any other packet, and the path
+  moves up only when the client acknowledges it. A client that
+  acknowledges a number it was never sent is still PROTOCOL_VIOLATION
+  (Q3), so it cannot validate a probe it did not receive.
+- **A lost probe is no congestion** (RFC 9000 §14.4). Its loss never
+  cuts the window or starts a recovery period. Three losses of one size
+  lower the top of the search below it, so a path that drops probes costs
+  at most three probes a size, over the five or so sizes a search tries.
+- **A black hole falls back to 1,200** (RFC 8899 §4.3). Three loss events,
+  each losing a packet past 1,200 bytes that was not a probe, with no
+  packet past 1,200 acknowledged between, set the path back to 1,200 and
+  restart the search below the size that failed. A queued DATAGRAM that no
+  longer fits the smaller packet is dropped and counted, never truncated.
+- **Recovery counts in the datagram size** (RFC 9002 §7.2). The initial and
+  minimum windows scale with the validated size, the initial window still
+  capped at 14,720 bytes, and fall back with it. A size under 1,200 is taken
+  as 1,200.
+- **A new path starts again at 1,200.** A migration resets the search, and
+  a path still being validated sends 1,200-byte datagrams whatever the old
+  path had validated.
 
 ### Q2b: what a server answers without a connection, the idle timeout and key update
 

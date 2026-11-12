@@ -60,6 +60,7 @@ class QuicDatagramQueue
 | `head: i32` | The index of the oldest entry; the `j`-th oldest is entry `(head + j) % capacity()`. |
 | `lengths: i32[]` | Each entry's payload length in bytes, 0 to `entrySize`; entry `k`'s is `lengths[k]`. |
 | `capacity(): i32` | How many datagrams the ring holds at most. |
+| `dropOldest(): void` | Forgets the oldest datagram unsent and counts it in `dropped`, for one that no packet can carry any more; an empty ring is left as it is. |
 | `peekLength(): i32` | The oldest datagram's length, or -1 when the ring is empty. |
 | `pop(buf: u8[], at: i32, cap: i32): i32` | Copies the oldest datagram into `buf` at `at` and forgets it. Answers its length, -1 when the ring is empty, or -2, keeping it, when it does not fit in `cap` bytes from `at` inside `buf`. |
 | `push(buf: u8[], from: i32, length: i32): boolean` | Copies `buf[from .. from + length)` in as the newest datagram. Answers whether it could: not when the ring is full, nor for a payload past `entrySize` or a window outside `buf`, each of which counts in `dropped`. |
