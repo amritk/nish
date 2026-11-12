@@ -1,6 +1,6 @@
 /**
- * `nish/net/http-server` — one handler for HTTP/1.1, HTTP/2 over TLS and
- * HTTP/3, with Alt-Svc advertising the HTTP/3 port.
+ * `nish/net/http-server` — one handler for HTTP/1.1, HTTP/2 (over TLS and
+ * cleartext) and HTTP/3, with Alt-Svc advertising the HTTP/3 port.
  *
  * `HttpServer` is `HttpHandler`'s pull loop (`nish/net/handler`) over up to
  * four listeners at once. The program builds a `Router`, configures the
@@ -37,12 +37,15 @@
  * than a quarter of the pool.
  *
  * **Alt-Svc.** Once an HTTP/3 listener is configured, every HTTP/1.1 and
- * HTTP/2 response names its port (`h3=":443"; ma=86400`); with
+ * HTTP/2 over TLS response names its port (`h3=":443"; ma=86400`); with
  * `altSvcMaxAge` 0 they say `alt-svc: clear` instead. A response whose fields
- * already hold an `alt-svc` keeps the program's.
+ * already hold an `alt-svc` keeps the program's. An h2c response carries
+ * none: it reaches clients through a proxy, and would name the backend's port.
  *
- * Cleartext HTTP/2 (`listenH2c`) checks its configuration but is not yet
- * wired to a carrier: it panics.
+ * **One HTTP/2 slot space.** The TLS and the cleartext HTTP/2 carriers share
+ * the stream tables: each listener's slots follow the other's, so every
+ * HTTP/2 path below names a slot of either and the carrier is looked up once,
+ * in the `h2Holds` family.
  */
 
 import { copyBytes } from "nish/bytes"
@@ -79,6 +82,7 @@ import {
   Http2Connection,
 } from "nish/net/http2"
 import { H2_CANCEL, H2_INTERNAL_ERROR, H2_NO_ERROR, H2_REFUSED_STREAM } from "nish/net/http2-frame"
+import { H2C_POOL_FULL, Http2CleartextServer } from "nish/net/http2-cleartext"
 import { Http2TlsServer } from "nish/net/http2-tls"
 import {
   H3_AGAIN,
@@ -138,10 +142,12 @@ const HTTP_SERVER_H2: i32 = 2
 const HTTP_SERVER_H3: i32 = 3
 
 // Poll tokens: an HTTP/1.1 slot is its own number, an HTTP/2 slot is past
-// `HTTP_SERVER_H2_BASE`, and a watched descriptor is `-2 - id`.
+// `HTTP_SERVER_H2_BASE`, and a watched descriptor is `-2 - id`. A listener's
+// token, less -100, is also its entry in `restUntil`.
 const HTTP_SERVER_H1_LISTENER: i32 = -100
 const HTTP_SERVER_H2_LISTENER: i32 = -101
 const HTTP_SERVER_H3_SOCKET: i32 = -102
+const HTTP_SERVER_H2C_LISTENER: i32 = -103
 const HTTP_SERVER_H2_BASE: i32 = 1048576
 
 const HTTP_SERVER_READ_BITS: i32 = 5
@@ -177,9 +183,9 @@ export class HttpServerLimits {
   maxResponseFields: i32 = 32
   /** Milliseconds from a request's head to the end of its body. */
   bodyTimeout: i32 = 30000
-  /** Milliseconds an HTTP/2 connection with no open stream is kept. */
+  /** Milliseconds an HTTP/2 connection (over TLS or h2c) with no open stream is kept. */
   idleTimeout: i32 = 60000
-  /** Milliseconds a cleartext HTTP/2 connection (`listenH2c`) has to send its preface; read once `listenH2c` serves. */
+  /** Milliseconds a cleartext HTTP/2 connection (`listenH2c`) has to send its 24-byte preface; after it, `idleTimeout` applies. */
   prefaceTimeout: i32 = 10000
   /** Seconds a client may remember the Alt-Svc advertisement; 0 sends `alt-svc: clear`. */
   altSvcMaxAge: i32 = 86400
@@ -678,7 +684,8 @@ export class HttpServer {
 
   // HTTP/1.1: the carrier, its listener, and per slot its generation, its request (-1 for none) and whether it is open.
   private h1: Http1Server | null = null
-  private h1RestUntil: i64 = 0
+  /** Per listener (`-100 - token`): when its rest for want of descriptors ends, 0 while it is not resting. */
+  private restUntil: i64[]
   private h1Gen: i32[]
   private h1Current: i32[]
   private h1Open: boolean[]
@@ -692,9 +699,14 @@ export class HttpServer {
   /** `host`, the field an HTTP/2 or HTTP/3 `:authority` becomes. */
   private hostName: u8[]
 
-  // HTTP/2 over TLS: the carrier, and per slot a stream table of `perConnection2` entries.
+  // HTTP/2: the two carriers, and per slot of either a stream table of
+  // `perConnection2` entries. TLS slot `s` is `h2TlsBase + s`, h2c slot `s`
+  // is `h2cBase + s`; `h2Clear` says which carrier a slot is on.
   private h2: Http2TlsServer | null = null
-  private h2RestUntil: i64 = 0
+  private h2c: Http2CleartextServer | null = null
+  private h2TlsBase: i32 = 0
+  private h2cBase: i32 = 0
+  private h2Clear: boolean[]
   private h2Gen: i32[]
   private h2Open: boolean[]
   /** When a connection last had no stream open, 0 while it has one. */
@@ -732,6 +744,7 @@ export class HttpServer {
   private perConnection2: i32 = 1
   /** The cleartext HTTP/2 listener, -1 until `listenH2c`. */
   private h2cFd: i32 = -1
+  private prefaceTimeout: i32 = 0
   private perConnection3: i32 = 1
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
   private draining: boolean = false
@@ -768,6 +781,7 @@ export class HttpServer {
     this.altSvcPort = limits.altSvcPort
     this.bodyTimeout = toI64(limits.bodyTimeout) * HTTP_SERVER_NANOS_PER_MS
     this.idleTimeout = toI64(limits.idleTimeout) * HTTP_SERVER_NANOS_PER_MS
+    this.prefaceTimeout = limits.prefaceTimeout
     this.requests = []
     this.free = []
     for (let k: i32 = 0; k < limits.requests; k++) {
@@ -807,6 +821,8 @@ export class HttpServer {
     this.h1Open = []
     this.starved = []
     this.h1Starved = []
+    this.restUntil = new Array<i64>(4)
+    this.h2Clear = []
     this.h2Gen = []
     this.h2Open = []
     this.h2IdleSince = []
@@ -870,10 +886,17 @@ export class HttpServer {
   }
 
   /**
-   * Checks a cleartext HTTP/2 (h2c, prior knowledge) listener's configuration.
-   * Not yet wired to a carrier: after the checks it panics. Panics on a
-   * second h2c listener, a `maxHeaderListSize` past `limits.maxHead`, or
-   * `enableConnectProtocol`.
+   * Serves cleartext HTTP/2 (h2c, prior knowledge: no Upgrade from
+   * HTTP/1.1) on `fd`, a listening TCP socket the program made, with up to
+   * `slots` connections. Meant for a server behind a TLS-terminating proxy
+   * or on a trusted network: nothing on it is encrypted. A connection that
+   * has not sent its 24-byte preface within `limits.prefaceTimeout` is
+   * closed, and one with no open stream after it within `limits.idleTimeout`.
+   * Its responses carry no Alt-Svc, and its requests say `secure` false.
+   * Each connection holds at most `config.maxStreams` requests and a quarter
+   * of `limits.requests`, as on `listenHttp2Tls`. Panics on a second h2c
+   * listener, a `maxHeaderListSize` past `limits.maxHead`, or
+   * `enableConnectProtocol`. `wait` serves it: it reads no key.
    * @param fd the listening socket's descriptor, still the program's to close
    * @param config the carrier's caps
    * @param slots the most connections held at once
@@ -883,8 +906,13 @@ export class HttpServer {
       panic("HttpServer.listenH2c: an h2c listener is already configured")
     }
     this.checkHttp2("listenH2c", config, slots)
+    this.h2cBase = this.h2Grow(slots, this.perOf(config))
+    for (let v: i32 = this.h2cBase; v < this.h2cBase + slots; v++) {
+      this.h2Clear[v] = true
+    }
+    this.h2c = new Http2CleartextServer(config, fd, slots, this.prefaceTimeout)
     this.h2cFd = fd
-    panic("HttpServer.listenH2c: not yet available")
+    pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H2C_LISTENER)
   }
 
   /** The checks every HTTP/2 listener's configuration passes. */
@@ -919,23 +947,61 @@ export class HttpServer {
       panic("HttpServer.listenHttp2Tls: an HTTP/2 over TLS listener is already configured")
     }
     this.checkHttp2("listenHttp2Tls", config, slots)
+    this.h2TlsBase = this.h2Grow(slots, this.perOf(config))
+    this.h2 = new Http2TlsServer(tls, config, fd, slots)
+    this.h2Fd = fd
+    pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H2_LISTENER)
+  }
+
+  /** The stream-table entries an HTTP/2 connection under `config` gets: its `maxStreams`, at most a quarter of the pool, at least 1. */
+  private perOf(config: Http2Config): i32 {
     let per: i32 = toI32(this.requests.length) / 4
     if (config.maxStreams < per) {
       per = config.maxStreams
     }
-    this.perConnection2 = per < 1 ? 1 : per
-    this.h2 = new Http2TlsServer(tls, config, fd, slots)
-    this.h2Fd = fd
-    this.h2Gen = new Array<i32>(slots)
-    this.h2Open = new Array<boolean>(slots)
-    this.h2IdleSince = new Array<i64>(slots)
-    this.h2Count = new Array<i32>(slots)
-    this.h2Streams = new Array<i32>(slots * this.perConnection2)
-    this.h2Reqs = new Array<i32>(slots * this.perConnection2)
-    for (let k: i32 = 0; k < toI32(this.h2Reqs.length); k++) {
-      this.h2Reqs[k] = -1
+    return per < 1 ? 1 : per
+  }
+
+  /**
+   * Adds `slots` HTTP/2 slots after those there are, each table at least
+   * `per` entries, and answers the first new slot. The tables share one
+   * width, the widest asked for, so a wider listener moves every entry,
+   * and every request's `entry`, to the new width.
+   */
+  private h2Grow(slots: i32, per: i32): i32 {
+    const base: i32 = toI32(this.h2Open.length)
+    const was: i32 = this.perConnection2
+    const width: i32 = per > was ? per : was
+    const streams: i32[] = new Array<i32>((base + slots) * width)
+    const reqs: i32[] = new Array<i32>((base + slots) * width)
+    for (let e: i32 = 0; e < toI32(reqs.length); e++) {
+      reqs[e] = -1
     }
-    pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H2_LISTENER)
+    for (let v: i32 = 0; v < base; v++) {
+      for (let i: i32 = 0; i < was; i++) {
+        streams[v * width + i] = this.h2Streams[v * was + i]
+        reqs[v * width + i] = this.h2Reqs[v * was + i]
+      }
+    }
+    if (width !== was) {
+      for (let k: i32 = 0; k < toI32(this.requests.length); k++) {
+        const r: HttpServerRequest = this.requests[k]
+        if (r.kind === HTTP_SERVER_H2 && r.entry >= 0) {
+          r.entry = (r.entry / was) * width + (r.entry % was)
+        }
+      }
+    }
+    this.h2Streams = streams
+    this.h2Reqs = reqs
+    this.perConnection2 = width
+    for (let v: i32 = 0; v < slots; v++) {
+      this.h2Gen.push(HTTP_SERVER_ZERO)
+      this.h2Open.push(false)
+      this.h2IdleSince.push(toI64(HTTP_SERVER_ZERO))
+      this.h2Count.push(HTTP_SERVER_ZERO)
+      this.h2Clear.push(false)
+    }
+    return base
   }
 
   /**
@@ -1013,8 +1079,9 @@ export class HttpServer {
 
   /**
    * One turn of the loop for a server with no TLS or QUIC listener: as
-   * `waitSigned`, with no key. Panics when an HTTP/2 over TLS or HTTP/3
-   * listener is configured, since a handshake there needs the key.
+   * `waitSigned`, with no key. It serves HTTP/1.1 and h2c (`listenH2c`).
+   * Panics when an HTTP/2 over TLS or HTTP/3 listener is configured, since a
+   * handshake there needs the key.
    * @param timeoutMs the longest to block, in milliseconds, or -1 to block until something is ready
    * @returns how many whole requests are queued for `take` after this turn
    */
@@ -1046,8 +1113,9 @@ export class HttpServer {
     this.feedStarved()
     let now: i64 = monotonicNanos()
     let timeout: i32 = this.queueCount > 0 ? 0 : timeoutMs
-    timeout = this.restListener(this.h1Fd, HTTP_SERVER_H1_LISTENER, now, timeout, true)
-    timeout = this.restListener(this.h2Fd, HTTP_SERVER_H2_LISTENER, now, timeout, false)
+    timeout = this.restListener(this.h1Fd, HTTP_SERVER_H1_LISTENER, now, timeout)
+    timeout = this.restListener(this.h2Fd, HTTP_SERVER_H2_LISTENER, now, timeout)
+    timeout = this.restListener(this.h2cFd, HTTP_SERVER_H2C_LISTENER, now, timeout)
     const h3: Http3Server | null = this.h3
     if (h3 !== null) {
       h3.flush(now / HTTP_SERVER_NANOS_PER_MS)
@@ -1067,6 +1135,8 @@ export class HttpServer {
         this.acceptHttp1()
       } else if (token === HTTP_SERVER_H2_LISTENER) {
         this.acceptHttp2()
+      } else if (token === HTTP_SERVER_H2C_LISTENER) {
+        this.acceptH2c()
       } else if (token === HTTP_SERVER_H3_SOCKET) {
         this.h3Readable = true
       } else if (token <= -2 && token > HTTP_SERVER_H1_LISTENER) {
@@ -1075,9 +1145,7 @@ export class HttpServer {
           this.watchedFired[id] = true
         }
       } else if (token >= HTTP_SERVER_H2_BASE) {
-        if (key !== null) {
-          this.h2Serve(token - HTTP_SERVER_H2_BASE, events, key)
-        }
+        this.h2Serve(token - HTTP_SERVER_H2_BASE, events, key)
       } else if (token >= 0) {
         this.h1Serve(token, events)
       }
@@ -1101,17 +1169,13 @@ export class HttpServer {
    * Puts a listener rested for want of descriptors back once its rest is
    * over, and answers `timeout` shortened to wake for that.
    */
-  private restListener(fd: i32, token: i32, now: i64, timeout: i32, first: boolean): i32 {
-    const until: i64 = first ? this.h1RestUntil : this.h2RestUntil
+  private restListener(fd: i32, token: i32, now: i64, timeout: i32): i32 {
+    const until: i64 = this.restUntil[HTTP_SERVER_H1_LISTENER - token]
     if (until === 0 || fd < 0) {
       return timeout
     }
     if (now >= until) {
-      if (first) {
-        this.h1RestUntil = 0
-      } else {
-        this.h2RestUntil = 0
-      }
+      this.restUntil[HTTP_SERVER_H1_LISTENER - token] = 0
       if (!this.draining) {
         pollAdd(this.loop, fd, H1_WANT_READ, token)
       }
@@ -1136,12 +1200,9 @@ export class HttpServer {
       return
     }
     this.draining = true
-    if (this.h1Fd >= 0 && this.h1RestUntil === 0) {
-      pollRemove(this.loop, this.h1Fd)
-    }
-    if (this.h2Fd >= 0 && this.h2RestUntil === 0) {
-      pollRemove(this.loop, this.h2Fd)
-    }
+    this.unlisten(this.h1Fd, HTTP_SERVER_H1_LISTENER)
+    this.unlisten(this.h2Fd, HTTP_SERVER_H2_LISTENER)
+    this.unlisten(this.h2cFd, HTTP_SERVER_H2C_LISTENER)
     const h1: Http1Server | null = this.h1
     if (h1 !== null) {
       for (let s: i32 = 0; s < toI32(this.h1Open.length); s++) {
@@ -1155,12 +1216,14 @@ export class HttpServer {
         }
       }
     }
-    const h2: Http2TlsServer | null = this.h2
-    if (h2 !== null) {
-      for (let s: i32 = 0; s < toI32(this.h2Open.length); s++) {
-        if (this.h2Open[s] && h2.holds(s)) {
-          h2.connection(s).goaway()
-          this.h2Settle(h2, s)
+    for (let v: i32 = 0; v < toI32(this.h2Open.length); v++) {
+      if (this.h2Open[v] && this.h2Holds(v)) {
+        if (this.h2Clear[v] && !this.h2cOf().prefaced(v - this.h2cBase)) {
+          // No preface yet, so no connection to say GOAWAY on.
+          this.h2Close(v)
+        } else {
+          this.h2Conn(v).goaway()
+          this.h2Settle(v)
         }
       }
     }
@@ -1172,6 +1235,13 @@ export class HttpServer {
           h3.touch(s)
         }
       }
+    }
+  }
+
+  /** Takes listener `fd` out of the loop, unless it is not there: never configured, or resting. */
+  private unlisten(fd: i32, token: i32): void {
+    if (fd >= 0 && this.restUntil[HTTP_SERVER_H1_LISTENER - token] === 0) {
+      pollRemove(this.loop, fd)
     }
   }
 
@@ -1188,6 +1258,10 @@ export class HttpServer {
     const h2: Http2TlsServer | null = this.h2
     if (h2 !== null) {
       n += h2.busy()
+    }
+    const h2c: Http2CleartextServer | null = this.h2c
+    if (h2c !== null) {
+      n += h2c.busy()
     }
     const h3: Http3Server | null = this.h3
     if (h3 !== null) {
@@ -1216,8 +1290,7 @@ export class HttpServer {
     if (slot !== HTTP_SERVER_ACCEPT_NONE) {
       // Out of descriptors or memory: the connection stays in the backlog
       // and the listener stays readable, so rest it rather than spin.
-      pollRemove(this.loop, this.h1Fd)
-      this.h1RestUntil = monotonicNanos() + HTTP_SERVER_ACCEPT_REST
+      this.rest(this.h1Fd, HTTP_SERVER_H1_LISTENER)
     }
   }
 
@@ -1683,8 +1756,7 @@ export class HttpServer {
       return false
     }
     if (r.kind === HTTP_SERVER_H2) {
-      const h2: Http2TlsServer | null = this.h2
-      return h2 !== null && h2.holds(r.slot) && this.h2Gen[r.slot] === r.gen
+      return this.h2Holds(r.slot) && this.h2Gen[r.slot] === r.gen
     }
     const h3: Http3Server | null = this.h3
     return h3 !== null && h3.holds(r.slot) && h3.connection(r.slot).generation === r.gen
@@ -1783,9 +1855,7 @@ export class HttpServer {
     const endNow: boolean = r.quiet || bodyLength === 0
     let sent: i32 = 0
     if (r.kind === HTTP_SERVER_H2) {
-      sent = this.h2Of()
-        .connection(r.slot)
-        .respond(toI32(r.stream), status, this.outNames, this.outValues, endNow)
+      sent = this.h2Conn(r.slot).respond(toI32(r.stream), status, this.outNames, this.outValues, endNow)
       if (sent === H2_INVALID) {
         panic(
           "HttpServer.start: the HTTP/2 carrier refused the head: a name that is not a lowercase token, a reserved field, or a value that is not field text"
@@ -1817,8 +1887,13 @@ export class HttpServer {
   private outFields(r: HttpServerRequest, names: u8[][], values: u8[][], bodyLength: i32): boolean {
     const given: i32 = toI32(names.length)
     const altSvc: u8[] | null = this.altSvc
+    // Never on HTTP/3, which it names, nor h2c, whose clients reach it
+    // through a proxy that answers on another port.
     const addAlt: boolean =
-      altSvc !== null && r.kind !== HTTP_SERVER_H3 && !this.hasField(names, this.altSvcName)
+      altSvc !== null &&
+      r.kind !== HTTP_SERVER_H3 &&
+      (r.kind !== HTTP_SERVER_H2 || r.secure) &&
+      !this.hasField(names, this.altSvcName)
     const addLength: boolean =
       r.kind !== HTTP_SERVER_H1 &&
       !r.quiet &&
@@ -1925,14 +2000,13 @@ export class HttpServer {
       return
     }
     if (r.kind === HTTP_SERVER_H2) {
-      const h2: Http2TlsServer = this.h2Of()
-      if (h2.holds(r.slot) && this.h2Gen[r.slot] === r.gen) {
-        if (h2.connection(r.slot).reset(toI32(r.stream), H2_INTERNAL_ERROR) === H2_AGAIN) {
+      if (this.h2Holds(r.slot) && this.h2Gen[r.slot] === r.gen) {
+        if (this.h2Conn(r.slot).reset(toI32(r.stream), H2_INTERNAL_ERROR) === H2_AGAIN) {
           // No room even for the reset: the connection is past saving.
-          this.h2Close(h2, r.slot)
+          this.h2Close(r.slot)
           return
         }
-        this.h2Settle(h2, r.slot)
+        this.h2Settle(r.slot)
       }
       return
     }
@@ -2012,7 +2086,7 @@ export class HttpServer {
     }
     let taken: i32 = 0
     if (r.kind === HTTP_SERVER_H2) {
-      taken = this.h2Of().connection(r.slot).writeData(toI32(r.stream), buf, off, len, last)
+      taken = this.h2Conn(r.slot).writeData(toI32(r.stream), buf, off, len, last)
       if (taken === H2_AGAIN) {
         return 0
       }
@@ -2030,9 +2104,8 @@ export class HttpServer {
     if (r.kind === HTTP_SERVER_H1) {
       this.drive(this.h1Of(), r.slot)
     } else if (r.kind === HTTP_SERVER_H2) {
-      const h2: Http2TlsServer = this.h2Of()
-      if (h2.holds(r.slot)) {
-        this.h2Settle(h2, r.slot)
+      if (this.h2Holds(r.slot)) {
+        this.h2Settle(r.slot)
       }
     } else {
       const h3: Http3Server = this.h3Of()
@@ -2121,9 +2194,7 @@ export class HttpServer {
   private carryEnd(r: HttpServerRequest): i32 {
     let done: i32 = 0
     if (r.kind === HTTP_SERVER_H2) {
-      done = this.h2Of()
-        .connection(r.slot)
-        .writeData(toI32(r.stream), r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+      done = this.h2Conn(r.slot).writeData(toI32(r.stream), r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
       if (done === H2_AGAIN) {
         return 0
       }
@@ -2358,13 +2429,22 @@ export class HttpServer {
     return h1
   }
 
-  /** The HTTP/2 carrier, for a request read on it. */
+  /** The HTTP/2 over TLS carrier, for a slot on it. */
   private h2Of(): Http2TlsServer {
     const h2: Http2TlsServer | null = this.h2
     if (h2 === null) {
-      panic("HttpServer: no HTTP/2 listener")
+      panic("HttpServer: no HTTP/2 over TLS listener")
     }
     return h2
+  }
+
+  /** The h2c carrier, for a slot on it. */
+  private h2cOf(): Http2CleartextServer {
+    const h2c: Http2CleartextServer | null = this.h2c
+    if (h2c === null) {
+      panic("HttpServer: no h2c listener")
+    }
+    return h2c
   }
 
   /** The HTTP/3 carrier, for a request read on it. */
@@ -2454,7 +2534,7 @@ export class HttpServer {
     r.spans[4 * n + 3] = this.headAt
   }
 
-  // ---- HTTP/2 over TLS ------------------------------------------------------------
+  // ---- HTTP/2 ---------------------------------------------------------------------
 
   /** Takes every waiting HTTP/2 over TLS connection, each with fresh randomness. */
   private acceptHttp2(): void {
@@ -2467,48 +2547,138 @@ export class HttpServer {
       crypto.getRandomValues(this.keyBuf)
       const slot: i32 = h2.accept(this.rnd, this.keyBuf)
       if (slot >= 0) {
-        this.h2Open[slot] = true
-        this.h2Count[slot] = 0
-        this.h2IdleSince[slot] = this.turnAt
-        const base: i32 = slot * this.perConnection2
-        for (let e: i32 = base; e < base + this.perConnection2; e++) {
-          this.h2Reqs[e] = -1
-        }
-        pollAdd(this.loop, h2.fd(slot), H1_WANT_READ, HTTP_SERVER_H2_BASE + slot)
+        this.h2Opened(this.h2TlsBase + slot, h2.fd(slot))
       } else if (slot === HTTP_SERVER_ACCEPT_NONE) {
         return
       } else if (slot !== TLS_TCP_POOL_FULL && slot !== HTTP_SERVER_ACCEPT_ABORTED) {
         // Out of descriptors or memory: rest the listener, as `acceptHttp1` does.
-        pollRemove(this.loop, this.h2Fd)
-        this.h2RestUntil = monotonicNanos() + HTTP_SERVER_ACCEPT_REST
+        this.rest(this.h2Fd, HTTP_SERVER_H2_LISTENER)
         return
       }
     }
   }
 
-  /** A ready HTTP/2 socket: read or written, its handshake signed, its events served, then settled. */
-  private h2Serve(slot: i32, events: i32, key: Secret<u8[]>): void {
+  /** Takes every waiting h2c connection. */
+  private acceptH2c(): void {
+    const h2c: Http2CleartextServer | null = this.h2c
+    if (h2c === null || this.draining) {
+      return
+    }
+    let slot: i32 = h2c.accept()
+    while (slot >= 0 || slot === H2C_POOL_FULL || slot === HTTP_SERVER_ACCEPT_ABORTED) {
+      if (slot >= 0) {
+        this.h2Opened(this.h2cBase + slot, h2c.fd(slot))
+      }
+      slot = h2c.accept()
+    }
+    if (slot !== HTTP_SERVER_ACCEPT_NONE) {
+      this.rest(this.h2cFd, HTTP_SERVER_H2C_LISTENER)
+    }
+  }
+
+  /**
+   * Out of descriptors or memory: the connection stays in the backlog and
+   * the listener stays readable, so it leaves the loop for a while rather
+   * than spin.
+   */
+  private rest(fd: i32, token: i32): void {
+    pollRemove(this.loop, fd)
+    this.restUntil[HTTP_SERVER_H1_LISTENER - token] = monotonicNanos() + HTTP_SERVER_ACCEPT_REST
+  }
+
+  /** HTTP/2 slot `v`, just accepted on socket `fd`: an empty stream table, idle, and in the loop. */
+  private h2Opened(v: i32, fd: i32): void {
+    this.h2Open[v] = true
+    this.h2Count[v] = 0
+    this.h2IdleSince[v] = this.turnAt
+    const base: i32 = v * this.perConnection2
+    for (let e: i32 = base; e < base + this.perConnection2; e++) {
+      this.h2Reqs[e] = -1
+    }
+    pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H2_BASE + v)
+  }
+
+  /** Whether HTTP/2 slot `v`'s carrier holds a connection there. */
+  private h2Holds(v: i32): boolean {
+    if (this.h2Clear[v]) {
+      const h2c: Http2CleartextServer | null = this.h2c
+      return h2c !== null && h2c.holds(v - this.h2cBase)
+    }
     const h2: Http2TlsServer | null = this.h2
-    if (h2 === null || slot < 0 || slot >= toI32(this.h2Open.length) || !this.h2Open[slot]) {
+    return h2 !== null && h2.holds(v - this.h2TlsBase)
+  }
+
+  /** HTTP/2 slot `v`'s connection. */
+  private h2Conn(v: i32): Http2Connection {
+    if (this.h2Clear[v]) {
+      return this.h2cOf().connection(v - this.h2cBase)
+    }
+    return this.h2Of().connection(v - this.h2TlsBase)
+  }
+
+  /** HTTP/2 slot `v`'s next event, as its carrier's `next` answers. */
+  private h2Next(v: i32): i32 {
+    if (this.h2Clear[v]) {
+      return this.h2cOf().next(v - this.h2cBase)
+    }
+    return this.h2Of().next(v - this.h2TlsBase)
+  }
+
+  /** Sends what HTTP/2 slot `v` holds: its interest, with `TLS_RECORD_DONE` (`H2C_DONE`) once it is over. */
+  private h2Flush(v: i32): i32 {
+    if (this.h2Clear[v]) {
+      return this.h2cOf().flush(v - this.h2cBase)
+    }
+    return this.h2Of().flush(v - this.h2TlsBase)
+  }
+
+  /** HTTP/2 slot `v`'s socket. */
+  private h2FdOf(v: i32): i32 {
+    if (this.h2Clear[v]) {
+      return this.h2cOf().fd(v - this.h2cBase)
+    }
+    return this.h2Of().fd(v - this.h2TlsBase)
+  }
+
+  /**
+   * A ready HTTP/2 socket: read or written, a TLS handshake signed, its
+   * events served, then settled. A TLS slot is never ready under `wait`,
+   * which panics with a TLS listener, so `key` is null only for h2c.
+   */
+  private h2Serve(v: i32, events: i32, key: Secret<u8[]> | null): void {
+    if (v < 0 || v >= toI32(this.h2Open.length) || !this.h2Open[v]) {
       return
     }
-    if (!h2.holds(slot)) {
-      this.h2Forget(slot)
+    if (!this.h2Holds(v)) {
+      this.h2Forget(v)
       return
     }
-    let wants: i32 = (events & HTTP_SERVER_READ_BITS) !== 0 ? h2.readable(slot) : h2.writable(slot)
-    for (let turn: i32 = 0; turn < 4 && h2.holds(slot) && (wants & TLS_RECORD_SIGN) !== 0; turn++) {
-      wants = h2.signP256(slot, key)
-    }
-    if (h2.holds(slot)) {
-      const conn: Http2Connection = h2.connection(slot)
-      let event: i32 = h2.next(slot)
-      while (event !== H2_NEED_MORE && event !== H2_ERROR) {
-        this.h2Event(slot, conn, event)
-        event = h2.next(slot)
+    const read: boolean = (events & HTTP_SERVER_READ_BITS) !== 0
+    if (this.h2Clear[v]) {
+      const h2c: Http2CleartextServer = this.h2cOf()
+      const slot: i32 = v - this.h2cBase
+      if (read) {
+        h2c.readable(slot)
+      } else {
+        h2c.writable(slot)
+      }
+    } else if (key !== null) {
+      const h2: Http2TlsServer = this.h2Of()
+      const slot: i32 = v - this.h2TlsBase
+      let wants: i32 = read ? h2.readable(slot) : h2.writable(slot)
+      for (let turn: i32 = 0; turn < 4 && h2.holds(slot) && (wants & TLS_RECORD_SIGN) !== 0; turn++) {
+        wants = h2.signP256(slot, key)
       }
     }
-    this.h2Settle(h2, slot)
+    if (this.h2Holds(v)) {
+      const conn: Http2Connection = this.h2Conn(v)
+      let event: i32 = this.h2Next(v)
+      while (event !== H2_NEED_MORE && event !== H2_ERROR) {
+        this.h2Event(v, conn, event)
+        event = this.h2Next(v)
+      }
+    }
+    this.h2Settle(v)
   }
 
   /** One HTTP/2 event of `slot`'s connection. */
@@ -2531,7 +2701,7 @@ export class HttpServer {
       this.fromFields(r, f)
       r.kind = HTTP_SERVER_H2
       r.version = 2
-      r.secure = true
+      r.secure = !this.h2Clear[slot]
       r.stream = toI64(id)
       r.slot = slot
       r.gen = this.h2Gen[slot]
@@ -2615,26 +2785,26 @@ export class HttpServer {
    * Sends what `slot` holds, pushing each response's pending bytes while a
    * pass moves any, then re-arms it, or closes it once it is over.
    */
-  private h2Settle(h2: Http2TlsServer, slot: i32): void {
-    if (!h2.holds(slot)) {
+  private h2Settle(slot: i32): void {
+    if (!this.h2Holds(slot)) {
       if (this.h2Open[slot]) {
         this.h2Forget(slot)
       }
       return
     }
-    let wants: i32 = h2.flush(slot)
-    for (let pass: i32 = 0; pass < 4096 && h2.holds(slot) && this.h2PushAll(slot); pass++) {
-      wants = h2.flush(slot)
+    let wants: i32 = this.h2Flush(slot)
+    for (let pass: i32 = 0; pass < 4096 && this.h2Holds(slot) && this.h2PushAll(slot); pass++) {
+      wants = this.h2Flush(slot)
     }
-    if (!h2.holds(slot)) {
+    if (!this.h2Holds(slot)) {
       this.h2Forget(slot)
       return
     }
     if ((wants & TLS_RECORD_DONE) !== 0) {
-      this.h2Close(h2, slot)
+      this.h2Close(slot)
       return
     }
-    pollModify(this.loop, h2.fd(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), HTTP_SERVER_H2_BASE + slot)
+    pollModify(this.loop, this.h2FdOf(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), HTTP_SERVER_H2_BASE + slot)
   }
 
   /** Pushes every response `slot` is sending: whether any moved a byte or ended. */
@@ -2661,8 +2831,12 @@ export class HttpServer {
   }
 
   /** Closes `slot` and forgets it. */
-  private h2Close(h2: Http2TlsServer, slot: i32): void {
-    h2.close(slot)
+  private h2Close(slot: i32): void {
+    if (this.h2Clear[slot]) {
+      this.h2cOf().close(slot - this.h2cBase)
+    } else {
+      this.h2Of().close(slot - this.h2TlsBase)
+    }
     this.h2Forget(slot)
   }
 
@@ -2862,12 +3036,15 @@ export class HttpServer {
         }
       }
     }
-    const h2: Http2TlsServer | null = this.h2
-    if (h2 !== null) {
-      for (let s: i32 = 0; s < toI32(this.h2Open.length); s++) {
-        if (this.h2Open[s]) {
-          this.h2Expire(h2, s, now)
-        }
+    const h2c: Http2CleartextServer | null = this.h2c
+    if (h2c !== null) {
+      // Closes each connection past `prefaceTimeout` with no preface; the
+      // loop below forgets it.
+      h2c.expire(now)
+    }
+    for (let v: i32 = 0; v < toI32(this.h2Open.length); v++) {
+      if (this.h2Open[v]) {
+        this.h2Expire(v, now)
       }
     }
     const h3: Http3Server | null = this.h3
@@ -2886,12 +3063,17 @@ export class HttpServer {
   }
 
   /** `expireAll` for HTTP/2 slot `s`. */
-  private h2Expire(h2: Http2TlsServer, s: i32, now: i64): void {
-    if (!h2.holds(s)) {
+  private h2Expire(s: i32, now: i64): void {
+    if (!this.h2Holds(s)) {
       this.h2Forget(s)
       return
     }
-    const conn: Http2Connection = h2.connection(s)
+    if (this.h2Clear[s] && !this.h2cOf().prefaced(s - this.h2cBase)) {
+      // `prefaceTimeout` holds it till then; `idleTimeout` runs from the preface.
+      this.h2IdleSince[s] = now
+      return
+    }
+    const conn: Http2Connection = this.h2Conn(s)
     const base: i32 = s * this.perConnection2
     for (let e: i32 = base; e < base + this.perConnection2; e++) {
       const at: i32 = this.h2Reqs[e]
@@ -2900,16 +3082,16 @@ export class HttpServer {
         this.release(this.requests[at])
         if (sent === H2_AGAIN) {
           // No room to send the reset: end the connection, as `abort` does.
-          this.h2Close(h2, s)
+          this.h2Close(s)
           return
         }
       }
     }
     if (this.h2Count[s] === 0 && this.h2IdleSince[s] > 0 && now - this.h2IdleSince[s] > this.idleTimeout) {
-      this.h2Close(h2, s)
+      this.h2Close(s)
       return
     }
-    this.h2Settle(h2, s)
+    this.h2Settle(s)
   }
 
   /** `expireAll` for HTTP/3 slot `s`. */
