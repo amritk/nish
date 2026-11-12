@@ -284,6 +284,20 @@ function emitNewWithoutArguments(emitter: Emitter, info: StructInfo, site: Node)
   callee +1:3 initInlineArrays -> @initInlineArrays
   local +2:9 none: Node[] (const)
   callee +3:3 constructObject -> @constructObject
+function emitStructCopy(emitter: Emitter, info: StructInfo, from: string): string -> @emitStructCopy [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  calls: Emitter.declare Emitter.useRuntime IRFunction.emit IRFunction.emitValue nish_str_concat nish_str_from_i32 structTypeName
+  pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.declare#0
+  pointer info: size=176 writesThrough=false captured=false passedTo=structTypeName#0
+  stackSites=0 stackLocals=0
+  local +0:9 bytes: string (const)
+  callee +0:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +0:50 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +1:3 Emitter.declare -> @Emitter.declare
+  callee +4:3 IRFunction.emit -> @IRFunction.emit
+  callee +7:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +7:58 structTypeName -> @structTypeName
 function emitPropertyAccess(emitter: Emitter, expr: Node): string -> @emitPropertyAccess [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
