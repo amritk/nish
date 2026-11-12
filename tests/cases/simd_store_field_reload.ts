@@ -1,10 +1,9 @@
-// A vector store cannot write the class field that holds the array, nor the
-// array's header. Before a vector access carried the scope and TBAA tag a
-// scalar element access of its lane type carries, `opt -O3` read each
-// `store(v, this.out, i)` as a clobber of `this.out`, its `length` and its
-// `data`, and reloaded all three on every trip round the loop. `tests/run.js`
-// pins the consequence a golden cannot state: after `opt -O3` the loop in
-// `@Sink.fill` loads no pointer and no length.
+// A vector store cannot write a class field. Before a vector access carried
+// the scope and TBAA tag a scalar element access of its lane type carries,
+// `opt -O3` read each `store(v, this.out, i)` as a possible write of
+// `this.count`, and reloaded and stored the counter on every trip round the
+// loop. `tests/run.js` pins the consequence a golden cannot state: after
+// `opt -O3` the loop in `@Sink.fill` keeps `this.count` in a register.
 import { loadU8x16, store, u8x16 } from "nish:simd"
 
 export class Sink {
