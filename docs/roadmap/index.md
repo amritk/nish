@@ -25,7 +25,7 @@ and where it is specified.
 2. [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): G1's interop, G2's open timeouts, then G7's one handler.
 3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
 4. [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md): stage 3, the soak.
-5. [WP21: Packages](wp21-packages.md): S3's two diagnostics.
+5. [WP21: Packages](wp21-packages.md): S4, the build cache.
 6. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
 7. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
 
@@ -55,7 +55,7 @@ For a contributor, or an agent asked to "pick up WP50":
 
 | Work package | State | Done |
 | --- | --- | --- |
-| [WP21: Packages](wp21-packages.md) | In progress | 3 of 7 |
+| [WP21: Packages](wp21-packages.md) | In progress | 5 of 7 |
 | [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 3 of 5 |
 | [WP27: Calling C](wp27-ffi.md) | In progress | 3 of 5 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |

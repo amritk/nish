@@ -1342,6 +1342,7 @@
   "agentSkills": [{ "filepath": "skills/writing-nish/SKILL.md" }],
   "siteConfig": {
     "isPrivate": true,
+    "agent": { "enabled": false },
     "theme": "docs/site/theme.css",
     "logo": { "lightMode": "docs/site/logo-light.png", "darkMode": "docs/site/logo-dark.png" },
     "rss": {

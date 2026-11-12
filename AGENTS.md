@@ -90,8 +90,9 @@ itself.
 
 Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,
-1-based, `endLine`/`endColumn` exclusive, and a trailing `"fix"` and then
-`"review"` when there is one.
+1-based, `endLine`/`endColumn` exclusive, a `"package"` after `"message"` when the
+diagnostic is in a dependency's source, and a trailing `"fix"` and then `"review"`
+when there is one.
 
 - **`severity`** is `"error"`, `"performance"`, `"portability"` or
   `"deprecation"`. A warning never changes the exit code, a portability warning

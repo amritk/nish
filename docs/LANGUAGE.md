@@ -2763,6 +2763,31 @@ and their `.ll` goldens are byte-identical files.
     may each keep a private `helper()`; the root package — the program being
     compiled — has no prefix and its IR is unchanged (`docs/wp21-packages.md`
     §9).
+  - **A diagnostic in a dependency says it is the dependency's.** An error or
+    warning spanned in a package's own source keeps its code and wording, adds
+    `` = note: this is in the dependency `pkg_broken` 0.3.1, not in this
+    program's own source `` under the excerpt (the version as its manifest
+    gives it, left out when it gives none), and under `--json` carries
+    `"package":"pkg_broken"` (`tests/link/package_dependency_error`). What
+    decides is where the module was resolved, so a dependency that calls
+    itself `nish` is still one, and the standard library never is.
+  - **A builtin with no runtime on the target is refused by what the program
+    reaches**, once every module is checked. A freestanding `--target wasm32`
+    build has no file, clock, environment, process, signal, terminal or
+    entropy call (`runtime/runtime-wasm.c`), so a program whose `main` or
+    any exported function of its own modules reaches one — `readFileSync`,
+    `getenv`, `spawnSync`, `monotonicNanos` among the ones no call-site rule
+    refuses — is refused with the N3 rule's words (NL2404), one error per
+    capability, spanned at the first call of the witness chain, which names
+    every hop; when the chain passes through a dependency the message names
+    the one nearest the builtin: `` `getenv` reaches the operating system,
+    and a wasm32 build has none to reach; the dependency `pkg_conf` calls it
+    in `load` `` (`tests/link/package_wasm_hostless`,
+    `tests/link/wasm_hostless_own`, `reject_read_file_wasm`). A module that
+    calls one in a function the program never reaches is not refused: a
+    wasm32 program may import `nish/cli` for `Style` (`npm test` "wasm
+    hostless"). `--target wasm32-wasi` and `--profile wasi` have the calls,
+    and refuse none of them.
 - An imported constant contributes no `declare` and no relocation: it is
   folded into every use site in the importing module exactly as it is in the
   exporting one (`tests/link/const_export`,
@@ -14465,6 +14490,12 @@ by the caller.
   deprecated call, which is the field a tool filters on; `code` is the stable
   identifier for the rule (`NL1013`, `NL2231`, ...) and is the field to key on,
   because the prose may improve between releases and the code may not. A
+  diagnostic in a dependency's source — a module resolved into a package
+  other than the root and the standard library — adds `"package"`, the
+  package's name, after `message` (and before a `fix`), and its human report
+  adds a line under the excerpt, `` = note: this is in the dependency
+  `pkg_broken` 0.3.1, not in this program's own source `` (WP21 S3,
+  `tests/link/package_dependency_error`). A
   failure with no source position — an unusable C toolchain, an internal
   compiler error, a bad `-o` layout — is `{"severity","code","message"}`. Two
   optional keys follow `message`, each a list of edits
