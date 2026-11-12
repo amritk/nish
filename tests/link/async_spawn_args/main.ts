@@ -4,7 +4,11 @@
 // `start` builds both strings in its own frame and returns before the task
 // wakes, and `main` then allocates 2890 characters of noise over the memory
 // they were built in, more than either string; each task still prints what
-// it was given.
+// it was given. Both tasks sleep the same 10 ms: `spawn` runs job-1 to its
+// `sleep` before job-2's is made, so job-1's deadline is never the later one
+// and the executor wakes the earlier deadline first, a tie in the order the
+// timers were made. With different sleeps the order rode on the time between
+// the two `sleep` calls, which a loaded runner stretched past the gap.
 import { spawn } from "nish:async"
 import { report } from "./lib"
 
@@ -19,7 +23,7 @@ async function start(i: i32, big: i64, half: f64, ms: i32): Promise<void> {
 }
 
 export async function main(): Promise<i32> {
-  await start(1, 4000000000, 0.5, 20)
+  await start(1, 4000000000, 0.5, 10)
   await start(2, 8000000000, 1, 10)
   let noise = ""
   for (let i = 0; i < 1000; i++) {
