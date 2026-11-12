@@ -1,7 +1,12 @@
 # WP46: Memory for programs that do not exit — regions
 
-**Status: stages 1 and 2 built** (2026-11-02). Stage 1, the runtime, makes,
-enters, leaves and frees a region (`runtime/runtime-region.c`,
+**Status: built, stages 1 to 3** (2026-11-12). Stage 3, the proof, is
+`tests/link/region_sessions_soak`: §1's sessions server with each session in
+a region, 1,000 live, serves 2,000,000 requests, and over the 1,900,000 past
+warm-up holds `Arena.mark()` unmoved and anonymous resident memory within
+512 KiB, where the arena-only baseline fails the same checks within 300,000
+(its growth is in the soak's stderr and in §7.1's table). Stage 1, the runtime,
+makes, enters, leaves and frees a region (`runtime/runtime-region.c`,
 `nish_region_new`, `_enter`, `_leave`, `_free`; its record is RT-41 to RT-44 in
 [security/runtime.md](security/runtime.md)), and `node tests/run.js region`
 holds the resident set flat over 100,000 of them. Stage 2, the language, is
@@ -1122,6 +1127,44 @@ program's time.
 
 The compiler itself has no long-lived state and does not need regions; the
 column says only when the rolling freeze would allow it.
+
+### 7.1 Stage 3, measured
+
+`node bench/wp46-memory/run.mjs` runs `sessions.ts`, a byte-for-byte copy of
+it, and `sessions-region.ts` in 9 interleaved rounds of 2,000,000 requests
+each, a checkpoint every 250,000. Memory is the median over the rounds at each
+checkpoint: anonymous resident bytes, and how far `Arena.mark()` has moved
+since the first checkpoint. Time is wall time over requests, start-up
+included; the noise band is the baseline against its own copy.
+
+| | 1,000 live | 100,000 live |
+| --- | ---: | ---: |
+| ns/request, baseline | 452 | 549 |
+| ns/request, regions | 438 (0.97x) | 613 (1.12x) |
+| noise band | 3.2% | 4.6% |
+| baseline anon, 250k → 2M requests | 42.5 MB → 337.7 MB | 57.6 MB → 361.8 MB |
+| baseline mark moved by 2M | 295,202,656 B | 295,091,616 B |
+| regions anon, 250k → 2M requests | 761,856 B at every checkpoint | 48.0 MB → 57.3 MB by 750k, then +12,288 B to 2M |
+| regions mark moved by 2M | 0 | −10,498,048 B once by 500k, then 0 |
+
+At 1,000 live the regions server is flat from the first checkpoint. At
+100,000 it warms up first: the cache's `Map` leaves a dead entry per delete
+until it rebuilds, so its table grows to about 2.7 times the live set before
+it compacts in place and stops growing (the one move of the mark, downward),
+and malloc's free lists settle under the regions' chunks over a few turnovers.
+The soak counts its checkpoints from eight turnovers of the live set, rounded
+up to a checkpoint. The checked-in test runs 1,000 live, where that is
+100,000 requests; run by hand at 100,000 live
+(`<soak binary> 2000000 100000`), it is 800,000 requests, and in that one run
+the 1,200,000 after it moved anonymous memory 53,248 B, against the 512 KiB
+bound. The table's +12,288 B is the bench's median from 750,000 on, so the
+two differ by run and by starting point, both far inside the bound. The growth
+is a bounded warm-up, not a leak: no checkpoint past it moves the mark.
+
+Regions cost nothing measurable at 1,000 live and 12% at 100,000, outside the
+noise band. The likely cause, not measured here: each session's region is a
+chunk of its own, so 100,000 of them spread over more cache lines and pages
+than the same sessions packed in one arena.
 
 ## Not in this work package
 
