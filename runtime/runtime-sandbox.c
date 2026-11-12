@@ -540,6 +540,11 @@ static int nish_sb_spawn_open(const char *file, int low, char *proc) {
  *     inherits the filter. A filter cannot be removed, which is why it is a
  *     thread that ends with the spawn and not the calling thread.
  *
+ * Both threads run with every signal blocked, and the child is started with
+ * the calling thread's mask (`POSIX_SPAWN_SETSIGMASK`): a handler run on
+ * either would write its wake pipe by number, and in the private table that
+ * number can be the listener or the spawn's own pipe.
+ *
  * The supervisor answers the first notification, the child's own exec, with
  * "continue" and closes the listener; the kernel then answers every later
  * exec in that child's subtree ENOSYS, for good. The same filter refuses a
@@ -581,6 +586,7 @@ struct nish_sb_job {
   char **argv;
   char proc[32];
   int pipe[2]; /* the spawner's two answers: its listener, then its child */
+  sigset_t mask; /* the calling thread's, which the child starts with */
   int32_t result;
 };
 
@@ -625,14 +631,23 @@ static void *nish_sb_spawner(void *arg) {
   (void)!write(job->pipe[1], &said, sizeof said);
   if (said < 0) return 0;
   pid_t pid;
-  int failed = posix_spawn(&pid, job->proc, job->actions, 0, job->argv, environ);
+  /* This thread blocks every signal, and a child starts with its parent's
+   * mask unless it is given one: the caller's. */
+  posix_spawnattr_t attr;
+  int failed = posix_spawnattr_init(&attr);
+  if (!failed) {
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK);
+    posix_spawnattr_setsigmask(&attr, &job->mask);
+    failed = posix_spawn(&pid, job->proc, job->actions, &attr, job->argv, environ);
+    posix_spawnattr_destroy(&attr);
+  }
   said = failed ? -failed : (int32_t)pid;
   (void)!write(job->pipe[1], &said, sizeof said);
   return 0;
 }
 
-/* The spawner's next answer. A signal handled on this thread restarts the
- * read: giving up there would lose a child that is already running. */
+/* The spawner's next answer. An interrupted read is restarted: giving up
+ * there would lose a child that is already running. */
 static int32_t nish_sb_answer(int fd) {
   int32_t said;
   ssize_t n;
@@ -689,7 +704,11 @@ static void *nish_sb_supervisor(void *arg) {
     job->result = fd;
     return 0;
   }
-  if (pthread_create(&spawner, 0, nish_sb_spawner, job)) return 0;
+  int failed = pthread_create(&spawner, 0, nish_sb_spawner, job);
+  if (failed) {
+    nish_sb_refuse_spawn(failed);
+    return 0;
+  }
   int32_t listener = nish_sb_answer(job->pipe[0]);
   if (listener < 0) {
     nish_sb_refuse_spawn(-listener);
@@ -731,7 +750,7 @@ static void *nish_sb_supervisor(void *arg) {
     /* `posix_spawn` reports a child killed before its exec as started. */
     if (killed && job->result > 0) {
       while (waitpid(job->result, 0, 0) < 0 && errno == EINTR) {}
-      job->result = -ENOSYS;
+      job->result = -ECHILD;
     }
   }
   pthread_join(spawner, 0);
@@ -746,7 +765,20 @@ static int32_t nish_sb_spawn_once(const char *file, const int *dup, int base, in
   struct nish_sb_job job = {
       .file = file, .dup = dup, .n = n, .low = base + n + 3, .actions = actions, .argv = argv, .result = -EAGAIN};
   pthread_t supervisor;
-  if (pthread_create(&supervisor, 0, nish_sb_supervisor, &job)) return -EAGAIN;
+  sigset_t all;
+  /* Both threads start with every signal blocked, so the program's handlers
+   * never run on them: a handler names its descriptors by number
+   * (`signalFd`'s pipe), and in the private table that number is nothing, or
+   * one of this spawn's own. A signal sent to the process is delivered to a
+   * thread that takes it. */
+  sigfillset(&all);
+  pthread_sigmask(SIG_SETMASK, &all, &job.mask);
+  int failed = pthread_create(&supervisor, 0, nish_sb_supervisor, &job);
+  pthread_sigmask(SIG_SETMASK, &job.mask, 0);
+  if (failed) {
+    nish_sb_refuse_spawn(failed);
+    return -EAGAIN;
+  }
   pthread_join(supervisor, 0);
   return job.result;
 }

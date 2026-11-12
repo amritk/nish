@@ -189,13 +189,21 @@ refuses every later one in its subtree:
    the target, and starts a **spawner** thread, which shares that private
    table. Every descriptor made here is moved to `base + n + 3` or above
    (`nish_sb_lift`), where `base` onward are the `n` numbers the actions
-   write.
+   write. **Both threads run with every signal blocked**: the hook blocks
+   them all on the calling thread around the `pthread_create` (a new thread
+   inherits its creator's mask) and restores the caller's mask straight
+   after, so a signal sent to the process is delivered to a thread of the
+   program's own. A handler run on a helper would act in the private table:
+   `signalFd`'s handler writes its wake pipe by descriptor number, and there
+   that number can be the listener or the spawn's pipe.
 3. The spawner installs a second seccomp filter on itself, with
    `SECCOMP_FILTER_FLAG_NEW_LISTENER`: `execve` and `execveat` answer
    `SECCOMP_RET_USER_NOTIF`, a `seccomp` call that asks for a listener
    answers `EBUSY`, everything else is allowed (after the same architecture
    and x32 checks as the process's filter). It then calls `posix_spawn` on
-   the `/proc/self/fd/N` name with the caller's file actions, so the child
+   the `/proc/self/fd/N` name with the caller's file actions and, through
+   `POSIX_SPAWN_SETSIGMASK`, the calling thread's saved signal mask (not the
+   spawner's all-blocked one), so the child
    inherits the filter and a copy of the private table. The listener is
    moved above the actions' numbers like the rest, before the spawn.
 4. The supervisor polls the listener and the spawner's pipe together. The
@@ -279,8 +287,9 @@ errno as the builtin's answer. That covers a kernel without the listener
 flag (`EINVAL`, before Linux 5.0), a launcher whose filters already hold a
 listener (`EBUSY`), a kernel that has the listener but not "continue"
 (before 5.5: the answer is refused, so the supervisor answers the same
-notification with the error `ENOSYS`, which fails the child's exec, and
-kills and reaps the child if that answer is refused too; closing the
+notification with the error `ENOSYS`, which fails the child's exec and
+answers the builtin `-ENOSYS`, and
+kills and reaps the child if that answer is refused too, answering `-ECHILD`; closing the
 listener alone would not do, the child holding a copy until its exec
 commits), and a launcher that denies `unshare` or `pipe2`: Docker's
 default seccomp profile is one (`unshare` is `EPERM` without
@@ -764,7 +773,8 @@ compiles extra copies of `runtime-sandbox.c` with
 `build.sh`'s flags, so no shipped runtime can carry it, and no binary reads it
 at run time. `-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=<n>` is the same kind of
 knob for the one-exec hold: 1 makes the "continue" answer fail as it does
-before Linux 5.5, 2 the error answer after it as well.
+before Linux 5.5, 2 the error answer after it as well; the two are told
+apart by the builtin's answer, `-ENOSYS` (-38) and `-ECHILD` (-10).
 
 **Budget rows.** `runtime-os.c` measures 1,530 of its 1,536 bytes of `.text*`
 (`RUNTIME_OS_TEXT_BUDGET`, `tests/runtime-budgets.js:86`; measured at

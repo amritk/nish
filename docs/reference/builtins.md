@@ -2997,7 +2997,10 @@ the program and its arguments.
 
 the child's pid, or a negative errno: -22 (EINVAL) for an empty
   vector or an argument holding a NUL, and `posix_spawnp`'s own error
-  otherwise, so a program that is not there is -2 (ENOENT).
+  otherwise, so a program that is not there is -2 (ENOENT). Under `--sandbox` with a list of granted
+  programs, a spawn that cannot be held to one program is refused: -11
+  (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+  on stderr.
 
 </scalar-field>
 
@@ -3256,7 +3259,10 @@ the descriptors handed down, at most 64.
 the child's pid, or a negative errno: -22 more than 64 descriptors
   or a negative one (before anything is opened or started), -9 one that is
   not open, -24 (or -22 above the descriptor limit) a scratch descriptor the
-  system cannot give.
+  system cannot give. Under `--sandbox` with a list of granted
+  programs, a spawn that cannot be held to one program is refused: -11
+  (EAGAIN), -38 (ENOSYS), -10 (ECHILD) or the kernel's own error, with a line
+  on stderr.
 
 </scalar-field>
 

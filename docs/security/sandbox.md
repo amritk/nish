@@ -298,7 +298,8 @@ counted. One finding is counted, and it is fixed:
   refused the supervisor therefore answers the same notification with an
   error (`ENOSYS`, an answer every kernel with a listener takes), which
   fails the child's exec; if that answer is refused as well it kills the
-  child, reaps it and answers `-ENOSYS` itself. A notification gone before
+  child, reaps it and answers `-ECHILD` itself (there is no child left to
+  wait for, and the number tells the two paths apart). A notification gone before
   its answer (`ENOENT`: the child was killed, or a signal restarted its
   exec) sends the supervisor back to wait for the next one or for the
   spawner's answer. Pinned by the two `a spawn whose exec cannot be answered
@@ -306,8 +307,10 @@ counted. One finding is counted, and it is fixed:
   built with `-DNISH_SANDBOX_SIMULATE_NO_CONTINUE`. The number the builtin
   answers is not always the errno the line prints, by design: a failed
   `unshare`, `pipe2`, descriptor move or `pthread_create` answers `-EAGAIN`
-  and a refused "continue" `-ENOSYS`, and a failed descriptor move prints `EMFILE`
-  whatever `fcntl` said; the line carries the cause. The hold also needs `unshare(CLONE_FILES)` and `pipe2`, and a
+  and a refused "continue" `-ENOSYS` (`-ECHILD` where the child had to be
+  killed), and a failed descriptor move prints `EMFILE`
+  whatever `fcntl` said; the line carries the cause. Either `pthread_create`
+  failing prints the line with its errno. The hold also needs `unshare(CLONE_FILES)` and `pipe2`, and a
   failure of either prints the same line. **Docker's default seccomp profile
   is such a place**: it allows `unshare` only to a container with
   `CAP_SYS_ADMIN` and answers `EPERM` otherwise (moby's
@@ -327,6 +330,30 @@ counted. One finding is counted, and it is fixed:
   each of its spawns refused (`EBUSY`), where the one-exec hold would refuse
   the exec anyway. Any other program that needs a listener (a container
   runtime, a sandboxing browser) fails the same way when spawned.
+- **No other route gives a descendant a listener, or an answer of its
+  own.** Read against `kernel/seccomp.c`: a listener comes only from
+  `seccomp(2)` with `SECCOMP_FILTER_FLAG_NEW_LISTENER`, whose bit the
+  filter tests, so the `TSYNC` with `TSYNC_ESRCH` spelling (flags 25) is
+  refused with the plain one (8); `prctl(PR_SET_SECCOMP)` installs with no
+  flags and cannot ask for one; the x32 numbers for `seccomp` and `execve`
+  are killed by the same head as the process's filter, as is a foreign
+  architecture. A descendant may still stack filters without a listener.
+  One that answers an exec `ERRNO` or `KILL` outranks `USER_NOTIF` and only
+  refuses more; `ALLOW`, `LOG` and `TRACE` rank below it and change nothing;
+  one that answers `USER_NOTIF` with no listener of its own gets `ENOSYS`.
+  Pinned by `a granted program cannot install a seccomp listener of its
+  own` below, for flags 8 and 25.
+- **Signals do not reach the helper threads.** Both are created under a
+  full mask, restored on the calling thread straight after, and the child
+  starts with the caller's mask, not theirs. Without that, a handler chosen
+  to run on the supervisor or spawner would act in the private descriptor
+  table: `signalFd`'s handler writes one byte to its pipe by number, and in
+  the private table a pipe that `signalFd` made on another thread after the
+  `unshare` is not there, its number unopened or given to the listener or
+  the spawn's pipe, so the program's own wake would be lost or
+  the supervisor woken with a byte it reads as the spawner's answer (`-EIO`,
+  a refused spawn, never a held-open one). `SIGKILL` and `SIGSTOP` are the
+  kernel's and act on the process whole.
 - **Who can raise the notification.** The filter is the spawner thread's
   alone, and that thread makes no `execve`: only the child `posix_spawn`
   creates carries it before the listener closes, so the one "continue" goes
@@ -396,7 +423,12 @@ Each is a kernel answer the test machines do not give; each fails closed:
   closed by another thread before the supervisor's snapshot (`EBADF`; the
   builtins hand over descriptors they opened or checked themselves, so only
   a racing `fileClose` reaches it); `nish_sb_lift` failing for a pipe end,
-  the listener or the target (`EMFILE`); either `pthread_create` failing;
+  the listener or the target (`EMFILE`); either `pthread_create` failing
+  and the "cannot hold" line each prints; `posix_spawnattr_init` failing
+  (`ENOMEM`, returned as `posix_spawn`'s error); a signal arriving while a
+  spawn is in flight (the two mask checks below show what the child starts
+  with, not that no handler ran on a helper: that follows from the mask the
+  threads are created under, and no check makes the delivery deterministic);
   the filter refused (`EINVAL`,
   `EBUSY`, `ENOMEM`) and the "cannot hold" line it prints (the nested case
   needs a second sandboxed Nish binary as the granted program); a refused
@@ -520,7 +552,13 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
   "continue" is refused and does not hang: the supervisor fails the child's
   exec (SBX-1)` and `... the supervisor kills and reaps the child (SBX-1)`
   (the runtime built with `-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=1` and `=2`;
-  a hang ends in the run's timeout and fails the check),
+  a hang ends in the run's timeout and fails the check; the builtin answers
+  -38 for the first and -10 for the second),
+  `sandbox dependency grants: a granted program cannot install a seccomp
+  listener of its own (SBX-1)` (the helper asks `seccomp(2)` for a listener
+  with flags 8 and 25 and both answer `EBUSY`, where the unsandboxed control
+  answers 0), `sandbox dependency grants: a program granted to spawnSync
+  starts with the caller's signal mask (SBX-1)` and the same for `spawn`,
   `sandbox dependency grants: a granted find cannot hand the loader an
   ungranted binary (SBX-1)` and the same for `env`, `sandbox dependency
   grants: a granted program cannot exec another granted program (SBX-1)`;

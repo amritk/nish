@@ -29099,8 +29099,22 @@ if (!only || "sandbox dependency grants".includes(only)) {
         const src = path.join(to, "exec-args.c")
         fs.writeFileSync(
           src,
-          "#include <stdio.h>\n#include <string.h>\n#include <sys/stat.h>\n#include <unistd.h>\n" +
+          "#include <errno.h>\n#include <signal.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n" +
+            "#include <sys/prctl.h>\n#include <sys/stat.h>\n#include <sys/syscall.h>\n#include <unistd.h>\n" +
+            "#include <linux/filter.h>\n#include <linux/seccomp.h>\n" +
             "int main(int argc, char **argv) {\n  if (argc < 2) return 0;\n" +
+            // `--listener <flags>`: the errno of installing an allow-all
+            // seccomp filter with those flags (8 is NEW_LISTENER), 0 for none.
+            '  if (!strcmp(argv[1], "--listener") && argc > 2) {\n' +
+            "    struct sock_filter allow = BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);\n" +
+            "    struct sock_fprog prog = {1, &allow};\n    prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);\n" +
+            "    return syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, atoi(argv[2]), &prog) < 0 ? errno : 0;\n  }\n" +
+            // `--sigblk`: how many signals this program was started with blocked.
+            '  if (!strcmp(argv[1], "--sigblk")) {\n    int n = 0;\n    sigset_t now;\n' +
+            "    sigprocmask(SIG_BLOCK, 0, &now);\n    for (int sig = 1; sig < 65; sig++) n += sigismember(&now, sig) == 1;\n    return n;\n  }\n" +
+            // `--block <program...>`: that program, started with SIGUSR1 blocked.
+            '  if (!strcmp(argv[1], "--block") && argc > 2) {\n    sigset_t usr;\n    sigemptyset(&usr);\n' +
+            "    sigaddset(&usr, SIGUSR1);\n    sigprocmask(SIG_BLOCK, &usr, 0);\n    argv++;\n  }\n" +
             // `--fds`: how many descriptors from 3 up this program was started
             // with that are not regular files (a pipe, a seccomp listener).
             '  if (!strcmp(argv[1], "--fds")) {\n    int n = 0;\n    struct stat st;\n' +
@@ -29168,6 +29182,53 @@ if (!only || "sandbox dependency grants".includes(only)) {
           rPlainStart.status === 0 && rPlainStart.stdout === "0\n" && rPlainStart.stderr === "",
           said(rPlainStart)
         )
+        // The rule the one exec rests on: a second listener anywhere in the
+        // subtree is refused (EBUSY, 16). The kernel lets the newest filter's
+        // "continue" stand for every filter's, so a granted program with a
+        // listener of its own would answer its children's execs itself. 8 is
+        // NEW_LISTENER; 25 adds TSYNC and TSYNC_ESRCH, the one other spelling
+        // the kernel takes it in (Linux 5.7). Without `--sandbox` the same
+        // call succeeds, which is what makes the EBUSY this filter's; where it
+        // does not (an older kernel, a launcher's own listener above the
+        // suite) that spelling is not judged.
+        const listeners = [8, 25].map((flags) => [
+          flags,
+          run(hAllow, ["sync", helper, "--listener", String(flags)]),
+          run(hOpen, ["sync", helper, "--listener", String(flags)]),
+        ])
+        const judged = listeners.filter(([, , plain]) => plain.status === 0 && plain.stdout === "0\n")
+        if (judged.length === 0 || judged[0][0] !== 8) {
+          skip(
+            `sandbox dependency grants: this machine installs no seccomp listener without --sandbox either (${listeners.map(([flags, , plain]) => `${flags}: ${plain.stdout.trim()}`).join(", ")}); the refusal of a second listener is not checked`
+          )
+        } else {
+          check(
+            "sandbox dependency grants: a granted program cannot install a seccomp listener of its own (SBX-1)",
+            judged.every(([, held]) => held.status === 0 && held.signal === null && held.stdout === "16\n"),
+            listeners
+              .map(([flags, held, plain]) => `flags ${flags}\n${said(held)}\n--- without --sandbox\n${said(plain)}`)
+              .join("\n")
+          )
+        }
+        // The two threads a spawn runs on block every signal, so the program's
+        // handlers never run in their private descriptor table; the child is
+        // handed the calling thread's mask, not theirs. Here the program is
+        // started with SIGUSR1 blocked and its child counts what it was
+        // started with blocked: that one signal, with `--sandbox` as without.
+        for (const [how, builtin] of [
+          ["sync", "spawnSync"],
+          ["spawn", "spawn"],
+        ]) {
+          const rMask = run(helper, ["--block", hAllow, how, helper, "--sigblk"])
+          const rMaskPlain = run(helper, ["--block", hOpen, how, helper, "--sigblk"])
+          const rNone = run(hAllow, [how, helper, "--sigblk"])
+          const maskShown = `${said(rMask)}\n--- without --sandbox\n${said(rMaskPlain)}\n--- nothing blocked\n${said(rNone)}`
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} starts with the caller's signal mask (SBX-1)`,
+            rMask.status === 0 && rMask.stdout === "1\n" && rMaskPlain.stdout === "1\n" && rNone.stdout === "0\n",
+            maskShown
+          )
+        }
         // A kernel that takes the filter and not the "continue" answer (Linux
         // 5.0 to 5.4), read on this one: the runtime built with
         // -DNISH_SANDBOX_SIMULATE_NO_CONTINUE=1 has that answer fail, and with
@@ -29179,9 +29240,12 @@ if (!only || "sandbox dependency grants".includes(only)) {
         // one too, and the program goes on.
         const refusedLine =
           "nish: --sandbox: cannot hold a spawned program to one exec, so the spawn is refused (EINVAL)\n"
-        for (const [sim, how] of [
-          [1, "fails the child's exec"],
-          [2, "kills and reaps the child"],
+        // The two paths answer different numbers through `spawn`: ENOSYS (38)
+        // is the child's own failed exec, as `posix_spawn` reports it, and
+        // ECHILD (10) the child killed and reaped.
+        for (const [sim, how, errno] of [
+          [1, "fails the child's exec", 38],
+          [2, "kills and reaps the child", 10],
         ]) {
           const exe = path.join(dir, `no-continue-${sim}`)
           const rt = runtimeObjects([`-DNISH_SANDBOX_SIMULATE_NO_CONTINUE=${sim}`])
@@ -29206,7 +29270,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
               rSync.stderr === refusedLine &&
               rSpawn.status === 0 &&
               rSpawn.signal === null &&
-              rSpawn.stdout === "-38\n" &&
+              rSpawn.stdout === `-${errno}\n` &&
               rSpawn.stderr === refusedLine,
             l.status === 0 ? `${said(rSync)}\n--- spawn\n${said(rSpawn)}` : shown(l)
           )
