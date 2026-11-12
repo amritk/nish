@@ -96,8 +96,6 @@ const h2cChecks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
 const clearChecks = (t: Suite, key: Secret<u8[]>): void => {
   const limits = rigLimits(n32(16))
   limits.altSvcMaxAge = 0
-  limits.prefaceTimeout = 300
-  limits.idleTimeout = 300
   const rig = new Rig(limits, true, toI32(4))
   const h2 = new H2TlsClient(rig)
   t.ok("altSvcMaxAge 0: the TLS handshake", h2.handshake(rig.h2.port, key) && h2.verified)
@@ -110,11 +108,21 @@ const clearChecks = (t: Suite, key: Secret<u8[]>): void => {
   c.flush(key)
   const frames: string = c.awaitFrames(n32(15), key)
   t.ok("h2c says nothing of alt-svc", frames.indexOf("content-type=text/plain content-length=6;") >= 0 && frames.indexOf("alt-svc") < 0)
-  const silent = new H2cClient(rig)
-  silent.connect(rig.h2.h2cPort)
+  // Each timer on its own server, the other one a minute: a close inside
+  // `TURNS` is the short timer firing, not the other.
+  const prefaceLimits = rigLimits(n32(16))
+  prefaceLimits.prefaceTimeout = 300
+  prefaceLimits.idleTimeout = 60000
+  const prefaceRig = new Rig(prefaceLimits, true, toI32(4))
+  const silent = new H2cClient(prefaceRig)
+  silent.connect(prefaceRig.h2.h2cPort)
   t.ok("an h2c connection that never sends its preface is closed by prefaceTimeout", silent.awaitClose(TURNS, key))
-  const idle = new H2cClient(rig)
-  idle.connect(rig.h2.h2cPort)
+  const idleLimits = rigLimits(n32(16))
+  idleLimits.prefaceTimeout = 60000
+  idleLimits.idleTimeout = 300
+  const idleRig = new Rig(idleLimits, true, toI32(4))
+  const idle = new H2cClient(idleRig)
+  idle.connect(idleRig.h2.h2cPort)
   const none: i32[] = []
   const noValues: i64[] = []
   idle.wire.preface()

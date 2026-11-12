@@ -27910,6 +27910,40 @@ if (!only || "thread_stack".includes(only)) {
   }
 }
 
+// `nish/net/http-server` answers a deep HTTP/1.1 pipeline without the stack
+// growing per request. tests/link/net_http_server/deep.ts holds a request,
+// reads twenty-five thousand `OPTIONS *` behind it in one burst, then answers
+// it; each screened request behind it used to be driven one call deeper, and
+// under `ulimit -s 512` that faulted inside the burst. The default 8 MiB stack
+// hides the fault, so the program runs here, under the small one, and the
+// link harness (which runs it under the default) does not run it.
+if (!only || "net_http_server_deep".includes(only)) {
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("net_http_server_deep: the stack is set by a Linux ulimit, and this host is not Linux with clang")
+  } else {
+    const dir = path.join(buildDir, "net_http_server_deep")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "deep")
+    const src = path.join(linkDir, "net_http_server", "deep.ts")
+    const c = spawnSync(NISH, [src, "-o", dir + path.sep, "--link", exe], { cwd: root, encoding: "utf8" })
+    if (c.status !== 0) {
+      check("net_http_server_deep: tests/link/net_http_server/deep.ts compiles and links", false, shown(c))
+    } else {
+      const r = spawnSync("bash", ["-c", 'ulimit -S -s 512 && exec "$0"', exe], {
+        cwd: path.join(linkDir, "net_http_server"),
+        encoding: "utf8",
+        timeout: 60000,
+      })
+      check(
+        "net_http_server_deep: twenty-five thousand pipelined OPTIONS * behind a held request are answered on a 512 KiB stack",
+        r.status === 0 && r.stdout.includes("PASS  and every OPTIONS * behind it") && !r.stdout.includes("FAIL"),
+        `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+  }
+}
+
 // WP37 stage 1: `--sandbox` confines a native program to main's capability set
 // (docs/security/sandbox.md). The fixtures in tests/link/sandbox_fixtures are
 // Nish programs whose main reaches a chosen set of capabilities and hands its

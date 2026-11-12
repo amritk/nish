@@ -27,6 +27,12 @@
 //   8. The drain: an idle connection closes at once, no new one is accepted,
 //      and a held request is still answered before its connection closes,
 //      with `Connection: close` and no pipelined request read behind it.
+//   9. The full pool: under `requests` 1, a request held on one connection
+//      leaves a second connection's request unread, and the held answer
+//      returns the entry that serves it.
+//
+// `deep.ts` runs the deep pipeline of `server.ts` alone, under a small stack
+// (tests/run.js, "net_http_server_deep").
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import { HTTP1_CHUNKED } from "nish/net/http1-codec"
@@ -50,433 +56,98 @@ import {
 } from "nish:net"
 import { ascii, ZERO } from "../net_tls_record_common/bytes"
 
-// The routes, in the order they are added.
-const HOME: i32 = 0
-const USER: i32 = 1
-const ECHO: i32 = 2
-const SLOW: i32 = 3
-const STREAM: i32 = 4
-const REMOVE: i32 = 5
-const PROBLEM: i32 = 6
-const BIG: i32 = 7
-const HOLD: i32 = 8
-
-const CAP: i32 = 65536
-const FIVE_SECONDS: i64 = 5000000000
-const MILLISECOND: i64 = 1000000
-/** The body of `GET /big`, and how many of it a peer pipelines and does not read. */
-const BIG_LENGTH: i32 = 200000
-const BIG_COUNT: i32 = 128
-
-/** The server half: the handler, and the requests it holds unanswered on purpose. */
-class App {
-  h: HttpServer
-  held: HttpServerRequest[]
-  heldCount: i32 = 0
-  text: u8[]
-  hello: u8[]
-  octets: u8[]
-  name: u8[]
-  streamNames: u8[][]
-  streamValues: u8[][]
-  pieces: u8[][]
-  big: u8[]
-  port: i32 = 0
-  failures: i32 = 0
-  /** How many `GET /big` the program has answered. */
-  bigCount: i32 = 0
-  /** How many requests the program has taken. */
-  taken: i32 = 0
-
-  constructor(idleMs: i32, bodyMs: i32, requests: i32, maxBody: i32) {
-    const router = new Router(new RouterLimits())
-    router.add("GET", "/")
-    router.add("GET", "/users/:id")
-    router.add("POST", "/echo")
-    router.add("GET", "/slow")
-    router.add("GET", "/stream")
-    router.add("DELETE", "/users/:id")
-    router.add("GET", "/problem")
-    router.add("GET", "/big")
-    router.add("POST", "/hold")
-    const limits = new HttpServerLimits()
-    limits.requests = requests
-    limits.maxBody = maxBody
-    limits.bodyTimeout = bodyMs
-    const config = new Http1Config()
-    config.idleTimeout = idleMs
-    const listener: i32 = tcpListen("127.0.0.1", 0, 64)
-    this.port = netLocalPort(listener)
-    this.h = new HttpServer(limits, router)
-    this.h.listenHttp1(listener, config, toI32(8))
-    this.held = []
-    this.text = ascii("text/plain")
-    this.hello = ascii("hello")
-    this.octets = ascii("application/octet-stream")
-    this.name = new Array<u8>(64)
-    this.streamNames = [ascii("content-type")]
-    this.streamValues = [ascii("text/plain")]
-    this.pieces = [ascii("one,"), ascii("two,"), ascii("three")]
-    this.big = new Array<u8>(BIG_LENGTH)
-  }
-
-  /** One turn of the handler, then every whole request answered (or held, for `/slow`). */
-  turn(): void {
-    this.h.wait(toI32(1))
-    while (this.h.ready()) {
-      this.answer(this.h.take())
-    }
-  }
-
-  answer(req: HttpServerRequest): void {
-    const h: HttpServer = this.h
-    this.taken += 1
-    switch (req.route) {
-      case HOME:
-        h.send(req, 200, this.text, this.hello, ZERO, toI32(this.hello.length))
-        break
-      case USER: {
-        const id: i32 = req.paramDecimal(ZERO)
-        const n: i32 = req.query("name", this.name)
-        if (id < 0 || n === ROUTER_BAD_ESCAPE) {
-          h.problem(req, 400, "Bad Request", "the id is a number and the name a well-formed query value")
-          break
-        }
-        const w: JsonWriter = h.json()
-        w.beginObject()
-        w.key("id")
-        w.i32(id)
-        if (n !== HANDLER_ABSENT) {
-          w.key("name")
-          w.stringBytes(this.name, ZERO, n)
-        }
-        w.endObject()
-        h.sendJson(req, 200)
-        break
-      }
-      case ECHO:
-        h.send(req, 200, this.octets, req.body, ZERO, req.bodyLength)
-        break
-      case SLOW:
-      case HOLD:
-        if (this.heldCount < toI32(this.held.length)) {
-          this.held[this.heldCount] = req
-        } else {
-          this.held.push(req)
-        }
-        this.heldCount += 1
-        break
-      case STREAM:
-        h.start(req, 200, this.streamNames, this.streamValues, HTTP1_CHUNKED)
-        for (let k: i32 = 0; k < toI32(this.pieces.length); k++) {
-          h.write(req, this.pieces[k], ZERO, toI32(this.pieces[k].length))
-        }
-        h.end(req)
-        break
-      case REMOVE:
-        h.empty(req, 204)
-        break
-      case PROBLEM: {
-        // A detail twice the JSON buffer: the problem goes without it.
-        let detail: string = "x"
-        for (let k: i32 = 0; k < 17; k++) {
-          detail = detail + detail
-        }
-        h.problem(req, 418, "I'm a teapot", detail)
-        break
-      }
-      case BIG:
-        this.bigCount += 1
-        h.send(req, 200, this.octets, this.big, ZERO, BIG_LENGTH)
-        break
-      default:
-        h.refuse(req)
-    }
-  }
-}
-
-/** A client: its socket and what it has read and not yet consumed. */
-class Client {
-  fd: i32 = -1
-  buf: u8[]
-  length: i32 = 0
-  /** The last response read: its status, where its body starts and how long it is. */
-  status: i32 = 0
-  bodyStart: i32 = 0
-  bodyLength: i32 = 0
-  responseLength: i32 = 0
-  closed: boolean = false
-
-  constructor() {
-    this.buf = new Array<u8>(262144)
-  }
-}
-
-const lower = (c: i32): i32 => (c >= 65 && c <= 90 ? c + 32 : c)
-
-/** Whether `buf[at ..)` starts with `text`, letters compared without case. */
-const startsWith = (buf: u8[], at: i32, end: i32, text: string): boolean => {
-  const n: i32 = toI32(text.length)
-  if (at < 0 || at + n > end || end > toI32(buf.length)) {
-    return false
-  }
-  for (let k: i32 = 0; k < n; k++) {
-    if (lower(toI32(buf[at + k])) !== lower(toI32(text.charCodeAt(k)))) {
-      return false
-    }
-  }
-  return true
-}
-
-/** Where `text` first appears in `buf[from .. end)`, or -1. */
-const find = (buf: u8[], from: i32, end: i32, text: string): i32 => {
-  for (let at: i32 = from; at + toI32(text.length) <= end; at++) {
-    if (startsWith(buf, at, end, text)) {
-      return at
-    }
-  }
-  return -1
-}
-
-/** The value of header `name` (with its `: `) in the head `buf[0 .. headEnd)` as a decimal, or -1. */
-const headerNumber = (buf: u8[], headEnd: i32, name: string): i32 => {
-  const at: i32 = find(buf, ZERO, headEnd, name)
-  if (at < 0) {
-    return -1
-  }
-  let n: i32 = 0
-  let k: i32 = at + toI32(name.length)
-  while (k >= 0 && k < headEnd && k < toI32(buf.length) && toI32(buf[k]) >= 48 && toI32(buf[k]) <= 57) {
-    n = n * 10 + toI32(buf[k]) - 48
-    k += 1
-  }
-  return n
-}
-
-const connect = (app: App): Client => {
-  const c = new Client()
-  const addr: u8[] = new Array<u8>(18)
-  netAddress(addr, "127.0.0.1", app.port)
-  c.fd = tcpConnect(addr)
-  const loop: i32 = pollCreate()
-  const ready: i32[] = new Array<i32>(2)
-  pollAdd(loop, c.fd, 2, ZERO)
-  if (pollWait(loop, ready, 5000) !== 1 || connectResult(c.fd) !== 0) {
-    panic("connect failed")
-  }
-  pollRemove(loop, c.fd)
-  netClose(loop)
-  return c
-}
-
-/** Sends all of `bytes`, turning the handler while the socket is full. */
-const sendAll = (app: App, c: Client, bytes: u8[], off: i32, len: i32): void => {
-  let at: i32 = off
-  const deadline: i64 = monotonicNanos() + FIVE_SECONDS
-  while (at < off + len && monotonicNanos() < deadline) {
-    const n: i32 = netWrite(c.fd, bytes, at, off + len - at)
-    if (n > 0) {
-      at += n
-    } else {
-      app.turn()
-    }
-  }
-}
-
-const send = (app: App, c: Client, text: string): void => {
-  const bytes: u8[] = ascii(text)
-  sendAll(app, c, bytes, ZERO, toI32(bytes.length))
-}
-
-/** Reads what has arrived; false once the peer has closed. */
-const pull = (c: Client): boolean => {
-  const room: i32 = toI32(c.buf.length) - c.length
-  if (room <= 0) {
-    return true
-  }
-  const n: i32 = netRead(c.fd, c.buf, c.length, room)
-  if (n > 0) {
-    c.length += n
-  } else if (n === 0) {
-    c.closed = true
-  }
-  return n !== 0
-}
-
-/** Drops the response before the one just read from `c.buf`. */
-const consume = (c: Client): void => {
-  const used: i32 = c.responseLength
-  if (used > 0) {
-    copyBytes(c.buf, ZERO, c.buf, used, c.length - used)
-    c.length -= used
-    c.responseLength = 0
-  }
-}
-
-/**
- * Reads one response, turning the handler until it is whole: true with its
- * status and body in `c`, or false after five seconds or the peer's close.
- * `head` says it answers a HEAD, so its length is not followed by a body.
- */
-const response = (app: App, c: Client, head: boolean): boolean => {
-  consume(c)
-  const deadline: i64 = monotonicNanos() + FIVE_SECONDS
-  while (monotonicNanos() < deadline) {
-    const headEnd: i32 = find(c.buf, ZERO, c.length, "\r\n\r\n")
-    if (headEnd > 0) {
-      const bodyStart: i32 = headEnd + 4
-      c.status = headerNumber(c.buf, headEnd, "HTTP/1.1 ")
-      c.bodyStart = bodyStart
-      const length: i32 = head ? 0 : headerNumber(c.buf, headEnd, "\r\ncontent-length: ")
-      if (length >= 0) {
-        if (c.length - bodyStart >= length) {
-          c.bodyLength = length
-          c.responseLength = bodyStart + length
-          return true
-        }
-      } else {
-        const last: i32 = find(c.buf, bodyStart, c.length, "0\r\n\r\n")
-        if (last >= 0) {
-          c.bodyLength = last + 5 - bodyStart
-          c.responseLength = last + 5
-          return true
-        }
-      }
-    }
-    if (c.closed) {
-      return false
-    }
-    app.turn()
-    pull(c)
-  }
-  return false
-}
-
-/** Whether the last response's body is exactly `text`, byte for byte (case counts, unlike `startsWith`). */
-const bodyIs = (c: Client, text: string): boolean => {
-  if (c.bodyLength !== toI32(text.length) || c.bodyStart + c.bodyLength > toI32(c.buf.length)) {
-    return false
-  }
-  for (let k: i32 = 0; k < c.bodyLength; k++) {
-    if (toI32(c.buf[c.bodyStart + k]) !== toI32(text.charCodeAt(k))) {
-      return false
-    }
-  }
-  return true
-}
-
-/** Whether the last response's head holds `text`. */
-const headHas = (c: Client, text: string): boolean => find(c.buf, ZERO, c.bodyStart, text) >= 0
-
-/** Turns the handler until the peer closes `c`, for five seconds at most. */
-const awaitClose = (app: App, c: Client): boolean => {
-  const deadline: i64 = monotonicNanos() + FIVE_SECONDS
-  while (!c.closed && monotonicNanos() < deadline) {
-    app.turn()
-    pull(c)
-  }
-  return c.closed
-}
-
-/** Turns the handler until it holds `n` connections, for five seconds at most. */
-const awaitConnections = (app: App, n: i32): boolean => {
-  const deadline: i64 = monotonicNanos() + FIVE_SECONDS
-  while (app.h.connections() !== n && monotonicNanos() < deadline) {
-    app.turn()
-  }
-  return app.h.connections() === n
-}
-
-/** Turns the handler until it holds `n` requests on purpose. */
-const awaitHeld = (app: App, n: i32): boolean => {
-  const deadline: i64 = monotonicNanos() + FIVE_SECONDS
-  while (app.heldCount < n && monotonicNanos() < deadline) {
-    app.turn()
-  }
-  return app.heldCount >= n
-}
-
-const check = (app: App, name: string, ok: boolean): void => {
-  if (ok) {
-    console.log(`PASS  ${name}`)
-  } else {
-    console.log(`FAIL  ${name}`)
-    app.failures += 1
-  }
-}
+import {
+  App,
+  awaitClose,
+  awaitConnections,
+  awaitHeld,
+  BIG_COUNT,
+  BIG_LENGTH,
+  bodyIs,
+  CAP,
+  check,
+  Client,
+  dial,
+  headHas,
+  MILLISECOND,
+  pull,
+  response,
+  sendAll,
+  sendText,
+} from "./server"
 
 const routing = (app: App): void => {
-  const c = connect(app)
-  send(app, c, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
+  const c = dial(app)
+  sendText(app, c, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a GET of a text route is answered 200 with its body", response(app, c, false) && c.status === 200 && bodyIs(c, "hello"))
   check(app, "and its content type", headHas(c, "\r\ncontent-type: text/plain\r\n"))
 
-  send(app, c, "GET /users/42?x=1&name=a%20b+c HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "GET /users/42?x=1&name=a%20b+c HTTP/1.1\r\nHost: t\r\n\r\n")
   check(
     app, "a parameter and a form-decoded query come back as JSON",
     response(app, c, false) && c.status === 200 && bodyIs(c, "{\"id\":42,\"name\":\"a b c\"}")
   )
   check(app, "as application/json", headHas(c, "\r\ncontent-type: application/json\r\n"))
 
-  send(app, c, "GET /users/7 HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "GET /users/7 HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a query without the name leaves it out", response(app, c, false) && bodyIs(c, "{\"id\":7}"))
 
-  send(app, c, "GET /users/7?name=a%00b HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "GET /users/7?name=a%00b HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a %00 in the query decodes to a NUL byte, as in a parameter", response(app, c, false) && bodyIs(c, "{\"id\":7,\"name\":\"a\\u0000b\"}"))
 
-  send(app, c, "GET /users/7?name=%zz HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "GET /users/7?name=%zz HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a malformed escape in the query is the program's 400", response(app, c, false) && c.status === 400)
 
-  send(app, c, "HEAD / HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "HEAD / HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "HEAD takes the GET route and is answered with its length and no body", response(app, c, true) && c.status === 200 && headHas(c, "\r\ncontent-length: 5\r\n"))
 
-  send(app, c, "GET /nowhere HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "GET /nowhere HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "an unknown path is 404", response(app, c, false) && c.status === 404)
   check(app, "as an RFC 9457 problem", headHas(c, "\r\ncontent-type: application/problem+json\r\n") && bodyIs(c, "{\"type\":\"about:blank\",\"title\":\"Not Found\",\"status\":404}"))
 
-  send(app, c, "PUT /users/3 HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n")
+  sendText(app, c, "PUT /users/3 HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n")
   check(app, "a method the path does not take is 405", response(app, c, false) && c.status === 405)
   check(app, "with an Allow naming GET and DELETE, and HEAD for the GET", headHas(c, "\r\nallow: GET, DELETE, HEAD\r\n"))
-  send(app, c, "PATCH /users/3 HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n")
+  sendText(app, c, "PATCH /users/3 HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n")
   check(app, "and a second one reuses the Allow value made for the first", response(app, c, false) && c.status === 405 && headHas(c, "DELETE"))
 
-  send(app, c, "GET /problem HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "GET /problem HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a problem too large for the JSON buffer is sent without its detail", response(app, c, false) && c.status === 418 && bodyIs(c, "{\"type\":\"about:blank\",\"title\":\"I'm a teapot\",\"status\":418}"))
 
-  send(app, c, "GET /users/%zz HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "GET /users/%zz HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a parameter that is not a number is the program's 400", response(app, c, false) && c.status === 400)
 
-  send(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 11\r\n\r\nhello world")
+  sendText(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 11\r\n\r\nhello world")
   check(app, "a body is echoed", response(app, c, false) && c.status === 200 && bodyIs(c, "hello world"))
 
-  send(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n4\r\ndefg\r\n0\r\n\r\n")
+  sendText(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n4\r\ndefg\r\n0\r\n\r\n")
   check(app, "a chunked body is gathered whole", response(app, c, false) && bodyIs(c, "abcdefg"))
 
-  send(app, c, "GET /stream HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "GET /stream HTTP/1.1\r\nHost: t\r\n\r\n")
   check(
     app, "a response written in three pieces arrives chunked",
     response(app, c, false) && c.status === 200 && headHas(c, "transfer-encoding: chunked") && bodyIs(c, "4\r\none,\r\n4\r\ntwo,\r\n5\r\nthree\r\n0\r\n\r\n")
   )
 
-  send(app, c, "DELETE /users/9 HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, c, "DELETE /users/9 HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "an empty answer is a 204 with no body", response(app, c, true) && c.status === 204 && c.bodyLength === 0)
   netClose(c.fd)
   check(app, "the client's close is seen", awaitConnections(app, toI32(0)))
 }
 
 const limits = (app: App): void => {
-  const c = connect(app)
-  send(app, c, `POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: ${CAP + 1}\r\n\r\n`)
+  const c = dial(app)
+  sendText(app, c, `POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: ${CAP + 1}\r\n\r\n`)
   check(app, "a declared body one byte over the cap is answered 413", response(app, c, false) && c.status === 413)
   check(app, "and the connection ends", awaitClose(app, c))
   netClose(c.fd)
 
-  const d = connect(app)
+  const d = dial(app)
   const body: u8[] = new Array<u8>(CAP)
   for (let k: i32 = 0; k < toI32(body.length); k++) {
     body[k] = toU8(97 + (k % 26))
   }
-  send(app, d, `POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: ${CAP}\r\n\r\n`)
+  sendText(app, d, `POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: ${CAP}\r\n\r\n`)
   sendAll(app, d, body, ZERO, CAP)
   let same: boolean = response(app, d, false) && d.status === 200 && d.bodyLength === CAP
   for (let k: i32 = 0; same && k < toI32(body.length); k++) {
@@ -509,18 +180,18 @@ const sizedHead = (target: string, fieldBytes: i32): string =>
 /** The answers the server gives before the program sees a request, and the request-head bounds. */
 const screens = (app: App): void => {
   const taken: i32 = app.taken
-  const c = connect(app)
-  send(app, c, "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n")
+  const c = dial(app)
+  sendText(app, c, "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n")
   check(app, "CONNECT is answered 501", response(app, c, false) && c.status === 501)
   netClose(c.fd)
-  const d = connect(app)
-  send(app, d, "OPTIONS * HTTP/1.1\r\nHost: t\r\n\r\n")
+  const d = dial(app)
+  sendText(app, d, "OPTIONS * HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "OPTIONS * is answered 204 with no Allow", response(app, d, true) && d.status === 204 && !headHas(d, "\r\nallow:"))
   netClose(d.fd)
   check(app, "the program takes neither", app.taken === taken)
 
-  const e = connect(app)
-  send(app, e, `POST /echo HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n10001\r\n`)
+  const e = dial(app)
+  sendText(app, e, `POST /echo HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n10001\r\n`)
   const body: u8[] = new Array<u8>(CAP + 1)
   sendAll(app, e, body, ZERO, CAP + 1)
   check(app, "a chunked body past the cap is answered 413", response(app, e, false) && e.status === 413)
@@ -528,16 +199,16 @@ const screens = (app: App): void => {
   check(app, "the program never takes it", app.taken === taken)
   netClose(e.fd)
 
-  const f = connect(app)
-  send(app, f, sizedHead(`/?p=${pad(8000 - 4)}`, 16000))
+  const f = dial(app)
+  sendText(app, f, sizedHead(`/?p=${pad(8000 - 4)}`, 16000))
   check(app, "an 8000-byte target with 16000 bytes of fields is served", response(app, f, false) && f.status === 200 && bodyIs(f, "hello"))
   netClose(f.fd)
-  const g = connect(app)
-  send(app, g, sizedHead("/", 16400))
+  const g = dial(app)
+  sendText(app, g, sizedHead("/", 16400))
   check(app, "16400 bytes of fields are answered 431", response(app, g, false) && g.status === 431)
   netClose(g.fd)
-  const k = connect(app)
-  send(app, k, sizedHead(`/?p=${pad(9000 - 4)}`, 100))
+  const k = dial(app)
+  sendText(app, k, sizedHead(`/?p=${pad(9000 - 4)}`, 100))
   check(app, "a 9000-byte target is answered 414", response(app, k, false) && k.status === 414)
   netClose(k.fd)
   check(app, "the screened clients are gone", awaitConnections(app, toI32(0)))
@@ -550,12 +221,12 @@ const screens = (app: App): void => {
  * this measures bodies well inside one chunk.
  */
 const bodyArena = (maxBody: i32, length: i32): i64 => {
-  const app = new App(toI32(60000), toI32(30000), toI32(8), maxBody)
+  const app = new App(toI32(60000), toI32(30000), toI32(8), maxBody, toI32(16384))
   const head: u8[] = ascii(`POST /hold HTTP/1.1\r\nHost: t\r\nContent-Length: ${length}\r\n\r\n`)
   const body: u8[] = new Array<u8>(length)
   const clients: Client[] = []
   for (let k: i32 = 0; k < 8; k++) {
-    clients.push(connect(app))
+    clients.push(dial(app))
   }
   awaitConnections(app, toI32(8))
   const before: i64 = Arena.used()
@@ -578,13 +249,13 @@ const bodyArena = (maxBody: i32, length: i32): i64 => {
  * a chunk of its own, past what `Arena.used` reads, so this reads the arrays.
  */
 const bodyHeld = (maxBody: i32): i64 => {
-  const app = new App(toI32(60000), toI32(30000), toI32(8), maxBody)
+  const app = new App(toI32(60000), toI32(30000), toI32(8), maxBody, toI32(16384))
   const head: u8[] = ascii("POST /hold HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n")
   const body: u8[] = new Array<u8>(maxBody)
   const sizes: i32[] = [1000, 70000, maxBody - 71000]
   const clients: Client[] = []
   for (let k: i32 = 0; k < 8; k++) {
-    clients.push(connect(app))
+    clients.push(dial(app))
   }
   awaitConnections(app, toI32(8))
   for (const c of clients) {
@@ -593,9 +264,9 @@ const bodyHeld = (maxBody: i32): i64 => {
       const line: u8[] = ascii(`${httpHex(n)}\r\n`)
       sendAll(app, c, line, ZERO, toI32(line.length))
       sendAll(app, c, body, ZERO, n)
-      send(app, c, "\r\n")
+      sendText(app, c, "\r\n")
     }
-    send(app, c, "0\r\n\r\n")
+    sendText(app, c, "0\r\n\r\n")
   }
   let total: i64 = toI64(-1)
   if (awaitHeld(app, toI32(8))) {
@@ -638,8 +309,8 @@ const bodyBound = (app: App): void => {
 }
 
 const pipelining = (app: App): void => {
-  const c = connect(app)
-  send(app, c, "GET /users/1 HTTP/1.1\r\nHost: t\r\n\r\nPOST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 3\r\n\r\nabcGET / HTTP/1.1\r\nHost: t\r\n\r\n")
+  const c = dial(app)
+  sendText(app, c, "GET /users/1 HTTP/1.1\r\nHost: t\r\n\r\nPOST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 3\r\n\r\nabcGET / HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "the first of three pipelined requests is answered first", response(app, c, false) && bodyIs(c, "{\"id\":1}"))
   check(app, "then the second", response(app, c, false) && bodyIs(c, "abc"))
   check(app, "then the third", response(app, c, false) && bodyIs(c, "hello"))
@@ -648,29 +319,29 @@ const pipelining = (app: App): void => {
 }
 
 const lateAnswer = (app: App): void => {
-  const c = connect(app)
-  send(app, c, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\n")
+  const c = dial(app)
+  sendText(app, c, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a request the program holds is taken", awaitHeld(app, toI32(1)))
   netClose(c.fd)
   check(app, "its peer leaves, and the idle timeout ends the connection before the answer", awaitConnections(app, toI32(0)))
   const r: HttpServerRequest = app.held[0]
   check(app, "the late answer is dropped", app.h.send(r, 200, app.text, app.hello, ZERO, toI32(app.hello.length)) === HANDLER_DROPPED)
 
-  const d = connect(app)
-  send(app, d, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\n")
+  const d = dial(app)
+  sendText(app, d, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a second request is held", awaitHeld(app, toI32(2)))
   netClose(d.fd)
   check(app, "and its peer leaves and times out too", awaitConnections(app, toI32(0)))
-  const e = connect(app)
-  send(app, e, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
+  const e = dial(app)
+  sendText(app, e, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a new connection on the freed slot is answered", response(app, e, false) && bodyIs(e, "hello"))
   const s: HttpServerRequest = app.held[1]
   check(app, "an answer for the old connection is dropped though the slot is in use again", app.h.problem(s, 503, "Service Unavailable", "") === HANDLER_DROPPED)
-  send(app, e, "GET /users/5 HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, e, "GET /users/5 HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "and the new connection never sees it", response(app, e, false) && e.status === 200 && bodyIs(e, "{\"id\":5}"))
   // The pool holds two requests: the held two. The new connection was served
   // on the first one dropped, and only the second's return lets it go on.
-  send(app, e, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
+  sendText(app, e, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "the dropped requests went back to the pool", response(app, e, false) && bodyIs(e, "hello"))
   app.heldCount = 0
   netClose(e.fd)
@@ -678,10 +349,10 @@ const lateAnswer = (app: App): void => {
 }
 
 const bodyDeadline = (app: App): void => {
-  const c = connect(app)
-  send(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 4\r\n\r\nfast")
+  const c = dial(app)
+  sendText(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 4\r\n\r\nfast")
   check(app, "a body sent whole inside the body deadline is answered", response(app, c, false) && bodyIs(c, "fast"))
-  send(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 40\r\n\r\n")
+  sendText(app, c, "POST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 40\r\n\r\n")
   // A byte every 100 ms keeps the connection inside its 300 ms idle timeout,
   // so only the body deadline can end it before the fortieth.
   const one: u8[] = ascii("x")
@@ -703,12 +374,12 @@ const bodyDeadline = (app: App): void => {
 }
 
 const backpressure = (app: App): void => {
-  const c = connect(app)
+  const c = dial(app)
   let pipeline: string = ""
   for (let k: i32 = 0; k < BIG_COUNT; k++) {
     pipeline = pipeline + "GET /big HTTP/1.1\r\nHost: t\r\n\r\n"
   }
-  send(app, c, pipeline)
+  sendText(app, c, pipeline)
   const until: i64 = monotonicNanos() + toI64(500) * MILLISECOND
   while (monotonicNanos() < until) {
     app.turn()
@@ -727,7 +398,7 @@ const backpressure = (app: App): void => {
 }
 
 const flat = (app: App): void => {
-  const c = connect(app)
+  const c = dial(app)
   const request: u8[] = ascii("GET /users/12?name=flat HTTP/1.1\r\nHost: t\r\n\r\nPOST /echo HTTP/1.1\r\nHost: t\r\nContent-Length: 4\r\n\r\nflat")
   let good: i32 = 0
   for (let round: i32 = 0; round < 100; round++) {
@@ -750,17 +421,38 @@ const flat = (app: App): void => {
   check(app, "the warm client is gone", awaitConnections(app, toI32(0)))
 }
 
+const poolFull = (app: App): void => {
+  const a = dial(app)
+  sendText(app, a, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\n")
+  check(app, "under requests 1 a held request takes the only pool entry", awaitHeld(app, toI32(1)))
+  const b = dial(app)
+  sendText(app, b, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
+  for (let k: i32 = 0; k < 50; k++) {
+    app.turn()
+    pull(b)
+  }
+  check(app, "a second connection's request waits unread while the pool is empty", b.length === 0 && !b.closed && app.taken === 1)
+  const r: HttpServerRequest = app.held[0]
+  app.heldCount = 0
+  check(app, "the held request is answered", app.h.send(r, 200, app.text, app.hello, ZERO, toI32(app.hello.length)) === HANDLER_SENT)
+  check(app, "and its client reads it", response(app, a, false) && bodyIs(a, "hello"))
+  check(app, "then the waiting request is served on the returned entry", response(app, b, false) && b.status === 200 && bodyIs(b, "hello"))
+  netClose(a.fd)
+  netClose(b.fd)
+  check(app, "both clients are gone", awaitConnections(app, toI32(0)))
+}
+
 const draining = (app: App): void => {
-  const idle = connect(app)
-  send(app, idle, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
+  const idle = dial(app)
+  sendText(app, idle, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "before the drain a keep-alive client is answered", response(app, idle, false) && bodyIs(idle, "hello"))
-  const busy = connect(app)
-  send(app, busy, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\n")
+  const busy = dial(app)
+  sendText(app, busy, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "and a request the program holds is taken", awaitHeld(app, toI32(1)))
   app.h.drain()
   check(app, "a drain closes the idle connection at once", awaitClose(app, idle))
   check(app, "and keeps the busy one", app.h.connections() === 1)
-  const late = connect(app)
+  const late = dial(app)
   app.turn()
   check(app, "a draining handler accepts no new connection", app.h.connections() === 1)
   const r: HttpServerRequest = app.held[0]
@@ -775,8 +467,8 @@ const draining = (app: App): void => {
 }
 
 const drainingPipelined = (app: App): void => {
-  const c = connect(app)
-  send(app, c, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\nGET / HTTP/1.1\r\nHost: t\r\n\r\n")
+  const c = dial(app)
+  sendText(app, c, "GET /slow HTTP/1.1\r\nHost: t\r\n\r\nGET / HTTP/1.1\r\nHost: t\r\n\r\n")
   check(app, "a held request with another pipelined behind it is taken", awaitHeld(app, toI32(1)))
   app.h.drain()
   const r: HttpServerRequest = app.held[0]
@@ -789,7 +481,7 @@ const drainingPipelined = (app: App): void => {
 }
 
 export const main = (): i32 => {
-  const app = new App(toI32(60000), toI32(30000), toI32(64), CAP)
+  const app = new App(toI32(60000), toI32(30000), toI32(64), CAP, toI32(16384))
   check(app, "the handler answers its codes as named", HANDLER_SENT === 0 && HANDLER_DROPPED < 0 && HANDLER_ABSENT < 0)
   routing(app)
   limits(app)
@@ -799,17 +491,21 @@ export const main = (): i32 => {
   // A peer that closes may only have half-closed and still be waiting for
   // its answer, so a held request's connection ends at the idle timeout:
   // a short one here.
-  const late = new App(toI32(300), toI32(30000), toI32(2), CAP)
+  const late = new App(toI32(300), toI32(30000), toI32(2), CAP, toI32(16384))
   lateAnswer(late)
   // The body deadline against a peer the idle timeout would keep.
-  const slow = new App(toI32(300), toI32(300), toI32(64), CAP)
+  const slow = new App(toI32(300), toI32(300), toI32(64), CAP, toI32(16384))
   bodyDeadline(slow)
   backpressure(app)
   flat(app)
-  const drained = new App(toI32(60000), toI32(30000), toI32(64), CAP)
+  const drained = new App(toI32(60000), toI32(30000), toI32(64), CAP, toI32(16384))
   draining(drained)
-  const drainedPipelined = new App(toI32(60000), toI32(30000), toI32(64), CAP)
+  const drainedPipelined = new App(toI32(60000), toI32(30000), toI32(64), CAP, toI32(16384))
   drainingPipelined(drainedPipelined)
-  const failures: i32 = app.failures + late.failures + slow.failures + drained.failures + drainedPipelined.failures
+  // One pool entry, held: a second connection's request waits for it.
+  const single = new App(toI32(60000), toI32(30000), toI32(1), CAP, toI32(16384))
+  poolFull(single)
+  const failures: i32 =
+    app.failures + late.failures + slow.failures + drained.failures + drainedPipelined.failures + single.failures
   return failures === 0 ? 0 : 1
 }

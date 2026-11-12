@@ -73,3 +73,9 @@ PASS  a held request with another pipelined behind it is taken
 PASS  a draining connection's answer says it closes
 PASS  and the pipelined request is not read: the connection closes
 PASS  and none are left
+PASS  under requests 1 a held request takes the only pool entry
+PASS  a second connection's request waits unread while the pool is empty
+PASS  the held request is answered
+PASS  and its client reads it
+PASS  then the waiting request is served on the returned entry
+PASS  both clients are gone
