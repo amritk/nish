@@ -55,6 +55,8 @@ export const echoConfig = (): QuicServerConfig => {
     activeConnectionIdLimit: toI64(4),
     statelessResetKey: resetKey(),
     retryTokenKey: tokenKey(),
+    workerIndex: toI32(-1),
+    workerCount: toI32(0),
     retry: false,
     retryTokenLifetime: toI64(10000),
   };

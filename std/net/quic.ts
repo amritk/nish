@@ -360,6 +360,11 @@ import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 /** The length of every connection ID this server issues; a short header's DCID is read at this length. */
 export const QUIC_CONN_CID_LENGTH: i32 = 8
 /**
+ * The most processes a steered UDP group may have (`QuicServerConfig.workerCount`):
+ * the worker index is one byte of the connection ID, read modulo the count.
+ */
+export const QUIC_WORKER_MAX: i32 = 255
+/**
  * The datagram size every QUIC path carries, and the smallest a client's
  * first Initial may arrive in (RFC 9000 §14.1): 1200 bytes. The server sends
  * no larger datagram until path MTU discovery has validated one (`pathMtu`),
@@ -638,7 +643,52 @@ export interface QuicServerConfig {
   statelessResetKey: u8[]
   /** The key `nish/net/quic-listener` authenticates its Retry tokens with (§8.1.4), `QUIC_CONN_STATIC_KEY_SIZE` bytes. */
   retryTokenKey: u8[]
+  /**
+   * This process's index k in a prefork group whose UDP sockets are steered
+   * by connection ID (`preforkIndex`), or -1 outside one. With a valid pair,
+   * every connection ID the server issues carries k in byte 0, so the
+   * kernel hands the connection's packets to this process whatever address
+   * they come from. Copy it from the supervisor's flags, never compute it.
+   */
+  workerIndex: i32
+  /**
+   * How many processes N share the steered UDP port (`preforkUdpCount`), or 0
+   * outside a prefork group. Valid with `workerIndex` when 0 <= k < N <= 255,
+   * or both unset (-1 and 0); `QuicListener` and `Http3Server` panic on any
+   * other pair.
+   */
+  workerCount: i32
 }
+
+/**
+ * Panics, with the pair in the message, unless `config`'s worker fields are
+ * both unset (`workerIndex` -1 and `workerCount` 0) or name a worker of a
+ * steered group (0 <= k < N <= 255). `QuicListener` calls it when it is built,
+ * before it reads a datagram, so an `Http3Server` panics through its listener.
+ *
+ * @param config The configuration whose `workerIndex` and `workerCount` are checked.
+ */
+export const quicWorkerCheck = (config: QuicServerConfig): void => {
+  const k: i32 = config.workerIndex
+  const n: i32 = config.workerCount
+  if ((k === -1 && n === 0) || (k >= 0 && k < n && n <= QUIC_WORKER_MAX)) {
+    return
+  }
+  panic(`nish/net/quic: workerIndex ${k} and workerCount ${n}, not 0 <= k < n <= ${QUIC_WORKER_MAX}`)
+}
+
+/**
+ * The byte a server writes at the start of every connection ID it issues:
+ * `config.workerIndex` when the pair names a worker of a steered group, -1
+ * (write nothing) otherwise.
+ *
+ * @param config The server's configuration.
+ * @returns The worker index k, from 0 to 254, or -1 when the IDs carry no worker.
+ */
+export const quicWorkerByte = (config: QuicServerConfig): i32 =>
+  config.workerIndex >= 0 && config.workerIndex < config.workerCount && config.workerCount <= QUIC_WORKER_MAX
+    ? config.workerIndex
+    : -1
 
 /** One run of stream data the client sent, in order, as `readStream` answers it: `fin` when it ends the stream. */
 export class QuicStreamData {
@@ -1356,6 +1406,14 @@ const quicConnEphemeralIn = (held: u8[], entropy: u8[]): i32 => {
   return 0
 }
 
+/** Writes the worker byte (`quicWorkerByte`) into `cid[0]`, when the configuration names a worker. */
+const quicWorkerMark = (config: QuicServerConfig, cid: u8[]): void => {
+  const k: i32 = quicWorkerByte(config)
+  if (k >= 0 && toI32(cid.length) > 0) {
+    cid[0] = toU8(k)
+  }
+}
+
 /** Whether the configuration's limits are ones this module can honour. */
 const quicConnConfigFits = (config: QuicServerConfig): boolean =>
   config.maxStreamData >= 1 &&
@@ -1895,6 +1953,7 @@ export class QuicConnection {
     quicCidCopy(this.serverRandom, entropy, 0, 32)
     exposeWith(this.ephemeral, entropy, quicConnEphemeralIn)
     quicCidCopy(this.localScid, entropy, 64, QUIC_CONN_CID_LENGTH)
+    quicWorkerMark(this.config, this.localScid)
     quicCidCopy(this.cidSeed, entropy, 72, 32)
     const fits: boolean = toI32(entropy.length) === QUIC_CONN_ENTROPY_SIZE && quicConnConfigFits(this.config)
     secureZero(entropy)
@@ -3632,6 +3691,7 @@ export class QuicConnection {
     }
     while (this.cids.nextLocal < QUIC_CONN_MAX_ISSUED_CIDS && toI64(this.cids.activeLocal()) < want) {
       this.deriveConnectionId(this.cids.nextLocal)
+      quicWorkerMark(this.config, this.cidScratch)
       quicConnResetTokenInto(
         this.kdf.sha256,
         this.config.statelessResetKey,

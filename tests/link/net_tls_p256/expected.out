@@ -20,16 +20,37 @@ PASS  whose key_share names x25519
 PASS  a client listing both groups and sharing neither gets an answer
 PASS  a HelloRetryRequest whose key_share names x25519
 PASS  a secp256r1-only client with no share gets an answer
+PASS  a HelloRetryRequest, which the server remembers
+PASS  and it waits for a second ClientHello
 PASS  a HelloRetryRequest whose key_share names secp256r1
 PASS  the second ClientHello, with a secp256r1 share, is answered
 PASS  over secp256r1
 PASS  with a ServerHello sharing a 65-byte point
 PASS  and it signs
+PASS  the client shares a secret with it and reads a whole flight
+PASS  the client verifies the signature over the retried transcript
+PASS  and the server's Finished
+PASS  the server takes the client's Finished
+PASS  and is connected after one retry
+PASS  both sides of the retried handshake derive the same client traffic secret
+PASS  and the same server traffic secret
+PASS  which are two secrets, not one
+PASS  each direction takes its key from its own side's secret
+PASS  the server opens the client's record
+PASS  the client opens the server's record
+PASS  a record opened under the other direction's secret is refused
 PASS  a second ClientHello still without a secp256r1 share is illegal_parameter
+PASS  and the server has failed
+PASS  without writing a second HelloRetryRequest
+PASS  a second ClientHello whose secp256r1 share comes without secp256r1 listed is illegal_parameter
+PASS  a client sharing x25519 takes a HelloRetryRequest for secp256r1
+PASS  and its second ClientHello shares one 65-byte secp256r1 point
+PASS  a second HelloRetryRequest is unexpected_message
+PASS  and the client has failed
 PASS  a secp256r1 share off the curve is illegal_parameter
 PASS  a 64-byte secp256r1 share is illegal_parameter
 PASS  a 66-byte secp256r1 share is illegal_parameter
 PASS  a 65-byte secp256r1 share whose prefix is not 0x04 is illegal_parameter
 PASS  a compressed secp256r1 point is illegal_parameter
 PASS  a client listing neither group is handshake_failure
-tls p256: 34 passed, 0 failed, 0 skipped
+tls p256: 55 passed, 0 failed, 0 skipped
