@@ -254,12 +254,19 @@ PASS  a size under 1200 is taken as 1200
 PASS  and the untouched window falls back to 12000
 PASS  the probe is lost by packet threshold
 PASS  but no congestion event follows
-PASS  and the window is not cut
+PASS  and the slow start threshold is not cut
+PASS  nor the window
 PASS  the same loss of a packet that is no probe is a congestion event
+PASS  an ACK of 6 loses 1 to 5, the probe 2 among them
+PASS  the lost probe is passed over: 1, 3, 4 and 5 span 186 ms, persistent congestion
+PASS  an ACK of 6 and the probe 2 loses 1, 3, 4 and 5
+PASS  but the acknowledged probe breaks the run: no persistent congestion
+PASS  only the congestion event
 PASS  before any probe the path is 1200 bytes
 PASS  with nothing else to send the server probes 1452 bytes, and again after each loss
 PASS  three probes lost
 PASS  none of them a congestion event
+PASS  nor a loss event toward a black hole
 PASS  the path stays at 1200
 PASS  the search goes on halfway below: 1326
 PASS  acknowledged, it validates 1326
@@ -287,4 +294,10 @@ PASS  and so does every datagram
 PASS  and recovery's datagram size
 PASS  the queued DATAGRAM no longer fits a packet and is dropped
 PASS  the search starts again below 1452: 1326
-quic recovery: 289 passed, 0 failed, 0 skipped
+PASS  a validated probe makes the path 1452
+PASS  a limit lowered to 1300 holds the next datagram to 1300
+PASS  and the path with it
+PASS  and recovery's datagram size
+PASS  a full datagram is then 1300 bytes
+PASS  a limit under 1200 takes the path to 1200, no lower
+quic recovery: 302 passed, 0 failed, 0 skipped

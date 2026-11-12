@@ -5,7 +5,8 @@
 // a size narrow the search below it, three loss events of large packets
 // fall back to 1200 and drop a queued DATAGRAM that no longer fits, and
 // the carrier's limit and the client's max_udp_payload_size bound the
-// search.
+// search; a lost probe is passed over by persistent congestion, an
+// acknowledged one breaks its run, and a lowered limit clamps the path.
 import { Suite } from "nish/testing";
 import { QUIC_RECOVERY_APPLICATION, QuicRecovery } from "nish/net/quic-recovery";
 import { QUIC_DATAGRAM_OK } from "nish/net/quic";
@@ -42,7 +43,8 @@ const pmProbeLossChecks = (t: Suite): void => {
   probe.onAck(APP, rcRange(n64(1), n64(3)), n32(1), n64(0), n64(100));
   t.eqI32("the probe is lost by packet threshold", probe.spaces[APP].lostCount, n32(1));
   t.eqI32("but no congestion event follows", probe.congestionEvents, n32(0));
-  t.eqI64("and the window is not cut", probe.ssthresh > n64(12000) ? n64(1) : n64(0), n64(1));
+  t.eqI64("and the slow start threshold is not cut", probe.ssthresh > n64(12000) ? n64(1) : n64(0), n64(1));
+  t.eqI64("nor the window", probe.congestionWindow, n64(12000));
 
   const plain = new QuicRecovery();
   plain.handshakeConfirmed = true;
@@ -52,6 +54,39 @@ const pmProbeLossChecks = (t: Suite): void => {
   }
   plain.onAck(APP, rcRange(n64(1), n64(3)), n32(1), n64(0), n64(100));
   t.eqI32("the same loss of a packet that is no probe is a congestion event", plain.congestionEvents, n32(1));
+};
+
+/**
+ * Packets 0 to 6 of 1200 bytes, sent as the persistent congestion check in
+ * unit.ts sends them, with packet 2 a path MTU probe; 0 is acknowledged at
+ * 10 ms for an RTT sample, then `count` pairs of `ranges` at 220 ms.
+ */
+const pmSpan = (ranges: i64[], count: i32): QuicRecovery => {
+  const r = new QuicRecovery();
+  r.handshakeConfirmed = true;
+  r.onPacketSent(APP, n64(0), n32(1200), n64(0));
+  r.onAck(APP, rcRange(n64(0), n64(0)), n32(1), n64(0), n64(10));
+  const times: i64[] = [n64(20), n64(100), n64(200), n64(205), n64(206), n64(207)];
+  for (let k: i32 = 0; k < 6; k++) {
+    const slot: i32 = r.onPacketSent(APP, toI64(k + 1), n32(1200), times[k]);
+    if (k === 1) {
+      r.onProbeSent(APP, slot);
+    }
+  }
+  r.onAck(APP, ranges, count, n64(0), n64(220));
+  return r;
+};
+
+/** Persistent congestion (RFC 9002 §7.6.2) with a probe inside the span: a lost one is passed over, an acknowledged one breaks the run. */
+const pmPersistentChecks = (t: Suite): void => {
+  const lost = pmSpan(rcRange(n64(6), n64(6)), n32(1));
+  t.eqI32("an ACK of 6 loses 1 to 5, the probe 2 among them", lost.spaces[APP].lostCount, n32(5));
+  t.eqI32("the lost probe is passed over: 1, 3, 4 and 5 span 186 ms, persistent congestion", lost.persistentCongestions, n32(1));
+
+  const acked = pmSpan([n64(6), n64(6), n64(2), n64(2)], n32(2));
+  t.eqI32("an ACK of 6 and the probe 2 loses 1, 3, 4 and 5", acked.spaces[APP].lostCount, n32(4));
+  t.eqI32("but the acknowledged probe breaks the run: no persistent congestion", acked.persistentCongestions, n32(0));
+  t.eqI32("only the congestion event", acked.congestionEvents, n32(1));
 };
 
 /** The next datagram the server writes with room for 1500 bytes, which the client is not given. */
@@ -98,6 +133,7 @@ const pmSearchChecks = (t: Suite): void => {
   t.eqStr("with nothing else to send the server probes 1452 bytes, and again after each loss", sizes.join(" "), "1452 1452 1452");
   t.eqI32("three probes lost", p.conn.pmtuProbesLost, n32(3));
   t.eqI32("none of them a congestion event", p.conn.recovery.congestionEvents, n32(0));
+  t.eqI32("nor a loss event toward a black hole", p.conn.pmtuBlackHoles, n32(0));
   t.eqI32("the path stays at 1200", p.conn.pathMtu, n32(1200));
   const half: u8[] = pmTake(p);
   t.eqI32("the search goes on halfway below: 1326", toI32(half.length), n32(1326));
@@ -163,10 +199,28 @@ const pmBlackHoleChecks = (t: Suite): void => {
   t.eqI32("the search starts again below 1452: 1326", toI32(pmTake(p).length), n32(1326));
 };
 
+/** A carrier that lowers `pathMtuLimit` under a validated path takes the path down with it. */
+const pmClampChecks = (t: Suite): void => {
+  const p: NqPair = pmPair(new NqLimits());
+  qcReceive(p.c, pmTake(p));
+  nqAck(p);
+  t.eqI32("a validated probe makes the path 1452", p.conn.pathMtu, n32(1452));
+  p.conn.pathMtuLimit = n32(1300);
+  t.eqI32("a limit lowered to 1300 holds the next datagram to 1300", p.conn.datagramSize(), n32(1300));
+  t.eqI32("and the path with it", p.conn.pathMtu, n32(1300));
+  t.eqI64("and recovery's datagram size", p.conn.recovery.datagramSize, n64(1300));
+  pmWrite(p, n32(3000));
+  t.eqI32("a full datagram is then 1300 bytes", toI32(pmTake(p).length), n32(1300));
+  p.conn.pathMtuLimit = n32(1000);
+  t.eqI32("a limit under 1200 takes the path to 1200, no lower", p.conn.datagramSize(), n32(1200));
+};
+
 /** Every path MTU check. */
 export const recoveryPmtuChecks = (t: Suite): void => {
   pmWindowChecks(t);
   pmProbeLossChecks(t);
+  pmPersistentChecks(t);
   pmSearchChecks(t);
   pmBlackHoleChecks(t);
+  pmClampChecks(t);
 };

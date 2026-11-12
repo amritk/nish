@@ -341,7 +341,8 @@ each of which also runs under `--number-mode f64`.
   search never goes above the smallest of the carrier's `pathMtuLimit`, the
   room the carrier hands `takeDatagramWithin`, 1,452 bytes
   (`QUIC_CONN_DATAGRAM_MAX`) and the client's `max_udp_payload_size`. A
-  limit the carrier lowers after the search began holds from the next probe.
+  limit the carrier lowers after the search began holds from the next
+  datagram and the next probe: a validated `pathMtu` above it falls to it.
   1,200 bytes is the floor and the size every connection starts at, and a
   limit of 1,200 or less turns discovery off.
 - **Only an acknowledgement validates a size.** A probe is a PING padded
@@ -353,6 +354,9 @@ each of which also runs under `--number-mode f64`.
   cuts the window or starts a recovery period. Three losses of one size
   lower the top of the search below it, so a path that drops probes costs
   at most three probes a size, over the five or so sizes a search tries.
+  A lost probe is passed over when persistent congestion is judged, but an
+  acknowledged one still breaks the run of losses (RFC 9002 §7.6.2), and
+  lost probes never count toward a black hole.
 - **A black hole falls back to 1,200** (RFC 8899 §4.3). Three loss events,
   each losing a packet past 1,200 bytes that was not a probe, with no
   packet past 1,200 acknowledged between, set the path back to 1,200 and
@@ -364,7 +368,12 @@ each of which also runs under `--number-mode f64`.
   as 1,200.
 - **A new path starts again at 1,200.** A migration resets the search, and
   a path still being validated sends 1,200-byte datagrams whatever the old
-  path had validated.
+  path had validated. A queued DATAGRAM past that size is held, not dropped,
+  until validation ends.
+- **Open: a busy sender does not probe.** A probe goes only in a datagram
+  that would otherwise not be sent, so a sender that always has stream or
+  DATAGRAM data due stays at 1,200 bytes until it runs dry. That costs
+  throughput, not safety.
 
 ### Q2b: what a server answers without a connection, the idle timeout and key update
 

@@ -1685,8 +1685,9 @@ export class QuicConnection {
    * through. A new address starts again from 1200.
    *
    * `pathMtuLimit` is the carrier's to lower, for an interface whose MTU
-   * carries less than `QUIC_CONN_DATAGRAM_MAX`, at any time: the next probe
-   * keeps under it. 1200 or less turns discovery off. `reset` keeps it.
+   * carries less than `QUIC_CONN_DATAGRAM_MAX`, at any time: the next
+   * datagram and the next probe keep under it, and a `pathMtu` above it
+   * falls to it. 1200 or less turns discovery off. `reset` keeps it.
    */
   pathMtuLimit: i32 = 1452
   /** The largest datagram validated on the current path: 1200 until a probe is acknowledged. */
@@ -2944,11 +2945,18 @@ export class QuicConnection {
 
   /**
    * The largest datagram the server sends now: `pathMtu`, or 1200 while a
-   * new path is being validated.
+   * new path is being validated. A `pathMtuLimit` the carrier lowered below
+   * `pathMtu` takes effect here: `pathMtu` and recovery's datagram size
+   * fall to it, no lower than 1200, and the search goes on below it.
    *
    * @returns The size in bytes, from 1200 to `QUIC_CONN_DATAGRAM_MAX`.
    */
   datagramSize(): i32 {
+    if (this.pathMtu > this.pathMtuLimit) {
+      this.pathMtu = this.pathMtuLimit > QUIC_CONN_DATAGRAM_SIZE ? this.pathMtuLimit : QUIC_CONN_DATAGRAM_SIZE
+      this.pmtuLow = this.pathMtu
+      this.recovery.setDatagramSize(toI64(this.pathMtu))
+    }
     return this.pathValidating ? QUIC_CONN_DATAGRAM_SIZE : this.pathMtu
   }
 
@@ -4485,6 +4493,13 @@ export class QuicConnection {
    * carrier that paces calls `nish/net/quic-listener`'s
    * `quicListenerTakeFlight` instead.
    *
+   * Its contract changed with path MTU discovery: it fills up to all of
+   * `out` from `at`, as much as `QUIC_CONN_DATAGRAM_MAX`, where it once
+   * wrote at most 1200 bytes. A carrier that sizes its buffer from
+   * `QUIC_CONN_DATAGRAM_SIZE` keeps getting datagrams of at most that size
+   * and is never probed past it; one that hands over a larger buffer must
+   * send all of what comes back.
+   *
    * @param out Where the datagram is written.
    * @param at Where in `out` it starts; `out` needs `QUIC_CONN_DATAGRAM_SIZE` bytes from here.
    * @param now The caller's monotonic time in milliseconds; timers due by then run first.
@@ -4500,7 +4515,9 @@ export class QuicConnection {
    * is due and `room` has space for it, the datagram is a path MTU probe
    * (see `pathMtu`), so a carrier that wants probing gives at least
    * `QUIC_CONN_DATAGRAM_MAX` bytes of room, and one that gives 1200 never
-   * probes.
+   * probes. A probe never displaces data: a sender that always has
+   * something due does not probe until it runs out, and stays at 1200
+   * bytes until then.
    *
    * @param out Where the datagram is written.
    * @param at Where in `out` it starts.
@@ -4907,10 +4924,14 @@ export class QuicConnection {
     // DATAGRAMs ride in any packet the window lets elicit, and are recorded
     // only by size: a lost one is not sent again (RFC 9221 §5.2). One queued
     // for a larger path than the datagram size allows now never fits: it is
-    // dropped rather than left to hold the rest back.
-    const most: i32 = this.maxDatagramPayload()
-    while (this.datagramsOut.peekLength() > most) {
-      this.datagramsOut.dropOldest()
+    // dropped rather than left to hold the rest back. While a new path is
+    // validated it is held instead, since a path that keeps `pathMtu` carries
+    // it again once validated.
+    if (!this.pathValidating) {
+      const most: i32 = this.maxDatagramPayload()
+      while (this.datagramsOut.peekLength() > most) {
+        this.datagramsOut.dropOldest()
+      }
     }
     let datagram: i32 = this.datagramsOut.putFrame(out, at, end)
     while (datagram > at) {

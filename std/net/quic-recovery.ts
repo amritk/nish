@@ -565,6 +565,9 @@ export class QuicRecovery {
    * max_datagram_size (B.1): the largest datagram the connection sends on
    * this path, 1200 until path MTU discovery validates more. The initial and
    * minimum windows and congestion avoidance's step are counted in it.
+   * `resetPath`, which the constructor runs, sets it to
+   * `QUIC_RECOVERY_DATAGRAM_SIZE`; a field's initializer
+   * must be a literal.
    */
   datagramSize: i64 = 1200
   /** How many congestion events reduced the window, and how many of them were persistent congestion. */
@@ -1213,11 +1216,17 @@ export class QuicRecovery {
     for (let k: i32 = 0; k < sp.count; k += 1) {
       const s: i32 = sp.slot(k)
       const state: i32 = sp.stateAt(s)
+      // An acknowledged probe still breaks the run; only a lost one says nothing (RFC 9000 §14.4).
+      if (state === QUIC_RECOVERY_ACKED) {
+        first = -1
+        fresh = false
+        continue
+      }
       if (sp.probeAt(s)) {
         continue
       }
       const lost: boolean = state === QUIC_RECOVERY_LOST || state === QUIC_RECOVERY_LOST_NOW
-      if (state === QUIC_RECOVERY_ACKED || (lost && sp.timeAt(s) < this.firstSampleTime)) {
+      if (lost && sp.timeAt(s) < this.firstSampleTime) {
         first = -1
         fresh = false
         continue
