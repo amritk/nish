@@ -195,8 +195,10 @@ export class Http1Parser {
   buf: u8[]
   /**
    * The request line (method to version, no CRLF) and then the header
-   * section's lines with their CRLFs, copied out of `buf` as each is read,
-   * names in lowercase: what the spans below index. The bytes from
+   * section's lines with their CRLFs, the closing CRLF last, copied out of
+   * `buf` as each is read, names in lowercase: what the spans below index.
+   * A field's line runs from its name's start to its value's end, any OWS
+   * around the value, and a CRLF; nothing else is in the head. The bytes from
    * `headLength` on are slack: the section scan stores a line's first bytes
    * there before the line is whole. Kept from one request to the next, so a
    * slot that has seen its largest head allocates nothing for the next one.
@@ -247,7 +249,10 @@ export class Http1Parser {
   lineEnd: i32 = 0
   /** How many fields the request's header section kept: the spans of field `i` are `spans[4 * i ..]`. */
   headerCount: i32 = 0
-  /** How much of `head` the request uses. */
+  /**
+   * How much of `head` the request uses: the request line, each kept field
+   * line and its CRLF, and the closing CRLF, so `headerCount + 1` CRLFs.
+   */
   headLength: i32 = 0
   /**
    * Whether the line being scanned holds a byte a field value may not: a
@@ -1775,6 +1780,12 @@ const http1Section = (p: Http1Parser): i32 => {
       }
       if (lf - 1 - start > p.maxHeaderBytes - p.sectionBytes) {
         return http1Fail(p, 431, "a line over its limit")
+      }
+      // The scan stops at the CR, so the LF after it may be in no vector
+      // or tail copied: store it, and the head holds each line's CRLF.
+      const at: i32 = lf + delta
+      if (copy && at >= 0 && at < toI32(p.head.length)) {
+        p.head[at] = 10
       }
       p.lineStart = start
       p.lineEnd = lf - 1

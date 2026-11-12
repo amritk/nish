@@ -174,8 +174,8 @@ const mixMaybe = (sum: u32, text: string | null): u32 => (text === null ? mix(su
  * The head as a caller reads it: the bytes of the method, the target and each
  * field's name and value, through their spans, and the spans' shape (each
  * field's name and value relative to its own name). Where the head stores
- * them, and what lies between, is the parser's own: the new parser keeps a
- * field line's CRLF in the head, the old one drops it.
+ * them is the parser's own: the new parser keeps a field line's CRLF in the
+ * head, the old one drops it. `mixHead` pins the rest of the head.
  */
 const mixSpans = (
   sum0: u32,
@@ -203,6 +203,44 @@ const mixSpans = (
   return sum
 }
 
+/**
+ * The whole head up to `length`, with the CRLFs the new parser keeps taken
+ * out: the bytes left must be the old parser's head, byte for byte, which pins
+ * `headLength` and every byte between spans. `crlfs` is how many CRLFs the
+ * parser's contract puts in the head (none for the old parser; for the new,
+ * one ending each of the `count` field lines and one closing the section), and
+ * each must sit where that contract says: before the next field's name, before
+ * the closing CRLF, or at `length`. A CR or LF anywhere else, or a CRLF out of
+ * place, mixes a refusal.
+ */
+const mixHead = (sum0: u32, head: u8[], length: i32, spans: i32[], count: i32, crlfs: i32): u32 => {
+  let sum: u32 = sum0
+  let kept: i32 = 0
+  let pairs: i32 = 0
+  let placed: boolean = length >= 0 && length <= toI32(head.length)
+  let k: i32 = 0
+  while (k >= 0 && k < length && k < toI32(head.length)) {
+    const c: i32 = toI32(head[k])
+    if (c === 13 && k + 1 < length && k + 1 < toI32(head.length) && head[k + 1] === 10) {
+      k += 2
+      if (pairs + 1 < count) {
+        const next: i32 = 4 * (pairs + 1)
+        placed = placed && next < toI32(spans.length) && spans[next] === k
+      } else if (pairs + 1 > count) {
+        placed = placed && k === length
+      }
+      pairs += 1
+    } else {
+      placed = placed && c !== 13 && c !== 10
+      sum = mix(sum, c)
+      kept += 1
+      k += 1
+    }
+  }
+  sum = mix(sum, kept)
+  return mixBool(sum, placed && pairs === crlfs)
+}
+
 const stateNew = (p: Http1Parser, e: i32): u32 => {
   let sum: u32 = mix(2166136261, e)
   sum = mix(sum, p.status)
@@ -220,6 +258,7 @@ const stateNew = (p: Http1Parser, e: i32): u32 => {
     sum = mix(sum, p.targetEnd)
     sum = mix(sum, p.headerCount)
     sum = mixSpans(sum, p.head, p.headLength, p.spans, p.headerCount, p.methodStart, p.methodEnd, p.targetStart, p.targetEnd)
+    sum = mixHead(sum, p.head, p.headLength, p.spans, p.headerCount, p.headerCount + 1)
     sum = mixBool(sum, p.methodIs("GET"))
     sum = mixBool(sum, p.targetIs("/"))
     sum = mixBool(sum, p.upgradeIs("websocket"))
@@ -268,6 +307,7 @@ const stateOld = (p: H1oldParser, e: i32): u32 => {
     sum = mix(sum, p.targetEnd)
     sum = mix(sum, p.headerCount)
     sum = mixSpans(sum, p.head, p.headLength, p.spans, p.headerCount, p.methodStart, p.methodEnd, p.targetStart, p.targetEnd)
+    sum = mixHead(sum, p.head, p.headLength, p.spans, p.headerCount, 0)
     sum = mixBool(sum, p.methodIs("GET"))
     sum = mixBool(sum, p.targetIs("/"))
     sum = mixBool(sum, p.upgradeIs("websocket"))
@@ -1081,15 +1121,17 @@ const nameCases = (tally: Tally): void => {
  * Field values and targets, which the section scan reads for CR and LF a
  * vector at a time: a Cookie and an Authorization value, and a target, of
  * every length 1 to 48 and of 255, 256, 257, 1000 and 4000 bytes, with each of
- * nine bytes the scan or the field rules stop at (CR, LF, NUL, HTAB, SP, DEL,
- * 0x80, 0xff and a comma) at every place in its first and last 48, so every
+ * eleven bytes the scan or the field rules stop at or must not (CR, LF, NUL,
+ * HTAB, SP, 0x1f and DEL, the last control bytes below and above the visible
+ * range, 0x7e, the last visible one, 0x80, 0xff and a comma) at every place in
+ * its first and last 48, so every
  * lane of the vectors at both ends, each in both fields under five setups;
  * and a head of 60 fields, each cut every way, so many lines take the same
  * path.
  */
 const valueCases = (tally: Tally): void => {
   tally.label = "value"
-  const stops: i32[] = [13, 10, 0, 9, 32, 127, 128, 255, 44]
+  const stops: i32[] = [13, 10, 0, 9, 32, 31, 127, 126, 128, 255, 44]
   const lengths: i32[] = [255, 256, 257, 1000, 4000]
   const text: Setup = setupOf(0)
   const spans: Setup = setupOf(2)

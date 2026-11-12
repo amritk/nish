@@ -386,7 +386,13 @@ No copy starts at or past `copyStop`, the line's start plus what is left of
 before its value is read, so a section's copy ends within one vector of
 `maxHeaderBytes` + 2 bytes past the request line, whatever the peer sends. Every store is a bounds-checked `u8x16` store or `copyBytes`; the head
 is grown first whenever a store would come within 32 bytes of its end.
-`http1HeadAppend` relies on its caller having called `http1HeadGrow` when the
+So `headLength` is the old head's length plus two bytes for each kept field
+line and two for the closing CRLF, and with those CRLFs taken out the head is
+main's byte for byte; `net_http1_parse_diff` pins both, and that each CRLF
+ends where the next field's name span starts (`mixHead`). A line whose CR is the last byte a vector
+or the byte-at-a-time tail copies has its LF stored when the line is taken,
+so no stale byte from an earlier request is left between a CR and the next
+line. `http1HeadAppend` relies on its caller having called `http1HeadGrow` when the
 request line would leave fewer than sixteen bytes of slack; without that it
 copies nothing (both of its paths check the bounds) and the spans would read
 stale bytes, never bytes outside the array.
@@ -407,10 +413,10 @@ The response writer (`http1WriteResponseHead`) is unchanged from `b49794d8`.
 Nothing accepted or refused changes, and no limit, status or reason string
 moved.
 
-Tests: in `net_http1_parse_diff`, 168,091 value cases against main's parser:
+Tests: in `net_http1_parse_diff`, 204,523 value cases against main's parser:
 a Cookie and an Authorization value and a target of every length 1 to 48 and
-of 255, 256, 257, 1000 and 4000 bytes, with CR, LF, NUL, HTAB, SP, DEL, a
-comma, 0x80 or 0xff at every place in the first and last 48 bytes, each value
+of 255, 256, 257, 1000 and 4000 bytes, with CR, LF, NUL, HTAB, SP, 0x1f, DEL,
+0x7e, a comma, 0x80 or 0xff at every place in the first and last 48 bytes, each value
 in both fields under five setups (text kept, spans only, fresh arrays, a
 declined upgrade, and pieces of 13, 16 and 3 bytes in turn); the same heads
 whole and cut at every two-feed split at the edge lengths; and a head of 60
@@ -431,6 +437,7 @@ Mutations tried against the default run, each a one-line change to
 | The section scan never grows the head before a store | panics, "index out of range: 269 >= 256": the store's bounds check holds |
 | `copyStop` one byte short of the line's value (`- 1` for `+ 2`) | panics on an i32 overflow check |
 | `copyStop` without the CRLF's two bytes (`+ 0` or `+ 1` for `+ 2`) | survives: the CR and LF of the line at the limit are copied but never read |
+| No LF stored when a line is taken (the head before this fix) | fails at case 24, a chunked POST cut after 21 bytes: the last field line's CR is the last lane of a vector, and the head holds a stale byte where its LF belongs |
 | The grow threshold at 16 bytes from the end, not 32 | survives: a store needs 16, so this only grows later |
 
 **Connection management** (`net_http1_server`): `Connection: close` in a
