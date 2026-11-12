@@ -393,6 +393,60 @@ export const structsHoldingVectors = (compilation: Compilation): StringSet => {
 }
 
 /**
+ * The names of the `declare class` layouts (WP27 S4.1) and of every class and
+ * interface that holds one anywhere, as `structsHoldingVectors` collects
+ * vector holders. The checker refuses each in an exported signature or field
+ * (`checkExportedLayouts`); the header still lists a module's other records,
+ * and makes a holder opaque rather than spell a C struct it does not define.
+ */
+export const structsHoldingLayouts = (compilation: Compilation): StringSet => {
+  const table = compilation.table
+  const held = new StringSet()
+  for (const unit of compilation.modules) {
+    for (const info of unit.checker.program.structList) {
+      if (info.layout) {
+        held.add(info.name)
+      }
+    }
+  }
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const unit of compilation.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (held.has(info.name)) {
+          continue
+        }
+        for (const field of info.fields) {
+          if (holdsRecordIn(table, field.type, held)) {
+            held.add(info.name)
+            grew = true
+            break
+          }
+        }
+      }
+    }
+  }
+  return held
+}
+
+/** Whether `t` is, or has inside it as an element, a `Result` arm or under a `| null`, a record named in `held`. */
+const holdsRecordIn = (table: TypeTable, t: i32, held: StringSet): boolean => {
+  switch (table.kindOf(t)) {
+    case K_ARRAY:
+      return holdsRecordIn(table, table.refOf(t), held)
+    case K_NULLABLE:
+      return holdsRecordIn(table, table.refOf(t), held)
+    case K_RESULT:
+      return holdsRecordIn(table, table.okOf(t), held) || holdsRecordIn(table, table.errOf(t), held)
+    case K_STRUCT:
+      return held.has(table.nameOf(t))
+    default:
+      return false
+  }
+}
+
+/**
  * Whether `t` is a `nish:simd` vector or has one inside it: an element, a
  * `Result` arm, the type under a `| null`, or a record named in `held`
  * (`structsHoldingVectors`). A vector is sixteen bytes aligned to sixteen, and

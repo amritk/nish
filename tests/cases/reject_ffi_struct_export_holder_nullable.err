@@ -1,0 +1,1 @@
+`Holder | null` holds a `declare class Point` and cannot be a parameter of an exported function

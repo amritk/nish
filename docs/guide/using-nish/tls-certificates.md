@@ -149,6 +149,15 @@ sends no share of the chosen group is asked once, with a HelloRetryRequest,
 for one; and a P-256 share that is not an uncompressed point on the
 curve is refused with the `illegal_parameter` alert.
 
+A client may ask for smaller records with the `record_size_limit` extension
+(RFC 8449), as a client short of memory does. The server keeps every
+encrypted record it sends within that limit and tells the client its own,
+16,385 bytes. Nothing in the program changes: `write` cuts what it is given
+into as many records as the limit needs. Each record costs 22 bytes on the
+wire, so at the smallest limit, 64, about a third of what is sent is
+overhead. A limit below 64 is refused with the `illegal_parameter` alert,
+and a malformed one with `decode_error`.
+
 The pool has a fixed number of slots, so a client that connects and then says
 nothing would hold one for good. Call `expire(monotonicNanos())` from the
 program's poll loop (`monotonicNanos` is in `nish:process`): it closes every

@@ -1,1 +1,1 @@
-`declare class` is not supported
+has type `string`, which has no C layout

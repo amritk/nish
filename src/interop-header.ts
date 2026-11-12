@@ -33,6 +33,7 @@ import {
   pushAll,
   resultDefinitions,
   spaceAfter,
+  structsHoldingLayouts,
   structsHoldingVectors,
   tsKeyword,
   tsSignatureLine,
@@ -96,7 +97,8 @@ const elementNote = (program: CheckedProgram, table: TypeTable, t: i32): string 
 }
 
 /**
- * `struct <Name> { ... };` for every class and interface of every module:
+ * `struct <Name> { ... };` for every class and interface of every module but
+ * a `declare class`:
  * forward declarations first (a field may point at a struct defined later),
  * then the bodies in module order. The fields are exactly the compiled
  * `%struct.<Name>` at natural alignment, which is clang's layout for the same
@@ -112,7 +114,10 @@ const structDefinitions = (compilation: Compilation): string[] => {
   const files: string[] = []
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
-      if (info.origin === unit.source) {
+      // A `declare class` is C's own struct, which no exported signature or
+      // exported field can name (`checkExportedLayouts`), so the header has
+      // no use for it and does not restate it.
+      if (info.origin === unit.source && !info.layout) {
         structs.push(info)
         files.push(unit.name)
       }
@@ -123,6 +128,7 @@ const structDefinitions = (compilation: Compilation): string[] => {
     return lines
   }
   const vectored = structsHoldingVectors(compilation)
+  const layouts = structsHoldingLayouts(compilation)
   lines.push("")
   lines.push("/* Classes and interfaces: the field layout of the compiled objects (natural")
   lines.push(" * alignment; a class that `implements` an interface lists its fields first).")
@@ -180,6 +186,16 @@ const structDefinitions = (compilation: Compilation): string[] => {
       i = i + 1
       continue
     }
+    // A record holding a `declare class` names a struct its module keeps to
+    // itself and the header does not define, so it is opaque the same way.
+    if (layouts.has(info.name)) {
+      lines.push(
+        `/* ${file}: ${kind} ${info.name}, opaque: it holds a \`declare class\`, a C struct its module keeps to itself */`
+      )
+      lines.push(`typedef struct ${cName} ${cName};`)
+      i = i + 1
+      continue
+    }
     lines.push(`/* ${file}: ${kind} ${info.name}${ifaces} */`)
     if (info.fields.length === 0) {
       lines.push(`/* struct ${cName} has no fields; it stays incomplete (pointers only). */`)
@@ -208,10 +224,13 @@ const structDefinitions = (compilation: Compilation): string[] => {
 const structFieldTypes = (compilation: Compilation): i32[] => {
   const out: i32[] = []
   const vectored = structsHoldingVectors(compilation)
+  const layouts = structsHoldingLayouts(compilation)
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
-      // An opaque `Map`, `Set` (WP32), `Secret`, holder or vector holder contributes no field to describe.
+      // An opaque `Map`, `Set` (WP32), `Secret`, holder or vector holder contributes no field to describe;
+      // nor does a `declare class`, which the header leaves out, or a record holding one.
       if (
+        layouts.has(info.name) ||
         isCollectionStruct(info) ||
         isSecretStruct(info) ||
         secretFieldOf(compilation.table, info) !== null ||
