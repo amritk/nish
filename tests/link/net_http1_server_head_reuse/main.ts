@@ -1,6 +1,6 @@
-// `Http1Connection.respond` keeps the last final head it wrote and copies it
-// when the next is the same: the same status, fields, framing and
-// `Connection`, in the same second. These checks drive one connection with
+// `Http1Connection.respond` keeps a final head it has written twice running
+// (the same status, framing, `Connection` and number of fields) and copies it
+// when the next is the same: the same fields too, in the same second. These checks drive one connection with
 // no socket and read every response byte for byte against
 // `http1WriteResponseHead` called directly, so a copied head is shown to be
 // the head the writer would have written, and a head that differs in any
@@ -119,7 +119,7 @@ export const main = (): i32 => {
   const values: u8[][] = fields(["Nish", "text/plain"]);
   const body: string = "Hello, World!";
 
-  // A repeated head, pipelined: written once, copied after.
+  // A repeated head, pipelined: written twice, the second kept, copied after.
   const piped = fed(times(GET, 5));
   const date: u8[] = piped.date.current();
   const plain: string = head(200, "OK", names, values, 13, "", date);
@@ -131,12 +131,13 @@ export const main = (): i32 => {
   }
   t.eqI32("five pipelined requests are answered", results, 5);
   t.eqStr("each with the head the writer writes, then its body", drained(piped), times(`${plain}${body}`, 5));
-  t.ok("the first head is written and the four after it copied", piped.headCopies === 4);
+  t.ok("the first two heads are written and the three after them copied", piped.headCopies === 3);
 
   // Every input of the head, changed one at a time, is a head written fresh.
-  const changes = fed(times(GET, 12));
+  const changes = fed(times(GET, 13));
   check(t, changes, "the first head", 200, names, values, body, "OK", false);
-  check(t, changes, "the same head again", 200, names, values, body, "OK", true);
+  check(t, changes, "the same head again, kept", 200, names, values, body, "OK", false);
+  check(t, changes, "and once more", 200, names, values, body, "OK", true);
   check(t, changes, "another status", 404, names, values, body, "Not Found", false);
   check(t, changes, "back to 200", 200, names, values, body, "OK", false);
   check(t, changes, "another body length", 200, names, values, "Hello, World!!", "OK", false);
@@ -168,75 +169,77 @@ export const main = (): i32 => {
   const laterHead: string = head(200, "OK", names, values, 13, "", later);
   t.eqStr("two answers in one second", first, times(`${plain}${body}`, 2));
   t.eqStr("two in the next carry the next second's Date", drained(ticking), times(`${laterHead}${body}`, 2));
-  t.ok("the turn writes a head, the rest are copied", ticking.headCopies === 2 && laterHead !== plain);
+  t.ok("the turn writes a head, the next is copied", ticking.headCopies === 1 && laterHead !== plain);
   // Within a second the pinned clock does not reformat: a later millisecond is the same head.
   ticking.date.pin(PINNED_MS + 1999);
   t.ok("a later millisecond of the same second reformats nothing", latin1(ticking.date.current(), ZERO, 29) === latin1(later, ZERO, 29));
 
   // Keep-alive, then close: the close is a head of its own.
-  const closing = fed(`${GET}${GET}GET /plaintext HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n`);
-  for (let k: i32 = 0; k < 3; k++) {
+  const closing = fed(`${GET}${GET}${GET}GET /plaintext HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n`);
+  for (let k: i32 = 0; k < 4; k++) {
     nextRequest(closing);
     answer(closing, 200, names, values, body);
   }
   const closeHead: string = head(200, "OK", names, values, 13, "close", date);
-  t.eqStr("two kept alive, then one with Connection: close", drained(closing), `${plain}${body}${plain}${body}${closeHead}${body}`);
-  t.ok("the second is copied, the close written", closing.headCopies === 1);
+  t.eqStr("three kept alive, then one with Connection: close", drained(closing), `${times(`${plain}${body}`, 3)}${closeHead}${body}`);
+  t.ok("the third is copied, the close written", closing.headCopies === 1);
 
   // HTTP/1.0 keep-alive: its Connection field is part of the kept head.
   const old: string = "GET /plaintext HTTP/1.0\r\nConnection: keep-alive\r\n\r\n";
-  const ten = fed(`${old}${old}${GET}`);
-  for (let k: i32 = 0; k < 3; k++) {
+  const ten = fed(`${old}${old}${old}${GET}`);
+  for (let k: i32 = 0; k < 4; k++) {
     nextRequest(ten);
     answer(ten, 200, names, values, body);
   }
   const aliveHead: string = head(200, "OK", names, values, 13, "keep-alive", date);
-  t.eqStr("two HTTP/1.0 keep-alive answers, then an HTTP/1.1 one", drained(ten), `${aliveHead}${body}${aliveHead}${body}${plain}${body}`);
-  t.ok("the second HTTP/1.0 head is copied, the HTTP/1.1 one written", ten.headCopies === 1);
+  t.eqStr("three HTTP/1.0 keep-alive answers, then an HTTP/1.1 one", drained(ten), `${times(`${aliveHead}${body}`, 3)}${plain}${body}`);
+  t.ok("the third HTTP/1.0 head is copied, the HTTP/1.1 one written", ten.headCopies === 1);
 
   // HEAD: the same head, no body, and the GET after it still sends its body.
-  const heading = fed(`${GET}HEAD /plaintext HTTP/1.1\r\nHost: a\r\n\r\n${GET}`);
-  for (let k: i32 = 0; k < 3; k++) {
+  const heading = fed(`${GET}${GET}HEAD /plaintext HTTP/1.1\r\nHost: a\r\n\r\n${GET}`);
+  for (let k: i32 = 0; k < 4; k++) {
     nextRequest(heading);
     answer(heading, 200, names, values, body);
   }
-  t.eqStr("GET, HEAD, GET", drained(heading), `${plain}${body}${plain}${plain}${body}`);
+  t.eqStr("GET, GET, HEAD, GET", drained(heading), `${plain}${body}${plain}${body}${plain}${plain}${body}`);
   t.ok("the HEAD's head and the GET's after it are copied", heading.headCopies === 2);
 
   // 100 Continue is never kept, and does not end the kept head.
-  const expecting = fed(`${GET}POST /p HTTP/1.1\r\nHost: a\r\nContent-Length: 0\r\nExpect: 100-continue\r\n\r\n`);
-  nextRequest(expecting);
-  answer(expecting, 200, names, values, body);
+  const expecting = fed(`${GET}${GET}POST /p HTTP/1.1\r\nHost: a\r\nContent-Length: 0\r\nExpect: 100-continue\r\n\r\n`);
+  for (let k: i32 = 0; k < 2; k++) {
+    nextRequest(expecting);
+    answer(expecting, 200, names, values, body);
+  }
   nextRequest(expecting);
   const none: u8[][] = [];
   const interim: i32 = expecting.respond(100, none, none, HTTP1_NO_BODY);
   answer(expecting, 200, names, values, body);
-  t.eqStr("a 100 between two answers", drained(expecting), `${plain}${body}HTTP/1.1 100 Continue\r\n\r\n${plain}${body}`);
+  t.eqStr("a 100 after two answers and before a third", drained(expecting), `${plain}${body}${plain}${body}HTTP/1.1 100 Continue\r\n\r\n${plain}${body}`);
   t.ok("the 100 is written and the answer after it copied", interim === 0 && expecting.headCopies === 1);
 
   // Chunked: kept like any framing; to HTTP/1.0 it is a close, written fresh.
-  const chunked = fed(`${GET}${GET}GET / HTTP/1.0\r\n\r\n`);
+  const chunked = fed(`${GET}${GET}${GET}GET / HTTP/1.0\r\n\r\n`);
   const chunkedHead: string = head(200, "OK", names, values, HTTP1_CHUNKED, "", date);
   const tenChunked: string = head(200, "OK", names, values, HTTP1_NO_BODY, "close", date);
   let chunkedOk: boolean = true;
-  for (let k: i32 = 0; k < 3; k++) {
+  for (let k: i32 = 0; k < 4; k++) {
     nextRequest(chunked);
     chunkedOk = chunkedOk && chunked.respond(200, names, values, HTTP1_CHUNKED) === 0;
     chunked.end();
   }
-  t.eqStr("two chunked answers, then one to HTTP/1.0", drained(chunked), `${chunkedHead}0\r\n\r\n${chunkedHead}0\r\n\r\n${tenChunked}`);
-  t.ok("the second chunked head is copied", chunkedOk && chunked.headCopies === 1);
+  t.eqStr("three chunked answers, then one to HTTP/1.0", drained(chunked), `${times(`${chunkedHead}0\r\n\r\n`, 3)}${tenChunked}`);
+  t.ok("the third chunked head is copied", chunkedOk && chunked.headCopies === 1);
 
   // A 204 with no body: kept too.
-  const empty = fed(times(GET, 2));
-  for (let k: i32 = 0; k < 2; k++) {
+  const empty = fed(times(GET, 3));
+  for (let k: i32 = 0; k < 3; k++) {
     nextRequest(empty);
     empty.respond(204, names, values, HTTP1_NO_BODY);
     empty.end();
   }
   const noContent: string = head(204, "No Content", names, values, HTTP1_NO_BODY, "", date);
-  t.eqStr("two 204s", drained(empty), `${noContent}${noContent}`);
-  t.ok("the second 204 is copied", empty.headCopies === 1);
+  t.eqStr("three 204s", drained(empty), times(noContent, 3));
+  t.ok("the third 204 is copied", empty.headCopies === 1);
 
   // An error answer after a kept head carries none of its fields.
   const erring = fed(`${GET}GET /x HTTP/9.9\r\n\r\n`);
@@ -267,17 +270,23 @@ export const main = (): i32 => {
   t.eqStr("and so after a kept head", drained(limited), `${plain}${body}${tooLong}`);
 
   // A field the writer refuses is refused even when its bytes line up with the kept head.
-  const split = fed(times(GET, 3));
-  nextRequest(split);
-  answer(split, 200, fields(["A", "B"]), fields(["1", "2"]), body);
+  const split = fed(times(GET, 8));
+  for (let k: i32 = 0; k < 3; k++) {
+    nextRequest(split);
+    answer(split, 200, fields(["A", "B"]), fields(["1", "2"]), body);
+  }
   drained(split);
+  t.ok("a head of A and B is kept and copied", split.headCopies === 1);
   nextRequest(split);
   const dateText: string = latin1(date, ZERO, toI32(date.length));
   const shifted: i32 = split.respond(200, fields(["A: 1\r\nB", "Date"]), fields(["2", dateText]), 13);
   t.eqI32("a name spanning two kept lines is refused", shifted, H1_INVALID);
-  answer(split, 200, fields(["A"]), fields(["b: c"]), body);
+  for (let k: i32 = 0; k < 3; k++) {
+    answer(split, 200, fields(["A"]), fields(["b: c"]), body);
+    nextRequest(split);
+  }
   drained(split);
-  nextRequest(split);
+  t.ok("then a head of A: b: c", split.headCopies === 2);
   t.eqI32("a name that takes in a colon of the kept value is refused", split.respond(200, fields(["A: b"]), fields(["c"]), 13), H1_INVALID);
   t.ok("nothing is queued by either", split.outputEnd === split.outputStart);
 
@@ -317,7 +326,7 @@ export const main = (): i32 => {
     }
   }
   t.eqI32("two hundred answers, each byte for byte", same, 200);
-  t.ok("one head written, 199 copied", busy.headCopies === 199);
+  t.ok("two heads written, 198 copied", busy.headCopies === 198);
 
   return t.done();
 };

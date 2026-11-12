@@ -1384,11 +1384,12 @@ export class Http1Connection {
       field = "keep-alive"
     }
     const start: i32 = this.outputEnd
+    const reason: string = http1ServerReason(status)
     const end: i32 = http1WriteResponseHead(
       this.output,
       start,
       status,
-      http1ServerReason(status),
+      reason,
       names,
       values,
       framing,
@@ -1413,7 +1414,7 @@ export class Http1Connection {
     if (interim) {
       return 0
     }
-    this.keepHead(start, end, status, names, framing, connection)
+    this.keepHead(start, end, status, reason, names, framing, connection)
     return this.begin(close, framing, empty)
   }
 
@@ -1464,15 +1465,26 @@ export class Http1Connection {
   }
 
   /**
-   * Keeps the final head just written at `output[start .. end)`, with what it
-   * was written from, for `sameHead`; a head longer than `H1_HEAD_KEEP`, or
-   * with more than `H1_HEAD_FIELDS` fields, is not kept, and none is until
-   * the next that fits.
+   * Records the final head just written at `output[start .. end)`, with what
+   * it was written from, for `sameHead`. Its bytes are kept only when the
+   * head before it had the same status, framing, `Connection` and number of
+   * fields, so that a program whose every head differs pays a few stores per
+   * response and no copy; a head longer than `H1_HEAD_KEEP`, or with more
+   * than `H1_HEAD_FIELDS` fields, is never kept.
    */
-  private keepHead(start: i32, end: i32, status: i32, names: u8[][], framing: i32, connection: i32): void {
+  private keepHead(start: i32, end: i32, status: i32, reason: string, names: u8[][], framing: i32, connection: i32): void {
     const n: i32 = end - start
     const fields: i32 = toI32(names.length)
-    if (n > H1_HEAD_KEEP || n <= 0 || fields > H1_HEAD_FIELDS) {
+    const again: boolean =
+      status === this.headStatus &&
+      framing === this.headFraming &&
+      connection === this.headConnection &&
+      fields === this.headFields
+    this.headStatus = status
+    this.headFraming = framing
+    this.headConnection = connection
+    this.headFields = fields
+    if (!again || n > H1_HEAD_KEEP || fields > H1_HEAD_FIELDS) {
       this.headLength = 0
       return
     }
@@ -1483,19 +1495,10 @@ export class Http1Connection {
     for (let i: i32 = 0; i < fields; i += 1) {
       this.headNames[i] = toI32(names[i].length)
     }
-    const kept: u8[] = this.headBytes
-    copyBytes(kept, H1_ZERO, this.output, start, n)
-    // The field lines start past the status line's LF.
-    let at: i32 = 0
-    while (at < n && kept[at] !== 10) {
-      at += 1
-    }
-    this.headFieldsAt = at + 1
+    copyBytes(this.headBytes, H1_ZERO, this.output, start, n)
+    // The field lines start past "HTTP/1.1 NNN " reason CRLF.
+    this.headFieldsAt = 15 + toI32(reason.length)
     this.headLength = n
-    this.headStatus = status
-    this.headFraming = framing
-    this.headConnection = connection
-    this.headFields = fields
     this.headDate = this.date
     this.headFormats = this.date.formats()
   }
