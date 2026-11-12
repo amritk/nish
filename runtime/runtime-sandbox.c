@@ -25,9 +25,10 @@
  * it, `EXECUTE` leaves the rule on `/` and each program gets a rule of its own.
  * An interpreter the grants do not name themselves is written `//<path>`, the
  * same file to the kernel, and is kept out of a spawn's reach (SBX-1): its
- * identity is recorded before step 2, and `nish_spawn_target`, which
+ * identity is recorded before step 2, and `nish_spawn_sandboxed`, which
  * runtime-os.c's spawn calls once it is set, refuses a target that is that
- * file and hands back a descriptor of any other, which the child executes.
+ * file, has the child execute a descriptor of any other, and holds that
+ * child's whole subtree to the one exec ("One exec per spawn" below).
  *
  * What it does, in the order of the note's section 3, each step before the
  * next because each needs the one before it:
@@ -611,10 +612,18 @@ static void *nish_sb_spawner(void *arg) {
   return 0;
 }
 
+/* The spawner's next answer. A signal handled on this thread restarts the
+ * read: giving up there would lose a child that is already running. */
+static int32_t nish_sb_answer(int fd) {
+  int32_t said;
+  ssize_t n;
+  while ((n = read(fd, &said, sizeof said)) < 0 && errno == EINTR) {}
+  return n == sizeof said ? said : -EIO;
+}
+
 static void *nish_sb_supervisor(void *arg) {
   struct nish_sb_job *job = arg;
   pthread_t spawner;
-  int32_t listener = -EIO;
   if (unshare(CLONE_FILES) || pipe2(job->pipe, O_CLOEXEC)) {
     job->result = -errno;
     return 0;
@@ -625,7 +634,7 @@ static void *nish_sb_supervisor(void *arg) {
     return 0;
   }
   if (pthread_create(&spawner, 0, nish_sb_spawner, job)) return 0;
-  if (read(job->pipe[0], &listener, sizeof listener) != sizeof listener) listener = -EIO;
+  int32_t listener = nish_sb_answer(job->pipe[0]);
   if (listener < 0) {
     nish_sb_refuse_spawn(-listener);
     job->result = listener;
@@ -645,7 +654,7 @@ static void *nish_sb_supervisor(void *arg) {
     /* From here every exec in the child's subtree is ENOSYS, this one too if
      * it was not answered. */
     close(listener);
-    if (read(job->pipe[0], &job->result, sizeof job->result) != sizeof job->result) job->result = -EIO;
+    job->result = nish_sb_answer(job->pipe[0]);
   }
   pthread_join(spawner, 0);
   return 0;

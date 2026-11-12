@@ -1158,6 +1158,11 @@ declare function realpathSync(path: string): string | null;
  * an embedded NUL truncates one. A `wasm32` build and a WASI build have no
  * processes, and a WASI build always answers `-1`. Capability: process.spawn.
  *
+ * Under `--sandbox`, when a dependency's `process.spawn=<program>` grants
+ * list the programs the build may start, the program this and every other
+ * spawn builtin starts cannot start another: an exec by it, or by anything it
+ * forks, fails. A granted `#!` script runs its interpreter's builtins alone.
+ *
  * @param argv the program and its arguments.
  * @returns the exit status, or `128 + n` when signal `n` killed it (the shell's
  *   convention), or `-1` when the vector is empty — there is no `argv[0]` to

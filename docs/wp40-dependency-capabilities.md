@@ -84,8 +84,10 @@ A capability is narrowed only when every dependency that reaches it is
 granted it with arguments, the root does not reach it itself, the command line
 gives it no scope and `main` does not reach `ffi`; otherwise it stays whole,
 the confinement it had before. The ELF loader and `#!` interpreter the exec
-allowlist holds are refused as spawn targets unless granted too (SBX-1,
-fixed). Hosts are not enforced at run time: seccomp
+allowlist holds are refused as spawn targets unless granted too, and a
+program spawned under the allowlist is held to its own start: neither it nor
+anything it forks can execute a second program, granted or not (SBX-1,
+fixed; [wp37-os-sandbox.md](wp37-os-sandbox.md#one-exec-per-spawn)). Hosts are not enforced at run time: seccomp
 cannot read the address a socket call is given (CAPS-19, open).
 
 ## 3. What a dependency reaches

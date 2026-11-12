@@ -193,6 +193,21 @@ and a script started that way sees a `/proc/self/fd/N` path as its `$0`. A
 program the grant names may still be an interpreter (`sh`, `python3`) that
 runs whatever it is told: grant one only to a dependency you have read.
 
+A program started under such a grant cannot start another. The kernel holds
+it, and everything it forks, to its own start, so `find -exec`, `xargs`,
+`env <program>`, `timeout` and `make` fail where they would run a second
+program, a granted one included. A granted shell script still starts and
+runs its shell's builtins (`echo`, `test`, `read`); any other command in it
+fails, and a script that opens with `#!/usr/bin/env sh` does not start at
+all, because `env` starting `sh` is already the second program: name the
+interpreter's own path on the `#!` line. This needs Linux 5.5; on an older
+kernel, or inside a container that forbids the calls it takes, every spawn
+under such a grant fails and says so on stderr, in `--sandbox=best-effort`
+too. The same holds for a granted program that is itself a Nish program
+built with `--sandbox` and such a grant: its own spawns fail. To let a
+dependency's program start others, grant the dependency `process.spawn`
+whole, which lifts the list of programs with it.
+
 Addresses are checked at build time only. The kernel cannot see which
 address a socket call is given, so a `net=<host>` grant does not stop a
 dependency that builds its address at run time. Grant `net` to a dependency

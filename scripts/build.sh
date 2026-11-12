@@ -492,6 +492,9 @@ case "$(uname -s)" in
   Darwin) ;;
   *)
     common+=(-fstack-clash-protection)
+    # runtime-sandbox.c runs each spawn under an exec allowlist on threads of
+    # its own, and a glibc before 2.34 keeps pthread_create outside libc.
+    common+=(-pthread)
     # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
     common+=(-Wl,-z,relro,-z,now -Wl,-z,noexecstack) ;;
 esac

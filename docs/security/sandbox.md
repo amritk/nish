@@ -13,14 +13,14 @@ functions rather than lines, so it has no `file:line` anchors to move.
 
 | File | What |
 | --- | --- |
-| `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; `nish_sb_keep_interpreters` and `nish_sb_spawn_open`, the spawn-target check (SBX-1); the non-Linux stubs |
+| `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; `nish_sb_keep_interpreters` and `nish_sb_spawn_open`, the spawn-target check, and `nish_sb_spawn_once`, `nish_sb_supervisor`, `nish_sb_spawner` and `nish_sb_answer`, the one exec a spawn's subtree is held to (SBX-1); the non-Linux stubs |
 | `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, the call of `@nish_sandbox_check` first in `@main`, and the scope constants `@.sandbox.read`, `@.sandbox.write` and `@.sandbox.exec` (`sandboxDirs`) |
 | `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-napi-async`, `--emit-ts`, `--emit-ast`, `--emit-checked`, `--fix`, two modes at once, an entry with no `main`; the scopes (`capabilityListMask`, `capabilityScopes`): which are accepted, and each directory's resolution |
 | `src/compilation.ts` | `sandboxWidened`, the widening of an `ffi` main by the policy's grants (open question 13); `narrowSandbox`, the scopes and the exec allowlist taken from a dependency's grant arguments, and the `//` mark on an interpreter the grant does not name (WP37 §2a, WP40 §2a) |
-| `runtime/runtime-os.c` | `nish_spawn_target` and its call in `nish_spawn_start`: a refused target's error, and the spawn of `/proc/self/fd/N` in place of `argv[0]` |
+| `runtime/runtime-os.c` | `nish_spawn_sandboxed` and its call in `nish_spawn_start`: the spawn handed to the sandbox whole under an exec allowlist, and its error |
 | `runtime/runtime-parallel.c` | `nish_cpu_prime` and the ceiling `nish_cpu_count` clamps to, step 1 |
-| `runtime/nish.h` | the declarations of `nish_sandbox`, `nish_sandbox_check`, `nish_cpu_prime` and `nish_spawn_target` |
-| `scripts/build.sh` | the refusal of `--sandbox` IR under the wasm and wasi profiles |
+| `runtime/nish.h` | the declarations of `nish_sandbox`, `nish_sandbox_check`, `nish_cpu_prime` and `nish_spawn_sandboxed` |
+| `scripts/build.sh` | the refusal of `--sandbox` IR under the wasm and wasi profiles; `-pthread` on every ELF link, for the two threads a spawn under an exec allowlist runs on |
 
 Out of scope: scopes in `package.json`'s `"nish"` field for the root's own
 capabilities, which stay refused (open question 1), and scopes of any
@@ -206,7 +206,7 @@ counted. One finding is counted, and it is fixed:
 
 | ID | Severity | Where | What must hold | Status |
 | --- | --- | --- | --- | --- |
-| SBX-1 | High | `narrowSandbox` in `src/compilation.ts`, `nish_sandbox` and `nish_sb_spawn_open` in `runtime/runtime-sandbox.c`, `nish_spawn_start` in `runtime/runtime-os.c` | Under `--sandbox`, a dependency granted `process.spawn=<program>` must run only that program. | **Fixed.** The exec allowlist must grant EXECUTE on each granted program's ELF interpreter (`PT_INTERP`, e.g. `/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`) and `#!` interpreter, which the kernel needs to start it. Before the fix that loader was a spawn target too: `spawnSync([loader, "/bin/echo", "x"])` was an allowed `execve`, the loader then opened `/bin/echo` under `process.spawn`'s READ_FILE on `/` and mapped it, and Landlock checks EXECUTE at `execve` and open-for-exec, not at `mmap`, so any program ran. Now `narrowSandbox` writes an interpreter the grant does not name with a second leading `/` (`//usr/lib/...`), the same file to Landlock's `O_PATH` open; `nish_sandbox` records each marked entry's `(st_dev, st_ino)` before it confines the process and sets `nish_spawn_target`. Every spawn then resolves `argv[0]` as `posix_spawnp` would, opens it `O_PATH`, refuses (`EACCES`) a file whose identity is a marked entry's, and otherwise execs that same open file through `/proc/self/fd/N`, so the file checked is the file run: a rename or symlink swap between the check and the `execve` cannot substitute the loader. An interpreter the grant also names (`process.spawn=sh` beside a script) stays unmarked and spawnable. Before/after: `sandbox dependency grants: a granted program's ELF loader is refused as a spawn target (SBX-1)` (sandboxed the spawn returns `-1`; the same build without `--sandbox` runs `echo`), `sandbox dependency grants: a second name for the loader is refused too (SBX-1)`, `sandbox dependency grants: a granted #! script runs and its interpreter is refused as a spawn target (SBX-1)` and `sandbox dependency grants: a program the grant names stays spawnable when it is also another's interpreter (SBX-1)` in `tests/run.js`. |
+| SBX-1 | High | `narrowSandbox` in `src/compilation.ts`, `nish_sandbox`, `nish_sb_spawn_open` and `nish_sb_spawn_once` in `runtime/runtime-sandbox.c`, `nish_spawn_start` in `runtime/runtime-os.c` | Under `--sandbox`, a dependency granted `process.spawn=<program>` must run only that program. | **Fixed, in two parts.** The exec allowlist must grant EXECUTE on each granted program's ELF interpreter (`PT_INTERP`, e.g. `/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2`) and `#!` interpreter, which the kernel needs to start it. Before the fix that loader was a spawn target too: `spawnSync([loader, "/bin/echo", "x"])` was an allowed `execve`, the loader then opened `/bin/echo` under `process.spawn`'s READ_FILE on `/` and mapped it, and Landlock checks EXECUTE at `execve` and open-for-exec, not at `mmap`, so any program ran. Now `narrowSandbox` writes an interpreter the grant does not name with a second leading `/` (`//usr/lib/...`), the same file to Landlock's `O_PATH` open; `nish_sandbox` records each marked entry's `(st_dev, st_ino)` before it confines the process and sets `nish_spawn_sandboxed`. Every spawn then resolves `argv[0]` as `posix_spawnp` would, opens it `O_PATH`, refuses (`EACCES`) a file whose identity is a marked entry's, and otherwise execs that same open file through `/proc/self/fd/N`, so the file checked is the file run: a rename or symlink swap between the check and the `execve` cannot substitute the loader. An interpreter the grant also names (`process.spawn=sh` beside a script) stays unmarked and spawnable. Before/after: `sandbox dependency grants: a granted program's ELF loader is refused as a spawn target (SBX-1)` (sandboxed the spawn returns `-1`; the same build without `--sandbox` runs `echo`), `sandbox dependency grants: a second name for the loader is refused too (SBX-1)`, `sandbox dependency grants: a granted #! script runs and its interpreter is refused as a spawn target (SBX-1)` and `sandbox dependency grants: a program the grant names stays spawnable when it is also another's interpreter (SBX-1)` in `tests/run.js`. **The second part.** That first fix (#1447) kept the loader from the Nish program's own spawns and from nothing below them: Landlock's EXECUTE on the loader holds for the whole process tree, since the kernel needs it to start the granted program, so a granted program that executes a path from its arguments reached it all the same. With `process.spawn=find` granted, `spawnSync(["find", ".", "-maxdepth", "0", "-exec", loader, "/any/binary", ";"])` ran the binary, and `env`, `xargs`, `nice`, `timeout` and `nohup` do the same; SBX-1 was recorded Fixed while this stayed open. Now every spawn under an exec allowlist is held by the kernel to one exec: `nish_sb_spawn_once` runs it on two threads of its own, the spawner installs a seccomp filter that sends `execve` and `execveat` to a user-notification listener (and answers a request for a second listener `EBUSY`) and calls `posix_spawn`, so the child inherits the filter; the supervisor answers the first notification, the child's own exec of the granted program, with "continue" and closes the listener, after which the kernel answers every exec in that child's subtree `ENOSYS`. The supervisor does the identity check and holds the target, the listener and its pipe in a descriptor table of its own (`unshare(CLONE_FILES)`), so no other thread of the program can close or replace one of them between the check and the exec. Before/after, each against the same build without `--sandbox`, where the ungranted program runs: `sandbox dependency grants: a program granted to <builtin> cannot hand the loader an ungranted binary (SBX-1)` for each of `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawnPipedWithin`, `spawnWithFds` and `spawn`; `sandbox dependency grants: a granted find cannot hand the loader an ungranted binary (SBX-1)` and the same for `env`; `sandbox dependency grants: a granted program cannot exec another granted program (SBX-1)`; `sandbox dependency grants: a granted program cannot exec itself again (SBX-1)`; and `sandbox dependency grants: a spawn whose child dies before its exec answers the error and does not hang (SBX-1)`. What the hold costs is under Limits. |
 
 ## Limits
 
@@ -265,17 +265,73 @@ counted. One finding is counted, and it is fixed:
   allowlist adds for a granted program are refused as spawn targets (SBX-1,
   fixed above) unless the grant names them itself: a grant of `sh` beside a
   script keeps `sh`, which then runs anything.
-- **What the SBX-1 check costs a spawn.** Under `--sandbox` with a marked
-  entry, a spawn reads `PATH` to resolve its program (a changed `PATH` can
-  only find another file, which is checked the same way), needs `/proc`
-  mounted to exec through `/proc/self/fd/N`, and leaves the child that
-  descriptor (an `O_PATH` one, not close-on-exec, since the `execve` needs it;
-  a spawn on another thread in the same window can inherit it too). A `#!`
-  script started this way sees `/proc/self/fd/N` as its `$0`. More than 16
-  marked entries refuses every spawn rather than check some of them. The
-  refusal and the `/proc/self/fd` routing are armed whenever the build carries
-  a marked entry, Landlock or not: under `--sandbox=best-effort` on a kernel
-  without Landlock, where exec is otherwise not confined, they still apply.
+- **One exec per spawn.** Under an exec allowlist a spawned program cannot
+  start a second program, granted or not, and neither can anything it forks:
+  `find -exec`, `xargs`, `env <program>`, `nice`, `timeout`, `make` and a
+  shell's non-builtin commands all fail (`ENOSYS`, which a shell reports as
+  "not found" or "function not implemented"). A granted `#!` script still
+  starts, since the kernel loads its interpreter inside the one `execve`, and
+  then runs builtins alone; a script that opens with `#!/usr/bin/env sh` does
+  not, because `env`'s exec of `sh` is the second. The hold covers every
+  program the Nish binary spawns, the root's own as well as a dependency's,
+  whenever the build carries an exec allowlist; a build without one (no
+  `process.spawn=<program>` grant, or `process.spawn` granted whole) takes no
+  filter and is not held. Granting `process.spawn` whole is the only way to
+  let a spawned program start others today; a per-grant opt-in is the next
+  stage of the work and is not built.
+- **What the hold needs, and where it is missing.** A seccomp user
+  notification listener (Linux 5.0) and its "continue" answer (5.5). Where
+  the filter cannot be installed (`EINVAL` on an older kernel, `EBUSY` where
+  an ancestor's filter refuses a listener, `ENOMEM`) or "continue" is
+  refused, the spawn is refused: the builtin answers a negative errno or its
+  failure value, and one line on stderr says `nish: --sandbox: cannot hold a
+  spawned program to one exec, so the spawn is refused (<errno>)`. That is
+  so in `--sandbox=best-effort` as well: nothing falls back to an unheld
+  spawn. A container runtime whose own seccomp profile denies `seccomp(2)` or
+  `unshare(2)` to its payload refuses every such spawn the same way.
+- **A sandboxed Nish program spawned by one cannot spawn.** The filter
+  refuses a second listener because the kernel lets the newest filter's
+  "continue" stand for every older one, so a spawned program with a listener
+  of its own would answer its children's execs itself. A granted program
+  that is itself a `--sandbox` build with an exec allowlist therefore has
+  each of its spawns refused (`EBUSY`), where the one-exec hold would refuse
+  the exec anyway. Any other program that needs a listener (a container
+  runtime, a sandboxing browser) fails the same way when spawned.
+- **Who can raise the notification.** The filter is the spawner thread's
+  alone, and that thread makes no `execve`: only the child `posix_spawn`
+  creates carries it before the listener closes, so the one "continue" goes
+  to that child's first exec, of `/proc/self/fd/N`, the file the supervisor
+  checked. A child that dies in a redirect before its exec notifies nobody;
+  the supervisor is woken by the spawner's pipe instead, closes the listener
+  and answers the error.
+- **"Continue" trusts the child's memory.** The kernel re-reads the path
+  when it continues the call, from the child's memory, which until the exec
+  is the Nish process's own (`posix_spawn` clones with `CLONE_VM`). The path
+  is `job.proc`, on the stack of the thread that called the builtin, which
+  is blocked until the spawn answers; another thread of a memory-safe Nish
+  program cannot write there, and no linked C can either: `narrowSandbox`
+  emits no exec allowlist for a `main` that reaches `ffi`.
+- **What a spawn costs under an exec allowlist.** Two threads created and
+  joined, a copy of the descriptor table, a pipe, a filter and two ioctls per
+  spawn, beside reading `PATH` to resolve the program (a changed `PATH` can
+  only find another file, which is checked the same way) and needing `/proc`
+  mounted to exec through `/proc/self/fd/N`. The child is left that
+  descriptor (an `O_PATH` one, not close-on-exec, since the `execve` needs
+  it); it is opened in the supervisor's private table, so a spawn on another
+  thread no longer inherits it. The private table is a copy, though: while a
+  spawn is in flight its two threads hold a duplicate of every descriptor the
+  process had, so a pipe another thread closes in that window reads
+  end-of-file only once the spawn has answered. A `#!` script started this
+  way sees `/proc/self/fd/N` as its `$0`. More than 16 marked entries refuses
+  every spawn rather than check some of them. All of it is armed whenever the
+  build carries an exec allowlist, Landlock or not: under
+  `--sandbox=best-effort` on a kernel without Landlock, where exec is
+  otherwise not confined, the hold and the refusal still apply.
+- **`spawnSyncTo` opens its files in the child.** Its stdout and stderr files
+  are opened by the child before the exec, under the sandbox's `fs.write`
+  rules: a package granted `process.spawn=<program>` and no write scope that
+  holds the file gets `-1` and no program runs. That is Landlock's refusal,
+  not the hold's, and it predates it.
 - **The allowlist is the build's.** Each program is the realpath the compiler
   found on `PATH` (or from the root package's directory), and its interpreter
   is read from the file then; a program replaced after the build with one
@@ -305,6 +361,13 @@ Each is a kernel answer the test machines do not give; each fails closed:
   `SECCOMP_SET_MODE_FILTER` failing;
 - `PR_SET_NO_NEW_PRIVS` failing;
 - the aarch64 tables, which compile but run on no test machine;
+- in a spawn under an exec allowlist: `unshare`, `pipe2`, either
+  `pthread_create` or the `F_DUPFD` failing; the filter refused (`EINVAL`,
+  `EBUSY`, `ENOMEM`) and the "cannot hold" line it prints (the nested case
+  needs a second sandboxed Nish binary as the granted program); the
+  notification gone before it is read (`ENOENT`, a child killed while it
+  waited) and "continue" refused; a short or interrupted read of the
+  spawner's pipe (`-EIO`, and the `EINTR` retries of `read` and `poll`);
 - the non-Linux stubs.
 
 ## Tests
@@ -398,7 +461,23 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
   script runs and its interpreter is refused as a spawn target (SBX-1)`, on
   `sandbox_dep_exec_script`; and `sandbox dependency grants: a program the
   grant names stays spawnable when it is also another's interpreter
-  (SBX-1)`, on `sandbox_dep_exec_interpreter_granted`
+  (SBX-1)`, on `sandbox_dep_exec_interpreter_granted`; and its second
+  part's, on `sandbox_dep_exec_once` with a helper the check builds and
+  grants, which execs its arguments: `sandbox dependency grants: a program
+  granted to spawnSync cannot hand the loader an ungranted binary (SBX-1)`
+  and the same check for `spawnPiped`, `spawnPipedWithin`, `spawnWithFds`
+  and `spawn`, `sandbox dependency grants: a granted program cannot exec
+  itself again (SBX-1)`, `sandbox dependency grants: a granted program that
+  execs nothing runs as before`, `sandbox dependency grants: a spawn whose
+  child dies before its exec answers the error and does not hang (SBX-1)`,
+  `sandbox dependency grants: a granted find cannot hand the loader an
+  ungranted binary (SBX-1)` and the same for `env`, `sandbox dependency
+  grants: a granted program cannot exec another granted program (SBX-1)`;
+  and on `sandbox_dep_exec_once_to`, whose grant adds the write scope the
+  child's redirect needs: `sandbox dependency grants: a program granted to
+  spawnSyncTo cannot hand the loader an ungranted binary (SBX-1)` (skipped
+  below Landlock ABI 3). Each is skipped, and counted, where `clang`, the
+  loader or the tool is missing
 
 ### Checks CI does not run
 

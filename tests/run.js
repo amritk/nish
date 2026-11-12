@@ -28872,13 +28872,13 @@ if (!only || "sandbox dependency grants".includes(only)) {
     const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], { cwd: root })
     if (a.status !== 0) check("sandbox dependency grants: the Landlock ABI probe compiles", false, shown(a))
     const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
-    /** Builds tests/link/<fixture> with `flags` into its own directory: the binary, or null and a FAIL. */
-    const build = (fixture, flags) => {
+    /** Builds <from>/<fixture> (tests/link by default) with `flags` into its own directory: the binary, or null and a FAIL. */
+    const build = (fixture, flags, from = linkDir) => {
       const out = path.join(dir, `${fixture}${flags.length > 0 ? "-sandbox" : "-plain"}`)
       const exe = path.join(out, "app")
       const r = spawnSync(
         NISH,
-        [path.join(linkDir, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
+        [path.join(from, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
         { cwd: root, encoding: "utf8" }
       )
       if (r.status !== 0) check(`sandbox dependency grants: ${fixture} ${flags.join(" ")} builds`, false, shown(r))
@@ -29080,6 +29080,179 @@ if (!only || "sandbox dependency grants".includes(only)) {
           rBothSh.stdout === "sh-ran\n0\n",
         `${said(rBothScript)}\n--- sh\n${said(rBothSh)}\n${ir(both)}`
       )
+      // SBX-1's residual, fixed (docs/security/sandbox.md): Landlock grants
+      // EXECUTE on the loader to the whole tree, so a granted program that
+      // executes a path from its arguments reached the loader and, through
+      // it, any binary. Under an exec allowlist a spawn's child now completes
+      // one exec, the granted program's own start, and nothing below it execs
+      // again. The granted program here is one this check builds, so that the
+      // checks run on every machine with clang; `find` and `env`, two tools of
+      // different shape, follow where the machine has them.
+      const once = "sandbox_dep_exec_once"
+      const onceTo = "sandbox_dep_exec_once_to"
+      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here. */
+      const withHelper = (fixture, grants) => {
+        const copy = `${fixture}_helper`
+        const to = path.join(dir, copy)
+        fs.cpSync(path.join(linkDir, fixture), to, { recursive: true })
+        fs.mkdirSync(path.join(to, "bin"), { recursive: true })
+        const src = path.join(to, "exec-args.c")
+        fs.writeFileSync(
+          src,
+          "#include <stdio.h>\n#include <unistd.h>\n" +
+            'int main(int argc, char **argv) {\n  if (argc < 2) return 0;\n  execv(argv[1], argv + 1);\n  perror("exec-args");\n  return 111;\n}\n'
+        )
+        const cc = spawnSync("clang", ["-O2", src, "-o", path.join(to, "bin", "exec-args")], { encoding: "utf8" })
+        const manifest = JSON.parse(fs.readFileSync(path.join(to, "package.json"), "utf8"))
+        manifest.nish.capabilities.dependencies.pkg_runner = ["process.spawn=./bin/exec-args", ...grants]
+        fs.writeFileSync(path.join(to, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
+        return cc.status === 0 ? copy : null
+      }
+      const helped = withHelper(once, [])
+      const hAllow = helped === null ? null : build(helped, ["--sandbox"], dir)
+      const hOpen = helped === null ? null : build(helped, [], dir)
+      const helper = helped === null ? "" : fs.realpathSync(path.join(dir, helped, "bin", "exec-args"))
+      const hList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(helped === null ? "" : ir(helped))
+      const hLoaders = hList === null ? [] : hList[1].split("\\00").filter((p) => p.startsWith("//"))
+      if (hAllow === null || hOpen === null || hLoaders.length === 0 || ungrantedCc.status !== 0) {
+        skip(
+          `sandbox dependency grants: clang could not build the granted exec-args helper or the ungranted program, or the helper has no ELF loader on the allowlist (${hLoaders.length}); one exec per spawn is not checked`
+        )
+      } else {
+        const loader = hLoaders[0].slice(1)
+        // One check per spawn builtin: each reaches `nish_spawn_start` with
+        // its own file actions. `sync`, `fds` and `spawn` leave the child's
+        // stdout on the check's pipe; a captured run answers the byte count.
+        // 111 is the helper's status when its exec fails.
+        for (const [how, builtin, held, ran] of [
+          ["sync", "spawnSync", "111\n", "sbx-1\n0\n"],
+          ["piped", "spawnPiped", "111 0\n", "0 6\n"],
+          ["within", "spawnPipedWithin", "111 0\n", "0 6\n"],
+          ["fds", "spawnWithFds", "111\n", "sbx-1\n0\n"],
+          ["spawn", "spawn", "111\n", "sbx-1\n0\n"],
+        ]) {
+          const rHeld = run(hAllow, [how, helper, loader, ungranted])
+          const rRan = run(hOpen, [how, helper, loader, ungranted])
+          check(
+            `sandbox dependency grants: a program granted to ${builtin} cannot hand the loader an ungranted binary (SBX-1)`,
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.signal === null &&
+              rHeld.stdout === held &&
+              rRan.status === 0 &&
+              rRan.stdout === ran,
+            `${helper} ${loader} ${ungranted}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
+          )
+        }
+        const rSelf = run(hAllow, ["sync", helper, helper])
+        const rSelfPlain = run(hOpen, ["sync", helper, helper])
+        check(
+          "sandbox dependency grants: a granted program cannot exec itself again (SBX-1)",
+          rSelf.status === 0 &&
+            rSelf.stdout === "111\n" &&
+            rSelf.stderr.includes("exec-args: ") &&
+            rSelfPlain.status === 0 &&
+            rSelfPlain.stdout === "0\n",
+          `${said(rSelf)}\n--- without --sandbox\n${said(rSelfPlain)}`
+        )
+        // The granted program still starts, and starts again: no state of one
+        // spawn (the filter, the listener) is left on the program's thread.
+        const rPlainStart = run(hAllow, ["sync", helper])
+        check(
+          "sandbox dependency grants: a granted program that execs nothing runs as before",
+          rPlainStart.status === 0 && rPlainStart.stdout === "0\n" && rPlainStart.stderr === "",
+          said(rPlainStart)
+        )
+        // The child of `to` dies before its exec: this package has no
+        // `fs.write`, so Landlock refuses the stdout file the child opens.
+        // The spawn answers its error and does not wait for an exec that
+        // never comes (the run's timeout would end it with a signal).
+        const rDied = run(hAllow, ["to", helper])
+        const rMissing = run(hAllow, ["spawn", "sbx-1-no-such-program"])
+        check(
+          "sandbox dependency grants: a spawn whose child dies before its exec answers the error and does not hang (SBX-1)",
+          rDied.status === 0 &&
+            rDied.signal === null &&
+            rDied.stdout === "-1\n" &&
+            rMissing.status === 0 &&
+            rMissing.stdout === "-2\n",
+          `${said(rDied)}\n--- a program that is not there\n${said(rMissing)}`
+        )
+        // `spawnSyncTo` has a file action of its own, the child's open of the
+        // stdout file, which needs a write scope and so ABI 3 under strict
+        // `--sandbox` (as the fs.write=<dir> checks above).
+        const helpedTo = abi < 3 ? null : withHelper(onceTo, ["fs.write=./out"])
+        if (helpedTo === null) {
+          skip(
+            `sandbox dependency grants: this kernel's Landlock is ABI ${abi} (<3) or clang could not build the helper; one exec per spawn is not checked through spawnSyncTo`
+          )
+        } else {
+          const tAllow = build(helpedTo, ["--sandbox"], dir)
+          const tOpen = build(helpedTo, [], dir)
+          const tHelper = fs.realpathSync(path.join(dir, helpedTo, "bin", "exec-args"))
+          const heldOut = path.join(dir, helpedTo, "out", "held.txt")
+          const ranOut = path.join(dir, helpedTo, "out", "ran.txt")
+          const rHeld = run(tAllow, [heldOut, tHelper, loader, ungranted])
+          const rRan = run(tOpen, [ranOut, tHelper, loader, ungranted])
+          const text = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null)
+          check(
+            "sandbox dependency grants: a program granted to spawnSyncTo cannot hand the loader an ungranted binary (SBX-1)",
+            rHeld !== null &&
+              rHeld.status === 0 &&
+              rHeld.stdout === "111\n" &&
+              text(heldOut) === "" &&
+              rRan !== null &&
+              rRan.status === 0 &&
+              rRan.stdout === "0\n" &&
+              text(ranOut) === "sbx-1\n",
+            `${said(rHeld)}\n${heldOut}: ${JSON.stringify(text(heldOut))}\n--- without --sandbox\n${said(rRan)}\n${ranOut}: ${JSON.stringify(text(ranOut))}`
+          )
+        }
+        // The machine's own tools. `find -exec` forks and execs per match and
+        // `env` execs in place; each is checked only where its control run,
+        // without `--sandbox`, does run the ungranted program through the
+        // loader, so a tool that is missing or of another shape is a SKIP.
+        const oAllow = build(once, ["--sandbox"])
+        const oOpen = build(once, [])
+        for (const [tool, argv] of [
+          ["find", ["find", ungranted, "-maxdepth", "0", "-exec", loader, ungranted, ";"]],
+          ["env", ["env", loader, ungranted]],
+        ]) {
+          const rRan = realOnPath(tool) === null ? null : run(oOpen, ["sync", ...argv])
+          if (rRan === null || rRan.status !== 0 || !rRan.stdout.startsWith("sbx-1\n")) {
+            skip(
+              `sandbox dependency grants: \`${tool}\` is not on PATH here or did not run the loader without --sandbox (${said(rRan)}); one exec per spawn is not checked through it`
+            )
+            continue
+          }
+          const rHeld = run(oAllow, ["sync", ...argv])
+          check(
+            `sandbox dependency grants: a granted ${tool} cannot hand the loader an ungranted binary (SBX-1)`,
+            rHeld !== null && rHeld.status === 0 && rHeld.signal === null && !rHeld.stdout.includes("sbx-1"),
+            `${argv.join(" ")}\n${said(rHeld)}\n--- without --sandbox\n${said(rRan)}`
+          )
+        }
+        // Another program the same grant names is no more reachable from a
+        // granted one than an ungranted program is.
+        const rOther = realOnPath("env") === null || realOnPath("true") === null ? null : run(oOpen, ["sync", "env", "true"])
+        if (rOther === null || rOther.stdout !== "0\n") {
+          skip(
+            `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOther)}); a granted program's exec of another granted program is not checked`
+          )
+        } else {
+          const rOtherHeld = run(oAllow, ["sync", "env", "true"])
+          const rTrueStill = run(oAllow, ["sync", "true"])
+          check(
+            "sandbox dependency grants: a granted program cannot exec another granted program (SBX-1)",
+            rOtherHeld !== null &&
+              rOtherHeld.status === 0 &&
+              rOtherHeld.stdout !== "0\n" &&
+              /^\d+\n$/.test(rOtherHeld.stdout) &&
+              rTrueStill.stdout === "0\n",
+            `${said(rOtherHeld)}\n--- true, spawned by the program itself\n${said(rTrueStill)}`
+          )
+        }
+      }
     }
   }
 }
