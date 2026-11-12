@@ -156,7 +156,7 @@ export class Router {
   private maxMethods: i32 = 0
   /** The most segments any route has: a path is split no further than one past it. */
   private deepest: i32 = 0
-  /** During a match: how many segments the path has, where it ends, the method's index, and the pairs in `found`. */
+  /** During a match: how many segments the path has, the method's index, and the pairs in `found`. */
   private segments: i32 = 0
   /**
    * Where the last `match`'s path ends in its target: the first `?`, or the target's end.
