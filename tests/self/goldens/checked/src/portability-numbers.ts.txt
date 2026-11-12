@@ -156,8 +156,8 @@ function moduleFindings(walk: PortabilityWalk, out: PortabilityFinding[]): void 
   pointer walk: size=48 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -7:9 program: CheckedProgram (const)
-  local -6:14 struct: StructInfo (const)
+  local -8:9 program: CheckedProgram (const)
+  local -7:14 struct: StructInfo (const)
   local -2:16 field: FieldInfo (const)
   callee -1:11 isWide -> @isWide
   callee +0:18 wideFinding -> @wideFinding

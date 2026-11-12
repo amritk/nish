@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 731 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 744 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -10509,7 +10509,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` is a `CPtr | null` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested
+` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested
 ```
 
 ## NL2540
@@ -14055,4 +14055,108 @@ export const main = (): i32 => {
 
 ```text
 `bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name
+```
+
+## NL2740
+
+The message of an error contains:
+
+```text
+` cannot be an array element: a C struct layout is lent to C one at a time, by pointer
+```
+
+## NL2741
+
+The message of an error contains:
+
+```text
+A generic `declare class` is not supported: a C struct layout has no type parameters
+```
+
+## NL2742
+
+The message of an error contains:
+
+```text
+…, and a C struct is only lent to C by pointer: take a `
+```
+
+## NL2743
+
+The message of an error contains:
+
+```text
+….<field>`) or pass it to a `declare function`, but it cannot be held as a value
+```
+
+## NL2744
+
+The message of an error contains:
+
+```text
+…()`, which zero-fills it: an object literal cannot lay out a C struct
+```
+
+## NL2745
+
+The message of an error contains:
+
+```text
+`: a `declare class` embedded in its object is written field by field
+```
+
+## NL2746
+
+The message of an error contains:
+
+```text
+` cannot be exported: a C struct layout is used in the module that declares it
+```
+
+## NL2747
+
+The message of an error contains:
+
+```text
+… must be a plain field: a C struct field is not `static`, optional or `readonly`
+```
+
+## NL2748
+
+The message of an error contains:
+
+```text
+… cannot have an initializer: `new` zero-fills a C struct
+```
+
+## NL2749
+
+The message of an error contains:
+
+```text
+` in itself: a C struct cannot contain itself by value
+```
+
+## NL2750
+
+The message of an error contains:
+
+```text
+` cannot `extends` or `implements`: a C struct layout is its own fields
+```
+
+## NL2751
+
+The message of an error contains:
+
+```text
+…: a C struct layout has fields only
+```
+
+## NL2752
+
+The message of an error contains:
+
+```text
+…, which has no C layout: a field of a `declare class` is i32, i64, u8, u16, u32, u64, f32, f64, `CPtr`, `CPtr | null` or another `declare class`
 ```

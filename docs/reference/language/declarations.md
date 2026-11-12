@@ -4602,14 +4602,17 @@ declare i32 @abs(i32)
 The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
-**A parameter is a scalar, a `CPtr`, a borrowed `string` or a `u8[]` buffer
-with its count; a return is a scalar, a `CPtr` or a copied `string`** — `i32`,
+**A parameter is a scalar, a `CPtr`, a borrowed `string`, a `u8[]` buffer
+with its count or a borrowed `declare class`; a return is a scalar, a `CPtr` or
+a copied `string`** — `i32`,
 `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `boolean`, `void`, the foreign
 pointer below, `string` and `string | null` in either position, and
-[a buffer](#a-u8-parameter-a-buffer-and-its-count) as a parameter. A class
-or an interface is rejected with
+[a buffer](#a-u8-parameter-a-buffer-and-its-count) and
+[a C struct](#a-declare-class-a-c-struct-lent-by-pointer) as a parameter. Any
+other class or an interface is rejected with
 `` and a declared C function takes scalars, `CPtr`, a `string` it borrows as
-`const char *` and a `u8[]` buffer followed by its `u64` count `` in a
+`const char *` and a `u8[]` buffer followed by its `u64` count, or a `declare
+class` it borrows by pointer `` in a
 parameter (`reject_ffi_class_param`), any other array with
 `` the only array a declared C function takes is a `u8[]` or a `readonly u8[]` ``
 (`tests/cases/reject_ffi_string_array_param`: a `string[]` too, which would be
@@ -4752,8 +4755,8 @@ declare function free(block: CPtr): void;
   for an address whose provenance and lifetime are unknown. The type-argument
   clause is stated where a generic function or class is instantiated
   (`reject_ffi_pointer_type_argument`), so `new Empty<CPtr>()` is refused even
-  when no member of `Empty<T>` names `T`. The one field that may hold a `CPtr`
-  is a handle class's, below.
+  when no member of `Empty<T>` names `T`. The fields that may hold a `CPtr`
+  are a handle class's and a [`declare class`](#a-declare-class-a-c-struct-lent-by-pointer)'s, below.
 - **A `null` reaches C only as the literal.** A `declare function` may return
   `CPtr | null` and may take one, and a call passes a `CPtr | null` parameter
   either the literal `null` — `realpath(path, null)`, `getcwd(null, 0)`, the
@@ -5070,6 +5073,84 @@ another name, `close(fileno(p))`, or a C function returning its argument are
 not seen by the rules above. And the constructor's foreign call returns a
 pointer the object owns: two objects built from one shared pointer would both
 close it.
+
+### A `declare class`: a C struct, lent by pointer
+
+**A `declare class` is a C struct: its fields are laid out in declaration order,
+each at its natural alignment, and the size is rounded up to the widest
+alignment, as a C compiler lays out the same fields. `new Name()` takes no
+arguments and zero-fills it, and a `declare function` parameter typed `Name`
+borrows it as a `struct Name *`** (`tests/cases/ffi_struct_param`,
+`ffi_struct_layout`, [cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#a-declare-class-a-c-struct-lent-by-pointer),
+`docs/wp27-ffi.md` §9b):
+
+```ts
+declare class Timespec {
+  sec: i64
+  nsec: i64
+}
+declare function clock_gettime(clock: i32, ts: Timespec): i32
+
+const now = new Timespec()
+clock_gettime(1, now)
+console.log(now.sec)
+```
+
+```llvm
+%struct.Timespec = type { i64, i64 }
+declare i32 @clock_gettime(i32, %struct.Timespec*)
+  %Timespec.obj = alloca %struct.Timespec, align 8
+  store %struct.Timespec zeroinitializer, %struct.Timespec* %Timespec.obj, align 8
+  store %struct.Timespec* %Timespec.obj, %struct.Timespec** %now.addr, align 8
+  %0 = load %struct.Timespec*, %struct.Timespec** %now.addr, align 8
+  %1 = call i32 @clock_gettime(i32 1, %struct.Timespec* %0)
+```
+
+- **A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
+  `CPtr | null`, or another `declare class`, embedded by value** — C's
+  `struct timespec it_value;`, not a pointer to one. Any other type is
+  `` Field `ok` of `declare class Flags` has type `boolean`, which has no C
+  layout `` (NL2752, `reject_ffi_struct_field_type`, `reject_cls_declare`): a
+  `boolean`, a `number` in the default mode, a `string`, an array and a Nish
+  class have no C spelling the compiler could promise. A struct cannot embed
+  itself, directly or through another (NL2749, `reject_ffi_struct_self`,
+  `reject_ffi_struct_cycle`).
+- **A field is plain and has no initializer, and the class has nothing but
+  fields**: no `readonly`, `static` or optional field (NL2747), no initializer,
+  because `new` zero-fills (NL2748), no method, accessor or constructor
+  (NL2751), no type parameter (NL2741), no `extends` or `implements` (NL2750),
+  and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
+- **It is built with `new` and nothing else.** `new Point(1)` is refused as for
+  any class without a constructor (`reject_ffi_struct_new_args`), and an object
+  literal typed as one is
+  `` an object literal cannot lay out a C struct `` (NL2744,
+  `reject_ffi_struct_literal`).
+- **C borrows it for the length of the call**, as it borrows a `string`: it may
+  read and write the fields until it returns, and may not keep the address. The
+  escape analysis treats the argument as a read, so an instance that does not
+  otherwise escape stays in the caller's stack frame; a C function that keeps
+  the pointer (an `aio_read` control block, a struct handed to a thread) is
+  outside the contract. Its accesses carry no TBAA tag, so a field read after
+  the call sees what C wrote.
+- **`Name | null` passes `NULL` for `null`**, under the rule a `CPtr | null`
+  parameter follows: the literal `null`, or a value narrowed with `!== null`
+  (NL2539, `reject_ffi_struct_nullable_held`).
+- **An embedded struct is part of its owner.** `stamp.at.sec` reads and writes a
+  field in place, and `clock_gettime(1, stamp.at)` lends C the address inside
+  `stamp`; those are the only two uses. Holding it — `const at = stamp.at`, or
+  passing it to a function this program defines — is
+  `` cannot be held as a value `` (NL2743, `reject_ffi_struct_nested_bind`,
+  `reject_ffi_struct_nested_nish_arg`), and replacing it is
+  `` a `declare class` embedded in its object is written field by field ``
+  (NL2745, `reject_ffi_struct_nested_assign`).
+- **It is not a return type or an array element.** C returning a struct by
+  value, or a pointer into memory it owns, leaves the copy with no owner on
+  this side: `` a C struct is only lent to C by pointer: take a `Point`
+  parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); an array of
+  them would be a C array the program lays out element by element, and is
+  `` cannot be an array element `` (NL2740, `reject_ffi_struct_array`).
+- **`--emit-ts` refuses a module that declares one**, with the same message as
+  for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
 
 ### What a declaration cannot say
 

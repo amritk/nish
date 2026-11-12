@@ -593,7 +593,7 @@ the elsewhere is C. Before S4.1 the checker refused every `declare class`
 A *layout class* is a `declare class` whose members are fields only, each one
 of:
 
-- a foreign scalar: `i8`–`i64`, `u8`–`u64`, `f32`, `f64`;
+- a foreign scalar: `i32`, `i64`, `u8`–`u64`, `f32`, `f64`;
 - `CPtr` or `CPtr | null`, one pointer-sized word;
 - another layout class, nested **by value**: its bytes sit inside the outer
   struct, as a C `struct inner in;` member does.
