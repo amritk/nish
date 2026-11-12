@@ -9,15 +9,19 @@ fix, run by the "Machine-applicable fixes" block of `tests/run.js`
 | --- | --- |
 | `<name>.ts` and `<name>.fixed.ts` | `--json` on the input reports at least one diagnostic with a `fix`; `nish --fix` on a copy of it exits 0 and leaves exactly the bytes of `<name>.fixed.ts`; and `<name>.fixed.ts` compiles with `--json`, exit 0 and no error object |
 | `<name>.rounds` (optional) | how many rounds `--fix` takes: one `fixed <file>` line on stderr per round that rewrote the file |
-| `<name>.nofix.ts` | `--json` reports at least one diagnostic and none of them has a `fix` key; `nish --fix` on a copy exits as the plain compile does and leaves the file byte-identical |
-| `<name>.plain-exit` (optional) | the plain `--json` run's exit status, for either form above, default 1; a program whose only diagnostics are warnings exits 0 |
+| `<name>.ts` and `<name>.reviewed.ts` | a `port-` case of WP33 R5's review tier: `--json` on the input reports a diagnostic with a `review` and none with a `fix`; the `review` edits, applied the way `fix`'s are, leave exactly the bytes of `<name>.reviewed.ts`; `nish --fix` leaves the input byte-identical, since it applies `fix` alone; and `<name>.reviewed.ts` compiles with no `review`, `fix` or error left, no `<name>.code`, and an `.ll` byte for byte the input's. With `<name>.stdout`, the input prints it natively (skipped without clang) and `<name>.reviewed.ts` prints it under Node |
+| `<name>.nofix.ts` | `--json` reports at least one diagnostic and none of them has a `fix` or a `review` key; `nish --fix` on a copy exits as the plain compile does and leaves the file byte-identical |
+| `<name>.reviewed-keeps` (optional) | beside a `.reviewed.ts`: the `line:column` sites, one per line, of the `<name>.code` diagnostics whose own edit was declined (`port-div-assign-nested`'s `/=` around a reviewed `/`). Every other site of that code must carry a `review`, these none, and the reviewed file reports the code at exactly these sites; without the file, at none |
+| `<name>.ll-lacks` (optional) | beside a `.reviewed.ts`: one `<function> <text>` per line, a check the input's IR must not hold in that function (`port-div-range` lists every function whose check its input skips: `addI32`'s overflow, `atI32`'s bounds and `sumU8`'s overflow; the unsigned `add` functions have no check to skip, and the others keep theirs), so a case about the edit keeping a proof fails when the proof is lost |
+| `<name>.plain-exit` (optional) | the plain `--json` run's exit status, for either form above, default 1 (0 for a `port-` case, whose diagnostics are warnings); a program whose only diagnostics are warnings exits 0 |
 | `<name>.code` | a code the plain `--json` run must report, so a case whose diagnostic stopped firing, or that another diagnostic now stops first, fails rather than passing with nothing to fix; beside a `.fixed.ts`, the fixed program must no longer report it. Required beside a `.nofix.ts`, optional beside a `.fixed.ts` |
 | `<name>.stdout` (optional) | beside a `.fixed.ts`: the input and the fixed program are each linked and run, and both must print exactly this and exit with `<name>.run-exit` (default 0). Skipped without clang |
 | `<name>/` | a case of several files, for what the command line decides: which files are named and which may be rewritten. `argv` lists the files `--fix` is given; every `x.ts` comes out as its `x.fixed.ts`, or byte-identical when there is none; `exit` (default 0) is `--fix`'s status; `rewrites` (optional) counts the `fixed <file>` lines on stderr. A case that exits 0 must then compile clean, and one that does not must still report the fix it was not allowed to apply. With `same-as-plain`, the report instead has to be byte for byte what a plain run (human and `--json`) prints about the files `--fix` leaves. `plain-exit` and `code` are the sidecars above, checked on the plain run (on the run after `--fix` under `same-as-plain`), and `code` is checked absent from the fixed program when `--fix` exits 0. `node-modules/` is copied as `node_modules/`, which git would ignore here |
 
 A case is named in kebab-case for the family of rule it fixes — `eq-` for
 loose equality, `expr-` for the expression checker's fixes, `decl-` for the
-declaration and module passes — and a refused shape has `nofix` in its name.
+declaration and module passes, `port-` for the portability warnings, compiled
+with `--warn-portability` — and a refused shape has `nofix` in its name.
 Every fix and every shape that is refused one has a case here: there is no
 line coverage for Nish, so this directory is the coverage gate.
 
@@ -128,6 +132,40 @@ starts inside a template literal, whose spaces are part of its string
 `.stdout`; the fixed programs print 25, 42, `joined`, `joined`, 24, 66, 86, 31, 27, 3 and 11. The fixed
 program imports `nish/threads`, which is why the runner compiles it with
 `-o fixed/`: one `.ll` per module.
+
+The `port-` cases are the review tier (WP33 R5): edits that make a
+portability warning's site mean the same under Node, kept out of `fix`
+because they change what the source says, though not what it compiles to.
+NL8006, an integer `/` or `/=`, is wrapped in the conversion to its own type:
+`toI32(a / b)`, `toU8`, `toU16` or `toU32`, which emits no instruction here
+and truncates the double quotient under Node. `port-div-precedence` places
+the call where precedence would otherwise move it (`a / b * c`, `-(a / b)`, a
+call argument), `port-div-unsigned` covers the unsigned widths and
+`port-div-assign` turns `q /= d + 1` into `q = toI32(q / (d + 1))`.
+`port-div-assign-nested` keeps the `/=` as it is when its divisor holds a
+`/`, at any depth (`q /= a / b`, `(a / b)`, `twice(a / b) + 2`), wrapping
+only the inner `/`: a `/=` edit spanning the divisor would overlap that
+one's. A comment before the `/=` declines it too, since the rewrite would
+drop it. `port-div-range` puts a literal-divisor quotient under a checked
+`+`, as an index and as a loop bound, for each conversion: the conversion
+keeps the quotient's range, so each check the input skips stays skipped.
+`port-div-ranged` divides a ranged operand, whose quotient is the base type,
+and `port-div-chain` pins how edits compose: `a / b / c`'s two `toI32(` at
+one offset nest. Each
+prints the same natively and, reviewed, under Node. Declined, each with a
+`port-nofix-` case: a division in a generic body (`-div-generic`), whose one
+rewrite would serve every instantiation; `/=` on an element
+(`-div-element`) or a field (`-div-field`), which the rewrite would evaluate
+twice; `/=` on a ranged target (`-div-ranged`), whose type is the range; an
+`i64` or `u64` division (`-div-i64`, `-div-u64`), which has no conversion
+that is the identity here and a truncation under Node; a `/=` with a comment
+before it (`-div-comment`), which the rewrite would drop; any division in a
+module that binds the conversion's name as anything but the builtin
+(`-div-shadow-local`, `-param`, `-function`, `-loop`, `-import`, `-scoped`,
+`-member`), where the edit would call that binding; and every NL8007
+(`-wrap`) and NL8008 (`-shift`) site, whose spellings either add an instruction here or saturate under Node
+where the native value wraps. The reasons are `docs/LANGUAGE.md`'s, row by
+row.
 
 A fix is behaviour-preserving or it is not attached. When a new fix is in
 doubt about a shape, the shape gets a `.nofix.ts` case rather than a guess.

@@ -7784,7 +7784,10 @@ and both come from the program as written:
   - **Any other integer index is proved by its range.** Where none of the
     rules above proves `w[e]`, the values `e` can take decide: every local's
     bounds from the facts above and its declared range, carried through
-    `+`, `-`, `*`, a mask, a conversion and a call's known return range. If
+    `+`, `-`, `*`, a mask, a conversion and a call's known return range;
+    a quotient converted to its own type, `toI32(a / 4)` of `i32` operands
+    (or `toU8`, `toU16`, `toU32` of theirs), keeps the quotient's range,
+    since that conversion emits nothing. If
     the lowest is not negative and the highest is below a length `w` is
     known to have (`w.length >= n`, from an array literal, a
     `new Array(n)`, a guard or a check that ran), the access needs no
@@ -14326,9 +14329,9 @@ by the caller.
   | NL8003 | a record copied in (3.3) | a local record `p` copied into a record array `ps` (`ps.push(p)`, an element of an array literal, `ps[i] = p`), when a field of one copy is written after the copy and the other copy is read after that write; the exact predicate is below the table | stores the same object, so a write through one is seen through the other |
   | NL8004 | a store over a live element (3.3) | a whole-slot store `ps[i] = v` into a record array while an element reference into the same array (`const r = ps[j]`, or `r` of `for (const r of ps)`) is still read afterwards; `i` and `j` are not compared, and a field store `ps[i].x = v` is not a whole-slot store | puts a new object in the slot and leaves `r` holding the old one |
   | NL8005 | zero-fill (3.3) | `new Array<T>(n)` of a number or a boolean, unless `n`'s value is zero, however it is spelled: `0x0`, `-0`, `0.0` or a `const` that folds to 0 (`tests/cases/port_array_zero_fill`; `[]`, a zero length and the typed arrays are silent, `port_array_quiet`, `port_array_quiet_f64`) | fills it with holes, which read back as `undefined` |
-  | NL8006 | integer `/` (3.1) | `/` or `/=` on an integer type | divides exactly and keeps the fraction |
-  | NL8007 | wrapping (3.1) | `+ - *`, their `op=` forms, `++` and `--` on `u8`/`u16`/`u32`; a ranged integer is left out, because every write into its range is checked | keeps counting past the range |
-  | NL8008 | `i32 >>>` (3.1) | `>>>` or `>>>=` whose result is `i32`, unless the count is a constant `k` — a literal, or a `const` that folds to one — with `k & 31` not 0: such a shift is at most 2^31 − 1, so it reads back the same both ways (`-16 >>> 2` is `1073741820` in each), and `x >>> 0` or a count that is not a constant is reported | reads the result back unsigned |
+  | NL8006 | integer `/` (3.1) | `/` or `/=` on an integer type, not already the argument of its own type's conversion (`toI32(a / b)` does not warn) | divides exactly and keeps the fraction. **`review`:** the division wrapped in its type's own conversion, `toI32(a / b)`, `toU8`, `toU16` or `toU32` (`q /= d` becomes `q = toI32(q / d)`), which emits no instruction here and truncates the quotient under Node; none in a generic body, whose one rewrite would serve every instantiation, for `/=` on anything but a name (`p.x /= 2`), which the rewrite would evaluate twice, for a `/=` on a ranged target, whose type is the range and not the conversion's, for a `/=` whose divisor holds a `/` (`q /= a / b`), whose own edit would land inside this one, or with a comment before its `/=`, which the rewrite would drop, where the quotient's type or an operand's is not exactly the conversion's (a `u8` divided into an `i32`), whose conversion would change a value, in a module that binds the conversion's name as anything but the builtin (a `const`, function, parameter, loop variable, member or import named `toI32`, renamed imports included), where the edit would call that binding, or for `i64` and `u64`, which no conversion leaves alone here and truncates there. A ranged operand's `/` takes the edit: its quotient is the base type, and a quotient's conversion to its own type keeps the quotient's proven range, so `toI32(a / 4) + 1` skips the overflow check `a / 4 + 1` skips. The edits compose: `a / b / c` warns twice, both edits insert `toI32(` at one offset, and applied together from the end they nest, `toI32(toI32(a / b) / c)` (`tests/fix/port-div-*`, `port-nofix-div-*`) |
+  | NL8007 | wrapping (3.1) | `+ - *`, their `op=` forms, `++` and `--` on `u8`/`u16`/`u32`; a ranged integer is left out, because every write into its range is checked | keeps counting past the range. **No `review`:** a mask (`(a + b) & 0xff`) or `>>> 0` still warns and adds an `and` or `lshr` here, and `toU8` and its kin saturate under Node where the native value wraps (`tests/fix/port-nofix-wrap`) |
+  | NL8008 | `i32 >>>` (3.1) | `>>>` or `>>>=` whose result is `i32`, unless the count is a constant `k` — a literal, or a `const` that folds to one — with `k & 31` not 0: such a shift is at most 2^31 − 1, so it reads back the same both ways (`-16 >>> 2` is `1073741820` in each), and `x >>> 0` or a count that is not a constant is reported | reads the result back unsigned. **No `review`:** `(x >>> k) \| 0` still warns and adds an `or` here, and `toI32` saturates under Node where the native bits read back signed (`tests/fix/port-nofix-shift`) |
   | NL8009 | 64-bit integers (3.1) | a binding, parameter, field or return type declared `i64` or `u64` | holds a double, which rounds past 2^53 |
   | NL8010 | *retired* | nothing: the row was `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32`, when `min` and `max` dropped a NaN operand and `round` answered `0` for a negative number that rounds to zero. They lower to a NaN test and a sign-bit pick (`llvm.minimum`/`llvm.maximum` on wasm) and a `llvm.copysign.f64` now, which answer NaN and `-0` as JavaScript does, so no site diverges (`tests/cases/port_num_libm` is quiet). The code stays reserved and is never reused | — |
   | NL8011 | *retired* | nothing: the row was `console.log` or `console.error` of a float printing `-0`, and it marks no divergence in the reading the class is defined against. `runtime/nish.mjs` replaces both with shims that print `String(x)`, and `String(-0)` is `0`, which is what the native build prints. The code stays reserved and is never reused | — |
@@ -14497,7 +14500,16 @@ by the caller.
   `pkg_broken` 0.3.1, not in this program's own source `` (WP21 S3,
   `tests/link/package_dependency_error`). A
   failure with no source position — an unusable C toolchain, an internal
-  compiler error, a bad `-o` layout — is `{"severity","code","message"}`. The
+  compiler error, a bad `-o` layout — is `{"severity","code","message"}`. Two
+  optional keys follow `message`, each a list of edits
+  `[{"line","column","endLine","endColumn","text"}]` placed as the diagnostic
+  is, and each absent rather than empty: `fix`, the rewrite that removes the
+  diagnostic and keeps the program's meaning, which `nish --fix` applies; and
+  then `review`, printed after `fix` (WP33 R5), on a portability warning whose
+  rewrite makes the site read the same under Node and compiles to the same IR
+  byte for byte, but changes what the source says, so a person or an agent
+  decides: `nish --fix` never applies it. Which rows carry one is the
+  portability table's last column. The
   bands and the registry are in
   [wp10-ci.md](wp10-ci.md#code). A clean compile with no warnings prints
   nothing.

@@ -1,0 +1,3 @@
+addI32 with.overflow
+atI32 panic_index
+sumU8 with.overflow
