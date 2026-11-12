@@ -1814,7 +1814,8 @@ export class QuicConnection {
       QUIC_CONN_LOCAL_CIDS
     )
     this.recovery = new QuicRecovery()
-    this.recovery.controller = config.congestion === QUIC_RECOVERY_CUBIC ? QUIC_RECOVERY_CUBIC : QUIC_RECOVERY_NEWRENO
+    this.recovery.controller =
+      config.congestion === QUIC_RECOVERY_CUBIC ? QUIC_RECOVERY_CUBIC : QUIC_RECOVERY_NEWRENO
     this.defaultParameters = new QuicTransportParameters()
     this.peerParameters = this.defaultParameters
     // A configuration that does not fit closes the connection at once (see

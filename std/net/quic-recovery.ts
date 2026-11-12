@@ -214,12 +214,12 @@ const QUIC_RECOVERY_CUBIC_SCALE: i64 = 5000000000
 const quicRecoveryMax = (a: i64, b: i64): i64 => (a > b ? a : b)
 
 /** `x` clamped to −`QUIC_RECOVERY_CUBIC_SPAN` .. `QUIC_RECOVERY_CUBIC_SPAN`. */
-const quicRecoveryCubicClamp = (x: i64): i64 =>
-  x > QUIC_RECOVERY_CUBIC_SPAN
-    ? QUIC_RECOVERY_CUBIC_SPAN
-    : x < -QUIC_RECOVERY_CUBIC_SPAN
-      ? -QUIC_RECOVERY_CUBIC_SPAN
-      : x
+const quicRecoveryCubicClamp = (x: i64): i64 => {
+  if (x > QUIC_RECOVERY_CUBIC_SPAN) {
+    return QUIC_RECOVERY_CUBIC_SPAN
+  }
+  return x < -QUIC_RECOVERY_CUBIC_SPAN ? -QUIC_RECOVERY_CUBIC_SPAN : x
+}
 
 /**
  * The integer cube root of `x`, the largest r with r³ <= x, for 0 <= x <=
@@ -1436,7 +1436,7 @@ export class QuicRecovery {
     }
     const ceiling: i64 = cwnd + cwnd / 2
     const curve: i64 = this.cubicWindow(t + this.smoothedRtt)
-    const target: i64 = curve < cwnd ? cwnd : curve > ceiling ? ceiling : curve
+    const target: i64 = quicRecoveryMax(cwnd, curve > ceiling ? ceiling : curve)
     this.congestionWindow = cwnd + ((target - cwnd) * size) / cwnd
   }
 
