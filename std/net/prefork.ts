@@ -75,6 +75,19 @@
  *  that the workers run unpinned, and the listeners are plain `SO_REUSEPORT`
  *  ones. Both are off by default.
  *
+ * **QUIC.** `listenUdp`, with `listenPort`, binds one UDP socket per worker
+ * on the same port before the TCP listeners, held like them, as a group the
+ * kernel steers by connection ID (`udpBind` flag 4): a datagram whose
+ * destination ID starts with byte k reaches worker k. Worker k reads its
+ * socket with `preforkUdpListener(args)` and the group's size N with
+ * `preforkUdpCount(args)` (`--nish-prefork-udp=<fd>,<N>`, before the listener
+ * flag), and sets `QuicServerConfig.workerIndex` to k and `.workerCount` to N
+ * so every ID it issues starts with k. A connection then stays with its
+ * worker when the client's address or port changes. More than 255 workers
+ * panics; where the kernel refuses the steering (off Linux, or under a
+ * seccomp profile that refuses it) the supervisor says so on stderr and runs
+ * one worker.
+ *
  * **How many.** `NISH_WORKERS` when it is a positive whole number, else
  * `PreforkConfig.workers` when that is positive, else
  * `availableParallelism()` on Linux and 1 elsewhere: Darwin shares a
@@ -113,6 +126,7 @@ import {
   pollCreate,
   pollWait,
   tcpListenFlags,
+  udpBind,
   unixSocketPair,
 } from "nish:net"
 import {
@@ -144,6 +158,12 @@ export const PREFORK_CHANNELS_FLAG: string = "--nish-prefork-channels="
  * descriptor.
  */
 export const PREFORK_LISTENER_FLAG: string = "--nish-prefork-listener="
+/**
+ * The flag that hands a worker its UDP socket and the size of the steered
+ * group, `<fd>,<N>`, before the listener flag, when `listenUdp` is on: read
+ * it with `preforkUdpListener` and `preforkUdpCount`.
+ */
+export const PREFORK_UDP_FLAG: string = "--nish-prefork-udp="
 
 /** What `preforkWith` answers in the supervisor once its workers are gone. */
 export const PREFORK_STOPPED: i32 = -1
@@ -206,6 +226,16 @@ export class PreforkConfig {
    * a connection received past the listeners falls back to the kernel's hash.
    */
   pin: boolean = false
+  /**
+   * With `listenPort`, also bind one UDP socket per worker on the same port,
+   * before the TCP listeners, as a group the kernel steers by QUIC
+   * connection ID (`udpBind` flag 4): a datagram goes to worker k when byte 0
+   * of its destination connection ID is k, so a QUIC connection stays with
+   * the worker that issued its IDs when the client's address changes. Linux
+   * only, and at most 255 workers (more panics). Where the kernel refuses
+   * the steering, the supervisor says so on stderr and runs one worker.
+   */
+  listenUdp: boolean = false
 }
 
 /** True when `s` is one or more ASCII digits and nothing else. */
@@ -270,8 +300,8 @@ export const preforkIndex = (args: string[]): i32 => {
 }
 
 /**
- * `args` (`process.argv`) without the worker flag and the channels and
- * listener flags before it, the same in every process.
+ * `args` (`process.argv`) without the worker flag and the channels,
+ * listener and UDP flags before it, the same in every process.
  *
  * @param args the process's arguments, `process.argv`
  * @returns a new list of the arguments the user gave, without the flags the
@@ -285,6 +315,9 @@ export const preforkArgs = (args: string[]): string[] => {
       keep = keep - 1
     }
     if (keep > 1 && args[keep - 1].startsWith(PREFORK_LISTENER_FLAG)) {
+      keep = keep - 1
+    }
+    if (keep > 1 && args[keep - 1].startsWith(PREFORK_UDP_FLAG)) {
       keep = keep - 1
     }
   }
@@ -368,6 +401,96 @@ export const preforkListener = (args: string[]): i32 => {
   return -1
 }
 
+/** The most workers a steered UDP group may have: the steering reads one byte. */
+const PREFORK_UDP_MAX: i32 = 255
+
+/**
+ * Field `at` (0 the descriptor, 1 the count) of a worker's well-formed UDP
+ * flag, `<fd>,<N>` with N from 1 to `PREFORK_UDP_MAX`; -1 without one.
+ */
+const preforkUdpField = (args: string[], at: i32): i32 => {
+  if (preforkIndex(args) < 0) {
+    return -1
+  }
+  for (let back: i32 = 2; back <= 4 && back < toI32(args.length); back++) {
+    const flag: string = args[toI32(args.length) - back]
+    if (flag.startsWith(PREFORK_UDP_FLAG)) {
+      const fields: string[] = flag.substring(PREFORK_UDP_FLAG.length).split(",")
+      if (fields.length !== 2 || !preforkDigits(fields[0]) || !preforkDigits(fields[1])) {
+        return -1
+      }
+      const count: i32 = parseInt(fields[1])
+      if (count < 1 || count > PREFORK_UDP_MAX) {
+        return -1
+      }
+      return at === 0 ? parseInt(fields[0]) : count
+    }
+  }
+  return -1
+}
+
+/**
+ * In a worker, the UDP socket the supervisor bound for it (`listenUdp`); -1
+ * when none, or when the flag is not the supervisor's `<fd>,<N>`.
+ *
+ * @param args the worker's arguments, `process.argv`
+ * @returns the bound UDP socket's descriptor to serve QUIC on, or -1
+ */
+export const preforkUdpListener = (args: string[]): i32 => preforkUdpField(args, 0)
+
+/**
+ * In a worker, how many workers share its steered UDP port (`listenUdp`): the
+ * `QuicServerConfig.workerCount` to pair with `preforkIndex` as its
+ * `workerIndex`. 0 exactly when `preforkUdpListener` answers -1.
+ *
+ * @param args the worker's arguments, `process.argv`
+ * @returns the group's size, 1 to 255, or 0 without a UDP socket
+ */
+export const preforkUdpCount = (args: string[]): i32 => {
+  const count: i32 = preforkUdpField(args, 1)
+  return count > 0 ? count : 0
+}
+
+/**
+ * The UDP group of `listenUdp`, socket i for worker i, bound before anything
+ * else on the port: steered by connection ID (`udpBind` flag 4 with the count
+ * in bits 8 to 15) for more than one worker. When the kernel refuses the
+ * steering, one plain socket and a line on stderr, so the supervisor runs one
+ * worker; empty, with a line on stderr and nothing left bound, when even that
+ * cannot bind.
+ */
+const preforkBindUdp = (config: PreforkConfig, count: i32): i32[] => {
+  const host: string = config.listenHost
+  const out: i32[] = []
+  const first: i32 = udpBind(host, config.listenPort, count > 1 ? 1 | 4 | (count << 8) : 1)
+  if (first < 0 && count > 1) {
+    const plain: i32 = udpBind(host, config.listenPort, 1)
+    if (plain >= 0) {
+      console.error(`nish/net/prefork: QUIC steering refused (${first}), running one worker`)
+      out.push(plain)
+      return out
+    }
+  }
+  if (first < 0) {
+    console.error(`nish/net/prefork: cannot bind UDP ${host}:${config.listenPort} (${first})`)
+    return out
+  }
+  out.push(first)
+  const port: i32 = config.listenPort === 0 ? netLocalPort(first) : config.listenPort
+  for (let i: i32 = 1; i < count; i++) {
+    const fd: i32 = udpBind(host, port, 1 | 4 | (count << 8))
+    if (fd < 0) {
+      console.error(`nish/net/prefork: cannot bind UDP ${host}:${port} (${fd})`)
+      for (let j: i32 = 0; j < toI32(out.length); j++) {
+        netClose(out[j])
+      }
+      return []
+    }
+    out.push(fd)
+  }
+  return out
+}
+
 /** Milliseconds on the monotonic clock. */
 const preforkNowMs = (): i64 => monotonicNanos() / 1000000
 
@@ -449,6 +572,11 @@ class PreforkSupervisor {
   private cascading: boolean = false
   /** Worker i's listener at i, held for the whole run; empty without `listenPort`. */
   private listeners: i32[]
+  /**
+   * Worker i's UDP socket at i, held for the whole run so its index in the
+   * steered group never moves; empty without `listenUdp`.
+   */
+  private udp: i32[]
 
   /**
    * A supervisor with one empty slot per worker and no worker started yet.
@@ -459,10 +587,13 @@ class PreforkSupervisor {
    * @param count how many workers to keep running
    * @param loop the readiness loop each supervisor channel is added to; the
    *   caller owns and closes it
+   * @param udp the UDP group `preforkBindUdp` bound, one per worker, kept and
+   *   closed with the listeners; empty without `listenUdp`
    */
-  constructor(config: PreforkConfig, args: string[], count: i32, loop: i32) {
+  constructor(config: PreforkConfig, args: string[], count: i32, loop: i32, udp: i32[]) {
     this.config = config
     this.loop = loop
+    this.udp = udp
     this.service = config.serviceWorker
     this.toService = []
     this.fromWorkers = []
@@ -522,6 +653,10 @@ class PreforkSupervisor {
       argv.push(this.args[i])
     }
     const channels: boolean = fds.length > 0
+    if (this.udp.length > 0) {
+      fds.push(this.udp[index])
+      argv.push(`${PREFORK_UDP_FLAG}${2 + fds.length},${this.udp.length}`)
+    }
     if (this.listeners.length > 0) {
       fds.push(this.listeners[index])
       argv.push(`${PREFORK_LISTENER_FLAG}${2 + fds.length}`)
@@ -764,7 +899,8 @@ class PreforkSupervisor {
   listen(steer: boolean): boolean {
     const config: PreforkConfig = this.config
     const flags: i32 = config.listenFlags | 1 | (steer ? 4 : 0)
-    let port: i32 = config.listenPort
+    // With `listenUdp`, port 0 was chosen by the UDP group, bound first.
+    let port: i32 = config.listenPort === 0 && this.udp.length > 0 ? netLocalPort(this.udp[0]) : config.listenPort
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       const fd: i32 = tcpListenFlags(config.listenHost, port, config.listenBacklog, flags)
       if (fd < 0) {
@@ -790,6 +926,10 @@ class PreforkSupervisor {
       netClose(this.listeners[i])
     }
     this.listeners = []
+    for (let i: i32 = 0; i < toI32(this.udp.length); i++) {
+      netClose(this.udp[i])
+    }
+    this.udp = []
   }
 
   /** Send `sig` to every running worker. */
@@ -871,6 +1011,9 @@ const preforkInvalid = (config: PreforkConfig): string => {
   if (config.listenFlags !== 0 && config.listenFlags !== 2) {
     return "listenFlags not 0 or 2"
   }
+  if (config.listenUdp && config.listenPort < 0) {
+    return "listenUdp without listenPort"
+  }
   return ""
 }
 
@@ -916,9 +1059,10 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
  * Panics, besides, when `serviceWorker` is not below the worker count or the
  * count is above 64 with a service worker (63 with `listenPort`), the most
  * `spawnWithFds` hands one child; when `pin`, on Linux, asks for more workers
- * than `availableParallelism()`; and, through `preforkInvalid`, on seqpacket
- * channels off Linux. A listener that cannot bind answers
- * `PREFORK_SPAWN_FAILED` before any worker starts.
+ * than `availableParallelism()`; when `listenUdp` asks for more than 255
+ * workers (62 with a service worker); and, through `preforkInvalid`, on
+ * seqpacket channels off Linux. A listener or UDP socket that cannot bind
+ * answers `PREFORK_SPAWN_FAILED` before any worker starts.
  *
  * @param args the process's arguments, `process.argv`
  * @param config the supervisor's settings, every field checked (a bad one
@@ -949,9 +1093,13 @@ export const preforkSupervise = <S>(
     }
     return index
   }
-  const count: i32 = preforkWorkerCount(config.workers, getenv("NISH_WORKERS"))
-  // A held listener is one more descriptor for every worker, the service one too.
-  const fdMax: i32 = config.listenPort >= 0 ? 63 : 64
+  let count: i32 = preforkWorkerCount(config.workers, getenv("NISH_WORKERS"))
+  if (config.listenUdp && count > PREFORK_UDP_MAX) {
+    panic(`nish/net/prefork: listenUdp with ${count} workers, above ${PREFORK_UDP_MAX}`)
+  }
+  // A held listener is one more descriptor for every worker, the service one
+  // too, and a held UDP socket one more again.
+  const fdMax: i32 = (config.listenPort >= 0 ? 63 : 64) - (config.listenUdp ? 1 : 0)
   if (config.serviceWorker >= count || (config.serviceWorker >= 0 && count > fdMax)) {
     panic(`nish/net/prefork: serviceWorker not below ${count} workers, or above ${fdMax} workers`)
   }
@@ -973,7 +1121,17 @@ export const preforkSupervise = <S>(
     }
     return PREFORK_SPAWN_FAILED
   }
-  const supervisor = new PreforkSupervisor(config, args, count, loop)
+  // The UDP group first: a refused steering runs one worker, so it decides
+  // the count everything after it is made for.
+  const udp: i32[] = config.listenUdp ? preforkBindUdp(config, count) : []
+  if (config.listenUdp && udp.length === 0) {
+    netClose(loop)
+    return PREFORK_SPAWN_FAILED
+  }
+  if (config.listenUdp) {
+    count = toI32(udp.length)
+  }
+  const supervisor = new PreforkSupervisor(config, args, count, loop, udp)
   if (config.listenPort >= 0 && !supervisor.listen(pin)) {
     netClose(loop)
     return PREFORK_SPAWN_FAILED

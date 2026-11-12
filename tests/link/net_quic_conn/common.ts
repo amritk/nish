@@ -29,6 +29,8 @@ export const qcConfig = (maxData: i64, maxStreamData: i64, maxStreams: i64, cidL
     activeConnectionIdLimit: cidLimit,
     statelessResetKey: resetKey(),
     retryTokenKey: tokenKey(),
+    workerIndex: -1,
+    workerCount: 0,
     retry: false,
     retryTokenLifetime: n64(10000),
   };

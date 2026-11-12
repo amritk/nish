@@ -483,6 +483,8 @@ const shapeChecks = (t: Suite): void => {
     activeConnectionIdLimit: n64(2),
     statelessResetKey: resetKey(),
     retryTokenKey: tokenKey(),
+    workerIndex: -1,
+    workerCount: 0,
     retry: false,
     retryTokenLifetime: n64(10000),
   };

@@ -136,6 +136,8 @@ const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
     activeConnectionIdLimit: toI64(4),
     statelessResetKey: randomBytes(QUIC_CONN_STATIC_KEY_SIZE),
     retryTokenKey: randomBytes(QUIC_CONN_STATIC_KEY_SIZE),
+    workerIndex: -1,
+    workerCount: 0,
     retry: retry,
     retryTokenLifetime: toI64(10000),
   };

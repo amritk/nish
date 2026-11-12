@@ -105,6 +105,8 @@ export const wtQuicConfig = (limits: WtLimits): QuicServerConfig => {
     activeConnectionIdLimit: n64(4),
     statelessResetKey: resetKey(),
     retryTokenKey: tokenKey(),
+    workerIndex: -1,
+    workerCount: 0,
     retry: false,
     retryTokenLifetime: n64(10000),
   };
