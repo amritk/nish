@@ -1,0 +1,57 @@
+PASS  five pipelined requests are answered
+PASS  each with the head the writer writes, then its body
+PASS  the first head is written and the four after it copied
+PASS  the first head
+PASS  the first head: written
+PASS  the same head again
+PASS  the same head again: copied
+PASS  another status
+PASS  another status: written
+PASS  back to 200
+PASS  back to 200: written
+PASS  another body length
+PASS  another body length: written
+PASS  a value of the same length, changed
+PASS  a value of the same length, changed: written
+PASS  a name of the same length in another case
+PASS  a name of the same length in another case: written
+PASS  a field more
+PASS  a field more: written
+PASS  a field fewer, its value never carried over
+PASS  a field fewer, its value never carried over: written
+PASS  the fields in another order
+PASS  the fields in another order: written
+PASS  fresh arrays with the kept head's bytes
+PASS  fresh arrays with the kept head's bytes: copied
+PASS  one byte changed in place in the same array
+PASS  one byte changed in place in the same array: written
+PASS  two answers in one second
+PASS  two in the next carry the next second's Date
+PASS  the turn writes a head, the rest are copied
+PASS  a later millisecond of the same second reformats nothing
+PASS  two kept alive, then one with Connection: close
+PASS  the second is copied, the close written
+PASS  two HTTP/1.0 keep-alive answers, then an HTTP/1.1 one
+PASS  the second HTTP/1.0 head is copied, the HTTP/1.1 one written
+PASS  GET, HEAD, GET
+PASS  the HEAD's head and the GET's after it are copied
+PASS  a 100 between two answers
+PASS  the 100 is written and the answer after it copied
+PASS  two chunked answers, then one to HTTP/1.0
+PASS  the second chunked head is copied
+PASS  two 204s
+PASS  the second 204 is copied
+PASS  a refused request is answered
+PASS  an error after a kept head is the error a fresh connection answers
+PASS  a target past maxTarget is answered 414
+PASS  and so after a kept head
+PASS  a name spanning two kept lines is refused
+PASS  a name that takes in a colon of the kept value is refused
+PASS  nothing is queued by either
+PASS  a head of over 1 KiB twice
+PASS  written both times
+PASS  seventeen fields twice
+PASS  written both times
+PASS  two hundred answers, each byte for byte
+PASS  one head written, 199 copied
+http1 head reuse: 56 passed, 0 failed, 0 skipped
