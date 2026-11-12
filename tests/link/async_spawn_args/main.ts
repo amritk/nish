@@ -4,11 +4,12 @@
 // `start` builds both strings in its own frame and returns before the task
 // wakes, and `main` then allocates 2890 characters of noise over the memory
 // they were built in, more than either string; each task still prints what
-// it was given. Both tasks sleep the same 10 ms: `spawn` runs job-1 to its
-// `sleep` before job-2's is made, so job-1's deadline is never the later one
-// and the executor wakes the earlier deadline first, a tie in the order the
-// timers were made. With different sleeps the order rode on the time between
-// the two `sleep` calls, which a loaded runner stretched past the gap.
+// it was given. Both tasks sleep the same 10 ms. `spawn` only queues a task;
+// once `main` yields the executor starts them first in, first out, so job-1
+// reaches its `sleep` first and its deadline is never the later one. Timers
+// wake in (deadline, sequence) order, so even a tie wakes job-1 first. With
+// different sleeps the order rode on the time between the two `sleep` calls,
+// which a loaded runner stretched past the gap.
 import { spawn } from "nish:async"
 import { report } from "./lib"
 
