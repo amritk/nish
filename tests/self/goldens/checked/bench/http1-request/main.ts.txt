@@ -1742,34 +1742,35 @@ function Http1Connection.respond(this: Http1Connection, status: i32, names: u8[]
   pointer names: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.sameHead#2 nish.http1WriteResponseHead#4 nish.Http1Connection.keepHead#5
   pointer values: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.sameHead#3 nish.http1WriteResponseHead#5 nish.Http1Connection.keepHead#6
   stackSites=0 stackLocals=0
-  callee -37:10 Http1Connection.answerable -> @nish.Http1Connection.answerable
-  local -31:11 interim: boolean (const)
-  local -30:11 empty: boolean (const)
-  callee -30:75 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
-  local -26:9 framing: i32 (let)
-  local -25:9 close: boolean (let)
-  local -19:9 connection: string (let)
-  local -18:9 code: i32 (let)
-  local -9:11 date: u8[] (const)
-  callee -9:24 HttpDate.current -> @nish.HttpDate.current
-  local -6:11 keeping: boolean (const)
-  callee -6:42 HttpDate.formats -> @nish.HttpDate.formats
+  callee -36:10 Http1Connection.answerable -> @nish.Http1Connection.answerable
+  local -30:11 interim: boolean (const)
+  local -29:11 empty: boolean (const)
+  callee -29:75 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  local -25:9 framing: i32 (let)
+  local -24:9 close: boolean (let)
+  local -18:9 connection: string (let)
+  local -17:9 code: i32 (let)
+  local -8:11 date: u8[] (const)
+  callee -8:24 HttpDate.current -> @nish.HttpDate.current
+  callee -5:21 HttpDate.formats -> @nish.HttpDate.formats
   callee -4:11 Http1Connection.sameHead -> @nish.Http1Connection.sameHead
   callee -3:32 Http1Connection.bodyRoom -> @nish.Http1Connection.bodyRoom
   callee -1:11 copyBytes -> @nish.copyBytes
   callee +3:18 Http1Connection.begin -> @nish.Http1Connection.begin
-  local +7:16 name: u8[] (const)
-  callee +8:11 http1ServerReserved -> @nish.http1ServerReserved
-  local +12:11 room: i32 (const)
-  callee +12:23 Http1Connection.bodyRoom -> @nish.Http1Connection.bodyRoom
-  local +13:11 start: i32 (const)
-  local +14:11 reason: string (const)
-  callee +14:28 http1ServerReason -> @nish.http1ServerReason
-  local +15:11 end: i32 (const)
-  callee +15:22 http1WriteResponseHead -> @nish.http1WriteResponseHead
-  callee +48:9 Http1Connection.keepHead -> @nish.Http1Connection.keepHead
-  callee +51:24 HttpDate.formats -> @nish.HttpDate.formats
-  callee +54:12 Http1Connection.begin -> @nish.Http1Connection.begin
+  local +7:11 count: i32 (const)
+  local +8:14 k: i32 (let)
+  callee +9:11 http1ServerReserved -> @nish.http1ServerReserved
+  local +13:11 room: i32 (const)
+  callee +13:23 Http1Connection.bodyRoom -> @nish.Http1Connection.bodyRoom
+  local +14:11 start: i32 (const)
+  local +15:11 reason: string (const)
+  callee +15:28 http1ServerReason -> @nish.http1ServerReason
+  local +16:11 end: i32 (const)
+  callee +16:22 http1WriteResponseHead -> @nish.http1WriteResponseHead
+  callee +45:9 HttpDate.formats -> @nish.HttpDate.formats
+  callee +49:9 Http1Connection.keepHead -> @nish.Http1Connection.keepHead
+  callee +52:24 HttpDate.formats -> @nish.HttpDate.formats
+  callee +55:12 Http1Connection.begin -> @nish.Http1Connection.begin
 function Http1Connection.begin(this: Http1Connection, close: boolean, framing: i32, empty: boolean): i32 -> @nish.Http1Connection.begin [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

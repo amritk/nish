@@ -1507,8 +1507,7 @@ export class Http1Connection {
     const date: u8[] = this.date.current()
     // Off for the rest of the second once heads stop repeating, so that a
     // program whose heads differ pays this test and no more.
-    const keeping: boolean = !interim && this.date.formats() !== this.headOff
-    if (keeping) {
+    if (!interim && this.date.formats() !== this.headOff) {
       if (this.sameHead(status, names, values, framing, code)) {
         if (this.headLength <= this.bodyRoom()) {
           // `bodyRoom` stops short of the output's end, so the copy fits.
@@ -1520,8 +1519,9 @@ export class Http1Connection {
         }
       }
     }
-    for (const name of names) {
-      if (http1ServerReserved(name)) {
+    const count: i32 = toI32(names.length)
+    for (let k: i32 = 0; k < count; k++) {
+      if (http1ServerReserved(names[k])) {
         return H1_INVALID
       }
     }
@@ -1557,7 +1557,7 @@ export class Http1Connection {
     if (interim) {
       return 0
     }
-    if (keeping) {
+    if (this.date.formats() !== this.headOff) {
       // A head written here is a miss: the kept one did not match.
       this.headMisses += 1
       if (this.headMisses < H1_HEAD_MISSES) {
