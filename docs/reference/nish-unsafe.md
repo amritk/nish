@@ -103,10 +103,12 @@ refuses each with exit 2. `readCString` and `readStruct` have no Node form, beca
 <scalar-detail title="The no-panic scope">
 
 Under `--deny-panics` or `"nish".noPanic`,
-`uncheckedGet`, `uncheckedSet`, `readCString` and `readStruct` are allowed `unchecked`
+`uncheckedGet`, `uncheckedSet` and `readCString` are allowed `unchecked`
 sites, because the import has already said that an index out of range is
-the author's to rule out. The wrapping three are not sites at all: they
-are defined for every pair.
+the author's to rule out. `readStruct` is not: it tests its pointer and
+panics with `ffi-null` on `NULL`, a site no proof removes, so the scope
+refuses it. The wrapping three are not sites at all: they are defined for
+every pair.
 
 </scalar-detail>
 

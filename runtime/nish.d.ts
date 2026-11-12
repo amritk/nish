@@ -838,10 +838,15 @@ declare function readCString(p: CPtr): string;
  * with `readCString` while C keeps it live. The parameter is `CPtr`, so an
  * unnarrowed `CPtr | null` is refused and `if (p !== null)` comes first.
  *
+ * A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
+ * naming the layout, since a `declare function` declared to answer `CPtr` may
+ * still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+ * the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
+ * `oom` beside it.
+ *
  * The copy is new on every call and is the calling function's allocation, held
- * by the arena like `new`. Under `--deny-panics` it is an allowed `unchecked`
- * site, with the copy's `oom` beside it. It lowers the same on wasm32, where a
- * pointer is 4 bytes and the layout is sized to match. It has no Node form.
+ * by the arena like `new`. It lowers the same on wasm32, where a pointer is 4
+ * bytes and the layout is sized to match. It has no Node form.
  * Capability: unsafe.
  *
  * @param p the address of a C struct a `declare function` handed back.
@@ -3516,10 +3521,12 @@ declare module "nish:net" {
  * `i64`. A program that stays in range prints the same as natively.
  *
  * **The no-panic scope.** Under `--deny-panics` or `"nish".noPanic`,
- * `uncheckedGet`, `uncheckedSet`, `readCString` and `readStruct` are allowed `unchecked`
+ * `uncheckedGet`, `uncheckedSet` and `readCString` are allowed `unchecked`
  * sites, because the import has already said that an index out of range is
- * the author's to rule out. The wrapping three are not sites at all: they
- * are defined for every pair.
+ * the author's to rule out. `readStruct` is not: it tests its pointer and
+ * panics with `ffi-null` on `NULL`, a site no proof removes, so the scope
+ * refuses it. The wrapping three are not sites at all: they are defined for
+ * every pair.
  *
  * Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping
  */
