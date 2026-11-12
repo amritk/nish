@@ -50,10 +50,12 @@
  * a root: one that reached a root beats any that did not, a longer one a
  * shorter, and the first found a later one of the same length.
  *
+ * An extension marked against RFC 5280 §4.2 refuses the chain, but for a
+ * non-critical nameConstraints, which binds as a critical one does.
  * Revocation (CRLs, OCSP, Certificate Transparency), certificate policies,
- * RFC 5280 §7.1's Name folding and an extension's criticality are not
- * checked; each is a finding of docs/security/crypto-pki.md. Nothing here is
- * secret — certificates, names and public keys — so nothing is wiped.
+ * RFC 5280 §7.1's Name folding and that nameConstraints are not checked;
+ * each is a finding of docs/security/crypto-pki.md. Nothing here is secret —
+ * certificates, names and public keys — so nothing is wiped.
  *
  * Written for this module from RFC 5280 (§4.2 and §6.1), RFC 6125 (§6.4),
  * RFC 4291 §2.2 and RFC 3986 §3.2.2 (address literals), RFC 5758, RFC 8017
@@ -905,6 +907,9 @@ const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certifica
   if (cand.version !== 2 || !cand.bcPresent || !cand.bcCa) {
     return PKI_ERR_NOT_CA
   }
+  // The root too: limbo refuses a root with a non-critical basicConstraints,
+  // and every root of Mozilla's store is marked as these rules ask
+  // (crypto-pki.md, "Each structural rule on a root").
   if (!cand.bcCritical || !pkiCriticalitySound(cand)) {
     return PKI_ERR_MALFORMED
   }

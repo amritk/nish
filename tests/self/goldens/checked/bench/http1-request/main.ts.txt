@@ -31823,15 +31823,15 @@ function pkiIssuerCode(s: PkiSearch, child: X509Certificate, cand: X509Certifica
   stackSites=0 stackLocals=0
   local +0:9 time: i32 (const)
   callee +0:21 pkiTimeCode -> @nish.pkiTimeCode
-  callee +10:28 pkiCriticalitySound -> @nish.pkiCriticalitySound
-  local +20:9 below: i32 (let)
-  local +21:14 i: i32 (let)
-  callee +22:12 pkiSelfIssued -> @nish.pkiSelfIssued
-  local +30:9 names: i32 (const)
-  callee +30:22 pkiConstraintsCode -> @nish.pkiConstraintsCode
-  local +34:9 signature: i32 (const)
-  callee +34:26 pkiCheckSignature -> @nish.pkiCheckSignature
-  callee +35:45 pkiKeyIdsCode -> @nish.pkiKeyIdsCode
+  callee +13:28 pkiCriticalitySound -> @nish.pkiCriticalitySound
+  local +23:9 below: i32 (let)
+  local +24:14 i: i32 (let)
+  callee +25:12 pkiSelfIssued -> @nish.pkiSelfIssued
+  local +33:9 names: i32 (const)
+  callee +33:22 pkiConstraintsCode -> @nish.pkiConstraintsCode
+  local +37:9 signature: i32 (const)
+  callee +37:26 pkiCheckSignature -> @nish.pkiCheckSignature
+  callee +38:45 pkiKeyIdsCode -> @nish.pkiKeyIdsCode
 function pkiNote(s: PkiSearch, code: i32, score: i32): void -> @nish.pkiNote
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

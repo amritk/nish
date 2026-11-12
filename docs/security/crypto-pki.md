@@ -433,7 +433,10 @@ module's answer.
   critical authorityKeyIdentifier, a critical policyConstraints, and an
   authorityKeyIdentifier with a keyIdentifier and without the issuer and
   serial fields; one root, ACCVRAIZ1, carries an authorityInfoAccess, and it
-  is sound.
+  is sound. A trust anchor is therefore held to these marking rules as an
+  intermediate is: limbo's `rfc5280::root-non-critical-basic-constraints`
+  asks for it, and the 122 roots the bundle holds on the head of #1028 all
+  conform, so the rule costs no shipped anchor.
 
   A subjectKeyIdentifier refuses one, TWCA Global Root CA,
   so a root need not carry one (PKI-32). Validity, unknown critical
@@ -1001,8 +1004,8 @@ Each fails closed, under a check this record keeps on purpose:
 Until #1028 the parser kept no critical flag, so a certificate that broke
 RFC 5280 §4.2 by marking a known extension wrongly was accepted. It now
 keeps one per decoded extension, and pki refuses as `PKI_ERR_MALFORMED` a
-critical authorityKeyIdentifier anywhere (§4.2.1.1), a policyConstraints
-that is not critical anywhere (§4.2.1.11), an issuer whose basicConstraints
+critical authorityKeyIdentifier anywhere on the path (§4.2.1.1), a
+policyConstraints that is not critical anywhere on the path (§4.2.1.11), an issuer whose basicConstraints
 is not critical, the root included (§4.2.1.9), and a leaf whose
 subjectAltName is critical with a subject, or not critical without one
 (§4.2.1.6), and as `PKI_ERR_EXT_KEY_USAGE` a leaf whose extKeyUsage is

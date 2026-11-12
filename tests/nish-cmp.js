@@ -1975,7 +1975,7 @@ const DECLARED = [
     why: "the program reads X509Certificate.sanCritical and the other critical flags, which the 0.38.0 seed's std/crypto/x509.ts does not have, so only the candidate compiles it",
   },
   ...x509Criticality(
-    "X509Certificate gains the critical flag of each extension it decodes, whether the authorityKeyIdentifier is present and names its issuer and serial, and whether a policyConstraints is present and critical, so it is laid out 8 bytes wider (168 to 176) in every module and header that names it; std/crypto/x509.ts also checks authorityInfoAccess's syntax and std/crypto/pki.ts refuses the markings RFC 5280 forbids, so those two modules move further",
+    "X509Certificate gains the critical flag of each extension it decodes, whether the authorityKeyIdentifier is present and names its issuer and serial, and whether a policyConstraints is present and critical, so it is laid out 8 bytes wider (168 to 176) in every module and header that names it; std/crypto/x509.ts also checks authorityInfoAccess's syntax and std/crypto/pki.ts refuses the markings RFC 5280 forbids, so those two modules move further; every other module and header (pki-roots, verify, tls-tcp, fetch, identity, main.h and the rest) moves only from that 168 to 176 layout",
     {
       "bench/http-app-carrier.ts": ["pki-roots.ll", "pki.ll", "tls-tcp.ll", "verify.ll", "x509.ll"],
       "bench/http1-request/main.ts": [

@@ -793,6 +793,16 @@ const criticalFlag = (c: X509Certificate, k: i32): boolean => {
   return flags[k]
 }
 
+/** Whether the critical flag `criticalFlag` numbers `k` is set, none when `k` is -1,, and every other is clear. */
+const onlyCritical = (c: X509Certificate, k: i32): boolean => {
+  for (let i: i32 = 0; i < 8; i++) {
+    if (criticalFlag(c, i) !== (i === k)) {
+      return false
+    }
+  }
+  return true
+}
+
 const criticalitySuite = (): i32 => {
   const t = new Suite("x509 criticality, authorityKeyIdentifier fields and authorityInfoAccess")
   // Each decoded extension's critical flag, set and clear, in criticalFlag's order.
@@ -811,8 +821,8 @@ const criticalitySuite = (): i32 => {
   for (let k: i32 = 0; k < toI32(names.length); k++) {
     const on: X509Certificate | null = readOne(oids[k], true, values[k])
     const off: X509Certificate | null = readOne(oids[k], false, values[k])
-    t.ok(`${names[k]} critical: its flag is set`, on !== null && criticalFlag(on, k))
-    t.ok(`${names[k]} not critical: its flag is clear`, off !== null && !criticalFlag(off, k))
+    t.ok(`${names[k]} critical: its flag alone is set`, on !== null && onlyCritical(on, k))
+    t.ok(`${names[k]} not critical: every flag is clear`, off !== null && onlyCritical(off, -1))
   }
   const plain: X509Certificate | null = readOne(OID_SKI, false, "040101")
   t.ok("no AKI and no policyConstraints: neither is present", plain !== null && !plain.akiPresent && !plain.pcPresent)
