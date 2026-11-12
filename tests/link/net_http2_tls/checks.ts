@@ -16,6 +16,10 @@
 //      back in its pool once the clients are gone, the one a client left
 //      mid-frame included.
 //   5. A server of 1,024 slots and no connection has made no frame buffer.
+//   6. The clock: `expire` sends GOAWAY SETTINGS_TIMEOUT to a client that has
+//      not acknowledged the server's SETTINGS, closes one stalled before its
+//      hello at the same deadline, and sends GOAWAY NO_ERROR to an idle one;
+//      nothing before then.
 //
 // A third-party client drives the same server in `serve` mode (`main.ts`).
 import { TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule";
@@ -27,6 +31,7 @@ import { H2_ERROR, Http2Config, Http2Connection, Http2Pools } from "nish/net/htt
 import { netClose, tcpListen } from "nish:net";
 import { H2_ALPN, Http2TlsServer } from "nish/net/http2-tls";
 import { Suite } from "nish/testing";
+import { monotonicNanos } from "nish:process";
 import { leafPublic, tcpConfig } from "../net_tls_common/server";
 import { GROUP_SECP256R1, clientFinish, clientHello, clientShare, extAlpn, extKeyShare, extSignatureAlgorithms, extSupportedGroups, extSupportedVersions } from "../net_tls_common/client";
 import { Opened, ZERO, join, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
@@ -329,5 +334,52 @@ export const tlsChecks = (): i32 => {
     big.connection(toI32(700)) === big.connection(ZERO) && big.connections.length === 1 && big.busy() === 0
   );
   netClose(listener);
+  // --- 6. The clock ------------------------------------------------------------------------------
+  // The server's timeouts are its defaults, ten seconds for the SETTINGS
+  // acknowledgement and a minute idle; `expire` is handed a time past them.
+  const SECOND: i64 = toI64(1000000000);
+  const clock = new H2Loop(tcpConfig([H2_ALPN]), new Http2Config(), 3);
+  const mute = new H2Client(clock);
+  const quiet = new H2Client(clock);
+  mute.handshake([H2_ALPN]);
+  mute.wire.preface();
+  const noIds: i32[] = [];
+  const noValues: i64[] = [];
+  mute.wire.settings(noIds, noValues);
+  mute.flush();
+  t.eqStr(
+    "a client that does not acknowledge the server's SETTINGS is answered all the same",
+    mute.awaitFrames(toI32(3)),
+    "SETTINGS 1=4096,3=100,4=65535,5=16384,6=16384; WINDOW_UPDATE 0 983041; SETTINGS ack"
+  );
+  quiet.handshake([H2_ALPN]);
+  quiet.prefaces();
+  quiet.flush();
+  quiet.awaitFrames(toI32(3));
+  const stalled: i32 = clock.connect();
+  while (clock.accepted < 3 && clock.failure === "") {
+    clock.step(toI32(-1));
+  }
+  const start: i64 = monotonicNanos();
+  t.ok(
+    "before any deadline, expire closes nothing",
+    clock.server.expire(start) === 0 && clock.server.busy() === 3
+  );
+  t.eqI32(
+    "ten seconds on, it closes the client late with its acknowledgement, and the one that never said hello, whose clock ran from its accept",
+    clock.server.expire(start + toI64(11) * SECOND),
+    toI32(2)
+  );
+  t.eqStr("the first is sent GOAWAY SETTINGS_TIMEOUT", mute.awaitFrames(toI32(1)), "GOAWAY 0 4");
+  t.ok("and both sockets end", clock.awaitEnd(mute.index) && clock.awaitEnd(stalled) && clock.server.busy() === 1);
+  quiet.wire.headers(toI32(1), getOf("/hello"), H2_FLAG_END_STREAM);
+  quiet.flush();
+  quiet.awaitFrames(toI32(2));
+  t.eqI32("a client that acknowledged and asks is not idle", clock.server.expire(monotonicNanos() + toI64(59) * SECOND), ZERO);
+  t.eqI32("a minute on, it is", clock.server.expire(monotonicNanos() + toI64(61) * SECOND), toI32(1));
+  t.eqStr("and is sent GOAWAY NO_ERROR, naming its stream", quiet.awaitFrames(toI32(1)), "GOAWAY 1 0");
+  t.ok("and its socket ends", clock.awaitEnd(quiet.index) && clock.server.busy() === 0);
+  t.eqStr("with nothing gone wrong in the loop", clock.failure, "");
+  clock.shutdown();
   return t.done();
 };
