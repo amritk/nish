@@ -552,7 +552,7 @@ function FunctionSig.suspends(this: FunctionSig): boolean -> @FunctionSig.suspen
 function FunctionSig.definedIn(this: FunctionSig, source: SourceFile): boolean -> @FunctionSig.definedIn [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=200 writesThrough=false captured=false
-  pointer source: size=32 writesThrough=false captured=false
+  pointer source: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 origin: SourceFile | null (const)
 function FunctionSig.constructor(this: FunctionSig, name: string, sourceName: string, decl: Node): void -> @FunctionSig.constructor [exported constructor]
@@ -661,7 +661,7 @@ function TemplateInfo.constructor(this: TemplateInfo, sourceName: string, decl: 
   calls: ConstraintList.constructor nish_alloc_struct
   pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
-  pointer origin: size=32 writesThrough=true captured=true
+  pointer origin: size=48 writesThrough=true captured=true
   pointer home: size=320 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:24 new ConstraintList -> @ConstraintList.constructor
@@ -671,7 +671,7 @@ function StructTemplateInfo.constructor(this: StructTemplateInfo, sourceName: st
   calls: ConstraintList.constructor nish_alloc_struct
   pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
-  pointer origin: size=32 writesThrough=true captured=true
+  pointer origin: size=48 writesThrough=true captured=true
   pointer home: size=320 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:24 new ConstraintList -> @ConstraintList.constructor
@@ -719,7 +719,7 @@ function SpreadCopy.constructor(this: SpreadCopy, at: Node, file: SourceFile, so
   escaping: at fields file into source
   pointer this: size=32 writesThrough=true captured=false
   pointer at: size=40 writesThrough=true captured=true
-  pointer file: size=32 writesThrough=true captured=true
+  pointer file: size=48 writesThrough=true captured=true
   pointer fields: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FieldInfo.constructor(this: FieldInfo, name: string, type: i32, decl: Node): void -> @FieldInfo.constructor [exported constructor]
@@ -738,7 +738,7 @@ function StructInfo.constructor(this: StructInfo, name: string, kind: i32, type:
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=176 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
-  pointer origin: size=32 writesThrough=true captured=true
+  pointer origin: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:23 new StringMap -> @StringMap.constructor
   callee +3:24 new StringMap -> @StringMap.constructor
@@ -781,14 +781,14 @@ function ConstInfo.constructor(this: ConstInfo, name: string, type: i32, decl: N
   escaping: decl name origin type
   pointer this: size=88 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
-  pointer origin: size=32 writesThrough=true captured=true
+  pointer origin: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function AliasInfo.constructor(this: AliasInfo, name: string, decl: Node, origin: SourceFile, home: CheckContext): void -> @AliasInfo.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: decl home name origin
   pointer this: size=40 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
-  pointer origin: size=32 writesThrough=true captured=true
+  pointer origin: size=48 writesThrough=true captured=true
   pointer home: size=320 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function EnumInfo.constructor(this: EnumInfo, name: string, decl: Node, origin: SourceFile, type: i32, symbol: string, exported: boolean): void -> @EnumInfo.constructor [exported constructor]
@@ -797,7 +797,7 @@ function EnumInfo.constructor(this: EnumInfo, name: string, decl: Node, origin: 
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
-  pointer origin: size=32 writesThrough=true captured=true
+  pointer origin: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:20 new StringMap -> @StringMap.constructor
 function EnumInfo.addMember(this: EnumInfo, name: string, value: i32): void -> @EnumInfo.addMember [exported method]
@@ -885,7 +885,7 @@ function CheckedProgram.constructor(this: CheckedProgram, source: SourceFile, fi
   escaping: file isEntry nodeCount packageName source
   calls: FusionTable.constructor StringMap.constructor StringSet.constructor isArrayModule isCollectionsModule isJsonTypedModule isMapExtrasModule isMathModule isRegionModule isSecretModule isSortModule nish_alloc_struct nish_array_grow nish_panic nish_panic_index packageSymbolPrefix
   pointer this: size=800 writesThrough=true captured=false
-  pointer source: size=32 writesThrough=true captured=true
+  pointer source: size=48 writesThrough=true captured=true
   pointer file: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:25 new StringSet -> @StringSet.constructor

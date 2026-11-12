@@ -85,3 +85,12 @@ behind the turn, late: ok=true failure=0 socket=0 rows=1 reusable=true first=q
 behind the turn, late: ok=true failure=0 socket=0 rows=1 reusable=true first=q
 behind the turn, late: ok=true failure=0 socket=0 rows=1 reusable=true first=q
 waits while the turn's answer was held: at most 64
+held: ok=true failure=0 socket=0 rows=1 reusable=true first=w
+held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+held: ok=true failure=0 socket=0 rows=1 reusable=true first=q
+eight seats freed together: 8 seated, over at most 5 loop turns

@@ -25,11 +25,18 @@ node bench/http1-request/run.mjs --instructions --base 4dc09dcc   # cachegrind c
 | `pipelined` | the `api` POST and the `browser` GET in one read | both |
 | `split` | the `browser` GET in two reads, cut inside its Cookie line | 2 JSON fields |
 | `json1k` … `json40k` | the `short` GET | 1,008, 3,943, 16,193 and 40,760 bytes of JSON |
+| `varied` | the `short` GET three times, one read each | in turn: 200 with Content-Type and 2 JSON fields; 201 with Content-Type, Location and Cache-Control and 3 JSON fields; 404 with a 26-byte text body |
 
 The checksum folds every response's bytes in the first iteration and every
 request's length, status, method, field count and body in all of them, and
 the number of reads a case is fed, so `split` and `browser` have different
 checksums. Two builds that parse or answer differently disagree on it.
+
+`varied` is the case a response head kept from the last request cannot serve:
+no answer has the status, the fields or the Content-Length of the one before
+it, so a writer that reuses the previous head misses on every request and
+pays its check on top of a full write. The other cases answer every request
+alike.
 
 `nish-copy` is a byte-identical copy of the build, timed as its own column:
 the spread between it and `nish` is the noise band. A time gain counts only
@@ -40,7 +47,7 @@ glibc's string functions pinned to one variant (`GLIBC_TUNABLES`) and
 `NISH_SIMD=base`, as `bench/run.mjs` pins them: the `json*` cases reach a scan
 that picks its width from `cpuid`. An iteration is a run of 1,000 iterations less a
 run of 500, over 500, so start-up cancels; a request is that over the case's
-requests (two for `pipelined`).
+requests (two for `pipelined`, three for `varied`).
 
 ## Instructions a request
 
