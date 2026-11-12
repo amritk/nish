@@ -48,7 +48,7 @@
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import { HANDLER_ABSENT, HANDLER_DROPPED, HANDLER_MAX_WATCHED, HANDLER_SENT } from "nish/net/handler"
-import { HttpFields, httpFieldBytes } from "nish/net/http-fields"
+import { HttpFields, httpFieldBytes, httpFieldIs } from "nish/net/http-fields"
 import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1HexValue } from "nish/net/http1-codec"
 import {
   H1_AGAIN,
@@ -732,7 +732,6 @@ export class HttpServer {
   private perConnection2: i32 = 1
   /** The cleartext HTTP/2 listener, -1 until `listenH2c`. */
   private h2cFd: i32 = -1
-  private h3Fd: i32 = -1
   private perConnection3: i32 = 1
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
   private draining: boolean = false
@@ -954,7 +953,7 @@ export class HttpServer {
    * @param entropy random bytes for the listener's own secrets, as `Http3Server` takes them
    */
   listenHttp3(fd: i32, quic: QuicServerConfig, config: Http3Config, slots: i32, entropy: u8[]): void {
-    if (this.h3Fd >= 0) {
+    if (this.h3 !== null) {
       panic("HttpServer.listenHttp3: an HTTP/3 listener is already configured")
     }
     if (config.maxFieldSectionSize > this.maxHead) {
@@ -974,7 +973,6 @@ export class HttpServer {
     }
     this.perConnection3 = per < toI64(1) ? 1 : toI32(per)
     this.h3 = new Http3Server(quic, config, fd, slots, entropy)
-    this.h3Fd = fd
     this.h3Gen = new Array<i32>(slots)
     this.h3Count = new Array<i32>(slots)
     this.h3Streams = new Array<i64>(slots * this.perConnection3)
@@ -1021,7 +1019,7 @@ export class HttpServer {
    * @returns how many whole requests are queued for `take` after this turn
    */
   wait(timeoutMs: i32): i32 {
-    if (this.h2Fd >= 0 || this.h3Fd >= 0) {
+    if (this.h2Fd >= 0 || this.h3 !== null) {
       panic("HttpServer.wait: a TLS or QUIC listener needs the certificate's key; call waitSigned")
     }
     return this.turnWith(timeoutMs, null)
@@ -1496,7 +1494,7 @@ export class HttpServer {
     }
     r.pathEnd = pathEnd
     r.bodyLength = 0
-    r.since = monotonicNanos()
+    r.since = this.turnAt
     r.state = HTTP_SERVER_READING
     r.pendingStart = 0
     r.pendingEnd = 0
@@ -1574,8 +1572,12 @@ export class HttpServer {
     this.free.push(r.index)
   }
 
-  /** Hands back `r` once its connection is gone, unless it is queued or the program's to answer. */
+  /**
+   * Marks `r` hung up, its connection or stream gone, and hands it back unless
+   * it is queued or the program's to answer.
+   */
   private drop(r: HttpServerRequest): void {
+    r.hung = true
     if (
       r.state === HTTP_SERVER_READING ||
       r.state === HTTP_SERVER_PARKED ||
@@ -2087,7 +2089,6 @@ export class HttpServer {
       const last: boolean = r.state === HTTP_SERVER_FLUSHING
       const taken: i32 = this.carry(r, r.pending, r.pendingStart, left, last)
       if (taken < 0) {
-        r.hung = true
         this.drop(r)
         return
       }
@@ -2387,11 +2388,7 @@ export class HttpServer {
       return 501
     }
     const pathLength: i32 = toI32(f.path.length)
-    if (
-      pathLength === 1 &&
-      toI32(f.path[0]) === 42 &&
-      httpServerSpanIs(f.method, HTTP_SERVER_ZERO, toI32(f.method.length), "OPTIONS")
-    ) {
+    if (pathLength === 1 && toI32(f.path[0]) === 42 && httpFieldIs(f.method, "OPTIONS")) {
       return 204
     }
     const count: i32 = toI32(f.names.length)
@@ -2432,7 +2429,7 @@ export class HttpServer {
     }
     for (let k: i32 = 0; k < toI32(f.names.length); k++) {
       const name: u8[] = f.names[k]
-      if (!authority || !httpServerSpanIs(name, HTTP_SERVER_ZERO, toI32(name.length), "host")) {
+      if (!authority || !httpFieldIs(name, "host")) {
         this.putField(r, n, name, f.values[k])
         n += 1
       }
@@ -2574,7 +2571,6 @@ export class HttpServer {
     } else if (event === H2_RESET) {
       // A request still read, or flushed after its answer, is the server's
       // alone; one queued or the program's goes back when it is answered.
-      r.hung = true
       this.drop(r)
       this.unlink(r)
     }
@@ -2789,7 +2785,6 @@ export class HttpServer {
     } else if (event === H3_RESET) {
       // A request still read, or flushed after its answer, is the server's
       // alone; one queued or the program's goes back when it is answered.
-      r.hung = true
       this.drop(r)
       this.unlink(r)
     }
@@ -2842,7 +2837,6 @@ export class HttpServer {
       if (at >= 0) {
         const r: HttpServerRequest = this.requests[at]
         r.entry = -1
-        r.hung = true
         this.drop(r)
       }
     }
