@@ -128,8 +128,10 @@ import { fitArguments } from "./declarations"
 import {
   checkReferenceCall,
   functionReference,
+  nullableReference,
   opaqueReferenceMessage,
   outerReference,
+  refuseNullableCall,
   refuseValueArrow,
 } from "./fnrefs"
 import { ParentTable } from "./parents"
@@ -921,7 +923,7 @@ const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       ctx.error(part, secretTemplateMessage())
       continue
     }
-    if (ctx.table.isFnRef(hole)) {
+    if (ctx.table.isFnRef(ctx.table.stripNull(hole))) {
       refuseReferenceHole(ctx, part)
       continue
     }
@@ -3330,6 +3332,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     if (ctx.table.isFnRef(computed)) {
       return checkReferenceCall(ctx, expr, computed, ctx.textOf(callee), scope)
     }
+    if (nullableReference(ctx, computed)) {
+      return refuseNullableCall(ctx, callee, ctx.textOf(callee))
+    }
     return ctx.errorType(expr, "Only direct calls to named functions are supported")
   }
   // WP29: a compile-time function parameter is a direct call to whichever
@@ -3341,12 +3346,18 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     const held = checkExpression(ctx, callee, scope, -1)
     return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, callee.text, scope)
   }
+  if (local !== null && nullableReference(ctx, scope.typeOf(local))) {
+    return refuseNullableCall(ctx, callee, callee.text)
+  }
   if (local === null) {
     if (ctx.capturesOuter(callee.text)) {
       // WP51: a reference local of the function around the arrow is a value
       // it captures like any other, so the call is through the capture.
       if (outerReference(ctx, callee.text)) {
         const held = checkExpression(ctx, callee, scope, -1)
+        if (held !== T_ERROR && nullableReference(ctx, held)) {
+          return refuseNullableCall(ctx, callee, callee.text)
+        }
         return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, callee.text, scope)
       }
       refuseOnce(ctx, callee, outerFunctionMessage(ctx, callee.text))

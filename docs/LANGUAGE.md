@@ -196,9 +196,10 @@ crosses to C, then the exact rules.
   and `new Int32Array(n)` is `new Array<i32>(n)`), except that a receiver
   spelled with one has no `push` or `pop`, as in TypeScript
   ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)).
-- **Only a class, interface, array or string can be `null`.** A nullable
-  value allows only `=== null` / `!== null`, assignment, narrowing and a `??`
-  default ([Nullable types](#nullable-types)).
+- **Only a class, interface, array, string or function reference can be
+  `null`.** A nullable value allows only `=== null` / `!== null`, assignment,
+  narrowing and a `??` default ([Nullable types](#nullable-types)); a nullable
+  function reference is the tag `0` ([Function references](#function-references)).
 - **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
   against every other type ([Enums](#enums)).
 - **A function reports failure with a `Result`**, the only way it can; the
@@ -314,7 +315,7 @@ interned, and two types are the same type exactly when they are the same
   the operator only before a type on its own line, so a class a program names
   `keyof` is still a type everywhere else (`tests/parser/names-declarations.ts`).
   `T | null` (or `null | T`) is accepted when `T` is a class, interface,
-  array, or string; a scalar is
+  array, string or [function reference](#function-references) type; a scalar is
   `` `i32 | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value) ``
   (`tests/cases/reject_nullable_scalar`). A type may be **parenthesised**, and
   `(T | null)[]` is where it matters: `T | null[]` groups the other way and
@@ -667,10 +668,14 @@ the IR; only a computed count costs the mask
 
 ### Nullable types
 
-`T | null` is available for `T` a class, interface, array, or string
-(`tests/cases/mem_nullable`; [wp6-memory.md](wp6-memory.md#4-t--null)). It
-is the same LLVM pointer type as `T` with the constant `null` as one more
-value, so nothing is boxed; `null` takes its type from context.
+`T | null` is available for `T` a class, interface, array, string, or
+function reference (`tests/cases/mem_nullable`;
+[wp6-memory.md](wp6-memory.md#4-t--null)). For a pointer type it is the same
+LLVM pointer type as `T` with the constant `null` as one more
+value, so nothing is boxed; `null` takes its type from context. A
+[function reference](#function-references) may be nullable too: it is an
+`i32` tag, and `null` is tag 0, which names no function
+(`tests/cases/fnref_nullable`).
 
 - **Where `null` may appear**: an annotated initializer
   (`let p: Node | null = null`), a field initializer (`next: Node | null = null`),
@@ -3439,7 +3444,9 @@ new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
 A parameter of a top-level function may have a **function type** written
 inline in its annotation, and its argument is then a function the checker can
 name at the call: a top-level
-function written by name, or an arrow written right there. Such a function is
+function written by name, an arrow written right there, or a local holding a
+function reference, which the call wraps in an arrow that calls it
+([Function references](#function-references)). Such a function is
 a template, with or without type parameters, and **each callee it is given is
 an instantiation of its own**, exactly as each type-argument tuple is: one
 `define` per (template, type arguments, function arguments), whose body calls
@@ -3553,10 +3560,35 @@ export const main = (): i32 => {
   that result:
   `` Argument 1 of `apply`: `widen` is `(x: i32) => i64`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type ``
   (`tests/cases/reject_fnarg_mismatch`). The argument must be the name of a
-  top-level function or an arrow — a local, a member or any other expression is
-  refused (`reject_fnarg_not_name`), a function reference among them
-  (`` `h` is a function reference: `apply` takes a top-level function or an arrow named at the call ``,
-  NL2734, `tests/wordings/nl2734_fnref_to_function_parameter`), a generic function names no one function
+  top-level function, an arrow, or a local that holds a
+  [function reference](#function-references) (`tests/cases/fnref_arg`): the
+  call passes an arrow that captures the local by value, so the callee calls
+  the function that was passed even if it reassigns where that came from
+  (`fnref_arg_reassign`). An arrow passed there may call a reference it
+  captures, narrowed first if it is nullable (`fnref_arg_capture`,
+  `fnref_arg_capture_param`). A field or element would be read again at
+  each call the callee makes, where JavaScript reads it once, so it is
+  refused, `ops[next(b)]` and `b.op` alike:
+  `` `ops[next(b)]` is read again at each call `twice` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const` ``
+  (NL2759, `reject_fnref_arg_effect`, `reject_fnref_arg_field`,
+  `reject_fnref_arg_element_nullable`). A nullable local is passed once a
+  test has narrowed it:
+  `` `h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it ``
+  (NL2760, `tests/wordings/nl2760_fnarg_nullable_reference`). A local that a
+  later argument of the same call assigns is refused, since the call reads it
+  after its arguments where JavaScript reads it before them:
+  `` `h` is assigned by a later argument of `apply`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const` ``
+  (NL2761, `reject_fnarg_ref_assigned_later`). A reference of
+  another signature is refused as any other function argument is (NL2340,
+  `tests/wordings/nl2340_fnarg_reference_arity`); any
+  other value is refused and named by its type,
+  `` `n` is `i32`, which is not a function `` (`reject_fnarg_not_name`). The
+  builtins that check the body they are handed — `parallelMap`,
+  `parallelMapInto`, `parallelReduce`, a scope's `spawn`, `expose`,
+  `exposeWith`, `region` and `enterWith` — take only a function or an arrow
+  named at the call, so a reference there is
+  `` `h` is a function reference: `parallelMap` takes a top-level function or an arrow named at the call ``
+  (NL2734, `tests/wordings/nl2734_fnref_to_function_parameter`). A generic function names no one function
   and is refused with the arrow to write instead (`reject_fnarg_generic_name`),
   and an arrow takes exactly its type's parameters (`reject_fnarg_arity`). An
   unannotated arrow parameter whose type no value argument binds
@@ -3593,7 +3625,8 @@ export const main = (): i32 => {
 ### Function references
 
 A name bound to a top-level function, in either spelling, written anywhere but
-a call's callee or a function argument is a **function reference**: a value
+a call's callee or a function argument is a **function reference**
+(a local holding one may itself be passed as a function argument, below): a value
 of the function's type, `(x: i32) => i32`. A function type names a reference
 everywhere but inline on a parameter of a top-level function
 ([Function parameters](#function-parameters)): on a local, a field, an array
@@ -3634,7 +3667,7 @@ export const main = (): void => {
   - `` `abs` is declared in C: a function reference names a function this program defines ``
     (NL2728, `reject_fnref_ffi`);
   - `` `sum` has a rest parameter: a function reference names a function whose every parameter the caller passes ``
-    (NL2729, `reject_fnref_rest`), and a written function type with a rest,
+    (NL2729, `reject_fnref_rest`; a defaulted parameter the same, `nl2729_fnref_default`), and a written function type with a rest,
     optional or defaulted parameter,
     `` `(x: i32, y?: i32) => i32` has an optional parameter: a function reference names a function whose every parameter the caller passes ``
     (NL2729, `reject_fnref_type_optional`, `reject_fnref_type_rest`);
@@ -3654,14 +3687,24 @@ export const main = (): void => {
     `` an arrow in value position is not yet a function reference: declare it as a top-level function and name it ``
     (NL2336, `reject_fnarg_arrow_value`).
 - **Where a reference goes.** It is held in a local, a field (of a class or an
-  interface), an array element or a return value, and passed as an argument
-  to a parameter typed through an alias, of a function, a method or a
-  constructor (`tests/cases/fnref_field`, `fnref_array`, `fnref_stores`,
-  `fnref_generic`). A reference has no zero value: a local is initialised
+  interface), an array element, a `Map` value or a return value, and passed as
+  an argument to a parameter typed through an alias, of a function, a method
+  or a constructor (`tests/cases/fnref_field`, `fnref_array`, `fnref_stores`,
+  `fnref_generic`, `fnref_map`), or to an inline function-typed parameter
+  ([Function parameters](#function-parameters), `fnref_arg`): that call
+  passes an arrow that calls the reference, so the callee is instantiated for
+  the call and calls through the dispatcher of the argument's place. A `Map`
+  may hold an array of references or a nullable of either as its value
+  (`fnref_map_array`, `fnref_map_nullable`); `??` on a nullable reference
+  tests it against `null`, tag 0 (`fnref_nullable_coalesce`); a `Map` key may not be a reference,
+  `` `(i32) => i32` cannot be the key type of `Map<(i32) => i32, i32>` ``
+  (`reject_fnref_map_key`). A reference has no zero value: a local is initialised
   where it is declared (`reject_fnarg_local`), and
   `new Array<(i32) => i32>(n)` is
   `` `new Array<(i32) => i32>(n)` would zero-fill with 0, which names no function; build it with `[]` and `push` instead ``
-  (NL2730, `reject_fnref_zero_fill`). For the same reason an array of
+  (NL2730, `reject_fnref_zero_fill`); `new Array<F | null>(n)` fills with
+  `null` and is allowed, except as module storage, which holds no `| null`
+  (NL2686, `reject_fnref_storage_nullable`). For the same reason an array of
   references has no `fill`, `unshift` or `splice`: `fill` is refused as a
   byte copy (`reject_fnref_row_fill`), the other two as an unknown method
   (`reject_fnref_row_unshift`, `reject_fnref_row_splice`). A module constant may not hold one
@@ -3673,13 +3716,28 @@ export const main = (): void => {
   name the same function (`fnref_eq`). Nothing else: printing it, putting it in
   a template string or any other use is
   `` `f` is a function reference: it can be called, compared, stored and passed, nothing else ``
-  (NL2737, `reject_fnref_print`); `jsonEncode` refuses a type that holds one
+  (NL2737, `reject_fnref_print`, and as `JSON.stringify`'s argument,
+  `reject_fnref_stringify`; a field, an element or a nullable reference
+  alike, `reject_fnref_stringify_place`); `jsonEncode` refuses a type that holds one
   (`` `jsonEncode` cannot handle `Stage.op`, which is `(i32) => i32` ``,
-  `reject_fnref_json`); `<` and the other orderings take numbers only; and a
+  `reject_fnref_json`); `<` and the other orderings take numbers only (`reject_fnref_order`,
+  `reject_fnref_order_gt`), as `+` and the other arithmetic does
+  (`reject_fnref_arith`); and a
   function type inside another type prints in parentheses,
-  `((i32) => i32)[]` (`reject_fnref_type_name`). A reference is not passed
-  for an inline function parameter (NL2734,
-  [Function parameters](#function-parameters)).
+  `((i32) => i32)[]` (`reject_fnref_type_name`).
+- **A reference may be `null`.** `F | null` holds a function or nothing: a
+  field of that type starts `null`, `new Array<F | null>(n)` holds `n`
+  `null`s, and in memory `null` is tag 0, a tag no function has. A call goes
+  through it only once a test proves it holds a function, `h !== null` or an
+  early `return` on `h === null`; a call before one is
+  `` `h` may be `null`: a nullable function reference is called only after a test such as `h !== null` proves it holds a function ``
+  (NL2758, `reject_fnref_nullable_call`). A field is not narrowed: read it
+  into a `const` and test that (`reject_fnref_nullable_field_call`). A
+  number is no reference, so a nullable field initialised with one is
+  refused as a non-null one is (NL2013, `reject_fnref_nullable_field_literal`,
+  `reject_fnref_nullable_field_negative`). The
+  rules otherwise follow [Nullable types](#nullable-types)
+  (`tests/cases/fnref_nullable`).
 - **In memory a reference is an `i32` tag**, the function's position, from 1,
   among the program's functions of that signature: never an address. A call
   through it is a direct call of an internal **dispatcher**,
@@ -3688,7 +3746,7 @@ export const main = (): void => {
   the `default` arm; there is no function pointer and no indirect call
   (`tests/cases/fnref_field`). Each place — a local or a parameter, a
   function's return, a field, and the elements of every array of one reference
-  type — has a set, the functions that can flow into it, and a call dispatches
+  type (a `Map`'s values are such elements) — has a set, the functions that can flow into it, and a call dispatches
   over its place's set only: a set of one's dispatcher is one tail call with
   no `switch`, and an empty set's dispatcher traps (`fnref_empty_set`,
   `fnref_place_set`).
@@ -3697,7 +3755,19 @@ export const main = (): void => {
   that mixes members that keep a pointer argument with members that do not is
   refused,
   `` this call through `h` can reach `u3`, which keeps `p`, and `u0`, which does not, so every call here would allocate `p` in the arena; ... ``
-  (NL2736, `reject_fnref_escape_join`, `fnref_escape_join`), and a set past
+  (NL2736, `reject_fnref_escape_join`, `fnref_escape_join`). `Map.get`
+  reads the place a `Map`'s values share with the arrays of that type, so a
+  call through what it returns dispatches over the functions stored into any
+  of them (`fnref_map`, `fnref_place_set_map`); where one of those keeps a
+  pointer argument the others leave alone, that call is the mixed set above
+  and refused (`reject_fnref_place_set_map`). A `Result` arm is not a place,
+  so a reference directly in one — `Result<F, E>`, `Result<F | null, E>`,
+  `Result<T, F>`, including through a generic's type parameter — is refused,
+  `` `Result<(i32) => i32, string>` cannot hold a function reference in an arm: ... ``
+  (NL2762, `reject_fnref_result`, `reject_fnref_result_generic`); an array of references in an arm holds the
+  element place and compiles (`fnref_result_array`). An assignment used as a value,
+  `k((r = inc))`, stores into its target and hands the same function on
+  (`fnref_assign_value`). A set past
   eight members is warning NL9017, a `switch` where a direct call would not
   branch (`tests/wordings/nl9017_fnref_wide_set`). Under `--profile debug` the
   dispatcher first checks that the tag is in its set and panics with
@@ -3715,16 +3785,8 @@ export const main = (): void => {
   (`tests/link/fnref_cross_module`).
 
 Still refused: a closure (an arrow that captures), a reference to a method, a
-generic or an `async` function, a nullable reference (`F | null` is the
-nullable-scalar refusal of [Nullable types](#nullable-types)), a reference as
-a `Map` value (a `Map` value is not yet a place the compiler tracks, so
-`` `Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map ``,
-NL2738, `reject_fnref_map`; keep the references in an array and the index in
-the `Map`), and a reference passed for an inline function parameter (NL2734).
-An array of references, or a nullable, `Maybe` or `Result` holding one, is
-refused as a `Map` value the same way (`Map<string, Op[]>`,
-`Map<string, Op[] | null>`; `reject_fnref_map_array`,
-`reject_fnref_map_nullable`).
+generic or an `async` function, and a reference as a `Map` key
+(`reject_fnref_map_key`).
 
 ### Async functions: `async` and `await`
 
@@ -8414,9 +8476,9 @@ import { write } from "nish:io";
   with an import is `` `panic` is already declared in this module `` instead
   (`reject_nish_import_clash`).
 - A name keeps its kind. `argv`, `platform` and `arch` are values, and calling
-  one is refused (`reject_nish_property_call`); the functions are not values,
-  for the reason no function in this language is one
-  (`reject_nish_builtin_value`).
+  one is refused (`reject_nish_property_call`); the functions are not values:
+  a builtin is not a capture-free top-level function of this program, so it
+  cannot be a reference (`reject_nish_builtin_value`).
 - `exit` terminates control flow exactly as `process.exit` does, so a
   non-`void` function may end with it (`io_nish_rename`).
 - Diagnostics name the canonical builtin whatever the call site calls it:
@@ -15436,13 +15498,14 @@ messages are exact for the cases cited; other entries quote the checker
   `reject_fnarg_nested`)
 - **a function reference to a function it cannot hold, or used other than
   called, compared, stored or passed**: NL2725, NL2726, NL2727, NL2728,
-  NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736, NL2737, NL2738 and
-  NL2739 (`reject_fnref_generic`, `_async`, `_ffi`, `_rest`, `_zero_fill`,
-  `_host`, `_host_field`, `_no_strict`, `_escape_join`,
-  `_escape_join_transitive`, `_print`, `_json`, `_map`, `_map_array`, `reject_fnarg_alias`,
-  `reject_mutex_guard_helper_*`; [Function references](#function-references))
-- **a function argument that is not a function's name or an arrow, or does not
-  match**:
+  NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736, NL2737, NL2739,
+  NL2758, NL2759, NL2760, NL2761 and NL2762 (`reject_fnref_generic`, `_async`, `_ffi`,
+  `_rest`, `_zero_fill`, `_host`, `_host_field`, `_no_strict`, `_escape_join`,
+  `_escape_join_transitive`, `_print`, `_json`, `_map_key`, `_nullable_call`,
+  `_arg_effect`, `_arg_field`, `_arg_element_nullable`, `_result`, `_result_generic`, `reject_fnarg_alias`,
+  `reject_fnarg_ref_assigned_later`, `reject_mutex_guard_helper_*`; [Function references](#function-references))
+- **a function argument that is not a function's name, an arrow or a local
+  holding a reference, or does not match**:
   `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... ``
   / `` ...; a function argument must have exactly its parameter's type ``
   (`reject_fnarg_not_name`, `reject_fnarg_generic_name`,

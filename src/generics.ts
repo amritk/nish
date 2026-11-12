@@ -55,6 +55,7 @@ import {
   CAPTURE_PARALLEL,
   CAPTURE_TASK,
   CAPTURE_REGION,
+  assignsName,
   capturesNothing,
   callLetCaptureMessage,
   callThisCaptureMessage,
@@ -137,6 +138,7 @@ import {
   N_TYPE_UNION,
   N_UNARY,
   Node,
+  FLAG_REFERENCE_ARROW,
 } from "./nodes"
 import {
   CheckedProgram,
@@ -201,9 +203,9 @@ export const isCollectionTemplate = (template: StructTemplateInfo): boolean =>
  * identity, and an array, a nullable type and a `Result` wait for a program
  * that needs one. A value is stored as it is, so it is anything but `void` and
  * an interface, whose record would be copied in rather than shared. A function
- * reference, or an array, nullable, maybe or `Result` holding one, is refused
- * as a value until a `Map` value is a place the reference pass tracks (WP51
- * stage 2); as a key it fails the key rule.
+ * reference, or an array or nullable of one, is a value like any other: the
+ * reference pass tracks it as the element place of its type (WP51 stage 2).
+ * As a key it fails the key rule.
  */
 const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string => {
   if (args.length !== template.typeParams.length || args.length === 0) {
@@ -222,22 +224,6 @@ const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateIn
     return ""
   }
   const value = args[1]
-  // An array, a nullable, a maybe or a `Result` of references is refused with
-  // them: a value the map hands out is a place the place pass does not
-  // follow, whatever the reference sits in.
-  let held = value
-  while (
-    held >= 0 &&
-    (table.isArray(held) || table.isNullable(held) || table.isMaybe(held) || table.isResult(held))
-  ) {
-    held = table.refOf(held)
-  }
-  if (held >= 0 && table.isFnRef(held)) {
-    return (
-      `\`${shown}\` cannot hold a function reference as its value: a \`Map\` value is not yet a place whose functions ` +
-      "the compiler tracks; keep the references in an array and store the index in the map"
-    )
-  }
   if (value === T_VOID || isInterfaceType(ctx, value)) {
     return (
       `\`${table.typeName(value)}\` cannot be the value type of \`${shown}\`: a value is stored in the table as it is, ` +
@@ -471,7 +457,7 @@ const containsType = (ctx: CheckContext, inner: i32, outer: i32): boolean => {
  */
 const growingArgument = (ctx: CheckContext, previous: i32[], args: i32[]): i32 => {
   let i = 0
-  while (i < args.length) {
+  while (i < args.length && i < previous.length) {
     if (previous[i] !== args[i] && containsType(ctx, previous[i], args[i])) {
       return i
     }
@@ -2046,6 +2032,16 @@ const mentionsUnbound = (annotation: Node, names: StringSet, bindings: StringMap
 }
 
 /**
+ * The refusal for a local passed for a function-typed parameter that holds no
+ * function reference: it names the local's type. A reference written in an
+ * arrow, outside the arrow's own scope, is a capture an arrow cannot make.
+ */
+const notFunctionLocal = (ctx: CheckContext, lead: string, name: string, type: i32): string =>
+  ctx.table.isFnRef(ctx.table.stripNull(type))
+    ? nestedCaptureMessage(name)
+    : `${lead}; \`${name}\` is \`${ctx.table.typeName(type)}\`, which is not a function`
+
+/**
  * The function a call gives the function-typed parameter at `index`, or
  * `null` once it has been refused: the name of a top-level function (or of a
  * function parameter of the body being checked, which passes its callee on),
@@ -2076,6 +2072,58 @@ const resolveFunctionArgument = (
     return liftArrowArgument(ctx, call, template, index, written, names, bindings, scope)
   }
   const lead = `${argumentLead(call, template.sourceName, index)} must be the name of a top-level function or an arrow written at the call, because \`${param.children[0].text}\` is a function parameter, resolved at compile time`
+  // WP51 stage 2: a reference held in a local is passed as the arrow that
+  // calls it, so the template is instantiated once per call over the
+  // reference's place and calls it through a dispatcher. A field or element
+  // is refused: it would be read again at each call.
+  let inLocal: Local | null = null
+  if (written.kind === N_IDENT) {
+    inLocal = scope.lookup(written.text)
+  }
+  if (
+    (inLocal !== null && ctx.table.isFnRef(ctx.table.stripNull(inLocal.type))) ||
+    ((written.kind === N_MEMBER || written.kind === N_INDEX) && rootedInLocal(written, scope))
+  ) {
+    const type = inLocal !== null ? scope.typeOf(inLocal) : checkExpression(ctx, written, scope, -1)
+    if (type === T_ERROR) {
+      return null
+    }
+    // A runner that checks the body it is handed takes no reference at all
+    // (NL2734), whatever place the reference is read from.
+    const runsAtCall = captureMode(template) === CAPTURE_CALL && !promisesAnswer(fnType)
+    if (!runsAtCall && ctx.table.isFnRef(ctx.table.stripNull(type))) {
+      return referenceArgument(ctx, call, template, index, arg, written, type, names, bindings, scope)
+    }
+    if (inLocal === null && ctx.table.isFnRef(ctx.table.stripNull(type))) {
+      // The arrow the call is rewritten into reads the field or element at
+      // each call the callee makes, where JavaScript reads it once at the
+      // call, so a callee that stores into that place would see the change.
+      refuseOnce(
+        ctx,
+        arg,
+        `\`${ctx.source.text.slice(written.start, written.end)}\` is read again at each call \`${calleeSpelling(call, template)}\` makes, where JavaScript reads it once at the call: read it into a \`const\` first and pass the \`const\``
+      )
+      return null
+    }
+    if (ctx.table.isFnRef(type)) {
+      return referenceArgument(ctx, call, template, index, arg, written, type, names, bindings, scope)
+    }
+    if (inLocal !== null) {
+      // A nullable reference is called only once narrowed.
+      refuseOnce(
+        ctx,
+        arg,
+        `\`${written.text}\` may be \`null\`, and \`${calleeSpelling(call, template)}\` calls it: pass it once a test such as \`${written.text} !== null\` has narrowed it`
+      )
+      return null
+    }
+    refuseOnce(
+      ctx,
+      arg,
+      `${lead}; \`${ctx.source.text.slice(written.start, written.end)}\` is \`${ctx.table.typeName(type)}\`, which is not a function`
+    )
+    return null
+  }
   if (written.kind !== N_IDENT) {
     refuseOnce(
       ctx,
@@ -2087,21 +2135,16 @@ const resolveFunctionArgument = (
   const name = written.text
   const inScope = scope.lookup(name)
   if (inScope !== null) {
-    // WP51 S1: a reference is a value, and a function parameter takes a
-    // callee; stage 2 instantiates the template over a reference's set.
-    refuseOnce(
-      ctx,
-      arg,
-      ctx.table.isFnRef(ctx.table.stripNull(inScope.type))
-        ? `\`${name}\` is a function reference: \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
-        : `${lead}; \`${name}\` is a local, and a local is never a function`
-    )
+    refuseOnce(ctx, arg, notFunctionLocal(ctx, lead, name, scope.typeOf(inScope)))
     return null
   }
   if (ctx.capturesOuter(name)) {
-    const local = ctx.arrowOuterScopes.length > 0 && ctx.arrowOuterScopes[0].lookup(name) !== null
-    if (local && !capturesNothing(ctx.arrowMode())) {
-      refuseOnce(ctx, arg, `${lead}; \`${name}\` is a local, and a local is never a function`)
+    let outer: Local | null = null
+    if (ctx.arrowOuterScopes.length > 0) {
+      outer = ctx.arrowOuterScopes[0].lookup(name)
+    }
+    if (outer !== null && !capturesNothing(ctx.arrowMode())) {
+      refuseOnce(ctx, arg, notFunctionLocal(ctx, lead, name, ctx.arrowOuterScopes[0].typeOf(outer)))
     } else {
       refuseOnce(ctx, arg, outerFunctionMessage(ctx, name))
     }
@@ -2168,6 +2211,140 @@ const resolveFunctionArgument = (
   }
   unifyAnnotation(ctx, answerAnnotation(fnType), fn.returnType, names, bindings)
   return fn
+}
+
+/**
+ * Whether the field or element read `expr` starts from a local or `this`, so
+ * it is a place that may hold a function reference. A member of a builtin
+ * namespace or a module, such as `Math.abs`, starts from neither and is left
+ * to the refusal of a function argument that names no function (NL2339).
+ */
+const rootedInLocal = (expr: Node, scope: Scope): boolean => {
+  let root = expr
+  while (root.kind === N_MEMBER || root.kind === N_INDEX || root.kind === N_PAREN) {
+    root = root.children[0]
+  }
+  return root.kind === N_THIS || (root.kind === N_IDENT && scope.lookup(root.text) !== null)
+}
+
+/** Whether an argument of `call` after `arg` assigns the local `name`. */
+const laterArgumentAssigns = (call: Node, arg: Node, name: string): boolean => {
+  for (const child of call.children) {
+    if (child.kind === N_LIST) {
+      let after = false
+      for (const each of child.children) {
+        if (after && assignsName(each, name)) {
+          return true
+        }
+        if (each === arg) {
+          after = true
+        }
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * WP51 stage 2: the reference `written` (a local of reference type `type`) given for the function parameter at `index`,
+ * rewritten in the call into the arrow `($a0, ...) => written($a0, ...)` and
+ * lifted as an arrow written there is. The arrow captures the local by value
+ * at the call; a field or element is refused before this, since the arrow
+ * would read it again at each call the callee makes. Each call through
+ * the reference is a call through a reference, resolved over its place's set
+ * like any other (`src/fnref-places.ts`). A form that runs its function away
+ * from the call — on another thread, in a task, a region or over a secret —
+ * takes no reference: its arrow captures by its own rules, and a reference
+ * call is no part of them (NL2734).
+ */
+const referenceArgument = (
+  ctx: CheckContext,
+  call: Node,
+  template: TemplateInfo,
+  index: i32,
+  arg: Node,
+  written: Node,
+  type: i32,
+  names: StringSet,
+  bindings: StringMap,
+  scope: Scope
+): FunctionSig | null => {
+  const param = template.decl.children[1].children[index]
+  const fnType = unwrapTypeParens(param.children[1])
+  const shown = ctx.source.text.slice(written.start, written.end)
+  if (captureMode(template) !== CAPTURE_CALL || promisesAnswer(fnType)) {
+    refuseOnce(
+      ctx,
+      arg,
+      `\`${shown}\` is a function reference: \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
+    )
+    return null
+  }
+  if (written.kind === N_IDENT && laterArgumentAssigns(call, arg, written.text)) {
+    // The arrow's capture of the local is read once every argument has run,
+    // where JavaScript reads the argument at its own position.
+    refuseOnce(
+      ctx,
+      arg,
+      `\`${shown}\` is assigned by a later argument of \`${calleeSpelling(call, template)}\`, and the call reads it after its arguments where JavaScript reads it before them: read it into a \`const\` first and pass the \`const\``
+    )
+    return null
+  }
+  const wanted = fnType.children[0].children
+  const params = ctx.table.fnRefParamsOf(type)
+  if (params.length !== wanted.length) {
+    refuseOnce(
+      ctx,
+      arg,
+      `${argumentLead(call, template.sourceName, index)}: \`${shown}\` is \`${ctx.table.typeName(type)}\`, ` +
+        `and \`${param.children[0].text}\` is \`${template.home.textOf(fnType)}\`; a function argument must have exactly its parameter's type`
+    )
+    return null
+  }
+  let k = 0
+  while (k < wanted.length && k < params.length) {
+    unifyAnnotation(ctx, wanted[k].children[1], params[k], names, bindings)
+    k = k + 1
+  }
+  unifyAnnotation(ctx, answerAnnotation(fnType), ctx.table.fnRefResultOf(type), names, bindings)
+  const program = ctx.program
+  const none: Node[] = []
+  const formals: Node[] = []
+  const actuals: Node[] = []
+  k = 0
+  while (k < wanted.length) {
+    const name = program.newNode(N_IDENT, written.start, written.end, `$a${k}`, none)
+    const blank = program.newNode(N_EMPTY, written.start, written.end, "", none)
+    formals.push(program.newNode(N_PARAM, written.start, written.end, "", [name, blank]))
+    actuals.push(program.newNode(N_IDENT, written.start, written.end, `$a${k}`, none))
+    k = k + 1
+  }
+  const list = program.newNode(N_LIST, written.start, written.end, "", actuals)
+  const body = program.newNode(N_CALL, written.start, written.end, "", [written, list])
+  const arrow = program.newNode(N_ARROW, arg.start, arg.end, "", [
+    program.newNode(N_EMPTY, arg.start, arg.start, "", none),
+    program.newNode(N_LIST, arg.start, arg.end, "", formals),
+    program.newNode(N_EMPTY, arg.end, arg.end, "", none),
+    body,
+    program.newNode(N_LIST, arg.end, arg.end, "", none),
+  ])
+  arrow.flags = FLAG_REFERENCE_ARROW
+  program.grewNodes()
+  for (const child of call.children) {
+    if (child.kind === N_LIST) {
+      let at = 0
+      while (at < child.children.length) {
+        if (child.children[at] === arg) {
+          child.children[at] = arrow
+        }
+        at = at + 1
+      }
+    }
+  }
+  // The parents are linked again after checking, as for a gathered rest.
+  program.gathered = true
+  program.nodeTypes[arrow.id] = T_VOID
+  return liftArrowArgument(ctx, call, template, index, arrow, names, bindings, scope)
 }
 
 /**
@@ -2577,11 +2754,14 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
   }
   // A scope's task is told about itself: it runs when the scope joins.
   const task = mode === CAPTURE_TASK
+  // The arrow written for a reference argument reads the reference as the call
+  // passes it, so a `let` it names is read once, at the call.
+  const passed = ctx.arrowFns.length > 0 && (ctx.arrowFns[0].decl.flags & FLAG_REFERENCE_ARROW) !== 0
   if (name === "this") {
     refuseOnce(ctx, expr, thisCaptureMessageFor(mode))
     return null
   }
-  if (outer.mutable) {
+  if (outer.mutable && !passed) {
     let message = letCaptureMessage(name)
     if (task) {
       message = taskLetCaptureMessage(name)

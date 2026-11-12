@@ -7031,6 +7031,9 @@ export const paramAttributes = (
     }
     return attrs
   }
+  if (kind === K_NULLABLE && table.isFnRef(table.refOf(type))) {
+    return attrs // WP51 stage 2: an `i32` tag, so no pointer fact applies
+  }
   if (kind === K_NULLABLE) {
     // WP6: no `nonnull` / `dereferenceable`; the rest as for the pointee kind.
     if (table.refOf(type) === T_STRING) {
@@ -7103,7 +7106,7 @@ export const returnAttributes = (
     }
     return attrs
   }
-  if (kind === K_NULLABLE) {
+  if (kind === K_NULLABLE && !table.isFnRef(table.refOf(type))) {
     attrs.push(`align ${align}`) // WP6: may be null
   }
   return attrs
