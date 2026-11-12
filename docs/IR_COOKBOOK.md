@@ -15351,6 +15351,149 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-struct -->
 
+### `readStruct`: a C-owned struct, copied out
+
+`readStruct(p)` from `nish:unsafe` (WP27 S4.2) is the way back from a struct
+C owns: `localeconv()` answers the address of a `struct lconv` it overwrites
+at the next call. The layout comes from context, here `current`'s return type.
+The call lowers to the allocation `new` makes in the arena,
+`nish_alloc_struct` of the struct's size, and one `llvm.memcpy` of that many
+bytes from C's address, padding included. The destination is the arena's
+8-byte-aligned block; the source is read at `align 1`, because C promised
+the struct and not its address's alignment. After the copy nothing of the
+result points into C's memory but the `CPtr` fields themselves, which are C's
+pointers still.
+
+Before the allocation the pointer is tested for `NULL`: a `declare function`
+declared to answer `CPtr` may still answer one, so `icmp eq` branches to an
+`ffi-null` panic that names the layout. There is no size test: the compiler
+cannot know how many bytes C's pointer covers. The copy is
+a fresh allocation of `current`, so returning it keeps `current`'s arena
+alive for the caller, as any returned `new` does.
+
+<!-- cookbook:begin decl-ffi-read-struct -->
+```ts
+import { readStruct } from "nish:unsafe"
+
+declare class Lconv {
+  decimalPoint: CPtr
+  thousandsSep: CPtr
+}
+declare function localeconv(): CPtr
+
+const current = (): Lconv => readStruct(localeconv())
+
+export const main = (): i32 => {
+  const lc = current()
+  return lc.decimalPoint === lc.thousandsSep ? 1 : 0
+}
+```
+
+```llvm
+%struct.Lconv = type { i8*, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"`readStruct` read a NULL pointer into a `Lconv`\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare i8* @localeconv()
+declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Lconv* @current() #0 {
+entry:
+  %0 = call i8* @localeconv()
+  %1 = icmp eq i8* %0, null
+  br i1 %1, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [48 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  %2 = call i8* @nish_alloc_struct(i64 16)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %2, i8* align 1 %0, i64 16, i1 false)
+  %3 = bitcast i8* %2 to %struct.Lconv*
+  ret %struct.Lconv* %3
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %lc.addr = alloca %struct.Lconv*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call %struct.Lconv* @current()
+  store %struct.Lconv* %0, %struct.Lconv** %lc.addr, align 8
+  %1 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
+  %2 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %1, i32 0, i32 0
+  %3 = load i8*, i8** %2, align 8
+  %4 = load %struct.Lconv*, %struct.Lconv** %lc.addr, align 8
+  %5 = getelementptr inbounds %struct.Lconv, %struct.Lconv* %4, i32 0, i32 1
+  %6 = load i8*, i8** %5, align 8
+  %7 = icmp eq i8* %3, %6
+  br i1 %7, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %8 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %8
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end decl-ffi-read-struct -->
+
 ### Numeric `enum`
 
 An enum is a **distinct type with `i32` representation**, so the type system

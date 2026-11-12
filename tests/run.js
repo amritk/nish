@@ -14820,6 +14820,12 @@ if (dealtHere("arrayChecks")) {
           )
         : []
     )
+    // `nish_alloc_struct` is not declared but defined, `internal`, in each module
+    // that calls it (`src/runtime.ts`), so `--runtime-decls` has no line for it;
+    // its `define` line is its table entry, read the same way.
+    for (const m of selfSource("runtime.ts").matchAll(/`define internal (.*?@(nish_alloc_struct)\()/g)) {
+      runtimeByName.set(m[2], { name: m[2], signature: `declare ${m[1]}` })
+    }
     check(
       `--runtime-decls prints the runtime table (${runtimeByName.size} declarations)`,
       decls.status === 0 && runtimeByName.size > 0,
@@ -14949,6 +14955,45 @@ if (dealtHere("arrayChecks")) {
           r.status === 0 &&
             body.includes("@nish.ffi.str(") &&
             body.includes("@nish_str_concat(") &&
+            !body.includes("nish_arena_release"),
+          `${probeSrc}\n${ir}`
+        )
+        continue
+      }
+      // `readStruct` takes a `CPtr` and answers the `declare class` its context
+      // names, which an exported function may not return, so its probe is an
+      // internal function that `main` calls, written out.
+      if (builtin === "readStruct") {
+        const probeSrc = [
+          'import { readStruct } from "nish:unsafe";',
+          "declare class Lconv {",
+          "  decimalPoint: CPtr",
+          "  thousandsSep: CPtr",
+          "}",
+          "declare function localeconv(): CPtr;",
+          "const probe = (arg0: string): Lconv => {",
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
+          "  const label = `probe ${arg0}`;",
+          "  console.log(label);",
+          "  return readStruct(localeconv());",
+          "};",
+          "export function main(): i32 {",
+          '  const lc = probe("x");',
+          "  return lc.decimalPoint === lc.thousandsSep ? 1 : 0;",
+          "}",
+          "",
+        ].join("\n")
+        const probeTs = path.join(buildDir, "alloc_probe_readStruct.ts")
+        const probeLl = path.join(buildDir, "alloc_probe_readStruct.ll")
+        fs.writeFileSync(probeTs, probeSrc)
+        const r = spawnSync(NISH, [probeTs, "-o", probeLl], { cwd: root, encoding: "utf8" })
+        const ir = r.status === 0 ? fs.readFileSync(probeLl, "utf8") : r.stderr
+        const body = ir.match(/^define [^\n]*@probe\([^\n]*\{\n([\s\S]*?)^\}/m)?.[1] ?? ""
+        check(
+          "readStruct: a function returning its result keeps the arena (no nish_arena_release before the ret)",
+          r.status === 0 &&
+            body.includes("@nish_alloc_struct(") &&
+            body.includes("@llvm.memcpy.") &&
             !body.includes("nish_arena_release"),
           `${probeSrc}\n${ir}`
         )
@@ -36212,7 +36257,7 @@ if (fs.existsSync(threadsLl)) {
 // A call to a `nish:unsafe` export carries `unsafe` (`builtinCapability`), and
 // the bit travels through callers, modules and packages like every other: here
 // read off `--emit-capabilities` for a direct call, a call two frames up, a
-// module with no unsafe call, each of the six exports, and a dependency that
+// module with no unsafe call, each of the seven exports, and a dependency that
 // imports `nish:unsafe` when the entry package does not.
 if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
   const unsafeDir = path.join(buildDir, "caps-unsafe")
@@ -36229,15 +36274,18 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       'import { firstTwice } from "./mid";\nimport { sum } from "./pure";\n\n' +
       "export const main = (): i32 => firstTwice([3, 4]) + sum([1, 2]);\n",
     "each.ts":
-      "import { readCString, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
+      "import { readCString, readStruct, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
       '"nish:unsafe";\n\n' +
+      "declare class Rec {\n  n: i32\n}\n\n" +
       "declare function cbuf(): CPtr | null;\n\n" +
       "export const get = (xs: i32[]): i32 => uncheckedGet(xs, 0);\n" +
       "export const set = (xs: i32[]): void => {\n  uncheckedSet(xs, 0, 1);\n};\n" +
       "export const add = (a: i32): i32 => wrappingAdd(a, 1);\n" +
       "export const sub = (a: i32): i32 => wrappingSub(a, 1);\n" +
       "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
-      'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n',
+      'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n' +
+      "export const rec = (): i32 => {\n  const p = cbuf();\n  if (p === null) {\n    return 0;\n  }\n" +
+      "  const r: Rec = readStruct(p);\n  return r.n;\n};\n",
     // The root grants `pkg_fast` its `unsafe` (docs/wp40-dependency-capabilities.md).
     "package.json":
       '{ "name": "caps-unsafe", "private": true, "nish": { "capabilities": { "dependencies": { "pkg_fast": ["unsafe"] } } } }\n',
@@ -36315,10 +36363,11 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     ["sub", "wrappingSub"],
     ["mul", "wrappingMul"],
     ["str", "readCString"],
+    ["rec", "readStruct"],
   ].filter(([fn, callee]) => chainOf(fnOf(each.report, "each.ts", fn)) === `${fn}->${callee}`)
   check(
-    "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call",
-    exportsSeen.length === 6,
+    "capabilities: each of the seven `nish:unsafe` exports carries `unsafe` at its call",
+    exportsSeen.length === 7,
     `${exportsSeen.map(([, callee]) => callee).join(", ")}\n${shown(each.r)}`
   )
 

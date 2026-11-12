@@ -1,0 +1,3 @@
+`readStruct(p)` needs a contextual `declare class` type to copy into (annotate it, e.g. `const s: Stat = readStruct(p)`)
+`readStruct(p)` copies into a `declare class` layout, and Plain is not one
+`readStruct(p)` copies into a `declare class` layout, and i32 is not one
