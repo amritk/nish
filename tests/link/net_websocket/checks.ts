@@ -198,6 +198,21 @@ const byteAtATime = (data: u8[]): string => {
   return log.join("\n");
 };
 
+/** Whether `data` fed a byte at a time to a server's decoder reads as it does fed whole. */
+const sameByteAtATime = (data: u8[]): boolean =>
+  `${byteAtATime(data)}\nneeds more` === transcript(data, toI32(data.length), true);
+
+/** The size of the message buffer once a client's decoder has read `hex`, a text frame still arriving. */
+const roomAfter = (hex: string): i32 => {
+  const maxMessage: i32 = 100000;
+  const d: WsDecoder = new WsDecoder(false, maxMessage);
+  const data: u8[] = fromHex(hex);
+  const start: i32 = 0;
+  d.feed(data, start, toI32(data.length));
+  const log: string[] = [];
+  return drain(d, log) === WS_NEED_MORE ? toI32(d.message.length) : 2147483647;
+};
+
 /** `n` copies of `b` as hex. */
 const repeatHex = (b: string, n: i32): string => {
   const parts: string[] = [];
@@ -766,6 +781,18 @@ export const websocketChecks = (): i32 => {
     byteAtATime(fromHex("018237fa213d7f9f 808337fa213d5b964e")),
     'text "Hello"'
   );
+  // A four-byte character split across reads, and across the growth of the
+  // message buffer past its first 256 bytes, reads as it does whole.
+  t.eqBool("a four-byte character fed a byte at a time", sameByteAtATime(fromHex("818637fa213d560ab1b0bf98")), true);
+  t.eqBool(
+    "a four-byte character across the buffer's growth, fed a byte at a time",
+    sameByteAtATime(
+      fromHex(`81fe011837fa213d${repeatHex("569b405c", 63)}569b40cda777a95c${repeatHex("569b405c", 5)}`)
+    ),
+    true
+  );
+  // The buffer grows with the bytes received, not the length a header declares.
+  t.eqBool("a 65536-byte text frame with one byte arrived holds a small buffer", roomAfter("817f0000000000010000 61") <= 256, true);
   t.eqI32("refused with 1009: a 301-byte message", refusalOf(`827e012d${repeatHex("00", 301)}`, false), WS_CLOSE_TOO_BIG);
   t.eqI32("refused with 1009 from the header alone", refusalOf("827e012d", false), WS_CLOSE_TOO_BIG);
   t.eqI32(

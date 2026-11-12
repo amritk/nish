@@ -164,6 +164,9 @@ PASS  refused with 1007 inside a continuation still arriving
 PASS  a valid prefix of a frame still arriving is not refused
 PASS  masked text fed a byte at a time
 PASS  masked text fragments fed a byte at a time
+PASS  a four-byte character fed a byte at a time
+PASS  a four-byte character across the buffer's growth, fed a byte at a time
+PASS  a 65536-byte text frame with one byte arrived holds a small buffer
 PASS  refused with 1009: a 301-byte message
 PASS  refused with 1009 from the header alone
 PASS  refused with 1009: fragments that pass the limit together
@@ -192,4 +195,4 @@ PASS  WS_MAX_CONTROL is 125 (§5.5)
 PASS  WS_OP_CLOSE is 8 (§5.2)
 PASS  WS_MESSAGE follows WS_NEED_MORE
 PASS  WS_CLOSE_TOO_BIG is 1009 (§7.4.1)
-websocket: 194 passed, 0 failed, 0 skipped
+websocket: 197 passed, 0 failed, 0 skipped

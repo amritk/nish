@@ -87,7 +87,7 @@ the record that found it. The notes below the table name each such finding.
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
-| **Total** ⁸ | | | **3 / 15 / 81 / 172** | **0 / 1 / 3 / 42** |
+| **Total** ⁸ | | | **3 / 15 / 81 / 174** | **0 / 1 / 3 / 42** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -186,7 +186,10 @@ the record that found it. The notes below the table name each such finding.
    (Medium), the arena a header block left, by #473, and H2-4 (Medium), the
    resets the server sent for the client, by #805; each is counted as a fixed
    Medium. H1-3 is open: its record says "accepted for now", but it names
-   the fix that closes it, so it is counted open and not accepted.
+   the fix that closes it, so it is counted open and not accepted. H1-4
+   (Low), the bound on when `expire` walks every slot, and H1-6 (Low), the UTF-8
+   check that waited for a whole WebSocket frame, are fixed and counted as
+   fixed Lows; H1-2 is open.
 8. A finding that two records both list is counted in each record, except
    K1-6, which is counted once, under K1: CG-9 and RT-7, CLI-6 and RT-4, and
    H3-1 and WT-1. The Total therefore counts those twins twice.

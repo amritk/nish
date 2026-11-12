@@ -52,8 +52,10 @@
  *   frame with a one-byte payload, or a status code that may not be sent
  *   (§5.5.1, §7.4).
  * - 1007: a text message, or a close reason, that is not UTF-8 (§8.1). A text
- *   message is checked as each fragment arrives, so a bad byte is refused
- *   without waiting for the rest.
+ *   message is checked as its bytes arrive, inside a frame as well as across
+ *   fragments, so a bad byte is refused without waiting for the rest of the
+ *   frame. The message buffer grows with the bytes received, not the length
+ *   a frame header declares.
  * - 1009: a message longer than `maxMessage` (§7.4.1), refused from the frame
  *   header that would pass it, before its payload arrives.
  *
@@ -436,7 +438,10 @@ const websocketUnmaskInto = (
   }
 }
 
-/** Grows `d.message` so that `need` bytes fit, keeping its live bytes. */
+/**
+ * Grows `d.message` so that `need` bytes fit, keeping its live bytes: the
+ * message so far and the part of a text frame already checked.
+ */
 const websocketMessageRoom = (d: WsDecoder, need: i32): void => {
   const old: u8[] = d.message
   let size: i32 = toI32(old.length)
@@ -447,7 +452,8 @@ const websocketMessageRoom = (d: WsDecoder, need: i32): void => {
     size = size > 1073741823 ? 2147483647 : size * 2
   }
   const grown: u8[] = new Array<u8>(size)
-  for (let k: i32 = 0; k < d.messageLen && k < toI32(grown.length) && k < toI32(old.length); k += 1) {
+  const live: i32 = d.messageLen + d.frameChecked
+  for (let k: i32 = 0; k < live && k < toI32(grown.length) && k < toI32(old.length); k += 1) {
     grown[k] = old[k]
   }
   d.message = grown
@@ -592,7 +598,9 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
       websocketUtf8Reset(d.utf8)
     }
     if (arrived > done) {
-      websocketMessageRoom(d, from + length)
+      // Room for the bytes that have arrived, not the length the header
+      // declares: a peer that declares much and sends little costs little.
+      websocketMessageRoom(d, from + arrived)
       websocketUnmaskInto(buf, payloadAt + done, arrived - done, masked, maskAt, done, d.message, from + done)
       d.frameChecked = arrived
       if (!websocketUtf8Run(d.utf8, d.message, from + done, arrived - done)) {

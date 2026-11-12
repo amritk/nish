@@ -5329,9 +5329,10 @@ function websocketMessageRoom(d: WsDecoder, need: i32): void -> @nish.websocketM
   calls: nish_panic nish_panic_overflow
   pointer d: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -12:9 old: u8[] (const)
-  local -11:7 size: i32 (let)
-  local -4:9 grown: u8[] (const)
+  local -13:9 old: u8[] (const)
+  local -12:7 size: i32 (let)
+  local -5:9 grown: u8[] (const)
+  local -4:9 live: i32 (const)
   local -3:12 k: i32 (let)
 function websocketReadClose(d: WsDecoder, len: i32): i32 -> @nish.websocketReadClose
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -5355,41 +5356,41 @@ function websocketFrameEvent(d: WsDecoder): i32 -> @nish.websocketFrameEvent
   calls: nish.websocketFail nish.websocketIsKnownOpcode nish.websocketMessageRoom nish.websocketReadClose nish.websocketUnmaskInto nish.websocketUtf8Reset nish.websocketUtf8Run nish_panic_index nish_panic_overflow
   pointer d: size=96 writesThrough=true captured=false passedTo=nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketFail#0 nish.websocketMessageRoom#0 nish.websocketFail#0 nish.websocketReadClose#0 nish.websocketMessageRoom#0 nish.websocketFail#0
   stackSites=0 stackLocals=0
-  local -100:9 buf: u8[] (const)
-  local -99:9 at: i32 (const)
-  local -98:9 ready: i32 (const)
-  local -94:9 b0: i32 (const)
-  local -93:9 b1: i32 (const)
-  local -92:9 fin: boolean (const)
-  local -91:9 opcode: i32 (const)
-  local -90:9 masked: boolean (const)
-  local -89:9 short: i32 (const)
-  local -87:7 extended: i32 (let)
-  local -81:9 headerLength: i32 (const)
-  callee -76:12 websocketFail -> @nish.websocketFail
-  local -74:9 control: boolean (const)
-  callee -73:8 websocketIsKnownOpcode -> @nish.websocketIsKnownOpcode
-  callee -72:12 websocketFail -> @nish.websocketFail
-  callee -69:12 websocketFail -> @nish.websocketFail
-  local -62:7 length: i32 (let)
-  callee -58:14 websocketFail -> @nish.websocketFail
-  callee -54:14 websocketFail -> @nish.websocketFail
-  local -50:9 high: i32 (let)
-  local -49:14 k: i32 (let)
-  callee -45:14 websocketFail -> @nish.websocketFail
-  callee -40:14 websocketFail -> @nish.websocketFail
-  callee -35:14 websocketFail -> @nish.websocketFail
-  callee -32:14 websocketFail -> @nish.websocketFail
-  callee -28:14 websocketFail -> @nish.websocketFail
-  callee -25:14 websocketFail -> @nish.websocketFail
-  callee -22:14 websocketFail -> @nish.websocketFail
-  local -19:9 payloadAt: i32 (const)
-  local -18:9 maskAt: i32 (const)
-  local -17:9 text: boolean (const)
-  local -11:11 arrived: i32 (const)
-  local -10:11 from: i32 (const)
-  local -9:11 done: i32 (const)
-  callee -5:7 websocketUtf8Reset -> @nish.websocketUtf8Reset
+  local -102:9 buf: u8[] (const)
+  local -101:9 at: i32 (const)
+  local -100:9 ready: i32 (const)
+  local -96:9 b0: i32 (const)
+  local -95:9 b1: i32 (const)
+  local -94:9 fin: boolean (const)
+  local -93:9 opcode: i32 (const)
+  local -92:9 masked: boolean (const)
+  local -91:9 short: i32 (const)
+  local -89:7 extended: i32 (let)
+  local -83:9 headerLength: i32 (const)
+  callee -78:12 websocketFail -> @nish.websocketFail
+  local -76:9 control: boolean (const)
+  callee -75:8 websocketIsKnownOpcode -> @nish.websocketIsKnownOpcode
+  callee -74:12 websocketFail -> @nish.websocketFail
+  callee -71:12 websocketFail -> @nish.websocketFail
+  local -64:7 length: i32 (let)
+  callee -60:14 websocketFail -> @nish.websocketFail
+  callee -56:14 websocketFail -> @nish.websocketFail
+  local -52:9 high: i32 (let)
+  local -51:14 k: i32 (let)
+  callee -47:14 websocketFail -> @nish.websocketFail
+  callee -42:14 websocketFail -> @nish.websocketFail
+  callee -37:14 websocketFail -> @nish.websocketFail
+  callee -34:14 websocketFail -> @nish.websocketFail
+  callee -30:14 websocketFail -> @nish.websocketFail
+  callee -27:14 websocketFail -> @nish.websocketFail
+  callee -24:14 websocketFail -> @nish.websocketFail
+  local -21:9 payloadAt: i32 (const)
+  local -20:9 maskAt: i32 (const)
+  local -19:9 text: boolean (const)
+  local -13:11 arrived: i32 (const)
+  local -12:11 from: i32 (const)
+  local -11:11 done: i32 (const)
+  callee -7:7 websocketUtf8Reset -> @nish.websocketUtf8Reset
   callee -2:7 websocketMessageRoom -> @nish.websocketMessageRoom
   callee -1:7 websocketUnmaskInto -> @nish.websocketUnmaskInto
   callee +1:12 websocketUtf8Run -> @nish.websocketUtf8Run
