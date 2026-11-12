@@ -8808,6 +8808,19 @@ if (dealtHere("cryptoBench")) {
     markers.every((m) => /^[a-z-]+$/.test(m)),
     `markers: ${markers.join(", ")}`
   )
+  // The paired-rounds decision on run 43086306918's numbers: a mask that
+  // changed nothing passed its fourth set at 36 of 48 and 1.000x, the count's
+  // bound having covered two sets of the four two cases may take. Split over
+  // all four the count is 37, and a tie fails whatever the count; the real
+  // mask's lowest CI ratio, 1.029x, with 40 rounds still passes.
+  const { pairedProves, pairedWant } = await import("../bench/crypto/paired.mjs")
+  const want2 = pairedWant(2)
+  const tie = [36, 48].map((lost) => pairedProves(lost, want2, 1.0))
+  check(
+    "crypto-bench: the paired rounds fail CI's tie (36 of 48 at 1.000x over two cases) and pass the real mask's 40 at 1.029x",
+    want2 === 37 && tie.every((p) => !p) && !pairedProves(36, want2, 1.029) && pairedProves(40, want2, 1.029),
+    `want ${want2} of 48; 36 and 48 at 1.000x prove ${tie}; 36 at 1.029x ${pairedProves(36, want2, 1.029)}; 40 at 1.029x ${pairedProves(40, want2, 1.029)}`
+  )
   if (HAS_CLANG) {
     const families = fs
       .readdirSync(path.join(root, "bench", "crypto"))
@@ -10950,25 +10963,67 @@ if (dealtHere("fileServer")) {
     )
     // One fetch from a fresh server: the response head, the body's length and
     // SHA-256, and the server's VmHWM in kB once the body is in. The server is
-    // killed whatever happens, and the whole exchange has a deadline.
+    // killed whatever happens.
+    //
+    // The deadline is on progress, not on the whole exchange: the fetch fails
+    // once `FILE_SERVER_STALL_MS` pass with no byte while the reader is not
+    // pausing, and the clock restarts on every byte. A whole 64 MiB fetch
+    // takes 0.74 to 0.78 s on CI and its longest pause is 250 ms, so 20 s
+    // without a byte is a stall, not a slow runner. CI saw three of them, each
+    // the whole 60 s the old fixed deadline allowed, with the server alive and
+    // nothing to say which side had stopped. A stall now records where the
+    // fetch was (phase, bytes, ms since the last one), the server's scheduler
+    // state and kernel wait channel, and both ends' kernel queues from
+    // /proc/net/tcp: a full send queue with an empty receive queue is the
+    // reader, empty queues with the server asleep are a lost wake-up.
+    const FILE_SERVER_STALL_MS = 20_000
+    const tcpQueues = (port) => {
+      const hex = port.toString(16).toUpperCase().padStart(4, "0")
+      try {
+        return fs
+          .readFileSync("/proc/net/tcp", "utf8")
+          .split("\n")
+          .map((l) => l.trim().split(/\s+/))
+          .filter((f) => f.length > 4 && (f[1].endsWith(`:${hex}`) || f[2].endsWith(`:${hex}`)))
+          .map((f) => `${f[1]}->${f[2]} st ${f[3]} tx:rx ${f[4]}`)
+      } catch (e) {
+        return [String(e)]
+      }
+    }
+    const procLine = (pid, name) => {
+      try {
+        return fs.readFileSync(`/proc/${pid}/${name}`, "utf8").trim()
+      } catch (e) {
+        return String(e)
+      }
+    }
     const serveOnce = (file, method) =>
       new Promise((resolve) => {
-        const server = spawn(exe, [file, "0"], {
-          stdio: ["ignore", "pipe", "pipe"],
-          timeout: 90_000,
-          killSignal: "SIGKILL",
-        })
+        const server = spawn(exe, [file, "0"], { stdio: ["ignore", "pipe", "pipe"] })
         let out = ""
         let fetching = false
         let settled = false
+        // Where the fetch is, for a stall's detail; `paused` stops the clock.
+        const at = { phase: "start", got: 0, last: Date.now(), paused: false, port: 0 }
         const finish = (r) => {
           if (settled) return
           settled = true
-          clearTimeout(timer)
+          clearInterval(watch)
           server.kill("SIGKILL")
           resolve({ ...r, out })
         }
-        const timer = setTimeout(() => finish({ error: "timed out after 60 s" }), 60_000)
+        const watch = setInterval(() => {
+          const idle = Date.now() - at.last
+          if (at.paused || idle < FILE_SERVER_STALL_MS) return
+          finish({
+            error: `no byte for ${idle} ms`,
+            phase: at.phase,
+            got: at.got,
+            server: procLine(server.pid, "stat").replace(/^.*\) /, "").split(" ")[0],
+            wchan: procLine(server.pid, "wchan"),
+            tcp: at.port > 0 ? tcpQueues(at.port) : [],
+          })
+        }, 1_000)
         server.on("error", (e) => finish({ error: String(e) }))
         server.on("exit", (code, signal) => finish({ error: `the server exited (${code ?? signal})` }))
         server.stderr.on("data", (d) => (out += d))
@@ -10977,30 +11032,48 @@ if (dealtHere("fileServer")) {
           const port = /http:\/\/127\.0\.0\.1:(\d+)\//.exec(out)
           if (port === null || fetching) return
           fetching = true
-          const socket = net.connect(Number(port[1]), "127.0.0.1")
+          at.port = Number(port[1])
+          at.phase = "connect"
+          at.last = Date.now()
+          const socket = net.connect(at.port, "127.0.0.1")
           const hash = crypto.createHash("sha256")
           let head = Buffer.alloc(0)
           let inBody = false
           let got = 0
           let sincePause = 0
           let pauses = 0
-          socket.on("connect", () => socket.write(`${method} / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`))
+          socket.on("connect", () => {
+            at.phase = "head"
+            at.last = Date.now()
+            socket.write(`${method} / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`)
+          })
           socket.on("data", (chunk) => {
+            at.last = Date.now()
             if (!inBody) {
               head = Buffer.concat([head, chunk])
               const end = head.indexOf("\r\n\r\n")
               if (end < 0) return
               inBody = true
+              at.phase = "body"
               chunk = head.subarray(end + 4)
               head = head.subarray(0, end)
             }
             hash.update(chunk)
             got += chunk.length
+            at.got = got
             sincePause += chunk.length
             if (sincePause >= 1 << 20) {
               sincePause = 0
               socket.pause()
-              setTimeout(() => socket.resume(), pauses++ === 0 ? 250 : 5)
+              at.paused = true
+              setTimeout(
+                () => {
+                  at.paused = false
+                  at.last = Date.now()
+                  socket.resume()
+                },
+                pauses++ === 0 ? 250 : 5
+              )
             }
           })
           socket.on("error", (e) => finish({ error: String(e) }))
