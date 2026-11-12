@@ -81,8 +81,8 @@ function isConverted(walk: PortabilityWalk, node: Node, type: i32): boolean -> @
 function divisionReview(walk: PortabilityWalk, node: Node, type: i32): Edit[] -> @divisionReview
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: Edit.constructor PortabilityWalk.textOf conversionTo nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq
-  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
+  calls: Edit.constructor PortabilityWalk.textOf conversionTo holdsDivision nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq onlyOperatorBetween
+  pointer walk: size=48 writesThrough=false captured=false passedTo=onlyOperatorBetween#0 PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 edits: Edit[] (const)
@@ -91,13 +91,33 @@ function divisionReview(walk: PortabilityWalk, node: Node, type: i32): Edit[] ->
   local +2:9 types: i32[] (const)
   local +3:9 left: Node (const)
   local +4:9 right: Node (const)
+  callee +15:16 new Edit -> @Edit.constructor
   callee +16:16 new Edit -> @Edit.constructor
-  callee +17:16 new Edit -> @Edit.constructor
-  local +23:9 bare: boolean (const)
-  local +25:9 divisor: string (const)
-  callee +25:26 PortabilityWalk.textOf -> @PortabilityWalk.textOf
-  callee +25:51 PortabilityWalk.textOf -> @PortabilityWalk.textOf
-  callee +26:14 new Edit -> @Edit.constructor
+  callee +19:32 holdsDivision -> @holdsDivision
+  callee +19:57 onlyOperatorBetween -> @onlyOperatorBetween
+  local +22:9 bare: boolean (const)
+  local +24:9 divisor: string (const)
+  callee +24:26 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  callee +24:51 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  callee +25:14 new Edit -> @Edit.constructor
+function holdsDivision(node: Node): boolean -> @holdsDivision
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: holdsDivision nish_str_eq
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  callee +2:9 holdsDivision -> @holdsDivision
+function onlyOperatorBetween(walk: PortabilityWalk, left: Node, right: Node): boolean -> @onlyOperatorBetween
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer left: size=40 writesThrough=false captured=false
+  pointer right: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 gap: string (const)
+  local +1:7 seen: i32 (let)
+  local +2:7 i: i32 (let)
+  local +4:11 c: i32 (const)
 function clearsSignBit(walk: PortabilityWalk, count: Node): boolean -> @clearsSignBit
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: clearsSignBit isFractional isInteger nish_panic_index nish_str_eq parseIntegerLiteral

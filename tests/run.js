@@ -6589,7 +6589,11 @@ if (!only || "arena_removed".includes(only)) {
           diagnosticsOf(clean.stdout).every((d) => d.severity !== "error" && !("review" in d) && !("fix" in d)),
         shown(clean)
       )
-      codeCheck(name, path.join(fixDir, `${name}.code`), clean, false)
+      // With `.reviewed-keeps`, a warning whose own edit was declined stands in
+      // the reviewed file (a `/=` around a reviewed `/`): it must still be there,
+      // with no `review` of its own, which the check above already holds.
+      const keeps = fs.existsSync(path.join(fixDir, `${name}.reviewed-keeps`))
+      codeCheck(name, path.join(fixDir, `${name}.code`), clean, keeps)
       const ll = path.join(work, "plain.ll")
       const reviewedLl = path.join(work, "reviewed", "plain.ll")
       check(

@@ -508,14 +508,20 @@ committed.
 `--fix` applies `fix` and nothing else. A portability warning's `review` is
 a suggestion for you, or the agent driving `nish`, to read and apply by hand:
 an integer division wrapped in its own type's conversion, which truncates
-under Node as it does natively and adds no instruction:
+under Node as it does natively and adds no instruction. For a `half.ts` of
+
+```ts
+const half = (n: i32): i32 => n / 2;
+```
+
+`--json` prints:
 
 ```console
 $ nish half.ts --warn-portability --json
 {"file":"half.ts","line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this `/` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}
 ```
 
-Applied, `a / b` reads `toI32(a / b)`, and the warning is gone. Wrapping
+Applied, `n / 2` reads `toI32(n / 2)`, and the warning is gone. Wrapping
 arithmetic (`NL8007`) and `>>>` on an `i32` (`NL8008`) get no `review`: no
 spelling of them reads the same under Node without costing an instruction
 here.

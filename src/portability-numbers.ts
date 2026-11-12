@@ -165,9 +165,12 @@ const isConverted = (walk: PortabilityWalk, node: Node, type: i32): boolean => {
  *
  * None is offered where that is not certain: a generic body, whose other
  * instantiations the edit would change too; an operand or result not exactly
- * `type` (a ranged value, which a check reads); a quotient the checker folded,
- * whose operands the call's `number` parameter would retype; and a `/=` on
- * anything but a plain name, which the rewrite would evaluate twice.
+ * `type` (a ranged value, which a check reads); and a `/=` on anything but a
+ * plain name, which the rewrite would evaluate twice. A `/=` whose divisor
+ * holds a `/` of its own is declined too: that `/` carries its own edits,
+ * which would land inside this one's span. So is a `/=` with anything but
+ * whitespace between the name and the divisor, a comment the rewrite would
+ * drop.
  */
 const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] => {
   const edits: Edit[] = []
@@ -180,8 +183,7 @@ const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] =>
     walk.sig.instance !== null ||
     types[node.id] !== type ||
     types[left.id] !== type ||
-    types[right.id] !== type ||
-    walk.program.nodeConstants[node.id] !== null
+    types[right.id] !== type
   ) {
     return edits
   }
@@ -190,7 +192,7 @@ const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] =>
     edits.push(new Edit(node.end, node.end, ")"))
     return edits
   }
-  if (left.kind !== N_IDENT) {
+  if (left.kind !== N_IDENT || holdsDivision(right) || !onlyOperatorBetween(walk, left, right)) {
     return edits
   }
   const bare =
@@ -198,6 +200,38 @@ const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] =>
   const divisor = bare ? walk.textOf(right) : `(${walk.textOf(right)})`
   edits.push(new Edit(left.end, right.end, ` = ${name}(${left.text} / ${divisor})`))
   return edits
+}
+
+/** Whether `node` is or contains a `/` or `/=`, at any depth. */
+const holdsDivision = (node: Node): boolean => {
+  if (node.kind === N_BINARY && (node.text === "/" || node.text === "/=")) {
+    return true
+  }
+  let i = 0
+  while (i < node.children.length) {
+    if (holdsDivision(node.children[i])) {
+      return true
+    }
+    i = i + 1
+  }
+  return false
+}
+
+/** Whether only whitespace and the `/=` itself stand between `t` and `e` in `t /= e`. */
+const onlyOperatorBetween = (walk: PortabilityWalk, left: Node, right: Node): boolean => {
+  const gap = walk.program.source.text.substring(left.end, right.start)
+  let seen = 0
+  let i = 0
+  while (i < gap.length) {
+    const c = gap.charCodeAt(i)
+    if (c === 47 || c === 61) {
+      seen = seen + 1
+    } else if (c !== 32 && c !== 9 && c !== 10 && c !== 13) {
+      return false
+    }
+    i = i + 1
+  }
+  return seen === 2 && gap.indexOf("/=") >= 0
 }
 
 /**

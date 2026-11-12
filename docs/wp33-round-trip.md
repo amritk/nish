@@ -387,7 +387,7 @@ and [AI.md](AI.md) states the loop.
 `safety` value, so that every line without one stays byte for byte what it
 was and a consumer that applies `fix` blindly cannot apply a `review` by
 accident. `review` is a sibling of `fix` with the same edit list, printed
-after it, and absent rather than empty:
+after it, and absent rather than empty. For `const half = (n: i32): i32 => n / 2;`:
 
 ```json
 {"file":"half.ts","line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this `/` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}
@@ -399,10 +399,11 @@ site compiles, no longer warns, gives IR byte for byte the input's, and reads
 under Node as it runs natively, which `tests/fix/`'s `port-` cases check
 case by case, `.ll` and stdout both. Of the class-C rows, only NL8006 meets
 it: an integer `/` wrapped in its own type's conversion, `toI32(a / b)`,
-`toU8`, `toU16` or `toU32` (`q /= d` as `q = toI32(q / d)`), which emits
-nothing here and truncates the double quotient under Node. It declines in a
-generic body, for `/=` on an element or field, for `i64` and `u64`, and for
-a quotient that folds. NL8007 and NL8008 decline everywhere: a mask or a
+`toU8`, `toU16` or `toU32` (`q /= d` as `q = toI32(q / d)`), so `n / 2` reads `toI32(n / 2)`, which
+emits nothing here and truncates the double quotient under Node. It declines
+in a generic body, for `/=` on an element or field, for a `/=` whose divisor
+holds a `/` or with a comment before its `/=`, for `i8`, `i16`, `i64` and
+`u64`, and for a ranged operand. NL8007 and NL8008 decline everywhere: a mask or a
 `| 0` still warns and costs an instruction, and the conversions saturate
 under Node where the native value wraps. The other rows have no spelling
 that keeps the native meaning: NL8001 to NL8005 change what the program

@@ -11,6 +11,7 @@ fix, run by the "Machine-applicable fixes" block of `tests/run.js`
 | `<name>.rounds` (optional) | how many rounds `--fix` takes: one `fixed <file>` line on stderr per round that rewrote the file |
 | `<name>.ts` and `<name>.reviewed.ts` | a `port-` case of WP33 R5's review tier: `--json` on the input reports a diagnostic with a `review` and none with a `fix`; the `review` edits, applied the way `fix`'s are, leave exactly the bytes of `<name>.reviewed.ts`; `nish --fix` leaves the input byte-identical, since it applies `fix` alone; and `<name>.reviewed.ts` compiles with no `review`, `fix` or error left, no `<name>.code`, and an `.ll` byte for byte the input's. With `<name>.stdout`, the input prints it natively (skipped without clang) and `<name>.reviewed.ts` prints it under Node |
 | `<name>.nofix.ts` | `--json` reports at least one diagnostic and none of them has a `fix` or a `review` key; `nish --fix` on a copy exits as the plain compile does and leaves the file byte-identical |
+| `<name>.reviewed-keeps` (optional) | beside a `.reviewed.ts`: the reviewed file still reports `<name>.code`, from a site whose own edit was declined (`port-div-assign-nested`'s `/=` around a reviewed `/`), rather than no longer reporting it; it still has no `review` left |
 | `<name>.plain-exit` (optional) | the plain `--json` run's exit status, for either form above, default 1 (0 for a `port-` case, whose diagnostics are warnings); a program whose only diagnostics are warnings exits 0 |
 | `<name>.code` | a code the plain `--json` run must report, so a case whose diagnostic stopped firing, or that another diagnostic now stops first, fails rather than passing with nothing to fix; beside a `.fixed.ts`, the fixed program must no longer report it. Required beside a `.nofix.ts`, optional beside a `.fixed.ts` |
 | `<name>.stdout` (optional) | beside a `.fixed.ts`: the input and the fixed program are each linked and run, and both must print exactly this and exit with `<name>.run-exit` (default 0). Skipped without clang |
@@ -139,7 +140,12 @@ NL8006, an integer `/` or `/=`, is wrapped in the conversion to its own type:
 and truncates the double quotient under Node. `port-div-precedence` places
 the call where precedence would otherwise move it (`a / b * c`, `-(a / b)`, a
 call argument), `port-div-unsigned` covers the unsigned widths and
-`port-div-assign` turns `q /= d + 1` into `q = toI32(q / (d + 1))`. Each
+`port-div-assign` turns `q /= d + 1` into `q = toI32(q / (d + 1))`.
+`port-div-assign-nested` keeps the `/=` as it is when its divisor holds a
+`/`, at any depth (`q /= a / b`, `(a / b)`, `twice(a / b) + 2`), wrapping
+only the inner `/`: a `/=` edit spanning the divisor would overlap that
+one's. A comment before the `/=` declines it too, since the rewrite would
+drop it. Each
 prints the same natively and, reviewed, under Node. Declined, each with a
 `port-nofix-` case: a division in a generic body (`-div-generic`), whose one
 rewrite would serve every instantiation; `/=` on an element
