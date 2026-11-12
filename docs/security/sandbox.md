@@ -272,7 +272,10 @@ counted. One finding is counted, and it is fixed:
   descriptor (an `O_PATH` one, not close-on-exec, since the `execve` needs it;
   a spawn on another thread in the same window can inherit it too). A `#!`
   script started this way sees `/proc/self/fd/N` as its `$0`. More than 16
-  marked entries refuses every spawn rather than check some of them.
+  marked entries refuses every spawn rather than check some of them. The
+  refusal and the `/proc/self/fd` routing are armed whenever the build carries
+  a marked entry, Landlock or not: under `--sandbox=best-effort` on a kernel
+  without Landlock, where exec is otherwise not confined, they still apply.
 - **The allowlist is the build's.** Each program is the realpath the compiler
   found on `PATH` (or from the root package's directory), and its interpreter
   is read from the file then; a program replaced after the build with one

@@ -432,6 +432,13 @@ _Bool nish_mkdir(const nish_str *path) {
   return mkdir(nish_cpath(path), 0777) == 0 || nish_is_dir(path);
 }
 
+#ifdef __linux__
+/* Set by `nish_sandbox` (runtime-sandbox.c) when the exec allowlist marks an
+   interpreter it keeps out of reach (SBX-1); null otherwise, so a spawn
+   outside `--sandbox` is the one `posix_spawnp` call it always was. */
+int (*nish_spawn_target)(const char *file, int low, char *proc);
+#endif
+
 /* `posix_spawnp` is one libc call where fork/execvp/waitpid would be three,
    it searches PATH, and glibc reports a failed exec through its return
    value rather than through a child that has already run.
@@ -444,14 +451,8 @@ _Bool nish_mkdir(const nish_str *path) {
    that spawns nothing loses it to `--gc-sections`. The answer is the child's
    pid, or a negative errno: -EINVAL for an empty argv or an argument holding a
    NUL, and `posix_spawnp`'s own error otherwise (-ENOENT for a command that is
-   not on PATH, on glibc). */
-#ifdef __linux__
-/* Set by `nish_sandbox` (runtime-sandbox.c) when the exec allowlist marks an
-   interpreter it keeps out of reach (SBX-1); null otherwise, so a spawn
-   outside `--sandbox` is the one `posix_spawnp` call it always was. */
-int (*nish_spawn_target)(const char *file, int low, char *proc);
-#endif
-
+   not on PATH, on glibc). Under `--sandbox` with marked entries the child
+   execs the checked file through `/proc/self/fd/N`, not the name in `argv[0]`. */
 static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err, const int *dup,
                                 int base, int n) {
 #ifdef __wasi__
