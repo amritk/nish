@@ -16,7 +16,8 @@
 // fixed-base comb of `p256BaseMult` — the digit's four bits read out of the
 // scalar, the fifteen-entry read of a comb sub-table, the complete mixed
 // addition, the move that keeps or discards its sum, and one whole pass of
-// its inner loop, the four composed; and the nonce's inversion by safegcd —
+// its inner loop, the four composed; and the inversion by safegcd, of the
+// nonce mod n and of a field element mod p —
 // one block of thirty divsteps, and the two matrix updates, of d and e and of
 // f and g. The check follows each call into its callee in this listing (tests/ct-asm.js), which is
 // what lets the doubling, the addition and the window step, which call the
@@ -42,8 +43,8 @@
 // again by the comb — its table built from G here, on the copies, not taken
 // from the module, then 64 `p256BaseStep`s — and requires, both ways, RFC 6979
 // A.2.5's public key and the `r` of its two SHA-256 signatures
-// (ct_asm_p256.out), and inverts 2, n - 1 and the RFC's "sample" nonce on
-// the safegcd copies, against inverses computed with Python's integers. tests/link/crypto_p256 holds the module to the
+// (ct_asm_p256.out), and inverts 2, n - 1 and the RFC's "sample" nonce mod n,
+// and 2, p - 1 and the generator's x mod p, on the safegcd copies, against inverses computed with Python's integers. tests/link/crypto_p256 holds the module to the
 // same vectors, so the two agree through the RFC; the field copies are also
 // held to known answers computed from their definitions.
 // ct-check: p256FiatMul secret=contents
@@ -4296,13 +4297,11 @@ export const p256Divsteps30 = (zeta: u32, f0: u32, g0: u32, t: u32[]): u32 => {
  * `p256UpdateDe30`, without the length guard on `d`, `e`, `t` and `n`, and
  * with the loop over limbs 1 to 8 written out at literal indices.
  */
-export const p256UpdateDe30 = (d: u32[], e: u32[], t: u32[], n: u32[]): void => {
+export const p256UpdateDe30 = (d: u32[], e: u32[], t: u32[], n: u32[], inverse30: u32): void => {
   const u: u64 = p256Wide(uncheckedGet(t, 0))
   const v: u64 = p256Wide(uncheckedGet(t, 1))
   const q: u64 = p256Wide(uncheckedGet(t, 2))
   const r: u64 = p256Wide(uncheckedGet(t, 3))
-  // n^-1 mod 2^30, which makes the sum's bottom 30 bits zero below.
-  const inverse30: u32 = 0x11ff43b1
   // [md, me] start as [u, q] if d is negative plus [v, r] if e is.
   const sd: u32 = p256SignMask(uncheckedGet(d, 8))
   const se: u32 = p256SignMask(uncheckedGet(e, 8))
@@ -4654,7 +4653,7 @@ const signed30Of = (a: u32[]): u32[] => {
   return out
 }
 
-/** `a` plus n when `mask` is all ones, negated when `negate` is, then carried: the module's `p256AddOrder30`. */
+/** `a` plus the modulus n when `mask` is all ones, negated when `negate` is, then carried: the module's `p256AddModulus30`. */
 const addOrder30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
   for (let i: i32 = 0; i < 9; i++) {
     uncheckedSet(a, i, ((uncheckedGet(a, i) + (uncheckedGet(n, i) & mask)) ^ negate) - negate);
@@ -4665,23 +4664,28 @@ const addOrder30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
   }
 }
 
+/** The group order n and the field prime p (SEC 2 §2.4.2), as hex. */
+const ORDER: string = "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+const PRIME: string = "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
+
 /**
- * `1 / a` mod n as hex, `a` plain, by `p256ScalarInverse`'s method on the
- * copies: twenty rounds of `p256Divsteps30`, `p256UpdateDe30` and
- * `p256UpdateFg30` from f = n and g = a, then d normalised and read back.
+ * `1 / a` mod m as hex, `a` plain, by `p256Safegcd`'s method on the copies:
+ * twenty rounds of `p256Divsteps30`, `p256UpdateDe30` (with `inverse30`,
+ * m^-1 mod 2^30) and `p256UpdateFg30` from f = m and g = a, then d normalised
+ * and read back. m is n for `p256ScalarInverse`, p for `p256FieldInvert`.
  */
-const inverseHex = (text: string): string => {
-  const n: u32[] = signed30Of(limbsOfHex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"))
+const inverseHex = (modulus: string, inverse30: u32, text: string): string => {
+  const n: u32[] = signed30Of(limbsOfHex(modulus))
   const d: u32[] = new Array<u32>(9)
   const e: u32[] = new Array<u32>(9)
-  const f: u32[] = signed30Of(limbsOfHex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"))
+  const f: u32[] = signed30Of(limbsOfHex(modulus))
   const g: u32[] = signed30Of(limbsOfHex(text))
   const t: u32[] = new Array<u32>(4)
   uncheckedSet(e, 0, 1);
   let zeta: u32 = 0xffffffff
   for (let i: i32 = 0; i < 20; i++) {
     zeta = p256Divsteps30(zeta, uncheckedGet(f, 0), uncheckedGet(g, 0), t)
-    p256UpdateDe30(d, e, t, n)
+    p256UpdateDe30(d, e, t, n, inverse30)
     p256UpdateFg30(f, g, t)
   }
   addOrder30(d, n, p256SignMask(uncheckedGet(d, 8)), p256SignMask(uncheckedGet(f, 8)))
@@ -4822,18 +4826,33 @@ export const main = (): i32 => {
   )
   failed += report(
     "p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / 2 mod n is (n + 1) / 2",
-    inverseHex("0000000000000000000000000000000000000000000000000000000000000002"),
+    inverseHex(ORDER, 0x11ff43b1, "0000000000000000000000000000000000000000000000000000000000000002"),
     "7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a9"
   )
   failed += report(
     "p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / (n - 1) mod n is n - 1",
-    inverseHex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"),
+    inverseHex(ORDER, 0x11ff43b1, "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"),
     "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"
   )
   failed += report(
     "p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / k mod n, RFC 6979 A.2.5's SHA-256 \"sample\" nonce",
-    inverseHex("a6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60"),
+    inverseHex(ORDER, 0x11ff43b1, "a6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60"),
     "aaf7a4c4d10293a89370e2cc3e88ca623e38b5814d37eb5e96ffdea769cfe547"
+  )
+  failed += report(
+    "p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / 2 mod p",
+    inverseHex(PRIME, 0x3fffffff, "0000000000000000000000000000000000000000000000000000000000000002"),
+    "7fffffff80000000800000000000000000000000800000000000000000000000"
+  )
+  failed += report(
+    "p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / (p - 1) mod p is p - 1",
+    inverseHex(PRIME, 0x3fffffff, "ffffffff00000001000000000000000000000000fffffffffffffffffffffffe"),
+    "ffffffff00000001000000000000000000000000fffffffffffffffffffffffe"
+  )
+  failed += report(
+    "p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / x mod p, x the generator's x",
+    inverseHex(PRIME, 0x3fffffff, "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"),
+    "e060cbb088706d5d24936933b69b16ab707d656273744b65664c49e577f35238"
   )
   return failed
 }
