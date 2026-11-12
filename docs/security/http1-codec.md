@@ -33,7 +33,7 @@ with its own `WS_HS_*` code; it adds no finding.
 
 | File | Functions |
 | --- | --- |
-| `std/net/http1-codec.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
+| `std/net/http1-codec.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`, `http1HeadGrow`, `http1FramingField`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
 | `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `sendBody`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
 | `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
 | `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload`, `websocketIsUtf8`; the handshake's `websocketAcceptKey`, `websocketKeyIsValid`, `websocketOfferedProtocols`; the client's `websocketClientKey`, `websocketUpgradeRequest`, `WsHandshake`, `websocketCheckResponse` and their helpers (`websocketSpanIs`, `websocketListInto`, `websocketListHas`) |
@@ -363,6 +363,51 @@ length; names of 15, 16, 17, 31, 32 and 33 bytes after an `X:` line of
 head's last byte; and a short name read over a head
 an earlier request's upper-case lines filled. The default run is now 237,143
 cases (`expected.out`).
+
+**A head read section-wide, its framing fields classified as read**
+(`net_http1`, `_f64`, `net_http1_parse_diff`, 2026-11-12, written against
+`main` at `b49794d8`). The header section's lines are found and parsed in one
+loop that keeps the control-byte mask of the last vector loaded, so a line
+after a short one is not loaded again; the line's control flag is the value
+check, as before. A kept line of 32 bytes or fewer is copied into the held
+head as one or two `u8x16` stores, a longer one as a single `copyBytes`. The
+stores run only where all 16 or 32 bytes they load and store lie inside `buf`
+and `head`; anywhere else the line is one `copyBytes`, and both are bounds
+checked. The caller grows the head first (`http1HeadGrow`) whenever the line
+would leave it fewer than 16 bytes of slack, so the stores' path is the
+common one; the lanes they write past the line are slack the next line
+overwrites, never read as part of this one.
+
+Every kept field's lowered name is then classified (`http1FramingField`) as
+Host, Content-Length, Transfer-Encoding, Connection, Upgrade or none, and the
+counts, the Content-Length field's index and the Connection options are kept
+as the line is read. `http1EndOfHead` applies RFC 9112 §6.3's framing rules
+to those counts exactly as it applied them to its own walk over every field:
+one Host on HTTP/1.1, Content-Length and Transfer-Encoding together refused,
+two Content-Lengths refused, a coding list that must end in a single
+`chunked`. A field is classified by its whole name, in any case, whatever
+its position, length or value, so a request cannot place a framing field
+where the classification misses it. There is no branch on the target, on a
+known header set or on the length of the head.
+
+`http1WriteResponseHead` checks a field name of sixteen bytes or more as
+`u8x16` lanes with `http1NonTokenLanes`, the same predicate the parser uses,
+the last vector overlapping the one before it; shorter names keep the byte
+test. Nothing accepted or refused changes, and no limit, status or reason
+string moved.
+
+Tests: `a long token name is written at every length` and `a long name with a
+space at any lane is refused` (names of 15 to 34 bytes, a space at each
+place; dropping the overlapping last vector fails the second), in
+`tests/link/net_http1` and `_f64`. In `net_http1_parse_diff`, 48,859 value
+cases against main's parser: a Cookie and an Authorization value and a target
+of every length 1 to 48 and of 255, 256, 257, 1000 and 4000 bytes, with CR,
+LF, NUL, HTAB, SP, DEL, a comma, 0x80 or 0xff at every place in the first
+and last 48 bytes; the same heads whole and cut at every two-feed split at
+the edge lengths; and a head of 60 fields cut every way. The default run is
+now 286,002 cases (`expected.out`). Masking the line scan's sixteenth lane
+fails it at case 33,582 ("a control character in a field value" where main
+reads the head).
 
 **Connection management** (`net_http1_server`): `Connection: close` in a
 request is answered with it, and the connection closes; HTTP/1.0 closes unless

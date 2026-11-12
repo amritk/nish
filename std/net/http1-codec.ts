@@ -1002,8 +1002,9 @@ const http1HeadGrow = (p: Http1Parser, n: i32): void => {
 }
 
 /**
- * Copies `buf[from .. to)` to the end of `head`, growing it when it must, and
- * answers where the copy starts. The head keeps sixteen bytes past its last
+ * Copies `buf[from .. to)` to the end of `head`, which the caller has grown
+ * with `http1HeadGrow` when the line would leave it fewer than sixteen bytes
+ * of slack, and answers where the copy starts. The head keeps sixteen bytes past its last
  * line, so a short line is copied as whole vectors and a vector load at any
  * byte of the head is in bounds: the name and value compares read one. A
  * vector's lanes past the line write bytes past `headLength`, which nothing
@@ -1111,7 +1112,14 @@ const HTTP1_FIELD_UPGRADE: i32 = 5
  * each upper-case ASCII letter of the head lowered when `fold`: one vector
  * compare, or `http1HeadIs` when fewer than sixteen bytes follow `at`.
  */
-const http1HeadIsVector = (head: u8[], at: i32, n: i32, word: u8x16, text: string, fold: boolean): boolean => {
+const http1HeadIsVector = (
+  head: u8[],
+  at: i32,
+  n: i32,
+  word: u8x16,
+  text: string,
+  fold: boolean
+): boolean => {
   if (at < 0 || at > toI32(head.length) - 16 || n > 16) {
     return http1HeadIs(head, at, at + n, text, fold)
   }
