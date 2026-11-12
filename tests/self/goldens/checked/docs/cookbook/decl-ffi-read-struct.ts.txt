@@ -12,13 +12,13 @@ function localeconv(): CPtr -> @localeconv
   sharedWrite: foreign
   stackSites=0 stackLocals=0
 function current(): Lconv -> @current
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via localeconv
-  calls: localeconv nish_alloc_struct
+  calls: localeconv nish_alloc_struct nish_panic
   stackSites=0 stackLocals=0
   callee +0:41 localeconv -> @localeconv
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via current
   calls: current nish_arena_mark nish_arena_release
   stackSites=0 stackLocals=0

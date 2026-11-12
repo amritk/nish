@@ -15,7 +15,7 @@ a package or a `std/` module binds the bare C name rather than the package's
 prefixed one, with duplicate declarations required to agree
 (`tests/link/ffi_package_declare`). Whether S5
 should happen at all is a language question (§3); §8 answers it for S3 and
-§9 for S4, which is being built. The rules are normative in
+§9 for S4, which is built. The rules are normative in
 [LANGUAGE.md](LANGUAGE.md#calling-c) and the lowering is in
 [IR_COOKBOOK.md](IR_COOKBOOK.md#declare-function-calling-c).
 
@@ -679,7 +679,7 @@ callbacks and variadics.
 | Step | Delivers | Tests |
 | --- | --- | --- |
 | **S4.1** (built) | `declare class` as a layout (§9b, §9c); a layout-class `declare function` parameter lowered to a borrowed pointer (§9d) | `ffi_struct_param` (`getrlimit`/`setrlimit` round trip, `clock_gettime` twice, a nested layout); `ffi_struct_layout` (a C sidecar's `offsetof`/`sizeof` against the fields Nish read); one `reject_ffi_struct_*` per refusal; `reject_cls_declare` rewritten |
-| **S4.2** (built) | `readStruct(p: CPtr)` in `nish:unsafe`, a copy of a C-owned struct into a Nish-owned instance of the `declare class` its context names (§9h) | `ffi_struct_read` (`localeconv`, a sidecar's static struct overwritten after the copy, a churned arena); `reject_unsafe_read_struct_*`; `reject_unsafe_no_import` extended; `tests/ffi-struct.js` (the `unchecked` site, the wasm32 size) |
+| **S4.2** (built) | `readStruct(p: CPtr)` in `nish:unsafe`, a copy of a C-owned struct into a Nish-owned instance of the `declare class` its context names (§9h) | `ffi_struct_read` (`localeconv`, a sidecar's static struct overwritten after the copy, a churned arena); `reject_unsafe_read_struct_*`; `reject_unsafe_no_import` extended; `panics_ffi_read_struct_null` (the `ffi-null` panic); `tests/ffi-struct.js` (the `ffi-null` site, the wasm32 size) |
 
 ### 9g. Headers, bindings and targets
 
@@ -786,19 +786,26 @@ is refused (`reject_unsafe_read_struct_context` holds both), and
 (`reject_unsafe_read_struct_type_args`). `runtime/nish.d.ts` still declares
 `readStruct<T>(p: CPtr): T`, which `tsc` infers from the same context.
 
-**No `NULL` test.** The parameter is a non-null `CPtr`, so a `CPtr | null` is
-narrowed first, as for `readCString` (`reject_unsafe_read_struct_null`). A
-`declare function` whose result is declared `CPtr` is trusted not to answer
-`NULL` (RT-16); an `ffi-null` panic at `readStruct` alone would check one of
-the two readers of that trust and not the other. Nor is the size checked: the
-compiler cannot know how many bytes C's pointer covers, so the layout must be
-the struct or a prefix of it. Both are the reasons the function is in
-`nish:unsafe`: under `--deny-panics` it is an allowed `unchecked` site, with
-the copy's `oom` beside it, and `--emit-checked` records the import and every
-call.
+**A `NULL` test, and no size test.** The parameter is a non-null `CPtr`, so a
+`CPtr | null` is narrowed first, as for `readCString`
+(`reject_unsafe_read_struct_null`). That narrowing proves nothing about a
+result C answered: a `declare function` whose result is declared `CPtr` may
+still answer `NULL`, and reading a struct through it is a fault natively and a
+silent read of address 0 on wasm32. So the copy tests its pointer first and
+panics with the `ffi-null` kind, naming the layout (``` `readStruct` read a NULL
+pointer into a `Pair` ```, `panics_ffi_read_struct_null`). `--emit-panics`
+lists the call as an `ffi-null` site with the copy's `oom` beside it, and no
+proof removes the check, so `--deny-panics` refuses a call in its scope.
+`readCString` is the one reader left unchecked: it still trusts a `CPtr`
+result not to be `NULL` (RT-16) and stays an allowed `unchecked` site. The
+size is not checked: the compiler cannot know how many bytes C's pointer
+covers, so the layout must be the struct or a prefix of it. That, and the
+liveness of the pointer, are why the function is in `nish:unsafe`, and
+`--emit-checked` records the import and every call.
 
 **As built.** The checker is `checkReadStruct` in `src/builtins.ts`; the
-emitter is `emitStructCopy` in `src/emit-classes.ts`: the arena allocation
+emitter is `emitStructCopy` in `src/emit-classes.ts`: the `NULL` test and
+its panic, then the arena allocation
 `new` makes (`nish_alloc_struct`, rounded to 8), then
 `llvm.memcpy` of the layout's size, the destination aligned to 8 and the source
 to 1, since C's struct is aligned to what C chose and the compiler knows only

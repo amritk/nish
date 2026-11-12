@@ -194,9 +194,9 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
   }
 
   // WP27 S4.2: `readStruct` from `nish:unsafe` copies a C-owned struct into a
-  // fresh instance of the `declare class` its context names. It is an allowed
-  // `unchecked` site beside its allocation's `oom`, so it compiles under
-  // --deny-panics; --deny unsafe refuses it and names the call; --emit-checked
+  // fresh instance of the `declare class` its context names. Its NULL test is
+  // an `ffi-null` site beside its allocation's allowed `oom`, so --deny-panics
+  // refuses it; --deny unsafe refuses it and names the call; --emit-checked
   // records the import and the call. The copy is `@llvm.memcpy` of the
   // layout's own size: sixteen bytes for two `CPtr` fields natively, eight on
   // wasm32, where a `CPtr` is four.
@@ -228,14 +228,16 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
       .map((p) => `${p.line}:${p.kind}:${p.allowed}`)
       .join(",")
     check(
-      "ffi_struct_read: `readStruct` is an allowed `unchecked` site and the copy's `oom`, and nothing else",
-      kinds === "11:unchecked:true,11:oom:true",
+      "ffi_struct_read: `readStruct` is an unproven `ffi-null` site and the copy's allowed `oom`, and nothing else",
+      kinds === "11:ffi-null:undefined,11:oom:true",
       report === null ? shown(listed) : JSON.stringify(report)
     )
     const denyPanics = compile(read, readDir, ["--deny-panics"])
     check(
-      "ffi_struct_read: `readStruct` compiles under --deny-panics",
-      denyPanics.status === 0,
+      "ffi_struct_read: --deny-panics refuses `readStruct` for its NULL test",
+      denyPanics.status === 1 &&
+        denyPanics.stderr.includes("`ffi-null` may panic here") &&
+        denyPanics.stderr.includes("`readStruct` panics on a NULL pointer"),
       shown(denyPanics)
     )
     const denyUnsafe = compile(read, readDir, ["--deny", "unsafe"])

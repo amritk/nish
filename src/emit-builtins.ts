@@ -846,7 +846,8 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     return emitCStringCopy(emitter, emitter.emitExpression(firstArgument(expr)))
   }
   // WP27 S4.2: the struct's bytes, copied into the arena by the layout the
-  // checker typed the call with, with no null test for the same reason.
+  // checker typed the call with, after a null test: a `CPtr` a C function
+  // answered may be `NULL` whatever its declaration says.
   if (name === "readStruct") {
     const from = emitter.emitExpression(firstArgument(expr))
     return emitStructCopy(emitter, structInfoOf(emitter, emitter.typeOf(expr)), from)
@@ -1493,8 +1494,10 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_str_new")
     return out
   }
-  // WP27 S4.2: the copy is a fresh arena struct, then an inline memcpy.
+  // WP27 S4.2: a null test that panics, then a fresh arena struct and an
+  // inline memcpy.
   if (name === "readStruct") {
+    panicTailCallees(out)
     out.push("nish_alloc_struct")
     return out
   }

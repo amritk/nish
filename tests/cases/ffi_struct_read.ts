@@ -30,14 +30,20 @@ type Copy = Sample
 // The copy is made in a function whose scope ends at its return.
 const copied = (): Sample => readStruct(samplePtr())
 
+// Each struct escapes `fill` through its return, so each is an arena
+// allocation, made after the copies above.
+const fill = (): Sample => {
+  const s = new Sample()
+  s.tag = 255
+  s.count = 99
+  s.ratio = 9.5
+  return s
+}
+
 const churn = (): i64 => {
   let total: i64 = 0
   for (let i = 0; i < 64; i++) {
-    const s = new Sample()
-    s.tag = 255
-    s.count = 99
-    s.ratio = 9.5
-    total = total + s.count
+    total = total + fill().count
   }
   return total
 }

@@ -14594,7 +14594,7 @@ if (dealtHere("arrayChecks")) {
     // `nish_alloc_struct` is not declared but defined, `internal`, in each module
     // that calls it (`src/runtime.ts`), so `--runtime-decls` has no line for it;
     // its `define` line is its table entry, read the same way.
-    for (const m of selfSource("runtime.ts").matchAll(/`define internal (.*?@(nish_\w+)\()/g)) {
+    for (const m of selfSource("runtime.ts").matchAll(/`define internal (.*?@(nish_alloc_struct)\()/g)) {
       runtimeByName.set(m[2], { name: m[2], signature: `declare ${m[1]}` })
     }
     check(
@@ -35994,7 +35994,7 @@ if (fs.existsSync(threadsLl)) {
 // A call to a `nish:unsafe` export carries `unsafe` (`builtinCapability`), and
 // the bit travels through callers, modules and packages like every other: here
 // read off `--emit-capabilities` for a direct call, a call two frames up, a
-// module with no unsafe call, each of the six exports, and a dependency that
+// module with no unsafe call, each of the seven exports, and a dependency that
 // imports `nish:unsafe` when the entry package does not.
 if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
   const unsafeDir = path.join(buildDir, "caps-unsafe")

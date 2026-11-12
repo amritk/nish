@@ -562,9 +562,10 @@ Reference: [`nish:unsafe`](../nish-unsafe.md).
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](semantics-decisions.md#the-no-panic-scope),
-  `deny_panics_unsafe`). `readCString` and `readStruct` are allowed `unchecked`
-  sites on the same terms, each with its copy's `oom` beside it
-  (`ffi_owned_string`, `tests/ffi-struct.js`). The
+  `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
+  same terms, with its copy's `oom` beside it (`ffi_owned_string`).
+  `readStruct` is not: it tests its pointer for `NULL`, an `ffi-null` site no
+  proof removes (`panics_ffi_read_struct_null`, `tests/ffi-struct.js`). The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no

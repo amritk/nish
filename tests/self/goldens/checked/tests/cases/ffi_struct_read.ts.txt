@@ -6,13 +6,13 @@ import readStruct from "nish:unsafe" -> builtin readStruct
 unsafe import 10:10 readCString from "nish:unsafe"
 unsafe import 10:23 readStruct from "nish:unsafe"
 unsafe call 31:30 readStruct (node 82)
-unsafe call 46:65 readCString (node 182)
-unsafe call 51:23 readStruct (node 214)
-unsafe call 53:11 readStruct (node 234)
-unsafe call 61:17 readStruct (node 293)
-unsafe call 62:21 readStruct (node 307)
-unsafe call 63:32 readCString (node 323)
-unsafe call 63:86 readCString (node 330)
+unsafe call 52:65 readCString (node 194)
+unsafe call 57:23 readStruct (node 226)
+unsafe call 59:11 readStruct (node 246)
+unsafe call 67:17 readStruct (node 305)
+unsafe call 68:21 readStruct (node 319)
+unsafe call 69:32 readCString (node 335)
+unsafe call 69:86 readCString (node 342)
 struct Sample (class) size=32 align=8
   field tag: u8 index=0 offset=0
   field count: i64 index=1 offset=8
@@ -34,18 +34,23 @@ function localeconv(): CPtr -> @localeconv
   sharedWrite: foreign
   stackSites=0 stackLocals=0
 function copied(): Sample -> @copied
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via samplePtr
-  calls: nish_alloc_struct samplePtr
+  calls: nish_alloc_struct nish_panic samplePtr
   stackSites=0 stackLocals=0
   callee +0:41 samplePtr -> @samplePtr
+function fill(): Sample -> @fill
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=32
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local +0:9 s: Sample (const)
 function churn(): i64 -> @churn
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
-  stackSites=1 stackLocals=1
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: fill nish_arena_mark nish_arena_release nish_panic_overflow
+  stackSites=0 stackLocals=0
   local +0:7 total: i64 (let)
   local +1:12 i: i32 (let)
-  local +2:11 s: Sample (const)
+  callee +2:21 fill -> @fill
 function show(label: string, s: Sample): void -> @show
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
@@ -55,7 +60,7 @@ function show(label: string, s: Sample): void -> @show
 function run(): i32 -> @run [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via copied
-  calls: churn copied localeconv nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i64 nish_str_new overwriteSample samplePtr show
+  calls: churn copied localeconv nish_alloc_struct nish_arena_mark nish_arena_release nish_panic nish_print nish_str_concat nish_str_from_i64 nish_str_new overwriteSample samplePtr show
   stackSites=0 stackLocals=0
   local +0:9 kept: Sample (const)
   callee +0:16 copied -> @copied

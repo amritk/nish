@@ -6892,10 +6892,18 @@ console.log(readCString(lc.decimalPoint))
 ```llvm
 %struct.Lconv = type { i8*, i8* }
   %0 = call i8* @localeconv()
-  %1 = call i8* @nish_alloc_struct(i64 16)
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %1, i8* align 1 %0, i64 16, i1 false)
-  %2 = bitcast i8* %1 to %struct.Lconv*
-  store %struct.Lconv* %2, %struct.Lconv** %lc.addr, align 8
+  %1 = icmp eq i8* %0, null
+  br i1 %1, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [48 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  %2 = call i8* @nish_alloc_struct(i64 16)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %2, i8* align 1 %0, i64 16, i1 false)
+  %3 = bitcast i8* %2 to %struct.Lconv*
+  store %struct.Lconv* %3, %struct.Lconv** %lc.addr, align 8
 ```
 
 - **The layout comes from context**, as `Ok(v)`'s does: an annotation, a
@@ -6917,14 +6925,20 @@ console.log(readCString(lc.decimalPoint))
 - **It does not copy deep.** A `CPtr` field of the copy is still C's pointer,
   read with [`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns) while
   C keeps it live.
-- **Nothing about the pointer is checked**: not `NULL`, not the size it
-  covers. The argument is a `CPtr`, so a `CPtr | null` is narrowed first
+- **A `NULL` pointer panics before the copy**, with the
+  [`ffi-null`](#panic-sites) kind:
+  `` `readStruct` read a NULL pointer into a `Lconv` ``
+  (`tests/cases/panics_ffi_read_struct_null`). The argument is a `CPtr`, so a
+  `CPtr | null` is narrowed first
   (`` `readStruct` expects an argument of type CPtr, got CPtr | null ``,
-  `reject_unsafe_read_struct_null`), and the layout must be C's struct or a
-  prefix of it. That is why it is in
-  [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping): an
-  allowed `unchecked` site under `--deny-panics`, with its copy's `oom`,
-  refused by `--deny unsafe`, and recorded by `--emit-checked`.
+  `reject_unsafe_read_struct_null`), but a `declare function` declared to
+  answer `CPtr` may still answer `NULL`, so the copy tests its pointer: the
+  `icmp eq` and the branch to `ffi.null` above.
+  No proof removes the test, so `--deny-panics` refuses a call in its scope.
+- **The rest of the pointer is not checked**: not that it is live, not the
+  size it covers. The layout must be C's struct or a prefix of it. That is why
+  it is in [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping):
+  refused by `--deny unsafe` and recorded by `--emit-checked`.
 - **There is no `writeStruct`.** A struct C should fill is lent to it, as
   above.
 
@@ -8988,9 +9002,10 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](#the-no-panic-scope),
-  `deny_panics_unsafe`). `readCString` and `readStruct` are allowed `unchecked`
-  sites on the same terms, each with its copy's `oom` beside it
-  (`ffi_owned_string`, `tests/ffi-struct.js`). The
+  `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
+  same terms, with its copy's `oom` beside it (`ffi_owned_string`).
+  `readStruct` is not: it tests its pointer for `NULL`, an `ffi-null` site no
+  proof removes (`panics_ffi_read_struct_null`, `tests/ffi-struct.js`). The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -14999,10 +15014,14 @@ holds a NUL byte, which C would read as the end of the string:
 
 **`ffi-null`**: a `string` result of a [`declare function`](#calling-c) that
 is `NULL`:
-`` `name` returned NULL for a `string` result; declare it `string | null` ``
+`` `name` returned NULL for a `string` result; declare it `string | null` ``;
+or the pointer of a [`readStruct`](#readstruct-a-struct-out-of-memory-c-owns)
+call that is `NULL`: `` `readStruct` read a NULL pointer into a `Lconv` ``
 
 - *What proves it away:* nothing: a result declared `string | null` reads
-  `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`)
+  `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`); the
+  `readStruct` test stays at every call
+  (`tests/cases/panics_ffi_read_struct_null`)
 
 **`ffi-length`**: a call to a
 [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is
@@ -15033,8 +15052,8 @@ through further calls
 **`unchecked`**: `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no
 check at all, so nothing panics, but an index out of range is undefined
 behaviour; `readCString`, whose pointer nothing proves is live and
-NUL-terminated; `readStruct`, whose pointer nothing proves is live and covers
-the layout
+NUL-terminated (`readStruct` tests its pointer for `NULL`, so it is an
+`ffi-null` site below)
 
 - *What proves it away:* nothing, and nothing needs to: the call is the
   author's word that the index is in range, or that the pointer is, not a

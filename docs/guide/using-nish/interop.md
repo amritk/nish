@@ -1047,8 +1047,13 @@ export const main = (): i32 => {
 };
 ```
 
-Nothing is checked: the pointer must be live and not `NULL`, and the class
-must declare C's fields in C's order, or the copy reads the wrong bytes. A
+A `NULL` pointer stops the program before the copy, with
+`` `readStruct` read a NULL pointer into a `Lconv` `` on stderr and exit
+status 1, and `--deny-panics` refuses the call for that reason. Nothing else
+is checked: the pointer must be live, and the class must declare C's fields
+in C's order, or the copy reads the wrong bytes. That is why `readStruct`
+comes from `nish:unsafe`: a call to it gives the function the `unsafe`
+capability, and a build with `--deny unsafe` refuses it. A
 `CPtr` field is copied as C's address, not followed, so read what it points
 at, with `readCString` here, while C still holds it. A `CPtr | null` result
 is narrowed with `!== null` before the call. The rules are in

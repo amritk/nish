@@ -5310,10 +5310,18 @@ console.log(readCString(lc.decimalPoint))
 ```llvm
 %struct.Lconv = type { i8*, i8* }
   %0 = call i8* @localeconv()
-  %1 = call i8* @nish_alloc_struct(i64 16)
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %1, i8* align 1 %0, i64 16, i1 false)
-  %2 = bitcast i8* %1 to %struct.Lconv*
-  store %struct.Lconv* %2, %struct.Lconv** %lc.addr, align 8
+  %1 = icmp eq i8* %0, null
+  br i1 %1, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [48 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  %2 = call i8* @nish_alloc_struct(i64 16)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %2, i8* align 1 %0, i64 16, i1 false)
+  %3 = bitcast i8* %2 to %struct.Lconv*
+  store %struct.Lconv* %3, %struct.Lconv** %lc.addr, align 8
 ```
 
 - **The layout comes from context**, as `Ok(v)`'s does: an annotation, a
@@ -5335,14 +5343,20 @@ console.log(readCString(lc.decimalPoint))
 - **It does not copy deep.** A `CPtr` field of the copy is still C's pointer,
   read with [`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns) while
   C keeps it live.
-- **Nothing about the pointer is checked**: not `NULL`, not the size it
-  covers. The argument is a `CPtr`, so a `CPtr | null` is narrowed first
+- **A `NULL` pointer panics before the copy**, with the
+  [`ffi-null`](semantics-decisions.md#panic-sites) kind:
+  `` `readStruct` read a NULL pointer into a `Lconv` ``
+  (`tests/cases/panics_ffi_read_struct_null`). The argument is a `CPtr`, so a
+  `CPtr | null` is narrowed first
   (`` `readStruct` expects an argument of type CPtr, got CPtr | null ``,
-  `reject_unsafe_read_struct_null`), and the layout must be C's struct or a
-  prefix of it. That is why it is in
-  [`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping): an
-  allowed `unchecked` site under `--deny-panics`, with its copy's `oom`,
-  refused by `--deny unsafe`, and recorded by `--emit-checked`.
+  `reject_unsafe_read_struct_null`), but a `declare function` declared to
+  answer `CPtr` may still answer `NULL`, so the copy tests its pointer: the
+  `icmp eq` and the branch to `ffi.null` above.
+  No proof removes the test, so `--deny-panics` refuses a call in its scope.
+- **The rest of the pointer is not checked**: not that it is live, not the
+  size it covers. The layout must be C's struct or a prefix of it. That is why
+  it is in [`nish:unsafe`](builtins.md#nishunsafe-unchecked-access-and-defined-wrapping):
+  refused by `--deny unsafe` and recorded by `--emit-checked`.
 - **There is no `writeStruct`.** A struct C should fill is lent to it, as
   above.
 

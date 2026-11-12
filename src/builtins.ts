@@ -899,8 +899,8 @@ const checkReadCString = (ctx: CheckContext, call: Node, scope: Scope, args: Nod
  * the call's context names. A type argument is never written at a call site
  * (`reject_generic_call_type_args`), so the layout comes from where the copy
  * goes, as `Ok(v)`'s `Result` does: an annotation, a parameter or a return
- * type. That type is the decision, so a `type` alias, a `| null` and a type
- * parameter bound to a layout all arrive here as the layout itself.
+ * type. That type is the decision, so a `type` alias and a `| null` arrive
+ * here as the layout itself.
  */
 const checkReadStruct = (ctx: CheckContext, call: Node, scope: Scope, args: Node, want: i32): i32 => {
   if (checkBuiltinArity(ctx, call, "readStruct", args, 1)) {

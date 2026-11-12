@@ -15364,9 +15364,10 @@ the struct and not its address's alignment. After the copy nothing of the
 result points into C's memory but the `CPtr` fields themselves, which are C's
 pointers still.
 
-There is no `NULL` test and no size test: the argument is a `CPtr`, which a
-`declare function` declared `CPtr` is trusted not to answer `NULL` (RT-16),
-and the compiler cannot know how many bytes C's pointer covers. The copy is
+Before the allocation the pointer is tested for `NULL`: a `declare function`
+declared to answer `CPtr` may still answer one, so `icmp eq` branches to an
+`ffi-null` panic that names the layout. There is no size test: the compiler
+cannot know how many bytes C's pointer covers. The copy is
 a fresh allocation of `current`, so returning it keeps `current`'s arena
 alive for the caller, as any returned `new` does.
 
@@ -15392,6 +15393,7 @@ export const main = (): i32 => {
 %struct.Lconv = type { i8*, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
+@.str.0 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"`readStruct` read a NULL pointer into a `Lconv`\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare i8* @localeconv()
@@ -15400,8 +15402,9 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -15428,10 +15431,18 @@ slow:
 define internal noundef nonnull align 8 dereferenceable(16) %struct.Lconv* @current() #0 {
 entry:
   %0 = call i8* @localeconv()
-  %1 = call i8* @nish_alloc_struct(i64 16)
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %1, i8* align 1 %0, i64 16, i1 false)
-  %2 = bitcast i8* %1 to %struct.Lconv*
-  ret %struct.Lconv* %2
+  %1 = icmp eq i8* %0, null
+  br i1 %1, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [48 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  %2 = call i8* @nish_alloc_struct(i64 16)
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %2, i8* align 1 %0, i64 16, i1 false)
+  %3 = bitcast i8* %2 to %struct.Lconv*
+  ret %struct.Lconv* %3
 }
 
 define noundef i32 @nish_main() #0 {
@@ -15471,7 +15482,8 @@ entry:
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
 attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}
