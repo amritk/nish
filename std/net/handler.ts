@@ -237,7 +237,8 @@ export class HttpRequest {
   targetEnd: i32 = 0
   /**
    * Where the path ends: the target's first `?`, or its end.
-   * @internal Set by `HttpHandler` in this module when it copies the head, and read by `pathIs` and `queryIndex`.
+   * @internal Set by `HttpHandler` in this module from the router's `pathEnd` once it has routed the request,
+   * so the path is scanned once; copied by std/net/serve.ts with the head, and read by `pathIs` and `queryIndex`.
    */
   pathEnd: i32 = 0
   /**

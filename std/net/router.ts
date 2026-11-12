@@ -715,7 +715,10 @@ const routerLabelIsText = (bytes: u8[], at: i32, text: string, from: i32, length
 
 /** Whether `a[at .. at + length)` and `b[from .. from + length)` hold the same bytes; a range outside its array does not. */
 const routerSameBytes = (a: u8[], at: i32, b: u8[], from: i32, length: i32): boolean => {
-  // Two cursors, so no index is a sum that must be checked for overflow.
+  // Two cursors, so no index is a sum that must be checked for overflow. `stop`
+  // is one sum, but every caller passes a label's or a method's offset and
+  // length inside an array whose length is an i32, so it cannot overflow; a
+  // range past either end fails the per-byte checks and answers false.
   const stop: i32 = at + length
   let j: i32 = from
   for (let i: i32 = at; i < stop; i++) {
