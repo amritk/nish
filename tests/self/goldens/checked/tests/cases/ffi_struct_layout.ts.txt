@@ -16,12 +16,12 @@ struct Mixed (class) size=72 align=8
 function fillMixed(m: Mixed): void -> @fillMixed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
-  pointer m: size=72 writesThrough=false captured=false
+  pointer m: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function checkMixed(m: Mixed): i32 -> @checkMixed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
-  pointer m: size=72 writesThrough=false captured=false
+  pointer m: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function isSentinel(p: CPtr): i32 -> @isSentinel
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -87,7 +87,7 @@ function readPointers(): i32 -> @readPointers [exported]
   callee +2:10 isSentinel -> @isSentinel
 function zeroFields(): i32 -> @zeroFields [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via checkMixed
+  sharedWrite: +0:10
   calls: checkMixed
   stackSites=1 stackLocals=0
   callee +0:10 checkMixed -> @checkMixed

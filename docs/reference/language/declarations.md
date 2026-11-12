@@ -5131,7 +5131,9 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   otherwise escape stays in the caller's stack frame; a C function that keeps
   the pointer (an `aio_read` control block, a struct handed to a thread) is
   outside the contract. Its accesses carry no TBAA tag, so a field read after
-  the call sees what C wrote.
+  the call sees what C wrote, and a function of this program that passes its
+  parameter on to C writes through that parameter, so the parameter is not
+  `readonly` and its caller's read sees the write too (`ffi_struct_param`).
 - **`Name | null` passes `NULL` for `null`**, under the rule a `CPtr | null`
   parameter follows: the literal `null`, or a value narrowed with `!== null`
   (NL2539, `reject_ffi_struct_nullable_held`).
@@ -5148,7 +5150,15 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   this side: `` a C struct is only lent to C by pointer: take a `Point`
   parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); an array of
   them would be a C array the program lays out element by element, and is
-  `` cannot be an array element `` (NL2740, `reject_ffi_struct_array`).
+  `` cannot be an array element `` (NL2740, `reject_ffi_struct_array`,
+  `reject_ffi_struct_array_literal`, `reject_ffi_struct_array_new`), however
+  the array's type is spelled.
+- **Its fields are C's to fill.** Typed JSON does not decode into one or
+  encode one: `` a `declare class`: C reads and writes its fields `` (NL2753,
+  `reject_ffi_struct_json`). A spread copies a flat one's fields into a class
+  of this program, but not one that embeds another, whose embedded struct is
+  not a value: `` which a spread cannot copy `` (NL2754,
+  `reject_ffi_struct_spread`).
 - **`--emit-ts` refuses a module that declares one**, with the same message as
   for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
 

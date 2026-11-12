@@ -70,25 +70,34 @@ function scalarNamed(name: string, numberMode: i32): i32 -> @scalarNamed
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
+function rejectLayoutElement(ctx: CheckContext, elem: i32, node: Node): boolean -> @rejectLayoutElement [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  escaping: elem
+  calls: CheckContext.error TypeTable.stripNull layoutClass nish_str_concat
+  pointer ctx: size=328 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  stackSites=0 stackLocals=0
+  local +0:9 layout: StructInfo | null (const)
+  callee +0:18 layoutClass -> @layoutClass
+  callee +0:54 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +4:3 CheckContext.error -> @CheckContext.error
 function elementType(node: Node, ctx: CheckContext): i32 -> @elementType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via resolveType
-  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.stripNull TypeTable.typeName containerMessage layoutClass nish_str_concat rejectForeignPointer rejectStoredMask resolveType
-  pointer node: size=40 writesThrough=true captured=true passedTo=resolveType#0 rejectForeignPointer#3 rejectStoredMask#3 CheckContext.errorType#1 CheckContext.errorType#1
-  pointer ctx: size=328 writesThrough=true captured=true passedTo=resolveType#1 rejectForeignPointer#0 rejectStoredMask#0 CheckContext.errorType#0 CheckContext.errorType#0
+  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.typeName containerMessage nish_str_concat rejectForeignPointer rejectLayoutElement rejectStoredMask resolveType
+  pointer node: size=40 writesThrough=true captured=true passedTo=resolveType#0 rejectForeignPointer#3 rejectStoredMask#3 rejectLayoutElement#2 CheckContext.errorType#1
+  pointer ctx: size=328 writesThrough=true captured=true passedTo=resolveType#1 rejectForeignPointer#0 rejectStoredMask#0 rejectLayoutElement#0 CheckContext.errorType#0
   stackSites=0 stackLocals=0
   local +0:9 elem: i32 (const)
   callee +0:16 resolveType -> @resolveType
   callee +1:7 rejectForeignPointer -> @rejectForeignPointer
   callee +4:7 rejectStoredMask -> @rejectStoredMask
-  local +9:9 layout: StructInfo | null (const)
-  callee +9:18 layoutClass -> @layoutClass
-  callee +9:54 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +11:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +17:7 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee +18:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +18:32 containerMessage -> @containerMessage
-  callee +18:58 TypeTable.typeName -> @TypeTable.typeName
+  callee +7:7 rejectLayoutElement -> @rejectLayoutElement
+  callee +11:7 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee +12:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +12:32 containerMessage -> @containerMessage
+  callee +12:58 TypeTable.typeName -> @TypeTable.typeName
 function rejectForeignPointer(ctx: CheckContext, type: i32, position: string, node: Node): boolean -> @rejectForeignPointer [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

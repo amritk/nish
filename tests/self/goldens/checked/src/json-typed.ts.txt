@@ -620,9 +620,9 @@ function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, ro
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonClasses
   escaping: name type
-  calls: TypeTable.isUnion TypeTable.stripNull TypeTable.typeName jsonBadVariant jsonClasses jsonFieldOf jsonMadeClasses jsonNotClassVariant jsonRootsOf jsonUnionIn jsonUnionRefusal nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer program: size=800 writesThrough=false captured=false passedTo=jsonBadVariant#0 jsonRootsOf#0 jsonUnionRefusal#0 jsonClasses#0 jsonFieldOf#0 jsonUnionIn#0 jsonBadVariant#0 jsonUnionRefusal#0 jsonMadeClasses#0
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonBadVariant#1 jsonNotClassVariant#0 jsonRootsOf#1 TypeTable.typeName#0 jsonUnionRefusal#1 jsonClasses#1 jsonFieldOf#1 jsonUnionIn#1 jsonBadVariant#1 jsonNotClassVariant#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonMadeClasses#1
+  calls: CheckedProgram.struct TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.stripNull TypeTable.typeName jsonBadVariant jsonClasses jsonFieldOf jsonMadeClasses jsonNotClassVariant jsonRootsOf jsonUnionIn jsonUnionRefusal nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer program: size=800 writesThrough=false captured=false passedTo=jsonBadVariant#0 jsonRootsOf#0 CheckedProgram.struct#0 jsonUnionRefusal#0 jsonClasses#0 jsonFieldOf#0 jsonUnionIn#0 jsonBadVariant#0 jsonUnionRefusal#0 jsonMadeClasses#0
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isUnion#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonBadVariant#1 jsonNotClassVariant#0 jsonRootsOf#1 TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.typeName#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonClasses#1 jsonFieldOf#1 jsonUnionIn#1 jsonBadVariant#1 jsonNotClassVariant#0 TypeTable.typeName#0 jsonUnionRefusal#1 jsonMadeClasses#1
   stackSites=1 stackLocals=1
   local +0:9 base: i32 (const)
   callee +0:16 TypeTable.stripNull -> @TypeTable.stripNull
@@ -636,28 +636,33 @@ function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, ro
   local +25:9 none: StructInfo[] (const)
   local +26:9 roots: StructInfo[] (const)
   callee +26:70 jsonRootsOf -> @jsonRootsOf
-  callee +29:35 TypeTable.typeName -> @TypeTable.typeName
-  local +34:11 why: string (const)
-  callee +34:17 jsonUnionRefusal -> @jsonUnionRefusal
-  local +39:9 decode: boolean (const)
-  local +40:9 classes: StructInfo[] (const)
-  callee +40:19 jsonClasses -> @jsonClasses
-  local +41:14 info: StructInfo (const)
-  local +45:16 field: FieldInfo (const)
-  local +50:13 f: JsonField | null (const)
-  callee +50:17 jsonFieldOf -> @jsonFieldOf
-  local +52:15 inner: i32 (const)
-  callee +52:23 jsonUnionIn -> @jsonUnionIn
-  local +54:17 bad: i32 (const)
-  callee +54:23 jsonBadVariant -> @jsonBadVariant
-  callee +56:20 jsonNotClassVariant -> @jsonNotClassVariant
-  callee +62:83 TypeTable.typeName -> @TypeTable.typeName
-  local +71:11 v: JsonField | null (let)
-  local +74:17 why: string (const)
-  callee +74:23 jsonUnionRefusal -> @jsonUnionRefusal
-  local +91:16 info: StructInfo (const)
-  callee +91:24 jsonMadeClasses -> @jsonMadeClasses
-  local +92:13 ctor: FunctionSig | null (const)
+  local +27:9 declared: StructInfo | null (const)
+  callee +27:39 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +27:62 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +27:77 TypeTable.nameOf -> @TypeTable.nameOf
+  callee +30:40 TypeTable.typeName -> @TypeTable.typeName
+  callee +34:35 TypeTable.typeName -> @TypeTable.typeName
+  local +39:11 why: string (const)
+  callee +39:17 jsonUnionRefusal -> @jsonUnionRefusal
+  local +44:9 decode: boolean (const)
+  local +45:9 classes: StructInfo[] (const)
+  callee +45:19 jsonClasses -> @jsonClasses
+  local +46:14 info: StructInfo (const)
+  local +50:16 field: FieldInfo (const)
+  local +55:13 f: JsonField | null (const)
+  callee +55:17 jsonFieldOf -> @jsonFieldOf
+  local +57:15 inner: i32 (const)
+  callee +57:23 jsonUnionIn -> @jsonUnionIn
+  local +59:17 bad: i32 (const)
+  callee +59:23 jsonBadVariant -> @jsonBadVariant
+  callee +61:20 jsonNotClassVariant -> @jsonNotClassVariant
+  callee +67:83 TypeTable.typeName -> @TypeTable.typeName
+  local +76:11 v: JsonField | null (let)
+  local +79:17 why: string (const)
+  callee +79:23 jsonUnionRefusal -> @jsonUnionRefusal
+  local +96:16 info: StructInfo (const)
+  callee +96:24 jsonMadeClasses -> @jsonMadeClasses
+  local +97:13 ctor: FunctionSig | null (const)
 function jsonScalarMethod(type: i32): string -> @jsonScalarMethod [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

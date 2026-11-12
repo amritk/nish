@@ -137,6 +137,27 @@ const scalarNamed = (name: string, numberMode: i32): i32 => {
   return -1
 }
 
+/**
+ * Refuses a `declare class` as an array element, wherever the element type
+ * comes from: an annotation, an array literal or `new Array<T>`.
+ *
+ * WP27 S4.1: an element is a pointer to an object, and C wants the structs
+ * themselves side by side; S4.2 lays out an array of structs.
+ *
+ * @returns whether it reported
+ */
+export const rejectLayoutElement = (ctx: CheckContext, elem: i32, node: Node): boolean => {
+  const layout = layoutClass(ctx.program, ctx.table, ctx.table.stripNull(elem))
+  if (layout === null) {
+    return false
+  }
+  ctx.error(
+    node,
+    `\`declare class ${layout.name}\` cannot be an array element: a C struct layout is lent to C one at a time, by pointer`
+  )
+  return true
+}
+
 /** An array's element type, refused when it is a foreign pointer (WP27 S2). */
 const elementType = (node: Node, ctx: CheckContext): i32 => {
   const elem = resolveType(node, ctx)
@@ -146,14 +167,8 @@ const elementType = (node: Node, ctx: CheckContext): i32 => {
   if (rejectStoredMask(ctx, elem, "an array element", node)) {
     return T_ERROR
   }
-  // WP27 S4.1: an element is a pointer to an object, and C wants the structs
-  // themselves side by side; S4.2 lays out an array of structs.
-  const layout = layoutClass(ctx.program, ctx.table, ctx.table.stripNull(elem))
-  if (layout !== null) {
-    return ctx.errorType(
-      node,
-      `\`declare class ${layout.name}\` cannot be an array element: a C struct layout is lent to C one at a time, by pointer`
-    )
+  if (rejectLayoutElement(ctx, elem, node)) {
+    return T_ERROR
   }
   // `nish:secret`: an element outlives the function that made the secret.
   if (ctx.table.holdsSecret(elem)) {

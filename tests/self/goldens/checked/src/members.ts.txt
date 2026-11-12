@@ -558,10 +558,10 @@ function setByNameAfter(expr: Node, entry: Node, name: string): boolean -> @setB
   local +0:7 after: boolean (let)
   local +1:14 prop: Node (const)
 function checkSpreadSource(ctx: CheckContext, spread: Node, info: StructInfo, literal: Node, scope: Scope): StructInfo | null -> @checkSpreadSource
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
   calls: CheckContext.error StructInfo.field TypeTable.isNullable TypeTable.isStruct TypeTable.isUnion TypeTable.secretInner TypeTable.typeName checkExpression isCollectionStruct isThreadsStruct nish_panic_index nish_str_concat reportSpreadField setByNameAfter structOf
-  pointer ctx: size=328 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0 structOf#0 CheckContext.error#0 reportSpreadField#0
+  pointer ctx: size=328 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 CheckContext.error#0 structOf#0 CheckContext.error#0 CheckContext.error#0 reportSpreadField#0
   pointer spread: size=40 writesThrough=false captured=false passedTo=setByNameAfter#1
   pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.field#0 reportSpreadField#3
   pointer literal: size=40 writesThrough=false captured=false passedTo=setByNameAfter#0
@@ -593,13 +593,17 @@ function checkSpreadSource(ctx: CheckContext, spread: Node, info: StructInfo, li
   local +36:11 spelled: string (const)
   callee +36:21 TypeTable.typeName -> @TypeTable.typeName
   callee +37:5 CheckContext.error -> @CheckContext.error
-  local +46:7 bad: FieldInfo | null (let)
-  local +47:7 badInto: FieldInfo | null (let)
-  local +48:14 field: FieldInfo (const)
-  local +49:11 into: FieldInfo | null (const)
-  callee +49:18 StructInfo.field -> @StructInfo.field
-  callee +52:56 setByNameAfter -> @setByNameAfter
-  callee +61:3 reportSpreadField -> @reportSpreadField
+  local +46:14 field: FieldInfo (const)
+  callee +48:7 CheckContext.error -> @CheckContext.error
+  callee +50:24 TypeTable.typeName -> @TypeTable.typeName
+  callee +50:60 TypeTable.typeName -> @TypeTable.typeName
+  local +57:7 bad: FieldInfo | null (let)
+  local +58:7 badInto: FieldInfo | null (let)
+  local +59:14 field: FieldInfo (const)
+  local +60:11 into: FieldInfo | null (const)
+  callee +60:18 StructInfo.field -> @StructInfo.field
+  callee +63:56 setByNameAfter -> @setByNameAfter
+  callee +72:3 reportSpreadField -> @reportSpreadField
 function reportSpreadField(ctx: CheckContext, value: Node, source: StructInfo, info: StructInfo, got: i32, field: FieldInfo, into: FieldInfo | null): void -> @reportSpreadField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

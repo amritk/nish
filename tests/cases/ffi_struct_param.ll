@@ -15,6 +15,19 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #1
 
+define internal noundef i32 @readClock(%struct.Timespec* noundef nonnull align 8 dereferenceable(16) nocapture %ts) #0 {
+entry:
+  %0 = call i32 @clock_gettime(i32 1, %struct.Timespec* %ts)
+  ret i32 %0
+}
+
+define internal noundef i32 @readStamp(%struct.Stamp* noundef nonnull align 8 dereferenceable(32) nocapture %stamp) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %stamp, i32 0, i32 1
+  %1 = call i32 @clock_gettime(i32 1, %struct.Timespec* %0)
+  ret i32 %1
+}
+
 define noundef i32 @nish_main() #0 {
 entry:
   %limit.addr = alloca %struct.Rlimit*, align 8
@@ -26,6 +39,10 @@ entry:
   %Stamp.obj = alloca %struct.Stamp, align 8
   %later.addr = alloca %struct.Timespec*, align 8
   %Timespec.obj = alloca %struct.Timespec, align 8
+  %lent.addr = alloca %struct.Timespec*, align 8
+  %Timespec.obj.1 = alloca %struct.Timespec, align 8
+  %relayed.addr = alloca %struct.Stamp*, align 8
+  %Stamp.obj.1 = alloca %struct.Stamp, align 8
   %arena.mark = call i64 @nish_arena_mark()
   store %struct.Rlimit zeroinitializer, %struct.Rlimit* %Rlimit.obj, align 8
   store %struct.Rlimit* %Rlimit.obj, %struct.Rlimit** %limit.addr, align 8
@@ -187,6 +204,54 @@ land.end.2:
   %101 = load i32, i32* %100, align 4
   %102 = call i8* @nish_str_from_i32(i32 %101)
   call void @nish_print(i8* %102)
+  store %struct.Timespec zeroinitializer, %struct.Timespec* %Timespec.obj.1, align 8
+  store %struct.Timespec* %Timespec.obj.1, %struct.Timespec** %lent.addr, align 8
+  %103 = load %struct.Timespec*, %struct.Timespec** %lent.addr, align 8
+  %104 = call i32 @readClock(%struct.Timespec* %103)
+  %105 = call i8* @nish_str_from_i32(i32 %104)
+  call void @nish_print(i8* %105)
+  %106 = load %struct.Timespec*, %struct.Timespec** %lent.addr, align 8
+  %107 = getelementptr inbounds %struct.Timespec, %struct.Timespec* %106, i32 0, i32 0
+  %108 = load i64, i64* %107, align 8
+  %109 = icmp sgt i64 %108, 0
+  br i1 %109, label %lor.end.1, label %lor.rhs.1
+
+lor.rhs.1:
+  %110 = load %struct.Timespec*, %struct.Timespec** %lent.addr, align 8
+  %111 = getelementptr inbounds %struct.Timespec, %struct.Timespec* %110, i32 0, i32 1
+  %112 = load i64, i64* %111, align 8
+  %113 = icmp sgt i64 %112, 0
+  br label %lor.end.1
+
+lor.end.1:
+  %114 = phi i1 [ true, %land.end.2 ], [ %113, %lor.rhs.1 ]
+  %115 = select i1 %114, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @nish_print(i8* %115)
+  store %struct.Stamp zeroinitializer, %struct.Stamp* %Stamp.obj.1, align 8
+  store %struct.Stamp* %Stamp.obj.1, %struct.Stamp** %relayed.addr, align 8
+  %116 = load %struct.Stamp*, %struct.Stamp** %relayed.addr, align 8
+  %117 = call i32 @readStamp(%struct.Stamp* %116)
+  %118 = call i8* @nish_str_from_i32(i32 %117)
+  call void @nish_print(i8* %118)
+  %119 = load %struct.Stamp*, %struct.Stamp** %relayed.addr, align 8
+  %120 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %119, i32 0, i32 1
+  %121 = getelementptr inbounds %struct.Timespec, %struct.Timespec* %120, i32 0, i32 0
+  %122 = load i64, i64* %121, align 8
+  %123 = icmp sgt i64 %122, 0
+  br i1 %123, label %lor.end.2, label %lor.rhs.2
+
+lor.rhs.2:
+  %124 = load %struct.Stamp*, %struct.Stamp** %relayed.addr, align 8
+  %125 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %124, i32 0, i32 1
+  %126 = getelementptr inbounds %struct.Timespec, %struct.Timespec* %125, i32 0, i32 1
+  %127 = load i64, i64* %126, align 8
+  %128 = icmp sgt i64 %127, 0
+  br label %lor.end.2
+
+lor.end.2:
+  %129 = phi i1 [ true, %lor.end.1 ], [ %128, %lor.rhs.2 ]
+  %130 = select i1 %129, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @nish_print(i8* %130)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

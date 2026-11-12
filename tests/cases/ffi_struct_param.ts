@@ -4,6 +4,8 @@
 // `Rlimit` is `struct rlimit` (two `rlim_t`, 64-bit on Linux) and `Timespec`
 // is `struct timespec`. `Stamp` embeds a `Timespec` by value between two
 // narrower fields, so `clock_gettime` writes through a pointer into its middle.
+// `readClock` and `readStamp` lend their parameter on to C, so the parameter is
+// written and not `readonly`, and the caller's read after the call sees C's write.
 declare class Rlimit {
   cur: u64
   max: u64
@@ -26,6 +28,10 @@ declare function clock_gettime(clock: i32, ts: Timespec): i32
 
 const RLIMIT_NOFILE: i32 = 7
 const CLOCK_MONOTONIC: i32 = 1
+
+const readClock = (ts: Timespec): i32 => clock_gettime(CLOCK_MONOTONIC, ts)
+
+const readStamp = (stamp: Stamp): i32 => clock_gettime(CLOCK_MONOTONIC, stamp.at)
 
 export const main = (): number => {
   const limit = new Rlimit()
@@ -51,5 +57,12 @@ export const main = (): number => {
   // C wrote the middle; the fields either side are as the program left them.
   console.log(stamp.tag)
   console.log(stamp.seq)
+
+  const lent = new Timespec()
+  console.log(readClock(lent))
+  console.log(lent.sec > 0 || lent.nsec > 0)
+  const relayed = new Stamp()
+  console.log(readStamp(relayed))
+  console.log(relayed.at.sec > 0 || relayed.at.nsec > 0)
   return 0
 }

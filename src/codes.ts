@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 910
+export const RULE_COUNT: i32 = 912
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -611,6 +611,8 @@ const diagnosticRules = (): string[] => [
   "NL2569",
   "` is not lowered yet: until a release emits its close, hold the `CPtr` in a local and close it yourself",
   "NL2573",
+  "`, a `declare class`: C reads and writes its fields, and typed JSON only those of a class Nish lays out",
+  "NL2753",
   "`, which has no `null`, so `null` cannot be its default: only a `T | null` parameter defaults to `null`",
   "NL2659",
   "`extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `",
@@ -635,6 +637,8 @@ const diagnosticRules = (): string[] => [
   "NL2538",
   "): compare lane by lane with `eq`, `lt` and the rest, which answer a mask, and ask it `all` or `any`",
   "NL2581",
+  "` is a `declare class` embedded in its object, which a spread cannot copy, so set each field by name",
+  "NL2754",
   "` is both allowed and denied in the root package's capability policy; a policy says one or the other",
   "NL3035",
   "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",

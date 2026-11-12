@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 744 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 746 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -14159,4 +14159,20 @@ The message of an error contains:
 
 ```text
 …, which has no C layout: a field of a `declare class` is i32, i64, u8, u16, u32, u64, f32, f64, `CPtr`, `CPtr | null` or another `declare class`
+```
+
+## NL2753
+
+The message of an error contains:
+
+```text
+`, a `declare class`: C reads and writes its fields, and typed JSON only those of a class Nish lays out
+```
+
+## NL2754
+
+The message of an error contains:
+
+```text
+` is a `declare class` embedded in its object, which a spread cannot copy, so set each field by name
 ```
