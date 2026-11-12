@@ -132,7 +132,7 @@ import {
   HttpCompressor,
   httpAcceptEncoding,
 } from "nish/net/http-compress"
-import { netClose, netMss, netRead, netWrite, netWrite2, tcpAccept } from "nish:net"
+import { netClose, netMss, netRead, netShutdown, netWrite, netWrite2, tcpAccept } from "nish:net"
 import {
   HTTP1_BODY,
   HTTP1_CHUNKED,
@@ -239,6 +239,9 @@ const H1_S_WEBSOCKET: i32 = 1
 const H1_S_CLOSING: i32 = 2
 /** `H1_ERROR` was answered; sending what is left, then done. */
 const H1_S_FAILED: i32 = 3
+
+/** `netShutdown`'s write side, for the lingering close. */
+const H1_SHUT_WRITE: i32 = 1
 
 // Where the current exchange's response stands.
 const H1_R_NONE: i32 = 0
@@ -430,6 +433,20 @@ export class Http1Config {
    */
   headTimeout: i32 = 30000
   /**
+   * Milliseconds `Http1Server` keeps reading, and throwing away, what a
+   * refused client still sends after its error response, before `expire`
+   * closes the slot (RFC 9112 §9.6). The server shuts its write side and
+   * drains rather than closing at once: a close with unread bytes resets the
+   * connection, and the reset can destroy the response before the client
+   * reads it.
+   */
+  lingerTimeout: i32 = 2000
+  /**
+   * The most bytes a refused slot drains before it is closed whatever is
+   * left (RFC 9112 §9.6); 0 closes at once, without a lingering close.
+   */
+  lingerBytes: i32 = 65536
+  /**
    * Lend a slot's input and head buffers back to the server between
    * exchanges: once a response is sent and no byte of the next request has
    * come, the slot gives both to pools the server's slots share, and takes
@@ -596,6 +613,8 @@ export class Http1Connection {
   lastActive: i64 = 0
   /** When the head being read began to arrive, in `monotonicNanos`; meaningful while `headTimed`. */
   headSince: i64 = 0
+  /** When the lingering close began, in `monotonicNanos`; meaningful while `lingering`. */
+  lingerSince: i64 = 0
   private state: i32 = 0
   private response: i32 = 0
   /**
@@ -659,6 +678,8 @@ export class Http1Connection {
   mss: i32 = 0
   /** The MSS `Http1Server.accept` read from this connection's socket (`netMss`), or 0 when it reports none. */
   socketMss: i32 = 0
+  /** How many bytes the lingering close has drained, or -1 while the connection does not linger. */
+  private lingered: i32 = -1
   /**
    * The plain TCP socket the carrier sends `output` on, which `sendBody`
    * writes to directly: `Http1Server.accept` sets it, and `restart` and
@@ -700,6 +721,8 @@ export class Http1Connection {
     http1ServerCheckCap("maxMessage", config.maxMessage, H1_ZERO, big - H1_FRAME_HEADER)
     http1ServerCheckCap("idleTimeout", config.idleTimeout, one, big)
     http1ServerCheckCap("headTimeout", config.headTimeout, one, big)
+    http1ServerCheckCap("lingerTimeout", config.lingerTimeout, one, big)
+    http1ServerCheckCap("lingerBytes", config.lingerBytes, H1_ZERO, big)
     // The buffers the peer's bytes fill grow by doubling and stop at 2^30
     // (`Http1Parser`'s input and head, `WsDecoder`'s input), so a cap whose
     // buffer could need more is refused here rather than reached by a peer:
@@ -769,6 +792,8 @@ export class Http1Connection {
     this.inputEnded = false
     this.headTimed = false
     this.headSince = 0
+    this.lingerSince = 0
+    this.lingered = -1
     this.mss = 0
     this.socketMss = 0
     this.fd = -1
@@ -900,6 +925,7 @@ export class Http1Connection {
   /** The socket failed: nothing more is sent or read, and the connection is done. */
   abort(): void {
     this.state = H1_S_FAILED
+    this.lingered = -1
     this.outputStart = 0
     this.outputEnd = 0
     this.pongPending = false
@@ -1804,12 +1830,66 @@ export class Http1Connection {
   }
 
   /**
-   * Whether `expire` closes the slot at `now`: idle, or a head past its deadline.
+   * Starts the lingering close at `now` (`monotonicNanos`) when the
+   * connection refused its peer (`H1_ERROR`) on a socket that still reads,
+   * the refusal is sent, and the peer has not ended its stream: the carrier
+   * then shuts its write side and drains rather than closing.
+   *
+   * @param now the current time in `monotonicNanos`, which `lingerTimeout` counts from
+   * @returns true when the lingering close began here; false when the connection should simply be closed
+   * @internal Called by `Http1Server.flush` in this module once a refused slot is done.
+   */
+  lingerStart(now: i64): boolean {
+    if (
+      this.lingered >= 0 ||
+      this.state !== H1_S_FAILED ||
+      this.fd < 0 ||
+      this.inputEnded ||
+      this.config.lingerBytes <= 0 ||
+      !this.isDone()
+    ) {
+      return false
+    }
+    this.lingered = 0
+    this.lingerSince = now
+    return true
+  }
+
+  /**
+   * Whether the connection is in its lingering close: its refusal is sent and
+   * its carrier drains what the peer still sends.
+   *
+   * @returns true from `lingerStart` until the connection is restarted or aborted
+   */
+  lingering(): boolean {
+    return this.lingered >= 0
+  }
+
+  /**
+   * Counts `n` more bytes drained in the lingering close.
+   *
+   * @param n how many bytes the carrier just read and threw away
+   * @returns true while the drain stays under `lingerBytes`; false once the slot should be closed
+   * @internal Called by `Http1Server` in this module as it drains a refused slot.
+   */
+  drained(n: i32): boolean {
+    this.lingered = this.lingered + n
+    return this.lingered < this.config.lingerBytes
+  }
+
+  /** Whether the lingering close has lasted longer than `lingerTimeout` at `now` (`monotonicNanos`). */
+  private lingerLate(now: i64): boolean {
+    return this.lingered >= 0 && now - this.lingerSince > toI64(this.config.lingerTimeout) * toI64(1000000)
+  }
+
+  /**
+   * Whether `expire` closes the slot at `now`: idle, a head past its
+   * deadline, or a lingering close past `lingerTimeout`.
    *
    * @internal Called by `Http1Server.expire` and `Http1TlsServer.expire` in this module to pick the slots to close.
    */
   expired(now: i64): boolean {
-    return this.idle(now) || this.headLate(now)
+    return this.idle(now) || this.headLate(now) || this.lingerLate(now)
   }
 
   /**
@@ -1834,7 +1914,12 @@ export class Http1Connection {
       start = this.lastActive
     }
     const head: i64 = start + toI64(this.config.headTimeout) * toI64(1000000)
-    return head < idle ? head : idle
+    const sooner: i64 = head < idle ? head : idle
+    if (this.lingered >= 0) {
+      const linger: i64 = this.lingerSince + toI64(this.config.lingerTimeout) * toI64(1000000)
+      return linger < sooner ? linger : sooner
+    }
+    return sooner
   }
 }
 
@@ -2127,6 +2212,10 @@ export class Http1Server {
       return H1_ERROR
     }
     const conn: Http1Connection = this.connections[slot]
+    if (conn.lingering()) {
+      // Its `H1_ERROR` was answered before the lingering close began.
+      return H1_NEED_MORE
+    }
     if (conn.writeHeld) {
       this.send(slot)
     }
@@ -2140,13 +2229,54 @@ export class Http1Server {
    * write is held back (its `H1_WRITE` comes from `next` once the socket is
    * writable, even when this send emptied the output). It ends
    * the serve call, so a response written after it reads the clock anew.
+   * Once a refusal (`H1_ERROR`) is sent the slot lingers: its write side is
+   * shut and what the client still sends is drained, answering
+   * `H1_WANT_READ` until the client's end of stream, `lingerBytes`, or
+   * `expire` past `lingerTimeout`; `next` answers `H1_NEED_MORE` meanwhile.
    *
    * @param slot the slot `accept` answered
    * @returns the `H1_WANT_` bits to arm the slot with, or `H1_DONE` when the program should `close` it
    */
   flush(slot: i32): i32 {
     this.date.unhold()
-    return this.settle(slot)
+    const wants: i32 = this.settle(slot)
+    if (wants !== H1_DONE || !this.holds(slot)) {
+      return wants
+    }
+    // A refusal is sent: shut the write side and drain what the client still
+    // sends (RFC 9112 §9.6), for `lingerTimeout` and `lingerBytes` at most.
+    // Closed with those bytes unread, the socket would answer them with a
+    // reset that can destroy the response before the client reads it (H1-2).
+    const now: i64 = monotonicNanos()
+    const conn: Http1Connection = this.connections[slot]
+    if (!conn.lingerStart(now) || netShutdown(this.fds[slot], H1_SHUT_WRITE) < 0) {
+      return H1_DONE
+    }
+    const deadline: i64 = conn.expiresNoSooner(now)
+    if (deadline < this.expireAfter) {
+      this.expireAfter = deadline
+    }
+    return this.drain(slot)
+  }
+
+  /**
+   * Reads and throws away what `slot`'s lingering peer sends until the
+   * socket would block, answering `H1_WANT_READ`; `H1_DONE` at its end of
+   * stream, an error, or past `lingerBytes`. What it drains is not activity:
+   * `lastActive` stays, and `expire` closes the slot past `lingerTimeout`.
+   */
+  private drain(slot: i32): i32 {
+    const conn: Http1Connection = this.connections[slot]
+    const fd: i32 = this.fds[slot]
+    while (true) {
+      const n: i32 = netRead(fd, this.scratch, H1_ZERO, toI32(this.scratch.length))
+      if (n === H1_AGAIN) {
+        return H1_WANT_READ
+      }
+      if (n <= 0 || !conn.drained(n)) {
+        return H1_DONE
+      }
+    }
   }
 
   /** `flush` within a serve call: sends, answers the interest, and keeps the clock reading. */
@@ -2155,6 +2285,9 @@ export class Http1Server {
       return H1_DONE
     }
     const conn: Http1Connection = this.connections[slot]
+    if (conn.lingering()) {
+      return this.drain(slot)
+    }
     this.send(slot)
     if (conn.isDone()) {
       return H1_DONE
@@ -2237,7 +2370,7 @@ export class Http1Server {
 
   /**
    * Closes every slot that has been idle past `idleTimeout`, or reading one
-   * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
+   * head for longer than `headTimeout`, or lingering past `lingerTimeout`, at `now` (`monotonicNanos`); answers how many.
    *
    * @param now the current time in `monotonicNanos`, which every timeout is measured against
    * @returns how many slots this call closed
