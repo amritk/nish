@@ -25,10 +25,25 @@
 //   and minus each 2^(30 j), where a signed-30 limb boundary falls;
 // - a seeded corpus of 10,000 random 32-byte scalars.
 //
+// Then the same for the field (#1430): `p256FieldInvert` (safegcd mod p and a
+// multiply by R^3) against a^(p - 2) by plain square-and-multiply, on 0, 1, 2,
+// p - 1, p, 2^255, every 2^k and 2^k - 1 and 1,000 random values, with the
+// published inverses of 2 and 2^255 checked, which pins the R^3 constant. And
+// `p256DoubleMultPublic`, `p256Verify`'s wNAF pass, against two constant-time
+// `p256ScalarMult` calls and an addition, on u1 and u2 of n - 1, n - 2, the
+// all-ones-top n - 2^k and random scalars, and on a sum that is the identity.
+//
 // Every safegcd output is folded into one checksum, so equal lines mean equal
 // bytes. `tests/run.js` runs it natively and as a `--profile wasi` module
 // under Node.
-import { p256SeamInverse, p256SeamInvert } from "./p256"
+import {
+  p256SeamDoubleMult,
+  p256SeamDoubleMultReference,
+  p256SeamFieldInverse,
+  p256SeamFieldInvert,
+  p256SeamInverse,
+  p256SeamInvert,
+} from "./p256"
 import { fromHex, toHex } from "../crypto_p256/hex"
 
 /** xorshift64 (Marsaglia, 2003): a fixed stream of test words, not a secret. */
@@ -54,6 +69,10 @@ const fold = (hash: u64[], bytes: u8[]): void => {
 
 // The group order n (SEC 2 §2.4.2), and the inverse of 2 mod n.
 const N: string = "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+// The field prime p, and the inverses of 2 and 2^255 mod p.
+const P: string = "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
+const HALF_P: string = "7fffffff80000000800000000000000000000000800000000000000000000000"
+const INVERSE_2_255: string = "fffffffd00000006fffffffa0000000400000002fffffffc0000000600000001"
 const HALF: string = "7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a9"
 
 /** The number of random scalars in the corpus. */
@@ -105,6 +124,49 @@ const offset = (a: u8[], bit: i32, add: boolean): u8[] => {
     }
   }
   return out
+}
+
+/** Both field inversions of `x`, folded and compared; the safegcd answer. */
+const agreeField = (hash: u64[], tally: Tally, name: string, x: u8[]): u8[] => {
+  const inverse: u8[] = p256SeamFieldInverse(x)
+  const reference: u8[] = p256SeamFieldInvert(x)
+  fold(hash, inverse)
+  tally.scalars = tally.scalars + 1
+  if (toHex(inverse) === toHex(reference)) {
+    tally.agreed = tally.agreed + 1
+  } else if (tally.reported < 10) {
+    tally.reported = tally.reported + 1
+    console.log(`disagree: field ${name} x = ${toHex(x)}`)
+    console.log(`  safegcd ${toHex(inverse)}`)
+    console.log(`  fermat  ${toHex(reference)}`)
+  }
+  return inverse
+}
+
+/** Both ways of `u1 G + u2 (k G)`, folded and compared. */
+const agreeSum = (hash: u64[], tally: Tally, name: string, u1: u8[], u2: u8[], k: u8[]): void => {
+  const wnaf: u8[] = p256SeamDoubleMult(u1, u2, k)
+  const reference: u8[] = p256SeamDoubleMultReference(u1, u2, k)
+  fold(hash, wnaf)
+  tally.scalars = tally.scalars + 1
+  if (toHex(wnaf) === toHex(reference)) {
+    tally.agreed = tally.agreed + 1
+  } else if (tally.reported < 10) {
+    tally.reported = tally.reported + 1
+    console.log(`disagree: sum ${name}`)
+    console.log(`  wnaf      ${toHex(wnaf)}`)
+    console.log(`  reference ${toHex(reference)}`)
+  }
+}
+
+/** 32 random bytes from `state`, the top byte cleared so the value is below n. */
+const randomBelowN = (state: u64[]): u8[] => {
+  const k: u8[] = new Array<u8>(32)
+  for (let i: i32 = 0; i < 32; i++) {
+    k[i] = toU8(nextWord(state) & toU64(0xff))
+  }
+  k[0] = toU8(toI32(k[0]) & 0x7f)
+  return k
 }
 
 /** 32 bytes of zero. */
@@ -166,6 +228,52 @@ export const main = (): i32 => {
     agree(hash, corpus, `corpus ${c}`, k)
   }
   console.log(`corpus: ${corpus.agreed} of ${corpus.scalars} scalars agree`)
+
+  const p: u8[] = fromHex(P)
+  const field = new Tally()
+  let fieldPublished: i32 = 0
+  if (toHex(agreeField(hash, field, "2", two)) === HALF_P) {
+    fieldPublished = fieldPublished + 1
+  }
+  if (toHex(agreeField(hash, field, "2^255", power(255))) === INVERSE_2_255) {
+    fieldPublished = fieldPublished + 1
+  }
+  agreeField(hash, field, "0", zeros())
+  agreeField(hash, field, "1", one)
+  agreeField(hash, field, "p - 1", offset(p, 0, false))
+  agreeField(hash, field, "p", p)
+  for (let bit: i32 = 0; bit < 256; bit++) {
+    agreeField(hash, field, `2^${bit}`, power(bit))
+    agreeField(hash, field, `2^${bit} - 1`, offset(power(bit), 0, false))
+  }
+  for (let c: i32 = 0; c < 1000; c++) {
+    const x: u8[] = new Array<u8>(32)
+    for (let i: i32 = 0; i < 32; i++) {
+      x[i] = toU8(nextWord(state) & toU64(0xff))
+    }
+    agreeField(hash, field, `random ${c}`, x)
+  }
+  console.log(`field: ${field.agreed} of ${field.scalars} elements agree, ${fieldPublished} as arithmetic gives`)
+
+  const sums = new Tally()
+  const nMinusTwo: u8[] = offset(n, 1, false)
+  const four: u8[] = power(2)
+  agreeSum(hash, sums, "n - 1, n - 1", nMinusOne, nMinusOne, four)
+  agreeSum(hash, sums, "n - 1, n - 2", nMinusOne, nMinusTwo, nMinusOne)
+  agreeSum(hash, sums, "n - 2, 1", nMinusTwo, one, four)
+  agreeSum(hash, sums, "1, n - 1", one, nMinusOne, two)
+  agreeSum(hash, sums, "0, n - 1", zeros(), nMinusOne, four)
+  agreeSum(hash, sums, "n - 1, 0", nMinusOne, zeros(), four)
+  // G + 1 (n - 1) G is the identity.
+  agreeSum(hash, sums, "identity", one, one, nMinusOne)
+  for (let bit: i32 = 0; bit < 256; bit = bit + 17) {
+    const top: u8[] = offset(n, bit, false)
+    agreeSum(hash, sums, `n - 2^${bit}`, top, offset(n, (bit + 5) % 256, false), randomBelowN(state))
+  }
+  for (let c: i32 = 0; c < 64; c++) {
+    agreeSum(hash, sums, `random ${c}`, randomBelowN(state), randomBelowN(state), randomBelowN(state))
+  }
+  console.log(`sums: ${sums.agreed} of ${sums.scalars} sums agree`)
   console.log(`checksum: ${hash[0]}`)
   return 0
 }
