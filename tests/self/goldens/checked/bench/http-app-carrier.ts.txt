@@ -16514,7 +16514,7 @@ function p256WindowFits(length: i32, at: i32, len: i32): boolean -> @nish.p256Wi
 function P256SignScratch.constructor(this: P256SignScratch): void -> @nish.P256SignScratch.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.p256Order
-  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256BaseTable nish.p256Limbs nish.p256Order nish.p256ScalarR2 nish_alloc_struct nish_panic
+  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256Limbs nish.p256Order nish.p256ScalarR2 nish_alloc_struct nish_panic
   pointer this: size=144 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:17 p256Limbs -> @nish.p256Limbs
@@ -16525,7 +16525,6 @@ function P256SignScratch.constructor(this: P256SignScratch): void -> @nish.P256S
   callee +12:14 p256Order -> @nish.p256Order
   callee +13:15 p256ScalarR2 -> @nish.p256ScalarR2
   callee +14:18 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
-  callee +15:18 p256BaseTable -> @nish.p256BaseTable
   callee +16:19 new P256PointScratch -> @nish.P256PointScratch.constructor
 function p256SignMac(sc: P256SignScratch, out: u8[], message: u8[], len: i32): void -> @nish.p256SignMac
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -16604,45 +16603,46 @@ function p256WipeSignScratch(sc: P256SignScratch): void -> @nish.p256WipeSignScr
   callee +4:3 p256WipePoint -> @nish.p256WipePoint
   callee +5:3 p256WipeScratch -> @nish.p256WipeScratch
 function p256SignSha256Into(sc: P256SignScratch, priv: Secret<u8[]>, msg: u8[], off: i32, len: i32, out: u8[], at: i32): boolean -> @nish.p256SignSha256Into [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
-  calls: nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed nish.p256AffineX nish.p256BaseMultWith nish.p256DigestScalar nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceSeparated nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ShaInto nish.p256SignMac nish.p256SignNonceKey nish.p256WindowFits nish.p256WipeSignScratch nish_arena_mark nish_arena_release nish_panic nish_panic_overflow
-  pointer sc: size=144 writesThrough=false captured=false passedTo=nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignMac#0 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#1 nish.p256WipeSignScratch#0 nish.p256NonceSeparated#0 nish.p256SignMac#0 nish.p256SignMac#0
+  calls: nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed nish.p256AffineX nish.p256BaseMultWith nish.p256BaseTable nish.p256DigestScalar nish.p256FiatNonzero nish.p256FiatScalarMul nish.p256LimbsFromBytes nish.p256LimbsToBytes nish.p256NonceSeparated nish.p256ReduceOnce nish.p256ScalarInRange nish.p256ScalarInverse nish.p256ShaInto nish.p256SignMac nish.p256SignNonceKey nish.p256WindowFits nish.p256WipeSignScratch nish_arena_release nish_panic nish_panic_overflow
+  pointer sc: size=144 writesThrough=true captured=false passedTo=nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignNonceKey#0 nish.p256SignMac#0 nish.p256SignMac#0 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#1 nish.p256WipeSignScratch#0 nish.p256NonceSeparated#0 nish.p256SignMac#0 nish.p256SignMac#0
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange#0 nish.p256SignNonceKey#1 nish.p256SignNonceKey#1 nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed#0
   pointer msg: size=0 writesThrough=false captured=false passedTo=nish.p256ShaInto#2
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.p256LimbsToBytes#0 nish.p256LimbsToBytes#0
   stackSites=0 stackLocals=0
-  callee -14:8 p256WindowFits -> @nish.p256WindowFits
-  callee -11:8 p256WindowFits -> @nish.p256WindowFits
-  local -8:9 _scope: i64 (const)
-  callee -7:8 expose<u8[], boolean, p256ScalarInRange> -> @nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange
-  callee -4:3 p256ShaInto -> @nish.p256ShaInto
-  callee -3:3 p256DigestScalar -> @nish.p256DigestScalar
-  callee -2:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  local -1:12 i: i32 (let)
-  callee +3:3 p256SignNonceKey -> @nish.p256SignNonceKey
-  callee +4:3 p256SignMac -> @nish.p256SignMac
-  callee +5:3 p256SignNonceKey -> @nish.p256SignNonceKey
-  callee +6:3 p256SignMac -> @nish.p256SignMac
-  callee +8:5 p256SignMac -> @nish.p256SignMac
-  callee +9:9 p256ScalarInRange -> @nish.p256ScalarInRange
-  callee +10:7 p256BaseMultWith -> @nish.p256BaseMultWith
-  callee +11:7 p256AffineX -> @nish.p256AffineX
-  callee +12:7 p256ReduceOnce -> @nish.p256ReduceOnce
-  callee +13:7 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
-  callee +14:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
-  callee +15:7 p256ScalarInverse -> @nish.p256ScalarInverse
-  local +16:13 s: u32[] (const)
-  callee +16:24 exposeWith<u8[], P256SignScratch, u32[], p256SignSExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed
-  callee +17:11 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee +17:42 p256FiatNonzero -> @nish.p256FiatNonzero
-  callee +18:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +19:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
-  callee +20:9 p256WipeSignScratch -> @nish.p256WipeSignScratch
-  callee +25:5 p256NonceSeparated -> @nish.p256NonceSeparated
-  callee +26:5 p256SignMac -> @nish.p256SignMac
-  callee +27:5 p256SignMac -> @nish.p256SignMac
+  callee -9:8 p256WindowFits -> @nish.p256WindowFits
+  callee -6:8 p256WindowFits -> @nish.p256WindowFits
+  callee +0:16 p256BaseTable -> @nish.p256BaseTable
+  local +2:9 _scope: i64 (const)
+  callee +3:8 expose<u8[], boolean, p256ScalarInRange> -> @nish.expose$arr.u8$bool$fn.22.nish.p256ScalarInRange
+  callee +6:3 p256ShaInto -> @nish.p256ShaInto
+  callee +7:3 p256DigestScalar -> @nish.p256DigestScalar
+  callee +8:3 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  local +9:12 i: i32 (let)
+  callee +13:3 p256SignNonceKey -> @nish.p256SignNonceKey
+  callee +14:3 p256SignMac -> @nish.p256SignMac
+  callee +15:3 p256SignNonceKey -> @nish.p256SignNonceKey
+  callee +16:3 p256SignMac -> @nish.p256SignMac
+  callee +18:5 p256SignMac -> @nish.p256SignMac
+  callee +19:9 p256ScalarInRange -> @nish.p256ScalarInRange
+  callee +20:7 p256BaseMultWith -> @nish.p256BaseMultWith
+  callee +21:7 p256AffineX -> @nish.p256AffineX
+  callee +22:7 p256ReduceOnce -> @nish.p256ReduceOnce
+  callee +23:7 p256LimbsFromBytes -> @nish.p256LimbsFromBytes
+  callee +24:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
+  callee +25:7 p256ScalarInverse -> @nish.p256ScalarInverse
+  local +26:13 s: u32[] (const)
+  callee +26:24 exposeWith<u8[], P256SignScratch, u32[], p256SignSExposed> -> @nish.exposeWith$arr.u8$$P256SignScratch$arr.u32$fn.21.nish.p256SignSExposed
+  callee +27:11 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee +27:42 p256FiatNonzero -> @nish.p256FiatNonzero
+  callee +28:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +29:9 p256LimbsToBytes -> @nish.p256LimbsToBytes
+  callee +30:9 p256WipeSignScratch -> @nish.p256WipeSignScratch
+  callee +35:5 p256NonceSeparated -> @nish.p256NonceSeparated
+  callee +36:5 p256SignMac -> @nish.p256SignMac
+  callee +37:5 p256SignMac -> @nish.p256SignMac
 module std/crypto/x25519.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import exposeWith from "nish:secret" -> generic function exposeWith

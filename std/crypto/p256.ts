@@ -6277,7 +6277,9 @@ export class P256SignScratch {
    */
   point: P256ProjectivePoint
   /**
-   * The comb table of G.
+   * The comb table of G, built by the first signature and empty until then,
+   * so a server that holds a signer does not carry its 22 KiB before its first
+   * handshake.
    *
    * @internal Read and written by `p256SignSha256Into` and its steps alone.
    */
@@ -6321,7 +6323,7 @@ export class P256SignScratch {
     this.n = p256Order()
     this.r2 = p256ScalarR2()
     this.point = new P256ProjectivePoint()
-    this.table = p256BaseTable()
+    this.table = new Array<u32>(0)
     this.points = new P256PointScratch()
   }
 }
@@ -6441,6 +6443,11 @@ export const p256SignSha256Into = (
   }
   if (!p256WindowFits(toI32(out.length), at, P256_SIGNATURE_SIZE)) {
     panic("p256SignSha256Into: the signature window is outside its array")
+  }
+  // Whether the table is built yet is public: it is the first signature or not. It
+  // is built before the arena opens, so it outlives this call.
+  if (toI32(sc.table.length) === 0) {
+    sc.table = p256BaseTable()
   }
   using _scope = arena()
   if (!expose(priv, p256ScalarInRange)) {

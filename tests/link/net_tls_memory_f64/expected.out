@@ -18,7 +18,7 @@ PASS  the first connection made one buffer of each of the four pools and the oth
 PASS  a TlsTcpServer with 1,024 slots and no connections has made no buffer in any pool
 PASS  TlsP256Signer: three hundred signatures, each tlsSignEcdsaP256's DER byte for byte
 PASS  across 3 DER lengths
-PASS  and not one sign moved Arena.mark(): a signature keeps 0 bytes
+PASS  and after the first, not one sign moved Arena.mark(): a signature keeps 0 bytes
 PASS  a 31-byte key is refused with null
 PASS  a TlsServer through RFC 8448's handshake holds its secrets in its own arrays
 PASS  and restart zeroes every array of secrets256
