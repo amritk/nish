@@ -124,4 +124,14 @@ PASS  zeroed, as far as each was written
 PASS  the next connection on the same pools serves its own request
 PASS  from the buffers the first gave back, not new ones
 PASS  and reads nothing the first wrote past what it wrote itself
-http2 connection: 126 passed, 0 failed, 0 skipped
+PASS  a client that has not acknowledged the server's SETTINGS is not late at settingsTimeout
+PASS  but is a nanosecond past it
+PASS  whose deadline is the soonest the connection can expire (100000000)
+PASS  timed out, it is sent GOAWAY SETTINGS_TIMEOUT
+PASS  a client that acknowledged them is not late at settingsTimeout
+PASS  and expires no sooner than idleTimeout (1000000000)
+PASS  a byte moved puts its idle deadline off
+PASS  and a deadline gone by is now, never earlier
+PASS  timed out idle, it is sent GOAWAY NO_ERROR
+PASS  and once only
+http2 connection: 136 passed, 0 failed, 0 skipped
