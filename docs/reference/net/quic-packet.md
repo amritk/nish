@@ -211,7 +211,7 @@ Opens one packet of a datagram (RFC 9001 §5.3, §5.4): header protection off, t
 
 <scalar-card title="quic​Packet​Copy" icon="phosphor/regular/function" href="#quicpacketcopy">
 
-Writes `bytes[from .. from + length)` into `buf` at `at`; the caller has checked both windows.
+Writes `bytes[from .. from + length)` into `buf` at `at`, as one slice copy; the caller has checked both windows.
 
 </scalar-card>
 
@@ -1229,8 +1229,8 @@ A new `QuicPacket`; read its `error` before any other field.
 
 ### quicPacketCopy
 
-Writes `bytes[from .. from + length)` into `buf` at `at`; the caller has checked both windows.
-A byte outside either window is skipped rather than written, so a wrong window cannot panic.
+Writes `bytes[from .. from + length)` into `buf` at `at`, as one slice copy; the caller has checked both windows.
+The part of the run outside either window is skipped rather than written, so a wrong window cannot panic.
 
 ```ts
 function quicPacketCopy(

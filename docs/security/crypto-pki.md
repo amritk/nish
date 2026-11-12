@@ -14,7 +14,8 @@ Anchors are function names: in `std/crypto/pki-roots.ts` on the head that
 merged its half, whose base is `2cdef4fa`, and in `std/crypto/pki.ts` on the
 head that merges the path validator, whose base is `351a9a8f`, except PKI-18
 and PKI-21 to PKI-32, on the head that merges the x509-limbo run, whose base
-is `50af350c`.
+is `50af350c`, and PKI-26 and PKI-27 as they stand since #1028, on the head
+that merges it, whose base is `8dd49b6b`.
 
 **Result.** The loader reads the roots `SSL_CERT_FILE` and `SSL_CERT_DIR`
 name, or else the first system bundle and `/etc/ssl/certs`, and gives them
@@ -337,7 +338,8 @@ leaf to a root of the store with these properties:
 Each refusal has a reason code of its own (PKI-14). Each cost an attacker can
 raise has a named bound, and passing a bound is a refusal, never a slow
 answer (PKI-1). Run against x509-limbo, the module accepted chains that
-limbo refuses; PKI-18 (Medium) and PKI-21 to PKI-24 (Low) fix them. Open,
+limbo refuses; PKI-18 (Medium) and PKI-21 to PKI-24 and PKI-27 (Low) fix
+them, and PKI-26 is narrowed to one case. Open,
 and counted:
 
 - PKI-17 (Medium): no revocation;
@@ -345,9 +347,7 @@ and counted:
 - PKI-20 (Low): Names are compared byte for byte, not folded as RFC 5280
   §7.1 says. This fails closed.
 - PKI-25 (Low): six chains limbo accepts are refused. This fails closed.
-- PKI-26 (Low): an extension's criticality is not read;
-- PKI-27 (Low): the authorityKeyIdentifier's issuer fields and the
-  authorityInfoAccess extension are not decoded;
+- PKI-26 (Low): a non-critical nameConstraints binds as a critical one;
 - PKI-28 (Low): a wildcard is not checked against the Public Suffix List;
 - PKI-30 (Low): a leaf without extKeyUsage is accepted;
 - PKI-31 (Low): a dNSName subtree with a leading period is not refused;
@@ -428,7 +428,15 @@ module's answer.
   `cA` TRUE, an authorityKeyIdentifier with a keyIdentifier equal to the
   subjectKeyIdentifier on a self-issued root, an authorityKeyIdentifier on one
   that is not, and keyCertSign in a keyUsage each refuse none, and are kept,
-  but for keyUsage, which no limbo case tests on a root.
+  but for keyUsage, which no limbo case tests on a root. So do the rules of
+  PKI-26 and PKI-27 that reach a root: basicConstraints critical, no
+  critical authorityKeyIdentifier, a critical policyConstraints, and an
+  authorityKeyIdentifier with a keyIdentifier and without the issuer and
+  serial fields; one root, ACCVRAIZ1, carries an authorityInfoAccess, and it
+  is sound. A trust anchor is therefore held to these marking rules as an
+  intermediate is: limbo's `rfc5280::root-non-critical-basic-constraints`
+  asks for it, and the 122 roots the bundle holds on the head of #1028 all
+  conform, so the rule costs no shipped anchor.
 
   A subjectKeyIdentifier refuses one, TWCA Global Root CA,
   so a root need not carry one (PKI-32). Validity, unknown critical
@@ -441,10 +449,15 @@ module's answer.
 - **A pathLenConstraint is read on every issuer, the root too.** The parser
   keeps it whatever `cA` says, but `pkiIssuerCode` reads it only after
   requiring `cA` TRUE, and the leaf's is never read.
-- **A known extension is honoured whether it is critical or not.** The
-  parser does not keep the flag, so a non-critical nameConstraints or
-  basicConstraints binds as a critical one does. A certificate that breaks
-  §4.2 by marking one wrongly is not refused for it (PKI-26).
+- **A known extension marked against §4.2 refuses the chain, but for
+  nameConstraints.** The parser keeps each decoded extension's critical flag
+  (crypto-x509.md, X509-15), and a critical authorityKeyIdentifier or leaf
+  extKeyUsage, a non-critical basicConstraints on an issuer or
+  policyConstraints anywhere, and a subjectAltName critical when the subject
+  is not empty, or not critical when it is, are refused (PKI-26). A
+  non-critical nameConstraints still binds as a critical one does: limbo
+  wants it refused under RFC 5280 and accepted under the web PKI, and
+  binding it fails closed.
 - **A dNSName subtree with a leading period** holds the names strictly below
   it, as OpenSSL and Go read it (PKI-31).
 - **Every name compares without ASCII case.** That covers the SANs, the host
@@ -521,8 +534,9 @@ the BetterTLS name-constraint cases (`generate.mjs` there says how). Each
 verdict is printed with its reason, and a case whose verdict is not limbo's
 must be listed in `divergences.ts` with the finding that keeps it.
 
-Before PKI-18 and PKI-21 to PKI-24, 63 cases diverged; 30 do now, all listed
-under PKI-25 to PKI-32. No limbo case trusts a CA with a pathLenConstraint,
+Before PKI-18 and PKI-21 to PKI-24, 63 cases diverged; 30 did after them,
+and 21 do since PKI-26 was narrowed and PKI-27 fixed, all listed under
+PKI-25, PKI-26 and PKI-28 to PKI-32. No limbo case trusts a CA with a pathLenConstraint,
 so `generate.mjs` adds two cases of its own from limbo's certificates (its
 `ANCHORED`): a pathLen:0 CA trusted as the root over another CA, refused,
 and over the leaf, accepted.
@@ -540,8 +554,10 @@ in `expected.out`:
 
 The 1-in-20 BetterTLS sample is deterministic: a case whose `tc` number is a
 multiple of 20. `generate.mjs --all-bettertls` keeps all 9572, and with this
-`pki.ts` every one agrees with limbo: 9762 cases, 934 accepted, 9732 as
-limbo says, and the 30 divergences above.
+`pki.ts` before #1028 every one agreed with limbo: 9762 cases, 934 accepted,
+9732 as limbo says, and the 30 divergences then listed. That run needs
+limbo's full `limbo.json`, and has not been repeated since PKI-26 was
+narrowed.
 
 Each fix was then reverted alone, the run rebuilt and repeated, and the cases
 that diverged anew were read: 26 reverts, each named with the cases it turns
@@ -915,6 +931,29 @@ Tests: `webpki::forbidden-rsa-key-not-divisible-by-8-in-leaf`,
 `webpki::forbidden-dsa-leaf`, `webpki::forbidden-p192-leaf` and
 `webpki::forbidden-weak-rsa-in-leaf`.
 
+#### PKI-27 (Low, fixed): the authorityKeyIdentifier's issuer fields and authorityInfoAccess are decoded
+
+`nish/crypto/x509` now says whether a certificate carries an
+authorityKeyIdentifier at all (`akiPresent`) and whether it carries the
+authorityCertIssuer and serial pair (`akiIssuerSerial`), and refuses a
+certificate whose authorityInfoAccess is not a non-empty run of
+AccessDescriptions, each a sound OID and exactly one GeneralName
+(crypto-x509.md, X509-15). `pkiKeyIdsCode` refuses, as `PKI_ERR_MALFORMED`,
+a root whose authorityKeyIdentifier lacks a keyIdentifier or carries the
+issuer and serial, as the web PKI's validators do; RFC 5280 §6.1 asks
+neither of a trust anchor. A malformed authorityInfoAccess makes its
+certificate unparseable, so its chain is refused as `PKI_ERR_MALFORMED`
+wherever it sits. The path is still built by Name and signature, never by
+these fields, and no AIA fetch is made.
+
+Tests: `webpki::aki::root-with-aki-missing-keyidentifier`,
+`webpki::aki::root-with-aki-all-fields` and `webpki::malformed-aia`;
+`crypto_x509` "x509 criticality, authorityKeyIdentifier fields and
+authorityInfoAccess" pins the fields and each refused AIA shape beside a
+sound one. `webpki::aki::root-with-aki-authoritycertissuer` and
+`…-authoritycertserialnumber` hold only one of the pair, which the parser
+already refused (X509-10), so they stay `ERR_UNTRUSTED`.
+
 ### Open
 
 #### PKI-17 (Medium): revocation is not checked
@@ -960,40 +999,34 @@ Each fails closed, under a check this record keeps on purpose:
 - `rfc5280::validity::notafter-fractional`: a certificate is expired a
   millisecond after its notAfter (PKI-7).
 
-#### PKI-26 (Low): an extension's criticality is not read
+#### PKI-26 (Low): a non-critical nameConstraints binds as a critical one
 
-The parser does not keep the critical flag, so a known extension binds
-whichever way it is marked. A certificate that breaks RFC 5280 §4.2 by
-marking one wrongly is accepted: a critical authorityKeyIdentifier or
-extKeyUsage, a non-critical nameConstraints, policyConstraints or root
-basicConstraints, and a subjectAltName whose criticality does not follow its
-subject. This is Low: every extension the module knows binds whichever way
-it is marked, so a wrong flag never widens what a path may name or a key may
-do; what is lost is catching a CA that misissues. The follow-up keeps each
-extension's critical bit in `X509Cert`, in `nish/crypto/x509`, which this
-work does not change: #1028.
-
-Tests: `rfc5280::aki::critical-aki`,
-`rfc5280::nc::permitted-dns-match-noncritical`, `rfc5280::pc::ica-noncritical-pc`,
+Until #1028 the parser kept no critical flag, so a certificate that broke
+RFC 5280 §4.2 by marking a known extension wrongly was accepted. It now
+keeps one per decoded extension, and pki refuses as `PKI_ERR_MALFORMED` a
+critical authorityKeyIdentifier anywhere on the path (§4.2.1.1), a
+policyConstraints that is not critical anywhere on the path (§4.2.1.11), an issuer whose basicConstraints
+is not critical, the root included (§4.2.1.9), and a leaf whose
+subjectAltName is critical with a subject, or not critical without one
+(§4.2.1.6), and as `PKI_ERR_EXT_KEY_USAGE` a leaf whose extKeyUsage is
+critical, as webpki does. A policyConstraints marked critical, as it must
+be, is not decoded and so still refuses as an unknown critical extension
+(PKI-19): either way a certificate carrying one anchors or extends no path,
+which no shipped root does. Tests: `rfc5280::aki::critical-aki`,
+`rfc5280::pc::ica-noncritical-pc`,
+`rfc5280::root-non-critical-basic-constraints`,
 `rfc5280::san::noncritical-with-empty-subject`,
-`rfc5280::root-non-critical-basic-constraints`, `webpki::eku::ee-critical-eku`
-and `webpki::san::san-critical-with-nonempty-subject`, each listed in
-`tests/link/crypto_pki_limbo/divergences.ts`.
+`webpki::san::san-critical-with-nonempty-subject` and
+`webpki::eku::ee-critical-eku`.
 
-#### PKI-27 (Low): parts of two extensions are not decoded
-
-The authorityKeyIdentifier's authorityCertIssuer and serial fields, and the
-authorityInfoAccess extension, are not decoded, so a root whose
-authorityKeyIdentifier lacks a keyIdentifier or carries the other fields, and
-a malformed authorityInfoAccess, are accepted. This is Low: the path is
-built by Name and signature, never by these fields, and no AIA fetch is made,
-so none of them widens what a path may name or reaches the network. The
-follow-ups are in `nish/crypto/x509`: decoding the authorityKeyIdentifier's
-authorityCertIssuer and serial, and parsing authorityInfoAccess so a
-malformed one refuses its certificate: #1028.
-
-Tests: `webpki::aki::root-with-aki-missing-keyidentifier`,
-`webpki::aki::root-with-aki-all-fields` and `webpki::malformed-aia`.
+Open: a nameConstraints that is not critical still binds as a critical one,
+so `rfc5280::nc::permitted-dns-match-noncritical` is accepted where limbo
+expects a refusal. limbo's own `webpki::nc::permitted-dns-match-noncritical`
+holds the same shape and expects it accepted, and the constraint binds
+either way, so a wrong flag never widens what a path may name. Refusing it
+is the owner's call between the two profiles; until then it is listed in
+`tests/link/crypto_pki_limbo/divergences.ts`. Low for the reason it was:
+what is lost is catching a CA that misissues.
 
 #### PKI-28 (Low): a wildcard is not checked against the Public Suffix List
 
