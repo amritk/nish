@@ -6,6 +6,7 @@ import secretIndexMessage from "./secret" -> function @indexMessage
 import namesSecret from "./secret" -> function @namesSecret
 import rejectStoredMask from "./simd" -> function @rejectStoredMask
 import rejectForeignPointer from "./annotations" -> function @rejectForeignPointer
+import rejectLayoutElement from "./annotations" -> function @rejectLayoutElement
 import resolveType from "./annotations" -> function @resolveType
 import typedArrayElement from "./annotations" -> function @typedArrayElement
 import checkBuiltinArity from "./builtins" -> function @checkBuiltinArity
@@ -147,8 +148,8 @@ function checkArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i3
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: want
-  calls: CheckContext.error CheckContext.errorType TypeTable.arrayOf TypeTable.holdsSecret TypeTable.isArray TypeTable.refOf TypeTable.typeName TypeTable.unionWithin checkExpression containerMessage holdsMember mixedMemberMessage nish_str_concat refuseGatheredRecord rejectStoredMask unproven
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.errorType#0 unproven#0 checkExpression#0 CheckContext.error#0 rejectStoredMask#0 holdsMember#0 holdsMember#0 CheckContext.error#0 mixedMemberMessage#0 CheckContext.error#0 CheckContext.errorType#0 refuseGatheredRecord#0
+  calls: CheckContext.error CheckContext.errorType TypeTable.arrayOf TypeTable.holdsSecret TypeTable.isArray TypeTable.refOf TypeTable.typeName TypeTable.unionWithin checkExpression containerMessage holdsMember mixedMemberMessage nish_str_concat refuseGatheredRecord rejectLayoutElement rejectStoredMask unproven
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.errorType#0 unproven#0 checkExpression#0 CheckContext.error#0 rejectStoredMask#0 rejectLayoutElement#0 holdsMember#0 holdsMember#0 CheckContext.error#0 mixedMemberMessage#0 CheckContext.error#0 CheckContext.errorType#0 refuseGatheredRecord#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 refuseGatheredRecord#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -168,26 +169,27 @@ function checkArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i3
   callee +20:31 TypeTable.unionWithin -> @TypeTable.unionWithin
   callee +25:7 CheckContext.error -> @CheckContext.error
   callee +28:9 rejectStoredMask -> @rejectStoredMask
-  callee +31:9 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee +38:34 holdsMember -> @holdsMember
-  callee +38:60 holdsMember -> @holdsMember
-  callee +39:7 CheckContext.error -> @CheckContext.error
-  callee +41:9 mixedMemberMessage -> @mixedMemberMessage
-  local +44:13 a: string (const)
-  callee +44:17 TypeTable.typeName -> @TypeTable.typeName
-  callee +45:7 CheckContext.error -> @CheckContext.error
-  callee +47:77 TypeTable.typeName -> @TypeTable.typeName
-  callee +52:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +52:36 containerMessage -> @containerMessage
-  callee +52:62 TypeTable.typeName -> @TypeTable.typeName
-  callee +54:58 refuseGatheredRecord -> @refuseGatheredRecord
-  callee +57:31 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee +31:9 rejectLayoutElement -> @rejectLayoutElement
+  callee +34:9 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee +41:34 holdsMember -> @holdsMember
+  callee +41:60 holdsMember -> @holdsMember
+  callee +42:7 CheckContext.error -> @CheckContext.error
+  callee +44:9 mixedMemberMessage -> @mixedMemberMessage
+  local +47:13 a: string (const)
+  callee +47:17 TypeTable.typeName -> @TypeTable.typeName
+  callee +48:7 CheckContext.error -> @CheckContext.error
+  callee +50:77 TypeTable.typeName -> @TypeTable.typeName
+  callee +55:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +55:36 containerMessage -> @containerMessage
+  callee +55:62 TypeTable.typeName -> @TypeTable.typeName
+  callee +57:58 refuseGatheredRecord -> @refuseGatheredRecord
+  callee +60:31 TypeTable.arrayOf -> @TypeTable.arrayOf
 function refuseGatheredRecord(ctx: CheckContext, expr: Node, elem: i32): boolean -> @refuseGatheredRecord
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   escaping: elem
   calls: CheckContext.error inlineElementStruct nish_str_concat unwrapParens
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 record: StructInfo | null (const)
@@ -199,7 +201,7 @@ function checkIndex(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkI
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
   calls: CheckContext.error CheckContext.errorType CheckContext.numberType TypeTable.isArray TypeTable.isNullable TypeTable.isSecret TypeTable.refOf TypeTable.typeName checkExpression indexMessage isNumeric namesSecret nish_panic_index nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=checkExpression#0 namesSecret#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 checkExpression#0 CheckContext.numberType#0 CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=checkExpression#0 namesSecret#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 checkExpression#0 CheckContext.numberType#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 namesSecret#2 checkExpression#2
   stackSites=0 stackLocals=0
@@ -228,7 +230,7 @@ function readonlyWriteMessage(ctx: CheckContext, receiver: i32, what: string): s
   sharedWrite: via TypeTable.arrayOf
   escaping: receiver
   calls: TypeTable.arrayOf TypeTable.refOf TypeTable.typeName nish_str_concat
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 mutable: string (const)
   callee +0:19 TypeTable.typeName -> @TypeTable.typeName
@@ -239,7 +241,7 @@ function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.errorType TypeTable.arrayOf TypeTable.assignable TypeTable.baseOf TypeTable.isReadonlyArray TypeTable.typeName checkBitwiseAssignOperands checkExpression checkIndex isArgvExpression isBitwiseCompound isNumeric nish_panic_index nish_str_concat nish_str_eq readonlyWriteMessage refuseNarrowingStore unwrapParens
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=isArgvExpression#0 CheckContext.errorType#0 checkIndex#0 CheckContext.errorType#0 readonlyWriteMessage#0 checkExpression#0 CheckContext.errorType#0 refuseNarrowingStore#0 checkBitwiseAssignOperands#0 CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=isArgvExpression#0 CheckContext.errorType#0 checkIndex#0 CheckContext.errorType#0 readonlyWriteMessage#0 checkExpression#0 CheckContext.errorType#0 refuseNarrowingStore#0 checkBitwiseAssignOperands#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkBitwiseAssignOperands#1 CheckContext.errorType#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=isArgvExpression#2 checkIndex#2 checkExpression#2
   stackSites=0 stackLocals=0
@@ -279,7 +281,7 @@ function checkArrayProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 -
   sharedWrite: via CheckContext.errorAtProperty
   escaping: receiver
   calls: CheckContext.errorAtProperty CheckContext.numberType TypeTable.typeName nish_str_concat nish_str_eq
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.numberType#0 CheckContext.errorAtProperty#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.numberType#0 CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
   callee +0:12 CheckContext.numberType -> @CheckContext.numberType
@@ -289,7 +291,7 @@ function typedArraySpelling(ctx: CheckContext, expr: Node, scope: Scope): string
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via newMapSpelling
   calls: CheckedProgram.struct Scope.lookup StructInfo.field TypeTable.nameOf TypeTable.stripNull eitherSpelling elementSpelling genericCallSpelling mapReadSpelling newMapSpelling nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq typedArrayElement typedArraySpelling unwrapParens
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=newMapSpelling#0 mapReadSpelling#0 genericCallSpelling#0 typedArraySpelling#0 typedArraySpelling#0 typedArraySpelling#0 typedArraySpelling#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=newMapSpelling#0 mapReadSpelling#0 genericCallSpelling#0 typedArraySpelling#0 typedArraySpelling#0 typedArraySpelling#0 typedArraySpelling#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0 mapReadSpelling#2 genericCallSpelling#3 typedArraySpelling#2 typedArraySpelling#2 typedArraySpelling#2 typedArraySpelling#2
   stackSites=0 stackLocals=0
@@ -338,7 +340,7 @@ function newMapSpelling(ctx: CheckContext, e: Node): string -> @newMapSpelling
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via annotationSpelling
   calls: annotationSpelling isGlobalMapType nish_panic_index nish_str_concat
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=isGlobalMapType#0 annotationSpelling#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=isGlobalMapType#0 annotationSpelling#0
   pointer e: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 typeArgs: Node (const)
@@ -349,7 +351,7 @@ function annotationSpelling(ctx: CheckContext, local: boolean, node: Node): stri
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via spellAnnotation
   calls: spellAnnotation
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=spellAnnotation#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=spellAnnotation#0
   pointer node: size=40 writesThrough=true captured=true passedTo=spellAnnotation#2
   stackSites=2 stackLocals=0
   callee +0:3 spellAnnotation -> @spellAnnotation
@@ -358,7 +360,7 @@ function spellAnnotation(ctx: CheckContext, home: CheckedProgram | null, node: N
   sharedWrite: via annotationName
   escaping: home node
   calls: CheckedProgram.alias StringMap.has annotationName indexOfName levelled nish_panic_index typedArrayElement
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   pointer home: size=800 writesThrough=true captured=true
   pointer node: size=40 writesThrough=true captured=true
   pointer names: size=0 writesThrough=false captured=false passedTo=indexOfName#0
@@ -401,7 +403,7 @@ function checkSort(ctx: CheckContext, call: Node, access: Node, args: Node, scop
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtProperty
   calls: CheckContext.errorAtProperty checkAsTemplateCall
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.errorAtProperty#0 checkAsTemplateCall#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.errorAtProperty#0 checkAsTemplateCall#0
   pointer call: size=40 writesThrough=true captured=true passedTo=checkAsTemplateCall#1
   pointer access: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1 checkAsTemplateCall#2
   pointer args: size=40 writesThrough=true captured=false passedTo=checkAsTemplateCall#3
@@ -414,7 +416,7 @@ function checkAsTemplateCall(ctx: CheckContext, call: Node, access: Node, args: 
   sharedWrite: +0:3
   escaping: local
   calls: CheckContext.errorType CheckContext.template Node.constructor checkGenericCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.template#0 CheckContext.errorType#0 checkGenericCall#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.template#0 CheckContext.errorType#0 checkGenericCall#0
   pointer call: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 checkGenericCall#1
   pointer access: size=40 writesThrough=false captured=false
   pointer args: size=40 writesThrough=true captured=false
@@ -431,7 +433,7 @@ function checkAsTemplateCall(ctx: CheckContext, call: Node, access: Node, args: 
 function callbackArity(ctx: CheckContext, arg: Node, scope: Scope): i32 -> @callbackArity
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.signature FunctionBindings.get FunctionSig.writtenArity Scope.lookup nish_panic_index unwrapParens
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=CheckContext.signature#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=CheckContext.signature#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0
   stackSites=0 stackLocals=0
@@ -447,7 +449,7 @@ function checkCallbackMethod(ctx: CheckContext, call: Node, access: Node, args: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
   calls: CheckContext.error arrayMethodLocal arrayMethodTemplate callbackArity checkAsTemplateCall checkBuiltinArity nish_panic_index nish_str_concat nish_str_from_i32
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=checkBuiltinArity#0 callbackArity#0 CheckContext.error#0 checkAsTemplateCall#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=checkBuiltinArity#0 callbackArity#0 CheckContext.error#0 checkAsTemplateCall#0
   pointer call: size=40 writesThrough=true captured=true passedTo=checkBuiltinArity#1 checkAsTemplateCall#1
   pointer access: size=40 writesThrough=false captured=false passedTo=checkAsTemplateCall#2
   pointer args: size=40 writesThrough=true captured=false passedTo=checkBuiltinArity#3 checkAsTemplateCall#3
@@ -466,7 +468,7 @@ function checkArraySlice(ctx: CheckContext, call: Node, access: Node, args: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error arrayMethodLocal arrayMethodTemplate checkAsTemplateCall nish_str_concat nish_str_from_i32
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.error#0 checkAsTemplateCall#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.error#0 checkAsTemplateCall#0
   pointer call: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 checkAsTemplateCall#1
   pointer access: size=40 writesThrough=false captured=false passedTo=checkAsTemplateCall#2
   pointer args: size=40 writesThrough=true captured=false passedTo=checkAsTemplateCall#3
@@ -482,7 +484,7 @@ function checkArrayMethod(ctx: CheckContext, call: Node, access: Node, args: Nod
   sharedWrite: via CheckContext.errorType
   escaping: receiver
   calls: CheckContext.error CheckContext.errorAtProperty CheckContext.errorType CheckContext.numberType TypeTable.assignable TypeTable.baseOf TypeTable.isEntered TypeTable.isReadonlyArray TypeTable.refOf TypeTable.typeName arrayMethodTemplateCount checkArraySlice checkBuiltinArity checkBulkMethod checkCallbackMethod checkExpression checkSort isArgvExpression isArrayWriteMethod nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 readonlyWriteMessage typedArrayElement typedArraySpelling unwrapParens
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=isArgvExpression#0 CheckContext.errorType#0 CheckContext.errorType#0 readonlyWriteMessage#0 checkSort#0 checkArraySlice#0 checkCallbackMethod#0 CheckContext.errorAtProperty#0 typedArraySpelling#0 CheckContext.errorAtProperty#0 checkBuiltinArity#0 CheckContext.numberType#0 checkExpression#0 CheckContext.error#0 CheckContext.numberType#0 checkBuiltinArity#0 checkBuiltinArity#0 CheckContext.numberType#0 checkExpression#0 CheckContext.error#0 CheckContext.numberType#0 CheckContext.errorAtProperty#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 checkBulkMethod#0 CheckContext.errorAtProperty#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=isArgvExpression#0 CheckContext.errorType#0 CheckContext.errorType#0 readonlyWriteMessage#0 checkSort#0 checkArraySlice#0 checkCallbackMethod#0 CheckContext.errorAtProperty#0 typedArraySpelling#0 CheckContext.errorAtProperty#0 checkBuiltinArity#0 CheckContext.numberType#0 checkExpression#0 CheckContext.error#0 CheckContext.numberType#0 checkBuiltinArity#0 checkBuiltinArity#0 CheckContext.numberType#0 checkExpression#0 CheckContext.error#0 CheckContext.numberType#0 CheckContext.errorAtProperty#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 checkBulkMethod#0 CheckContext.errorAtProperty#0
   pointer call: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 checkSort#1 checkArraySlice#1 checkCallbackMethod#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 CheckContext.error#1 checkBulkMethod#1
   pointer access: size=40 writesThrough=false captured=false passedTo=checkSort#2 checkArraySlice#2 checkCallbackMethod#2 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 checkBulkMethod#2 CheckContext.errorAtProperty#1
   pointer args: size=40 writesThrough=true captured=false passedTo=checkSort#3 checkArraySlice#3 checkCallbackMethod#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBulkMethod#3
@@ -546,7 +548,7 @@ function checkBulkMethod(ctx: CheckContext, call: Node, access: Node, args: Node
   sharedWrite: +0:5
   escaping: receiver
   calls: CheckContext.error CheckContext.errorAtProperty TypeTable.arrayOf TypeTable.assignable TypeTable.baseOf TypeTable.isArray TypeTable.refOf TypeTable.typeName checkExpression checkIndexArgument disjointCopy isNumeric nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 requireStatementPosition
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=requireStatementPosition#0 CheckContext.errorAtProperty#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 checkIndexArgument#0 disjointCopy#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 checkIndexArgument#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=requireStatementPosition#0 CheckContext.errorAtProperty#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 checkIndexArgument#0 disjointCopy#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 checkIndexArgument#0
   pointer call: size=40 writesThrough=false captured=false passedTo=requireStatementPosition#1 CheckContext.error#1 CheckContext.error#1
   pointer access: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   pointer args: size=40 writesThrough=false captured=false
@@ -589,7 +591,7 @@ function checkBulkMethod(ctx: CheckContext, call: Node, access: Node, args: Node
 function disjointCopy(ctx: CheckContext, receiver: Node, source: Node): boolean -> @disjointCopy
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: freshLocal isFreshArrayExpression
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=freshLocal#0 freshLocal#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=freshLocal#0 freshLocal#0
   pointer receiver: size=40 writesThrough=true captured=true passedTo=isFreshArrayExpression#0 freshLocal#1
   pointer source: size=40 writesThrough=true captured=true passedTo=isFreshArrayExpression#0 freshLocal#1
   stackSites=0 stackLocals=0
@@ -609,7 +611,7 @@ function isFreshArrayExpression(expr: Node): boolean -> @isFreshArrayExpression 
 function freshLocal(ctx: CheckContext, expr: Node): Local | null -> @freshLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index unwrapParens
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -619,8 +621,8 @@ function checkNewArray(ctx: CheckContext, expr: Node, name: string, scope: Scope
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: name
-  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.isEnumMemberType TypeTable.isFnRef TypeTable.isPointer TypeTable.isRanged TypeTable.memberValue TypeTable.rangeHi TypeTable.rangeLo TypeTable.typeName checkArrayLength containerMessage fillsEverySlot isSortScratch nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 rejectForeignPointer rejectStoredMask resolveType typedArrayElement zeroFilledReferenceMessage
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.errorType#0 resolveType#1 rejectForeignPointer#0 rejectStoredMask#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 isSortScratch#0 checkArrayLength#0 fillsEverySlot#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 checkArrayLength#0
+  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.isEnumMemberType TypeTable.isFnRef TypeTable.isPointer TypeTable.isRanged TypeTable.memberValue TypeTable.rangeHi TypeTable.rangeLo TypeTable.typeName checkArrayLength containerMessage fillsEverySlot isSortScratch nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 rejectForeignPointer rejectLayoutElement rejectStoredMask resolveType typedArrayElement zeroFilledReferenceMessage
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.errorType#0 resolveType#1 rejectForeignPointer#0 rejectStoredMask#0 rejectLayoutElement#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 isSortScratch#0 checkArrayLength#0 fillsEverySlot#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 checkArrayLength#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkArrayLength#2 checkArrayLength#2
   stackSites=0 stackLocals=0
@@ -631,46 +633,47 @@ function checkNewArray(ctx: CheckContext, expr: Node, name: string, scope: Scope
   callee +7:12 resolveType -> @resolveType
   callee +8:9 rejectForeignPointer -> @rejectForeignPointer
   callee +11:9 rejectStoredMask -> @rejectStoredMask
-  callee +14:9 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee +15:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +15:50 containerMessage -> @containerMessage
-  callee +15:76 TypeTable.typeName -> @TypeTable.typeName
-  local +18:11 alias: i32 (const)
-  callee +18:19 typedArrayElement -> @typedArrayElement
-  local +23:13 spelled: string (const)
-  callee +23:23 TypeTable.typeName -> @TypeTable.typeName
-  callee +24:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +32:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +34:37 isSortScratch -> @isSortScratch
-  callee +35:12 checkArrayLength -> @checkArrayLength
-  callee +40:7 TypeTable.isPointer -> @TypeTable.isPointer
-  callee +40:37 fillsEverySlot -> @fillsEverySlot
-  local +41:11 spelled: string (const)
-  callee +41:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +42:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +49:7 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +49:36 TypeTable.rangeLo -> @TypeTable.rangeLo
-  callee +49:67 TypeTable.rangeHi -> @TypeTable.rangeHi
-  local +50:11 spelled: string (const)
-  callee +50:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +51:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +58:7 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  callee +58:43 TypeTable.memberValue -> @TypeTable.memberValue
-  local +59:11 spelled: string (const)
-  callee +59:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +60:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +67:7 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +68:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +68:32 zeroFilledReferenceMessage -> @zeroFilledReferenceMessage
-  callee +68:59 TypeTable.typeName -> @TypeTable.typeName
+  callee +14:9 rejectLayoutElement -> @rejectLayoutElement
+  callee +17:9 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee +18:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +18:50 containerMessage -> @containerMessage
+  callee +18:76 TypeTable.typeName -> @TypeTable.typeName
+  local +21:11 alias: i32 (const)
+  callee +21:19 typedArrayElement -> @typedArrayElement
+  local +26:13 spelled: string (const)
+  callee +26:23 TypeTable.typeName -> @TypeTable.typeName
+  callee +27:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +35:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +37:37 isSortScratch -> @isSortScratch
+  callee +38:12 checkArrayLength -> @checkArrayLength
+  callee +43:7 TypeTable.isPointer -> @TypeTable.isPointer
+  callee +43:37 fillsEverySlot -> @fillsEverySlot
+  local +44:11 spelled: string (const)
+  callee +44:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +45:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +52:7 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +52:36 TypeTable.rangeLo -> @TypeTable.rangeLo
+  callee +52:67 TypeTable.rangeHi -> @TypeTable.rangeHi
+  local +53:11 spelled: string (const)
+  callee +53:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +54:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +61:7 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee +61:43 TypeTable.memberValue -> @TypeTable.memberValue
+  local +62:11 spelled: string (const)
+  callee +62:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +63:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +70:7 TypeTable.isFnRef -> @TypeTable.isFnRef
   callee +71:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +76:10 checkArrayLength -> @checkArrayLength
+  callee +71:32 zeroFilledReferenceMessage -> @zeroFilledReferenceMessage
+  callee +71:59 TypeTable.typeName -> @TypeTable.typeName
+  callee +74:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +79:10 checkArrayLength -> @checkArrayLength
 function checkArrayLength(ctx: CheckContext, args: Node, scope: Scope, elem: i32): i32 -> @checkArrayLength
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
   escaping: elem
   calls: CheckContext.error CheckContext.numberType TypeTable.arrayOf TypeTable.typeName checkExpression isNumeric nish_panic_index nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.numberType#0 CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.numberType#0 CheckContext.error#0
   pointer args: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -684,7 +687,7 @@ function checkArrayLength(ctx: CheckContext, args: Node, scope: Scope, elem: i32
 function isSortScratch(ctx: CheckContext): boolean -> @isSortScratch
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isSortInstance
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:55 isSortInstance -> @isSortInstance
 function isSortInstance(instance: Instantiation | null): boolean -> @isSortInstance [exported]
@@ -806,7 +809,7 @@ function RefWalk.constructor(this: RefWalk, program: CheckedProgram, table: Type
   pointer this: size=88 writesThrough=true captured=false
   pointer program: size=800 writesThrough=true captured=true
   pointer table: size=112 writesThrough=true captured=true
-  pointer ctx: size=320 writesThrough=true captured=true
+  pointer ctx: size=336 writesThrough=true captured=true
   pointer overwrites: size=0 writesThrough=true captured=true
   pointer aliased: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -1108,7 +1111,7 @@ function checkElementReferences(ctx: CheckContext, body: Node): void -> @checkEl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefWalk.visit
   calls: RefWalk.constructor RefWalk.visit StringSet.constructor nish_alloc_struct
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=RefWalk.constructor#3
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=RefWalk.constructor#3
   pointer body: size=40 writesThrough=true captured=true passedTo=RefWalk.visit#1
   stackSites=1 stackLocals=1
   local +0:9 walk: RefWalk (const)
@@ -1187,7 +1190,7 @@ function fillsEverySlot(ctx: CheckContext, elem: i32): boolean -> @fillsEverySlo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: elem
   calls: crossesByCopy parallelRole
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   callee +1:29 crossesByCopy -> @crossesByCopy

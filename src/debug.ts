@@ -272,7 +272,8 @@ export class DebugInfo {
     if (type === T_VOID) {
       return "null"
     }
-    if (this.table.isNullable(type)) {
+    // A nullable reference keeps its own enumeration, which names tag 0 `null`.
+    if (this.table.isNullable(type) && !this.table.isFnRef(this.table.refOf(type))) {
       return this.typeRef(this.table.refOf(type))
     }
     // An enum member type is its enum to a debugger, which then prints the
@@ -341,10 +342,13 @@ export class DebugInfo {
       ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)))
     } else if (this.table.isUnion(type)) {
       ref = this.pointerTo(this.unionComposite(type))
+    } else if (this.table.isNullable(type)) {
+      // Only a nullable function reference reaches here (above).
+      ref = this.referenceEnumeration(this.table.refOf(type), type)
     } else if (this.table.isFnRef(type)) {
       // WP51 §5.3: a function reference is an `i32` tag naming one function
       // of its signature, so a debugger prints `h = twice` rather than `2`.
-      ref = this.referenceEnumeration(type)
+      ref = this.referenceEnumeration(type, type)
     } else if (this.table.isVector(type)) {
       // A `nish:simd` vector is a value, so DWARF's vector type: an array of
       // its lanes flagged `DIFlagVector`, which a debugger prints as `{1, 2, 3, 4}`.
@@ -366,6 +370,12 @@ export class DebugInfo {
     }
     this.setTypeRef(key, ref)
     return ref
+  }
+
+  /** The `DICompositeType` of `info` itself, not a pointer to it: a layout embedded by value. */
+  byValue(info: StructInfo): string {
+    this.typeRef(info.type)
+    return this.typeRefs[this.typeKeys.get(`=${this.table.mangle(info.type)}`, -1)]
   }
 
   /** Record `ref` as the metadata for `key`, replacing a reservation made by `composite`. */
@@ -422,6 +432,9 @@ export class DebugInfo {
   composite(info: StructInfo): string {
     const ref = this.module.reserveMetadata()
     this.setTypeRef(this.table.mangle(info.type), this.pointerTo(ref))
+    // The struct itself, under a key no mangled type starts with, for a
+    // layout that embeds this one by value (WP27 S4.1).
+    this.setTypeRef(`=${this.table.mangle(info.type)}`, ref)
     const file = this.fileOf(info.origin)
     const members: string[] = []
     for (const f of info.fields) {
@@ -437,6 +450,13 @@ export class DebugInfo {
           // is the header itself, whose `data` points at the slots after it.
           members.push(this.member(f.name, ref, this.arrayHeader(elem, name), 192, f.offset * 8, file, line))
         }
+        continue
+      }
+      const nested = f.nested
+      if (nested !== null) {
+        members.push(
+          this.member(f.name, ref, this.byValue(nested), nested.size * 8, f.offset * 8, file, line)
+        )
         continue
       }
       const base = this.typeRef(f.type)
@@ -472,11 +492,16 @@ export class DebugInfo {
   /**
    * A function reference type as DWARF sees it (WP51 §5.3): a 32-bit
    * enumeration named for the signature, one enumerator per function a
-   * reference of it may hold, valued by its tag.
+   * reference of it may hold, valued by its tag. `named` is the type the
+   * enumeration is named for: `type` itself, or its `| null`, which adds a
+   * `null` enumerator for tag 0.
    */
-  referenceEnumeration(type: i32): string {
+  referenceEnumeration(type: i32, named: i32): string {
     const names = this.table.fnRefMembers[this.table.refOf(type)]
     const enumerators: string[] = []
+    if (named !== type) {
+      enumerators.push(this.module.addMetadata('!DIEnumerator(name: "null", value: 0)'))
+    }
     let i = 0
     while (i < names.length) {
       enumerators.push(this.module.addMetadata(`!DIEnumerator(name: ${quote(names[i])}, value: ${i + 1})`))
@@ -484,7 +509,7 @@ export class DebugInfo {
     }
     const elements = this.module.addMetadata(`!{${enumerators.join(", ")}}`)
     return this.module.addMetadata(
-      `!DICompositeType(tag: DW_TAG_enumeration_type, name: ${quote(this.table.typeName(type))}, file: ${this.file}, size: 32, align: 32, elements: ${elements}, baseType: ${this.typeRef(T_I32)})`
+      `!DICompositeType(tag: DW_TAG_enumeration_type, name: ${quote(this.table.typeName(named))}, file: ${this.file}, size: 32, align: 32, elements: ${elements}, baseType: ${this.typeRef(T_I32)})`
     )
   }
 

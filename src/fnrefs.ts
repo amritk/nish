@@ -18,6 +18,7 @@ import { BuildMode, hostVisible } from "./visibility"
 import { isGuardType } from "./parallel"
 import { N_ARROW, N_CLASS, N_CONSTRUCTOR, N_FIELD, N_IDENT, N_PARAM, N_THIS, N_VAR_DECL, Node } from "./nodes"
 import { StringSet } from "./map"
+import { ROOT_PACKAGE } from "./packages"
 
 /** The refusal for a generic function named in a value position. */
 const genericReferenceMessage = (name: string): string =>
@@ -157,6 +158,23 @@ export const referenceTypeOf = (table: TypeTable, sig: FunctionSig): i32 => {
   return table.fnRefOf(params, sig.returnType)
 }
 
+/** WP51 stage 2: a `F | null` whose `null` no test has excluded here. */
+export const nullableReference = (ctx: CheckContext, type: i32): boolean =>
+  ctx.table.isNullable(type) && ctx.table.isFnRef(ctx.table.stripNull(type))
+
+/**
+ * WP51 stage 2: a call through a `F | null` is refused until a test proves it
+ * holds a function, as TypeScript refuses it, because tag 0 names none. A test
+ * narrows a local only, so a field or an element is read into a `const` first.
+ */
+export const refuseNullableCall = (ctx: CheckContext, callee: Node, shown: string): i32 => {
+  const test = callee.kind === N_IDENT ? `${shown} !== null` : `const h = ${shown}; if (h !== null)`
+  return ctx.errorType(
+    callee,
+    `\`${shown}\` may be \`null\`: a nullable function reference is called only after a test such as \`${test}\` proves it holds a function`
+  )
+}
+
 /**
  * A call through a reference of type `type`, whose callee `expr.children[0]`
  * is already checked: the arguments against the reference's signature, and
@@ -220,7 +238,8 @@ export const outerReference = (ctx: CheckContext, name: string): boolean => {
   for (const scope of ctx.arrowOuterScopes) {
     const local = scope.lookup(name)
     if (local !== null) {
-      return ctx.table.isFnRef(scope.typeOf(local))
+      // A nullable one is a reference too: the call is refused until a test narrows it.
+      return ctx.table.isFnRef(ctx.table.stripNull(scope.typeOf(local)))
     }
   }
   return false
@@ -288,6 +307,10 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
   for (const ctx of contexts) {
     const program = ctx.program
     const table = ctx.table
+    // A dependency's export, `std/`'s included, is an export to Nish code, not
+    // to a host: the C ABI is the root package's (`src/interop-abi.ts`), so a
+    // `Map<K, F>`'s `set` is no door a host can call (WP51 stage 2).
+    const rootPackage = program.packageName === ROOT_PACKAGE
     for (const sig of program.functions) {
       const owner = sig.owner
       const exported = owner !== null ? owner.exported : sig.exported
@@ -297,7 +320,7 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
         !sig.definedIn(program.source) ||
         sig.dispatcher ||
         sig.compileTimeOnly() ||
-        (!sig.foreign() && !hostVisible(mode, exported, entry))
+        (!sig.foreign() && (!rootPackage || !hostVisible(mode, exported, entry)))
       ) {
         continue
       }
@@ -338,7 +361,10 @@ export const refuseHostReferences = (contexts: CheckContext[], mode: BuildMode):
   }
   for (const ctx of contexts) {
     for (const info of ctx.program.structList) {
-      if (info.origin !== ctx.program.source || (!mode.everyLayoutShared && reached.indexOf(info.type) < 0)) {
+      // Every layout is handed out only for the root package's classes; a
+      // dependency's class is shared where a signature reaches it.
+      const everyLayout = mode.everyLayoutShared && ctx.program.packageName === ROOT_PACKAGE
+      if (info.origin !== ctx.program.source || (!everyLayout && reached.indexOf(info.type) < 0)) {
         continue
       }
       for (const field of info.fields) {

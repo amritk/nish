@@ -76,6 +76,7 @@ import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
+import { runFfiStructChecks } from "./ffi-struct.js"
 import { hardeningProblems } from "../scripts/check-hardening.mjs"
 import {
   packageRootOf,
@@ -3728,6 +3729,15 @@ if (selects("fnref", "fnref_debug_check")) {
     peakOf("place_set_1x", scaled("fnref_place_set", 9, 1000)),
     peakOf("place_set_10x", scaled("fnref_place_set", 9, 10000))
   )
+  // WP51 stage 2: the same loop through an argument, a nullable element and
+  // a `Map` value.
+  for (const variant of ["arg", "nullable", "map"]) {
+    flat(
+      `fnref_place_set_${variant}: 10x the loop peaks where 1x does`,
+      peakOf(`place_set_${variant}_1x`, scaled(`fnref_place_set_${variant}`, 9, 1000)),
+      peakOf(`place_set_${variant}_10x`, scaled(`fnref_place_set_${variant}`, 9, 10000))
+    )
+  }
   const keepless = (t) => t.replace(/\n\s*sum = sum \+ slot\.use\(new P\(i\), k\)/, "")
   flat(
     "fnref_escape_join: 10x the loop through the set that keeps nothing peaks where 1x does",
@@ -3786,6 +3796,44 @@ if (selects("fnref", "fnref_debug_check")) {
       gLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
       enumTag.test(gLl),
     gLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gLl.slice(0, 2000)
+  )
+  // A nullable reference's tag 0 is `null`: its enumeration names it, so a
+  // debugger prints `h = null` rather than `0`.
+  const gnSrc = path.join(fnrefDir, "fnref_gn.ts")
+  fs.writeFileSync(
+    gnSrc,
+    [
+      "type Op = (x: i32) => i32",
+      "const inc = (x: i32): i32 => x + 1",
+      "const twice = (x: i32): i32 => x * 2",
+      "export const main = (): number => {",
+      "  let h: Op | null = null",
+      "  if (Date.now() > 0) {",
+      "    h = inc",
+      "  }",
+      "  if (Date.now() > 1) {",
+      "    h = twice",
+      "  }",
+      "  if (h !== null) {",
+      "    console.log(`${h(3)}`)",
+      "  }",
+      "  return 0",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const gnOut = path.join(fnrefDir, "gn-ir") + path.sep
+  const gnIr = spawnSync(NISH, [gnSrc, "-g", "-o", gnOut], { cwd: root, encoding: "utf8" })
+  const gnLlPath = path.join(gnOut, "fnref_gn.ll")
+  const gnLl = gnIr.status === 0 && fs.existsSync(gnLlPath) ? fs.readFileSync(gnLlPath, "utf8") : shown(gnIr)
+  const nullableTag = /!DICompositeType\(tag: DW_TAG_enumeration_type, name: "\(i32\) => i32 \| null",[^\n]*size: 32/
+  check(
+    "fnref -g: a nullable reference's enumeration names tag 0 `null`, then its members",
+    gnLl.includes('!DIEnumerator(name: "null", value: 0)') &&
+      gnLl.includes('!DIEnumerator(name: "inc", value: 1)') &&
+      gnLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
+      nullableTag.test(gnLl),
+    gnLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gnLl.slice(0, 2000)
   )
   const dispatcherSp = gLl
     .split("\n")
@@ -4121,6 +4169,107 @@ if (!only || "net_tls_tcp".includes(only)) {
       ended.code === 0 && body === want,
       `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(body)}\nwant:   ${JSON.stringify(want)}\nstderr: ${serverErr}`
     )
+  }
+}
+
+// ---- record_size_limit (RFC 8449) against openssl s_client (WP39 G3) ------------
+//
+// `tests/link/net_tls_record_size_limit` reads the record lengths the server
+// writes under a client's limit; this asks a third-party client the same, when
+// its openssl can send the extension: s_client offers a limit of 512 with
+// `-record_size_limit`, prints every record header it reads under `-msg`, and
+// no protected record the server sends may carry more than 512 + 16 bytes
+// (the inner plaintext and the AEAD tag). OpenSSL has no such option up to at
+// least 3.0, so most hosts skip, and say why.
+if (!only || "net_tls_record_size_limit".includes(only)) {
+  const help = spawnSync("openssl", ["s_client", "-help"], { encoding: "utf8" })
+  const helpText = `${help.stdout ?? ""}${help.stderr ?? ""}`
+  if (help.error !== undefined || !helpText.includes("-record_size_limit")) {
+    const version = spawnSync("openssl", ["version"], { encoding: "utf8" })
+    const which = help.error === undefined ? String(version.stdout).trim() : "no openssl on PATH"
+    skip(`net_tls_record_size_limit: ${which}: s_client has no -record_size_limit, so the interop run did not happen`)
+  } else {
+    const rslDir = path.join(buildDir, "net-tls-rsl")
+    fs.rmSync(rslDir, { recursive: true, force: true })
+    fs.mkdirSync(rslDir, { recursive: true })
+    const exe = path.join(rslDir, "app")
+    const built = spawnSync(
+      NISH,
+      [
+        path.join(root, "tests", "link", "net_tls_record_tcp", "main.ts"),
+        "-o",
+        rslDir + path.sep,
+        "--link",
+        exe,
+        ...linkProfile("net_tls_record_tcp"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    if (check("net_tls_record_size_limit: the server links", built.status === 0, String(built.stderr))) {
+      const server = spawn(exe, ["serve", "1"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+      const serverTimer = setTimeout(() => server.kill("SIGKILL"), 30000)
+      const serverDone = new Promise((resolve) =>
+        server.on("close", (code) => {
+          clearTimeout(serverTimer)
+          resolve(code)
+        })
+      )
+      let served = ""
+      const port = await new Promise((resolve) => {
+        server.stdout.on("data", (chunk) => {
+          served += chunk
+          const m = /^port (\d+)\n/.exec(served)
+          if (m !== null) {
+            resolve(Number(m[1]))
+          }
+        })
+        server.on("close", () => resolve(0))
+      })
+      // A line long enough that the echo must be cut into several records.
+      const line = `${"x".repeat(2000)}\n`
+      const got =
+        port > 0
+          ? await new Promise((resolve) => {
+              const child = spawn(
+                "openssl",
+                ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-servername", "localhost", "-msg", "-record_size_limit", "512"],
+                { stdio: ["pipe", "pipe", "pipe"] }
+              )
+              let all = ""
+              let sent = false
+              const timer = setTimeout(() => child.kill("SIGKILL"), 15000)
+              const onData = (chunk) => {
+                all += chunk
+                if (!sent && all.includes("Verify return code")) {
+                  sent = true
+                  child.stdin.write(line)
+                }
+                // The echo, whole: s_client prints what it reads, one record at a
+                // time between the `-msg` lines, and never what it was given.
+                if (sent && (all.match(/x{8,}/g) ?? []).join("").length >= 2000) {
+                  child.stdin.end()
+                }
+              }
+              child.stdout.on("data", onData)
+              child.stderr.on("data", onData)
+              child.on("close", (code) => {
+                clearTimeout(timer)
+                resolve({ code, all })
+              })
+            })
+          : { code: null, all: "" }
+      // `-msg` prints `<<< ... RecordHeader` and the five header bytes, in hex,
+      // on the next line, for every record s_client reads.
+      const lengths = [...got.all.matchAll(/<<< [^\n]*RecordHeader[^\n]*\n\s*17 03 03 ([0-9a-f]{2}) ([0-9a-f]{2})/gi)].map(
+        (m) => Number.parseInt(m[1] + m[2], 16)
+      )
+      check(
+        "net_tls_record_size_limit: openssl s_client -record_size_limit 512 completes, and no protected record it reads passes 512 + 16 bytes",
+        got.code === 0 && lengths.length > 1 && lengths.every((n) => n <= 512 + 16),
+        `exit ${got.code}, protected record lengths ${JSON.stringify(lengths)}\n${got.all.slice(-1500)}`
+      )
+      await serverDone
+    }
   }
 }
 
@@ -29641,6 +29790,7 @@ if (!only || "c_symbol_private_libm".includes(only)) {
 }
 
 runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
+runFfiStructChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 

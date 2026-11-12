@@ -781,7 +781,7 @@ export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
   if (parts.read === null && isPlainOperand(emitter, expr.children[1])) {
     const fallback = emitter.emitExpression(expr.children[1])
     const present = nullable
-      ? fn.emitValue(`and i1 ${parts.found}, ${isSet(emitter, ty, parts.value)}`)
+      ? fn.emitValue(`and i1 ${parts.found}, ${isSet(emitter, type, parts.value)}`)
       : parts.found
     return fn.emitValue(`select i1 ${present}, ${ty} ${parts.value}, ${ty} ${fallback}`)
   }
@@ -793,7 +793,7 @@ export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
   const value = loadMaybeValue(emitter, parts)
   const foundEdge = fn.currentBlock().label
   if (nullable) {
-    fn.emit(`br i1 ${isSet(emitter, ty, value)}, label %${done.label}, label %${missing.label}`)
+    fn.emit(`br i1 ${isSet(emitter, type, value)}, label %${done.label}, label %${missing.label}`)
   } else {
     fn.emit(`br label %${done.label}`)
   }
@@ -813,9 +813,10 @@ export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
  */
 const emitNullableCoalesce = (emitter: Emitter, expr: Node): string => {
   const fn = emitter.fn
-  const ty = emitter.llvm(intrinsicType(emitter.program, expr))
+  const type = intrinsicType(emitter.program, expr)
+  const ty = emitter.llvm(type)
   const value = emitter.emitExpression(expr.children[0])
-  const present = isSet(emitter, ty, value)
+  const present = isSet(emitter, type, value)
   if (isPlainOperand(emitter, expr.children[1])) {
     const fallback = emitter.emitExpression(expr.children[1])
     return fn.emitValue(`select i1 ${present}, ${ty} ${value}, ${ty} ${fallback}`)
@@ -848,7 +849,8 @@ const emitNullableCoalesce = (emitter: Emitter, expr: Node): string => {
 const emitChainCoalesce = (emitter: Emitter, expr: Node): string => {
   const fn = emitter.fn
   const chain = expr.children[0]
-  const ty = emitter.llvm(intrinsicType(emitter.program, expr))
+  const type = intrinsicType(emitter.program, expr)
+  const ty = emitter.llvm(type)
   const missing = fn.newBlock("nullish.default")
   const done = fn.newBlock("nullish.end")
   emitter.chainDefaults.push(missing.label)
@@ -862,7 +864,7 @@ const emitChainCoalesce = (emitter: Emitter, expr: Node): string => {
     )
   }
   if (emitter.table.isNullable(emitter.typeOf(chain))) {
-    fn.emit(`br i1 ${isSet(emitter, ty, value)}, label %${done.label}, label %${missing.label}`)
+    fn.emit(`br i1 ${isSet(emitter, type, value)}, label %${done.label}, label %${missing.label}`)
   } else {
     fn.emit(`br label %${done.label}`)
   }
@@ -910,9 +912,15 @@ export const emitChainTest = (emitter: Emitter, receiver: Node, value: string): 
   emitter.chainTests[at] = emitter.chainTests[at] + 1
 }
 
-/** Whether `value`, a found value of the nullable LLVM type `ty`, is not the stored `null` that `??` replaces too. */
-const isSet = (emitter: Emitter, ty: string, value: string): string =>
-  emitter.fn.emitValue(`icmp ne ${ty} ${value}, null`)
+/**
+ * Whether `value`, a found value of the nullable type `type`, is not the
+ * stored `null` that `??` replaces too: the null pointer, or tag 0 of a
+ * function reference, which names no function (WP51 stage 2).
+ */
+const isSet = (emitter: Emitter, type: i32, value: string): string => {
+  const empty = emitter.table.isFnRef(emitter.table.stripNull(type)) ? "0" : "null"
+  return emitter.fn.emitValue(`icmp ne ${emitter.llvm(type)} ${value}, ${empty}`)
+}
 
 /** A literal, a local or a module constant: evaluating it has no effect, so it may be evaluated whether or not it is used. */
 const isPlainOperand = (emitter: Emitter, expr: Node): boolean => {
