@@ -242,6 +242,17 @@ export class H2cLoop {
     return toI32(peer.got.length) >= n;
   }
 
+  /** Runs the loop until the server has accepted `count` connections in all. */
+  awaitAccepted(count: i32): boolean {
+    while (this.accepted < count) {
+      this.step(toI32(-1));
+      if (this.failure !== "") {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** Runs the loop until the server has closed `count` connections in all. */
   awaitClosed(count: i32): boolean {
     while (this.closed < count) {

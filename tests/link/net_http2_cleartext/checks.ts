@@ -41,12 +41,15 @@ class H2cClient {
   index: i32 = -1;
   wire: Wire;
   log: FrameLog;
+  /** What `flushHead` kept back, until `flushHeld` sends it. */
+  held: u8[];
 
   constructor(lb: H2cLoop) {
     this.lb = lb;
     this.index = lb.connect();
     this.wire = new Wire();
     this.log = new FrameLog();
+    this.held = [];
   }
 
   /** Sends what `wire` holds. */
@@ -54,21 +57,25 @@ class H2cClient {
     this.lb.send(this.index, this.wire.take());
   }
 
-  /** Sends what `wire` holds in two writes, the first of `at` bytes, with ten milliseconds of the loop between. */
-  flushSplit(at: i32): void {
+  /** Sends the first `at` bytes of what `wire` holds and keeps the rest for `flushHeld`. */
+  flushHead(at: i32): void {
     const bytes: u8[] = this.wire.take();
     const head: u8[] = [];
-    const tail: u8[] = [];
+    this.held = [];
     for (let k: i32 = 0; k < toI32(bytes.length); k++) {
       if (k < at) {
         head.push(bytes[k]);
       } else {
-        tail.push(bytes[k]);
+        this.held.push(bytes[k]);
       }
     }
     this.lb.send(this.index, head);
-    this.lb.wait(toI32(10));
-    this.lb.send(this.index, tail);
+  }
+
+  /** Sends what `flushHead` kept back. */
+  flushHeld(): void {
+    this.lb.send(this.index, this.held);
+    this.held = [];
   }
 
   /** Sends `text`, one byte a character. */
@@ -200,11 +207,19 @@ export const cleartextChecks = (): i32 => {
   const splits: i32[] = [toI32(1), toI32(10), toI32(23)];
   for (let k: i32 = 0; k < 3; k++) {
     const at: i32 = splits[k];
+    const before: i32 = lp.accepted;
     const split = new H2cClient(lp);
+    const admitted: boolean = lp.awaitAccepted(before + 1);
     const slot: i32 = lp.lastSlot;
     split.prefaces();
     split.wire.headers(toI32(1), plainGet("/hello"), H2_FLAG_END_STREAM);
-    split.flushSplit(at);
+    split.flushHead(at);
+    lp.wait(toI32(10));
+    t.ok(
+      `a preface's first ${at} bytes leave slot ${slot} open and not yet prefaced`,
+      admitted && lp.server.holds(slot) && !lp.server.prefaced(slot) && lp.server.busy() === 1
+    );
+    split.flushHeld();
     t.eqStr(
       `a preface split after its byte ${at} is held and answered as one`,
       split.awaitFrames(toI32(5)),
