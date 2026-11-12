@@ -135,6 +135,7 @@ class Http2TlsServer
 | `busy(): i32` | How many slots hold a connection. |
 | `close(slot: i32): void` | Ends `slot`'s connection and frees the slot at once, as `TlsTcpServer.close` does; the connection gives back every buffer it holds. |
 | `connection(slot: i32): Http2Connection` | The HTTP/2 connection of `slot`, its `date` brought up to now. A slot never accepted into, or out of range, names slot 0's, which may be live. |
+| `expire(now: i64): i32` | Ends every slot whose connection has outlived a timeout at `now`: a client that has not acknowledged the server's SETTINGS within `settingsTimeout` of its accept, the TLS handshake included, is sent GOAWAY SETTINGS_TIMEOUT (RFC 9113 §6.5.3) once its handshake is done, and one with nothing moved for `idleTimeout`, mid-stream or lingering after its `close_notify`, GOAWAY NO_ERROR; each frame goes as far as the socket takes it now, and the slot is closed. A program calls it from its loop, with `pollWait`'s timeout no longer than the shorter of the two. |
 | `fd(slot: i32): i32` | The descriptor of `slot`, for `pollAdd`. |
 | `flush(slot: i32): i32` | Writes what `slot`'s connection holds into TLS, as far as TLS takes it, and sends it; shuts TLS down once the connection is over (everything is sent, and it failed, or no stream is left after a GOAWAY or after the peer's byte stream ended), or ALPN chose another protocol. Answers the interest, with the write bit while the connection still holds bytes. |
 | `holds(slot: i32): boolean` | Whether `slot` holds a connection. |

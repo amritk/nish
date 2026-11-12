@@ -373,7 +373,7 @@ function Relay.close(this: Relay, slot: i32, code: i32, reason: string, quicCode
   local +11:13 a: i64 (const)
   callee +12:7 Relay.log -> @Relay.log
 function Relay.wt(this: Relay, slot: i32): WebTransport -> @Relay.wt [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=368
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=432
   sharedWrite: +0:7
   escaping: slot
   calls: nish.Http3Server.connection nish.WebTransport.constructor nish_alloc_struct nish_array_grow nish_panic_index
@@ -415,7 +415,7 @@ function Relay.session(this: Relay, slot: i32, wt: WebTransport, now: i64): void
   escaping: now slot
   calls: Relay.close Relay.isPath nish.Http3Wheel.file nish.WebTransport.accept nish.WebTransport.refuse nish.h3Count nish_panic_index nish_panic_overflow
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.isPath#0 Relay.close#0 Relay.close#0
-  pointer wt: size=368 writesThrough=true captured=false passedTo=nish.WebTransport.refuse#0 nish.WebTransport.accept#0
+  pointer wt: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.refuse#0 nish.WebTransport.accept#0
   stackSites=0 stackLocals=0
   local -4:11 id: i64 (const)
   callee -3:52 Relay.isPath -> @Relay.isPath
@@ -442,7 +442,7 @@ function Relay.hello(this: Relay, slot: i32, wt: WebTransport, now: i64, wall: i
   escaping: now slot wall
   calls: GrantVerifier.verify Relay.close Relay.log Relay.openUpstream nish.Http3Wheel.file nish.WebTransport.sendDatagram nish.h3Count nish_alloc_struct nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_poll_add nish_str_concat nish_str_from_i32 nish_str_from_i64 relayDecode relayEncodeHelloOk
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.close#0 Relay.close#0 Relay.close#0 Relay.openUpstream#0 Relay.close#0 Relay.log#0
-  pointer wt: size=368 writesThrough=true captured=false passedTo=nish.WebTransport.sendDatagram#0
+  pointer wt: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.sendDatagram#0
   pointer grantKey: size=8 writesThrough=false captured=false passedTo=GrantVerifier.verify#5
   stackSites=1 stackLocals=1
   local -3:11 f: RelayFrame (const)
@@ -500,7 +500,7 @@ function Relay.pump(this: Relay, slot: i32, wt: WebTransport, now: i64): void ->
   escaping: now slot
   calls: Relay.close Relay.sendUp nish.WebTransport.sendDatagram nish.h3Count nish_monotonic_nanos nish_panic_index nish_panic_overflow relayCount32 relayDecode relayEncodePong
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.close#0 Relay.sendUp#0 Relay.close#0
-  pointer wt: size=368 writesThrough=true captured=false passedTo=nish.WebTransport.sendDatagram#0
+  pointer wt: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.sendDatagram#0
   stackSites=0 stackLocals=0
   callee +6:30 h3Count -> @nish.h3Count
   callee +8:26 h3Count -> @nish.h3Count

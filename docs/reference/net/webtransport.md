@@ -193,6 +193,23 @@ nothing a warm session does allocates. Counters a peer drives saturate.
 
 </scalar-callout>
 
+<scalar-detail title="The clock">
+
+Each session keeps the time of its last activity
+(`monotonicNanos`, read once a call of `next`): its request, its accept,
+a datagram or a stream event either way, a capsule. `expire(now)`, called
+from the program's loop as `Http1Server.expire` is, ends every session
+quiet for longer than `WebTransportConfig.idleTimeout`: one never answered
+is refused with 503, an accepted one is closed (CLOSE with code 0 and the
+FIN, or a reset both ways when the capsule does not fit), and one already
+closed whose client never finished its half is let go. Each session it
+ends that the program still held is reported by the next calls of `next`
+as WT_CLOSED, `closedByPeer` false, code 0. A session takes at most
+`maxDatagramsPerSecond` datagrams in each second from its first; the rest
+are dropped and counted in `datagramsDropped`.
+
+</scalar-detail>
+
 <scalar-detail title="Error codes">
 
 A stream's reset and STOP_SENDING carry an HTTP/3 code;
@@ -295,6 +312,8 @@ class WebTransport
 | `accept(id: i64): i32` | Accepts session `id` with a 200 (draft-02 §3.2): its datagrams and streams reach the program from now on, the streams that waited for it first. Answers 0, H3_AGAIN when the response does not fit yet, or H3_CLOSED for one that is not a session asked for. |
 | `close(id: i64, code: i64, buf: u8[], off: i32, len: i32): i32` | Closes session `id` (draft-02 §5): CLOSE_WEBTRANSPORT_SESSION with the application's `code` and the reason `buf[off .. off + len)`, at most 1024 bytes of UTF-8, then the FIN; every stream of the session is reset with WT_SESSION_GONE. Answers 0; H3_INVALID for a reason too long; H3_AGAIN while the CONNECT stream has no room for the capsule, and WT_WRITABLE then names it; or H3_CLOSED. |
 | `drain(id: i64): i32` | Sends DRAIN_WEBTRANSPORT_SESSION on session `id`: the client should finish and close it. Answers 0, H3_AGAIN, or H3_CLOSED. |
+| `expire(now: i64): i32` | Ends every session quiet for longer than `idleTimeout` at `now` (see the module comment): one never answered is refused with 503, an accepted one closed with code 0, and one already closed whose client never finished its half let go. Call it from the program's loop; it returns at once before the soonest deadline it last saw. The next calls of `next` report each session the program held as WT_CLOSED. |
+| `expiresNoSooner(now: i64): i64` | The soonest `expire` could end a session, at or after `now`: activity only moves a session's deadline later. |
 | `maxDatagramPayload(id: i64): i32` | The largest payload `sendDatagram` takes for session `id` now: what the QUIC connection's `maxDatagramPayload` leaves after the quarter stream ID; 0 for a session not accepted. |
 | `next(): i32` | Reads what the connection has and answers the next event (see the module comment): a `WT_*` one, or a plain request's `H3_*` one. Call it until it answers H3_NEED_MORE or H3_ERROR. |
 | `openStream(id: i64, bidirectional: boolean): i64` | Opens a stream of this side's for session `id` (draft-02 §4.1, §4.2). Answers its ID; WT_LIMIT when the session holds `maxStreams`; H3_AGAIN while the client's MAX_STREAMS allows no more; or H3_CLOSED. |
@@ -315,6 +334,8 @@ class WebTransportConfig
 | Member | |
 | --- | --- |
 | `new WebTransportConfig()` |  |
+| `idleTimeout: i32` | Milliseconds a session may go without activity before `expire` ends it, 1 to 86,400,000: a session asked for counts from its request, an accepted one from its last datagram or stream event either way, and one this side closed from its close. |
+| `maxDatagramsPerSecond: i32` | Datagrams one session may deliver in a second, 1 to 1,048,576; the rest are dropped and counted. |
 | `maxPending: i32` | Streams that may wait at once for a session not yet answered or not yet arrived (draft-02 §4.5). |
 | `maxStreams: i32` | Streams one session may have at once, both kinds and both openers together. |
 
