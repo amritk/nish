@@ -875,6 +875,32 @@ export const http1Checks = (): i32 => {
   t.eqI32("refused: a CR in the connection value", http1WriteResponseHead(out, zero, ok, "OK", none, none, zero, "close\r\nX: y", noDate), HTTP1_REFUSED);
   t.eqI32("refused: a LF in a value's octets", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a")], [bytesOf("b\nc")], zero, "", noDate), HTTP1_REFUSED);
   t.eqI32("refused: a name that is not a token", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a b")], [bytesOf("c")], zero, "", noDate), HTTP1_REFUSED);
+  // A name of sixteen octets or more is checked a vector at a time, the last
+  // vector overlapping the one before it: a space at every lane of every
+  // length around the vector width is refused, and the clean name written.
+  const tokenOut: u8[] = new Array<u8>(400);
+  let longRefused: i32 = 0;
+  let longTried: i32 = 0;
+  let longWritten: i32 = 0;
+  for (let n: i32 = 15; n <= 34; n += 1) {
+    const clean: u8[] = new Array<u8>(n);
+    for (let k: i32 = 0; k < n; k += 1) {
+      clean[k] = toU8(toI32(97) + (k % toI32(26)));
+    }
+    if (http1WriteResponseHead(tokenOut, zero, ok, "OK", [clean], [bytesOf("v")], zero, "", noDate) > 0) {
+      longWritten += 1;
+    }
+    for (let k: i32 = 0; k < n; k += 1) {
+      const bad: u8[] = clean.slice();
+      bad[k] = toU8(32);
+      longTried += 1;
+      if (http1WriteResponseHead(tokenOut, zero, ok, "OK", [bad], [bytesOf("v")], zero, "", noDate) === HTTP1_REFUSED) {
+        longRefused += 1;
+      }
+    }
+  }
+  t.eqI32("a long token name is written at every length", longWritten, toI32(20));
+  t.eqI32("a long name with a space at any lane is refused", longRefused, longTried);
   t.eqI32("refused: the caller's Transfer-Encoding", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("Transfer-Encoding")], [bytesOf("gzip")], zero, "", noDate), HTTP1_REFUSED);
   t.eqI32("refused: names and values of different lengths", http1WriteResponseHead(out, zero, ok, "OK", names, none, zero, "", noDate), HTTP1_REFUSED);
   t.eqI32("refused: status 600", http1WriteResponseHead(out, zero, s600, "OK", none, none, zero, "", noDate), HTTP1_REFUSED);
