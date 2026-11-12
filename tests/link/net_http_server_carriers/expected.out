@@ -15,4 +15,7 @@ PASS  a POST of /echo answered and ended
 PASS  200 with its body echoed
 PASS  a GET of a path no route has answered and ended
 PASS  404 as problem+json
-http server carriers: 17 passed, 0 failed, 0 skipped
+PASS  a server with a pool of one: the TLS handshake
+PASS  a GET of /big: 200, and the body waits for window
+PASS  the reset handed the request back: the next stream is answered, not refused
+http server carriers: 20 passed, 0 failed, 0 skipped

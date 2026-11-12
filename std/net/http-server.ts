@@ -179,7 +179,7 @@ export class HttpServerLimits {
   bodyTimeout: i32 = 30000
   /** Milliseconds an HTTP/2 connection with no open stream is kept. */
   idleTimeout: i32 = 60000
-  /** Milliseconds a cleartext HTTP/2 connection has to send its preface. */
+  /** Milliseconds a cleartext HTTP/2 connection (`listenH2c`) has to send its preface; read once `listenH2c` serves. */
   prefaceTimeout: i32 = 10000
   /** Seconds a client may remember the Alt-Svc advertisement; 0 sends `alt-svc: clear`. */
   altSvcMaxAge: i32 = 86400
@@ -724,6 +724,8 @@ export class HttpServer {
   private loop: i32 = 0
   private h1Fd: i32 = -1
   private h1OutputSize: i32 = 0
+  /** Where `feedStarved` takes the next slot of `starved`; the slots before it are spent. */
+  private starvedHead: i32 = 0
   /** Where `fromFields` writes next in a request's head. */
   private headAt: i32 = 0
   private h2Fd: i32 = -1
@@ -1287,17 +1289,25 @@ export class HttpServer {
     if (h1 === null) {
       return
     }
-    while (toI32(this.starved.length) > 0 && toI32(this.free.length) > 0) {
-      const slot: i32 = this.starved[0]
-      const last: i32 = toI32(this.starved.length) - 1
-      for (let k: i32 = 0; k < last; k++) {
-        this.starved[k] = this.starved[k + 1]
-      }
-      this.starved.pop()
+    while (this.starvedHead < toI32(this.starved.length) && toI32(this.free.length) > 0) {
+      const slot: i32 = this.starved[this.starvedHead]
+      this.starvedHead += 1
       this.h1Starved[slot] = false
       if (this.h1Open[slot] && h1.holds(slot)) {
         this.drive(h1, slot)
       }
+    }
+    // Drop the spent slots once they are half the list, so each is moved O(1) times.
+    const spent: i32 = this.starvedHead
+    const length: i32 = toI32(this.starved.length)
+    if (spent > 0 && spent * 2 >= length) {
+      for (let k: i32 = spent; k < length; k++) {
+        this.starved[k - spent] = this.starved[k]
+      }
+      for (let k: i32 = 0; k < spent; k++) {
+        this.starved.pop()
+      }
+      this.starvedHead = 0
     }
   }
 
@@ -1486,7 +1496,7 @@ export class HttpServer {
     }
     r.pathEnd = pathEnd
     r.bodyLength = 0
-    r.since = this.turnAt
+    r.since = monotonicNanos()
     r.state = HTTP_SERVER_READING
     r.pendingStart = 0
     r.pendingEnd = 0
@@ -2090,14 +2100,41 @@ export class HttpServer {
       return
     }
     if (!r.ended) {
-      const done: i32 = this.carry(r, r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+      const done: i32 = this.carryEnd(r)
+      if (done === 0) {
+        return // no room for the end yet: the next push sends it
+      }
       if (done < 0) {
         r.hung = true
       }
-      // An empty DATA frame with END_STREAM is taken as 0 bytes.
       r.ended = true
     }
     this.release(r)
+  }
+
+  /**
+   * Ends `r`'s HTTP/2 or HTTP/3 stream with an empty DATA frame: 1 when it is
+   * sent, 0 when the carrier has no room yet, -1 when the stream is gone.
+   * `carry` cannot say this, since the frame is taken as 0 bytes either way.
+   */
+  private carryEnd(r: HttpServerRequest): i32 {
+    let done: i32 = 0
+    if (r.kind === HTTP_SERVER_H2) {
+      done = this.h2Of()
+        .connection(r.slot)
+        .writeData(toI32(r.stream), r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+      if (done === H2_AGAIN) {
+        return 0
+      }
+    } else {
+      done = this.h3Of()
+        .connection(r.slot)
+        .writeData(r.stream, r.pending, HTTP_SERVER_ZERO, HTTP_SERVER_ZERO, true)
+      if (done === H3_AGAIN) {
+        return 0
+      }
+    }
+    return done < 0 ? -1 : 1
   }
 
   /**
@@ -2441,8 +2478,12 @@ export class HttpServer {
           this.h2Reqs[e] = -1
         }
         pollAdd(this.loop, h2.fd(slot), H1_WANT_READ, HTTP_SERVER_H2_BASE + slot)
-      } else if (slot !== TLS_TCP_POOL_FULL) {
-        // None waiting, or out of descriptors: the next readiness tries again.
+      } else if (slot === HTTP_SERVER_ACCEPT_NONE) {
+        return
+      } else if (slot !== TLS_TCP_POOL_FULL && slot !== HTTP_SERVER_ACCEPT_ABORTED) {
+        // Out of descriptors or memory: rest the listener, as `acceptHttp1` does.
+        pollRemove(this.loop, this.h2Fd)
+        this.h2RestUntil = monotonicNanos() + HTTP_SERVER_ACCEPT_REST
         return
       }
     }
@@ -2531,12 +2572,11 @@ export class HttpServer {
         this.enqueue(r)
       }
     } else if (event === H2_RESET) {
+      // A request still read, or flushed after its answer, is the server's
+      // alone; one queued or the program's goes back when it is answered.
       r.hung = true
-      if (r.state === HTTP_SERVER_READING) {
-        this.release(r)
-      } else {
-        this.unlink(r)
-      }
+      this.drop(r)
+      this.unlink(r)
     }
   }
 
@@ -2747,12 +2787,11 @@ export class HttpServer {
         this.enqueue(r)
       }
     } else if (event === H3_RESET) {
+      // A request still read, or flushed after its answer, is the server's
+      // alone; one queued or the program's goes back when it is answered.
       r.hung = true
-      if (r.state === HTTP_SERVER_READING) {
-        this.release(r)
-      } else {
-        this.unlink(r)
-      }
+      this.drop(r)
+      this.unlink(r)
     }
   }
 
@@ -2863,8 +2902,13 @@ export class HttpServer {
     for (let e: i32 = base; e < base + this.perConnection2; e++) {
       const at: i32 = this.h2Reqs[e]
       if (at >= 0 && this.late(this.requests[at], now)) {
-        conn.reset(this.h2Streams[e], H2_CANCEL)
+        const sent: i32 = conn.reset(this.h2Streams[e], H2_CANCEL)
         this.release(this.requests[at])
+        if (sent === H2_AGAIN) {
+          // No room to send the reset: end the connection, as `abort` does.
+          this.h2Close(h2, s)
+          return
+        }
       }
     }
     if (this.h2Count[s] === 0 && this.h2IdleSince[s] > 0 && now - this.h2IdleSince[s] > this.idleTimeout) {

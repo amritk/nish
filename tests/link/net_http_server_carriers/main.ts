@@ -6,9 +6,12 @@
 //   1. HTTP/2 over TLS: a text route, a parameter as JSON, a body echoed, a
 //      404 as problem+json, and `alt-svc` naming the HTTP/3 port on each.
 //   2. HTTP/3: the same requests, answered alike, with no `alt-svc`.
+//   3. A stream reset while its response waits for flow-control window: the
+//      request goes back to the pool, so a server whose pool holds one
+//      request answers the next stream rather than refusing it.
 import { Secret, secret, wipe } from "nish:secret"
 import { Suite } from "nish/testing"
-import { H2_FLAG_END_STREAM } from "nish/net/http2-frame"
+import { H2_CANCEL, H2_FLAG_END_STREAM } from "nish/net/http2-frame"
 import { H3_FRAME_DATA, H3_FRAME_HEADERS, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame"
 import { QpackEncoder } from "nish/net/qpack"
 import { n32, n64 } from "../net_quic_frame/typed"
@@ -56,6 +59,35 @@ const h2Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   t.ok("every stream ended", frames.indexOf(`DATA 1 0 "" end`) >= 0 && frames.indexOf(`DATA 3 0 "" end`) >= 0 && frames.indexOf(`DATA 5 0 "" end`) >= 0 && frames.indexOf(`DATA 7 0 "" end`) >= 0)
 }
 
+/** A reset of a stream still flushing its response hands its request back. */
+const h2ResetFlushing = (t: Suite, key: Secret<u8[]>): void => {
+  const rig = new Rig(n32(1))
+  const h2 = new H2TlsClient(rig)
+  t.ok("a server with a pool of one: the TLS handshake", h2.handshake(rig.h2.port, key) && h2.verified)
+  const none: i32[] = []
+  const noValues: i64[] = []
+  h2.wire.preface()
+  h2.wire.settings(none, noValues)
+  h2.wire.settingsAck()
+  h2.wire.headers(n32(1), getOf("/big"), H2_FLAG_END_STREAM)
+  h2.flush(key, null, null)
+  // SETTINGS, WINDOW_UPDATE and the ack, then HEADERS and the first of the
+  // 65535 bytes the stream's window lets out.
+  const first: string = h2.awaitFrames(n32(5), key, null, null)
+  t.ok("a GET of /big: 200, and the body waits for window", first.indexOf("HEADERS 1 :status=200 ") >= 0 && first.indexOf("DATA 1 ") >= 0 && first.indexOf(" end") < 0)
+  h2.wire.rst(n32(1), H2_CANCEL)
+  // /big spent the connection's window too: open it for stream 3's body.
+  h2.wire.windowUpdate(n32(0), n32(65535))
+  h2.wire.headers(n32(3), getOf("/hello"), H2_FLAG_END_STREAM)
+  h2.flush(key, null, null)
+  // The rest of the window's DATA may still come first: read until stream 3 ends.
+  let next: string = ""
+  for (let round: i32 = 0; round < 8 && next.indexOf(`DATA 3 0 "" end`) < 0 && !h2.closed; round++) {
+    next = `${next}; ${h2.awaitFrames(n32(1), key, null, null)}`
+  }
+  t.ok("the reset handed the request back: the next stream is answered, not refused", next.indexOf("HEADERS 3 :status=200 ") >= 0 && next.indexOf(`DATA 3 0 "" end`) >= 0 && next.indexOf("RST_STREAM 3") < 0)
+}
+
 /** HTTP/3, one request per stream. */
 const h3Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
   const h3 = new QuicClient(rig)
@@ -85,10 +117,11 @@ const h3Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
 export const main = (): i32 => {
   const t = new Suite("http server carriers")
   const key: Secret<u8[]> = secret(leafPrivate())
-  const rig = new Rig()
+  const rig = new Rig(n32(1024))
   t.ok("the server listens: HTTP/2 over TLS and HTTP/3", rig.h2.port > 0 && rig.quicPort > 0)
   h2Checks(t, rig, key)
   h3Checks(t, rig, key)
+  h2ResetFlushing(t, key)
   wipe(key)
   return t.done()
 }

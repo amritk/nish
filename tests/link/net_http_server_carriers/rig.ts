@@ -17,6 +17,10 @@ import { ascii, ZERO } from "../net_tls_record_common/bytes"
 const HELLO: i32 = 0
 const USER: i32 = 1
 const ECHO: i32 = 2
+const BIG: i32 = 3
+
+/** `/big`'s body: more than the 65535 bytes of an HTTP/2 stream's first window. */
+export const RIG_BIG: i32 = 100000
 
 /** The HTTP/2 listener's port, where the clients read it. */
 export class RigH2 {
@@ -31,13 +35,18 @@ export class Rig {
   text: u8[]
   octets: u8[]
   hello: u8[]
+  big: u8[]
 
-  constructor() {
+  /** A server whose pool holds `requests` requests. */
+  constructor(requests: i32) {
     const router = new Router(new RouterLimits())
     router.add("GET", "/hello")
     router.add("GET", "/users/:id")
     router.add("POST", "/echo")
-    this.h = new HttpServer(new HttpServerLimits(), router)
+    router.add("GET", "/big")
+    const limits = new HttpServerLimits()
+    limits.requests = requests
+    this.h = new HttpServer(limits, router)
     const tcp: i32 = tcpListen("127.0.0.1", 0, 8)
     this.h.listenHttp2Tls(tcp, tcpConfig([H2_ALPN]), new Http2Config(), toI32(4))
     this.h2 = new RigH2()
@@ -48,6 +57,7 @@ export class Rig {
     this.text = ascii("text/plain")
     this.octets = ascii("application/octet-stream")
     this.hello = ascii("hello\n")
+    this.big = new Array<u8>(RIG_BIG)
   }
 
   /** One turn of the server's loop, at most `wait` ms, signing with `key`, then an answer to every request it took. */
@@ -77,6 +87,9 @@ export class Rig {
       }
       case ECHO:
         h.send(r, 200, this.octets, r.body, ZERO, r.bodyLength)
+        break
+      case BIG:
+        h.send(r, 200, this.octets, this.big, ZERO, RIG_BIG)
         break
       default:
         h.refuse(r)
