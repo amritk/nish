@@ -83,6 +83,50 @@ PASS  STOP_SENDING alone
 PASS  leaves this side to write
 PASS  the client is asked to stop, and gets the reply and the FIN, not a reset
 PASS  reasons are text
+PASS  no session ends while it is fresh
+PASS  none can end before a minute is up
+PASS  nor at 59 seconds
+PASS  at 61 seconds both end
+PASS  the session never answered is refused with 503
+PASS  the accepted one gets CLOSE_WEBTRANSPORT_SESSION with code 0 and no reason
+PASS  then the FIN
+PASS  the program is told of each, not by the client
+PASS  the program's late answer finds no session
+PASS  the refused one's slot is free; the closed one's waits for the client's half
+PASS  a minute on, the closed session the client never finished is let go
+PASS  and its slot is free
+PASS  with no second WT_CLOSED
+PASS  a session a second quiet ends
+PASS  a session 0.9 seconds quiet is kept
+PASS  with no activity, it ends a second after its accept
+PASS  a session 0.9 seconds quiet is kept
+PASS  quiet since its accept, it can end within a second of it
+PASS  the datagram reached the program
+PASS  after the datagram it can end no sooner than a second on
+PASS  a datagram received keeps it
+PASS  a session 0.9 seconds quiet is kept
+PASS  a datagram is sent
+PASS  a datagram sent keeps it
+PASS  a session 0.9 seconds quiet is kept
+PASS  the capsule reached the program
+PASS  a capsule on its CONNECT stream keeps it
+PASS  a stream's opening is kept
+PASS  a stream byte received keeps it
+PASS  a quiet stream is kept
+PASS  the program writes on the stream
+PASS  a stream byte sent keeps it
+PASS  a session 0.9 seconds quiet is kept
+PASS  a session asked for counts from its request: only the quiet one ends
+PASS  an unanswered session is kept
+PASS  the program accepts it
+PASS  its accept restarts its clock: only the other ends
+PASS  a session 0.9 seconds quiet is kept
+PASS  the program closes the session
+PASS  its close restarts its clock: the client has a full idleTimeout to finish its half
+PASS  four datagrams in a second reach the program
+PASS  only four
+PASS  the other six are dropped and counted
+PASS  each one received was echoed
 PASS  a client whose SETTINGS lack SETTINGS_H3_DATAGRAM is answered 400
 PASS  the program never sees it, and the stream is asked to stop with H3_NO_ERROR
 PASS  one with HTTP datagrams but neither WebTransport setting is answered 400
@@ -190,4 +234,4 @@ PASS  five connections, one after another, through one slot
 PASS  each with its session, which the layer forgot at the restart
 PASS  resetting the slot keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, a session, datagrams, streams, a close
-webtransport: 192 passed, 0 failed, 0 skipped
+webtransport: 236 passed, 0 failed, 0 skipped
