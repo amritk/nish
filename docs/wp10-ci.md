@@ -196,8 +196,20 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   check in `tests/run.js` holds their `if:` to it.
 - **`runner`**, three ways, and one process per core in each.
   `build/nish-runner --shard <i>/<n>` starts itself `--jobs` times (the core
-  count up to 8 by default), each on a slice it deals round-robin, so job `i`
-  runs exactly the programs `--shard <i>/<n>` names. Each process keeps its
+  count up to 8 by default) as `--shard <i>/<n> --part <k>/<p>`, so job `i`
+  runs exactly the programs `--shard <i>/<n>` names. Cases are dealt
+  round-robin by position; link programs, most of the time, are dealt by
+  their `link` cost in `tests/shard-costs.json`, dearest first to the
+  lightest piece, first among the shards and then among a shard's parts. By
+  position, shard 3 drew `net_handler`, `crypto_p384` and
+  `std_postgres_carrier` (about 50 s each) and was the longest of every run:
+  351, 398 and 504 s of link programs on the table's costs, the median of
+  the three runs above, against 417.9 s each dealt by cost. The CI step runs
+  `node scripts/shard-costs.mjs --check-runner build/nish-runner 3 $(nproc)`
+  before the corpus: it reads the deal through the runner's `--list`, which
+  prints what the flags would run, and fails when a piece misses or repeats
+  a program or carries more than its siblings' mean plus the dearest
+  program. Each process keeps its
   work under `build/nish-runner-jobs/<slice>-of-<total>/`; `build/test`,
   which cases write into by literal path, is shared, and `io_nish_import` and
   `io_nish_import_global`, which write the same file there by design, are

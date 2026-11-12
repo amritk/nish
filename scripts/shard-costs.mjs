@@ -43,13 +43,100 @@
  * recognizer, a recognizer that matches nothing in the shard that ran the
  * section, or a shard whose link programs do not number what shard 1 says it
  * dealt it. A renamed check fails this script rather than writing a 0.
+ *
+ *   node scripts/shard-costs.mjs --check-runner <nish-runner> <slices> <parts>
+ *
+ * checks the deal the Nish runner (`tests/nish/run.ts`) makes from the same
+ * table's `link` costs, through its `--list`: that the `<slices>` slices
+ * cover the whole list once, that each slice's `<parts>` parts (what `--jobs`
+ * runs as separate processes) cover that slice once, and that no slice or
+ * part carries more link cost than the mean of its siblings plus the dearest
+ * program among them, which a cost deal guarantees and the position deal it
+ * replaced broke (504 s against a mean of 418 s on the last of three slices).
  */
 import fs from "node:fs"
 import path from "node:path"
+import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
 const argv = process.argv.slice(2)
+
+/**
+ * The `--check-runner` mode; see the header. It answers before the
+ * log-reading part of this file asks for run directories.
+ */
+const checkRunner = (runner, slices, parts) => {
+  if (!runner || !(slices >= 1) || !(parts >= 1)) {
+    console.error("usage: node scripts/shard-costs.mjs --check-runner <nish-runner> <slices> <parts>")
+    process.exit(2)
+  }
+  const list = (...flags) => {
+    const r = spawnSync(runner, ["--list", ...flags], { cwd: root, encoding: "utf8" })
+    if (r.status !== 0) {
+      console.error(`${runner} --list ${flags.join(" ")} exited ${r.status}: ${r.stderr}`)
+      process.exit(1)
+    }
+    return r.stdout.split("\n").filter((l) => l.length > 0)
+  }
+  const costs = JSON.parse(fs.readFileSync(path.join(root, "tests", "shard-costs.json"), "utf8")).link
+  // tests/run.js's `linkFloor`, which the runner's `dealByCost` copies.
+  const cost = (line) => {
+    const name = line.slice("link ".length)
+    const floor = fs.existsSync(path.join(root, "tests", "link", name, "expected.err")) ? 0.05 : 0.5
+    return Math.max(costs[name] ?? 0, floor)
+  }
+  const problems = []
+  // `pieces` must hold exactly `all`'s lines, and none more link cost than the mean plus its dearest program.
+  const covers = (what, all, pieces) => {
+    const joined = pieces.flat().sort()
+    const sorted = [...all].sort()
+    if (joined.length !== sorted.length || joined.some((l, i) => l !== sorted[i])) {
+      problems.push(
+        `${what}: its ${pieces.length} pieces list ${joined.length} items, not the ${sorted.length} it has once each`
+      )
+    }
+    const links = pieces.map((p) => p.filter((l) => l.startsWith("link ")))
+    const loads = links.map((p) => p.reduce((sum, l) => sum + cost(l), 0))
+    const mean = loads.reduce((a, b) => a + b, 0) / loads.length
+    const dearest = Math.max(0, ...links.flat().map(cost))
+    loads.forEach((load, i) => {
+      if (load > mean + dearest + 1e-6) {
+        problems.push(
+          `${what}: piece ${i + 1} carries ${load.toFixed(1)} s of link programs, over the mean ${mean.toFixed(1)} s plus the dearest ${dearest} s`
+        )
+      }
+    })
+    return loads
+  }
+  const whole = list()
+  const shards = []
+  for (let i = 1; i <= slices; i++) {
+    shards.push(list("--shard", `${i}/${slices}`))
+  }
+  const loads = covers("the whole list", whole, shards)
+  shards.forEach((shard, i) => {
+    const pieces = []
+    for (let k = 1; k <= parts; k++) {
+      pieces.push(list("--shard", `${i + 1}/${slices}`, "--part", `${k}/${parts}`))
+    }
+    covers(`slice ${i + 1}/${slices}`, shard, pieces)
+  })
+  if (problems.length > 0) {
+    for (const p of problems) {
+      console.error(p)
+    }
+    process.exit(1)
+  }
+  console.log(
+    `the runner's ${slices} slices of ${whole.length} items carry ${loads.map((l) => l.toFixed(1)).join(", ")} s of link programs, each in ${parts} parts that cover it once`
+  )
+}
+
+if (argv[0] === "--check-runner") {
+  checkRunner(argv[1], Number(argv[2]), Number(argv[3]))
+  process.exit(0)
+}
 const write = argv.includes("--write")
 const runs = argv.filter((a) => a !== "--write")
 if (runs.length === 0) {
@@ -129,8 +216,8 @@ const sections = (() => {
 })()
 
 /** One log line: its time in seconds and, for a check, its name. */
-const parse = (text) =>
-  text.split("\n").map((line) => {
+const parse = (log) =>
+  log.split("\n").map((line) => {
     const m = /^﻿?(\d{4}-\d\d-\d\dT[\d:.]+Z) (.*)$/.exec(line)
     const t = m ? Date.parse(m[1]) / 1000 : Number.NaN
     const check = m ? /^(?:PASS|SKIP|FAIL) {2}(.*)$/.exec(m[2]) : null
@@ -149,8 +236,8 @@ const measureShard = (lines, shard, shards, linkCount) => {
     lines.map((l) => /^DELEGATED {2}(.*) -- proved by /.exec(l.body)?.[1]).filter((n) => n !== undefined)
   )
   const owned = sections.filter((s) => !delegated.has(s.name))
-  const find = (re, from, to) => {
-    for (let i = from; i < to; i++) {
+  const find = (re, start, to) => {
+    for (let i = start; i < to; i++) {
       if (lines[i].check !== null && re.test(lines[i].check)) {
         return i
       }
@@ -224,7 +311,7 @@ const measureShard = (lines, shard, shards, linkCount) => {
     out.link[p.name] = (out.link[p.name] ?? 0) + Math.max(0, lines[p.end].t - prev)
     prev = lines[p.end].t
   }
-  for (const s of owned.filter((s) => s.beforeLink)) {
+  for (const s of owned.filter((o) => o.beforeLink)) {
     const first = find(RECOGNIZERS[s.key], 0, linkStart)
     if (first < 0) {
       fail(
@@ -309,7 +396,7 @@ const median = (xs) => {
 
 const measured = runs.map(measureRun)
 const table = { shardOne: Math.round(median(measured.map((r) => r.shardOne))) }
-for (const s of sections.filter((s) => !s.tail)) {
+for (const s of sections.filter((x) => !x.tail)) {
   table[s.key] = Math.round(median(measured.map((r) => r[s.key])))
 }
 // A program a run did not have (added since) is left out of that run's median.
@@ -320,7 +407,7 @@ table.link = Object.fromEntries(
     return [name, Math.round(median(seen) * 10) / 10]
   })
 )
-for (const s of sections.filter((s) => s.tail)) {
+for (const s of sections.filter((x) => x.tail)) {
   table[s.key] = Math.round(median(measured.map((r) => r[s.key])))
 }
 

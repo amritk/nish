@@ -1089,12 +1089,18 @@ jobs:
       # the step shell with SIGPIPE ignored, `exec` keeps an ignored signal,
       # and `io_spawn_piped` checks that a child starts with SIGPIPE at its
       # default. Node reset it when it started the runner; nothing else does.
+      # The runner deals its link programs by their cost in
+      # tests/shard-costs.json (by position, the last slice carried 504 s of
+      # them against 351 s for the first); `--check-runner` reads that deal
+      # through `--list`, a slice per row of `nproc` parts, and fails one that
+      # misses or repeats a program or is uneven.
       - name: The corpus, through the Nish runner
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
+          node scripts/shard-costs.mjs --check-runner build/nish-runner 3 "$(nproc)"
           env --default-signal build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
