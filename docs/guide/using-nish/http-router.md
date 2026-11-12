@@ -126,9 +126,9 @@ back to the next one, so `/users/new` reaches a `GET /users/new` route before
 waits on that search: every step moves one segment deeper into the table, so
 one match looks at each route's segments at most once.
 
-A route with no parameter and no `*`, such as `GET /health`, is also looked up
-by its whole path before that search starts. The answer is the same route
-either way, only sooner, so the order above is all you need to reason about.
+A route with no parameter and no `*`, such as `GET /health`, may be answered
+by a shortcut that skips that search. The answer is always the route the order
+above picks, so that order is all you need to reason about.
 
 A path that matches routes only under other methods answers
 `ROUTER_METHOD_NOT_ALLOWED`, so your server can send 405 and 404 where each

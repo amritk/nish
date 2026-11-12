@@ -35017,8 +35017,8 @@ function pkiLoadSystemRoots(): PkiRoots -> @nish.pkiLoadSystemRoots [exported]
 module std/net/router.ts [package nish]
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 unsafe import 66:10 uncheckedGet from "nish:unsafe"
-unsafe call 975:9 uncheckedGet (node 4505)
-unsafe call 975:32 uncheckedGet (node 4511)
+unsafe call 987:9 uncheckedGet (node 4541)
+unsafe call 987:32 uncheckedGet (node 4547)
 const ROUTER_BAD_PATTERN: i32 = -1 [exported]
 const ROUTER_BAD_METHOD: i32 = -2 [exported]
 const ROUTER_TOO_LONG: i32 = -3 [exported]
@@ -35284,8 +35284,8 @@ function Router.enter(this: Router, method: u8[], mStart: i32, mEnd: i32, target
   pointer method: size=0 writesThrough=false captured=false passedTo=nish.routerSameRange#2
   pointer target: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  callee -8:7 routerOutside -> @nish.routerOutside
   callee -5:7 routerOutside -> @nish.routerOutside
-  callee -2:7 routerOutside -> @nish.routerOutside
   local +2:11 end: i32 (let)
   local +10:11 methodLength: i32 (const)
   local +11:14 m: i32 (let)

@@ -4210,20 +4210,22 @@ const DECLARED = [
     }
   ),
   // WP49 stage 6: `Router` files a route with no parameter in an exact-path
-  // table, so the class gains the table's fields and `matchTree`. A module
-  // that names Router's struct lays it out again (the negative programs'
-  // main.ll, bench/router.ts's own module) and so does the header that
-  // declares it; the two programs that call `matchTree` are refused by a
-  // release that has no such method. router.ll itself is declared below.
+  // table, so the class gains the table's fields, `matchTree` and
+  // `staticCount`. A module that names Router's struct lays it out again (the
+  // negative programs' main.ll) and so does the header that declares it; the
+  // programs that call the new methods (the two equivalence tests and
+  // bench/router.ts) are refused by a release that has neither. router.ll
+  // itself is declared below, but for the range program, which is new here.
   ...staticRoutes(
-    "Router gains the exact-path table's fields, so a module or header naming its struct moves, and the release has no matchTree for the equivalence test to call",
+    "Router gains the exact-path table's fields, so a module or header naming its struct moves, and the release has no matchTree or staticCount for the equivalence tests and the benchmark to call",
     {
-      "bench/router.ts": ["router.h", "router.ll"],
+      "bench/router.ts": ["exit"],
       "tests/link/net_router/main.ts": ["exit"],
       "tests/link/net_router_f64/main.ts": ["exit"],
       "tests/link/net_router_negative_ambiguous/main.ts": ["main.h", "main.ll"],
       "tests/link/net_router_negative_duplicate/main.ts": ["main.h", "main.ll"],
       "tests/link/net_router_negative_limits/main.ts": ["main.h", "main.ll"],
+      "tests/link/net_router_negative_range/main.ts": ["main.h", "main.ll", "router.ll"],
       "tests/link/net_router_negative_too_long/main.ts": ["main.h", "main.ll"],
       "tests/link/net_router_negative_too_many_params/main.ts": ["main.h", "main.ll"],
     }

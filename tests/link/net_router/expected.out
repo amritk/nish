@@ -164,7 +164,14 @@ PASS  nine paths of one home slot
 PASS  eight are filed and the ninth is left to the tree
 PASS  all nine answer their own index
 PASS  one of them from the tree
-PASS  a tenth path of that slot is 404
+PASS  an unregistered path whose home is that full run
+PASS  is 404, as the tree alone answers it
+PASS  and the tree visits no more than its nodes for it
+PASS  a path of another slot is 404
+PASS  a static route with a query that fits the longest
+PASS  is answered from the table
+PASS  the same route with a query past the longest
+PASS  is answered by the tree
 PASS  a table grown past them files the ninth (17 of 17)
 PASS  and all nine still answer their own index
-router: 169 passed, 0 failed, 0 skipped
+router: 176 passed, 0 failed, 0 skipped

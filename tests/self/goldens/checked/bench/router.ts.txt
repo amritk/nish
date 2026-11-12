@@ -4,8 +4,8 @@ entry: bench/router.ts
 module std/net/router.ts [package nish]
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 unsafe import 66:10 uncheckedGet from "nish:unsafe"
-unsafe call 975:9 uncheckedGet (node 4505)
-unsafe call 975:32 uncheckedGet (node 4511)
+unsafe call 987:9 uncheckedGet (node 4541)
+unsafe call 987:32 uncheckedGet (node 4547)
 const ROUTER_BAD_PATTERN: i32 = -1 [exported]
 const ROUTER_BAD_METHOD: i32 = -2 [exported]
 const ROUTER_TOO_LONG: i32 = -3 [exported]
@@ -271,8 +271,8 @@ function Router.enter(this: Router, method: u8[], mStart: i32, mEnd: i32, target
   pointer method: size=0 writesThrough=false captured=false passedTo=nish.routerSameRange#2
   pointer target: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  callee -8:7 routerOutside -> @nish.routerOutside
   callee -5:7 routerOutside -> @nish.routerOutside
-  callee -2:7 routerOutside -> @nish.routerOutside
   local +2:11 end: i32 (let)
   local +10:11 methodLength: i32 (const)
   local +11:14 m: i32 (let)
@@ -925,7 +925,7 @@ function perLookup(total: i64): string -> @perLookup
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.Router.match
-  calls: LinearTable.add LinearTable.constructor STATIC_TARGETS TARGETS fold linearMatch linearRun linearRunCopy median nish.Router.add nish.Router.constructor nish.Router.match nish.Router.nodeCount nish.Router.paramCount nish.httpFieldBytes nish_arena_mark nish_arena_release nish_array_grow nish_monotonic_nanos nish_panic nish_panic_div nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_index_of nish_str_index_of_from nish_str_new perLookup routeTable routerRun
+  calls: LinearTable.add LinearTable.constructor STATIC_TARGETS TARGETS fold linearMatch linearRun linearRunCopy median nish.Router.add nish.Router.constructor nish.Router.lastVisited nish.Router.match nish.Router.nodeCount nish.Router.paramCount nish.Router.staticCount nish.httpFieldBytes nish_arena_mark nish_arena_release nish_array_grow nish_monotonic_nanos nish_panic nish_panic_div nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_index_of nish_str_index_of_from nish_str_new perLookup routeTable routerRun
   stackSites=11 stackLocals=10
   local +0:9 rows: string[] (const)
   callee +0:16 routeTable -> @routeTable
@@ -957,48 +957,54 @@ function main(): i32 -> @nish_main [exported entry]
   callee +24:15 linearMatch -> @linearMatch
   callee +25:29 fold -> @fold
   callee +25:49 fold -> @fold
-  local +30:9 staticNames: string[] (const)
-  callee +30:23 STATIC_TARGETS -> @STATIC_TARGETS
-  local +31:9 staticTargets: u8[][] (const)
-  local +32:12 k: i32 (let)
-  local +33:11 target: u8[] (const)
-  callee +33:20 httpFieldBytes -> @nish.httpFieldBytes
-  local +35:11 a: i32 (const)
-  callee +35:15 Router.match -> @nish.Router.match
-  local +36:11 b: i32 (const)
-  callee +36:15 linearMatch -> @linearMatch
-  callee +37:29 Router.paramCount -> @nish.Router.paramCount
-  local +42:9 routerNs: i64[] (const)
-  local +43:9 staticNs: i64[] (const)
-  local +44:9 linearNs: i64[] (const)
-  local +45:9 copyNs: i64[] (const)
-  local +46:7 checksum: i64 (let)
-  local +47:7 staticSum: i64 (let)
-  local +48:12 round: i32 (let)
-  local +49:11 a: i64 (const)
-  callee +50:17 routerRun -> @routerRun
-  local +51:11 b: i64 (const)
-  callee +52:17 linearRun -> @linearRun
-  local +53:11 c: i64 (const)
-  callee +54:17 linearRunCopy -> @linearRunCopy
-  local +55:11 d: i64 (const)
-  callee +56:18 routerRun -> @routerRun
-  local +57:11 e: i64 (const)
-  local +63:9 rMed: i64 (const)
-  callee +63:16 median -> @median
-  local +64:9 lMed: i64 (const)
-  callee +64:16 median -> @median
-  local +65:9 cMed: i64 (const)
-  callee +65:16 median -> @median
-  local +66:9 sMed: i64 (const)
-  callee +66:16 median -> @median
-  callee +68:37 Router.nodeCount -> @nish.Router.nodeCount
-  callee +70:35 perLookup -> @perLookup
-  callee +70:72 perLookup -> @perLookup
-  callee +71:36 perLookup -> @perLookup
-  callee +71:73 perLookup -> @perLookup
-  callee +72:35 perLookup -> @perLookup
-  callee +72:72 perLookup -> @perLookup
-  callee +73:35 perLookup -> @perLookup
-  callee +73:70 perLookup -> @perLookup
-  local +74:9 band: i64 (const)
+  local +32:7 staticRoutes: i32 (let)
+  local +33:12 r: i32 (let)
+  callee +34:9 Router.paramCount -> @nish.Router.paramCount
+  callee +38:7 Router.staticCount -> @nish.Router.staticCount
+  callee +39:52 Router.staticCount -> @nish.Router.staticCount
+  local +41:9 staticNames: string[] (const)
+  callee +41:23 STATIC_TARGETS -> @STATIC_TARGETS
+  local +42:9 staticTargets: u8[][] (const)
+  local +43:12 k: i32 (let)
+  local +44:11 target: u8[] (const)
+  callee +44:20 httpFieldBytes -> @nish.httpFieldBytes
+  local +46:11 a: i32 (const)
+  callee +46:15 Router.match -> @nish.Router.match
+  local +47:11 b: i32 (const)
+  callee +47:15 linearMatch -> @linearMatch
+  callee +48:29 Router.paramCount -> @nish.Router.paramCount
+  callee +48:59 Router.lastVisited -> @nish.Router.lastVisited
+  local +53:9 routerNs: i64[] (const)
+  local +54:9 staticNs: i64[] (const)
+  local +55:9 linearNs: i64[] (const)
+  local +56:9 copyNs: i64[] (const)
+  local +57:7 checksum: i64 (let)
+  local +58:7 staticSum: i64 (let)
+  local +59:12 round: i32 (let)
+  local +60:11 a: i64 (const)
+  callee +61:17 routerRun -> @routerRun
+  local +62:11 b: i64 (const)
+  callee +63:17 linearRun -> @linearRun
+  local +64:11 c: i64 (const)
+  callee +65:17 linearRunCopy -> @linearRunCopy
+  local +66:11 d: i64 (const)
+  callee +67:18 routerRun -> @routerRun
+  local +68:11 e: i64 (const)
+  local +74:9 rMed: i64 (const)
+  callee +74:16 median -> @median
+  local +75:9 lMed: i64 (const)
+  callee +75:16 median -> @median
+  local +76:9 cMed: i64 (const)
+  callee +76:16 median -> @median
+  local +77:9 sMed: i64 (const)
+  callee +77:16 median -> @median
+  callee +79:37 Router.nodeCount -> @nish.Router.nodeCount
+  callee +81:35 perLookup -> @perLookup
+  callee +81:72 perLookup -> @perLookup
+  callee +82:36 perLookup -> @perLookup
+  callee +82:73 perLookup -> @perLookup
+  callee +83:35 perLookup -> @perLookup
+  callee +83:72 perLookup -> @perLookup
+  callee +84:35 perLookup -> @perLookup
+  callee +84:70 perLookup -> @perLookup
+  local +85:9 band: i64 (const)

@@ -307,7 +307,35 @@ export const exactChecks = (t: Suite): void => {
   }
   t.eqI32("all nine answer their own index", own, toI32(9));
   t.eqI32("one of them from the tree", viaTree, toI32(1));
-  t.eqI32("a tenth path of that slot is 404", both(c, "GET", "/c/none", 0, true), ROUTER_NOT_FOUND);
+  // A path nobody registered whose home is the full run: the lookup reads its
+  // eight slots, finds none of them is this path, and the tree answers as it
+  // would have alone, visiting no more than every node once.
+  let stranger: string = "";
+  for (let k: i32 = 0; stranger.length === 0 && k < 100000; k++) {
+    const path: string = `/c/${k}`;
+    let filed: boolean = false;
+    for (const taken of crowd) {
+      filed = filed || taken === path;
+    }
+    if (homeOf(0, path, 64) === 60 && !filed) {
+      stranger = path;
+    }
+  }
+  t.ok("an unregistered path whose home is that full run", stranger.length > 0);
+  t.eqI32("is 404, as the tree alone answers it", both(c, "GET", stranger, 0, true), ROUTER_NOT_FOUND);
+  t.ok("and the tree visits no more than its nodes for it", c.lastVisited() > 0 && c.lastVisited() <= c.nodeCount());
+  t.eqI32("a path of another slot is 404", both(c, "GET", "/c/none", 0, true), ROUTER_NOT_FOUND);
+
+  // --- the longest static route ---------------------------------------------------
+  // A target longer than every static route, query included, is not hashed:
+  // the tree answers it. One that fits is answered from the table.
+  const lg = new Router(new RouterLimits());
+  lg.add("GET", "/ab");
+  lg.add("GET", "/abcdef");
+  t.eqI32("a static route with a query that fits the longest", both(lg, "GET", "/ab?x=1", 0, true), toI32(0));
+  t.eqI32("is answered from the table", lg.lastVisited(), toI32(0));
+  t.eqI32("the same route with a query past the longest", both(lg, "GET", "/ab?x=12", 0, true), toI32(0));
+  t.ok("is answered by the tree", lg.lastVisited() > 0);
   for (let k: i32 = 0; k < 8; k++) {
     c.add("GET", `/d/${k}`);
   }

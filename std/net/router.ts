@@ -603,6 +603,9 @@ export class Router {
     }
     if (tStart < 0 || tEnd < tStart || tEnd > toI32(target.length)) {
       routerOutside("target", tStart, tEnd, toI32(target.length))
+      // Not reached: the helper panics. The return is what tells the prover
+      // that `tStart .. tEnd` is inside `target` from here on.
+      return false
     }
     this.visited = 0
     if (tStart === tEnd || toI32(target[tStart]) !== 47) {
@@ -631,6 +634,11 @@ export class Router {
 
   /** The tree's answer for a target `enter` took: the split, the walk and the pairs. */
   private descend(target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 {
+    // `enter` took this range, so this is never true; it is here because a
+    // proof does not cross a call, and the reads below need this one.
+    if (tStart < 0 || tEnd > toI32(target.length)) {
+      return ROUTER_NOT_FOUND
+    }
     // One pass over the path: where it ends, and each segment's span up to one
     // past the deepest route, which is as far as any edge can reach.
     const keep: i32 = this.deepest + 1
@@ -688,6 +696,10 @@ export class Router {
    * whatever the target and however many routes the table holds.
    */
   private staticRoute(target: u8[], tStart: i32, tEnd: i32): i32 {
+    // Never true, as in `descend`: the guard is the proof the loop's reads need.
+    if (tStart < 0 || tEnd > toI32(target.length)) {
+      return ROUTER_NONE
+    }
     let hash: u32 = routerHashOf(this.wanted)
     let end: i32 = tStart
     while (end < tEnd) {

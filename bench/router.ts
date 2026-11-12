@@ -430,6 +430,17 @@ export const main = (): i32 => {
     }
   }
 
+  // Every route with no parameter and no `*` must be in the exact-path table,
+  // or the static column would be timing the tree for the ones left out.
+  let staticRoutes: i32 = 0
+  for (let r: i32 = 0; r < toI32(rows.length); r++) {
+    if (router.paramCount(r) === 0) {
+      staticRoutes += 1
+    }
+  }
+  if (router.staticCount() !== staticRoutes) {
+    panic(`router.ts: the exact-path table holds ${router.staticCount()} of ${staticRoutes} static routes`)
+  }
   const staticNames = STATIC_TARGETS()
   const staticTargets: u8[][] = []
   for (let k: i32 = 0; k < toI32(staticNames.length); k++) {
@@ -437,7 +448,7 @@ export const main = (): i32 => {
     staticTargets.push(target)
     const a = router.match(method, 0, toI32(method.length), target, 0, toI32(target.length), params)
     const b = linearMatch(table, method, target, check)
-    if (a < 0 || a !== b || router.paramCount(a) !== 0) {
+    if (a < 0 || a !== b || router.paramCount(a) !== 0 || router.lastVisited() !== 0) {
       panic(`router.ts: ${staticNames[k]} is route ${a} to the router and ${b} to the scan`)
     }
   }
