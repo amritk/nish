@@ -73,8 +73,16 @@ const activeSession = (t: Suite): void => {
 
   let begun: i64 = monotonicNanos();
   let q: WtPeer = quietPeer(t, begun);
+  t.ok(
+    "quiet since its accept, it can end within a second of it",
+    q.wt.expiresNoSooner(begun + QUIET) < begun + QUIET + n64(1000000000)
+  );
   q.datagram(n64(0), bytesOf("alive"));
   t.ok("the datagram reached the program", wtSaw(q, "datagram 0 5"));
+  t.ok(
+    "after the datagram it can end no sooner than a second on",
+    q.wt.expiresNoSooner(begun + QUIET) >= begun + QUIET + n64(1000000000)
+  );
   t.eqI32("a datagram received keeps it", q.wt.expire(begun + LATE), n32(0));
 
   begun = monotonicNanos();

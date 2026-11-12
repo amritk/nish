@@ -506,7 +506,6 @@ export class WebTransport {
   /** Sessions `expire` ended that `next` has not yet reported, `expiredCount` of them, with their IDs. */
   private expiredSessions: i32[]
   private expiredIds: i64[]
-  private expiredCount: i32 = 0
   /** The time `next` last read, which stamps activity; and no session can expire before `expireAfter`. */
   private now: i64 = 0
   private expireAfter: i64 = 0
@@ -540,6 +539,8 @@ export class WebTransport {
    * WT_CLOSED, `errorCode` itself.
    */
   appCode: i64 = -1
+  /** How many of `expiredSessions` `next` has still to report. */
+  private expiredCount: i32 = 0
   /** Where the capsules of a DATA window are being read: `h3.data[capAt .. capEnd)`, for session `capSession`. */
   private capAt: i32 = 0
   private capEnd: i32 = 0
