@@ -140,11 +140,6 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
 
 ## Known gaps
 
-- **DATA down is at most 1,164 bytes.** `nish/net/quic` sends 1,200-byte
-  packets and has no path MTU discovery, so after the quarter stream ID and the
-  3-byte header 1,164 bytes of payload fit; a larger datagram from the game
-  server is dropped and counted (`droppedDown`). Up, the full 1,200 bytes are
-  forwarded.
 - **Eight datagrams queued each way per connection** (QUIC's
   `QUIC_CONN_DATAGRAM_QUEUE`): a burst of more than eight from the game server
   inside one turn of the loop drops the rest, counted.

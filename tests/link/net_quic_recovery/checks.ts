@@ -1,11 +1,12 @@
 // The checks of `nish/net/quic-recovery`, run by `main.ts` in the default
 // number mode and by `tests/link/net_quic_recovery_f64` under
 // `--number-mode f64`: the module on its own in `unit.ts`, inside the
-// connection in `conn.ts`, and the handshake flight under loss in
-// `handshake.ts`.
+// connection in `conn.ts`, the handshake flight under loss in
+// `handshake.ts`, and path MTU discovery in `pmtu.ts`.
 import { Suite } from "nish/testing";
 import { recoveryConnChecks } from "./conn";
 import { recoveryHandshakeChecks } from "./handshake";
+import { recoveryPmtuChecks } from "./pmtu";
 import { recoveryUnitChecks } from "./unit";
 
 /** Every check, in one suite. */
@@ -14,5 +15,6 @@ export const quicRecoveryChecks = (): i32 => {
   recoveryUnitChecks(t);
   recoveryConnChecks(t);
   recoveryHandshakeChecks(t);
+  recoveryPmtuChecks(t);
   return t.done();
 };

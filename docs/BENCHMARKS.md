@@ -1638,6 +1638,35 @@ For `bench/http1-server.ts` at 2.07 syscalls a request that is 0.22 µs of about
 Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#tls-handshake) describes it, and [WP34 K5](https://github.com/amritk/nish/blob/main/docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline and [its result](https://github.com/amritk/nish/blob/main/docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-result).
 <!-- tls-handshake:end -->
 
+<!-- http-load:begin -->
+## HTTP/2 and HTTP/3
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/h2load.mjs` drives `tests/link/net_interop_server` (`main serve`, pinned to CPU 0, 64 slots) with h2load on the other CPUs for HTTPS/1.1 and HTTP/2 over TLS, and with the server's own scripted QUIC client for HTTP/3, one build against another in interleaved rounds (a b, then b a). Run with one `--bin` it measures the build against itself, so the spread of the b / a ratios is the noise band.
+
+```bash
+build/seed/bin/nish tests/link/net_interop_server/main.ts -o build/interop.ir/ --link build/interop
+node bench/h2load.mjs --bin build/interop --rounds 5
+```
+
+Measured 2026-11-12 with the interop server built from commit `747126db` (the main the branch started from, no source change) by the 0.38.0 seed, `build/seed/bin/nish ... --link build/interop`, profile `speed` (-O3 with LTO). Machine: a KVM guest, Intel Xeon @ 2.10 GHz, 4 vCPUs (one thread per core), 15 GB, Linux 6.18.44, h2load nghttp2 1.59.0 (Ubuntu 24.04), loopback. 5 rounds, 64 slots, 20,000 requests per round for the two h2load rows (16 clients; 8 streams each for HTTP/2, none for HTTPS/1.1) and 2,000 requests over one connection for HTTP/3.
+
+| scenario | a req/s | b req/s | b / a (min–max) |
+| --- | ---: | ---: | ---: |
+| HTTPS/1.1 `h2load --h1` c=16 | 88,771 | 85,270 | 0.911 (0.787–1.187) |
+| HTTP/2 over TLS, `h2load` c=16 m=8 | 177,277 | 171,397 | 0.967 (0.704–1.173) |
+| HTTP/3, `main h3-load` c=1, 2,000 requests, in process | 28,986 | 29,412 | 1.046 (0.920–1.566) |
+
+A second identical run a few minutes later on the same VM gave 85,703 / 102,403 (1.137, 0.956–1.232), 155,584 / 166,240 (1.051, 0.805–1.213) and 30,303 / 30,303 (1.000, 0.881–1.241): the levels repeat to about 15%, so they are this machine's, not one run's luck.
+
+a and b are the same binary, so the ratios are the noise band: about ±20 to 30% between the extremes of five rounds, and up to +57% on HTTP/3 in the first run. A difference between two builds smaller than that is not shown by five rounds; widen `--rounds` first.
+
+**Against the table in [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md)** (the same harness, 64 slots, 5 rounds: 47,354 / 74,411 / 13,245 req/s, HTTP/3 band 0.886–1.081). These figures are 1.9x, 2.4x and 2.2x higher. That table names no machine, compiler or commit, so the gap cannot be attributed here; what is shown is that it is not noise, since this VM reproduced its own levels twice. The likely causes are the host's CPU (this guest's cores are a different part and a shared host) and the build, and neither was varied. The two tables are each a ratio on one machine and are not to be read against each other; compare a build with another only within one table.
+
+Not h2load's HTTP/3 number: Ubuntu's nghttp2-client is built without ngtcp2 and nghttp3, so the script falls back to `main h3-load`, the server and `client.ts`'s QUIC client in one process on CPU 0, one connection with its requests one after another. That figure is the two sides' work together and falls as the connection's streams pile up; it compares builds and is not a server capacity, nor comparable with an h2load HTTP/3 run.
+
+What the cloud VM allows: the median requests per second of one shared-host guest, useful against another build measured the same way on the same machine, in the same session. They are not comparable with bare metal, another VM size or another h2load.
+<!-- http-load:end -->
+
 <!-- postgres-profile:begin -->
 ## PostgreSQL client: where the time goes
 
