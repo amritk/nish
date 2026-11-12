@@ -28341,14 +28341,14 @@ function Http1Connection.sameHead(this: Http1Connection, status: i32, names: u8[
   pointer values: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 count: i32 (const)
-  callee +11:40 HttpDate.formats -> @nish.HttpDate.formats
-  local +14:11 kept: u8[] (const)
-  local +15:11 limit: i32 (const)
-  local +16:9 at: i32 (let)
-  local +17:11 lengths: i32[] (const)
-  local +18:14 i: i32 (let)
+  callee +9:7 HttpDate.formats -> @nish.HttpDate.formats
+  local +13:11 kept: u8[] (const)
+  local +14:11 limit: i32 (const)
+  local +15:9 at: i32 (let)
+  local +16:11 lengths: i32[] (const)
+  local +17:14 i: i32 (let)
+  callee +21:12 http1ServerKept -> @nish.http1ServerKept
   callee +22:12 http1ServerKept -> @nish.http1ServerKept
-  callee +23:12 http1ServerKept -> @nish.http1ServerKept
 function Http1Connection.keepHead(this: Http1Connection, start: i32, end: i32, status: i32, reason: string, names: u8[][], framing: i32, connection: i32): void -> @nish.Http1Connection.keepHead [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

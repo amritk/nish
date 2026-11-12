@@ -1531,11 +1531,10 @@ export class Http1Connection {
       framing !== this.headFraming ||
       connection !== this.headConnection ||
       count !== this.headFields ||
-      toI32(values.length) !== count
+      toI32(values.length) !== count ||
+      this.date !== this.headDate ||
+      this.date.formats() !== this.headFormats
     ) {
-      return false
-    }
-    if (this.date !== this.headDate || this.date.formats() !== this.headFormats) {
       return false
     }
     const kept: u8[] = this.headBytes
