@@ -125,4 +125,45 @@ PASS  a range inside a target decodes only that range
 PASS  to the bytes of that range
 PASS  a match on /files/a%2Fb
 PASS  decodes its pair in place to a/b
-router: 127 passed, 0 failed, 0 skipped
+PASS  every route with no parameter is in the exact-path table
+PASS  16800 lookups answer alike from the table and from the tree
+PASS  some of them reach a route (471)
+PASS  and some are refused for too little params (141)
+PASS  a static route wins over the parameter beside it
+PASS  and is answered without entering the tree
+PASS  the parameter route answers every other segment
+PASS  from the tree
+PASS  a static route below a parameter's sibling
+PASS  a static route beside a *
+PASS  a static route of four literals beside four parameters
+PASS  the same path under another method is its own route
+PASS  a static path under a method with no route there is 405
+PASS  and under a method the table has never seen
+PASS  a static route with a query
+PASS  with its path ending at the ?
+PASS  a static route needs no params
+PASS  a trailing slash is not the static route
+PASS  unless it is one
+PASS  another case is not the static route
+PASS  nor is an escape of it
+PASS  the root is a static route
+PASS  a parameter route still refuses too little params
+PASS  300 static routes each answer their own index as they are added
+PASS  and all 300 are in the table
+PASS  and again once it has grown
+PASS  a parameter route among them
+PASS  a path one past the last of them is 404
+PASS  a path two methods file at one slot, and one filed where its prefix is
+PASS  the first method's route
+PASS  and the second's, one slot on
+PASS  both from the table
+PASS  a path is not the longer one filed before it
+PASS  nor the longer one it
+PASS  nine paths of one home slot
+PASS  eight are filed and the ninth is left to the tree
+PASS  all nine answer their own index
+PASS  one of them from the tree
+PASS  a tenth path of that slot is 404
+PASS  a table grown past them files the ninth (17 of 17)
+PASS  and all nine still answer their own index
+router: 168 passed, 0 failed, 0 skipped

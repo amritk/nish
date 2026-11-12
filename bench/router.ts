@@ -19,6 +19,10 @@
 // median: `router`, `linear`, and `linear copy`, a byte-identical copy of the
 // linear scan. The distance between the two linear columns is the noise band
 // a difference has to clear before it means anything.
+//
+// A fourth column, `router static`, is the router again on `STATIC_TARGETS`,
+// four paths whose routes have no parameter: the case its exact-path table
+// answers without the tree, and what `/plaintext` and `/json` are to a server.
 import { Router, RouterLimits } from "nish/net/router"
 import { httpFieldBytes } from "nish/net/http-fields"
 
@@ -145,6 +149,9 @@ const TARGETS = (): string[] => [
   "/v1/orgs/acme/projects/api/builds/97/artifacts",
   "/v2/users/u-42/keys/k-7",
 ]
+
+/** The rotating static targets, each answered by a route with no parameter and no `*`. */
+const STATIC_TARGETS = (): string[] => ["/health", "/v1/projects", "/metrics", "/robots.txt"]
 
 const LOOKUPS: i32 = 200000
 const ROUNDS: i32 = 15
@@ -423,10 +430,24 @@ export const main = (): i32 => {
     }
   }
 
+  const staticNames = STATIC_TARGETS()
+  const staticTargets: u8[][] = []
+  for (let k: i32 = 0; k < toI32(staticNames.length); k++) {
+    const target = httpFieldBytes(staticNames[k])
+    staticTargets.push(target)
+    const a = router.match(method, 0, toI32(method.length), target, 0, toI32(target.length), params)
+    const b = linearMatch(table, method, target, check)
+    if (a < 0 || a !== b || router.paramCount(a) !== 0) {
+      panic(`router.ts: ${staticNames[k]} is route ${a} to the router and ${b} to the scan`)
+    }
+  }
+
   const routerNs: i64[] = []
+  const staticNs: i64[] = []
   const linearNs: i64[] = []
   const copyNs: i64[] = []
   let checksum: i64 = 0
+  let staticSum: i64 = 0
   for (let round: i32 = 0; round < ROUNDS; round++) {
     const a = monotonicNanos()
     checksum += routerRun(router, method, targets, params)
@@ -435,6 +456,9 @@ export const main = (): i32 => {
     const c = monotonicNanos()
     checksum += linearRunCopy(table, method, targets, params)
     const d = monotonicNanos()
+    staticSum += routerRun(router, method, staticTargets, params)
+    const e = monotonicNanos()
+    staticNs.push(e - d)
     routerNs.push(b - a)
     linearNs.push(c - b)
     copyNs.push(d - c)
@@ -442,15 +466,17 @@ export const main = (): i32 => {
   const rMed = median(routerNs)
   const lMed = median(linearNs)
   const cMed = median(copyNs)
+  const sMed = median(staticNs)
   console.log(
     `routes ${rows.length}, nodes ${router.nodeCount()}, ${LOOKUPS} lookups a round, ${ROUNDS} rounds`
   )
   console.log(`router       min ${perLookup(routerNs[0])} ns  median ${perLookup(rMed)} ns`)
+  console.log(`router static min ${perLookup(staticNs[0])} ns  median ${perLookup(sMed)} ns`)
   console.log(`linear       min ${perLookup(linearNs[0])} ns  median ${perLookup(lMed)} ns`)
   console.log(`linear copy  min ${perLookup(copyNs[0])} ns  median ${perLookup(cMed)} ns`)
   const band: i64 = lMed > cMed ? lMed - cMed : cMed - lMed
   console.log(`noise band   ${(band * 1000) / lMed} per mille of linear`)
   console.log(`linear/router ${toF64(lMed) / toF64(rMed)}`)
-  console.log(`checksum ${checksum}`)
+  console.log(`checksum ${checksum}, static ${staticSum}`)
   return 0
 }
