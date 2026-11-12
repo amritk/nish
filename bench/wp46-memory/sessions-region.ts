@@ -32,7 +32,7 @@ const open = (id: i64): Session => new Session(id, 16 + toI32(((id * 2654435761)
 const serve = (s: Session, out: u8[]): i32 => {
   s.hits = s.hits + 1
   const n: i32 = toI32(s.payload.length)
-  for (let k: i32 = 0; k < n; k++) {
+  for (let k: i32 = 0; k < n && k < toI32(out.length); k++) {
     out[k] = s.payload[k]
   }
   return n

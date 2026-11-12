@@ -42,8 +42,9 @@ const SOAK_CHECKSUM: i64 = 269280599213444
  * `malloc`'s free lists, whose shape drifts as sessions of 16 to 255 byte
  * payloads come and go: a page or two over 2,000,000 requests at 1,000 live,
  * and at 100,000 live a few pages. 512 KiB, the relay soak's bound, is well
- * above that drift and far below a leak: the baseline grows by about 168 bytes
- * a request, 16 MiB in one checkpoint interval.
+ * above that drift and far below a leak: the baseline grows by about 150 bytes
+ * a request (46 MB over this soak's 300,000, 295 MB over the bench's
+ * 2,000,000), some 15 MB in one checkpoint interval.
  */
 const SOAK_RSS_BOUND: i64 = 524288
 /**

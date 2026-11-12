@@ -18,7 +18,7 @@ kept here, and a pull request that lands a stage ticks its box.
 
 ## Up next
 
-In order, as of 2026-11-11. Each package's page says what its next stage is
+In order, as of 2026-11-12. Each package's page says what its next stage is
 and where it is specified.
 
 1. [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): meet stage 6's gate.

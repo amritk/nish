@@ -7,7 +7,7 @@
 - [x] Stage 1: regions in the runtime
 - [x] Stage 2: `nish:region` and its checker rules
 - [x] Child regions, freed with their parent ([#1357](https://github.com/amritk/nish/pull/1357))
-- [x] Stage 3: the sessions server on regions, a soak flat over 2,000,000 requests
+- [x] Stage 3: the sessions server on regions, a soak flat past warm-up over 2,000,000 requests at 1,000 live
 
 ## Next
 
