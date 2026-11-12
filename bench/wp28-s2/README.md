@@ -31,12 +31,14 @@ container; nothing in them depends on the machine.
   with the unknown column as the whole of the gap. The lower bound is above
   half in each of the four: 64.2%, 54.4%, 50.3% and 50.2%. In two of them it is
   above half by less than one point, so "most" is the word and "nearly all" is
-  not.
+  not. Those two margins are smaller than the census's known undercounts of
+  need (items 3, 6 and 7 under "Known false positives"), so for
+  @stryker-mutator/core and @budibase/server the census does not settle which
+  side of half the true share is on.
 - **By need, in the note's sense, is rare.** The note's leaf is the function
   that "did I/O once". Only 89 `async` functions (3.8%) wait on the platform
   directly: a Node module, a global such as `fetch`, a timer, or a `new
-  Promise`. That is one for every 26 `async` functions; the note's "four
-  hundred callers" is a figure of speech, and the measured one is 26. The rest
+  Promise`. That is one for every 27 `async` functions (2364 / 89 is 26.6). The rest
   of the 35.3% wait on a dependency, and the dependencies they wait on are
   mostly the application's own sibling packages (`@budibase/backend-core`,
   `@nomicfoundation/hardhat-utils`, `@appium/support`), which a whole-program
@@ -50,18 +52,19 @@ container; nothing in them depends on the machine.
   the leaves exist.
 
 **Against §10's "does `async` belong in compat at all, or only as
-`--async-model threads`":** this is not the negative S2 that would drop
-[C3](../../docs/wp28-compatibility-mode.md#73-the-stages) for C4 alone. The
+`--async-model threads`":** the figures argue against reading this as the negative S2 that would drop
+[C3](../../docs/wp28-compatibility-mode.md#73-the-stages) for C4 alone; the
+decision is the note's owner's. The
 threads model pays only where more than one promise is live, and the census
 finds that rare: 94.7% of the 4487 `await`s are on a direct call, and 3.0% are
 on the `Promise.all` family. For the 94.7%, spawn-and-join is, as §6.5 says,
-a call with extra steps. C3's erasure is the lowering that fits what the
-corpus writes, and C4 is an option on the 3%.
+a call with extra steps. On these counts erasure is the lowering that fits what the corpus writes, and
+the threads model has something to add on the 3%.
 
-**What strict already takes** (below) changes what C3 is. The note was written
-when strict rejected `async` outright. Strict now accepts it, under rules
-close to §6.3's two, so C3 is no longer "`async` in compat": it is the shapes
-strict still refuses. The largest are an `async` method (30.7% of `async`
+**What strict already takes** (below) bears on what C3 has left to do. The
+note was written when strict rejected `async` outright. Strict now accepts it,
+under rules close to §6.3's two, which suggests C3's remaining work is the
+shapes strict still refuses. The largest are an `async` method (30.7% of `async`
 functions) and an inferred return type (56.3%).
 
 ## The corpus
@@ -154,14 +157,15 @@ need" to "every unknown is by contagion":
 
 | application | waits outside itself | of which on the platform | waits only on the program | reaches nothing outside |
 | --- | ---: | ---: | ---: | ---: |
-| hardhat | 24.1% | 3.6% | 64.2% to 75.9% | 23.4% to 40.1% |
-| appium | 32.3% | 3.2% | 54.4% to 67.7% | 6.3% to 39.2% |
-| @stryker-mutator/core | 30.4% | 12.9% | 50.3% to 69.6% | 4.1% to 39.2% |
-| @budibase/server | 40.2% | 2.9% | 50.2% to 59.8% | 4.2% to 16.8% |
-| all | 35.3% | 3.8% | 53.6% to 64.7% | 8.6% to 25.2% |
+| hardhat | 24.1% | 3.6% (19) | 64.2% to 75.9% | 23.4% to 40.1% |
+| appium | 32.3% | 3.2% (5) | 54.4% to 67.7% | 6.3% to 39.2% |
+| @stryker-mutator/core | 30.4% | 12.9% (22) | 50.3% to 69.6% | 4.1% to 39.2% |
+| @budibase/server | 40.2% | 2.9% (43) | 50.2% to 59.8% | 4.2% to 16.8% |
+| all | 35.3% | 3.8% (89) | 53.6% to 64.7% | 8.6% to 25.2% |
 
 "Waits outside itself" is leaf plus mixed. "Of which on the platform" counts
-the functions with a leaf that is not a dependency. "Reaches nothing outside"
+the functions with a leaf that is not a dependency, with the count behind
+the share. "Reaches nothing outside"
 is contagion-never plus no-wait, with contagion-unknown and unknown as its
 gap.
 
@@ -263,8 +267,8 @@ way each pushes:
 
 Items 1 and 8 overstate need and 3, 6 and 7 understate it. None moves a
 bound past half in an application, except that the two applications at 50.2%
-and 50.3% are within reach of items 3, 6 and 7 together, and the verdict says
-so.
+and 50.3% are within reach of items 3, 6 and 7 together, as the verdict
+says.
 
 ## What strict `async` already does
 

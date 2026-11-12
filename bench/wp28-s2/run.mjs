@@ -31,7 +31,13 @@ const here = import.meta.dirname
 const args = process.argv.slice(2)
 const option = (name) => {
   const at = args.indexOf(name)
-  return at >= 0 ? args[at + 1] : null
+  if (at < 0) {
+    return null
+  }
+  if (args[at + 1] === undefined) {
+    throw new Error(`${name} takes a value`)
+  }
+  return args[at + 1]
 }
 const sampleSize = Number(option("--sample") ?? "0")
 const only = option("--only")
@@ -40,6 +46,12 @@ const SAMPLE_SEED = "wp28-s2"
 
 const corpus = JSON.parse(readFileSync(join(here, "corpus.json"), "utf8"))
 const applications = corpus.applications.filter((app) => only === null || app.name === only)
+if (applications.length === 0) {
+  throw new Error(`--only ${only}: corpus.json pins ${corpus.applications.map((app) => app.name).join(", ")}`)
+}
+if (!Number.isInteger(sampleSize) || sampleSize < 0) {
+  throw new Error("--sample takes a count, as in --sample 48")
+}
 
 const TEST_PATH = /(^|\/)(node_modules|tests?|__tests__|__mocks__|__fixtures__|fixtures|e2e|specs?)\//
 const TEST_FILE = /\.(test|spec|e2e|bench)\.tsx?$/
@@ -48,18 +60,17 @@ const isSource = (path) =>
 
 const fetched = (app, into) => {
   const spec = `${app.name}@${app.version}`
-  const packed = JSON.parse(
-    execFileSync("npm", ["pack", spec, "--json", "--pack-destination", into, "--registry", corpus.registry], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-  )[0]
-  if (packed.integrity !== app.integrity) {
-    throw new Error(
-      `${spec}: the registry's tarball is ${packed.integrity}, corpus.json pins ${app.integrity}`
-    )
-  }
+  execFileSync("npm", ["pack", spec, "--pack-destination", into, "--registry", corpus.registry], {
+    stdio: "ignore",
+  })
   const tarball = readdirSync(into).find((f) => f.endsWith(".tgz"))
+  // The hash is of the file about to be unpacked, not of what npm reports.
+  const integrity = `sha512-${createHash("sha512")
+    .update(readFileSync(join(into, tarball)))
+    .digest("base64")}`
+  if (integrity !== app.integrity) {
+    throw new Error(`${spec}: the fetched tarball is ${integrity}, corpus.json pins ${app.integrity}`)
+  }
   execFileSync("tar", ["-xzf", join(into, tarball), "-C", into])
   const root = join(into, "package")
   return { root, files: readdirSync(root, { recursive: true }).filter(isSource).sort() }
@@ -126,7 +137,7 @@ const readingRow = (name, c, platform) => {
   return [
     name,
     percent(r.need, r.total),
-    percent(platform, r.total),
+    `${percent(platform, r.total)} (${platform})`,
     `${percent(r.direct.low, r.total)} to ${percent(r.direct.high, r.total)}`,
     `${percent(r.transitive.low, r.total)} to ${percent(r.transitive.high, r.total)}`,
   ]
@@ -247,8 +258,14 @@ if (existsSync(compiler)) {
       const run = spawnSync(compiler, [join(here, "strict", file), "--json", "-o", join(out, "out.ll")], {
         encoding: "utf8",
       })
+      if (run.status === 0) {
+        return [file, run.status, "accepted"]
+      }
       const first = run.stdout.split("\n").find((line) => line.startsWith("{"))
-      return [file, run.status, first === undefined ? "accepted" : JSON.parse(first).code]
+      if (first === undefined) {
+        throw new Error(`strict/${file}: exit ${run.status} with no diagnostic\n${run.stderr}`)
+      }
+      return [file, run.status, JSON.parse(first).code]
     })
   rmSync(out, { recursive: true, force: true })
   table(["example", "exit", "diagnostic"], rows)
