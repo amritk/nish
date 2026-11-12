@@ -1271,6 +1271,35 @@ const convertedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
 }
 
 /**
+ * The quotient in `toI32(a / b)`, `toU8`, `toU16` or `toU32` when it is
+ * already of `type`, the conversion's own, or `null`. The conversion emits
+ * nothing then, so the value has the quotient's range: wrapping a division as
+ * NL8006's review edit does, `toI32(a / 4) + 1`, keeps the proof that lets
+ * `a / 4 + 1` skip its overflow check. Only a quotient, the shape the edit
+ * writes: any other argument keeps the conversion's own range, as before, so
+ * no program that did not take the edit compiles differently.
+ */
+const identityConversionOf = (program: CheckedProgram, table: TypeTable, e: Node, type: i32): Node | null => {
+  if (e.kind !== N_CALL) {
+    return null
+  }
+  const own =
+    (type === T_I32 && isBuiltinConversion(program, e, "toI32")) ||
+    (type === T_U8 && isBuiltinConversion(program, e, "toU8")) ||
+    (type === T_U16 && isBuiltinConversion(program, e, "toU16")) ||
+    (type === T_U32 && isBuiltinConversion(program, e, "toU32"))
+  if (!own) {
+    return null
+  }
+  const arg = e.children[1].children[0]
+  if (arg.kind !== N_BINARY || arg.text !== "/") {
+    return null
+  }
+  const argType = program.nodeTypes[arg.id]
+  return argType >= 0 && table.baseOf(argType) === type ? arg : null
+}
+
+/**
  * `w.length` on a local or a path: the expression a bound is stated against.
  *
  * `toI32(w.length)` is accepted as the same expression, because every fact
@@ -2022,14 +2051,18 @@ const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node):
 /**
  * What the range of a computed value gives the `i32` or `i64` variable it is
  * written into: `const ij = i + j` with both below 3000 is below 5999,
- * `acc = x & 0xffff` is in `[0, 65535]`, and `toI64(i & 1)` is 0 or 1. Only where the arithmetic is checked,
+ * `acc = x & 0xffff` is in `[0, 65535]`, `toI64(i & 1)` is 0 or 1, and
+ * `toI32(i / 4)` is `i / 4`'s range. Only where the arithmetic is checked,
  * because a range drawn through a wrap is not one, and only where `e` writes
  * no local, so that the state describes the values it read.
  */
 const rangeFacts = (walk: BoundsWalk, state: State, v: Local, e: Node, out: Fact[]): void => {
   const ctx = walk.ctx
   const base = ctx.table.baseOf(v.type)
-  const computed = e.kind === N_BINARY || (e.kind === N_CALL && isBuiltinConversion(ctx.program, e, "toI64"))
+  const computed =
+    e.kind === N_BINARY ||
+    (e.kind === N_CALL && isBuiltinConversion(ctx.program, e, "toI64")) ||
+    identityConversionOf(ctx.program, ctx.table, e, base) !== null
   if ((base !== T_I32 && base !== T_I64) || !computed) {
     return
   }
@@ -4806,6 +4839,10 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
   const converted = convertedRange(walk, e)
   if (converted !== null) {
     return new Interval(converted.lo, converted.hi)
+  }
+  const kept = identityConversionOf(ctx.program, ctx.table, e, type)
+  if (kept !== null) {
+    return valueRange(walk, state, kept, type)
   }
   const widened = widenedRange(walk, state, e, type)
   if (widened !== null) {

@@ -521,7 +521,10 @@ $ nish half.ts --warn-portability --json
 {"file":"half.ts","line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this `/` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}
 ```
 
-Applied, `n / 2` reads `toI32(n / 2)`, and the warning is gone. Wrapping
+Applied, `n / 2` reads `toI32(n / 2)`, and the warning is gone. Apply a
+run's edits together, from the end of the file back, each placed in the
+original text: `a / b / c` gets two edits that both insert `toI32(` at one
+place, and applied that way they nest, `toI32(toI32(a / b) / c)`. Wrapping
 arithmetic (`NL8007`) and `>>>` on an `i32` (`NL8008`) get no `review`: no
 spelling of them reads the same under Node without costing an instruction
 here.

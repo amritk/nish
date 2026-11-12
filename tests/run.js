@@ -6558,10 +6558,28 @@ if (!only || "arena_removed".includes(only)) {
       // the input's IR byte for byte with the warning gone, and which runs
       // under Node to print what the input prints natively.
       const reviewed = fs.readFileSync(reviewedFile, "utf8")
+      // Checked per site: each diagnostic of the case's `code` carries a
+      // `review` unless `.reviewed-keeps` names its `line:column`, and the
+      // reviewed file reports that code at exactly those sites.
+      const code = sidecar(path.join(fixDir, `${name}.code`), "")
+      const keepSites = sidecar(path.join(fixDir, `${name}.reviewed-keeps`), "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+        .sort()
+      const siteOf = (d) => `${d.line}:${d.column}`
+      const sitesOf = (objects) =>
+        objects
+          .filter((d) => d.code === code)
+          .map(siteOf)
+          .sort()
       check(
-        `fix ${name}: --json carries \`review\` and no \`fix\``,
+        `fix ${name}: --json carries \`review\` at every ${code} site but ${keepSites.join(", ") || "none"}, and no \`fix\``,
         plain.status === wantPlain &&
-          plainObjects.some((d) => Array.isArray(d.review) && d.review.length > 0) &&
+          plainObjects.some((d) => d.code === code) &&
+          plainObjects
+            .filter((d) => d.code === code)
+            .every((d) => (Array.isArray(d.review) && d.review.length > 0) !== keepSites.includes(siteOf(d))) &&
           plainObjects.every((d) => !("fix" in d)),
         shown(plain)
       )
@@ -6589,11 +6607,14 @@ if (!only || "arena_removed".includes(only)) {
           diagnosticsOf(clean.stdout).every((d) => d.severity !== "error" && !("review" in d) && !("fix" in d)),
         shown(clean)
       )
-      // With `.reviewed-keeps`, a warning whose own edit was declined stands in
-      // the reviewed file (a `/=` around a reviewed `/`): it must still be there,
-      // with no `review` of its own, which the check above already holds.
-      const keeps = fs.existsSync(path.join(fixDir, `${name}.reviewed-keeps`))
-      codeCheck(name, path.join(fixDir, `${name}.code`), clean, keeps)
+      // A warning whose own edit was declined stands in the reviewed file (a
+      // `/=` around a reviewed `/`), at the site `.reviewed-keeps` names, with
+      // no `review` of its own, which the check above already holds.
+      check(
+        `fix ${name}: ${name}.reviewed.ts reports ${code} at ${keepSites.join(", ") || "no site"}`,
+        JSON.stringify(sitesOf(diagnosticsOf(clean.stdout))) === JSON.stringify(keepSites),
+        shown(clean)
+      )
       const ll = path.join(work, "plain.ll")
       const reviewedLl = path.join(work, "reviewed", "plain.ll")
       check(

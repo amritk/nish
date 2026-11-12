@@ -165,8 +165,11 @@ const isConverted = (walk: PortabilityWalk, node: Node, type: i32): boolean => {
  *
  * None is offered where that is not certain: a generic body, whose other
  * instantiations the edit would change too; an operand or result not exactly
- * `type` (a ranged value, which a check reads); and a `/=` on anything but a
- * plain name, which the rewrite would evaluate twice. A `/=` whose divisor
+ * `type`, so a `/=` on a ranged target, whose assignment a check reads; and a
+ * `/=` on anything but a plain name, which the rewrite would evaluate twice.
+ * A ranged operand's `/` takes the edit: its quotient is the base type, and
+ * `bounds.ts` reads a quotient's conversion to its own type as the quotient,
+ * so the range a later check consumes does not move. A `/=` whose divisor
  * holds a `/` of its own is declined too: that `/` carries its own edits,
  * which would land inside this one's span. So is a `/=` with anything but
  * whitespace between the name and the divisor, a comment the rewrite would
