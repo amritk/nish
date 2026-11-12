@@ -1829,7 +1829,7 @@ const DEALT_SECTIONS = {
   },
   simd: { name: "the simd section and the kernels' lowerings", selected: true, tail: true, pinned: 2 },
   cliChecks: {
-    name: "the contract, interop, exit-code, secret, capabilities and run-command sections",
+    name: "the contract, interop, exit-code, secret, capabilities, run-command and compat-erasure sections",
     selected: true,
     tail: true,
   },
@@ -23227,29 +23227,39 @@ process.exitCode = r.status ?? 1
     )
     const positiveCase = "add_plain"
     const rejectCase = "reject_type_mismatch"
-    for (const [mode, filter, caught] of [
-      ["ir", positiveCase, `compat-erasure: ${positiveCase}: --compat changed the file ${positiveCase}.ll, first at line `],
-      ["word", rejectCase, `compat-erasure: ${rejectCase}: --compat changed stderr, first at line 1\n`],
-      ["code", rejectCase, `compat-erasure: ${rejectCase} (--json): --compat changed stdout, first at line 1\n`],
+    for (const [mode, filter, phrase, caught, tamperedLine] of [
+      [
+        "ir",
+        positiveCase,
+        "one changed line of IR",
+        `compat-erasure: ${positiveCase}: --compat changed the file ${positiveCase}.ll, first at line `,
+        " ; tampered",
+      ],
+      [
+        "word",
+        rejectCase,
+        "one changed word of a diagnostic",
+        `compat-erasure: ${rejectCase}: --compat changed stderr, first at line 1\n`,
+        "Operator `+` wants two",
+      ],
+      [
+        "code",
+        rejectCase,
+        "one changed diagnostic code",
+        `compat-erasure: ${rejectCase} (--json): --compat changed stdout, first at line 1\n`,
+        '"code":"NL0000"',
+      ],
     ]) {
       const honest = erasure(tamperer, filter)
       const tampered = erasure(tamperer, filter, { COMPAT_TAMPER: mode })
-      const expected = mode === "ir" ? " ; tampered" : mode === "word" ? "Operator `+` wants two" : '"code":"NL0000"'
+      const shown = tampered.stderr.split("\n")
       check(
-        `compat-erasure: the runner fails on ${
-          mode === "ir"
-            ? "one changed line of IR"
-            : mode === "word"
-              ? "one changed word of a diagnostic"
-              : "one changed diagnostic code"
-        } under \`--compat\`, and shows both answers`,
+        `compat-erasure: the runner fails on ${phrase} under \`--compat\`, and shows both answers`,
         honest.status === 0 &&
           tampered.status === 1 &&
           tampered.stderr.includes(caught) &&
-          /^ {2}without: .+$/m.test(tampered.stderr) &&
-          new RegExp(`^ {2}with: {4}.*${expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m").test(
-            tampered.stderr
-          ) &&
+          shown.some((line) => line.startsWith("  without: ") && !line.includes(tamperedLine)) &&
+          shown.some((line) => line.startsWith("  with:    ") && line.includes(tamperedLine)) &&
           !tampered.stdout.includes("byte-identical"),
         `honest: exit ${honest.status}\n${honest.stderr}tampered: exit ${tampered.status}\n${tampered.stderr}`
       )
