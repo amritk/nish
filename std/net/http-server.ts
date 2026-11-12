@@ -114,6 +114,13 @@ import { URL_DECODE_ALLOW_NUL, URL_DECODE_ERR_SPACE, URL_DECODE_FORM, percentDec
 import { netLocalPort, pollAdd, pollCreate, pollModify, pollRemove, pollWait } from "nish:net"
 import { Secret } from "nish:secret"
 
+/** The base `digits` writes a content-length in, and the byte of its digit 0. */
+const HTTP_SERVER_TEN: i32 = 10
+const HTTP_SERVER_ZERO_DIGIT: i32 = 48
+
+/** The status a body past `maxBody` is answered with. */
+const HTTP_SERVER_TOO_LARGE: i32 = 413
+
 // A request's life: free, reading its body, whole but parked behind a full
 // output, queued for `take`, held by the program, streaming its response,
 // and flushing the response's last bytes.
@@ -223,8 +230,6 @@ export class HttpServerRequest {
   route: i32 = 0
   /** The HTTP version it came in on: 1, 2 or 3. */
   version: i32 = 1
-  /** Whether it came over TLS or QUIC: true on HTTP/2 over TLS and on HTTP/3. */
-  secure: boolean = false
   /**
    * How many parameter pairs `params` holds.
    * @internal Set by `HttpServer` in this module after routing; the param accessors check `k` against it.
@@ -289,6 +294,12 @@ export class HttpServerRequest {
    * @internal Advanced by `HttpServer` in this module as `write` keeps what the carrier had no room for.
    */
   pendingEnd: i32 = 0
+  /** The span `queryIndex` found, raw. */
+  queryValueStart: i32 = 0
+  /** Where the raw value `queryIndex` found ends in `head`, one past its last byte; it starts at `queryValueStart`. */
+  queryValueEnd: i32 = 0
+  /** Whether it came over TLS or QUIC: true on HTTP/2 over TLS and on HTTP/3. */
+  secure: boolean = false
   /**
    * Whether the peer reset the stream or stopped reading it (HTTP/2 and 3).
    * @internal Set by `HttpServer` in this module; such a request is answered `HANDLER_DROPPED`.
@@ -423,11 +434,6 @@ export class HttpServerRequest {
   hasQuery(name: string): boolean {
     return this.queryIndex(name) >= 0
   }
-
-  /** The span `queryIndex` found, raw. */
-  queryValueStart: i32 = 0
-  /** Where the raw value `queryIndex` found ends in `head`, one past its last byte; it starts at `queryValueStart`. */
-  queryValueEnd: i32 = 0
 
   /**
    * Finds the first parameter named `name`: where its pair starts, or -1; its raw value goes to `queryValue...`.
@@ -630,8 +636,6 @@ export class HttpServer {
   private free: i32[]
   /** Whole requests waiting for `take`, a ring of `queue.length` with `queueCount` from `queueStart`. */
   private queue: i32[]
-  private queueStart: i32 = 0
-  private queueCount: i32 = 0
   /** `pollWait`'s output. */
   private readyFds: i32[]
   /** Per watched id: whether its descriptor was ready in the last turn. */
@@ -665,30 +669,16 @@ export class HttpServer {
   private contentLengthName: u8[]
   /** The Alt-Svc value, set by `listenHttp3`; null without an HTTP/3 listener. */
   private altSvc: u8[] | null = null
-  private maxBody: i32 = 0
-  private maxHead: i32 = 0
-  private maxFields: i32 = 0
-  private maxResponseFields: i32 = 0
-  private altSvcMaxAge: i32 = 0
-  private altSvcPort: i32 = 0
   private bodyTimeout: i64 = 0
   private idleTimeout: i64 = 0
   /** When the current turn's sockets were ready (`monotonicNanos`): a head read in it is stamped with this. */
   private turnAt: i64 = 0
   /** When `wait` next looks for timeouts. */
   private sweepAt: i64 = 0
-  /** The readiness loop's descriptor, from `pollCreate`. */
-  private loop: i32 = 0
-  /** Set by `drain`: accept nothing more and close each connection once it is idle. */
-  private draining: boolean = false
-  /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
-  private jsonBegun: boolean = false
 
   // HTTP/1.1: the carrier, its listener, and per slot its generation, its request (-1 for none) and whether it is open.
   private h1: Http1Server | null = null
-  private h1Fd: i32 = -1
   private h1RestUntil: i64 = 0
-  private h1OutputSize: i32 = 0
   private h1Gen: i32[]
   private h1Current: i32[]
   private h1Open: boolean[]
@@ -701,12 +691,9 @@ export class HttpServer {
   private outValues: u8[][]
   /** `host`, the field an HTTP/2 or HTTP/3 `:authority` becomes. */
   private hostName: u8[]
-  /** Where `fromFields` writes next in a request's head. */
-  private headAt: i32 = 0
 
   // HTTP/2 over TLS: the carrier, and per slot a stream table of `perConnection2` entries.
   private h2: Http2TlsServer | null = null
-  private h2Fd: i32 = -1
   private h2RestUntil: i64 = 0
   private h2Gen: i32[]
   private h2Open: boolean[]
@@ -716,21 +703,40 @@ export class HttpServer {
   private h2Streams: i32[]
   private h2Reqs: i32[]
   private h2Count: i32[]
-  private perConnection2: i32 = 1
   private rnd: u8[]
   private keyBuf: u8[]
-  /** The cleartext HTTP/2 listener, -1 until `listenH2c`. */
-  private h2cFd: i32 = -1
 
   // HTTP/3: the carrier, and per slot a stream table of `perConnection3` entries.
   private h3: Http3Server | null = null
-  private h3Fd: i32 = -1
-  private h3Readable: boolean = false
   private h3Gen: i32[]
   private h3Streams: i64[]
   private h3Reqs: i32[]
   private h3Count: i32[]
+  private queueStart: i32 = 0
+  private queueCount: i32 = 0
+  private maxBody: i32 = 0
+  private maxHead: i32 = 0
+  private maxFields: i32 = 0
+  private maxResponseFields: i32 = 0
+  private altSvcMaxAge: i32 = 0
+  private altSvcPort: i32 = 0
+  /** The readiness loop's descriptor, from `pollCreate`. */
+  private loop: i32 = 0
+  private h1Fd: i32 = -1
+  private h1OutputSize: i32 = 0
+  /** Where `fromFields` writes next in a request's head. */
+  private headAt: i32 = 0
+  private h2Fd: i32 = -1
+  private perConnection2: i32 = 1
+  /** The cleartext HTTP/2 listener, -1 until `listenH2c`. */
+  private h2cFd: i32 = -1
+  private h3Fd: i32 = -1
   private perConnection3: i32 = 1
+  /** Set by `drain`: accept nothing more and close each connection once it is idle. */
+  private draining: boolean = false
+  /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
+  private jsonBegun: boolean = false
+  private h3Readable: boolean = false
 
   /**
    * A server routing through `router`, held to `limits`. It has no listener
@@ -1829,8 +1835,15 @@ export class HttpServer {
     const outN: u8[][] = this.outNamesBy[count]
     const outV: u8[][] = this.outValuesBy[count]
     for (let k: i32 = 0; k < given; k++) {
-      outN[k] = names[k]
-      outV[k] = values[k]
+      if (
+        k < toI32(outN.length) &&
+        k < toI32(outV.length) &&
+        k < toI32(names.length) &&
+        k < toI32(values.length)
+      ) {
+        outN[k] = names[k]
+        outV[k] = values[k]
+      }
     }
     let at: i32 = given
     if (altSvc !== null && addAlt) {
@@ -1853,7 +1866,7 @@ export class HttpServer {
       const have: u8[] = names[k]
       if (toI32(have.length) === toI32(name.length)) {
         let same: boolean = true
-        for (let i: i32 = 0; i < toI32(name.length) && same; i++) {
+        for (let i: i32 = 0; i < toI32(name.length) && i < toI32(have.length) && same; i++) {
           let c: i32 = toI32(have[i])
           if (c >= 65 && c <= 90) {
             c += 32
@@ -1872,15 +1885,16 @@ export class HttpServer {
   private digits(n: i32): u8[] {
     let count: i32 = 1
     let rest: i32 = n
-    while (rest >= 10) {
-      rest = rest / 10
+    while (rest >= HTTP_SERVER_TEN) {
+      rest = (rest - (rest % HTTP_SERVER_TEN)) / HTTP_SERVER_TEN
       count += 1
     }
     const out: u8[] = this.digitBufs[count]
     rest = n
-    for (let k: i32 = count - 1; k >= 0; k--) {
-      out[k] = toU8(48 + (rest % 10))
-      rest = rest / 10
+    for (let k: i32 = count - 1; k >= 0 && k < toI32(out.length); k--) {
+      const digit: i32 = rest % HTTP_SERVER_TEN
+      out[k] = toU8(HTTP_SERVER_ZERO_DIGIT + digit)
+      rest = (rest - digit) / HTTP_SERVER_TEN
     }
     return out
   }
@@ -2355,7 +2369,7 @@ export class HttpServer {
       return 431
     }
     if (f.contentLength > toI64(this.maxBody)) {
-      return 413
+      return HTTP_SERVER_TOO_LARGE
     }
     return 0
   }
@@ -2505,7 +2519,7 @@ export class HttpServer {
       }
       if (r.bodyLength + conn.dataLength > this.maxBody) {
         this.release(r)
-        this.h2Direct(conn, id, 413, conn.endStream)
+        this.h2Direct(conn, id, HTTP_SERVER_TOO_LARGE, conn.endStream)
         return
       }
       this.append(r, conn.data, conn.dataStart, conn.dataLength)
@@ -2724,7 +2738,7 @@ export class HttpServer {
       }
       if (r.bodyLength + conn.dataLength > this.maxBody) {
         this.release(r)
-        this.h3Direct(conn, id, 413)
+        this.h3Direct(conn, id, HTTP_SERVER_TOO_LARGE)
         return
       }
       this.append(r, conn.data, conn.dataStart, conn.dataLength)
