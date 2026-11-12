@@ -11,6 +11,7 @@
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
 import {
+  checkExportedLayouts,
   aliasType,
   builtinTypeName,
   rejectRangedIntegerName,
@@ -348,6 +349,8 @@ export class Checker {
     // now has its members, and so does every struct declared here, so the two
     // checks that need both can run (WP18 G5).
     this.finishPendingStructs()
+    // Every record the module's exported types name has its fields now.
+    checkExportedLayouts(this.ctx)
 
     // Last, exactly where stage0 puts it, so two compilers report one file's
     // diagnostics in one order: every alias is resolved even when nothing
@@ -1046,6 +1049,9 @@ export class Checker {
         this.checkFunctionBody(sig)
       }
     }
+    // An instantiation a body asked for collects its fields here, after
+    // `collectSignatures` drained the list.
+    checkExportedLayouts(this.ctx)
   }
 
   /**

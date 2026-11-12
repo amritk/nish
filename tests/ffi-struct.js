@@ -27,8 +27,11 @@ const LAYOUTS = [
   "",
 ].join("\n")
 
-/** The same structs in C, with the size and offsets `target` must give them. */
-const cLayouts = (size, p, inner, z) =>
+/**
+ * The same structs in C, asserting the size and offsets Nish's build gave them:
+ * clang refuses the file where the two disagree.
+ */
+const cLayouts = ([p, inner, z, size]) =>
   [
     "struct Inner { unsigned short tag; void *link; };",
     "struct Outer { unsigned char a; void *p; struct Inner inner; unsigned char z; };",
@@ -36,6 +39,23 @@ const cLayouts = (size, p, inner, z) =>
     `_Static_assert(__builtin_offsetof(struct Outer, p) == ${p}, "p");`,
     `_Static_assert(__builtin_offsetof(struct Outer, inner) == ${inner}, "inner");`,
     `_Static_assert(__builtin_offsetof(struct Outer, z) == ${z}, "z");`,
+    "",
+  ].join("\n")
+
+/**
+ * An LLVM module that measures Nish's `%struct.Outer` as `llc` lays it out for a
+ * target: the offsets of fields 1 to 3, then the size, as four `i64` constants.
+ */
+const measureOuter = (types) =>
+  [
+    types,
+    "@layout = global [4 x i64] [",
+    ...[1, 2, 3].map(
+      (i) =>
+        `  i64 ptrtoint (%struct.Outer* getelementptr (%struct.Outer, %struct.Outer* null, i32 0, i32 ${i}) to i64),`
+    ),
+    "  i64 ptrtoint (%struct.Outer* getelementptr (%struct.Outer, %struct.Outer* null, i32 1) to i64)",
+    "]",
     "",
   ].join("\n")
 
@@ -54,10 +74,25 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
   const compile = (file, out, extra) =>
     spawnSync(nish, [file, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
 
+  /** Nish's struct as `llc` lays it out for `triple`: three offsets and a size, or null. */
+  const measure = (types, triple) => {
+    const probe = write(`measure-${triple}.ll`, measureOuter(types))
+    const asm = spawnSync("llc", [`-mtriple=${triple}`, "-o", "-", probe], { encoding: "utf8" })
+    if (asm.status !== 0) {
+      return null
+    }
+    const values = [...asm.stdout.matchAll(/^\s*\.(?:quad|int64)\s+(?:0\+)?(\d+)\s*$/gm)].map((m) =>
+      Number(m[1])
+    )
+    return values.length === 4 ? values : null
+  }
+
   // `--deny ffi` refuses a program whose only C use is a layout lent to a
-  // `declare function`: lending a struct is a call into C like any other.
-  // The `--emit-header` of a module that keeps a layout private has no
-  // `struct` for it, and the header still compiles as C.
+  // `declare function`: lending a struct is a call into C like any other. The
+  // same layouts built and read without the lend pass, so the refusal is the
+  // lend's. The `--emit-header` of a module that keeps a layout private has no
+  // `struct` for it, a class that holds one is opaque, and the header still
+  // compiles as C.
   if (!only || "ffi_struct checks".includes(only)) {
     const lent = write("lent.ts", `${LAYOUTS}export const main = (): number => lend(new Outer())\n`)
     const denied = compile(lent, dir + path.sep, ["--deny", "ffi"])
@@ -67,6 +102,16 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
         denied.stderr.includes("reaches `ffi`") &&
         denied.stderr.includes("calls fill_outer"),
       shown(denied)
+    )
+    const kept = write(
+      "kept.ts",
+      `${LAYOUTS}export const main = (): number => (new Outer().z === 0 ? 0 : 1)\n`
+    )
+    const allowed = compile(kept, dir + path.sep, ["--deny", "ffi"])
+    check(
+      "ffi_struct: --deny ffi passes the same layouts built and read without the lend",
+      allowed.status === 0,
+      shown(allowed)
     )
 
     const exported = write(
@@ -84,50 +129,94 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
         /int32_t twice\(int32_t n\);/.test(text),
       emitted.status === 0 ? text : shown(emitted)
     )
+
+    const holding = write(
+      "holder.ts",
+      `${LAYOUTS}class Holder {\n  o: Outer\n  constructor() { this.o = new Outer() }\n}\n\n` +
+        "export const viaHolder = (): i32 => lend(new Holder().o)\n"
+    )
+    const holderHeader = path.join(dir, "holder.h")
+    const held = compile(holding, path.join(dir, "holder") + path.sep, ["--emit-header", holderHeader])
+    const heldText = held.status === 0 ? fs.readFileSync(holderHeader, "utf8") : ""
+    check(
+      "ffi_struct: --emit-header makes a private class that holds a layout opaque",
+      held.status === 0 &&
+        heldText.includes("typedef struct Holder Holder;") &&
+        heldText.includes("opaque: it holds a `declare class`") &&
+        !heldText.includes("struct Holder {") &&
+        !heldText.includes("struct Outer") &&
+        /int32_t viaHolder\(void\);/.test(heldText),
+      held.status === 0 ? heldText : shown(held)
+    )
     if (has("clang")) {
-      const syntax = spawnSync(
-        "clang",
-        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "-Iruntime", "-x", "c", header],
-        {
-          cwd: root,
-          encoding: "utf8",
-        }
-      )
-      check("ffi_struct: the --emit-header beside a layout compiles as C", syntax.status === 0, shown(syntax))
+      for (const [what, file] of [
+        ["beside a layout", header],
+        ["with an opaque holder", holderHeader],
+      ]) {
+        const syntax = spawnSync(
+          "clang",
+          ["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "-Iruntime", "-x", "c", file],
+          { cwd: root, encoding: "utf8" }
+        )
+        check(`ffi_struct: the --emit-header ${what} compiles as C`, syntax.status === 0, shown(syntax))
+      }
     }
   }
 
   // A layout's `CPtr` is the target's `void *`: eight bytes natively, four on
-  // wasm32 (`--profile wasi`), where clang lays the same C struct out in 20 bytes rather than 40.
-  // The size `new` zero-fills and the `dereferenceable` a lending function's
-  // parameter claims are the target's, and clang agrees with the offsets.
+  // wasm32 (`--profile wasi`). Nish's build is measured, never assumed: the
+  // size its `new` zero-fills and its lending parameter's `dereferenceable`
+  // claim are read from the IR, and `llc` lays the IR's own `%struct.Outer` out
+  // for the target. clang must give the C struct those offsets and that size,
+  // and the pointer width must show (the wasm32 struct is the smaller).
   if (!only || "ffi_struct checks".includes(only) || "wasi".includes(only)) {
     const sized = write("sized.ts", `${LAYOUTS}export const main = (): number => lend(new Outer())\n`)
     const targets = [
-      ["native", [], 40, 8, 16, 32, "x86_64-unknown-linux-gnu"],
-      ["wasm32", ["--profile", "wasi"], 20, 4, 8, 16, "wasm32"],
+      ["native", [], "x86_64-unknown-linux-gnu"],
+      ["wasm32", ["--profile", "wasi"], "wasm32"],
     ]
-    for (const [name, flags, size, p, inner, z, triple] of targets) {
+    const sizes = []
+    for (const [name, flags, triple] of targets) {
       const ll = path.join(dir, `sized-${name}.ll`)
       const built = compile(sized, ll, flags)
       const ir = built.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+      const filled =
+        /call void @llvm\.memset\.p0i8\.i64\(i8\* align 8 %[\w.]+, i8 0, i64 (\d+), i1 false\)/.exec(ir)
+      const lent = /dereferenceable\((\d+)\) nocapture %o\)/.exec(ir)
+      const types = ir
+        .split("\n")
+        .filter((line) => /^%struct\.(Outer|Inner) = type /.test(line))
+        .join("\n")
+      const measured = filled && lent && types && has("llc") ? measure(types, triple) : null
+      const size = filled ? Number(filled[1]) : -1
+      sizes.push(size)
       check(
-        `ffi_struct: a ${name} build zero-fills and lends the ${size} bytes clang gives the struct`,
+        `ffi_struct: a ${name} build zero-fills and lends the size llc gives its own struct`,
         built.status === 0 &&
-          ir.includes("call void @llvm.memset.p0i8.i64(i8* align 8 %") &&
-          ir.includes(`i8 0, i64 ${size}, i1 false)`) &&
-          ir.includes(`dereferenceable(${size}) nocapture %o)`),
-        built.status === 0 ? ir : shown(built)
+          filled !== null &&
+          lent !== null &&
+          Number(lent[1]) === size &&
+          (measured === null || measured[3] === size),
+        built.status === 0 ? `${ir}\nllc: ${measured}` : shown(built)
       )
-      if (has("clang")) {
+      if (measured !== null && has("clang")) {
         const c = spawnSync("clang", [`--target=${triple}`, "-fsyntax-only", "-x", "c", "-"], {
-          input: cLayouts(size, p, inner, z),
+          input: cLayouts(measured),
           encoding: "utf8",
         })
-        check(`ffi_struct: clang lays the struct out in ${size} bytes on ${name}`, c.status === 0, shown(c))
+        check(
+          `ffi_struct: clang gives the C struct the ${name} offsets and size Nish's build has`,
+          c.status === 0,
+          `llc: ${measured}\n${shown(c)}`
+        )
       } else {
-        skip(`skipped: ffi_struct: no clang: the ${name} C layout is not compared`)
+        skip(`skipped: ffi_struct: no clang or llc: the ${name} C layout is not compared`)
       }
     }
+    check(
+      "ffi_struct: the wasm32 struct is smaller than the native one, its CPtr four bytes",
+      sizes[1] > 0 && sizes[1] < sizes[0],
+      `native ${sizes[0]}, wasm32 ${sizes[1]}`
+    )
   }
 }

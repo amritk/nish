@@ -90,7 +90,7 @@ function refuseValueArrow(ctx: CheckContext, arrow: Node, scope: Scope): void ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseOnce
   calls: StringSet.constructor arrowElsewhereMessage capturingArrowMessage declaredNames firstCapture nish_str_eq refuseOnce
-  pointer ctx: size=328 writesThrough=true captured=false passedTo=refuseOnce#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=refuseOnce#0
   pointer arrow: size=40 writesThrough=false captured=false passedTo=declaredNames#0 firstCapture#0 refuseOnce#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=firstCapture#2
   stackSites=1 stackLocals=1
@@ -106,7 +106,7 @@ function functionReference(ctx: CheckContext, expr: Node): i32 -> @functionRefer
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.errorType CheckContext.signature CheckContext.template FunctionSig.foreign FunctionSig.isAsync FunctionSig.requiredArity FunctionSig.writtenArity asyncReferenceMessage foreignReferenceMessage genericReferenceMessage guardReferenceMessage isGuardType nish_panic_index partialReferenceMessage referenceTypeOf refuseOnce templateReferenceMessage
-  pointer ctx: size=328 writesThrough=true captured=false passedTo=CheckContext.template#0 refuseOnce#0 CheckContext.signature#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.template#0 refuseOnce#0 CheckContext.signature#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=refuseOnce#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   stackSites=0 stackLocals=0
   local -28:9 name: string (const)
@@ -148,7 +148,7 @@ function checkReferenceCall(ctx: CheckContext, expr: Node, type: i32, shown: str
   sharedWrite: +0:5
   escaping: expr type
   calls: CheckContext.errorType TypeTable.assignable TypeTable.fnRefParamsOf TypeTable.fnRefResultOf TypeTable.typeName checkExpression nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
-  pointer ctx: size=328 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkExpression#0 CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkExpression#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -175,7 +175,7 @@ function outerReference(ctx: CheckContext, name: string): boolean -> @outerRefer
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: Scope.lookup Scope.typeOf TypeTable.isFnRef
-  pointer ctx: size=328 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 scope: Scope (const)
   local +1:11 local: Local | null (const)

@@ -2,7 +2,7 @@
 // at its natural alignment, a nested `declare class` embedded by value, the
 // size rounded up to the widest alignment. `ffi_struct_layout.c` declares the
 // same two structs. C fills a zeroed instance through the pointer it is lent
-// (`readField` reads every field back), and C checks the fields the program
+// (the `read*` exports read every field back), and C checks the fields the program
 // wrote (`writtenFields`). Any field the two sides placed differently comes
 // back wrong. `Mixed` has padding after `a`, `c`'s gap before `d`, `e`, and
 // trailing padding after `z`; `Inner` has padding after `tag`.

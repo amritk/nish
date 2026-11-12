@@ -15106,8 +15106,10 @@ declaration's, in order, each at its natural alignment: `Stamp` below is
 `Timespec` at offset 8. There is no header word and no class id: the memory is
 C's layout and nothing else, so there is no room for one.
 
-`new Stamp()` is an `alloca` the escape analysis keeps in the frame, filled by
-one `store %struct.Stamp zeroinitializer`. The embedded `Timespec` is part of
+`new Stamp()` is an `alloca` the escape analysis keeps in the frame, zeroed by
+one `llvm.memset` of the struct's size, padding included: a
+`store %struct.Stamp zeroinitializer` need not write the padding bytes, and C
+may compare or hash the whole struct. The embedded `Timespec` is part of
 the same memory: `stamp.at` is a `getelementptr inbounds` to field 1, and that
 address is what `clock_gettime` receives, so C writes into `stamp` directly.
 `stamp.at.sec` is a second `getelementptr` from it. None of these loads and

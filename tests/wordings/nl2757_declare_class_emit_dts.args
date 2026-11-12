@@ -1,0 +1,1 @@
+--emit-dts build/test/wordings/nl2757_declare_class_emit_dts.d.ts

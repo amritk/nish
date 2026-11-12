@@ -20,7 +20,7 @@ import { hostTypeProblem } from "./host-module"
 import {
   ASYNC_RETURN_MESSAGE,
   promiseArgument,
-  rejectExportedLayout,
+  deferExportedLayout,
   rejectForeignPointer,
   resolveType,
 } from "./annotations"
@@ -148,7 +148,7 @@ export const collectParams = (
     if (sig.exported) {
       const where =
         owner >= 0 ? "a parameter of an exported class's method" : "a parameter of an exported function"
-      rejectExportedLayout(ctx, type, where, param.children[1])
+      deferExportedLayout(ctx, type, where, param.children[1])
     }
     sig.paramNames.push(name)
     sig.paramTypes.push(type)
@@ -512,7 +512,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
     )
     if (sig.exported) {
       rejectStoredMask(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
-      rejectExportedLayout(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
+      deferExportedLayout(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
     }
   }
   return sig

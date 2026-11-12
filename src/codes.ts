@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 912
+export const RULE_COUNT: i32 = 915
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -341,6 +341,8 @@ const diagnosticRules = (): string[] => [
   "NL2448",
   "`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one",
   "NL2503",
+  "` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the `declare function` that takes it in a native build",
+  "NL2757",
   "` hands it — returns it, stores it or passes it where it is kept — and the key would outlive the `Secret` unwiped; return a value computed from it instead",
   "NL2449",
   "` is a wait on the executor, written only where it is awaited: `await sleep(ms)`, `await readable(fd)` or `await writable(fd)`, inside an `async` function",
@@ -355,6 +357,8 @@ const diagnosticRules = (): string[] => [
   "NL2354",
   ", and a buffer window lends only `u8[]`, `u16[]`, `u32[]`, `i32[]`, `f32[]` or `f64[]` (or the typed array of each): copy the values into one of those",
   "NL2681",
+  ": a C struct layout stays in the module that declares it and is lent only to a `declare function`, so no header, `.d.ts` or N-API binding describes it",
+  "NL2756",
   "` is set again while it may still hold a `Secret`: a `Secret` field is set once, in its class's constructor, and the key it held would be lost unwiped",
   "NL2543",
   "` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add `import { ",
@@ -525,6 +529,8 @@ const diagnosticRules = (): string[] => [
   "NL2566",
   "`case` label must be an integer literal, a module constant, or an enum member (LLVM's `switch` table holds constants)",
   "NL2284",
+  " has type `number`, whose width `--number-mode` chooses: a C struct field has one layout, so spell it `i32` or `f64`",
+  "NL2755",
   "` is a `string`: strings cross in WP50 stage 4, so until then write the text into module storage and pass its length",
   "NL2665",
   "` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result",

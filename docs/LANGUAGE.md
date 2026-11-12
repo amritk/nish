@@ -6663,7 +6663,7 @@ each at its natural alignment, and the size is rounded up to the widest
 alignment, as a C compiler lays out the same fields. `new Name()` takes no
 arguments and zero-fills it, and a `declare function` parameter typed `Name`
 borrows it as a `struct Name *`** (`tests/cases/ffi_struct_param`,
-`ffi_struct_layout`, [cookbook](IR_COOKBOOK.md#a-declare-class-a-c-struct-lent-by-pointer),
+`ffi_struct_layout`, [cookbook](IR_COOKBOOK.md#declare-class-a-c-struct-lent-by-pointer),
 `docs/wp27-ffi.md` §9b):
 
 ```ts
@@ -6700,24 +6700,37 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `struct timespec it_value;`, not a pointer to one. A `number` field is
   refused whatever the mode, since `--number-mode` picks its width and a C
   struct has one layout: `` has type `number`, whose width `--number-mode`
-  chooses `` (`reject_ffi_struct_field_number`). Any other type is
+  chooses `` (NL2755, `reject_ffi_struct_field_number`). Any other type is
   `` Field `ok` of `declare class Flags` has type `boolean`, which has no C
-  layout `` (NL2752, `reject_ffi_struct_field_type`, `reject_cls_declare`): a
-  `boolean`, a `number` in the default mode, a `string`, an array and a Nish
-  class have no C spelling the compiler could promise. A struct cannot embed
+  layout `` (NL2752, `reject_ffi_struct_field_type`, `reject_cls_declare`,
+  `reject_ffi_struct_field_array`, `reject_ffi_struct_field_class`): a
+  `boolean`, a `string`, an array and a Nish class have no C spelling the
+  compiler could promise. A struct cannot embed
   itself, directly or through another (NL2749, `reject_ffi_struct_self`,
   `reject_ffi_struct_cycle`).
 - **A field is plain and has no initializer, and the class has nothing but
   fields**: no `readonly`, `static` or optional field (NL2747), no initializer,
-  because `new` zero-fills (NL2748), no method, accessor or constructor
-  (NL2751), no type parameter (NL2741), no `extends` or `implements` (NL2750),
+  because `new` zero-fills (NL2748), no constructor, method, accessor or other
+  member such as an index signature (NL2751, `reject_ffi_struct_index_signature`), no type parameter (NL2741), no `extends` or `implements` (NL2750),
   and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
 - **It stays in its module.** It cannot be a parameter or the return type of an
   exported function or an exported class's method, or a field of an exported
   class or interface: `` `declare class Point` cannot be a parameter of an
   exported function `` (`reject_ffi_struct_export_param`, `_return`, `_method`,
-  `_field`). So no `--emit-header`, `.d.ts` or N-API binding ever describes one
-  (`docs/wp27-ffi.md` §9g).
+  `_field`). A type that holds one is refused there too, however deep —
+  through `Result`, `T | null`, an array, a generic instance or a class of
+  this program: `` `Wrap` holds a `declare class Point` and cannot be a
+  parameter of an exported function `` (NL2756,
+  `reject_ffi_struct_export_result`, `_generic`, `_holder`). So no `.d.ts`
+  or N-API binding ever describes one, and `--emit-header`, which lists every
+  class of the program, declares a class that holds one only as an opaque
+  `typedef struct Holder Holder;` (`tests/ffi-struct.js`, `docs/wp27-ffi.md`
+  §9g).
+- **It is a native build's.** A wasm module a page loads — freestanding wasm,
+  or any build that writes `--emit-dts` — links no C to lend a struct to, and
+  its IR is laid out for wasm32 later: `` `declare class Point` declares a C
+  struct, and a wasm module a page loads links no C to lend it to `` (NL2757).
+  A `--profile wasi` build is wasm32 from the start and keeps it.
 - **It is built with `new` and nothing else.** `new Point(1)` is refused as for
   any class without a constructor (`reject_ffi_struct_new_args`), and an object
   literal typed as one is

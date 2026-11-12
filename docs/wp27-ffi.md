@@ -699,19 +699,40 @@ answers were open:
    (`reject_ffi_struct_export_param`, `_return`, `_method`, `_field`); the
    header generator also skips a layout when it lists structs.
 
+"Names a layout" is transitive: `Result<Point, string>`, `Point | null`, an
+array, a generic instance `Box<Point>` and a class of this program with a
+layout field all hold one, and each is refused where the layout itself is
+(`reject_ffi_struct_export_result`, `_generic`, `_holder`). The check runs
+once every struct has its fields, after signatures and again after bodies, since
+a holder may be declared below the export that names it and a generic instance
+may first appear in a body. The `.d.ts` and N-API generators read only exported
+signatures, so the refusal keeps a layout from them. The header lists every
+class of the program, exported or not, so a private class that holds a layout
+is declared there opaque, `typedef struct Holder Holder;`, with no fields for C
+to misread.
+
 S4.1 takes the second. It is the smaller promise, it matches §9d's contract (a
 layout is lent to a `declare function`, by this program), and lifting it later
 is additive. `tests/ffi-struct.js` pins the result: the `--emit-header` of a
 module with a private layout and an exported function has no `struct` for the
-layout and compiles under `-Wall -Wextra -Werror`.
+layout, a private holder is opaque, and both headers compile under
+`-Wall -Wextra -Werror`.
 
 **Targets.** A `CPtr` field is the target's `void *`, so a layout's sizes and
 offsets follow the target: on wasm32 (`--profile wasi`) a pointer field is four
 bytes, aligned to four, and the struct `{ u8; CPtr; { u16; CPtr | null }; u8 }`
-is 20 bytes where it is 40 natively. `tests/ffi-struct.js` checks both against
-clang's `sizeof` and `offsetof` for the same C struct on each triple, and the
-`memset` length and the `dereferenceable` a lending parameter claims are the
-target's size. Debug info still describes a pointer member as 64 bits wide on
+is 20 bytes where it is 40 natively. `tests/ffi-struct.js` measures Nish's
+build, never a constant: the `memset` length and the `dereferenceable` a
+lending parameter claims are read from the IR, `llc` lays the IR's own struct
+type out for the triple, and clang must give the same C struct those
+`offsetof`s and that `sizeof`.
+
+A page module — freestanding wasm, or any build that writes `--emit-dts` — is
+compiled once for the host and its IR recompiled for wasm32 later, so a size
+fixed at check time would be the wrong target's; and nothing on a page links C
+to lend a struct to. A `declare class` there is refused (NL2757,
+`tests/wordings/nl2757_declare_class_emit_dts`). A `--profile wasi` build knows
+it is wasm32 from the start and is sized for it. Debug info still describes a pointer member as 64 bits wide on
 wasm32, as it does for every pointer the compiler emits; the offsets it gives
 are the layout's.
 

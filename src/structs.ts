@@ -26,7 +26,7 @@ import {
 import { CheckContext } from "./context"
 import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
 import { rejectStoredMask } from "./simd"
-import { rejectExportedLayout, rejectForeignPointer, resolveType } from "./annotations"
+import { deferExportedLayout, rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import {
   collectTypeParamNames,
@@ -495,6 +495,15 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
       decl.children[0],
       `\`declare class ${name}\` cannot be exported: a C struct layout is used in the module that declares it`
     )
+  } else if (info.layout && ctx.pageModule) {
+    // A layout exists to be lent to a `declare function`, which a module a
+    // page loads cannot have (`src/declarations.ts` refuses one). It would be
+    // sized for the host when `scripts/build.sh` recompiles an `--emit-dts`
+    // module's IR for wasm32, where a `CPtr` field is four bytes, not eight.
+    ctx.error(
+      decl.children[0],
+      `\`declare class ${name}\` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the \`declare function\` that takes it in a native build`
+    )
   }
   ctx.program.addStruct(name, info)
   ctx.program.typeNames.add(name)
@@ -714,11 +723,8 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     return
   } else if (rejectStoredMask(ctx, type, "a field", decl.children[1])) {
     return
-  } else if (
-    owner.exported &&
-    rejectExportedLayout(ctx, type, "a field of an exported class or interface", decl.children[1])
-  ) {
-    return
+  } else if (owner.exported) {
+    deferExportedLayout(ctx, type, "a field of an exported class or interface", decl.children[1])
   }
   // `nish:secret`: a field outlives the function that made the secret, unless
   // it is a holder's `readonly` field, which its `wipe()` ends (`secret.ts`).
@@ -884,7 +890,7 @@ export const collectMethodSignature = (
     )
     rejectStoredMask(ctx, sig.returnType, "the return type of a method", returnAnnotation)
     if (sig.exported) {
-      rejectExportedLayout(
+      deferExportedLayout(
         ctx,
         sig.returnType,
         "the return type of an exported class's method",
@@ -1059,7 +1065,14 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
     if (member.kind === N_FIELD) {
       collectLayoutField(ctx, info, member)
     } else {
-      const word = member.kind === N_CONSTRUCTOR ? "a constructor" : "a method or accessor"
+      // An index signature or a `static` block is neither, and a C struct has
+      // no member of its kind either.
+      let word = "a member other than a field"
+      if (member.kind === N_CONSTRUCTOR) {
+        word = "a constructor"
+      } else if (member.kind === N_METHOD) {
+        word = "a method or accessor"
+      }
       ctx.error(
         member,
         `\`declare class ${info.name}\` cannot have ${word}: a C struct layout has fields only`

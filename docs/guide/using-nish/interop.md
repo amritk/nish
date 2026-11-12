@@ -987,10 +987,13 @@ A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
 embeds one struct in another. `stamp.at.sec` reads a field of the embedded
 struct in place, and `clock_gettime(1, stamp.at)` hands C its address inside
 `stamp`. The class has fields and nothing else: no initialiser, no method or
-constructor, no `readonly`, no `extends`, no `export`, and it cannot appear in
-an exported function's or class's signature, so no generated header or
-binding has to describe it. A `CPtr` field is the target's pointer, four bytes
-under `--profile wasi`. Any other field type is refused, since it has no C
+constructor, no `readonly`, no `extends`, no `export`. It cannot appear in
+an exported function's or class's signature, nor can any type that holds one
+(a `Result`, an array, a generic instance or a class with such a field), so no
+generated header or binding has to describe it. A `CPtr` field is the
+target's pointer, four bytes under `--profile wasi`. A build a web page loads
+(freestanding wasm, or one that writes `--emit-dts`) has no C to lend a struct
+to and refuses a `declare class`. Any other field type is refused, since it has no C
 spelling; that includes `number`, whose width `--number-mode` picks:
 
 ```ts nish:err NL2752

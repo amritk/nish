@@ -17,8 +17,9 @@
 import { containerMessage as secretContainerMessage } from "./secret"
 import { rejectStoredMask, simdImportMessage, simdLaneType, simdMaskLane } from "./simd"
 import { LANGUAGE } from "./branding"
-import { CheckContext, NUMBER_MODE_I32 } from "./context"
-import { AliasInfo, STRUCT_CLASS, StructInfo } from "./program"
+import { StringSet } from "./map"
+import { CheckContext, ExportedLayoutUse, NUMBER_MODE_I32 } from "./context"
+import { AliasInfo, CheckedProgram, STRUCT_CLASS, StructInfo } from "./program"
 import { layoutClass } from "./structs"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
@@ -47,6 +48,9 @@ import {
 import {
   CPTR_NAME,
   K_ARRAY,
+  K_NULLABLE,
+  K_RESULT,
+  K_STRUCT,
   T_BOOL,
   T_CPTR,
   T_ERROR,
@@ -61,6 +65,7 @@ import {
   T_U8,
   T_VOID,
   R_UNKNOWN,
+  TypeTable,
 } from "./types"
 
 const SUPPORTED_REFERENCES: string =
@@ -211,22 +216,85 @@ export const rejectForeignPointer = (ctx: CheckContext, type: i32, position: str
 }
 
 /**
- * Refuses a `declare class` (WP27 S4.1) in `position`, a place an exported
- * signature or an exported class's field puts it: the header, `.d.ts` and
- * N-API generators describe every class as a pointer to an arena object,
- * and a layout is C's struct, embedded by value where it nests and lent only
- * to a `declare function` (docs/wp27-ffi.md §9g).
+ * Holds `type`, a place an exported signature or an exported class's field
+ * puts it, for `checkExportedLayouts`, which runs once every struct of the
+ * module has its fields.
  */
-export const rejectExportedLayout = (ctx: CheckContext, type: i32, position: string, node: Node): boolean => {
-  const layout = layoutClass(ctx.program, ctx.table, ctx.table.stripNull(type))
-  if (layout === null) {
-    return false
+export const deferExportedLayout = (ctx: CheckContext, type: i32, position: string, node: Node): void => {
+  ctx.exportedLayoutUses.push(new ExportedLayoutUse(type, position, node))
+}
+
+/**
+ * Refuses a `declare class` (WP27 S4.1), or anything that holds one, in an
+ * exported signature or an exported class's field: the header, `.d.ts` and
+ * N-API generators describe every class as a pointer to an arena object, and
+ * a layout is C's struct, embedded by value where it nests and lent only to a
+ * `declare function` (docs/wp27-ffi.md §9g). Holding is transitive -- an
+ * element, a `Result` arm, a field of a record named there -- because each of
+ * those is a type the generators would have to describe.
+ */
+export const checkExportedLayouts = (ctx: CheckContext): void => {
+  for (const use of ctx.exportedLayoutUses) {
+    ctx.errored = false
+    const direct = layoutClass(ctx.program, ctx.table, ctx.table.stripNull(use.type))
+    const layout = direct !== null ? direct : heldLayout(ctx.program, ctx.table, use.type, new StringSet())
+    if (layout === null) {
+      continue
+    }
+    const what =
+      direct !== null
+        ? `\`declare class ${layout.name}\``
+        : `\`${ctx.table.typeName(use.type)}\` holds a \`declare class ${layout.name}\` and`
+    ctx.error(
+      use.node,
+      `${what} cannot be ${use.position}: a C struct layout stays in the module that declares it and is lent only to a \`declare function\`, so no header, \`.d.ts\` or N-API binding describes it`
+    )
   }
-  ctx.error(
-    node,
-    `\`declare class ${layout.name}\` cannot be ${position}: a C struct layout stays in the module that declares it and is lent only to a \`declare function\`, so no header, \`.d.ts\` or N-API binding describes it`
-  )
-  return true
+  ctx.exportedLayoutUses = []
+  ctx.errored = false
+}
+
+/**
+ * The `declare class` `t` holds, or `null`: `t` itself, the type under a
+ * `| null`, an element, a `Result` arm, or a field of a record `t` names,
+ * through any depth of records (`seen` stops a cycle).
+ */
+export const heldLayout = (
+  program: CheckedProgram,
+  table: TypeTable,
+  t: i32,
+  seen: StringSet
+): StructInfo | null => {
+  if (t < 0) {
+    return null
+  }
+  const kind = table.kindOf(t)
+  if (kind === K_NULLABLE || kind === K_ARRAY) {
+    return heldLayout(program, table, table.refOf(t), seen)
+  }
+  if (kind === K_RESULT) {
+    const ok = heldLayout(program, table, table.okOf(t), seen)
+    return ok !== null ? ok : heldLayout(program, table, table.errOf(t), seen)
+  }
+  if (kind !== K_STRUCT) {
+    return null
+  }
+  const name = table.nameOf(t)
+  const info = program.struct(name)
+  if (info === null || seen.has(name)) {
+    return null
+  }
+  if (info.layout) {
+    return info
+  }
+  seen.add(name)
+  for (const field of info.fields) {
+    const held = heldLayout(program, table, field.type, seen)
+    if (held !== null) {
+      return held
+    }
+  }
+  return null
 }
 
 /** Whether `name` spells `nish:region`'s `Region` here: imported from it, under any local name, or inside it. */

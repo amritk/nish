@@ -56,6 +56,24 @@ export class SwitchFrame {
 }
 
 /**
+ * One type an exported signature or an exported class's field writes, held
+ * until every struct of the module has its fields: whether it holds a
+ * `declare class` (WP27 S4.1) is a walk through the records it names, and a
+ * record declared further down has no fields yet (`checkExportedLayouts`).
+ */
+export class ExportedLayoutUse {
+  type: i32
+  position: string
+  node: Node
+
+  constructor(type: i32, position: string, node: Node) {
+    this.type = type
+    this.position = position
+    this.node = node
+  }
+}
+
+/**
  * One loop's dataflow pre-pass (`src/loop-flow.ts`): the union and enum
  * variables the loop assigns, and what each may hold at the loop's head, at
  * a `do`'s condition and after the loop, as bit sets — a union's variants in
@@ -293,6 +311,8 @@ export class CheckContext {
    * been collected.
    */
   pendingFinish: StructInfo[]
+  /** The exported types `checkExportedLayouts` walks once the module's structs have their fields. */
+  exportedLayoutUses: ExportedLayoutUse[]
   /**
    * The loops, `switch`es and labelled blocks enclosing the statement being
    * checked, innermost last, each with its label or `""`. A plain `break`
@@ -397,6 +417,7 @@ export class CheckContext {
     this.hygiene = []
     this.pending = []
     this.pendingFinish = []
+    this.exportedLayoutUses = []
   }
 
   /**
