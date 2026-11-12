@@ -110,6 +110,10 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+if [ "$cores" = 1 ] && [ "$only" = db ]; then
+  echo "run.sh: --cores-compare times plaintext and json, not db" >&2
+  exit 2
+fi
 
 plainLevels=(256 1024 4096 16384)
 jsonLevels=(16 32 64 128 256 512)

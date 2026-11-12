@@ -27,7 +27,9 @@
 //      UDP, then as two `client`s pinned to CPUs 0 and 1, whose connections
 //      the steered listeners hand to worker 0 and worker 1. SIGTERM to the
 //      supervisor stops both, each reporting how many requests it answered:
-//      two pids, each of which answered, and the supervisor exits 0.
+//      two pids, each of which answered, and the supervisor exits 0. Off
+//      Linux, on one CPU, or where a `pin` probe finds CPU 0 or 1 outside the
+//      affinity, its five checks are skipped with the reason.
 //
 // Every wait is bounded: five seconds without a wake is a failure, never a hang.
 // The supervisor runs under `timeout`, so it outlives a driver that died by a
@@ -527,14 +529,22 @@ const workers = (t: Suite): void => {
   ];
   if (platform !== "linux" || availableParallelism() < 2) {
     for (const name of names) {
-      t.pass(name);
+      t.skip(name, "two workers need Linux and two CPUs");
+    }
+    return;
+  }
+  // prefork pins worker k to CPU k, and each client pins itself to one of them:
+  // a cpuset without CPU 0 or 1 cannot run this section, so it says so.
+  const self: string = selfPath();
+  if (!exitsZero(spawn([self, "pin", "0"])) || !exitsZero(spawn([self, "pin", "1"]))) {
+    for (const name of names) {
+      t.skip(name, "CPUs 0 and 1 are not both in this process's affinity");
     }
     return;
   }
   const fd: i32 = udpBind("127.0.0.1", ZERO, ZERO);
   const loop: i32 = pollCreate();
   pollAdd(loop, fd, 1, ZERO);
-  const self: string = selfPath();
   const sup: i32 = spawn(["timeout", "60", self, "serve", `${netLocalPort(fd)}`, "0", "1", "127.0.0.1", "64", "2"]);
   // Each worker's `ready`: its index, its port and its pid, by index.
   const ports: i32[] = [0, 0];
@@ -591,6 +601,9 @@ export const main = (): i32 => {
   }
   if (args.length > 3 && args[1] === "client") {
     return client(args);
+  }
+  if (args.length > 2 && args[1] === "pin") {
+    return setCpuAffinity(parseInt(args[2])) === 0 ? 0 : 2;
   }
   const t = new Suite("tfb entry");
   const json: string = '{"message":"Hello, World!"}';

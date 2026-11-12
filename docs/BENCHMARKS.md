@@ -678,7 +678,7 @@ Noise band (medians): 5.3%, 5.5%, 3.2%, 14.8%. `entry-cores` against `entry`: +9
 
 Noise band (medians): 1.2%, 0.5%, 2.4%, 1.7%, 1.9%, 2.6%. `entry-cores` against `entry`: +93.3%, +92.9%, +82.3%, +91.2%, +92.2%, +73.6%, each outside its band.
 
-- Two workers on two cores serve 1.7 to 2.3 times the one process at every concurrency. A gain above 2x, as on `/plaintext` at 1024 and 4096, is plausible because the one process is not pinned inside its two CPUs and so pays for migrations the pinned workers do not.
+- Two workers on two cores serve 1.7 to 2.3 times the one process at every concurrency. A gain above 2x, as on `/plaintext` at 1024 and 4096, is not explained by these runs. One unmeasured hypothesis: the one process is not pinned inside its two CPUs, so it pays for migrations the pinned workers do not.
 - The gain shrinks at the top concurrencies: 16384 on `/plaintext` and 512 on `/json`. Two wrk cores are likely the ceiling there, since this machine is client-shared.
 - At `/plaintext` 16384, `entry` had 4,679 read errors (connections reset) in one round, which the `*` marks. The 14.8% band at that level is wide, but the +90.1% gain is several times larger.
 - The peak RSS `run.sh` reads for `entry-cores` (1.9 MiB) is the supervisor's alone, so it is left out of these tables. The one process peaked at 91 MiB on `/plaintext` and 3.1 MiB on `/json`.
