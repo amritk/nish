@@ -86,7 +86,7 @@ export const helpText = (style: Style, guide: string): string => {
 
   menu.section("Code generation")
   menu.row("--number-mode", "i32|f64", "what a bare number is; i32 by default")
-  menu.row("--compat", "", "the compatibility dialect; accepts nothing yet")
+  menu.row("--compat", "", "compatibility dialect; accepts nothing yet")
   menu.row("--plain", "", "the IR without LLVM's attributes")
   menu.row("--no-strict-exports", "", "keep every function externally visible")
   menu.row("--no-stack-alloc", "", "keep every value off the stack")
