@@ -16,18 +16,19 @@ body framing, the head and body caps and the timeouts are the carrier's
 (`docs/security/http1-codec.md`), the queueing, ordering and late-answer
 rules are the handler's (`docs/security/handler.md`), and routing is the
 router's (`docs/security/router.md`). What it adds is a fixed set of request
-slots, a task per request that reads the request where the handler parsed
-it, and a copy of each answer back into its slot's preallocated buffers.
-Every one of those is bounded by a `ServeLimits` field the program set: the
-slots by `inFlight`, an answer's body by `responseBytes`, its content type by
-128 bytes. How long a task may read its request, and who may write it
-meanwhile, is [the request's lifetime](#the-requests-lifetime) below.
+slots, a copy of each request into its task's region, and a copy of each
+answer back into its slot's preallocated buffers. Every one of those is
+bounded by a `ServeLimits` field the program set: the slots by `inFlight`,
+an answer's body by `responseBytes`, its content type by 128 bytes. Why the
+request is a copy, and how long each side of it lives, is
+[the request's lifetime](#the-requests-lifetime) below.
 
 A task never writes past its slot's buffers and never stores its own memory
 into the server's: the spawn rule (`docs/LANGUAGE.md`, NL2609, NL2610,
-NL2615) refuses the program that would. The task reads the request in the
-server's memory, which the rule allows, and makes what it wants of it — a
-string, a decoded parameter — in its own; it copies its answer into its
+NL2615) refuses the program that would. The task copies the request's head (only
+its `headLength` bytes), its spans (only `4 × headerCount` of them) and its
+parameters and body (when it has any) into arrays of its own (a copy out
+of the server's memory, which the rule allows) and its answer into its
 slot's buffer with `set`, which stores bytes, never a pointer. A response the program got wrong — a status outside 200 to 599, a
 body larger than `responseBytes`, a content type too long or holding a
 control byte — is answered 500, never sent as written, and never stops the
@@ -69,52 +70,46 @@ echoed from a header, a body sized by the request) is treated as the peer's.
 
 ## The request's lifetime
 
-Until WP49 stage 6's hand-off change a task copied its request — head, spans,
-parameters and body — into its own region before `handle` ran. It now reads
-the handler's own `HttpRequest`, the one `HttpHandler.take` answered, through
-`Request.raw`. The rule that makes that safe, and that the code is built to:
+A task reads a copy of its request, never the handler's own. WP49 stage 6 set
+out to drop that copy and have the task read the `HttpRequest` that
+`HttpHandler.take` answered. The language refuses it, in both shapes it can
+take, so the copy stays and this is the rule the code is built to:
 
-1. **A request's bytes are written once, before it is taken.** The handler
-   copies the head and spans out of the carrier's parser into a pooled
-   `HttpRequest` as the head arrives (`HttpHandler.begin`), routes it, and
-   gathers the body into the same object (`gather`). Only then is it queued,
-   and `take` hands it to the server's loop as HELD. Nothing of the carrier's
-   input buffer is referenced: more bytes on the connection, pipelined or
-   not, land in the carrier's buffer and never in the request.
-2. **From `take` to its answer, nothing writes it.** A HELD request is on no
-   free list: `HttpHandler.release` runs only from the answer (`end`,
-   `problem`, `refuse`, or the drop of a late answer), and `closeSlot` and
-   `forget` release only a request that is still being read, parked or
-   flushing. The server's loop reads its `slot` and `gen` (`hungUp`) and
-   writes nothing. The task writes two scratch integers, `queryValueStart`
-   and `queryValueEnd`, when it looks a query parameter up, and nothing
-   else; no other task has the object.
-3. **One task per request, one request per slot.** `serveOn` stores the
-   request in `st.reqs[k]` as it marks slot `k` busy and spawns the task; the
-   slot is freed only in the loop, after the task wrote `done`, and the
-   request is answered in that same step, before the slot or the request can
-   be handed out again. The task makes no await after `handle` returns, so it
-   has ended by the time the loop runs.
-4. **A pipelined successor is parsed into another object.** The handler
-   reads a connection's next request only once the one before it is answered
-   (HANDLER-4), and `begin` takes its `HttpRequest` from the free list, which
-   the HELD one is not on. Bytes of the successor that arrive while the
-   earlier task still runs wait in the carrier's input buffer.
-5. **A hang-up leaves the bytes.** A connection that ends while its task
-   runs bumps the connection slot's generation, which is what later drops
-   the answer (HANDLER-3), and leaves the HELD request as it is: the
-   cancelled task goes on reading the request its client sent until it ends.
-   A new connection in the same connection slot parses into another object.
-6. **A `Request` is the task's; what it points at is the server's.** A
-   `Request` lives in its task's region and cannot be stored anywhere that
-   outlives the task: the spawn rule refuses it. `Request.raw` is the
-   server's object, alive for as long as the server is — the pool never
-   frees a request — so a program that keeps `raw` past its handler reads
-   memory that is still a request, bounded by its own arrays, but one that
-   may by then be another client's. The guide says to keep what `Request`'s
-   methods answer, never `raw` (SERVE-17).
+1. **The handler's request is written once, before it is taken, and is the
+   server's.** `HttpHandler.begin` copies the head and spans out of the
+   carrier's parser into a pooled `HttpRequest`, routes it and gathers the
+   body into the same object; only then is it queued and taken. From `take`
+   to its answer it is on no free list (`release` runs only from the answer
+   or a late answer's drop), so nothing rewrites it while a task copies it,
+   and a pipelined successor is parsed into another object (HANDLER-4).
+2. **The task copies it first, with no await before the copy.** `serveTask`
+   allocates a `HttpRequest` in its own region and copies `headLength` bytes
+   of head, `4 × headerCount` spans, the parameters and the body. The copy
+   reads the server's memory and stores none of it, which the spawn rule
+   allows. Each count is one the handler bounded: the head by the carrier's
+   head cap, the body by `bodyBytes`.
+3. **`Request` and `Request.raw` are the task's, and go when it ends.** A
+   handler may keep neither: the spawn rule refuses a program that stores one
+   in anything the task shares (NL2609; the guide's `stats.last = req`). What
+   the handler made from the request — a string, a number — is its own on the
+   same terms. A hang-up or a deadline that cancels a task leaves its copy
+   readable until the task ends.
+4. **The server reads only the handler's object again.** `serveAnswer`
+   answers through `st.reqs[k]`, the request `take` answered, never through
+   anything the task made; its `slot` and `gen` are what drop an answer for
+   a connection that closed meanwhile (SERVE-10).
 
-`tests/link/net_serve_in_place` pins rules 2, 4 and 5 and the body cap.
+Reading in place is refused twice over. A `Request` made in the task's region
+over the server's `HttpRequest` is "memory outside a region kept by the
+region's memory" — the rule cannot know the server outlives every task. A
+`Request` the server made once per slot and handed to `handle` is refused for
+any handler that "may grow it": one that writes through its argument and
+allocates, which `HttpRequest.queryIndex`'s two scratch fields make true of
+every handler that reads a query parameter, and which the checker also
+reports for a handler that only calls a method on a `Response` it just made.
+Lifting either is a change to the region rules in `src/`, not to this module.
+The copy costs about 450 instructions of the 7,900 a pipelined `/plaintext`
+request takes.
 
 ## Findings
 
