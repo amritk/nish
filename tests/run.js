@@ -76,6 +76,7 @@ import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
+import { runFfiStructChecks } from "./ffi-struct.js"
 import { hardeningProblems } from "../scripts/check-hardening.mjs"
 import {
   packageRootOf,
@@ -3728,6 +3729,15 @@ if (selects("fnref", "fnref_debug_check")) {
     peakOf("place_set_1x", scaled("fnref_place_set", 9, 1000)),
     peakOf("place_set_10x", scaled("fnref_place_set", 9, 10000))
   )
+  // WP51 stage 2: the same loop through an argument, a nullable element and
+  // a `Map` value.
+  for (const variant of ["arg", "nullable", "map"]) {
+    flat(
+      `fnref_place_set_${variant}: 10x the loop peaks where 1x does`,
+      peakOf(`place_set_${variant}_1x`, scaled(`fnref_place_set_${variant}`, 9, 1000)),
+      peakOf(`place_set_${variant}_10x`, scaled(`fnref_place_set_${variant}`, 9, 10000))
+    )
+  }
   const keepless = (t) => t.replace(/\n\s*sum = sum \+ slot\.use\(new P\(i\), k\)/, "")
   flat(
     "fnref_escape_join: 10x the loop through the set that keeps nothing peaks where 1x does",
@@ -3786,6 +3796,44 @@ if (selects("fnref", "fnref_debug_check")) {
       gLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
       enumTag.test(gLl),
     gLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gLl.slice(0, 2000)
+  )
+  // A nullable reference's tag 0 is `null`: its enumeration names it, so a
+  // debugger prints `h = null` rather than `0`.
+  const gnSrc = path.join(fnrefDir, "fnref_gn.ts")
+  fs.writeFileSync(
+    gnSrc,
+    [
+      "type Op = (x: i32) => i32",
+      "const inc = (x: i32): i32 => x + 1",
+      "const twice = (x: i32): i32 => x * 2",
+      "export const main = (): number => {",
+      "  let h: Op | null = null",
+      "  if (Date.now() > 0) {",
+      "    h = inc",
+      "  }",
+      "  if (Date.now() > 1) {",
+      "    h = twice",
+      "  }",
+      "  if (h !== null) {",
+      "    console.log(`${h(3)}`)",
+      "  }",
+      "  return 0",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const gnOut = path.join(fnrefDir, "gn-ir") + path.sep
+  const gnIr = spawnSync(NISH, [gnSrc, "-g", "-o", gnOut], { cwd: root, encoding: "utf8" })
+  const gnLlPath = path.join(gnOut, "fnref_gn.ll")
+  const gnLl = gnIr.status === 0 && fs.existsSync(gnLlPath) ? fs.readFileSync(gnLlPath, "utf8") : shown(gnIr)
+  const nullableTag = /!DICompositeType\(tag: DW_TAG_enumeration_type, name: "\(i32\) => i32 \| null",[^\n]*size: 32/
+  check(
+    "fnref -g: a nullable reference's enumeration names tag 0 `null`, then its members",
+    gnLl.includes('!DIEnumerator(name: "null", value: 0)') &&
+      gnLl.includes('!DIEnumerator(name: "inc", value: 1)') &&
+      gnLl.includes('!DIEnumerator(name: "twice", value: 2)') &&
+      nullableTag.test(gnLl),
+    gnLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gnLl.slice(0, 2000)
   )
   const dispatcherSp = gLl
     .split("\n")
@@ -4121,6 +4169,212 @@ if (!only || "net_tls_tcp".includes(only)) {
       ended.code === 0 && body === want,
       `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(body)}\nwant:   ${JSON.stringify(want)}\nstderr: ${serverErr}`
     )
+  }
+}
+
+// ---- `nish/net/http2-cleartext`, against curl and h2load (WP39 G7) --------------
+//
+// What the Nish clients in `tests/link/net_http2_cleartext` cannot say: that an
+// HTTP/2 stack somebody else wrote speaks to the carrier by prior knowledge,
+// with no TLS and no Upgrade. The same program run as `serve 5` listens, prints
+// its port and serves five connections: one from `curl --http2-prior-knowledge`,
+// whose GET must come back 200 over HTTP/2 with the short body, then four from
+// `h2load -n 1000 -c 4`, every one of whose thousand requests must succeed. The
+// server prints one line per connection it closed; each must end with no error.
+// Either client missing is a skip, named, rather than a pass.
+if (!only || "net_http2_cleartext".includes(only)) {
+  const h2cDir = path.join(buildDir, "net-h2c")
+  fs.rmSync(h2cDir, { recursive: true, force: true })
+  fs.mkdirSync(h2cDir, { recursive: true })
+  const exe = path.join(h2cDir, "app")
+  const built = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "net_http2_cleartext", "main.ts"),
+      "-o",
+      h2cDir + path.sep,
+      "--link",
+      exe,
+      ...linkProfile("net_http2_cleartext"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  // A curl built without nghttp2 refuses --http2-prior-knowledge before it
+  // connects, and the server would wait out its timer for that connection.
+  const curlFound = has("curl")
+  const hasCurl = curlFound && /\bHTTP2\b/.test(String(spawnSync("curl", ["--version"], { encoding: "utf8" }).stdout))
+  const hasH2load = has("h2load")
+  if (!curlFound) skip("net_http2_cleartext: curl is not installed, so no third-party client speaks h2c to the carrier")
+  else if (!hasCurl) skip("net_http2_cleartext: curl was built without HTTP2 (curl --version), so it cannot speak h2c to the carrier")
+  if (!hasH2load) skip("net_http2_cleartext: h2load is not installed (nghttp2-client), so the carrier is not loaded by one")
+  if (check("net_http2_cleartext: the server links", built.status === 0, String(built.stderr)) && (hasCurl || hasH2load)) {
+    const connections = (hasCurl ? 1 : 0) + (hasH2load ? 4 : 0)
+    const server = spawn(exe, ["serve", String(connections)], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let served = ""
+    let serverErr = ""
+    const serverTimer = setTimeout(() => server.kill("SIGKILL"), 60000)
+    const serverDone = new Promise((resolve) =>
+      server.on("close", (code, signal) => {
+        clearTimeout(serverTimer)
+        resolve({ code, signal })
+      })
+    )
+    server.stderr.on("data", (chunk) => {
+      serverErr += chunk
+    })
+    const port = await new Promise((resolve) => {
+      server.stdout.on("data", (chunk) => {
+        served += chunk
+        const m = /^port (\d+)\n/.exec(served)
+        if (m !== null) {
+          resolve(Number(m[1]))
+        }
+      })
+      server.on("close", () => resolve(0))
+    })
+    // Each client runs to its end before the next, asynchronously, so that the
+    // server's output keeps arriving while it does.
+    const run = (tool, args) =>
+      new Promise((resolve) => {
+        const child = spawn(tool, args, { stdio: ["ignore", "pipe", "pipe"] })
+        let out = ""
+        const timer = setTimeout(() => child.kill("SIGKILL"), 30000)
+        child.stdout.on("data", (chunk) => {
+          out += chunk
+        })
+        child.stderr.on("data", (chunk) => {
+          out += chunk
+        })
+        child.on("close", (code, signal) => {
+          clearTimeout(timer)
+          resolve({ code, signal, out })
+        })
+      })
+    const url = `http://127.0.0.1:${port}/hello`
+    if (hasCurl) {
+      const r = port > 0 ? await run("curl", ["-sS", "--max-time", "10", "--http2-prior-knowledge", url, "-w", "\n%{http_version} %{http_code}\n"]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: curl --http2-prior-knowledge GETs the page over HTTP/2, 200 with the short body",
+        r.code === 0 && r.out === "hello from nish/net/http2\n\n2 200\n",
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    if (hasH2load) {
+      const r = port > 0 ? await run("h2load", ["-n", "1000", "-c", "4", url]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: h2load -n 1000 -c 4 over prior knowledge: every request succeeds with a 2xx",
+        r.code === 0 && /requests: 1000 total, 1000 started, 1000 done, 1000 succeeded, 0 failed, 0 errored, 0 timeout/.test(r.out) && /status codes: 1000 2xx/.test(r.out),
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    const ended = await serverDone
+    const lines = served.replace(/^port \d+\n/, "").split("\n").filter((line) => line !== "")
+    check(
+      `net_http2_cleartext: the server closes all ${connections} connections, each with no error, and exits 0`,
+      ended.code === 0 && lines.length === connections && lines.every((line) => /^closed: streams \d+ error 0$/.test(line)),
+      `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(served)}\nstderr: ${serverErr}`
+    )
+  }
+}
+
+// ---- record_size_limit (RFC 8449) against openssl s_client (WP39 G3) ------------
+//
+// `tests/link/net_tls_record_size_limit` reads the record lengths the server
+// writes under a client's limit; this asks a third-party client the same, when
+// its openssl can send the extension: s_client offers a limit of 512 with
+// `-record_size_limit`, prints every record header it reads under `-msg`, and
+// no protected record the server sends may carry more than 512 + 16 bytes
+// (the inner plaintext and the AEAD tag). OpenSSL has no such option up to at
+// least 3.0, so most hosts skip, and say why.
+if (!only || "net_tls_record_size_limit".includes(only)) {
+  const help = spawnSync("openssl", ["s_client", "-help"], { encoding: "utf8" })
+  const helpText = `${help.stdout ?? ""}${help.stderr ?? ""}`
+  if (help.error !== undefined || !helpText.includes("-record_size_limit")) {
+    const version = spawnSync("openssl", ["version"], { encoding: "utf8" })
+    const which = help.error === undefined ? String(version.stdout).trim() : "no openssl on PATH"
+    skip(`net_tls_record_size_limit: ${which}: s_client has no -record_size_limit, so the interop run did not happen`)
+  } else {
+    const rslDir = path.join(buildDir, "net-tls-rsl")
+    fs.rmSync(rslDir, { recursive: true, force: true })
+    fs.mkdirSync(rslDir, { recursive: true })
+    const exe = path.join(rslDir, "app")
+    const built = spawnSync(
+      NISH,
+      [
+        path.join(root, "tests", "link", "net_tls_record_tcp", "main.ts"),
+        "-o",
+        rslDir + path.sep,
+        "--link",
+        exe,
+        ...linkProfile("net_tls_record_tcp"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    if (check("net_tls_record_size_limit: the server links", built.status === 0, String(built.stderr))) {
+      const server = spawn(exe, ["serve", "1"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+      const serverTimer = setTimeout(() => server.kill("SIGKILL"), 30000)
+      const serverDone = new Promise((resolve) =>
+        server.on("close", (code) => {
+          clearTimeout(serverTimer)
+          resolve(code)
+        })
+      )
+      let served = ""
+      const port = await new Promise((resolve) => {
+        server.stdout.on("data", (chunk) => {
+          served += chunk
+          const m = /^port (\d+)\n/.exec(served)
+          if (m !== null) {
+            resolve(Number(m[1]))
+          }
+        })
+        server.on("close", () => resolve(0))
+      })
+      // A line long enough that the echo must be cut into several records.
+      const line = `${"x".repeat(2000)}\n`
+      const got =
+        port > 0
+          ? await new Promise((resolve) => {
+              const child = spawn(
+                "openssl",
+                ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-servername", "localhost", "-msg", "-record_size_limit", "512"],
+                { stdio: ["pipe", "pipe", "pipe"] }
+              )
+              let all = ""
+              let sent = false
+              const timer = setTimeout(() => child.kill("SIGKILL"), 15000)
+              const onData = (chunk) => {
+                all += chunk
+                if (!sent && all.includes("Verify return code")) {
+                  sent = true
+                  child.stdin.write(line)
+                }
+                // The echo, whole: s_client prints what it reads, one record at a
+                // time between the `-msg` lines, and never what it was given.
+                if (sent && (all.match(/x{8,}/g) ?? []).join("").length >= 2000) {
+                  child.stdin.end()
+                }
+              }
+              child.stdout.on("data", onData)
+              child.stderr.on("data", onData)
+              child.on("close", (code) => {
+                clearTimeout(timer)
+                resolve({ code, all })
+              })
+            })
+          : { code: null, all: "" }
+      // `-msg` prints `<<< ... RecordHeader` and the five header bytes, in hex,
+      // on the next line, for every record s_client reads.
+      const lengths = [...got.all.matchAll(/<<< [^\n]*RecordHeader[^\n]*\n\s*17 03 03 ([0-9a-f]{2}) ([0-9a-f]{2})/gi)].map(
+        (m) => Number.parseInt(m[1] + m[2], 16)
+      )
+      check(
+        "net_tls_record_size_limit: openssl s_client -record_size_limit 512 completes, and no protected record it reads passes 512 + 16 bytes",
+        got.code === 0 && lengths.length > 1 && lengths.every((n) => n <= 512 + 16),
+        `exit ${got.code}, protected record lengths ${JSON.stringify(lengths)}\n${got.all.slice(-1500)}`
+      )
+      await serverDone
+    }
   }
 }
 
@@ -5952,6 +6206,36 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       many.stderr.includes("\n...and 5 more portability warnings\n25 portability warnings"),
     many.stderr
   )
+
+  // WP33 R5's review tier, one `--json` line per row it covers. An NL8006
+  // whose rewrite compiles to the same IR carries `review` after `message`, in
+  // `fix`'s edit shape; NL8007 and NL8008 have no such rewrite (their
+  // conversions saturate under Node, or add an instruction here), so their
+  // lines are what they were before the tier, byte for byte.
+  const reviewSrc = path.join(buildDir, "port_class_review.ts")
+  fs.writeFileSync(
+    reviewSrc,
+    "const half = (a: i32): i32 => a / 2;\n" +
+      "const twice = (b: u8): u8 => b + b;\n" +
+      "const shifted = (k: i32, n: i32): i32 => k >>> n;\n\n" +
+      "export const main = (): number => {\n" +
+      "  console.log(half(7) + toI32(twice(250)) + shifted(-8, 0));\n" +
+      "  return 0;\n" +
+      "};\n"
+  )
+  const review = compile(reviewSrc, "port_class_review.ll", ["--warn-portability", "--json"])
+  const head = `{"file":${JSON.stringify(reviewSrc)},`
+  check(
+    "portability: --json carries `review` on NL8006 alone, after `message`, and NL8007 and NL8008 lines are unchanged",
+    review.status === 0 &&
+      objects(review.stdout).join("\n") ===
+        [
+          `${head}"line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this \`/\` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}`,
+          `${head}"line":2,"column":30,"endLine":2,"endColumn":35,"severity":"portability","code":"NL8007","message":"this \`+\` on u8 wraps here, and TypeScript keeps counting past the range"}`,
+          `${head}"line":3,"column":42,"endLine":3,"endColumn":49,"severity":"portability","code":"NL8008","message":"this \`>>>\` on i32 reads back signed here, and unsigned in TypeScript"}`,
+        ].join("\n"),
+    review.stdout + review.stderr
+  )
 }
 
 // ---- WP33 R4: `--emit-ts` ------------------------------------------------------------
@@ -6477,9 +6761,29 @@ if (!only || "arena_removed".includes(only)) {
     }
     fs.rmSync(work, { recursive: true, force: true })
   }
+  // `review` edits (WP33 R5) applied to `text` the way an agent would: each
+  // placed by line and UTF-16 column, end exclusive, applied from the end.
+  const applyReview = (text, objects) => {
+    const starts = [0]
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "\n") {
+        starts.push(i + 1)
+      }
+    }
+    const at = (line, column) => starts[line - 1] + column - 1
+    const edits = objects
+      .flatMap((d) => d.review ?? [])
+      .map((e) => [at(e.line, e.column), at(e.endLine, e.endColumn), e.text])
+      .sort((a, b) => b[0] - a[0] || b[1] - a[1])
+    let out = text
+    for (const [start, end, insert] of edits) {
+      out = out.slice(0, start) + insert + out.slice(end)
+    }
+    return out
+  }
   const inputs = fs
     .readdirSync(fixDir)
-    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts") && !f.endsWith(".reviewed.ts"))
     .sort()
   for (const file of inputs) {
     const noFix = file.endsWith(".nofix.ts")
@@ -6487,16 +6791,122 @@ if (!only || "arena_removed".includes(only)) {
     if (only && !name.includes(only) && !"fix".includes(only)) {
       continue
     }
+    // A `port-` case is a portability row's: every run is under
+    // `--warn-portability`, and its plain run, whose diagnostics are all
+    // warnings, exits 0 unless `plain-exit` says otherwise.
+    const portability = name.startsWith("port-")
+    const flags = portability ? ["--warn-portability"] : []
     const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
     const input = fs.readFileSync(path.join(fixDir, file))
     fs.writeFileSync(path.join(work, file), input)
-    const plain = spawnSync(NISH, ["--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
+    const plain = spawnSync(NISH, [...flags, "--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
     const plainObjects = diagnosticsOf(plain.stdout)
-    const fixed = spawnSync(NISH, ["--fix", "--json", file], { cwd: work, encoding: "utf8" })
+    const fixed = spawnSync(NISH, [...flags, "--fix", "--json", file], { cwd: work, encoding: "utf8" })
     const after = fs.readFileSync(path.join(work, file))
-    const wantPlain = plainExit(path.join(fixDir, `${name}.plain-exit`))
+    const wantPlain = Number(sidecar(path.join(fixDir, `${name}.plain-exit`), portability ? "0" : "1"))
     codeCheck(name, path.join(fixDir, `${name}.code`), plain)
-    if (noFix) {
+    const reviewedFile = path.join(fixDir, `${name}.reviewed.ts`)
+    if (!noFix && fs.existsSync(reviewedFile)) {
+      // The `review` tier: edits a reader approves, which `--fix` never
+      // applies. Applied by hand they give `.reviewed.ts`, which compiles to
+      // the input's IR byte for byte with the warning gone, and which runs
+      // under Node to print what the input prints natively.
+      const reviewed = fs.readFileSync(reviewedFile, "utf8")
+      // Checked per site: each diagnostic of the case's `code` carries a
+      // `review` unless `.reviewed-keeps` names its `line:column`, and the
+      // reviewed file reports that code at exactly those sites.
+      const code = sidecar(path.join(fixDir, `${name}.code`), "")
+      const keepSites = sidecar(path.join(fixDir, `${name}.reviewed-keeps`), "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+        .sort()
+      const siteOf = (d) => `${d.line}:${d.column}`
+      const sitesOf = (objects) =>
+        objects
+          .filter((d) => d.code === code)
+          .map(siteOf)
+          .sort()
+      check(
+        `fix ${name}: --json carries \`review\` at every ${code} site but ${keepSites.join(", ") || "none"}, and no \`fix\``,
+        plain.status === wantPlain &&
+          plainObjects.some((d) => d.code === code) &&
+          plainObjects
+            .filter((d) => d.code === code)
+            .every((d) => (Array.isArray(d.review) && d.review.length > 0) !== keepSites.includes(siteOf(d))) &&
+          plainObjects.every((d) => !("fix" in d)),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: the review edits make ${name}.reviewed.ts byte for byte`,
+        applyReview(input.toString("utf8"), plainObjects) === reviewed,
+        `got:\n${applyReview(input.toString("utf8"), plainObjects)}`
+      )
+      check(
+        `fix ${name}: --fix applies no review edit and leaves the file byte-identical`,
+        fixed.status === plain.status && after.equals(input),
+        shown(fixed)
+      )
+      // The same file name in a directory of its own, so the IR's
+      // `source_filename` and debug names match.
+      fs.mkdirSync(path.join(work, "reviewed"))
+      fs.writeFileSync(path.join(work, "reviewed", file), reviewed)
+      const clean = spawnSync(NISH, [...flags, "--json", file, "-o", "plain.ll"], {
+        cwd: path.join(work, "reviewed"),
+        encoding: "utf8",
+      })
+      check(
+        `fix ${name}: ${name}.reviewed.ts compiles with nothing left to review`,
+        clean.status === 0 &&
+          diagnosticsOf(clean.stdout).every((d) => d.severity !== "error" && !("review" in d) && !("fix" in d)),
+        shown(clean)
+      )
+      // A warning whose own edit was declined stands in the reviewed file (a
+      // `/=` around a reviewed `/`), at the site `.reviewed-keeps` names, with
+      // no `review` of its own, which the check above already holds.
+      check(
+        `fix ${name}: ${name}.reviewed.ts reports ${code} at ${keepSites.join(", ") || "no site"}`,
+        JSON.stringify(sitesOf(diagnosticsOf(clean.stdout))) === JSON.stringify(keepSites),
+        shown(clean)
+      )
+      const ll = path.join(work, "plain.ll")
+      const reviewedLl = path.join(work, "reviewed", "plain.ll")
+      check(
+        `fix ${name}: ${name}.reviewed.ts compiles to the input's IR byte for byte`,
+        fs.existsSync(ll) && fs.existsSync(reviewedLl) && fs.readFileSync(ll).equals(fs.readFileSync(reviewedLl)),
+        "the two .ll files differ"
+      )
+      // `.ll-lacks` names, one `<function> <text>` per line, a check the
+      // input's IR must not hold in that function's body: a case about the
+      // edit keeping a proof lists the checks the proof drops.
+      const lacks = sidecar(path.join(fixDir, `${name}.ll-lacks`), "")
+      const irText = fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+      for (const line of lacks === "" ? [] : lacks.split("\n")) {
+        const [fn, needle] = line.split(" ")
+        const head = irText.indexOf(` @${fn}(`)
+        const body = head === -1 ? "" : irText.slice(head, irText.indexOf("\n}\n", head))
+        check(`fix ${name}: the input's IR for ${fn} holds no \`${needle}\``, body !== "" && !body.includes(needle), body || `no @${fn} in plain.ll`)
+      }
+      const want = fs.readFileSync(path.join(fixDir, `${name}.stdout`), "utf8")
+      if (HAS_CLANG) {
+        const exe = path.join(work, "native")
+        const built = spawnSync(NISH, [file, "-o", `${exe}.ll`, "--link", exe], { cwd: work, encoding: "utf8" })
+        const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+        check(
+          `fix ${name}: the input prints ${name}.stdout natively`,
+          ran.status === 0 && ran.stdout === want,
+          shown(ran)
+        )
+      } else {
+        skip(`fix ${name}: the native run needs clang`)
+      }
+      const node = runUnderPrelude(path.join(work, "reviewed", file), [])
+      check(
+        `fix ${name}: ${name}.reviewed.ts prints ${name}.stdout under Node`,
+        node.status === 0 && node.stdout === want,
+        shown(node)
+      )
+    } else if (noFix) {
       // A refused shape must name the diagnostic it was written for: with
       // nothing to apply, a case whose diagnostic stopped firing, or that
       // another diagnostic now stops first, would otherwise pass for having
@@ -6506,8 +6916,10 @@ if (!only || "arena_removed".includes(only)) {
         sidecar(path.join(fixDir, `${name}.code`), "").length > 0
       )
       check(
-        `fix ${name}: reported with no \`fix\` key`,
-        plain.status === wantPlain && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
+        `fix ${name}: reported with no \`fix\` or \`review\` key`,
+        plain.status === wantPlain &&
+          plainObjects.length > 0 &&
+          plainObjects.every((d) => !("fix" in d) && !("review" in d)),
         shown(plain)
       )
       check(
@@ -7978,7 +8390,7 @@ if (dealtHere("selfHosting")) {
   const simdShard = DEALT_SECTIONS.simd.pinned
   const simdSteps = testJobText
     .split(/\n(?= {6}- name: )/)
-    .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32) kernel: /.test(step))
+    .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32|adler32) kernel: /.test(step))
   const strayed = simdSteps.filter((step) => !step.includes(`if: matrix.shard == ${simdShard}\n`))
   check(
     `ci.yml: the \`test\` job's ${simdSteps.length} steps that read the simd group run in its shard, ${simdShard}`,
@@ -15867,7 +16279,7 @@ if (dealtHere("simd")) {
     const judge = (label, cc, r) => {
       const said = r === null ? "" : String(r.stdout ?? "").trim()
       check(
-        `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256|chacha20|crc32): /, "") || "the agreement driver"}`,
+        `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm|sha256|chacha20|crc32|adler32): /, "") || "the agreement driver"}`,
         r !== null && r.status === 0 && /cases agree/.test(said),
         cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
       )
@@ -16008,6 +16420,33 @@ if (dealtHere("simd")) {
       )
     }
 
+    // WP38 S8: the same unit runs Adler-32 on SSSE3 or NEON, and adler32Update takes
+    // that path or std/compress/checksum.ts's loop. tests/simd/adler32.c includes the
+    // file and holds every path this machine has to that loop, itself held to RFC 1950:
+    // the check value, the empty input, every length 0..4,096 at offsets 0..15 from
+    // starts most of them unreduced, the lengths either side of a kernel stretch and of
+    // NMAX over random and all-0xff bytes, inputs of 1 to 16 MiB, streamed pieces and
+    // one split, every length 0..256 against a no-access page; then `nish_adler32_hw`
+    // under each `NISH_ADLER32`. The line must name the path /proc/cpuinfo says the CPU has.
+    const adlerSaid = agree(`adler32 native ${process.arch}`, [], path.join(simdDir, "adler32"), native, "tests/simd/adler32.c")
+    let adlerPath = null
+    if (process.arch === "x64" && features.has("ssse3")) {
+      adlerPath = "ssse3;"
+    } else if (process.arch === "arm64") {
+      adlerPath = "neon;"
+    }
+    if (adlerPath === null) {
+      skip(
+        `simd: adler32: /proc/cpuinfo names no SSSE3 for ${process.platform}-${process.arch}, so no kernel path is required to run`
+      )
+    } else {
+      check(
+        `simd: adler32 ran the ${adlerPath.replace(";", "")} path, which /proc/cpuinfo says this CPU has`,
+        adlerSaid.includes(`cases agree across ${adlerPath}`),
+        adlerSaid
+      )
+    }
+
     if (WASI_SYSROOT && has("wasm-ld")) {
       for (const [label, flags, source, name] of [
         ["wasm32-wasi, the scalar base path", [], driver, "index-of-any"],
@@ -16017,6 +16456,7 @@ if (dealtHere("simd")) {
         ["regex-scan wasm32-wasi, the scalar base path", [], scanDriver, "regex-scan"],
         ["regex-scan wasm32-wasi -msimd128", ["-msimd128"], scanDriver, "regex-scan"],
         ["crc32 wasm32-wasi, no kernel", [], "tests/simd/crc32.c", "crc32"],
+        ["adler32 wasm32-wasi, no kernel", [], "tests/simd/adler32.c", "adler32"],
       ]) {
         agree(
           label,
@@ -16105,6 +16545,13 @@ if (dealtHere("simd")) {
             "the ARMv8 CRC32 path",
             /cases agree across armv8-crc32;/,
           ],
+          [
+            "adler32 aarch64 through binfmt, the NEON path",
+            "tests/simd/adler32.c",
+            path.join(simdDir, "adler32.aarch64"),
+            "the NEON path of Adler-32",
+            /cases agree across neon;/,
+          ],
         ]) {
           const linked = build(cross, out, source)
           const r =
@@ -16115,7 +16562,7 @@ if (dealtHere("simd")) {
           // file to /bin/sh, which fails on it. So the driver ran when it printed its own
           // line (a summary or a FAIL) or died of a signal, and not otherwise.
           const ran =
-            r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|chacha20:|crc32:|FAIL )/m.test(String(r.stdout)))
+            r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|sha256:|chacha20:|crc32:|adler32:|FAIL )/m.test(String(r.stdout)))
           if (linked.status !== 0 || ran) {
             const said = judge(label, linked, r)
             if (wantLine !== null) {
@@ -16165,7 +16612,7 @@ if (dealtHere("simd")) {
           .split("\n")
           .map((line) => line.trim().split(/\s+/).pop())
           .filter((name) =>
-            /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|nish_chacha20\w*|nish_crc32\w*|__cpu_model|__cpu_indicator_init)$/.test(
+            /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|nish_sha256\w*|nish_chacha20\w*|nish_crc32\w*|nish_adler32\w*|__cpu_model|__cpu_indicator_init)$/.test(
               name
             )
           )
@@ -16173,6 +16620,7 @@ if (dealtHere("simd")) {
       }
       const aesControl = wantPath === null ? null : "nish_aes_hw: 1\n69c4e0d86a7b0430d8cdb78070b4c55a\n"
       const crcControl = crcPath === null ? null : "nish_crc32_hw: 1\ncbf43926\n"
+      const adlerControl = adlerPath === null ? null : "nish_adler32_hw: 1\n091e01de\n"
       /** The runtime as it was before build.sh paired `unit`: every file but that one. */
       const runtimeWithout = (unit) => {
         const dir = path.join(simdDir, `runtime-without-${unit.replace(/^runtime-|\.c$/g, "")}`)
@@ -16301,6 +16749,25 @@ if (dealtHere("simd")) {
             `the control keeps: ${crcCtrl.names.join(" ") || "(none)"} ${crcCtrl.why}\nthe control printed: ${crcPrinted || "(not run)"}`
         )
 
+        // Its Adler-32 half: hello is the same link as above, and this control keeps
+        // that half's kernel and gives Adler-32's check value where the CPU runs it.
+        const adlerExe = path.join(simdDir, `calls-adler32.${profile}`)
+        const adlerCtrl = kept(["tests/simd/calls-adler32.c"], adlerExe, profile)
+        const adlerRan = adlerCtrl.ok ? spawnSync(adlerExe, [], { encoding: "utf8" }) : null
+        const adlerPrinted = adlerRan === null ? "" : String(adlerRan.stdout)
+        check(
+          `simd: --profile ${profile} keeps runtime-checksum.c's Adler-32 kernel in a program that calls it, and runs it`,
+          quiet.ok &&
+            !quiet.names.some((name) => name.startsWith("nish_adler32_")) &&
+            adlerCtrl.ok &&
+            adlerCtrl.names.some((name) => name.startsWith("nish_adler32_")) &&
+            !adlerCtrl.names.includes("__cpu_model") &&
+            adlerRan.status === 0 &&
+            (adlerControl === null ? /^nish_adler32_hw: [01]\n/.test(adlerPrinted) : adlerPrinted === adlerControl),
+          `hello keeps: ${quiet.names.join(" ") || "(none)"} ${quiet.why}\n` +
+            `the control keeps: ${adlerCtrl.names.join(" ") || "(none)"} ${adlerCtrl.why}\nthe control printed: ${adlerPrinted || "(not run)"}`
+        )
+
         // runtime-chacha20.c, the same way, its control giving RFC 8439 §2.3.2's block
         // where the CPU runs the kernel.
         const withoutChacha =
@@ -16378,6 +16845,21 @@ if (dealtHere("simd")) {
         "simd: --profile wasi links runtime-checksum.c, and nish_crc32_hw answers 0 there",
         crcRan !== null && crcRan.status === 0 && crcRan.stdout === "nish_crc32_hw: 0\n",
         cb.status !== 0 ? cb.stderr : `${crcRan.stdout}${crcRan.stderr}`
+      )
+      const adlerWasm = path.join(simdDir, "calls-adler32.wasm")
+      const ab = spawnSync(
+        "bash",
+        ["scripts/build.sh", "tests/simd/calls-adler32.c", "runtime/runtime.c", "-o", adlerWasm, "--profile", "wasi"],
+        { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+      )
+      const adlerRan =
+        ab.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", adlerWasm], { cwd: root, encoding: "utf8" })
+          : null
+      check(
+        "simd: --profile wasi links runtime-checksum.c, and nish_adler32_hw answers 0 there",
+        adlerRan !== null && adlerRan.status === 0 && adlerRan.stdout === "nish_adler32_hw: 0\n",
+        ab.status !== 0 ? ab.stderr : `${adlerRan.stdout}${adlerRan.stderr}`
       )
       const chachaWasm = path.join(simdDir, "chacha20-calls.wasm")
       const chachaB = spawnSync(
@@ -18040,7 +18522,10 @@ if (dealtHere("simd")) {
           .map((l) => l.trim().split(/\s+/))
           .filter((f) => f.length >= 2)
           .map((f) => ({ type: f[f.length - 2], name: name(f[f.length - 1]) }));
-        const defined = syms.filter((x) => x.type !== "U").map((x) => x.name);
+        // The Adler-32 half of the unit is the adler32 kernel section's.
+        const defined = syms
+          .filter((x) => x.type !== "U" && !x.name.startsWith("nish_adler32_"))
+          .map((x) => x.name);
         const undef = syms.filter((x) => x.type === "U").map((x) => x.name);
         const ok =
           want === stub
@@ -18209,6 +18694,236 @@ if (dealtHere("simd")) {
     } else {
       skip(
         "crc32 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of std_compress_crc_paths is not checked for kernel references"
+      )
+    }
+  }
+
+  // `adler32Update`'s call of checksum.ts's `adler32Walk` is lowered the same way, to a
+  // branch on `nish_adler32_hw`: runtime-checksum.c's `nish_adler32_update` (SSSE3 on
+  // x86-64, NEON on AArch64) on one arm, the walk on the other.
+  // `tests/link/std_compress_adler_paths` holds the checksum to its check value, empty
+  // input, zlib trailers, the 5552-byte stretch edges and streamed pieces;
+  // `tests/link/std_compress_adler_diff` folds 69,648 window checksums and 48 large ones
+  // into its stdout. Each is counted and run as the CRC-32 programs are, under
+  // `NISH_ADLER32`; the targets CI cannot run are compiled the same way, and a
+  // `--profile wasi` build names no `nish_adler32_` symbol.
+  if (!only || "adler32 kernel wasi std_compress_adler_paths std_compress_adler_diff".includes(only)) {
+    const adlerDir = path.join(buildDir, "adler32-kernel")
+    fs.rmSync(adlerDir, { recursive: true, force: true })
+    fs.mkdirSync(adlerDir, { recursive: true })
+    const cpuHasAdler =
+      (process.arch === "x64" && cpuFeatures.has("ssse3")) ||
+      (process.arch === "arm64" && (cpuFeatures.has("asimd") || cpuFeatures.has("neon")))
+
+    if (!HAS_CLANG) {
+      skip("adler32 kernel: no clang to link the Adler-32 programs against runtime-checksum.c")
+    } else if (process.platform !== "linux") {
+      skip(
+        `adler32 kernel: the kernel's calls are counted with GNU ld's --wrap and judged against /proc/cpuinfo, and this host is ${process.platform}`
+      )
+    } else {
+      const counter = path.join(adlerDir, "count.c")
+      fs.writeFileSync(
+        counter,
+        [
+          "#include <stdint.h>",
+          "#include <stdio.h>",
+          "struct nish_array;",
+          "static unsigned long nish_adler32_calls;",
+          "uint32_t __real_nish_adler32_update(uint32_t adler, const struct nish_array *buf, int32_t off, int32_t len);",
+          "uint32_t __wrap_nish_adler32_update(uint32_t adler, const struct nish_array *buf, int32_t off, int32_t len) {",
+          "  nish_adler32_calls++;",
+          "  return __real_nish_adler32_update(adler, buf, off, len);",
+          "}",
+          "__attribute__((destructor)) static void nish_adler32_report(void) {",
+          '  fprintf(stderr, "adler32 kernel calls: %lu\\n", nish_adler32_calls);',
+          "}",
+          "",
+        ].join("\n")
+      )
+      const unset = { ...process.env }
+      delete unset.NISH_ADLER32
+      for (const program of ["std_compress_adler_paths", "std_compress_adler_diff"]) {
+        const compiled = compileLinkModules(program, path.join(adlerDir, program), [])
+        const exe = path.join(adlerDir, `${program}.counted`)
+        const linked =
+          compiled.lls.length > 0
+            ? spawnSync(
+                "bash",
+                [
+                  "scripts/build.sh",
+                  ...compiled.lls,
+                  "runtime/runtime.c",
+                  counter,
+                  "-Wl,--wrap=nish_adler32_update",
+                  "-o",
+                  exe,
+                  "--profile",
+                  "debug",
+                ],
+                { cwd: root, encoding: "utf8" }
+              )
+            : null
+        if (linked === null || linked.status !== 0) {
+          check(
+            `adler32 kernel: ${program} links with the kernel counted`,
+            false,
+            linked === null ? compiled.why : linked.stderr
+          )
+          continue
+        }
+        const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+        const hw = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: unset })
+        const soft = spawnSync(exe, [], { cwd: root, encoding: "utf8", env: { ...unset, NISH_ADLER32: "soft" } })
+        /** The count the wrapper printed, or null. */
+        const calls = (r) => {
+          const m = /^adler32 kernel calls: (\d+)$/m.exec(r.stderr)
+          return m === null ? null : Number(m[1])
+        }
+        check(
+          `adler32 kernel: ${program} prints the same bytes with NISH_ADLER32 unset and with NISH_ADLER32=soft, and they are its expected.out`,
+          hw.status === 0 && soft.status === 0 && hw.stdout === soft.stdout && hw.stdout === want,
+          `--- NISH_ADLER32 unset (exit ${hw.status})\n${hw.stdout}${hw.stderr}--- NISH_ADLER32=soft (exit ${soft.status})\n${soft.stdout}${soft.stderr}`
+        )
+        check(`adler32 kernel: ${program} under NISH_ADLER32=soft calls no kernel`, calls(soft) === 0, soft.stderr)
+        if (cpuHasAdler) {
+          check(
+            `adler32 kernel: ${program} with NISH_ADLER32 unset calls the kernel, which /proc/cpuinfo says this CPU runs`,
+            calls(hw) > 0,
+            hw.stderr
+          )
+        } else {
+          check(
+            `adler32 kernel: ${program} with NISH_ADLER32 unset calls no kernel on a CPU /proc/cpuinfo names no SSSE3 or NEON for`,
+            calls(hw) === 0,
+            hw.stderr
+          )
+        }
+      }
+    }
+
+    // The targets CI cannot run, as for CRC-32 above: Darwin on x86-64 and AArch64
+    // selects the kernel, which asks the C library for nothing the CRC-32 kernel does
+    // not; the rest select the stub, whose Adler-32 half is `nish_adler32_hw` and
+    // `nish_adler32_update` alone.
+    const adlerNm = ["llvm-nm", "llvm-nm-18"].find(has)
+    if (!HAS_CLANG || adlerNm === undefined) {
+      skip("adler32 kernel: no clang and llvm-nm to compile runtime-checksum.c for the targets CI cannot run")
+    } else {
+      const xcDir = path.join(adlerDir, "cross")
+      fs.mkdirSync(xcDir, { recursive: true })
+      const resource = spawnSync("clang", ["-print-resource-dir"], { encoding: "utf8" }).stdout.trim()
+      const bare = path.join(xcDir, "include")
+      fs.mkdirSync(bare, { recursive: true })
+      for (const f of fs.readdirSync(path.join(resource, "include"))) {
+        if (["stdint.h", "stdbool.h", "stddef.h"].includes(f) || /^__stddef_.*\.h$/.test(f)) {
+          fs.copyFileSync(path.join(resource, "include", f), path.join(bare, f))
+        }
+      }
+      const stub = ["nish_adler32_hw", "nish_adler32_update"]
+      const crossTargets = [
+        ["x86_64-apple-darwin", [], ["nish_adler32_answer", "nish_adler32_ssse3"]],
+        ["arm64-apple-darwin", [], ["nish_adler32_answer", "nish_adler32_neon"]],
+        ["i686-linux-gnu", [], stub],
+        ["armv7-linux-gnueabihf", [], stub],
+        ["aarch64_be-linux-gnu", [], stub],
+        ["x86_64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+        ["aarch64-linux-gnu", ["-nostdinc", "-isystem", bare], stub],
+      ]
+      for (const [triple, extra, want] of crossTargets) {
+        const hidden = extra.length > 0
+        const label = hidden ? `${triple} with the intrinsic headers hidden` : triple
+        const obj = path.join(xcDir, `${triple}${hidden ? "-hidden" : ""}.o`)
+        const cc = spawnSync(
+          "clang",
+          ["-c", "-ffreestanding", `--target=${triple}`, ...extra, "-Iruntime", "runtime/runtime-checksum.c", "-o", obj],
+          { cwd: root, encoding: "utf8" }
+        )
+        if (cc.status !== 0 && /no available targets|unknown target triple|unable to create target/i.test(cc.stderr)) {
+          skip(`adler32 kernel: this clang cannot compile for ${triple}: ${cc.stderr.trim().split("\n")[0]}`)
+          continue
+        }
+        if (cc.status !== 0) {
+          check(`adler32 kernel: runtime-checksum.c compiles for ${label}`, false, cc.stderr)
+          continue
+        }
+        const nm = spawnSync(adlerNm, [obj], { encoding: "utf8" })
+        // Mach-O names carry a leading underscore; ELF's do not.
+        const name = (n) => (triple.includes("apple") ? n.replace(/^_/, "") : n)
+        const syms = nm.stdout
+          .split("\n")
+          .map((l) => l.trim().split(/\s+/))
+          .filter((f) => f.length >= 2)
+          .map((f) => ({ type: f[f.length - 2], name: name(f[f.length - 1]) }))
+        const defined = syms
+          .filter((x) => x.type !== "U" && x.name.startsWith("nish_adler32_"))
+          .map((x) => x.name)
+          .sort()
+        const ok =
+          want === stub
+            ? defined.join(" ") === stub.join(" ")
+            : ["nish_adler32_hw", "nish_adler32_update", ...want].every((n) => defined.includes(n))
+        check(
+          want === stub
+            ? `adler32 kernel: runtime-checksum.c for ${label} is the stub, nish_adler32_hw and nish_adler32_update and no other nish_adler32_ symbol`
+            : `adler32 kernel: runtime-checksum.c for ${label} selects the kernel, ${want[1]}`,
+          nm.status === 0 && ok,
+          `nish_adler32_ symbols: ${defined.join(" ")}\n${nm.stderr}`
+        )
+      }
+    }
+
+    if (WASI_SYSROOT && has("wasm-ld")) {
+      const program = "std_compress_adler_paths"
+      const wasi = compileLinkModules(program, path.join(adlerDir, "wasi"), ["--profile", "wasi"])
+      const native = compileLinkModules(program, path.join(adlerDir, "native"), [])
+      const named = wasi.lls.filter((f) => fs.readFileSync(f, "utf8").includes("nish_adler32_"))
+      /** The modules linked for wasm32-wasi with the Adler-32 symbols traced. */
+      const traced = (lls, out) =>
+        spawnSync(
+          "bash",
+          [
+            "scripts/build.sh",
+            ...lls,
+            "runtime/runtime.c",
+            "-Wl,--trace-symbol=nish_adler32_hw,--trace-symbol=nish_adler32_update",
+            "-o",
+            out,
+            "--profile",
+            "wasi",
+          ],
+          { cwd: root, encoding: "utf8", env: { ...process.env, WASI_SYSROOT } }
+        )
+      const wasm = path.join(adlerDir, `${program}.wasm`)
+      const linked = wasi.lls.length > 0 ? traced(wasi.lls, wasm) : null
+      const control = native.lls.length > 0 ? traced(native.lls, path.join(adlerDir, "native.wasm")) : null
+      const refs = (r) =>
+        r === null ? [] : `${r.stdout}${r.stderr}`.split("\n").filter((l) => /reference to nish_adler32_/.test(l))
+      const ran =
+        linked !== null && linked.status === 0
+          ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+          : null
+      const want = fs.readFileSync(path.join(root, "tests", "link", program, "expected.out"), "utf8")
+      check(
+        `adler32 kernel: --profile wasi compiles ${program} to IR and a .wasm that reference no nish_adler32_ symbol, and it prints its expected.out`,
+        wasi.lls.length > 0 &&
+          named.length === 0 &&
+          linked.status === 0 &&
+          refs(linked).length === 0 &&
+          control !== null &&
+          control.status === 0 &&
+          refs(control).length > 0 &&
+          ran !== null &&
+          ran.status === 0 &&
+          ran.stdout === want,
+        `${wasi.why}IR naming one: ${named.join(", ") || "(none)"}\n` +
+          `references in the wasi link: ${refs(linked).join("; ") || "(none)"}\n` +
+          `references in the control's link (want some): ${refs(control).join("; ") || "(none)"}\n` +
+          `${linked === null ? "" : linked.stderr}${ran === null ? "(not run)" : `${ran.stdout}${ran.stderr}`}`
+      )
+    } else {
+      skip(
+        "adler32 kernel: no WASI sysroot (set WASI_SYSROOT): the wasm32 build of std_compress_adler_paths is not checked for kernel references"
       )
     }
   }
@@ -29180,6 +29895,7 @@ if (!only || "c_symbol_private_libm".includes(only)) {
 }
 
 runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
+runFfiStructChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 

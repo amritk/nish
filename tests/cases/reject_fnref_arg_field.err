@@ -1,0 +1,2 @@
+`b.op` is read again at each call `swapThen` makes
+read it into a `const` first and pass the `const`

@@ -1,4 +1,4 @@
-// `declare class` promises a layout from elsewhere, and there is no elsewhere.
+// A `declare class` is a C struct layout (WP27 S4.1), and a `string` has none.
 declare class Point {
-  x: number;
+  name: string
 }

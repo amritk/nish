@@ -3,8 +3,9 @@
 // case's `www`, and one request per protocol from the repository's scripted
 // clients — HTTP/1.1 through `H1Loop`'s own client, HTTP/2 over TLS,
 // `hq-interop` and HTTP/3 over QUIC, and a WebTransport session's datagram
-// and bidirectional stream. A change in `nish/net` that breaks the server the
-// interop job drives fails here, inside `npm test`, before that job runs.
+// and bidirectional stream, and the WebSocket echo port Autobahn drives. A
+// change in `nish/net` that breaks the server the interop job drives fails
+// here, inside `npm test`, before that job runs.
 // Then the refusals of the command line, each with its exit code.
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
@@ -20,13 +21,26 @@ import {
   H3_STREAM_QPACK_ENCODER,
 } from "nish/net/http3-frame";
 import { QpackEncoder } from "nish/net/qpack";
-import { bytesOf, textOf } from "../crypto_x509/hex";
+import {
+  WS_CLOSE,
+  WS_CLOSE_INVALID_DATA,
+  WS_MESSAGE,
+  WS_OP_BINARY,
+  WS_OP_CLOSE,
+  WS_OP_CONTINUATION,
+  WS_OP_PING,
+  WS_OP_TEXT,
+  WS_PONG,
+  websocketClosePayload,
+} from "nish/net/websocket";
+import { bytesOf, sameBytes, textOf } from "../crypto_x509/hex";
+import { ZERO, range } from "../net_tls_record_common/bytes";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafCertificate, leafPrivate } from "../net_tls_common/server";
 import { getOf } from "../net_http2/peer";
 import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, H3Limits, h3Cat, h3ClientParams, h3ClientSettings, h3Frame, h3Section, h3Varint } from "../net_http3/peer";
 import { WtLimits, wtClientParams, wtClientSettingIds, wtClientSettingValues, wtSettingsFrame } from "../net_webtransport/peer";
-import { H2TlsClient, QuicClient, h3Answer } from "./client";
+import { H2TlsClient, QuicClient, WsClient, h3Answer } from "./client";
 import { parseServe, serve } from "./cli";
 import { certificateHash, loadChain, loadKey, mintCertificate, mintKey } from "./identity";
 import { InteropOptions, InteropServer, poolSlots, supportedTestcase } from "./server";
@@ -82,6 +96,9 @@ const identityChecks = (t: Suite): void => {
   t.eqStr("an unknown flag is refused", parseServe(["main", "serve", "--nope", "1"]).error, "unknown flag --nope");
   t.eqStr("a flag with no value is refused", parseServe(["main", "serve", "--www"]).error, "--www wants a value");
   t.eqStr("a port past 65535 is refused", parseServe(["main", "serve", "--port", "65536"]).error, "a port outside 0 to 65535");
+  const withWs = parseServe(["main", "serve", "--ws-port", "9001"]);
+  t.ok("--ws-port is read", withWs.error === "" && withWs.options.wsPort === n32(9001));
+  t.eqStr("a --ws-port past 65535 is refused", parseServe(["main", "serve", "--ws-port", "70000"]).error, "a port outside 0 to 65535");
   const sized = parseServe(["main", "serve", "--slots", "4096", "--only", "h3"]);
   t.ok("--slots and --only are read", sized.error === "" && sized.options.slots === n32(4096) && sized.options.only === "h3");
   t.eqStr("--slots 0 is refused", parseServe(["main", "serve", "--slots", "0"]).error, "--slots wants a count from 1 to 4096");
@@ -111,13 +128,51 @@ const carrierChecks = (t: Suite): void => {
   options.slots = n32(4);
   const key: Secret<u8[]> = secret(leafPrivate());
   const server = new InteropServer(options, [leafCertificate()]);
-  t.ok("the server listens: QUIC, HTTP/1.1 plain and over TLS, HTTP/2", server.udp >= 0 && server.h1.plainPort > 0 && server.h1.tlsPort > 0 && server.h2.port > 0);
+  t.ok(
+    "the server listens: QUIC, HTTP/1.1 plain and over TLS, HTTP/2, the WebSocket echo port",
+    server.udp >= 0 && server.h1.plainPort > 0 && server.h1.tlsPort > 0 && server.h2.port > 0 && server.ws.port > 0
+  );
 
   // HTTP/1.1, through the loop H1Loop owns.
   const plain: i32 = server.h1.connect(false);
   server.h1.send(plain, bytesOf("GET /hello HTTP/1.1\r\nHost: localhost\r\n\r\n"));
   const answer = server.h1.response(plain, false);
   t.eqStr("HTTP/1.1: a GET of /hello", `${answer.status} ${textOf(answer.body)}`, "200 hello from nish/net/http1\n");
+
+  // The WebSocket echo port, as Autobahn's fuzzingclient drives it.
+  const ws = new WsClient(server);
+  const upgraded: string = ws.open("/runCase?case=1&agent=nish", key);
+  t.ok("WebSocket: the opening handshake on any target is answered 101", upgraded.indexOf("HTTP/1.1 101 ") === 0);
+  // RFC 6455 §1.3's sample key and the accept value it gives.
+  t.ok("WebSocket: the 101 carries the key's Sec-WebSocket-Accept", upgraded.indexOf("\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n") > 0);
+  const big: u8[] = [];
+  for (let k: i32 = 0; k < 65536; k++) {
+    big.push(toU8((k * 7) & 255));
+  }
+  ws.frame(true, WS_OP_BINARY, big, key);
+  t.ok(
+    "a 64 KiB binary message, four fragments on the way back, is echoed whole and byte for byte",
+    ws.next(key) === WS_MESSAGE && ws.decoder.opcode === WS_OP_BINARY && sameBytes(range(ws.decoder.data, ZERO, ws.decoder.dataLen), big)
+  );
+  ws.frame(false, WS_OP_TEXT, bytesOf("frag"), key);
+  ws.frame(true, WS_OP_CONTINUATION, bytesOf("mented"), key);
+  t.ok("a fragmented text message is echoed as text", ws.next(key) === WS_MESSAGE && ws.decoder.opcode === WS_OP_TEXT && textOf(range(ws.decoder.data, ZERO, ws.decoder.dataLen)) === "fragmented");
+  const empty: u8[] = [];
+  ws.frame(true, WS_OP_TEXT, empty, key);
+  t.ok("an empty text message is echoed empty", ws.next(key) === WS_MESSAGE && ws.decoder.dataLen === n32(0));
+  ws.frame(true, WS_OP_PING, bytesOf("hi"), key);
+  t.ok("a ping is answered with a pong", ws.next(key) === WS_PONG && textOf(range(ws.decoder.data, ZERO, ws.decoder.dataLen)) === "hi");
+  const normal: u8[] | null = websocketClosePayload(n32(1000), "");
+  ws.frame(true, WS_OP_CLOSE, normal !== null ? normal : empty, key);
+  t.ok("a close is echoed with its code", ws.next(key) === WS_CLOSE && ws.decoder.closeCode === n32(1000));
+  t.eqI32("the three messages counted echoed", server.ws.echoed, n32(3));
+
+  const bad = new WsClient(server);
+  bad.open("/", key);
+  bad.frame(true, WS_OP_TEXT, [toU8(0xc3), toU8(0x28)], key);
+  t.ok("text that is not UTF-8 is closed with 1007", bad.next(key) === WS_CLOSE && bad.decoder.closeCode === WS_CLOSE_INVALID_DATA);
+  const get = new WsClient(server);
+  t.ok("a request that asks no upgrade is answered 400", get.openPlain("/", key).indexOf("HTTP/1.1 400 ") === 0);
 
   // HTTP/2 over TLS.
   // The server's date, pinned so the heads compare byte for byte.

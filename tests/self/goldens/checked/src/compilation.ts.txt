@@ -735,60 +735,61 @@ function Compilation.check(this: Compilation): boolean -> @Compilation.check [ex
   callee +43:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
   local +50:9 gathered: boolean (let)
   local +51:16 unit: ModuleUnit (const)
-  local +55:18 unit: ModuleUnit (const)
-  callee +56:9 ParentTable.link -> @ParentTable.link
-  local +61:11 refModules: RefModule[] (const)
-  local +62:16 unit: ModuleUnit (const)
-  callee +64:9 new RefModule -> @RefModule.constructor
-  callee +67:9 resolveReferences -> @resolveReferences
-  local +68:11 r: i32 (let)
-  callee +73:11 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  local +79:16 unit: ModuleUnit (const)
-  local +80:13 program: CheckedProgram (const)
-  local +81:18 finding: HandleFinding (const)
-  callee +81:29 handleFindings -> @handleFindings
-  callee +82:9 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +85:5 Compilation.rejectWideSpreads -> @Compilation.rejectWideSpreads
-  callee +86:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  local +92:11 checked: CheckedProgram[] (const)
-  local +93:16 unit: ModuleUnit (const)
-  callee +96:5 spellCSymbolsApart -> @spellCSymbolsApart
-  callee +97:5 Compilation.rejectForeignShadows -> @Compilation.rejectForeignShadows
-  callee +98:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +101:5 Compilation.rejectCLibrarySymbols -> @Compilation.rejectCLibrarySymbols
-  callee +102:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  local +109:11 contexts: CheckContext[] (const)
-  local +110:11 programs: CheckedProgram[] (const)
-  local +111:16 unit: ModuleUnit (const)
-  local +115:11 mode: BuildMode (const)
-  callee +115:18 buildModeOf -> @buildModeOf
-  callee +117:5 refuseHostReferences -> @refuseHostReferences
-  callee +118:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  local +127:18 program: CheckedProgram (const)
-  callee +128:9 forgetProofs -> @forgetProofs
-  callee +131:7 layoutInlineArrays -> @layoutInlineArrays
-  callee +132:7 proveCallSiteRanges -> @proveCallSiteRanges
-  callee +135:5 Compilation.reportArenaLoops -> @Compilation.reportArenaLoops
-  callee +136:5 Compilation.denyRetention -> @Compilation.denyRetention
-  callee +137:5 Compilation.checkParallel -> @Compilation.checkParallel
-  callee +138:5 Compilation.keyEnumsBySymbol -> @Compilation.keyEnumsBySymbol
-  callee +139:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +144:9 Options.recordsPanics -> @Options.recordsPanics
-  local +145:13 facts: FactsTable (const)
-  callee +145:21 Compilation.analyze -> @Compilation.analyze
-  callee +146:7 resolvePanicSites -> @resolvePanicSites
-  callee +147:7 Compilation.denyPanicSites -> @Compilation.denyPanicSites
-  callee +148:11 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +152:5 Compilation.refuseCapabilities -> @Compilation.refuseCapabilities
-  callee +153:5 Compilation.refuseDependencyCapabilities -> @Compilation.refuseDependencyCapabilities
-  callee +154:5 Compilation.refuseNarrowGrants -> @Compilation.refuseNarrowGrants
-  callee +155:5 Compilation.refuseHostlessBuiltins -> @Compilation.refuseHostlessBuiltins
-  callee +156:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +159:5 Compilation.checkCapabilityLock -> @Compilation.checkCapabilityLock
-  callee +160:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +163:5 Compilation.reportHygiene -> @Compilation.reportHygiene
-  callee +164:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +168:7 Compilation.reportPortability -> @Compilation.reportPortability
+  local +54:13 none: Node | null (const)
+  local +61:18 unit: ModuleUnit (const)
+  callee +62:9 ParentTable.link -> @ParentTable.link
+  local +67:11 refModules: RefModule[] (const)
+  local +68:16 unit: ModuleUnit (const)
+  callee +70:9 new RefModule -> @RefModule.constructor
+  callee +73:9 resolveReferences -> @resolveReferences
+  local +74:11 r: i32 (let)
+  callee +79:11 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  local +85:16 unit: ModuleUnit (const)
+  local +86:13 program: CheckedProgram (const)
+  local +87:18 finding: HandleFinding (const)
+  callee +87:29 handleFindings -> @handleFindings
+  callee +88:9 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +91:5 Compilation.rejectWideSpreads -> @Compilation.rejectWideSpreads
+  callee +92:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  local +98:11 checked: CheckedProgram[] (const)
+  local +99:16 unit: ModuleUnit (const)
+  callee +102:5 spellCSymbolsApart -> @spellCSymbolsApart
+  callee +103:5 Compilation.rejectForeignShadows -> @Compilation.rejectForeignShadows
+  callee +104:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +107:5 Compilation.rejectCLibrarySymbols -> @Compilation.rejectCLibrarySymbols
+  callee +108:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  local +115:11 contexts: CheckContext[] (const)
+  local +116:11 programs: CheckedProgram[] (const)
+  local +117:16 unit: ModuleUnit (const)
+  local +121:11 mode: BuildMode (const)
+  callee +121:18 buildModeOf -> @buildModeOf
+  callee +123:5 refuseHostReferences -> @refuseHostReferences
+  callee +124:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  local +133:18 program: CheckedProgram (const)
+  callee +134:9 forgetProofs -> @forgetProofs
+  callee +137:7 layoutInlineArrays -> @layoutInlineArrays
+  callee +138:7 proveCallSiteRanges -> @proveCallSiteRanges
+  callee +141:5 Compilation.reportArenaLoops -> @Compilation.reportArenaLoops
+  callee +142:5 Compilation.denyRetention -> @Compilation.denyRetention
+  callee +143:5 Compilation.checkParallel -> @Compilation.checkParallel
+  callee +144:5 Compilation.keyEnumsBySymbol -> @Compilation.keyEnumsBySymbol
+  callee +145:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +150:9 Options.recordsPanics -> @Options.recordsPanics
+  local +151:13 facts: FactsTable (const)
+  callee +151:21 Compilation.analyze -> @Compilation.analyze
+  callee +152:7 resolvePanicSites -> @resolvePanicSites
+  callee +153:7 Compilation.denyPanicSites -> @Compilation.denyPanicSites
+  callee +154:11 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +158:5 Compilation.refuseCapabilities -> @Compilation.refuseCapabilities
+  callee +159:5 Compilation.refuseDependencyCapabilities -> @Compilation.refuseDependencyCapabilities
+  callee +160:5 Compilation.refuseNarrowGrants -> @Compilation.refuseNarrowGrants
+  callee +161:5 Compilation.refuseHostlessBuiltins -> @Compilation.refuseHostlessBuiltins
+  callee +162:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +165:5 Compilation.checkCapabilityLock -> @Compilation.checkCapabilityLock
+  callee +166:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +169:5 Compilation.reportHygiene -> @Compilation.reportHygiene
+  callee +170:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +174:7 Compilation.reportPortability -> @Compilation.reportPortability
 function Compilation.reportHygiene(this: Compilation): void -> @Compilation.reportHygiene [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.add
@@ -1624,13 +1625,13 @@ function Compilation.reportArenaLoops(this: Compilation): void -> @Compilation.r
 function Compilation.reportPortability(this: Compilation): void -> @Compilation.reportPortability [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via portabilityFindings
-  calls: DiagnosticSink.reportPortability portabilityFindings
+  calls: DiagnosticSink.reportPortabilityReview portabilityFindings
   pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 unit: AnalysisUnit (const)
   local +1:18 finding: PortabilityFinding (const)
   callee +1:29 portabilityFindings -> @portabilityFindings
-  callee +2:9 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
+  callee +2:9 DiagnosticSink.reportPortabilityReview -> @DiagnosticSink.reportPortabilityReview
 function Compilation.rejectAsync(this: Compilation): void -> @Compilation.rejectAsync [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rejectAwaitCycles
@@ -2203,7 +2204,7 @@ function parentDirectory(dir: string): string -> @parentDirectory
 function restatedBy(warning: Diagnostic, refused: PanicSite[]): boolean -> @restatedBy
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_index_of nish_str_index_of_from
-  pointer warning: size=48 writesThrough=false captured=false
+  pointer warning: size=56 writesThrough=false captured=false
   pointer refused: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 text: string (const)
@@ -2261,7 +2262,7 @@ function signatureText(table: TypeTable, sig: FunctionSig): string -> @signature
 function fsSpecifierFix(ctx: CheckContext, imports: ImportBinding[], imp: ImportBinding): Edit[] -> @fsSpecifierFix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit exportsAllOf isQuote nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=CheckContext.edit#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=CheckContext.edit#0
   pointer imports: size=0 writesThrough=false captured=false passedTo=exportsAllOf#1
   pointer imp: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0

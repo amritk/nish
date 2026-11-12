@@ -1,0 +1,1 @@
+`ops[next(b)]` is read again at each call `twice` makes, where JavaScript reads it once at the call

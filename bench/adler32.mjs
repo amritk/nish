@@ -8,19 +8,29 @@
 //   npm run build && node bench/adler32.mjs [options] [--compiler <nish>]
 //     --runs N    timed rounds after one warm-up (default 9), rounded up to a
 //                 multiple of the column count so each column goes first equally often
-//     --check     one short run per column, each checksum against the pinned one; exit 0 when equal
+//     --self      time the adler32Update that ships instead: `default`, its
+//                 byte-identical copy and `soft`, and the verdict on the kernel
+//                 runtime/runtime-checksum.c picks
+//     --check     one short run per column of both modes, each checksum against the pinned one; exit 0 when equal.
+//                 It runs both modes itself, so it refuses `--self`
 //
-// The columns. `nish` is bench/adler32.ts built with `--profile speed`, the
-// adler32Update that ships; `nish (copy)` is a byte-identical copy of it, the
-// noise band; `kernel` is kernel.c's vector kernel (`ssse3` or `neon`, which
-// it names); `scalar C` is kernel.c's scalar reference, for scale. kernel.c is
-// built with `clang -O2` and no CPU flag: only the kernel carries a target
-// attribute. Every run must print the same checksum, or the run stops.
+// The columns. `nish` is bench/adler32.ts built with `--profile speed` and run
+// under `NISH_ADLER32=soft`, the Nish loop; `nish (copy)` is a byte-identical
+// copy of it, the noise band; `kernel` is kernel.c's vector kernel (`ssse3` or
+// `neon`, which it names); `scalar C` is kernel.c's scalar reference, for
+// scale. kernel.c keeps its own copies of the kernels, not the runtime's, so
+// this measurement is the one #1078 made. It is built with `clang -O2` and no
+// CPU flag: only the kernel carries a target attribute.
 //
-// The gain at a size is the nish median over the kernel median, less one; the
-// band is the larger of the copy's distance from nish at the minimum and at
-// the median. A kernel passes when its gain is 20% or more and above the band
-// at both sizes; the last line says whether it did. MB/s is 10^6 bytes a second.
+// `--self` times what a program gets: `default` is the same binary with
+// `NISH_ADLER32` unset, so adler32Update runs runtime-checksum.c's kernel where
+// the CPU has one; `default (copy)` is its copy; `soft` is the pinned loop.
+// Every run must print the same checksum, or the run stops.
+//
+// The gain at a size is the loop's median over the kernel's, less one; the
+// band is the larger of the copy's distance from its twin at the minimum and
+// at the median. A kernel passes when its gain is 20% or more and above the
+// band at both sizes; the last line says whether it did. MB/s is 10^6 bytes a second.
 import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
@@ -49,16 +59,22 @@ const WORKLOADS = 2
 const BAR = 0.2
 
 let runs = 9
+let self = false
 let check = false
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--runs") {
     runs = Number(argv[++i])
+  } else if (argv[i] === "--self") {
+    self = true
   } else if (argv[i] === "--check") {
     check = true
   } else {
     fail(`unknown option ${argv[i]}`)
   }
+}
+if (self && check) {
+  fail("--check runs both modes already; pass --check or --self, not both")
 }
 if (!(runs >= 1)) {
   fail("--runs needs a positive count")
@@ -103,19 +119,36 @@ const verified = run(kernel, ["verify"]).trim()
 console.log(verified)
 const kernelPath = verified.match(/^adler32 (\S+):/)?.[1] ?? fail(`kernel verify printed ${verified}`)
 
-/** The columns, each `{ label, bin, args }`, nish first and the kernel third. */
-const columns = [
-  { label: "nish", bin: exe, args: [] },
-  { label: "nish (copy)", bin: copy, args: [] },
-  { label: `kernel ${kernelPath}`, bin: kernel, args: ["time"] },
-  { label: "scalar C", bin: kernel, args: ["scalar"] },
+const unset = { ...process.env }
+delete unset.NISH_ADLER32
+const soft = { ...unset, NISH_ADLER32: "soft" }
+/**
+ * The columns, each `{ label, bin, args, env }`: the loop first, its copy
+ * second and the kernel third, or under `--self` the kernel first, its copy
+ * second and the loop third.
+ */
+const bench = [
+  { label: "nish", bin: exe, args: [], env: soft },
+  { label: "nish (copy)", bin: copy, args: [], env: soft },
+  { label: `kernel ${kernelPath}`, bin: kernel, args: ["time"], env: unset },
+  { label: "scalar C", bin: kernel, args: ["scalar"], env: unset },
 ]
+const shipped = [
+  { label: "default", bin: exe, args: [], env: unset },
+  { label: "default (copy)", bin: copy, args: [], env: unset },
+  { label: "soft", bin: exe, args: [], env: soft },
+]
+let columns = self ? shipped : bench
+if (check) {
+  columns = [...bench, shipped[0]]
+}
 
 /** One run of a column at `scale`: `{ answer, times }`, times a Map from workload to `{ ns, bytes, ops }`. */
 const runOnce = (c, scale) => {
   const r = spawnSync(c.bin, [...c.args, String(scale)], {
     cwd: root,
     encoding: "utf8",
+    env: c.env,
     stdio: ["ignore", "pipe", "pipe"],
   })
   if (r.status !== 0) {
@@ -201,7 +234,7 @@ const commit = (() => {
 })()
 
 /** The table's widths: the first two columns are left-aligned, the rest right-aligned. */
-const WIDTHS = [10, 13, 10, 10, 8, 8]
+const WIDTHS = [10, 14, 10, 10, 8, 8]
 const line = (cells) => cells.map((c, i) => (i < 2 ? c.padEnd(WIDTHS[i]) : c.padStart(WIDTHS[i]))).join(" ")
 console.log(line(["workload", "column", "min ns/op", "median", "MB/s", "median"]))
 const stats = columns.map(() => new Map())
@@ -228,16 +261,20 @@ console.log(
 )
 const pct = (x) => `${(x * 100).toFixed(1)}%`
 let passes = true
+/** Under `--self` the kernel is column 0 and the loop column 2; otherwise the other way round. */
+const [loopAt, vecAt] = self ? [2, 0] : [0, 2]
 for (const name of shape.keys()) {
-  const [nish, twin, vec] = [stats[0].get(name), stats[1].get(name), stats[2].get(name)]
-  const band = Math.max(Math.abs(twin.min / nish.min - 1), Math.abs(twin.median / nish.median - 1))
-  const gain = nish.median / vec.median - 1
+  const [first, twin, loop, vec] = [stats[0], stats[1], stats[loopAt], stats[vecAt]].map((m) => m.get(name))
+  const band = Math.max(Math.abs(twin.min / first.min - 1), Math.abs(twin.median / first.median - 1))
+  const gain = loop.median / vec.median - 1
   const ok = gain >= BAR && gain > band
   passes &&= ok
   console.log(
-    `${name}: ${columns[2].label} gains ${pct(gain)} over nish (band ${pct(band)}): ${ok ? "passes" : "misses"} the ${pct(BAR)} bar`
+    `${name}: ${columns[vecAt].label} gains ${pct(gain)} over ${columns[loopAt].label} (band ${pct(band)}): ${ok ? "passes" : "misses"} the ${pct(BAR)} bar`
   )
 }
 console.log(
-  `verdict on ${process.arch}: the ${kernelPath} kernel ${passes ? "clears" : "misses"} the bar at every size`
+  self
+    ? `verdict on ${process.arch}: adler32Update with NISH_ADLER32 unset ${passes ? "clears" : "misses"} the bar at every size (${kernelPath} is what bench/adler32/kernel.c's verify found on this CPU, not a report from the shipped binary)`
+    : `verdict on ${process.arch}: the ${kernelPath} kernel ${passes ? "clears" : "misses"} the bar at every size`
 )

@@ -28,6 +28,8 @@ const CHACHA20_HW: string = "nish_chacha20_hw" [exported]
 const CHACHA20_KERNEL: string = "nish_chacha20_xor" [exported]
 const CRC32_HW: string = "nish_crc32_hw" [exported]
 const CRC32_KERNEL: string = "nish_crc32_update" [exported]
+const ADLER32_HW: string = "nish_adler32_hw" [exported]
+const ADLER32_KERNEL: string = "nish_adler32_update" [exported]
 const BYTES_WALK_NONE: i32 = 0 [exported]
 const BYTES_WALK_BLANK: i32 = 1
 const BYTES_WALK_DIGITS: i32 = 2
@@ -76,6 +78,13 @@ function isChacha20Seam(program: CheckedProgram, sig: FunctionSig): boolean -> @
   stackSites=0 stackLocals=0
   callee +0:27 stdModuleName -> @stdModuleName
 function isCrc32Seam(program: CheckedProgram, sig: FunctionSig): boolean -> @isCrc32Seam [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isCompressChecksumModule nish_str_eq
+  pointer program: size=800 writesThrough=false captured=false
+  pointer sig: size=200 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 isCompressChecksumModule -> @isCompressChecksumModule
+function isAdler32Seam(program: CheckedProgram, sig: FunctionSig): boolean -> @isAdler32Seam [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isCompressChecksumModule nish_str_eq
   pointer program: size=800 writesThrough=false captured=false

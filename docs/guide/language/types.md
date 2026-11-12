@@ -141,8 +141,9 @@ export const main = (): i32 => {
 ## Nullable types: `T | null`
 
 A value that may be absent has the type `T | null`. `T` must be a class, an
-interface, an array or a `string` — a number or a `boolean` can never be
-null, so `i32 | null` is refused. Absence is `null`; `undefined` is not a
+interface, an array, a `string` or a
+[function reference](function-references.md#a-reference-that-may-be-null) —
+a number or a `boolean` can never be null, so `i32 | null` is refused. Absence is `null`; `undefined` is not a
 value a program writes (the one place it appears is a `Map` lookup — see
 [Maps and sets](maps-and-sets.md)).
 
