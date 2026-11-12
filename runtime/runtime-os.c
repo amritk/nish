@@ -433,10 +433,10 @@ _Bool nish_mkdir(const nish_str *path) {
 }
 
 #ifdef __linux__
-/* Set by `nish_sandbox` (runtime-sandbox.c) when the exec allowlist marks an
-   interpreter it keeps out of reach (SBX-1); null otherwise, so a spawn
-   outside `--sandbox` is the one `posix_spawnp` call it always was. */
-int (*nish_spawn_target)(const char *file, int low, char *proc);
+/* Set by `nish_sandbox` (runtime-sandbox.c) when the program has an exec
+   allowlist (SBX-1); null otherwise, so a spawn outside `--sandbox` is the
+   one `posix_spawnp` call it always was. */
+int32_t (*nish_spawn_sandboxed)(const char *file, int low, const void *actions, char **argv);
 #endif
 
 /* `posix_spawnp` is one libc call where fork/execvp/waitpid would be three,
@@ -451,8 +451,9 @@ int (*nish_spawn_target)(const char *file, int low, char *proc);
    that spawns nothing loses it to `--gc-sections`. The answer is the child's
    pid, or a negative errno: -EINVAL for an empty argv or an argument holding a
    NUL, and `posix_spawnp`'s own error otherwise (-ENOENT for a command that is
-   not on PATH, on glibc). Under `--sandbox` with marked entries the child
-   execs the checked file through `/proc/self/fd/N`, not the name in `argv[0]`. */
+   not on PATH, on glibc). Under `--sandbox` with an exec allowlist the child
+   execs the checked file through `/proc/self/fd/N`, not the name in `argv[0]`,
+   and that is the one exec its subtree gets. */
 static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err, const int *dup,
                                 int base, int n) {
 #ifdef __wasi__
@@ -498,27 +499,18 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
        leave its own stdout pointing at the file. */
     if (to[k]) posix_spawn_file_actions_addopen(&fa, k + 1, nish_cpath(to[k]), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
   }
-  const char *run = v[0];
+  pid_t pid;
 #ifdef __linux__
-  /* The child executes the file the sandbox checked, through a descriptor
-     above every one a `dup` action writes. */
-  char proc[32];
-  int fd = -1;
-  if (nish_spawn_target) {
-    fd = nish_spawn_target(run, base + n + 3, proc);
-    if (fd < 0) {
-      posix_spawn_file_actions_destroy(&fa);
-      return fd;
-    }
-    run = proc;
+  /* The sandbox starts the child itself: it executes the file checked, through
+     a descriptor above every one a `dup` action writes, and nothing after. */
+  if (nish_spawn_sandboxed) {
+    int32_t started = nish_spawn_sandboxed(v[0], base + n + 3, &fa, v);
+    posix_spawn_file_actions_destroy(&fa);
+    return started;
   }
 #endif
-  pid_t pid;
-  failed = posix_spawnp(&pid, run, &fa, 0, v, environ);
+  failed = posix_spawnp(&pid, v[0], &fa, 0, v, environ);
   posix_spawn_file_actions_destroy(&fa);
-#ifdef __linux__
-  if (fd >= 0) close(fd);
-#endif
   return failed ? -failed : (int32_t)pid;
 #endif
 }
