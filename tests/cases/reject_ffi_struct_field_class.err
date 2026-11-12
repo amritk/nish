@@ -1,0 +1,1 @@
+Field `inner` of `declare class Outer` has type `Inner`, which has no C layout

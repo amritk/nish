@@ -1,0 +1,12 @@
+sizeof Inner 16, tag 0, link 8
+sizeof Mixed 72: a 0, b 8, c 16, d 24, e 32, p 40, inner 48, z 64
+a 171
+b 1122334455667788
+c -123456
+d 0.375
+e 1234
+tag cafe
+z 7f
+pointers 3
+zeroed 0
+written 7f

@@ -308,6 +308,13 @@ const tlsAdvanceHeld = (protection: TlsRecordProtection, held: Secret<u8[]>): bo
  * sequence numbers. `padding` is how many zero bytes each protected record
  * the server writes carries after its content type (§5.4), 0 unless the
  * caller sets it.
+ *
+ * A client that sent `record_size_limit` (RFC 8449) gets no protected record
+ * whose plaintext, content type and padding included, passes it: `write` and
+ * the handshake flight are cut into records of at most the limit less one
+ * less `padding`, and a padding that leaves no room fails the connection with
+ * `internal_error` as it does under 2^14. Records in the clear (ServerHello,
+ * HelloRetryRequest, the compatibility `change_cipher_spec`) are not limited.
  */
 export class TlsRecordServer {
   /** The handshake underneath: read it for the suite, ALPN, server name and exporter secret. */
@@ -1080,13 +1087,28 @@ export class TlsRecordServer {
   }
 
   /**
+   * The most content and padding together one record may carry under the
+   * write protection as it stands: 2^14 bytes (§5.4), and under protection
+   * one less than the client's `record_size_limit` when it sent one, since
+   * that limit counts the content-type byte too (RFC 8449 §4). Records in
+   * the clear are not limited by it.
+   */
+  private writeCap(): i32 {
+    const limit: i32 = this.tls.peerRecordSizeLimit
+    if (limit === 0 || !this.writeProtection.isProtected() || limit - 1 > TLS_MAX_PLAINTEXT) {
+      return TLS_MAX_PLAINTEXT
+    }
+    return limit - 1
+  }
+
+  /**
    * The most content one record may carry under the write protection as it
-   * stands: 2^14 bytes, less the padding each protected record carries, since
-   * the content, its type and the padding together may not pass 2^14 + 1
-   * (§5.4). Below 1 when the padding leaves no room at all.
+   * stands: `writeCap()`, less the padding each protected record carries,
+   * since the content, its type and the padding together may not pass it.
+   * Below 1 when the padding leaves no room at all.
    */
   private maxChunk(): i32 {
-    return TLS_MAX_PLAINTEXT - this.writePadding()
+    return this.writeCap() - this.writePadding()
   }
 
   /** The padding the next record carries: `padding` once records are protected, none in the clear. */
@@ -1105,16 +1127,24 @@ export class TlsRecordServer {
   /**
    * Seals one record of `type` from `data[off .. off + len)` onto `output`
    * under the write protection, padded when it is protected. False, writing
-   * nothing, when it does not fit; a refusal from `seal` itself, which only a
-   * mistake here could cause, fails the connection.
+   * nothing, when it does not fit; content and padding past `writeCap()` (the
+   * client's `record_size_limit`, or 2^14) and a refusal from `seal` itself
+   * fail the connection with `internal_error`.
    *
    * @param type The content type to send, such as `TLS_CONTENT_HANDSHAKE`.
    * @param data The array that holds the content.
    * @param off Where in `data` the content starts.
    * @param len How many bytes of content, from `off`, to seal into this one record.
-   * @returns `true` when the record was added to `output`; `false` when it did not fit or `seal` refused it.
+   * @returns `true` when the record was added to `output`; `false` when it did not fit, passed the cap or `seal` refused it.
    */
   sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean {
+    // A record the cap cannot carry, such as an alert under a padding that
+    // fills it, fails the connection rather than pass the client's limit; the
+    // alert that failure seals is refused here in turn, and not sent.
+    if (len + this.writePadding() > this.writeCap()) {
+      this.fail(TLS_ALERT_INTERNAL_ERROR)
+      return false
+    }
     const room: i32 = this.recordRoom(len)
     if (!this.outputHasRoom(room)) {
       return false
