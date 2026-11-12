@@ -12723,7 +12723,7 @@ if (dealtHere("cryptoChecks")) {
           // A spec that could not be read exactly fails below, in the fixture check,
           // rather than being run here with a secret it lost.
           for (const spec of specs.filter((sp) => sp.problems.length === 0)) {
-            const body = functionBody(lines, spec.name, target)
+            const body = functionBody(lines, spec.name, target, { labels: spec.loops })
             const found = body === null ? [] : ctViolations(body, spec, target)
             const kinds = [...new Set(found.map((v) => v.kind))]
             check(
@@ -12880,6 +12880,125 @@ if (dealtHere("cryptoChecks")) {
         loopBody === undefined
           ? "no `for (let i: i32 = 0; i < 30; i++)` loop in std/crypto/p256.ts's p256Divsteps30"
           : `${blocks.length} blocks, ${stray.length} unlike the module's loop body:\n${stray[0] ?? ""}\n--- module:\n${loopBody}`
+      )
+
+      // ct_asm_chacha20poly1305's loop copies are the module's text with a `ct`
+      // prefix and an `export`, so a module edit the copy misses fails here, not
+      // silently. `ctPoly1305AbsorbWhole` is the head of poly1305Absorb up to the
+      // end of its whole-blocks loop; the padded tail stays discipline.
+      const chachaSource = fs.readFileSync(path.join(root, "std", "crypto", "chacha20poly1305.ts"), "utf8")
+      const chachaFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_chacha20poly1305.ts"), "utf8")
+        .replace(/\bct(Chacha20|Poly1305)/g, (_m, word) => word.toLowerCase())
+        .replace(/\bCT_POLY1305_/g, "POLY1305_")
+        .replace(/\nexport const /g, "\nconst ")
+      const bodyOf = (source, name) =>
+        source.match(new RegExp(`\\nconst ${name} = (?:[^\\n]*\\{\\n[\\s\\S]*?\\n\\}\\n|[^\\n]*[^{\\n]\\n)`))?.[0]
+      const drifted = []
+      for (const name of ["chacha20Rotl", "chacha20Core", "chacha20XorInto"]) {
+        const copy = bodyOf(chachaFixture, name)
+        if (copy === undefined || copy !== bodyOf(chachaSource, name)) {
+          drifted.push(name)
+        }
+      }
+      const absorbHead = bodyOf(chachaFixture, "poly1305AbsorbWhole")
+        ?.replace("poly1305AbsorbWhole", "poly1305Absorb")
+        .replace(", len: i32): void", ", len: i32, zeroPad: boolean): void")
+        .replace(/\}\n$/, "")
+      if (absorbHead === undefined || !bodyOf(chachaSource, "poly1305Absorb")?.startsWith(absorbHead)) {
+        drifted.push("poly1305Absorb's whole-blocks loop")
+      }
+      if (!chachaSource.includes("\nconst POLY1305_HIGH_BIT: i32 = 0x1000000\n")) {
+        drifted.push("POLY1305_HIGH_BIT")
+      }
+      check(
+        "ct_asm: ct_asm_chacha20poly1305's loop copies match std/crypto/chacha20poly1305.ts",
+        drifted.length === 0,
+        `differs from the module: ${drifted.join(", ")}`
+      )
+
+      // ct_asm_aes's loop copies keep the module's names, so only `export` differs.
+      const aesSource = fs.readFileSync(path.join(root, "std", "crypto", "aes.ts"), "utf8")
+      const aesFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_aes.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const aesDrifted = [
+        "aesBytes",
+        "aesSwapBits",
+        "aesTranspose",
+        "aesPack",
+        "aesUnpack",
+        "aesEncryptBatch",
+        "aesSubWord",
+      ].filter((name) => {
+        const copy = bodyOf(aesFixture, name)
+        return copy === undefined || copy !== bodyOf(aesSource, name)
+      })
+      check(
+        "ct_asm: ct_asm_aes's loop copies match std/crypto/aes.ts",
+        aesDrifted.length === 0,
+        `differs from the module: ${aesDrifted.join(", ")}`
+      )
+
+      // ct_asm_x25519's copies are std/crypto/x25519.ts put through the rewrites
+      // the fixture's header names: the module's names mapped to the fixture's,
+      // the short-array early returns, comments and blank lines dropped, and
+      // each `a[i]` written through `nish:unsafe`. `ladderStep` and `ladderLoop`
+      // put their parameters on lines of their own, which `bodyOf`'s one-line
+      // form would stop at, so a line ending in `(` opens a block here.
+      const x25519Body = (source, name) =>
+        source.match(new RegExp(`\\nconst ${name} = (?:[^\\n]*[^{(\\n]\\n|[\\s\\S]*?\\n\\}\\n)`))?.[0]
+      const x25519Module = fs
+        .readFileSync(path.join(root, "std", "crypto", "x25519.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+        .replace(/\bf25519Swap\b/g, "condSwap")
+        .replace(/\bx25519Ladder(Step|Loop)\b/g, (_m, word) => `ladder${word}`)
+        .replace(/\bf25519(\w)/g, (_m, c) => `field${c}`)
+        .replace(/\bX25519_A24\b/g, "toI64(121665)")
+        .replace(/\bfieldZero\(\)/g, "new Array<i64>(10)")
+      const x25519Fixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_x25519.ts"), "utf8")
+        .replace(/\nexport const /g, "\nconst ")
+      const x25519Drifted = [
+        "fieldAdd64",
+        "fieldSub64",
+        "fieldMul64",
+        "fieldWidth",
+        "fieldLimbMask",
+        "fieldCopy",
+        "fieldCarryChain",
+        "fieldCarry",
+        "fieldAdd",
+        "fieldSub",
+        "fieldMulRow",
+        "fieldMul",
+        "fieldSquare",
+        "fieldSquareTimes",
+        "fieldMulA24",
+        "fieldPow250",
+        "fieldInvert",
+        "condSwap",
+        "fieldDecode",
+        "fieldDecodeInto",
+        "fieldEncode",
+        "fieldEncodeInto",
+        "ladderStep",
+        "ladderLoop",
+      ].filter((name) => {
+        const copy = x25519Body(x25519Fixture, name)
+        const want = x25519Body(x25519Module, name)
+          ?.replace(/\n {2}if \(toI32\([^\n]*\.length\) < \d+[^\n]*\{\n {4}return[^\n]*\n {2}\}/g, "")
+          .replace(/\n\s*\/\/[^\n]*/g, "")
+          .replace(/ \/\/ [^\n]*/g, "")
+          .replace(/\n\s*(?=\n)/g, "")
+          .replace(/^(\s*)(\w+)\[([^\]\n]+)\] = ([^\n]*)$/gm, "$1uncheckedSet($2, $3, $4);")
+          .replace(/\b(\w+)\[([^[\]\n]+)\]/g, "uncheckedGet($1, $2)")
+        return copy === undefined || want === undefined || copy !== want
+      })
+      check(
+        "ct_asm: ct_asm_x25519's copies match std/crypto/x25519.ts",
+        x25519Drifted.length === 0,
+        `differs from the module: ${x25519Drifted.join(", ")}`
       )
     }
   }

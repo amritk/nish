@@ -442,15 +442,133 @@ Every fixture's copy changed with its module, and each still passes its link
 test against the module. A check the compiler proves away — a loop counter, a
 masked value — is no branch at all, and the fixtures rely on that too.
 
+## Loops read whole (WP34 ct-asm)
+
+Until this stage the check refused every conditional branch, so a function
+with a loop, even one whose trip count is public, could never pass it, and
+every loop in K2, K3 and K4 was held by review. A fixture can now mark a spec
+`loops` (`// ct-check: ladderLoopScratch secret=contents loops`), and the function
+is read with its labels:
+
+- **The walk settles.** Each label's taint is the join of every edge into
+  it, the back edge included, and the walk repeats until no label's state
+  grows (`settle` in `tests/ct-asm.js`). A secret carried round the loop
+  reaches the top of the next pass, so a load it indexes on the second pass
+  is refused like one on the first. Followed callees are read the same way.
+- **A branch is refused only on secret flags.** A loop on a public counter
+  passes; one that stops on a secret byte is refused as `branch`.
+- **`noloop`.** A `loops` spec must reach a back edge: a branch or jump to a
+  label at or above it, in the function or in a callee the check follows (a
+  callee's back edges count for its caller, so `fieldInvert`, whose loops
+  are its callees', is read as a loop). One that reaches none is refused: a check
+  that read no loop would pass whatever the loop did, so a spec cannot keep
+  passing after clang unrolls its loop away. A forward branch is not a loop,
+  so the bounds check or length guard an unrolled body keeps does not make
+  one. A function clang does unroll whole is marked `branches` instead of
+  `loops`: read the same way, its branches judged by their flags, no loop
+  claimed for it.
+- **A panic does not return.** A call to a `nish_panic_*` function ends its
+  path, since the branch that reaches it has already been judged; a bounds
+  check on a public index passes, and one on a secret index is refused as
+  `branch`. Any other call out is still `call`. The model knows a panic by
+  its symbol's name alone, not by a `noreturn` it reads, so a corner calls
+  one unconditionally ahead of a loop and requires `noloop`: the loop after
+  it is never reached, and its back edge is not counted.
+
+Two rules of the model changed with it, each a false refusal the new targets
+met, and each pinned by a `STACK_CORNERS` row that fails when the rule is
+reverted:
+
+- **`set<cc>` writes one byte.** It carries no size suffix, and the model
+  took the width from the operand it could not size: `seto 7(%rsp)`, the
+  spill of `chacha20XorInto`'s overflow check, smeared secret over the slots
+  beside it. A secret byte it does write is still secret (`seto` byte, refused
+  as `load`).
+- **A narrow read at an index the model cannot place is an element.** Such a
+  read from the stack was taken to be possibly the frame's own pointer to a
+  stack array, so storing it off the stack was an `escape`. Only an
+  eight-byte read can be that pointer; a narrower one is an element of the
+  array and may be stored anywhere. On aarch64 the width is the register's:
+  `ldr w9` is a four-byte element and passes, `ldr x9` at the same index may
+  be the pointer and is refused as `escape` (a pair of corners).
+
+The back-edge rule has its own corners, each made to fail by reverting it:
+an unrolled body with only a forward bounds check (`noloop`); a loop on a
+public counter (passes); and a secret carried round the back edge to index a
+load on the next pass, through a stack slot and through a register (`load`).
+
+The functions now read this way, on x86-64, aarch64 and x86-64 at
+`x86-64-v3`, each beside a variant written to leak that must fail:
+
+| module | read with `loops` (or `branches`) | written to fail |
+| --- | --- | --- |
+| `std/crypto/chacha20poly1305.ts` | `chacha20Core` (the twenty rounds), `chacha20XorInto`, and `poly1305Absorb`'s whole-block loop (`ctPoly1305AbsorbWhole`) | `ctChacha20XorIntoToZero` (stops at a zero byte: `branch`), `ctChacha20SboxStream` (a table lookup: `load`) |
+| `std/crypto/aes.ts` | `aesEncryptBatch` (the bitsliced block loop, every round); as `branches`, since clang unrolls them whole and leaves only the length guard, `aesPack`, `aesUnpack` and `aesSubWord` | `aesPackToZeroByte` (`branch`), `aesSubWordsByTable` (`load`) |
+| `std/crypto/x25519.ts` | `x25519LadderLoop`, the 255-step ladder (`ladderLoopScratch`), `f25519SquareTimes`, `f25519Pow250`, `f25519Invert`, `f25519DecodeInto`, `f25519EncodeInto`; with no branch at all, since clang unrolls them whole, `x25519LadderStep` (`ladderStepScratch`), `f25519Mul` (its ten rows written out as `f25519MulRow` calls, which keeps `wide` at stack offsets the model places; a rolled row loop stores to it at a counted index, which the model cannot place, and so taints every spill slot) and `f25519Square` | `ladderLoopToTopBit` (`branch`), `indexAfterMul` and `decodeThroughTable` (`load`), `fieldAddUnrolled` (`noloop`) |
+
+The ChaCha20 and AES functions are copies of the module's text, differing
+only in `export` and, for ChaCha20, a `ct` prefix on each name, and
+`tests/run.js` compares each with its function in the module ("ct_asm's
+loop copies match std/crypto/chacha20poly1305.ts", "… std/crypto/aes.ts"),
+so an edit to the module that the copy does not take fails the run. The
+Absorb copy is the module's function up to its padded tail. The X25519
+copies are the module's text through a fixed set of rewrites, each named in
+the fixture's header (the module's names mapped to the fixture's, the
+short-array early returns, comments and blank lines dropped, and `a[i]`
+written as `uncheckedGet` or `uncheckedSet`), and `tests/run.js` applies them
+to the module and requires every copy ("ct_asm_x25519's copies match
+std/crypto/x25519.ts"); `main` also runs X25519 on them against RFC 7748's
+vectors. For that, `x25519Ladder`'s loop and step are their own functions in
+the module, `x25519LadderLoop` and `x25519LadderStep`, and its decode and
+encode are split from their allocations (`f25519DecodeInto`,
+`f25519EncodeInto`). The step and loop take their scratch as ten arrays, past
+the six parameters the check places in registers, so the fixture reads them
+through `ladderStepScratch` and `ladderLoopScratch`, which allocate that
+scratch on their own stack as `x25519Ladder` does. And `f25519Mul` calls
+`f25519MulRow` once per row rather than looping over the rows: rolled, the
+row loop stores into `wide` on the stack at a counted index, which the model
+cannot place, so every spill slot after it (the `out` pointer among them)
+would read as secret, the reason Poly1305's padded tail stays discipline
+below. Written out, clang unrolls each row and every store has its offset.
+
+What stays discipline, and why the model cannot read it:
+
+- **Poly1305's padded tail** (`poly1305Absorb` after its whole blocks). It
+  copies the last partial block into a zeroed stack block at an index the
+  model cannot place, so the frame's slots after it are taken as possibly
+  secret and every later read of them refused. Only the whole-block loop is
+  read.
+- **The AES key schedule** (`aesScheduleInto`, `aesKey`, `aesKeyInto`). It
+  allocates its scratch through `nish_arena_mark`, `memset` and
+  `nish_arena_release`, calls the model does not follow, and its loop reads
+  those calls' results. Its one non-linear step, SubWord, is read
+  (`aesSubWord`); the rest is XOR and rotation of words by public offsets.
+- **The CTR and GCM block loops** (`aesCtrInto`, `aesGcmCtr`,
+  `ghashBlocksInto`, `ghashUpdate`). They allocate scratch the same way and
+  loop for the message's length around what is read: the bitsliced batch
+  (`aesEncryptBatch`) and one GHASH multiply (`ghashMultiply`).
+- **The seal and open drivers** (`chacha20Poly1305Seal` and `Open`,
+  `aesGcmSeal` and `Open`, and the tag functions under them). Each allocates
+  its scratch and output through the arena, a call the model does not
+  follow, and branches on public lengths; the tag compare they end in is
+  read (`chacha20Poly1305TagMatch`, `aesGcmTagMask`).
+- **The `wipe` calls.** A wipe is a volatile store the model does not need to
+  read for constant time; that it survives `-O2` is pinned by
+  `tests/wipes/crypto.js`.
+- AEAD-4 ([crypto-aead.md](crypto-aead.md)): the vector registers and spills
+  the AES kernels leave behind, which no assembly check can wipe.
+- `--cpu` beyond `x86-64-v3` (WP38 S2): the check reads the baseline and
+  `x86-64-v3` only.
+
 ## Functions still held by discipline only
 
-The assembly check reads a function only if a fixture names it, and it
-refuses every branch, so a function with a loop — even one whose trip count
-is public — can never pass it. The fixtures are therefore *copies* of each
+The assembly check reads a function only if a fixture names it. Without
+`loops` it refuses every branch, so most fixtures are *copies* of each
 module's straight-line cores (each kept honest by its `.out` or link test
-against the module's own vectors); the module functions themselves are not
-read. What follows is every secret-handling function in `std/crypto` that no
-fixture reads, as a copy or otherwise. Their constant time rests on review.
+against the module's own vectors); the `loops` copies above are held to the
+module's text. What follows is every secret-handling function in `std/crypto`
+that no fixture reads, as a copy or otherwise. Their constant time rests on
+review.
 
 - **`std/crypto/ct.ts`**: `timingSafeEqual`, `timingSafeEqualAt`, whose
   loops run for a length. (`ct_asm_k1_ct` reads copies of their cores:
@@ -475,22 +593,31 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
   `sha256CopyBytes`, `sha256` (secret whenever they hash a key, as in HMAC).
 - **`std/crypto/sha512.ts`**: `loadWord`, `storeWord`, the round helpers,
   `sha512`, `sha384`.
-- **`std/crypto/x25519.ts`**: `f25519Invert`, `f25519SquareTimes`,
-  `f25519Decode`, `f25519Encode`, `x25519Ladder` (its 255-step loop),
-  `x25519`, `x25519Base`. (`f25519Mul`, `f25519Square`, `f25519Add`,
-  `f25519Sub`, `f25519MulA24`, `f25519Swap` and one ladder step are read as
-  copies in `ct_asm_x25519`.)
-- **`std/crypto/chacha20poly1305.ts`**: `chacha20QuarterRound`, `chacha20Core`,
-  `chacha20State`, `chacha20Block`, `chacha20`, `chacha20XorInto`,
-  `chacha20HeaderMask`, `poly1305Absorb`, `poly1305`, `poly1305KeyGen`,
-  `chacha20Poly1305Tag`, `chacha20Poly1305Seal`, `chacha20Poly1305Open`.
-  (`poly1305Clamp`, `poly1305Block`, `poly1305Finish` and
-  `chacha20Poly1305TagMatch` are read as copies.)
-- **`std/crypto/aes.ts`**: the key schedule (`aesExpand`, `aesSubWord`,
-  `aesKey`), `aesEncryptBatch`, `aesEncryptOne`, `aesEncryptBlock`,
-  `aesHeaderMask`, `ghashUpdate`, `aesGcmCtr`, `aesGcmTag`, `aesGcmSeal`,
-  `aesGcmOpen`. (`aesBitslicedRound` with the helpers it inlines,
-  `ghashMultiply` and `aesGcmTagMask` are read as copies.)
+- **`std/crypto/x25519.ts`**: `x25519Ladder` itself (its allocation and
+  wipes; the loop it calls is read), `f25519Decode` and `f25519Encode`
+  (their allocations; the work they call is read), `x25519Exposed`,
+  `x25519`, `x25519Base`.
+  (`f25519Add`, `f25519Sub`, `f25519MulA24`, `f25519Swap`, `f25519Mul`,
+  `f25519Square` and `x25519LadderStep` are read as copies in
+  `ct_asm_x25519`, and with `loops` `f25519SquareTimes`, `f25519Pow250`,
+  `f25519Invert`, `f25519DecodeInto`, `f25519EncodeInto` and
+  `x25519LadderLoop`.)
+- **`std/crypto/chacha20poly1305.ts`**: `chacha20QuarterRound`,
+  `chacha20State`, `chacha20Block`,
+  `chacha20`, `chacha20HeaderMask`, `poly1305Absorb`'s padded tail,
+  `poly1305`, `poly1305KeyGen`, `chacha20Poly1305Tag`,
+  `chacha20Poly1305Seal`, `chacha20Poly1305Open`. (`poly1305Clamp`,
+  `poly1305Block`, `poly1305Finish` and `chacha20Poly1305TagMatch` are read
+  as copies, and with `loops` `chacha20Core`, `chacha20XorInto` and
+  `poly1305Absorb`'s whole blocks.)
+- **`std/crypto/aes.ts`**: the key schedule (`aesScheduleInto`, `aesKey`,
+  `aesKeyInto`), `aesBlockInto`, `aesEncryptOne`, `aesEncryptBlock`,
+  `aesHeaderMask`, `ghashBlocksInto`, `ghashUpdate`, `ghashLengths`,
+  `aesGcmJ0`, `aesCtrInto`, `aesGcmCtr`, `aesGcmTag`, `aesGcmSeal`,
+  `aesGcmOpen`.
+  (`aesBitslicedRound` with the helpers it inlines, `ghashMultiply` and
+  `aesGcmTagMask` are read as copies, with `loops` `aesEncryptBatch`, and
+  as `branches` `aesPack`, `aesUnpack` and `aesSubWord`.)
 - **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FiatSelectznz`,
   `p256FiatScalarAdd`, `p256FieldInvert`, `p256ScalarInvert`,
   `p256ScalarMult`, `p256BaseMult`, `p256BaseMultWith`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
@@ -627,6 +754,9 @@ of a secret no wipe reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 | A followed call's leak is found inside the callee, not in inlined code | `via=leakyRow` on `callsLeak` and `tailLeak`; `CALL_CORNERS` `leakVia` / `leakElsewhere` |
 | A chain of calls deeper than `CALL_DEPTH` is refused, not followed for ever | `CALL_CORNERS` `deep` |
 | Each gap in CT-2 to CT-10, CT-17, CT-18 and CT-20 is refused, and the shapes beside it still pass | `AUDIT_CORNERS` (37 rows: 19 for CT-2 to CT-10, 5 for CT-17, 7 for CT-18, 4 for CT-20, and 2 for the carry flag `dec` leaves, a `sete` that must pass and a `setb` that must be refused), checked when the module loads |
+| A loop is read whole: a secret carried round the back edge, a loop that stops on a secret and a secret table index on any pass are refused, a loop on a public counter passes, and a `loops` spec that reaches no back edge, in it or a callee, is refused (`noloop`) | `ct_asm: ${name} ${spec.name} on ${at}: ${spec.promise}` for every `loops` and `branches` spec in `ct_asm_chacha20poly1305`, `ct_asm_aes` and `ct_asm_x25519`, those written to fail among them; the `loops` rows of `STACK_CORNERS` (a public and a secret bounds-check panic, an unconditional panic ahead of a loop, an unrolled body with only a bounds check, a public counter loop, a secret carried round the back edge through the stack and through a register, the same unrolled body under `branches`, and `nish_abort` still refused as `call`) |
+| `set<cc>` writes one byte, and a narrow read at an unplaceable stack index is an element, not the frame's pointer | `STACK_CORNERS` in `tests/ct-asm.js`, each rule with a row that passes and one that is refused, checked when the module loads |
+| The ChaCha20, AES and X25519 fixtures read with labels are the module's text | `ct_asm: ct_asm_chacha20poly1305's loop copies match std/crypto/chacha20poly1305.ts`, `ct_asm: ct_asm_aes's loop copies match std/crypto/aes.ts`, `ct_asm: ct_asm_x25519's copies match std/crypto/x25519.ts` |
 | A spec that makes nothing secret is refused | `seedMisses` in `tests/ct-asm.js` |
 | No existing fixture leaks by the stricter rules | every `ct_asm: … no branch, call, secret-indexed access or secret-dependent latency` check |
 | Each refusal check is named for the kind it expects (CT-14) | `EXPECT_KINDS` and each spec's `promise` in `tests/ct-asm.js` |
