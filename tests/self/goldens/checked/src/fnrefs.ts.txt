@@ -193,14 +193,15 @@ function checkReferenceCall(ctx: CheckContext, expr: Node, type: i32, shown: str
 function outerReference(ctx: CheckContext, name: string): boolean -> @outerReference [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: Scope.lookup Scope.typeOf TypeTable.isFnRef
+  calls: Scope.lookup Scope.typeOf TypeTable.isFnRef TypeTable.stripNull
   pointer ctx: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 scope: Scope (const)
   local +1:11 local: Local | null (const)
   callee +1:19 Scope.lookup -> @Scope.lookup
-  callee +3:14 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +3:32 Scope.typeOf -> @Scope.typeOf
+  callee +4:14 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +4:32 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +4:52 Scope.typeOf -> @Scope.typeOf
 function hostReferenceMessage(what: string): string -> @hostReferenceMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

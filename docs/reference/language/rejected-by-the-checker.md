@@ -65,11 +65,11 @@ messages are exact for the cases cited; other entries quote the checker
 - **a function reference to a function it cannot hold, or used other than
   called, compared, stored or passed**: NL2725, NL2726, NL2727, NL2728,
   NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736, NL2737, NL2739,
-  NL2740, NL2741 and NL2742 (`reject_fnref_generic`, `_async`, `_ffi`,
+  NL2740, NL2741, NL2742 and NL2743 (`reject_fnref_generic`, `_async`, `_ffi`,
   `_rest`, `_zero_fill`, `_host`, `_host_field`, `_no_strict`, `_escape_join`,
   `_escape_join_transitive`, `_print`, `_json`, `_map_key`, `_nullable_call`,
   `_arg_effect`, `_arg_field`, `_arg_element_nullable`, `reject_fnarg_alias`,
-  `reject_mutex_guard_helper_*`; [Function references](declarations.md#function-references))
+  `reject_fnarg_ref_assigned_later`, `reject_mutex_guard_helper_*`; [Function references](declarations.md#function-references))
 - **a function argument that is not a function's name, an arrow or a local
   holding a reference, or does not match**:
   `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... ``

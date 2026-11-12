@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 734 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 735 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -14169,4 +14169,35 @@ export const main = (): i32 => {
 
 ```text
 `h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it
+```
+
+## NL2743
+
+The message of an error contains:
+
+```text
+…`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const`
+```
+
+[`nl2743_fnarg_reference_assigned_later.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2743_fnarg_reference_assigned_later.ts):
+
+```ts
+// NL2743: a reference local passed for a function parameter that a later
+// argument of the same call assigns.
+type F = (x: i32) => i32;
+
+const sq = (x: i32): i32 => x * x;
+const inc = (x: i32): i32 => x + 1;
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
+const k = (f: F): i32 => f(1);
+
+export const main = (): i32 => {
+  let h: F = sq;
+  return apply(h, k((h = inc)));
+};
+```
+
+```text
+`h` is assigned by a later argument of `apply`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const`
 ```

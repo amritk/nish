@@ -1981,7 +1981,11 @@ export const main = (): i32 => {
   `reject_fnref_arg_element_nullable`). A nullable local is passed once a
   test has narrowed it:
   `` `h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it ``
-  (NL2742, `tests/wordings/nl2742_fnarg_nullable_reference`). A reference of
+  (NL2742, `tests/wordings/nl2742_fnarg_nullable_reference`). A local that a
+  later argument of the same call assigns is refused, since the call reads it
+  after its arguments where JavaScript reads it before them:
+  `` `h` is assigned by a later argument of `apply`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const` ``
+  (NL2743, `reject_fnarg_ref_assigned_later`). A reference of
   another signature is refused as any other function argument is (NL2340,
   `tests/wordings/nl2340_fnarg_reference_arity`); any
   other value is refused and named by its type,
@@ -2163,8 +2167,10 @@ export const main = (): void => {
   call through what it returns dispatches over the functions stored into any
   of them (`fnref_map`, `fnref_place_set_map`); where one of those keeps a
   pointer argument the others leave alone, that call is the mixed set above
-  and refused (`reject_fnref_place_set_map`). A call whose result has no
-  place of its own can hold every function of its type. A set past
+  and refused (`reject_fnref_place_set_map`). An assignment used as a value,
+  `k((r = inc))`, stores into its target and hands the same function on
+  (`fnref_assign_value`); a value the compiler does not follow, such as a
+  module constant, can hold every function of its type. A set past
   eight members is warning NL9017, a `switch` where a direct call would not
   branch (`tests/wordings/nl9017_fnref_wide_set`). Under `--profile debug` the
   dispatcher first checks that the tag is in its set and panics with

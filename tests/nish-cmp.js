@@ -1355,6 +1355,8 @@ const DECLARED = [
     "tests/cases/fnref_arg_capture.ts",
     "tests/cases/fnref_arg_capture_host.ts",
     "tests/cases/fnref_arg_capture_param.ts",
+    "tests/cases/fnref_assign_value.ts",
+    "tests/cases/fnref_for_of_nullable.ts",
     "tests/cases/fnref_map.ts",
     "tests/cases/fnref_map_array.ts",
     "tests/cases/fnref_map_nullable.ts",
@@ -1366,6 +1368,7 @@ const DECLARED = [
     "tests/cases/fnref_row_coalesce_nullable.ts",
     "tests/cases/fnref_row_conditional_nullable.ts",
     "tests/cases/fnref_row_map_set.ts",
+    "tests/cases/fnref_row_push_nullable.ts",
   ].map((program) => ({
     program,
     file: "exit",

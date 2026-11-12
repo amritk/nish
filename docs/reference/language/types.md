@@ -523,9 +523,10 @@ the IR; only a computed count costs the mask
 
 ## Nullable types
 
-`T | null` is available for `T` a class, interface, array, or string
-(`tests/cases/mem_nullable`; [wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md#4-t--null)). It
-is the same LLVM pointer type as `T` with the constant `null` as one more
+`T | null` is available for `T` a class, interface, array, string, or
+function reference (`tests/cases/mem_nullable`;
+[wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md#4-t--null)). For a pointer type it is the same
+LLVM pointer type as `T` with the constant `null` as one more
 value, so nothing is boxed; `null` takes its type from context. A
 [function reference](declarations.md#function-references) may be nullable too: it is an
 `i32` tag, and `null` is tag 0, which names no function

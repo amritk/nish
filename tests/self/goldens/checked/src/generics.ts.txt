@@ -41,6 +41,7 @@ import CAPTURE_NONE from "./parallel" -> const CAPTURE_NONE
 import CAPTURE_PARALLEL from "./parallel" -> const CAPTURE_PARALLEL
 import CAPTURE_TASK from "./parallel" -> const CAPTURE_TASK
 import CAPTURE_REGION from "./parallel" -> const CAPTURE_REGION
+import assignsName from "./parallel" -> function @assignsName
 import capturesNothing from "./parallel" -> function @capturesNothing
 import callLetCaptureMessage from "./parallel" -> function @callLetCaptureMessage
 import callThisCaptureMessage from "./parallel" -> function @callThisCaptureMessage
@@ -1279,28 +1280,42 @@ function rootedInLocal(expr: Node, scope: Scope): boolean -> @rootedInLocal
   stackSites=0 stackLocals=0
   local +0:7 root: Node (let)
   callee +4:60 Scope.lookup -> @Scope.lookup
+function laterArgumentAssigns(call: Node, arg: Node, name: string): boolean -> @laterArgumentAssigns
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: assignsName
+  pointer call: size=40 writesThrough=false captured=false
+  pointer arg: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 child: Node (const)
+  local +2:11 after: boolean (let)
+  local +3:18 each: Node (const)
+  callee +4:22 assignsName -> @assignsName
 function referenceArgument(ctx: CheckContext, call: Node, template: TemplateInfo, index: i32, arg: Node, written: Node, type: i32, names: StringSet, bindings: StringMap, scope: Scope): FunctionSig | null -> @referenceArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: index type written
-  calls: CheckContext.textOf CheckedProgram.grewNodes CheckedProgram.newNode TypeTable.fnRefParamsOf TypeTable.fnRefResultOf TypeTable.typeName answerAnnotation argumentLead calleeSpelling captureMode liftArrowArgument nish_array_grow nish_panic_index nish_panic_slice nish_str_concat nish_str_from_i32 nish_str_new promisesAnswer refuseOnce unifyAnnotation unwrapTypeParens
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=refuseOnce#0 refuseOnce#0 unifyAnnotation#0 unifyAnnotation#0 liftArrowArgument#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=calleeSpelling#0 argumentLead#0 liftArrowArgument#1
-  pointer template: size=64 writesThrough=false captured=false passedTo=captureMode#0 calleeSpelling#1 liftArrowArgument#2
-  pointer arg: size=40 writesThrough=false captured=false passedTo=refuseOnce#1 refuseOnce#1
+  calls: CheckContext.textOf CheckedProgram.grewNodes CheckedProgram.newNode TypeTable.fnRefParamsOf TypeTable.fnRefResultOf TypeTable.typeName answerAnnotation argumentLead calleeSpelling captureMode laterArgumentAssigns liftArrowArgument nish_array_grow nish_panic_index nish_panic_slice nish_str_concat nish_str_from_i32 nish_str_new promisesAnswer refuseOnce unifyAnnotation unwrapTypeParens
+  pointer ctx: size=320 writesThrough=true captured=true passedTo=refuseOnce#0 refuseOnce#0 refuseOnce#0 unifyAnnotation#0 unifyAnnotation#0 liftArrowArgument#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=calleeSpelling#0 laterArgumentAssigns#0 calleeSpelling#0 argumentLead#0 liftArrowArgument#1
+  pointer template: size=64 writesThrough=false captured=false passedTo=captureMode#0 calleeSpelling#1 calleeSpelling#1 liftArrowArgument#2
+  pointer arg: size=40 writesThrough=false captured=false passedTo=refuseOnce#1 laterArgumentAssigns#1 refuseOnce#1 refuseOnce#1
   pointer written: size=40 writesThrough=true captured=true
   pointer names: size=8 writesThrough=false captured=false passedTo=unifyAnnotation#3 unifyAnnotation#3 liftArrowArgument#5
   pointer bindings: size=40 writesThrough=true captured=true passedTo=unifyAnnotation#4 unifyAnnotation#4 liftArrowArgument#6
   pointer scope: size=56 writesThrough=true captured=true passedTo=liftArrowArgument#7
   stackSites=0 stackLocals=0
-  local -49:9 param: Node (const)
-  local -48:9 fnType: Node (const)
-  callee -48:18 unwrapTypeParens -> @unwrapTypeParens
-  local -47:9 shown: string (const)
-  callee -46:7 captureMode -> @captureMode
-  callee -46:49 promisesAnswer -> @promisesAnswer
+  local -59:9 param: Node (const)
+  local -58:9 fnType: Node (const)
+  callee -58:18 unwrapTypeParens -> @unwrapTypeParens
+  local -57:9 shown: string (const)
+  callee -56:7 captureMode -> @captureMode
+  callee -56:49 promisesAnswer -> @promisesAnswer
+  callee -55:5 refuseOnce -> @refuseOnce
+  callee -52:50 calleeSpelling -> @calleeSpelling
+  callee -48:35 laterArgumentAssigns -> @laterArgumentAssigns
   callee -45:5 refuseOnce -> @refuseOnce
-  callee -42:50 calleeSpelling -> @calleeSpelling
+  callee -42:60 calleeSpelling -> @calleeSpelling
   local -38:9 wanted: Node[] (const)
   local -37:9 params: i32[] (const)
   callee -37:18 TypeTable.fnRefParamsOf -> @TypeTable.fnRefParamsOf
