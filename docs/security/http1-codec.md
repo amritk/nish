@@ -177,11 +177,11 @@ frozen beside it in `old.ts`: both are fed the same bytes in the same pieces,
 and after every event they must agree on the event, the status and reason,
 and everything a caller can read.
 
-The default run, seed 1175, is 427,992 cases (the fuzz corpus and its
+The default run, seed 1175, is 464,424 cases (the fuzz corpus and its
 regressions cut every way, every byte at every position of three requests, nine
 inserted bytes at every position, each limit at -1, 0 and +1, the name, value,
 tight-limit and browser-head cases below, and 100,000 grammar requests) and
-3,809,375 events, among them 292,521 refusals, in about 8 s of the test's
+4,129,500 events, among them 310,737 refusals, in about 8 s of the test's
 `--profile speed` build; it must print the summary in `expected.out` (counts
 as of 2026-11-12).
 
@@ -196,6 +196,15 @@ scan fails it at case 1 (a 400 for "a malformed request target"), and
 letting DEL into the target (`94` for `93`) fails it at case 16,366, where
 main refuses `GET \x7fa` and the mutant reads a head. No limit, status or
 reason string changed.
+
+The version check reads the eight bytes `HTTP/d.d` as one 16-byte load
+where at least 16 bytes of `buf` remain, and byte by byte in the tail; a
+field line that starts with whitespace (obs-fold) is told apart only once its
+name has failed, since whitespace is no tchar and such a line's name is
+empty. Both keep main's status and reason. The test sees a lost lane in the
+vector version check (checked 2026-11-12): dropping the `.` lane from its
+mask (`31` for `95`) fails the default run at case 18,543, where main refuses
+`HTTP/1\x001` as "a malformed HTTP version" and the mutant reads a head.
 
 **One exchange at a time, in order** (`net_http1_server`): pipelined requests
 are answered in the order they came, because the next head is not read until
