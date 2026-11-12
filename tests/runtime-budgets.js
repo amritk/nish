@@ -602,8 +602,10 @@ const RUNTIME_CHACHA20_TEXT_BUDGET = 3840
  * its CPUID question and `NISH_ADLER32` pin 113, and the entry point 22. Raised in
  * place rather than split into a file of its own because both checksums are the
  * same seam over the same `nish_array` window, and a program that inflates zlib or
- * gzip already links this unit; the AArch64 build's NEON kernel is measured where
- * the gate runs no more than the CRC32 one is.
+ * gzip already links this unit. The gate measures the x86-64 build only: the test
+ * shards run on x86-64, and the AArch64 CI job runs the kernel sections, not this
+ * one. The AArch64 build, NEON Adler-32 and the CRC32 instructions, measured **752
+ * bytes** (`--target=aarch64-linux-gnu -ffreestanding`, clang 18), under the ceiling.
  */
 const RUNTIME_CHECKSUM_TEXT_BUDGET = 1280
 /**

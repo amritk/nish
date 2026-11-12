@@ -11,7 +11,8 @@
 //     --self      time the adler32Update that ships instead: `default`, its
 //                 byte-identical copy and `soft`, and the verdict on the kernel
 //                 runtime/runtime-checksum.c picks
-//     --check     one short run per column of both modes, each checksum against the pinned one; exit 0 when equal
+//     --check     one short run per column of both modes, each checksum against the pinned one; exit 0 when equal.
+//                 It runs both modes itself, so it refuses `--self`
 //
 // The columns. `nish` is bench/adler32.ts built with `--profile speed` and run
 // under `NISH_ADLER32=soft`, the Nish loop; `nish (copy)` is a byte-identical
@@ -71,6 +72,9 @@ for (let i = 2; i < argv.length; i++) {
   } else {
     fail(`unknown option ${argv[i]}`)
   }
+}
+if (self && check) {
+  fail("--check runs both modes already; pass --check or --self, not both")
 }
 if (!(runs >= 1)) {
   fail("--runs needs a positive count")
@@ -271,6 +275,6 @@ for (const name of shape.keys()) {
 }
 console.log(
   self
-    ? `verdict on ${process.arch}: adler32Update with NISH_ADLER32 unset (the kernel verify names: ${kernelPath}) ${passes ? "clears" : "misses"} the bar at every size`
+    ? `verdict on ${process.arch}: adler32Update with NISH_ADLER32 unset ${passes ? "clears" : "misses"} the bar at every size (${kernelPath} is what bench/adler32/kernel.c's verify found on this CPU, not a report from the shipped binary)`
     : `verdict on ${process.arch}: the ${kernelPath} kernel ${passes ? "clears" : "misses"} the bar at every size`
 )

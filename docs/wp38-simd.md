@@ -997,7 +997,7 @@ the next byte from this set".
 **CRC-32 on the same seam.** `nish/compress/checksum`'s `Crc32.update` hands
 its checked window to one private walker, `crc32Walk`, and the compiler
 branches in front of that call on `nish_crc32_hw` (`isCrc32Seam` in
-`src/kernels.ts`, `emitCrc32KernelArm` in `src/emit.ts`), so the
+`src/kernels.ts`, `emitSumKernelArm` in `src/emit.ts`), so the
 slicing-by-8 tables stay the fallback and the answer at the edges stays the
 `std` file's. The kernels are `runtime/runtime-checksum.c`, a unit of its own
 with its own ceiling: PCLMULQDQ folding then a Barrett reduction on x86-64
@@ -1126,7 +1126,7 @@ the Darwin and stub targets compiled, and the wasi build), a runtime budget
 `adler32Update` with `NISH_ADLER32` unset against `soft`, ns/op at the median,
 on the same Xeon:
 
-| Size | default | default (copy) | `soft` | Gain |
+| Size | default | default (copy) | `soft` | `soft` over default |
 | --- | ---: | ---: | ---: | ---: |
 | 64 KiB | 3,297 | 3,112 | 22,409 | 6.80× |
 | 1 MiB | 57,671 | 54,770 | 364,945 | 6.33× |

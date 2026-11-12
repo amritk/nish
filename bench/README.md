@@ -646,7 +646,7 @@ loop the same way:
 
 ```bash
 npm run build
-node bench/adler32.mjs --check          # one short run per column of both modes; each checksum against the pinned one
+node bench/adler32.mjs --check          # one short run per column of both modes; each checksum against the pinned one (refuses --self)
 node bench/adler32.mjs --runs 16        # every column, minimum and median, then the verdict
 node bench/adler32.mjs --self --runs 9  # the shipped path against NISH_ADLER32=soft
 ```
@@ -671,7 +671,7 @@ at 2.10 GHz, at 9046339. The AArch64 run is CI's `simd-arm64` job on
 The shipped path, `--self --runs 9` on the same Xeon at 925c5fb4, median ns/op
 (WP38 S8). The AArch64 figures are CI's `simd-arm64` log.
 
-| Workload | default | default (copy) | soft | gain |
+| Workload | default | default (copy) | soft | soft over default |
 | --- | ---: | ---: | ---: | ---: |
 | adler-64k | 3,297 | 3,112 | 22,409 | 6.80x |
 | adler-1m | 57,671 | 54,770 | 364,945 | 6.33x |
