@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 754 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 757 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -14404,4 +14404,28 @@ export const main = (): i32 => {
 
 ```text
 `Result<(i32) => i32, string>` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array
+```
+
+## NL2763
+
+The message of an error contains:
+
+```text
+…: `readStruct` copies into the `declare class` its context names, so write `const s: Stat = readStruct(p)`
+```
+
+## NL2764
+
+The message of an error contains:
+
+```text
+`readStruct(p)` needs a contextual `declare class` type to copy into (annotate it, e.g. `const s: Stat = readStruct(p)`)
+```
+
+## NL2765
+
+The message of an error contains:
+
+```text
+`readStruct(p)` copies into a `declare class` layout, and …
 ```
