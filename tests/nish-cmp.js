@@ -557,7 +557,7 @@ const heldWrite = (why, moved) =>
   moved.map((program) => ({ program, file: "http1-server.ll", changelog: HELD_WRITE, why }))
 
 /** The changelog line of #1028's stage: x509 keeps each extension's critical flag. */
-const X509_CRITICALITY = "expose x509 criticality, AKI issuer/serial and AIA to pki"
+const X509_CRITICALITY = "Expose x509 criticality, AKI issuer/serial and AIA to pki"
 const x509Criticality = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: X509_CRITICALITY, why }))

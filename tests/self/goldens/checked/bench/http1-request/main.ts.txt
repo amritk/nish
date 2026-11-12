@@ -34049,17 +34049,19 @@ function x509ReadExtensions(der: u8[], e: X509DerElement, out: X509Certificate):
   pointer e: size=16 writesThrough=false captured=false
   pointer out: size=176 writesThrough=true captured=false passedTo=nish.x509ReadExtension#4 nish.x509NoteCritical#1
   stackSites=5 stackLocals=5
-  local -54:9 seq: X509DerElement | null (const)
-  callee -54:38 x509DerExpect -> @nish.x509DerExpect
-  local -48:9 seen: u8[][] (const)
-  local -46:9 ext: X509DerElement (const)
-  callee -46:15 new X509DerElement -> @nish.X509DerElement.constructor
-  local -45:9 id: X509DerElement (const)
-  callee -45:14 new X509DerElement -> @nish.X509DerElement.constructor
-  local -44:9 flag: X509DerElement (const)
-  callee -44:16 new X509DerElement -> @nish.X509DerElement.constructor
-  local -43:9 value: X509DerElement (const)
-  callee -43:17 new X509DerElement -> @nish.X509DerElement.constructor
+  local -55:9 seq: X509DerElement | null (const)
+  callee -55:38 x509DerExpect -> @nish.x509DerExpect
+  local -49:9 seen: u8[][] (const)
+  local -47:9 ext: X509DerElement (const)
+  callee -47:15 new X509DerElement -> @nish.X509DerElement.constructor
+  local -46:9 id: X509DerElement (const)
+  callee -46:14 new X509DerElement -> @nish.X509DerElement.constructor
+  local -45:9 flag: X509DerElement (const)
+  callee -45:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -44:9 value: X509DerElement (const)
+  callee -44:17 new X509DerElement -> @nish.X509DerElement.constructor
+  local -43:9 aia: u8[] (const)
+  callee -43:21 x509OidAuthorityInfoAccess -> @nish.x509OidAuthorityInfoAccess
   local -42:7 at: i32 (let)
   callee -38:8 x509DerExpectInto -> @nish.x509DerExpectInto
   callee -34:10 x509DerExpectInto -> @nish.x509DerExpectInto
@@ -34079,7 +34081,6 @@ function x509ReadExtensions(der: u8[], e: X509DerElement, out: X509Certificate):
   local -11:11 read: i32 (const)
   callee -11:23 x509ReadExtension -> @nish.x509ReadExtension
   callee -6:7 x509DerContentsAre -> @nish.x509DerContentsAre
-  callee -6:35 x509OidAuthorityInfoAccess -> @nish.x509OidAuthorityInfoAccess
   callee -5:8 x509AuthorityInfoAccessSound -> @nish.x509AuthorityInfoAccessSound
   callee +3:7 x509NoteCritical -> @nish.x509NoteCritical
 function x509ParseCertificate(der: u8[]): X509Certificate | null -> @nish.x509ParseCertificate [exported]
