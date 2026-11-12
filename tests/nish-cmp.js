@@ -526,6 +526,11 @@ const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
   )
+const ASYNC_TRIM = "the async request path's instructions per request"
+const asyncTrim = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: ASYNC_TRIM, why }))
+  )
 const PIPELINED_WRITE = "answers pipelined requests in one write"
 const pipelinedWrite = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -3650,6 +3655,66 @@ const DECLARED = [
       "tests/link/std_postgres_async_size_panic/main.ts",
       "tests/link/tfb_async_entry/main.ts",
     ]
+  ),
+  // WP49 stage 6: `Router.match` walks the path once, recording where it
+  // ends, and HttpRequest gains `headLength`, so every program reaching
+  // std/net/router.ts lays it out again, and a module naming HttpRequest's
+  // struct gains a field.
+  ...asyncTrim(
+    "Router.match finds the path's segments and its end in one pass and compares a route's bytes with two cursors, so router.ll moves in every program that reaches std/net/router.ts",
+    {
+      "bench/http-app-carrier.ts": ["router.ll"],
+      "bench/http1-server.ts": ["router.ll"],
+      "bench/router.ts": ["std_net_router.ll"],
+      "examples/http-app/main.ts": ["router.ll"],
+      "tests/link/net_handler/main.ts": ["router.ll"],
+      "tests/link/net_handler_descriptors/main.ts": ["router.ll"],
+      "tests/link/net_handler_overlong/main.ts": ["router.ll"],
+      "tests/link/net_handler_short/main.ts": ["router.ll"],
+      "tests/link/net_handler_unbegun/main.ts": ["router.ll"],
+      "tests/link/net_http_app/main.ts": ["router.ll"],
+      "tests/link/net_router/main.ts": ["router.ll"],
+      "tests/link/net_router_f64/main.ts": ["router.ll"],
+      "tests/link/net_router_negative_ambiguous/main.ts": ["router.ll"],
+      "tests/link/net_router_negative_duplicate/main.ts": ["router.ll"],
+      "tests/link/net_router_negative_limits/main.ts": ["router.ll"],
+      "tests/link/net_router_negative_too_long/main.ts": ["router.ll"],
+      "tests/link/net_router_negative_too_many_params/main.ts": ["router.ll"],
+      "tests/link/net_serve/main.ts": ["router.ll"],
+      "tests/link/net_serve_deadline/main.ts": ["router.ll"],
+      "tests/link/net_serve_hangup/main.ts": ["router.ll"],
+      "tests/link/net_serve_pg/main.ts": ["router.ll"],
+      "tests/link/net_serve_pipelined_flat/main.ts": ["router.ll"],
+      "tests/link/net_serve_server_field/main.ts": ["router.ll"],
+      "tests/link/net_serve_server_panic/main.ts": ["router.ll"],
+      "tests/link/net_serve_shutdown/main.ts": ["router.ll"],
+      "tests/link/net_upstream/main.ts": ["router.ll"],
+      "tests/link/net_upstream_release/main.ts": ["router.ll"],
+      "tests/link/std_http1_end_head/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_cancel/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_caps_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_double_release_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_flat/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_release_closed_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_release_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_async_size_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_carrier/main.ts": ["router.ll"],
+      "tests/link/std_postgres_carrier_attach_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_carrier_batcher_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_carrier_connection_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_carrier_limits_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_carrier_next_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_carrier_request_panic/main.ts": ["router.ll"],
+      "tests/link/std_postgres_carrier_send_panic/main.ts": ["router.ll"],
+      "tests/link/tfb_async_entry/main.ts": ["router.ll"],
+      "tests/link/tfb_db/main.ts": ["router.ll"],
+    }
+  ),
+  ...asyncTrim(
+    "HttpRequest gains headLength, so a module that names HttpRequest's struct type gains an i32 field",
+    {
+      "tests/link/tfb_async_entry/main.ts": ["async-server.ll"],
+    }
   ),
   // #1028: X509Certificate keeps each decoded extension's critical flag and
   // the authorityKeyIdentifier's shape, which lays it out 8 bytes wider in
