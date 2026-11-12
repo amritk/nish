@@ -815,6 +815,86 @@ PASS  short fields, copied
 PASS  short fields, copied: copied
 PASS  short fields, one byte changed
 PASS  short fields, one byte changed: written
+PASS  a streak's base head
+PASS  a streak's base head: written
+PASS  a streak's base head, kept
+PASS  a streak's base head, kept: written
+PASS  a streak's base head, copied
+PASS  a streak's base head, copied: copied
+PASS  a miss in a row, 1
+PASS  a miss in a row, 1: written
+PASS  a miss in a row, 2
+PASS  a miss in a row, 2: written
+PASS  a miss in a row, 3
+PASS  a miss in a row, 3: written
+PASS  a miss in a row, 4
+PASS  a miss in a row, 4: written
+PASS  the fourth miss repeated: off, so written
+PASS  the fourth miss repeated: off, so written: written
+PASS  and again: written
+PASS  and again: written: written
+PASS  the base head too: written
+PASS  the base head too: written: written
+PASS  the streak copied nothing past its base
+PASS  the next second: on again, written
+PASS  the next second: on again, written: written
+PASS  the next second: kept, then copied
+PASS  the next second: kept, then copied: copied
+PASS  another shape in a row, 1
+PASS  another shape in a row, 1: written
+PASS  another shape in a row, 2
+PASS  another shape in a row, 2: written
+PASS  another shape in a row, 3
+PASS  another shape in a row, 3: written
+PASS  another shape in a row, 4
+PASS  another shape in a row, 4: written
+PASS  then one head, off: written 1
+PASS  then one head, off: written 1: written
+PASS  then one head, off: written 2
+PASS  then one head, off: written 2: written
+PASS  then one head, off: written 3
+PASS  then one head, off: written 3: written
+PASS  the next second: written
+PASS  the next second: written: written
+PASS  the next second: copied
+PASS  the next second: copied: copied
+PASS  a broken streak's base head
+PASS  a broken streak's base head: written
+PASS  a broken streak's base head, kept
+PASS  a broken streak's base head, kept: written
+PASS  a broken streak's base head, copied
+PASS  a broken streak's base head, copied: copied
+PASS  round 1, miss 1
+PASS  round 1, miss 1: written
+PASS  round 1, miss 2
+PASS  round 1, miss 2: written
+PASS  round 1, miss 3
+PASS  round 1, miss 3: written
+PASS  round 1, the third miss's head again
+PASS  round 1, the third miss's head again: copied
+PASS  round 2, miss 1
+PASS  round 2, miss 1: written
+PASS  round 2, miss 2
+PASS  round 2, miss 2: written
+PASS  round 2, miss 3
+PASS  round 2, miss 3: written
+PASS  round 2, the third miss's head again
+PASS  round 2, the third miss's head again: copied
+PASS  a restarted streak, miss 1
+PASS  a restarted streak, miss 1: written
+PASS  a restarted streak, miss 2
+PASS  a restarted streak, miss 2: written
+PASS  a restarted streak, miss 3
+PASS  a restarted streak, miss 3: written
+PASS  a restarted streak, miss 4
+PASS  a restarted streak, miss 4: written
+PASS  restarted while off: written
+PASS  restarted while off: written: written
+PASS  restarted while off: kept
+PASS  restarted while off: kept: written
+PASS  restarted while off: copied
+PASS  restarted while off: copied: copied
+PASS  the restarted slot copied one
 PASS  before the restart
 PASS  before the restart: written
 PASS  before the restart, kept
@@ -843,4 +923,4 @@ PASS  now copied
 PASS  its bytes
 PASS  two hundred answers, each byte for byte
 PASS  two heads written, 198 copied
-http1 head reuse: 845 passed, 0 failed, 0 skipped
+http1 head reuse: 925 passed, 0 failed, 0 skipped

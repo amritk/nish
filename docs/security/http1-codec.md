@@ -650,8 +650,8 @@ A kept-alive slot quiet past `headTimeout` is not yet
 due, so it does not make every `expire` walk every slot (H1-4). The pool sheds
 a connection past its size.
 
-**Kept response heads** (`tests/link/net_http1_server_head_reuse`, 845
-checks, written against `main` at `44358c01`): `respond` copies its previous
+**Kept response heads** (`tests/link/net_http1_server_head_reuse`, 925
+checks, written against `main` at `9e49a177`): `respond` copies its previous
 final head only when every input of it is the same, and otherwise writes it
 fresh through `http1WriteResponseHead` and its checks, so a kept head cannot
 carry one response's fields, or a value the writer would refuse, into another.
@@ -705,7 +705,21 @@ called directly, and `headCopies` says whether it was copied:
   kept head was the last connection's state).
 - Memory is bounded and lazy: the buffer is made at the first head that is
   kept, so a connection whose heads never repeat their shape holds none, and
-  one that keeps heads holds about 1.1 KiB.
+  one that keeps heads holds about 1.3 KiB (1,024 bytes of head, 128 of
+  lengths and the arrays' own headers).
+- Work on a miss is bounded. The compare reads a field with guarded word
+  loads (`http1ServerKept`: 16-byte `nish:simd` loads with an overlapping
+  tail from 16 bytes, two u64 loads from 8, two u32 loads from 4, bytes
+  below), each guard checking both arrays, and stops at the first length or
+  byte that differs. A miss after a head of the same shape copies the
+  written head into `headBytes` (`keepHead`, at most `H1_HEAD_KEEP` bytes).
+  After `H1_HEAD_MISSES` (4) heads in a row are written, `respond` neither
+  compares nor keeps until the `Date` turns, so a peer that varies every
+  response pays at most four compares and copies a second per connection,
+  then none (`the fourth miss repeated: off, so written`, `the streak
+  copied nothing past its base`, `the next second: kept, then copied`, a
+  copy ending a streak (`round 2, the third miss's head again`), and `restarted while off:
+  copied`).
 
 **The program's mistakes panic** (one program each): a window outside its
 buffer in `Http1Connection.feed` (`net_http1_server_feed_window`), `write`

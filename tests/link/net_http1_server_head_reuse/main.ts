@@ -423,6 +423,66 @@ export const main = (): i32 => {
   check(t, bytewise, "short fields, copied", 200, short, shortValues, body, "OK", true);
   check(t, bytewise, "short fields, one byte changed", 200, short, fields(["", "1", "23", "333"]), body, "OK", false);
 
+  // Four written heads in a row turn keeping off for the rest of the second:
+  // a head that then repeats is written each time, until the Date turns.
+  const streak = fed(times(GET, 12));
+  check(t, streak, "a streak's base head", 200, names, values, body, "OK", false);
+  check(t, streak, "a streak's base head, kept", 200, names, values, body, "OK", false);
+  check(t, streak, "a streak's base head, copied", 200, names, values, body, "OK", true);
+  const tags: string[] = ["Nisa", "Nisb", "Nisc", "Nisd"];
+  for (let k: i32 = 0; k < 4; k++) {
+    check(t, streak, `a miss in a row, ${k + 1}`, 200, names, fields([tags[k], "text/plain"]), body, "OK", false);
+  }
+  const lastTag: u8[][] = fields(["Nisd", "text/plain"]);
+  check(t, streak, "the fourth miss repeated: off, so written", 200, names, lastTag, body, "OK", false);
+  check(t, streak, "and again: written", 200, names, lastTag, body, "OK", false);
+  check(t, streak, "the base head too: written", 200, names, values, body, "OK", false);
+  t.ok("the streak copied nothing past its base", streak.headCopies === 1);
+  streak.date.pin(PINNED_MS + 1000);
+  check(t, streak, "the next second: on again, written", 200, names, values, body, "OK", false);
+  check(t, streak, "the next second: kept, then copied", 200, names, values, body, "OK", true);
+
+  // Heads of another shape each time turn it off the same way.
+  const shapes = fed(times(GET, 9));
+  const shapeStatus: i32[] = [200, 404, 200, 404];
+  const shapeReason: string[] = ["OK", "Not Found", "OK", "Not Found"];
+  for (let k: i32 = 0; k < 4; k++) {
+    check(t, shapes, `another shape in a row, ${k + 1}`, shapeStatus[k], names, values, body, shapeReason[k], false);
+  }
+  for (let k: i32 = 0; k < 3; k++) {
+    check(t, shapes, `then one head, off: written ${k + 1}`, 200, names, values, body, "OK", false);
+  }
+  shapes.date.pin(PINNED_MS + 1000);
+  check(t, shapes, "the next second: written", 200, names, values, body, "OK", false);
+  check(t, shapes, "the next second: copied", 200, names, values, body, "OK", true);
+
+  // A copy ends a streak: three misses, a hit, three more, a hit, stay on.
+  const broken = fed(times(GET, 11));
+  check(t, broken, "a broken streak's base head", 200, names, values, body, "OK", false);
+  check(t, broken, "a broken streak's base head, kept", 200, names, values, body, "OK", false);
+  check(t, broken, "a broken streak's base head, copied", 200, names, values, body, "OK", true);
+  for (let round: i32 = 0; round < 2; round++) {
+    for (let k: i32 = 0; k < 3; k++) {
+      check(t, broken, `round ${round + 1}, miss ${k + 1}`, 200, names, fields([tags[k], "text/plain"]), body, "OK", false);
+    }
+    check(t, broken, `round ${round + 1}, the third miss's head again`, 200, names, fields([tags[2], "text/plain"]), body, "OK", true);
+  }
+
+  // A restart turns keeping back on within the same second.
+  streak.restart();
+  const more: u8[] = ascii(times(GET, 7));
+  streak.feed(more, ZERO, toI32(more.length));
+  for (let k: i32 = 0; k < 4; k++) {
+    check(t, streak, `a restarted streak, miss ${k + 1}`, 200, names, fields([tags[k], "text/plain"]), body, "OK", false);
+  }
+  streak.restart();
+  streak.feed(more, ZERO, toI32(more.length));
+  const copiesBefore: i64 = streak.headCopies;
+  check(t, streak, "restarted while off: written", 200, names, values, body, "OK", false);
+  check(t, streak, "restarted while off: kept", 200, names, values, body, "OK", false);
+  check(t, streak, "restarted while off: copied", 200, names, values, body, "OK", true);
+  t.ok("the restarted slot copied one", streak.headCopies === copiesBefore + 1);
+
   // A restarted slot keeps nothing of its last connection's head: the next
   // connection's first two heads are written, and only the third copied.
   const reused = fed(times(GET, 3));

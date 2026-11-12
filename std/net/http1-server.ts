@@ -256,6 +256,13 @@ const H1_HEAD_KEEP: i32 = 1024
 /** The most program fields a kept head carries: a head with more is written fresh every time. */
 const H1_HEAD_FIELDS: i32 = 16
 
+/**
+ * How many responses in a row may miss the kept head before `respond` stops
+ * comparing and keeping until the `Date` turns: past it, a head is written as
+ * if nothing were kept, so heads that never repeat cost no more than that.
+ */
+const H1_HEAD_MISSES: i32 = 4
+
 // `respond`'s `Connection` field, as the kept head records it.
 const H1_CONN_NONE: i32 = 0
 const H1_CONN_CLOSE: i32 = 1
@@ -819,8 +826,9 @@ export class Http1Connection {
    * status, the same field names and values byte for byte, the same framing
    * and `Connection`, and the same `date` not reformatted since (`formats`).
    * Empty until the first head that is kept (one of at most `H1_HEAD_KEEP`
-   * bytes, after a head of the same shape); then made once and kept for the slot's later peers, since what it holds is a
-   * function of those inputs alone.
+   * bytes, after a head of the same shape); then made once and kept for the
+   * slot's later peers, since what it holds is a function of those inputs
+   * alone.
    */
   private headBytes: u8[]
   /** How many bytes of `headBytes` the kept head is; 0 while none is kept. */
@@ -844,6 +852,13 @@ export class Http1Connection {
   private headDate: HttpDate
   /** `headDate.formats()` when the kept head was written: a later format is a new second. */
   private headFormats: i64 = 0
+  /** How many responses in a row have missed the kept head, up to `H1_HEAD_MISSES`. */
+  private headMisses: i32 = 0
+  /**
+   * `date.formats()` when the misses reached `H1_HEAD_MISSES`: while the date
+   * still has that count, `respond` neither compares nor keeps. -1 while on.
+   */
+  private headOff: i64 = -1
   /**
    * How many heads `respond` has copied from the kept one rather than written.
    *
@@ -946,6 +961,8 @@ export class Http1Connection {
     // head is not taken for a repeat of the last connection's.
     this.headLength = 0
     this.headStatus = 0
+    this.headMisses = 0
+    this.headOff = -1
     this.mss = 0
     this.socketMss = 0
     this.fd = -1
@@ -1156,7 +1173,10 @@ export class Http1Connection {
 
   /** The room at the end of the output, once what was sent is moved out of the way. */
   private room(): i32 {
-    this.acquire()
+    // Tested here, so that the usual case, an output already held, is no call.
+    if (this.outputCap === 0) {
+      this.acquire()
+    }
     const output: u8[] = this.output
     const live: i32 = this.outputEnd - this.outputStart
     if (this.outputStart > 0) {
@@ -1448,36 +1468,38 @@ export class Http1Connection {
       framing = HTTP1_NO_BODY
       close = true
     }
-    let connection: i32 = H1_CONN_NONE
+    let connection: string = ""
+    let code: i32 = H1_CONN_NONE
     if (!interim && close) {
-      connection = H1_CONN_CLOSE
+      connection = "close"
+      code = H1_CONN_CLOSE
     } else if (!interim && this.parser.minor === 0) {
-      connection = H1_CONN_KEEP_ALIVE
+      connection = "keep-alive"
+      code = H1_CONN_KEEP_ALIVE
     }
     // Asked first, so that a second that has turned is a new head.
     const date: u8[] = this.date.current()
-    const same: boolean = !interim && this.sameHead(status, names, values, framing, connection)
-    if (!same) {
-      for (const name of names) {
-        if (http1ServerReserved(name)) {
-          return H1_INVALID
+    // Off for the rest of the second once heads stop repeating, so that a
+    // program whose heads differ pays this test and no more.
+    const keeping: boolean = !interim && this.date.formats() !== this.headOff
+    if (keeping) {
+      if (this.sameHead(status, names, values, framing, code)) {
+        if (this.headLength <= this.bodyRoom()) {
+          // `bodyRoom` stops short of the output's end, so the copy fits.
+          copyBytes(this.output, this.outputEnd, this.headBytes, H1_ZERO, this.headLength)
+          this.outputEnd += this.headLength
+          this.headMisses = 0
+          this.headCopies += 1
+          return this.begin(close, framing, empty)
         }
       }
     }
+    for (const name of names) {
+      if (http1ServerReserved(name)) {
+        return H1_INVALID
+      }
+    }
     const room: i32 = this.bodyRoom()
-    if (same && this.headLength <= room) {
-      // `room` stops short of the output's end, so the copy fits.
-      copyBytes(this.output, this.outputEnd, this.headBytes, H1_ZERO, this.headLength)
-      this.outputEnd += this.headLength
-      this.headCopies += 1
-      return this.begin(close, framing, empty)
-    }
-    let field: string = ""
-    if (connection === H1_CONN_CLOSE) {
-      field = "close"
-    } else if (connection === H1_CONN_KEEP_ALIVE) {
-      field = "keep-alive"
-    }
     const start: i32 = this.outputEnd
     const reason: string = http1ServerReason(status)
     const end: i32 = http1WriteResponseHead(
@@ -1488,7 +1510,7 @@ export class Http1Connection {
       names,
       values,
       framing,
-      field,
+      connection,
       date
     )
     if (end === HTTP1_REFUSED) {
@@ -1509,7 +1531,16 @@ export class Http1Connection {
     if (interim) {
       return 0
     }
-    this.keepHead(start, end, status, reason, names, values, framing, connection)
+    if (keeping) {
+      // A head written here is a miss: the kept one did not match.
+      this.headMisses += 1
+      if (this.headMisses < H1_HEAD_MISSES) {
+        this.keepHead(start, end, status, reason, names, values, framing, code)
+      } else {
+        this.headMisses = 0
+        this.headOff = this.date.formats()
+      }
+    }
     return this.begin(close, framing, empty)
   }
 
@@ -1571,7 +1602,8 @@ export class Http1Connection {
    * response and no copy; a head longer than `H1_HEAD_KEEP`, or with more
    * than `H1_HEAD_FIELDS` fields, is never kept. The buffer is made at the
    * first head that is kept, so a connection whose heads never repeat their
-   * shape holds none.
+   * shape holds none. `respond` stops calling it, and `sameHead`, for the
+   * rest of the second once `H1_HEAD_MISSES` heads in a row are written.
    */
   private keepHead(
     start: i32,
