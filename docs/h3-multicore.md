@@ -22,9 +22,10 @@ WP42's prefork (`std/net/prefork.ts`) runs N worker processes on one port.
 With `listenPort`, the supervisor binds one `SO_REUSEPORT` socket per worker in
 index order, keeps it for the whole run, and hands socket k to every start of
 worker k (`prefork.ts:56-80`, `listen` at `:764`). Those sockets are TCP
-listeners. Nothing binds a UDP reuseport group for QUIC today:
-`Http3Server` binds with flags 0 (`std/net/http3-server.ts:17`) and
-`examples/relay` with 2 or 0. The deployment G6 enables is N workers whose
+listeners. Nothing binds a UDP reuseport group for QUIC today.
+`Http3Server` binds nothing: its caller passes the socket in, and the usage
+example in its doc comment binds with flags 0
+(`std/net/http3-server.ts:17`). `examples/relay` binds with 2 or 0. The deployment G6 enables is N workers whose
 QUIC servers share one port through `udpBind` flag 1
 (`runtime/runtime-net.c:236`). Built that way on today's code, without
 steering, it fails as follows.
@@ -69,8 +70,15 @@ k = worker index, 0 <= k < N; the rest is unchanged
   NEW_CONNECTION_ID, and the SCID of a Retry (§4.2). The challenge and skip
   draws that also call `deriveConnectionId` (`quic.ts:3736`, `:3930`) are not
   connection IDs and are left as they are.
-- **N is at most 255.** In practice prefork caps it lower: 64 workers, or 63
-  with `listenPort` (`prefork.ts:917`). k is a plain byte, not a field of
+- **N is at most 255.** Prefork does not cap it there today. Its only cap,
+  64 workers or 63 with `listenPort`, applies only when a service worker is
+  configured (`prefork.ts:954-957`). Otherwise the count has no upper bound,
+  and §4.4 tells a QUIC server not to configure a service worker. So the
+  `listenUdp` path checks the count itself: above 255, `listen` panics with
+  `nish/net/prefork: listenUdp with <count> workers, above 255` before it
+  binds anything (§8, §7 row 12). A panic and not a fallback to one worker,
+  because a count the operator set that high is a configuration error, and
+  prefork already panics for its other bad counts. k is a plain byte, not a field of
   log2 N bits. The steering program takes byte 0 modulo N (§3.1), so a
   server ID, below N, names its worker exactly.
 - **Uniqueness and the reset token are unchanged.** The 7 remaining bytes are
@@ -370,10 +378,13 @@ UDP attach. The record carries:
 | 9 | **Two connections on one 4-tuple** (one client UDP socket), their IDs issued by worker 0 and worker 1, both complete requests, each served by its own worker. The GRO decision is covered by the -22 check: `udpBind` with flags 2 and 4 together answers -22, so a steered socket never has GRO | `net_quic_prefork`; the -22 in `test_udp_steer` | Linux |
 | 10 | Darwin runs QUIC with one worker and says so | `net_quic_prefork` | Darwin |
 | 11 | The flag under a wasm target is refused with NL2404 | `tests/cases/reject_net_udp_steer_wasm` | wasm32 |
+| 12 | `listenUdp` with `NISH_WORKERS=256` panics at `listen` with the message of §2.1, before any bind or fork; 255 starts | `net_quic_prefork` | Linux |
 
-Row 4 is the acceptance test of the stage. Built against today's code, it
-fails: the rebound packet is hashed to the other worker and answered with a
-reset.
+Row 4 is the acceptance test of the stage. That it fails without steering is
+reasoning from §1, not a run: the test needs the stage's own `listenUdp`.
+To see it fail, `g6-steer` runs row 4 with the steering flag left off
+(sockets bound with flag 1 only). The rebound packet should then be hashed to
+the other worker and answered with a reset.
 
 ## 8. What `g6-steer` builds
 
@@ -403,12 +414,23 @@ reset.
   program and the attach and its error path. Because the flag and its bits
   are visible to users, it also needs its `docs/LANGUAGE.md` row (`:10872`),
   the `runtime/nish.d.ts` comment (`:1719`) and the guide page, which are
-  outside the plan's file list.
+  outside the plan's file list. The rule "any bit above 3 is -22"
+  (`runtime-net.c:524`) changes with it, so the existing assertions that
+  pin it are rewritten beside those. Two assertions pass 4 alone:
+  `tests/runtime-test.c:931` ("an unknown flag") and
+  `tests/cases/net_udp_calls.ts:47`, whose `.out` and comment at `:5` call it
+  a bad argument. Flag 4 without flag 1 still answers -22, so their values
+  hold, but their reason is no longer "unknown". Each gets a reworded label
+  and a companion that passes a bit that is still undefined (8, or 1 << 16).
+  The -22 checks come before the -95 check, so flag 4 alone answers -22 on
+  Darwin too, as today. `tests/cases/reject_net_udp_wasm` is unaffected: it
+  refuses the builtin, whatever the flags are.
 - **Prefork:** a way to make `listenPort` bind UDP. `PreforkConfig` gets a
   `listenUdp: boolean`. With it, `listen` binds N UDP sockets with flags 1
   and 4 and N in bits 8–15 (never 2: GRO is off on a steered socket, §5), holds them, and hands socket k to
-  worker k through `preforkListener`, as it does for TCP. When the attach
-  fails, it falls back to one worker (§5). The names are a proposal; the
+  worker k through `preforkListener`, as it does for TCP. Above 255 workers
+  it panics before binding (§2.1). When the attach fails, it falls back to one
+  worker (§5). The names are a proposal; the
   stage chooses.
 - **QUIC:** a worker index in `QuicServerConfig` (default -1: none). With it,
   `begin` and the NEW_CONNECTION_ID path through `deriveConnectionId`
