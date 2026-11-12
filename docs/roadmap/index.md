@@ -57,7 +57,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 3 of 5 |
 | [WP27: Calling C](wp27-ffi.md) | In progress | 3 of 5 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |
-| [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 9 of 18 |
+| [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 15 of 19 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 4 of 8 |
 | [WP38: SIMD](wp38-simd.md) | In progress | 8 of 10 |
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 12 of 27 |

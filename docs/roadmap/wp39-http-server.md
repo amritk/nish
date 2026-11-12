@@ -13,12 +13,12 @@
 - [x] E7, E8: the `db`, `query`, `update`, `cached-query` and `fortune` entry
 - [ ] E9: submit the entry to TechEmpower *(owner's decision)*
 - [x] G1: Chrome over HTTP/2 on TCP in the interop job
-- [ ] G1: `curl` and Autobahn for HTTP/1.1 and WebSocket; Chrome over HTTP/1.1
+- [x] G1: `curl` and Autobahn for HTTP/1.1 and WebSocket; Chrome over HTTP/1.1 ([#1437](https://github.com/amritk/nish/pull/1437))
 - [x] G2: the request-head deadline (H1-1) and HPACK's allocation (H2-1)
-- [ ] G2: a lingering close after a refusal (H1-2)
-- [ ] G2: SETTINGS and idle timeouts for HTTP/2 (H2-3)
-- [ ] G2: an idle timeout in the TLS carrier (TLS-4)
-- [ ] G2: a session clock and rate cap for WebTransport (WT-2)
+- [x] G2: a lingering close after a refusal (H1-2) ([#1454](https://github.com/amritk/nish/pull/1454))
+- [x] G2: SETTINGS and idle timeouts for HTTP/2 (H2-3) ([#1454](https://github.com/amritk/nish/pull/1454))
+- [x] G2: an idle timeout in the TLS carrier (TLS-4) ([#1449](https://github.com/amritk/nish/pull/1449))
+- [x] G2: a session clock and rate cap for WebTransport (WT-2) ([#1454](https://github.com/amritk/nish/pull/1454))
 - [x] G3: session tickets and PSK resumption, without 0-RTT
 - [ ] G3: `secp256r1` as a key-share group on the server; `record_size_limit`
 - [x] G4: AES-GCM on AES-NI with PCLMULQDQ and on AArch64 AES with PMULL
