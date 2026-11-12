@@ -1391,8 +1391,15 @@ export const emitUncheckedElement = (emitter: Emitter, expr: Node, store: boolea
  * against `len` as `xs[i]`'s does. Arguments are evaluated left to right.
  *
  * The access claims the lane's alignment, which is the element buffer's, and
- * never the vector's sixteen: an element can start anywhere. It carries no
- * TBAA tag, because it is a `<N x T>` covering elements tagged as `T`.
+ * never the vector's sixteen: an element can start anywhere. It carries the
+ * metadata a scalar slot access of the lane type does (`valueSlotAccess`):
+ * once the check has passed, every byte it reaches is element data of `T`,
+ * the `count` slots from `idx`, so it is in the element scope and is tagged
+ * `element T`. TBAA compares tags and never sizes, so a `<N x T>` tagged
+ * `element T` is MayAlias with each `T` slot it covers and NoAlias with every
+ * header and class field. Without them a vector store is a clobber of every
+ * header and field, and each length, data pointer and field the loop reads
+ * is loaded again after it.
  */
 export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): string => {
   const args = expr.children[1].children
@@ -1424,12 +1431,12 @@ export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): 
   const ty = emitter.llvm(vector)
   const ptr = fn.emitValue(`bitcast ${slotType(emitter, lane)}* ${slot} to ${ty}*`)
   // Always stated: without it the access would claim the vector's sixteen.
-  const align = `, align ${emitter.table.alignOf(lane)}`
+  const attrs = `, align ${emitter.table.alignOf(lane)}${valueSlotAccess(emitter, lane)}`
   if (store) {
-    fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${align}`)
+    fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${attrs}`)
     return "void"
   }
-  return fn.emitValue(`load ${ty}, ${ty}* ${ptr}${align}`)
+  return fn.emitValue(`load ${ty}, ${ty}* ${ptr}${attrs}`)
 }
 
 /**
