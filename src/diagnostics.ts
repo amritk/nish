@@ -408,9 +408,8 @@ export class Diagnostic {
    * `message`, and only when there is at least one edit, so a diagnostic
    * without a fix prints exactly the line it always has. `review` follows
    * `fix` on the same terms, so a line without review edits is unchanged too.
-   * Each edit is placed
-   * the way the diagnostic is — 1-based, columns in UTF-16 code units, the end
-   * exclusive.
+   * Each edit is placed the way the diagnostic is — 1-based, columns in UTF-16
+   * code units, the end exclusive.
    */
   json(): string {
     const endLine = this.source.lineOf(this.end)
