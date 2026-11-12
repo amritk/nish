@@ -1,7 +1,7 @@
 // WP28 spike S5: what `--number-mode f64` costs on the benchmark suite, the
 // price docs/wp28-compatibility-mode.md §5.3 attaches to `--compat`.
 //
-//   node bench/wp28-s5/run.mjs            # every program, about 15 minutes
+//   node bench/wp28-s5/run.mjs            # every program, about 25 minutes
 //   node bench/wp28-s5/run.mjs --quick    # three programs, three rounds
 //   node bench/wp28-s5/run.mjs --rounds 9 --compiler build/nish
 //
@@ -79,6 +79,9 @@ const suiteDeclarations = (names) => {
       return lines[from]
     }
     const to = lines.findIndex((l, at) => at > from && l.startsWith("]"))
+    if (to < 0) {
+      fail(`bench/run.mjs opens \`${name}\` and never closes it at the start of a line`)
+    }
     return lines.slice(from, to + 1).join("\n")
   })
   return vm.runInNewContext(`${source.join("\n")}\n;({ ${names.join(", ")} })`)
@@ -90,6 +93,7 @@ const suite = suiteDeclarations([
   "AWFY_ITERATIONS",
   "PARALLEL",
   "MAPS",
+  // Not read here: MAP_MEASURES names it.
   "MAPS_NODE",
   "MAP_MEASURES",
   "PINNED_LIBC",
@@ -115,14 +119,15 @@ const sourceArgs = (name) => {
  * has the program: a size to rewrite the `bench:n` line to, or the arguments
  * of an AWFY port.
  */
+const single = (b) => ({
+  name: b.name,
+  source: `${b.name}.ts`,
+  flags: sourceArgs(b.name),
+  runs: [[]],
+  counted: sized[b.name] && { size: String(sized[b.name].n) },
+})
 const programs = [
-  ...suite.BENCHMARKS.map((b) => ({
-    name: b.name,
-    source: `${b.name}.ts`,
-    flags: sourceArgs(b.name),
-    runs: [[]],
-    counted: sized[b.name] && { size: String(sized[b.name].n) },
-  })),
+  ...suite.BENCHMARKS.map(single),
   ...suite.AWFY.map((b) => ({
     name: b.name,
     source: "awfy/main.ts",
@@ -136,13 +141,7 @@ const programs = [
     flags: sourceArgs(b.name),
     runs: [["seq"], ["par"]],
   })),
-  ...[...suite.MAPS, ...suite.MAP_MEASURES].map((b) => ({
-    name: b.name,
-    source: `${b.name}.ts`,
-    flags: sourceArgs(b.name),
-    runs: [[]],
-    counted: sized[b.name] && { size: String(sized[b.name].n) },
-  })),
+  ...[...suite.MAPS, ...suite.MAP_MEASURES].map(single),
 ].filter((p) => !options.quick || QUICK.includes(p.name))
 
 if (options.quick && programs.length !== QUICK.length) {
@@ -194,13 +193,39 @@ const build = (file, flags, dir) => {
   return { exe, errors }
 }
 
-/** Whether the two directories hold the same files with the same bytes: `diff -r`'s exit status. */
-const sameTree = (a, b) => {
-  const r = spawnSync("diff", ["-r", a, b], { encoding: "utf8" })
-  if (r.status > 1) {
-    fail(`diff -r ${rel(a)} ${rel(b)} failed\n${r.stderr}`)
+/**
+ * How far apart the IR in two directories is: whether every module is the
+ * same bytes, and otherwise how many lines differ once SSA numbers are masked.
+ * One added instruction renumbers every `%N` after it, so an unmasked count
+ * says how long the function is rather than how much of it changed. Lines are
+ * compared as a multiset, which is a count and not an alignment: the place to
+ * read what changed is `diff` over the two files.
+ */
+const compareIr = (a, b) => {
+  const read = (dir) =>
+    fs
+      .readdirSync(dir)
+      .sort()
+      .map((name) => [name, fs.readFileSync(path.join(dir, name), "utf8")])
+  const [left, right] = [read(a), read(b)]
+  if (
+    left.length === right.length &&
+    left.every(([name, text], i) => name === right[i][0] && text === right[i][1])
+  ) {
+    return { same: true, changed: 0 }
   }
-  return { same: r.status === 0, changed: r.stdout.split("\n").filter((l) => /^[<>]/.test(l)).length }
+  const tally = new Map()
+  const add = (modules, by) => {
+    for (const [name, text] of modules) {
+      for (const line of text.split("\n")) {
+        const key = `${name}:${line.replace(/%\d+/g, "%N")}`
+        tally.set(key, (tally.get(key) ?? 0) + by)
+      }
+    }
+  }
+  add(left, 1)
+  add(right, -1)
+  return { same: false, changed: [...tally.values()].reduce((sum, n) => sum + Math.abs(n), 0) }
 }
 
 /**
@@ -221,7 +246,7 @@ const buildBoth = (program, file = path.join(benchDir, program.source), into = "
     }
     const f64 = build(file, [...program.flags, ...F64], path.join(dir, "f64"))
     const ir =
-      f64.errors.length === 0 ? sameTree(path.join(dir, "default", "ir"), path.join(dir, "f64", "ir")) : null
+      f64.errors.length === 0 ? compareIr(path.join(dir, "default", "ir"), path.join(dir, "f64", "ir")) : null
     builds.set(key, { dir, exes: [base.exe, f64.exe], errors: f64.errors, ir })
   }
   return builds.get(key)
@@ -268,15 +293,14 @@ const median = (xs) => {
  * (.claude/testing.md, "A `Measured:` trailer").
  */
 const time = (exes, args) => {
-  const ids = ["default", "f64", "default-copy", "f64-copy"]
   const files = [...exes, ...exes.map((exe) => `${exe}-copy`)]
-  exes.forEach((exe, i) => {
-    fs.copyFileSync(exe, files[i + 2])
-  })
-  const samples = ids.map(() => [])
+  for (const exe of exes) {
+    fs.copyFileSync(exe, `${exe}-copy`)
+  }
+  const samples = files.map(() => [])
   for (let round = -1; round < rounds; round++) {
-    for (let k = 0; k < ids.length; k++) {
-      const at = (k + Math.max(round, 0)) % ids.length
+    for (let k = 0; k < files.length; k++) {
+      const at = (k + Math.max(round, 0)) % files.length
       const { ms } = run(files[at], args)
       if (round >= 0) {
         samples[at].push(ms)
@@ -392,12 +416,7 @@ const firstDifference = (a, b) => {
   const [x, y] = [a.split("\n"), b.split("\n")]
   const differs = x.findIndex((text, i) => text !== y[i])
   const at = differs < 0 ? x.length : differs
-  const cut = (s) => {
-    if (s === undefined) {
-      return "(no such line)"
-    }
-    return s.length > 60 ? `${s.slice(0, 60)}…` : s
-  }
+  const cut = (s = "(no such line)") => (s.length > 60 ? `${s.slice(0, 60)}…` : s)
   return `line ${at + 1}: \`${cut(x[at])}\` became \`${cut(y[at])}\``
 }
 
@@ -432,7 +451,7 @@ if (timed.length > 0) {
     "",
     "Ratio is f64 over the default, on the median; the band is the larger gap between a binary and its byte-identical copy in the same rounds.",
     "",
-    "| program | default (ms) | f64 (ms) | ratio | band | reading | ratio (min) | band (min) | instructions | IR lines changed |",
+    "| program | default (ms) | f64 (ms) | ratio | band | reading | ratio (min) | band (min) | instructions | IR lines changed, `%N` masked |",
     "| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |"
   )
   for (const r of timed) {
