@@ -95,6 +95,8 @@ const H2C_PREFACE_SIZE: i32 = 24
 const H2C_ADDRESS_SIZE: i32 = 18
 /** What `netRead` and `netWrite` answer when the socket would block. */
 const H2C_AGAIN: i32 = -11
+/** A free slot's socket: no descriptor at all. */
+const H2C_NO_FD: i32 = -1
 /** Nanoseconds in a millisecond, for `prefaceTimeout` against `monotonicNanos`. */
 const H2C_NANOS_PER_MS: i64 = 1000000
 
@@ -288,7 +290,7 @@ export class Http2CleartextServer {
       this.free.pop()
     } else if (toI32(this.fds.length) < this.slots) {
       k = toI32(this.fds.length)
-      this.fds.push(-1)
+      this.fds.push(H2C_NO_FD)
       this.got.push(H2C_ZERO)
       this.since.push(toI64(H2C_ZERO))
       this.ended.push(false)
