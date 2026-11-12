@@ -6,18 +6,18 @@
  *   node scripts/gen-p256-table.mjs --check   exit 1 if the table there differs by a byte
  *
  * The table is the region of `p256.ts` between the `gen-p256-table:begin` and
- * `gen-p256-table:end` lines: `p256BaseTable`, which answers 16 sub-tables of
- * 15 affine points each. Sub-table `c`, entry `j` (1 to 15), is
- *
- *     (j_0 + j_1 2^64 + j_2 2^128 + j_3 2^192) 2^(4c) G
- *
- * where `j_b` is bit `b` of `j`, so a 4-tooth comb whose teeth are 64 bits
- * apart, one sub-table per 4-bit offset of the comb. `p256BaseMult` reads the
- * scalar's bits `i`, `i + 64`, `i + 128` and `i + 192` as one digit and adds
- * the entry it names; 4 rows of 16 such additions, with a doubling between
- * rows, are the whole multiplication. Each entry is X then Y, eight 32-bit
- * limbs each, least significant first, in the Montgomery domain (x 2^256 mod
- * p) that fiat's arithmetic works in: 3,840 limbs, 15 KiB.
+ * `gen-p256-table:end` lines: the comb's shape, the recoding's two constants
+ * and `p256BaseTable`, a signed all-bits-set comb (Hamburg, "Fast and compact
+ * elliptic-curve cryptography", 2012). The scalar k is recoded to
+ * m = (k + 2^BITS - 1) / 2 mod n, so that 2m - (2^BITS - 1) = k and every bit
+ * of m stands for +1 (set) or -1 (clear) times its power of two. Comb `c`
+ * reads `TEETH` bits of m `SPACING` apart; its top tooth picks the sign and
+ * the others the entry, so `2^(TEETH - 1)` entries per comb cover every
+ * digit, none of them the identity. Each entry is X then Y, eight 32-bit limbs
+ * each, least significant first, in the Montgomery domain (x 2^256 mod p)
+ * that fiat's arithmetic works in. The default shape, 11 combs of 6 teeth 4
+ * apart, is 352 entries, 5,632 limbs, 22 KiB, and 44 additions with 3
+ * doublings per multiplication.
  *
  * Computed here with BigInt from SEC 2 §2.4.2's p, b and G, by the textbook
  * affine formulas: the table is public, so nothing here needs to be constant

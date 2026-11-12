@@ -1,6 +1,7 @@
 rfc 6979 a.2.5: 3 of 3 scalars agree, as published
-edges and digits: 986 of 986 scalars agree, 973 of them public keys
+edges and digits: 778 of 778 scalars agree, 774 of them public keys, 656 table choices read
+table: 352 of 352 entries rebuilt from G
 wycheproof ecdsa r and s: 1104 of 1104 scalars agree
 wycheproof ecdh: 355 of 355 private keys agree, 330 shared secrets as published, 25 public keys refused
 corpus: 10000 of 10000 scalars agree, 10000 public keys, 625 signed both ways and verified
-checksum: 3160635463
+checksum: 2745095998

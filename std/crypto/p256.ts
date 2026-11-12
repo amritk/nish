@@ -5178,7 +5178,9 @@ const p256BaseDigit = (m: u32[], c: i32, i: i32): u32 => {
   for (let j: i32 = 0; j < P256_COMB_TEETH; j++) {
     const bit: i32 = (c * P256_COMB_TEETH + j) * P256_COMB_SPACING + i
     const limb: i32 = bit >> 5
-    const word: u32 = limb < 8 ? m[limb] : 0
+    // `limb` is below 16 (the comb covers fewer than 512 bits), so
+    // `(limb >> 3) - 1` is all ones below 8 and 0 past the top, with no branch.
+    const word: u32 = m[limb & 7] & toU32((limb >> 3) - 1)
     digit = digit | (((word >> toU32(bit & 31)) & 1) << toU32(j))
   }
   return digit
