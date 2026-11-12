@@ -53,7 +53,9 @@
  *
  * **The curve** is `y^2 = x^3 - 3x + b` over GF(p),
  * p = 2^256 - 2^224 + 2^192 + 2^96 - 1, with the base point G and its order n from SEC 2 §2.4.2 (FIPS
- * 186-4 §D.1.2.3). Points are projective (X : Y : Z), Z = 0 the identity, and
+ * 186-4 §D.1.2.3).
+ *
+ * Points are projective (X : Y : Z), Z = 0 the identity, and
  * are added and doubled with the complete formulas of J. Renes, C. Costello and
  * L. Batina, "Complete addition formulas for prime order elliptic curves"
  * (EUROCRYPT 2016), Algorithms 4 and 6 for a = -3. Complete means no input is
