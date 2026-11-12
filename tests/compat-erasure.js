@@ -42,6 +42,9 @@ const FLAG = "--compat"
 /** Where a case's `.args` put the files they name: `tests/run.js`'s build directory. */
 const SHARED_OUTPUT = "build/test/"
 
+/** How long one compile may take before it is killed: the slowest case takes a few seconds. */
+const COMPILE_TIMEOUT_MS = 120_000
+
 /** The options that take a value, and so are not the filter. */
 const VALUED = ["--compiler", "--jobs", "--out"]
 
@@ -108,8 +111,10 @@ const compile = async (name, extra) => {
     return moved
   })
   const source = path.join("tests", "cases", `${name}.ts`)
+  // A compile that hangs is killed, and its signal is then part of its answer.
   const r = await run(compiler, [source, "-o", path.join(work, `${name}.ll`), ...args, ...extra], {
     cwd: root,
+    timeout: COMPILE_TIMEOUT_MS,
   })
   return { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr, files: filesUnder(work) }
 }
@@ -223,6 +228,7 @@ const rejected = results.filter((result) => result.reject)
 const sum = (list, key) => list.reduce((total, result) => total + result[key], 0)
 console.log(
   `compat-erasure: ${positive.length} positive cases byte-identical under ${FLAG} (${sum(positive, "files")} files), ` +
-    `${rejected.length} reject cases rejected alike (${sum(rejected, "diagnostics")} coded diagnostics), ` +
+    `${rejected.length} reject cases rejected alike (${sum(rejected, "diagnostics")} coded diagnostics, ` +
+    `${rejected.filter((result) => result.diagnostics === 0).length} cases with none), ` +
     `${cases.length - results.length} skipped`
 )

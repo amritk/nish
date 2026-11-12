@@ -23169,10 +23169,10 @@ if (dealtHere("cliChecks")) {
 
     const corpus = erasure(NISH, "")
     const counts =
-      /^compat-erasure: (\d+) positive cases byte-identical under --compat \((\d+) files\), (\d+) reject cases rejected alike \((\d+) coded diagnostics\), (\d+) skipped$/m.exec(
+      /^compat-erasure: (\d+) positive cases byte-identical under --compat \((\d+) files\), (\d+) reject cases rejected alike \((\d+) coded diagnostics, (\d+) cases with none\), (\d+) skipped$/m.exec(
         corpus.stdout
       )
-    const [positiveCount, fileCount, rejectCount, codedCount, skippedCount] = (counts ?? []).slice(1).map(Number)
+    const [positiveCount, fileCount, rejectCount, codedCount, uncodedCases, skippedCount] = (counts ?? []).slice(1).map(Number)
     const rejectCases = cases.filter((name) => fs.existsSync(path.join(casesDir, `${name}.err`))).length
     check(
       "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",
@@ -23181,8 +23181,8 @@ if (dealtHere("cliChecks")) {
     )
     // A run that compared nothing would agree with itself: the counts are the
     // corpus's own, files were written and compared (a case that asks for
-    // `--emit-ast` prints instead), the reject cases gave at least a coded
-    // diagnostic each, and none was skipped.
+    // `--emit-ast` prints instead), every reject case gave at least one coded
+    // diagnostic, and none was skipped.
     check(
       `compat-erasure: the run covered the corpus (${cases.length} cases) and skipped none`,
       counts !== null &&
@@ -23190,6 +23190,7 @@ if (dealtHere("cliChecks")) {
         rejectCount === rejectCases &&
         fileCount > 0 &&
         codedCount >= rejectCount &&
+        uncodedCases === 0 &&
         skippedCount === 0,
       corpus.stdout
     )
