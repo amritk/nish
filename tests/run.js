@@ -12311,7 +12311,7 @@ if (dealtHere("cryptoChecks")) {
           // A spec that could not be read exactly fails below, in the fixture check,
           // rather than being run here with a secret it lost.
           for (const spec of specs.filter((sp) => sp.problems.length === 0)) {
-            const body = functionBody(lines, spec.name, target)
+            const body = functionBody(lines, spec.name, target, { labels: spec.loops })
             const found = body === null ? [] : ctViolations(body, spec, target)
             const kinds = [...new Set(found.map((v) => v.kind))]
             check(

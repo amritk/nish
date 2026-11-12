@@ -24,13 +24,13 @@
  * are secret. Two things are added, because code with loops needs them:
  *
  * **Control flow.** The body is read with its labels (`functionBody`'s
- * `labels`). Each label keeps the
- * join of every state that reaches it (`Taint.join`: a register is secret
- * there if it is secret on any edge in, a stack offset is kept only if every
- * edge agrees)
- * and the body is walked again until no label's state changes, so a value a
- * loop's back edge carries round is seen at the loop's head. The violations
- * are those of the last walk, on the settled states.
+ * `labels`) by ct-asm.js's `settle`, which a fixture's `loops` check uses
+ * too. Each label keeps the join of every state that reaches it
+ * (`Taint.join`: a register is secret there if it is secret on any edge in, a
+ * stack offset is kept only if every edge agrees) and the body is walked again
+ * until no label's state changes, so a value a loop's back edge carries round
+ * is seen at the loop's head. The violations are those of the last walk, on
+ * the settled states.
  *
  * **The flags, per instruction.** ct-asm.js lets the flags only ever gain a
  * secret, which is right for code with no branch at all, but would refuse
@@ -58,7 +58,7 @@
 
 import { spawnSync } from "node:child_process"
 import path from "node:path"
-import { CT_TARGETS, functionBody, parseInstruction, Taint } from "./ct-asm.js"
+import { CT_TARGETS, functionBody, settle, Taint } from "./ct-asm.js"
 
 /**
  * The runtime's kernel units, each with its resolver and its kernels, and what
@@ -99,53 +99,6 @@ const RUNTIME_LEAKS = [
   ["nish_aes_leaky_branch", "branch", "a branch on a secret"],
 ]
 
-/**
- * How an instruction moves control, if it does: `{ to, conditional, on }`,
- * where `to` is the local label it may go to and `on` the register a
- * compare-and-branch tests (else the flags). `null` for one that falls
- * through. `ret` ends the path; a jump anywhere but a local label is left to
- * the step, which refuses it as a call.
- */
-const control = (target, mnemonic, operands) => {
-  const last = operands.at(-1)
-  const label = last !== undefined && /^\.L\w+$/.test(last) ? last : null
-  if (target.name === "x86-64") {
-    if (/^ret/.test(mnemonic)) {
-      return { to: null, conditional: false }
-    }
-    if (/^jmp[wlq]?$/.test(mnemonic)) {
-      return label === null ? null : { to: label, conditional: false }
-    }
-    if (/^j[a-z]+$/.test(mnemonic) && !/^j[er]?cxz$/.test(mnemonic)) {
-      return { to: label, conditional: true, on: "flags" }
-    }
-    return null
-  }
-  if (mnemonic === "ret") {
-    return { to: null, conditional: false }
-  }
-  if (mnemonic === "b") {
-    return label === null ? null : { to: label, conditional: false }
-  }
-  if (/^bc?\.\w+$/.test(mnemonic)) {
-    return { to: label, conditional: true, on: "flags" }
-  }
-  if (/^(cbn?z|tbn?z)$/.test(mnemonic)) {
-    return { to: label, conditional: true, on: operands[0] }
-  }
-  return null
-}
-
-/** Whether the condition a branch reads is secret in `t`. */
-const conditionSecret = (t, on, mnemonic) => {
-  if (on === "flags") {
-    return t.flagsSecret(mnemonic)
-  }
-  // `cbz w8` and `tbz x8, #3` test one general register, `w8` and `x8` both `r8`.
-  const m = on.match(/^[wx](\d+)$/)
-  return m === null || t.secret.has(`r${m[1]}`)
-}
-
 /** Violations as text, one a line. */
 const listed = (found, separator = "\n") => found.map((v) => `${v.kind}: ${v.line}`).join(separator)
 
@@ -158,72 +111,8 @@ const listed = (found, separator = "\n") => found.map((v) => `${v.kind}: ${v.lin
  * that are secret beside every array's elements.
  */
 const runtimeViolations = (body, secretArgs, target) => {
-  const entry = () => new Taint({ contents: true, secretArgs, preciseFlags: true }, target)
-  /** Each label's joined state, with its key kept beside it so a join is compared once. */
-  const at = new Map()
-  /** Joins `state` into what `label` holds; whether that changed it. */
-  const reach = (label, state) => {
-    const old = at.get(label)
-    const joined = old === undefined ? state.clone() : old.state.join(state)
-    const key = joined.key()
-    if (old !== undefined && old.key === key) {
-      return false
-    }
-    at.set(label, { state: joined, key })
-    return true
-  }
-  /** One walk of the body; whether any label's state changed, and what it found. */
-  const pass = () => {
-    let changed = false
-    const found = []
-    let branches = 0
-    let t = entry()
-    for (const line of body) {
-      if (line.endsWith(":")) {
-        const label = line.slice(0, -1)
-        if (t !== null) {
-          changed = reach(label, t) || changed
-        }
-        t = at.has(label) ? at.get(label).state.clone() : null
-        continue
-      }
-      if (t === null) {
-        continue
-      }
-      const [mnemonic, operands] = parseInstruction(line)
-      const flow = control(target, mnemonic, operands)
-      if (flow === null) {
-        const kind = target.step(t, mnemonic, operands)
-        if (kind !== null) {
-          found.push({ kind, line })
-        }
-        continue
-      }
-      if (flow.conditional) {
-        branches++
-        if (flow.to === null || conditionSecret(t, flow.on, mnemonic)) {
-          found.push({ kind: "branch", line })
-        }
-      }
-      if (flow.to !== null) {
-        changed = reach(flow.to, t) || changed
-      }
-      if (!flow.conditional) {
-        t = null
-      }
-    }
-    return { changed, found, branches }
-  }
-  // Each walk only joins more into a label, and there are finitely many
-  // registers and stack bytes, so this settles; the bound is a guard against
-  // a bug here, reported rather than looped on.
-  for (let i = 0; i < 64; i++) {
-    const { changed, found, branches } = pass()
-    if (!changed) {
-      return { found, branches }
-    }
-  }
-  return { found: [{ kind: "unsettled", line: "the label states did not settle in 64 walks" }], branches: 0 }
+  const { found, branches } = settle(new Taint({ contents: true, secretArgs, preciseFlags: true }, target), body)
+  return { found, branches }
 }
 
 /**

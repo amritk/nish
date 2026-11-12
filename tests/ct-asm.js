@@ -100,6 +100,7 @@ const EXPECT_KINDS = {
   call: "a call to code the check does not read",
   load: "a load or store at a secret address",
   latency: "an instruction whose latency depends on a secret",
+  noloop: "no loop where a `loops` check expects one",
 }
 
 const KINDS = Object.keys(EXPECT_KINDS).join("|")
@@ -119,16 +120,18 @@ export const ctSpecs = (source) => {
   const specs = []
   for (const line of source.split("\n").filter((l) => l.startsWith("// ct-check"))) {
     const m = line.match(
-      new RegExp(`^// ct-check: (\\w+) secret=([\\w,]+)(?: expect=(${KINDS})(?: via=(\\w+))?)?\\s*$`)
+      new RegExp(
+        `^// ct-check: (\\w+) secret=([\\w,]+)( loops)?(?: expect=(${KINDS})(?: via=(\\w+))?)?\\s*$`
+      )
     )
     if (m === null) {
       specs.push({
         name: line,
-        problems: [`not \`// ct-check: <fn> secret=<names> [expect=${KINDS} [via=<callee>]]\``],
+        problems: [`not \`// ct-check: <fn> secret=<names> [loops] [expect=${KINDS} [via=<callee>]]\``],
       })
       continue
     }
-    const [, name, secret, expect, via] = m
+    const [, name, secret, loops, expect, via] = m
     const signature = source.match(new RegExp(`export const ${name} = \\(([^)]*)\\)(?::\\s*([^=]+?))?\\s*=>`))
     const params = signature === null || signature[1].trim().length === 0 ? [] : signature[1].split(",")
     const names = params.map((p) => p.split(":")[0].trim())
@@ -163,12 +166,15 @@ export const ctSpecs = (source) => {
       secretArgs: secrets.map((n) => names.indexOf(n)),
       types,
       returns: signature === null || signature[2] === undefined ? "void" : signature[2].trim(),
+      loops: loops !== undefined,
       expect: expect ?? null,
       via: via ?? null,
       // What the suite names the check by: clean, or refused for its kind and where.
       promise:
         expect === undefined
-          ? "no branch, call, secret-indexed access or secret-dependent latency"
+          ? loops === undefined
+            ? "no branch, call, secret-indexed access or secret-dependent latency"
+            : "loops on public bounds only; no secret branch, call, secret-indexed access or secret-dependent latency"
           : `refused for ${EXPECT_KINDS[expect]}${via === undefined ? "" : ` inside ${via}`}`,
     })
   }
@@ -435,6 +441,8 @@ export class Taint {
     this.depth = 0
     this.found = []
     this.preciseFlags = spec.preciseFlags === true
+    // Read a callee's labels and loops too (`settle`), as a `loops` spec does.
+    this.loops = false
     this.mnemonic = ""
     // `ctSpecs` has already refused a secret that names no parameter or one
     // past the registers, so every index here is a register.
@@ -560,7 +568,20 @@ export class Taint {
     c.bytes = new Map([...this.bytes].map(([at, b]) => [at, { ...b }]))
     c.unknownSecret = this.unknownSecret
     c.listing = this.listing
+    c.depth = this.depth
+    c.loops = this.loops
     return c
+  }
+
+  /** Takes on `other`'s registers, stack and memory: the state a callee returned in. */
+  adopt(other) {
+    this.secret = new Set(other.secret)
+    this.loaded = new Set(other.loaded)
+    this.stackAt = new Map(other.stackAt)
+    this.sp = other.sp
+    this.bytes = new Map([...other.bytes].map(([at, b]) => [at, { ...b }]))
+    this.unknownSecret = other.unknownSecret
+    this.contents = other.contents
   }
 
   /**
@@ -741,7 +762,16 @@ export class Taint {
   call(operands, tail) {
     const symbol = operands.length === 1 ? operands[0].replace(/@PLT$/, "") : ""
     const body =
-      this.listing === null || symbol.length === 0 ? null : functionBody(this.listing, symbol, this.target)
+      this.listing === null || symbol.length === 0
+        ? null
+        : functionBody(this.listing, symbol, this.target, { labels: this.loops })
+    // A runtime panic does not return. In a `loops` read the branch that
+    // reaches it has been judged already: a check on a public counter or
+    // length panics only on public values, and one on a secret is refused as
+    // a branch. So the path ends there, unread and unrefused.
+    if (this.loops && /^nish_panic_\w+$/.test(symbol)) {
+      return "noreturn"
+    }
     if (body === null || this.depth >= CALL_DEPTH) {
       return "call"
     }
@@ -750,7 +780,17 @@ export class Taint {
     this.depth++
     const outer = this.found
     this.found = []
-    walk(this, body)
+    if (this.loops) {
+      // The callee's loops are settled from this state, and what it returns
+      // in is where the caller goes on from.
+      const { found, exit } = settle(this, body)
+      this.found = found
+      if (exit !== null) {
+        this.adopt(exit)
+      }
+    } else {
+      walk(this, body)
+    }
     for (const v of this.found) {
       outer.push({ kind: v.kind, line: `${symbol}: ${v.line}` })
     }
@@ -1202,10 +1242,177 @@ const walk = (t, body) => {
  * callee is reported as `<kind> outside <callee>`, so that `expect=` is met
  * only by what following the call found.
  */
+/**
+ * How an instruction moves control, if it does: `{ to, conditional, on }`,
+ * where `to` is the local label it may go to and `on` the register a
+ * compare-and-branch tests (else the flags). `null` for one that falls
+ * through. `ret` ends the path; a jump anywhere but a local label is left to
+ * the step, which follows it as a tail call or refuses it.
+ */
+export const control = (target, mnemonic, operands) => {
+  const last = operands.at(-1)
+  const label = last !== undefined && /^\.L\w+$/.test(last) ? last : null
+  if (target.name === "x86-64") {
+    if (/^ret/.test(mnemonic)) {
+      return { to: null, conditional: false }
+    }
+    if (/^jmp[wlq]?$/.test(mnemonic)) {
+      return label === null ? null : { to: label, conditional: false }
+    }
+    if (/^j[a-z]+$/.test(mnemonic) && !/^j[er]?cxz$/.test(mnemonic)) {
+      return { to: label, conditional: true, on: "flags" }
+    }
+    return null
+  }
+  if (mnemonic === "ret") {
+    return { to: null, conditional: false }
+  }
+  if (mnemonic === "b") {
+    return label === null ? null : { to: label, conditional: false }
+  }
+  if (/^bc?\.\w+$/.test(mnemonic)) {
+    return { to: label, conditional: true, on: "flags" }
+  }
+  if (/^(cbn?z|tbn?z)$/.test(mnemonic)) {
+    return { to: label, conditional: true, on: operands[0] }
+  }
+  return null
+}
+
+/** Whether the condition a branch reads is secret in `t`. */
+const conditionSecret = (t, on, mnemonic) => {
+  if (on === "flags") {
+    return t.flagsSecret(mnemonic)
+  }
+  // `cbz w8` and `tbz x8, #3` test one general register, `w8` and `x8` both `r8`.
+  const m = on.match(/^[wx](\d+)$/)
+  return m === null || t.secret.has(`r${m[1]}`)
+}
+
+/**
+ * A body with its labels kept (`functionBody`'s `labels`), read from `entry`
+ * until every label's state settles. Each label keeps the join of every state
+ * that reaches it (`Taint.join`), and the body is walked again until no
+ * label's state changes, so a value a loop's back edge carries round is seen
+ * at the loop's head; the violations are those of the last walk, on the
+ * settled states. A conditional branch is refused only when its condition is
+ * secret: one on a counter, a length or an address is the loop a public bound
+ * runs. Gives `{ found, branches, exit }`: the violations, the conditional
+ * branches judged public (so a caller can say a loop was read, not absent),
+ * and the join of the states the body returns in (`null` if it never does).
+ * `entry` is not changed. Read with `preciseFlags`, or the first secret XOR
+ * would make every later loop test secret.
+ */
+export const settle = (entry, body) => {
+  const target = entry.target
+  /** Each label's joined state, with its key kept beside it so a join is compared once. */
+  const at = new Map()
+  /** Joins `state` into what `label` holds; whether that changed it. */
+  const reach = (label, state) => {
+    const old = at.get(label)
+    const joined = old === undefined ? state.clone() : old.state.join(state)
+    joined.depth = state.depth
+    const key = joined.key()
+    if (old !== undefined && old.key === key) {
+      return false
+    }
+    at.set(label, { state: joined, key })
+    return true
+  }
+  /** One walk of the body; whether any label's state changed, and what it found. */
+  const pass = () => {
+    let changed = false
+    const found = []
+    let branches = 0
+    let exit = null
+    const leave = (state) => {
+      exit = exit === null ? state.clone() : exit.join(state)
+    }
+    const resume = (state) => {
+      const c = state.clone()
+      c.found = found
+      return c
+    }
+    let t = resume(entry)
+    for (const line of body) {
+      if (line.endsWith(":")) {
+        const label = line.slice(0, -1)
+        if (t !== null) {
+          changed = reach(label, t) || changed
+        }
+        t = at.has(label) ? resume(at.get(label).state) : null
+        continue
+      }
+      if (t === null) {
+        continue
+      }
+      const [mnemonic, operands] = parseInstruction(line)
+      const flow = control(target, mnemonic, operands)
+      if (flow === null) {
+        const kind = target.step(t, mnemonic, operands)
+        if (kind === "noreturn") {
+          t = null
+        } else if (kind !== null) {
+          found.push({ kind, line })
+        }
+        continue
+      }
+      if (flow.conditional) {
+        branches++
+        if (flow.to === null || conditionSecret(t, flow.on, mnemonic)) {
+          found.push({ kind: "branch", line })
+        }
+      }
+      if (flow.to !== null) {
+        changed = reach(flow.to, t) || changed
+      } else if (!flow.conditional) {
+        leave(t)
+      }
+      if (!flow.conditional) {
+        t = null
+      }
+    }
+    // Falling off the end, as after a tail call, leaves too.
+    if (t !== null) {
+      leave(t)
+    }
+    return { changed, found, branches, exit }
+  }
+  // Each walk only joins more into a label, and there are finitely many
+  // registers and stack bytes, so this settles; the bound is a guard against
+  // a bug here, reported rather than looped on.
+  for (let i = 0; i < 64; i++) {
+    const { changed, found, branches, exit } = pass()
+    if (!changed) {
+      return { found, branches, exit }
+    }
+  }
+  return {
+    found: [{ kind: "unsettled", line: "the label states did not settle in 64 walks" }],
+    branches: 0,
+    exit: null,
+  }
+}
+
+/**
+ * Every violation in `body` under `spec`. A `loops` spec's body is read with
+ * its labels (`settle`), callees too, and must hold a conditional branch of
+ * its own, judged public: one with none read no loop, and a check that read
+ * none would pass whatever the loop did.
+ */
 export const ctViolations = (body, spec, target) => {
-  const t = new Taint(spec, target)
+  const t = new Taint(spec.loops ? { ...spec, preciseFlags: true } : spec, target)
   t.listing = LISTINGS.get(body) ?? null
-  walk(t, body)
+  if (spec.loops) {
+    t.loops = true
+    const { found, branches } = settle(t, body)
+    t.found = found
+    if (branches === 0) {
+      t.found.push({ kind: "noloop", line: `${spec.name} has no conditional branch to read` })
+    }
+  } else {
+    walk(t, body)
+  }
   if (spec.via === null || spec.via === undefined) {
     return t.found
   }
