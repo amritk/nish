@@ -8015,9 +8015,9 @@ function Http1Connection.keepHead(this: Http1Connection, start: i32, end: i32, s
   local -7:11 n: i32 (const)
   local -6:11 fields: i32 (const)
   local -5:11 again: boolean (const)
-  local +12:14 i: i32 (let)
-  callee +15:5 copyBytes -> @nish.copyBytes
-  callee +20:24 HttpDate.formats -> @nish.HttpDate.formats
+  local +15:14 i: i32 (let)
+  callee +18:5 copyBytes -> @nish.copyBytes
+  callee +23:24 HttpDate.formats -> @nish.HttpDate.formats
 function Http1Connection.write(this: Http1Connection, buf: readonly u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.write [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

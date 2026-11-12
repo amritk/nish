@@ -1470,9 +1470,19 @@ export class Http1Connection {
    * head before it had the same status, framing, `Connection` and number of
    * fields, so that a program whose every head differs pays a few stores per
    * response and no copy; a head longer than `H1_HEAD_KEEP`, or with more
-   * than `H1_HEAD_FIELDS` fields, is never kept.
+   * than `H1_HEAD_FIELDS` fields, is never kept. The buffer is made at the
+   * first head that would fit, so a connection's first response, not a later
+   * one, is the one that grows the arena.
    */
-  private keepHead(start: i32, end: i32, status: i32, reason: string, names: u8[][], framing: i32, connection: i32): void {
+  private keepHead(
+    start: i32,
+    end: i32,
+    status: i32,
+    reason: string,
+    names: u8[][],
+    framing: i32,
+    connection: i32
+  ): void {
     const n: i32 = end - start
     const fields: i32 = toI32(names.length)
     const again: boolean =
@@ -1484,13 +1494,16 @@ export class Http1Connection {
     this.headFraming = framing
     this.headConnection = connection
     this.headFields = fields
-    if (!again || n > H1_HEAD_KEEP || fields > H1_HEAD_FIELDS) {
-      this.headLength = 0
+    this.headLength = 0
+    if (n > H1_HEAD_KEEP || fields > H1_HEAD_FIELDS) {
       return
     }
     if (toI32(this.headBytes.length) < H1_HEAD_KEEP) {
       this.headBytes = new Array<u8>(H1_HEAD_KEEP)
       this.headNames = new Array<i32>(H1_HEAD_FIELDS)
+    }
+    if (!again) {
+      return
     }
     for (let i: i32 = 0; i < fields; i += 1) {
       this.headNames[i] = toI32(names[i].length)
