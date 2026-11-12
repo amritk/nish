@@ -1587,6 +1587,250 @@ No database cell has a `*`, and neither explicit build has one anywhere. The asy
 
 **What remains, as far as this run and the profiles go.** No new profile was taken for this run; #1459's callgrind tables, on its head, are the latest (its PR body has them). Per request, the async entry still runs about 3,100 (`plaintext`) and 3,300 (`json`) more instructions than the explicit one, about 8,500 against 5,400 and 9,900 against 6,600. About 750 of it is the task's memory in `runtime/runtime-async.c` (`malloc`/`free` of the frame and region, `nish_async_spawn`, `nish_async_done`, `nish_arena_release`), not the per-wait system calls #1374 ruled out; about 2,100 is the layered hand-off from `serveOn` through `HttpHandler` to `serveTask` and the router's walk; about 190 (`plaintext`) and 450 (`json`) is shared `std/net/http1-server.ts` and JSON-writer code. The database tests' remaining gap was not profiled after #1419.
 
+## TechEmpower: the gate's baseline checked and re-measured (WP49 stage 6)
+
+The same gate as [the re-measurement after the profile-led fixes](#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6), run on `main` to answer one question and to give the next fixes their before: since #1448 `bench/techempower/main.ts` forks one worker a core when it is given no worker count, `run.sh` gives `entry` and `entry-copy` none, and `async-main.ts` is always one process. Is the gate still one worker against one worker?
+
+**It is, and it was in the earlier runs.** The default count is `availableParallelism()`, which reads the affinity mask, and `run.sh` starts every server under `taskset -c 0`. Each default contestant was started as `run.sh` starts it and read from `/proc` while `wrk` (256 connections on `/json`, on CPUs 1-3) loaded it: the processes in its tree, each one's `Cpus_allowed_list` and threads from `/proc/<pid>/status`, and its CPU ticks (`utime + stime` of `/proc/<pid>/stat`) 1.5 s into the load.
+
+| started as | processes | `Cpus_allowed_list` | threads | CPU ticks at 1.5 s |
+| --- | ---: | --- | ---: | ---: |
+| `taskset -c 0 build/tfb/entry <port>` (`run.sh`'s `entry`) | 1 | 0 | 1 | 147 |
+| `taskset -c 0 build/tfb/entry-copy <port>` (`run.sh`'s `entry-copy`) | 1 | 0 | 1 | 150 |
+| `taskset -c 0 build/tfb/async <port>` (`run.sh`'s `async`) | 1 | 0 | 1 | 151 |
+| `taskset -c 0 build/tfb/entry <port> 1 127.0.0.1 16384 1` (the explicit count 1) | 1 | 0 | 1 | 150 |
+| `build/tfb/entry <port>`, unpinned | 5: a supervisor and 4 workers | supervisor 0-3; workers 0, 1, 2 and 3 | 1 each | 0; 0, 67, 68 and 66 |
+| `taskset -c 0-1 build/tfb/entry <port>` | 3: a supervisor and 2 workers | supervisor 0-1; workers 0 and 1 | 1 each | 0; 143 and 110 |
+| `NISH_WORKERS=4 taskset -c 0 build/tfb/entry <port>` | none: exit 1, `nish/net/prefork: pin with 4 workers on 1 CPUs` | | | |
+
+So under `run.sh`'s pinning the explicit entry serves in the process it was started in, with no supervisor and no worker, exactly as it does given the count 1, and the three contestants each have one thread on CPU 0. The last three rows are what the gate does not run: without the pin the entry is one worker a core, and with `NISH_WORKERS` above 1 exported it refuses to start, so `run.sh` exits 1 (`entry did not start`) and cannot compare unlike things silently. The database wrappers pass the count 1, and `profile.sh` starts its servers under the same `taskset -c 0`.
+
+**What changed in `run.sh`: its comment only.** The header said "workers (one)" without saying what makes it one; it now says the count is `main.ts`'s default under the pin, and what `NISH_WORKERS` does. The contestants' commands are the ones the earlier runs used, so the earlier sections' figures were one worker against one worker too.
+
+| | |
+| --- | --- |
+| Date | 2026-11-12 |
+| nish | `build/nish` built from `main` at `7e241d75` (nish 0.38.0 sources), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 15 GiB |
+| OS | linux 6.18.44 (x64) |
+| Postgres | 16, a throwaway cluster in `build/tfb/pg`, `fsync=off`, TFB's `world` (10,000 rows) and `fortune` tables |
+| Client | wrk 4.1.0, TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
+| Pinning | plaintext and json: server on CPU 0, wrk `-t 3` on CPUs 1-3. Database: server on CPU 0, Postgres on CPU 1, wrk `-t 2` on CPUs 2-3 |
+| Commands | `bash bench/techempower/run.sh --only plaintext`, `bash bench/techempower/run.sh --only json --duration 8`, `PG_BIN=/usr/lib/postgresql/16/bin bash bench/techempower/run.sh --only db --duration 2`, each alone in the foreground; `bash bench/techempower/profile.sh --only plaintext` and `--only json` |
+
+The method, the `*` rule and the caveats are [the first measurement](#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6)'s: one 4-core VM shared by wrk, Postgres and the server, a relative A/B and not a TechEmpower rank. The cells are req/s, median (minimum) of 3 interleaved rounds, and a delta `d` is inside when `d >= −band`. **The rounds are shorter than the earlier runs' on two tests**, because one call of this session's shell ends after ten minutes and each test ran as one call: `/plaintext` has the default 10 s, `/json` 8 s, and the five database tests 2 s. A 2 s round is a weak figure; the database rows below are a baseline for a re-run at the same `--duration 2`, not a replacement for the 10 s figures of the section above. The http-twins were not built, so the tables have no twin rows.
+
+**Outcome: the gate is not met on `main`.** Seven of the eleven judged cells are outside:
+
+| test | connections | band | async vs entry | verdict | after the profile-led fixes |
+| --- | ---: | ---: | ---: | --- | ---: |
+| `/plaintext` | 256 | 18.3% | −27.6% | outside | −27.7% |
+| `/plaintext` | 1024 | 8.5% | −21.7% | outside | −15.0% |
+| `/plaintext` | 4096 | 1.2% | −31.3% | outside | −26.9% |
+| `/plaintext` | 16384 | 1.4% | −63.1% | not judged (`run.sh`: outside*) | −68.0%* |
+| `/json` | 16 | 3.0% | −1.1% | inside | −2.0% |
+| `/json` | 32 | 0.5% | −0.1% | inside | −0.5% |
+| `/json` | 64 | 2.9% | −1.1% | inside | +0.5% |
+| `/json` | 128 | 7.8% | −11.6% | outside | −4.9% |
+| `/json` | 256 | 1.6% | −13.0% | outside | −3.6% |
+| `/json` | 512 | 4.7% | −13.1% | outside | −13.0% |
+| `/db` | 16 | 10.2% (bimodal) | +164.6% | not judged (`run.sh`: inside) | −23.4% |
+| `/db` | 64 | 2.3% | −9.1% | outside | −5.7% |
+| `/db` | 256 | 1.6% | +6.3% | inside | +7.3% |
+| `/queries?queries=20` | 16 | 5.3% | +6.9% | inside | +10.8% |
+| `/queries?queries=20` | 64 | 4.1% | +7.9% | inside | +19.3% |
+| `/queries?queries=20` | 256 | 11.2% | −26.8% | outside | −18.0% |
+| `/updates?queries=20` | 16 | 0.7% | −6.2% | outside | +6.4% |
+| `/updates?queries=20` | 64 | 6.3% | +10.4% | inside | +7.0% |
+| `/updates?queries=20` | 256 | 5.5% | +0.5% | inside | +8.7% |
+| `/fortunes` | 16 | 0.1% | −27.5% | outside | −31.2% |
+| `/fortunes` | 64 | 1.7% | −8.8% | outside | −11.2% |
+| `/fortunes` | 256 | 2.1% | −36.2% | outside | −44.1% |
+| `/cached-queries?count=100` | 16 | 2.6% | +5.2% | inside | +8.2% |
+| `/cached-queries?count=100` | 64 | 7.3% | +20.2% | inside | +19.1% |
+| `/cached-queries?count=100` | 256 | 4.6% | +9.2% | inside | +17.3% |
+
+The judged cells are `/plaintext` at 256, 1,024 and 4,096 connections, `/json` at all six, and `/db` at 64 and 256. `/plaintext` at 16,384 (a `*` cell: read errors in two of the async entry's rounds and one of `entry-copy`'s), `/db` at 16 and the four other database tests are recorded and not judged.
+
+Three cells need their rounds read:
+
+- **`/plaintext` at 256** has an 18.3% band because `entry-copy` gave 1,003,833, 1,348,640 and 1,100,494 req/s against `entry`'s 1,303,328, 1,408,132 and 1,346,435. The async entry gave 974,508, 990,862 and 951,813, below every explicit round of both builds, so the cell is outside however the band is read.
+- **`/json` at 256** was inside in the section above on a 9.5% band and is outside here on a 1.6% one; the async entry's own figure moved from 175,217 to 153,178 req/s between the two runs, at 8 s rounds here. One run does not say which is the cell's level.
+- **`/db` at 16** is bimodal as before: the explicit builds gave 22–25k req/s in five rounds and 71,908 in the sixth, and the async entry 52.7–62.8k. **`/db` at 64** has one low explicit round, `db-entry`'s first at 43,970 against 106,299 and 109,558; its median is not moved by it.
+
+### /plaintext, req/s, median (min) of 3 rounds of 10 s, the baseline
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1346435 (1303328) | 1053251 (859591) | 924010 (810910) | 927770 (909391) | 91.9 |
+| entry-copy | 1100494 (1003833) | 963336 (881312) | 935437 (895975) | 914474 (892098)* | 91.9 |
+| async | 974508 (951813) | 824529 (812935) | 635200 (612522) | 342670 (327120)* | 96.3 |
+
+noise band (|entry - entry-copy| / entry, medians): 256: 18.3% 1024: 8.5% 4096: 1.2% 16384: 1.4%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 256: -27.6% outside 1024: -21.7% outside 4096: -31.3% outside 16384: -63.1% outside*
+- /plaintext c=16384 round 1: entry-copy had 0 Non-2xx responses and socket errors c/r/w/t 0/506/0/0
+- /plaintext c=16384 round 1: async had 0 Non-2xx responses and socket errors c/r/w/t 0/4274/0/0
+- /plaintext c=16384 round 2: async had 0 Non-2xx responses and socket errors c/r/w/t 0/1071/0/0
+
+### /json, req/s, median (min) of 3 rounds of 8 s, the baseline
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 104290 (102785) | 126942 (126527) | 142203 (130745) | 161957 (160809) | 175980 (174676) | 179671 (171024) | 3.3 |
+| entry-copy | 101131 (99792) | 126360 (125347) | 138123 (137767) | 149260 (147660) | 173247 (172042) | 171220 (163266) | 3.3 |
+| async | 103125 (96351) | 126842 (125024) | 140600 (139605) | 143217 (138492) | 153178 (152420) | 156080 (138030) | 7.6 |
+
+noise band (|entry - entry-copy| / entry, medians): 16: 3.0% 32: 0.5% 64: 2.9% 128: 7.8% 256: 1.6% 512: 4.7%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -1.1% inside 32: -0.1% inside 64: -1.1% inside 128: -11.6% outside 256: -13.0% outside 512: -13.1% outside
+
+### /db, req/s, median (min) of 3 rounds of 2 s, the baseline
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 22920 (22195) | 106299 (43970) | 99740 (98747) | 65.8 |
+| db-entry-copy | 25251 (21649) | 103804 (97747) | 98111 (97196) | 65.9 |
+| async-db | 60655 (52712) | 96584 (94913) | 106024 (99975) | 33.0 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 10.2% 64: 2.3% 256: 1.6%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +164.6% inside 64: -9.1% outside 256: +6.3% inside
+
+### /queries?queries=20, req/s, median (min) of 3 rounds of 2 s, the baseline
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 24905 (23260) | 25923 (25117) | 37115 (34514) | 66.4 |
+| db-entry-copy | 23588 (23258) | 26986 (25307) | 32970 (32499) | 66.4 |
+| async-db | 26616 (26484) | 27974 (26045) | 27179 (26039) | 23.9 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 5.3% 64: 4.1% 256: 11.2%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +6.9% inside 64: +7.9% inside 256: -26.8% outside
+
+### /updates?queries=20, req/s, median (min) of 3 rounds of 2 s, the baseline
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 6605 (5134) | 6937 (5915) | 7464 (7117) | 66.4 |
+| db-entry-copy | 6653 (6260) | 6504 (6000) | 7051 (6555) | 66.4 |
+| async-db | 6196 (6074) | 7659 (6737) | 7505 (7412) | 26.4 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 0.7% 64: 6.3% 256: 5.5%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: -6.2% outside 64: +10.4% inside 256: +0.5% inside
+
+### /fortunes, req/s, median (min) of 3 rounds of 2 s, the baseline
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 58866 (58191) | 69660 (67888) | 63482 (59310) | 65.8 |
+| db-entry-copy | 58907 (56579) | 70855 (68616) | 64831 (57930) | 65.8 |
+| async-db | 42652 (40783) | 63551 (62057) | 40511 (40463) | 24.3 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 0.1% 64: 1.7% 256: 2.1%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: -27.5% outside 64: -8.8% outside 256: -36.2% outside
+
+### /cached-queries?count=100, req/s, median (min) of 3 rounds of 2 s, the baseline
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 61657 (59582) | 66834 (60029) | 66015 (51824) | 65.7 |
+| db-entry-copy | 63286 (61685) | 71715 (66504) | 62971 (60077) | 65.7 |
+| async-db | 64885 (64381) | 80353 (78555) | 72087 (71049) | 18.4 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 2.6% 64: 7.3% 256: 4.6%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +5.2% inside 64: +20.2% inside 256: +9.2% inside
+
+No database cell has a `*`.
+
+**Memory.** Peak RSS is the server's `VmHWM`, the largest over every round and concurrency of the test, and is where it was: 96.3 MiB against the explicit entry's 91.9 on `plaintext`, 7.6 against 3.3 on `json`, and 18.4–33.0 against 65.7–66.4 on the database tests.
+
+### The baseline profile: instructions and system calls per request
+
+`profile.sh` on the same tree, its defaults (5 s perf and strace phases, a 10 s callgrind window), one process on CPU 0 for each side as above. Instructions per request (callgrind's Ir over the responses wrk counted in the window) hold across machines and noise, so they are the figure a fix is checked against.
+
+| | explicit | async | async − explicit |
+| --- | ---: | ---: | ---: |
+| `/plaintext`, 256 connections, 16 pipelined: Ir per request | 4,814 | 7,848 | 3,034 |
+| `/plaintext`: system calls per request (`strace -c -f`) | 0.129 | 0.134 | 0.005 |
+| `/plaintext`: req/s under perf | 1,326,148 | 982,824 | |
+| `/plaintext`: server CPU µs per request, user + system | 0.74 | 1.01 | |
+| `/json`, 64 connections: Ir per request | 5,962 | 9,276 | 3,314 |
+| `/json`: system calls per request (`strace -c -f`) | 2.026 | 2.109 | 0.083 |
+| `/json`: req/s under perf | 136,267 | 136,230 | |
+| `/json`: server CPU µs per request, user + system | 7.30 | 7.23 | |
+
+The responses in the callgrind windows were 343,648 and 225,104 (`plaintext`, explicit and async) and 155,028 and 160,147 (`json`); no wrk run of either profile had an error. The system calls are almost all `recvfrom` and `sendto`, one of each a request on `/json` and one of each for about sixteen on `/plaintext`. What the async entry adds over the 5 s strace window is its per-wait calls: on `/plaintext` 1,375 `epoll_ctl`, 561 `close` and 559 `fcntl` against the explicit entry's 256 `epoll_ctl`, over 35,711 `sendto`; on `/json` 1,301, 620 and 618 against 64, over 38,848.
+
+The explicit entry's Ir is lower than the 5,411 (`plaintext`) and 6,588 (`json`) of #1459's tables, and the async entry's lower than its 8,507 and 9,887, with the difference between the two entries about the same (3,034 and 3,314 against about 3,100 and 3,300). What moved both was not measured; #1460's request-head parse landed on `main` after that head, and `http1Next` is in both entries. The top frames by self Ir per request:
+
+`/plaintext`, explicit:
+
+```text
+    2364.8  nish.http1Next
+     887.5  nish.http1WriteResponseHead
+     391.4  tfbMain$fn.16.nish_main$arrow0$fn.16.nish_main$arrow1
+     338.0  TfbServer.resume
+     145.4  nish.http1PutBytes
+     126.9  nish.http1TakeLine
+      97.8  __memcpy_avx_unaligned_erms
+      77.2  nish.http1PutStatusLine
+      76.2  nish.http1PutCrlf
+      54.2  nish.http1PutDecimal
+      50.1  nish.Http1Connection.bodyRoom
+      41.1  nish.http1PutText
+```
+
+`/plaintext`, async:
+
+```text
+    2365.5  nish.http1Next
+     904.9  nish.http1WriteResponseHead
+     487.8  nish.serveTask$fn.9.tfbHandle.resume
+     464.2  nish.HttpHandler.drive
+     454.9  nish.serveOn$fn.9.tfbHandle.resume
+     295.7  nish.Router.match
+     244.3  nish.HttpHandler.start
+     238.4  nish.Router.walk
+     214.8  __memcpy_avx_unaligned_erms
+     182.0  nish_async_done
+     162.9  _int_free
+     145.8  nish.http1PutBytes
+```
+
+`/json`, explicit:
+
+```text
+    2442.6  nish.http1Next
+     804.3  nish.http1WriteResponseHead
+     575.5  tfbMain$fn.16.nish_main$arrow0$fn.16.nish_main$arrow1
+     434.2  nish.jsonWriterPutString
+     339.1  TfbServer.resume
+     165.1  nish.http1TakeLine
+     145.1  nish.http1PutBytes
+     136.1  nish.Http1Server.send
+     106.0  __memcpy_avx_unaligned_erms
+     100.0  nish.Http1Connection.inputRoom
+      84.0  nish.Http1Connection.feed
+      77.0  nish.http1PutStatusLine
+```
+
+`/json`, async:
+
+```text
+    2436.5  nish.http1Next
+     817.3  nish.http1WriteResponseHead
+     646.1  nish.serveOn$fn.9.tfbHandle.resume
+     544.2  nish.serveTask$fn.9.tfbHandle.resume
+     530.2  nish.HttpHandler.drive
+     434.1  nish.jsonWriterPutString
+     249.1  nish.Router.match
+     243.1  nish.HttpHandler.start
+     208.1  __memcpy_avx_unaligned_erms
+     181.1  nish_async_done
+     172.1  nish.Http1Server.send
+     165.1  nish.http1TakeLine
+```
+
+**From here on the gate is read against this section**: a fix's before is these tables, re-run with the same commands and durations, and its Ir per request is set against the 4,814 and 7,848 (`plaintext`) and 5,962 and 9,276 (`json`) above.
+
 <!-- http-codec-baseline:begin -->
 ## HTTP/1 codec baseline
 

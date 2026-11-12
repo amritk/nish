@@ -539,7 +539,7 @@ report() {
   if [ "$browser" = 1 ]; then echo "Browser head: a browser's request headers, one request at a time on /plaintext and /json."; fi
   lineup=(${contestants[@]+"${contestants[@]}"})
   twin=async
-  [ "$cores" = 1 ] && twin=entry-cores
+  [ "$cores" = 1 ] && twin="entry-cores"
   if wants plaintext; then report /plaintext entry entry-copy "$twin" "${plainLevels[@]}"; fi
   if wants json; then
     report /json entry entry-copy "$twin" "${jsonLevels[@]}"

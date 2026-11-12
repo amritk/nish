@@ -87,7 +87,9 @@ the database entry, a byte-identical copy of it and its async twin
 `/cached-queries` at 16, 64 and 256 connections, against a throwaway Postgres
 it starts in `build/tfb/pg` (`PG_BIN` names its binaries; `--only db` runs
 these alone). The server is pinned to CPU 0, Postgres to CPU 1 and `wrk` to the
-rest. Each server's peak RSS is recorded beside its figures, and the report
+rest. Under that pin every contestant is one process: the entry is given no
+worker count, and its default of one worker a CPU it may run on is then one, so
+it serves in the process it started in, as the async twin always does. Each server's peak RSS is recorded beside its figures, and the report
 says, per concurrency, whether the async twin is inside the band: WP49 stage
 6's gate. Its header says the rest of the method. `--browser-head` swaps
 TFB's three request headers for a browser's 759-byte head, sends one request at
@@ -99,8 +101,12 @@ and, for the gate, its
 [first measurement](../../docs/BENCHMARKS.md#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6),
 its
 [re-measurement after the `serve` and pool fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6)
-and its
-[re-measurement after the profile-led fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6).
+its
+[re-measurement after the profile-led fixes](../../docs/BENCHMARKS.md#techempower-the-async-entry-re-measured-after-the-profile-led-fixes-wp49-stage-6)
+and
+[the baseline the gate is read against](../../docs/BENCHMARKS.md#techempower-the-gates-baseline-checked-and-re-measured-wp49-stage-6),
+which has the `/proc` reading of each contestant's processes and the latest
+`profile.sh` figures.
 
 ### Profiling the async entry against the explicit one
 
