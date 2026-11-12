@@ -952,13 +952,21 @@ const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): 
   if (a < 0 || b - a !== n || b > toI32(bytes.length)) {
     return false
   }
-  for (let k: i32 = 0; k < n && a + k < toI32(bytes.length); k += 1) {
+  if (!fold) {
+    for (let k: i32 = 0; k < n; k += 1) {
+      if (toI32(word.charCodeAt(k)) !== toI32(bytes[a + k])) {
+        return false
+      }
+    }
+    return true
+  }
+  for (let k: i32 = 0; k < n; k += 1) {
     let c: i32 = toI32(word.charCodeAt(k))
     let d: i32 = toI32(bytes[a + k])
-    if (fold && c >= 65 && c <= 90) {
+    if (c >= 65 && c <= 90) {
       c += 32
     }
-    if (fold && d >= 65 && d <= 90) {
+    if (d >= 65 && d <= 90) {
       d += 32
     }
     if (c !== d) {
@@ -966,6 +974,31 @@ const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): 
     }
   }
   return true
+}
+
+/**
+ * Grows `p.head` so that `n` more bytes and sixteen of slack fit past
+ * `p.headLength`, keeping the bytes already there: `http1HeadAppend`'s rare
+ * path, apart so that the common one stays small enough to inline.
+ */
+const http1HeadGrow = (p: Http1Parser, n: i32): void => {
+  const at: i32 = p.headLength
+  let size: i32 = toI32(p.head.length)
+  if (size < HTTP1_FIRST_HEAD) {
+    size = HTTP1_FIRST_HEAD
+  }
+  while (size - at - 16 < n) {
+    if (size > 1073741823) {
+      panic("Http1Parser: a head of more than 2^31 - 1 bytes")
+    }
+    size = size * 2
+  }
+  const grown: u8[] = new Array<u8>(size)
+  const old: u8[] = p.head
+  if (at > 0 && at <= toI32(old.length) && at <= size) {
+    copyBytes(grown, 0, old, 0, at)
+  }
+  p.head = grown
 }
 
 /**
@@ -979,24 +1012,6 @@ const http1HeadIs = (bytes: u8[], a: i32, b: i32, word: string, fold: boolean): 
 const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   const n: i32 = to - from
   const at: i32 = p.headLength
-  let size: i32 = toI32(p.head.length)
-  if (n > size - at - 16) {
-    if (size < HTTP1_FIRST_HEAD) {
-      size = HTTP1_FIRST_HEAD
-    }
-    while (size - at - 16 < n) {
-      if (size > 1073741823) {
-        panic("Http1Parser: a head of more than 2^31 - 1 bytes")
-      }
-      size = size * 2
-    }
-    const grown: u8[] = new Array<u8>(size)
-    const old: u8[] = p.head
-    if (at > 0 && at <= toI32(old.length) && at <= size) {
-      copyBytes(grown, 0, old, 0, at)
-    }
-    p.head = grown
-  }
   const head: u8[] = p.head
   const buf: u8[] = p.buf
   // A line of up to 32 bytes is one or two vector stores; a longer one, or
@@ -1310,6 +1325,9 @@ const http1RequestLine = (p: Http1Parser): i32 => {
     return http1Fail(p, 505, "an HTTP major version other than 1")
   }
   p.minor = buf[i + 7] === 48 ? 0 : 1
+  if (b - a > toI32(p.head.length) - p.headLength - 16) {
+    http1HeadGrow(p, b - a)
+  }
   const at: i32 = http1HeadAppend(p, a, b)
   p.methodStart = at
   p.methodEnd = at + (methodEnd - a)
@@ -1343,6 +1361,9 @@ const http1FieldLine = (p: Http1Parser, keep: boolean): i32 => {
   let at: i32 = 0
   let i: i32 = a
   if (keep) {
+    if (b - a > toI32(p.head.length) - p.headLength - 16) {
+      http1HeadGrow(p, b - a)
+    }
     at = http1HeadAppend(p, a, b)
     i = a + (http1LowerName(p.head, at, at + (b - a)) - at)
   } else {
@@ -2043,14 +2064,29 @@ export const HTTP1_NO_ROOM: i32 = -1
 /** `http1WriteResponseHead`: a head the writer refuses to write. */
 export const HTTP1_REFUSED: i32 = -2
 
-/** Whether `bytes` is a non-empty run of tchars. */
+/**
+ * Whether `bytes` is a non-empty run of tchars: sixteen at a time, the last
+ * vector ending at the last byte and overlapping the one before it, and one
+ * at a time below sixteen.
+ */
 const http1BytesAreToken = (bytes: u8[]): boolean => {
-  for (const b of bytes) {
-    if (!http1IsTokenByte(toI32(b))) {
+  const n: i32 = toI32(bytes.length)
+  if (n < 16) {
+    for (let k: i32 = 0; k < n; k += 1) {
+      if (!http1IsTokenByte(toI32(bytes[k]))) {
+        return false
+      }
+    }
+    return n > 0
+  }
+  let k: i32 = 0
+  while (k >= 0 && k <= n - 16) {
+    if (http1NonTokenLanes(loadU8x16(bytes, k)) !== 0) {
       return false
     }
+    k += 16
   }
-  return toI32(bytes.length) > 0
+  return k === n || http1NonTokenLanes(loadU8x16(bytes, n - 16)) === 0
 }
 
 /**
