@@ -102,8 +102,9 @@ import {
   H3_REQUEST_CANCELLED,
   H3_REQUEST_REJECTED,
 } from "nish/net/http3-frame"
-import { Http3Server } from "nish/net/http3-server"
-import { QuicServerConfig } from "nish/net/quic"
+import { H3_SERVER_RECEIVE_BURST, Http3Server } from "nish/net/http3-server"
+import { QUIC_CONN_CID_LENGTH, QuicServerConfig } from "nish/net/quic"
+import { QUIC_MAX_CID_LENGTH } from "nish/net/quic-packet"
 import {
   ROUTER_BAD_ESCAPE,
   ROUTER_METHOD_NOT_ALLOWED,
@@ -115,7 +116,7 @@ import { TlsServerConfig } from "nish/net/tls"
 import { TLS_RECORD_DONE, TLS_RECORD_SIGN } from "nish/net/tls/record-server"
 import { TLS_TCP_POOL_FULL } from "nish/net/tls-tcp"
 import { URL_DECODE_ALLOW_NUL, URL_DECODE_ERR_SPACE, URL_DECODE_FORM, percentDecode } from "nish/net/url"
-import { netLocalPort, pollAdd, pollCreate, pollModify, pollRemove, pollWait } from "nish:net"
+import { netLocalPort, pollAdd, pollCreate, pollModify, pollRemove, pollWait, udpRecvFrom } from "nish:net"
 import { Secret } from "nish:secret"
 
 /** The base `digits` writes a content-length in, and the byte of its digit 0. */
@@ -168,6 +169,13 @@ const HTTP_SERVER_TOOK_THREE: i32 = 768
 const HTTP_SERVER_MAX_REQUESTS: i32 = 65536
 const HTTP_SERVER_MAX_BODY: i32 = 1073741824
 const HTTP_SERVER_MAX_HEAD: i32 = 1048576
+// A body's small tier (`T` is the lesser of this and `maxBody`), and its first array.
+const HTTP_SERVER_BODY_TIER: i32 = 65536
+const HTTP_SERVER_BODY_FIRST: i32 = 64
+/** The largest datagram (a GRO receive included) the drain reads, as `Http3Server.receive` reads them. */
+const HTTP_SERVER_UDP_SIZE: i32 = 65536
+/** A sender's address in `nish:net`'s form. */
+const HTTP_SERVER_UDP_ADDRESS: i32 = 18
 
 /** The caps an `HttpServer` holds itself to; every listener's carrier is checked against them. */
 export class HttpServerLimits {
@@ -524,13 +532,15 @@ const httpServerAllowAppend = (value: u8[], bytes: u8[], start: i32, end: i32): 
   }
 }
 
-/** A buffer size of at least `need`: `have` doubled until it is, starting from 64. */
-const httpServerGrown = (have: i32, need: i32): i32 => {
-  let size: i32 = have < 64 ? 64 : have
-  while (size < need && size < 1073741824) {
-    size = size * 2
-  }
-  return size < need ? need : size
+/**
+ * The size a `pending` buffer of `have` bytes grows to for `need`:
+ * `min(2^30, max(need, 2 × have))`, in `i64` so the doubling cannot wrap.
+ * The caller has refused a `need` past 2^30.
+ */
+const httpServerPendingSize = (have: i32, need: i64): i32 => {
+  const doubled: i64 = toI64(have) * toI64(2)
+  const size: i64 = need > doubled ? need : doubled
+  return size > toI64(HTTP_SERVER_MAX_BODY) ? HTTP_SERVER_MAX_BODY : toI32(size)
 }
 
 /** Whether `bytes[start .. end)` is exactly `text`. */
@@ -675,6 +685,9 @@ export class HttpServer {
   private contentLengthName: u8[]
   /** The Alt-Svc value, set by `listenHttp3`; null without an HTTP/3 listener. */
   private altSvc: u8[] | null = null
+  /** `alt-svc` alone, and its value once there is one: the fields of an HTTP/2 over TLS answer the server gives itself. */
+  private altNames: u8[][]
+  private altValues: u8[][]
   private bodyTimeout: i64 = 0
   private idleTimeout: i64 = 0
   /** When the current turn's sockets were ready (`monotonicNanos`): a head read in it is stamped with this. */
@@ -720,6 +733,10 @@ export class HttpServer {
 
   // HTTP/3: the carrier, and per slot a stream table of `perConnection3` entries.
   private h3: Http3Server | null = null
+  /** What the drain reads datagrams into, made when it begins: a datagram, its sender and its GRO segment size. */
+  private h3Rx: u8[]
+  private h3From: u8[]
+  private h3Meta: i32[]
   private h3Gen: i32[]
   private h3Streams: i64[]
   private h3Reqs: i32[]
@@ -746,6 +763,8 @@ export class HttpServer {
   private h2cFd: i32 = -1
   private prefaceTimeout: i32 = 0
   private perConnection3: i32 = 1
+  /** The HTTP/3 listener's UDP socket, or -1. */
+  private h3Fd: i32 = -1
   /** Set by `drain`: accept nothing more and close each connection once it is idle. */
   private draining: boolean = false
   /** Whether `json` gave out the writer for a value `sendJson` has not yet sent. */
@@ -805,6 +824,9 @@ export class HttpServer {
     this.allowMasks = []
     this.allowBytes = []
     this.noFields = []
+    this.h3Rx = []
+    this.h3From = new Array<u8>(HTTP_SERVER_UDP_ADDRESS)
+    this.h3Meta = [HTTP_SERVER_ZERO, HTTP_SERVER_ZERO]
     this.outNamesBy = []
     this.outValuesBy = []
     this.digitBufs = []
@@ -812,6 +834,12 @@ export class HttpServer {
       this.digitBufs.push(new Array<u8>(d))
     }
     this.altSvcName = httpFieldBytes("alt-svc")
+    this.altNames = [this.altSvcName]
+    this.altValues = [this.altSvcName]
+    if (this.altSvcMaxAge === 0) {
+      this.altSvc = httpFieldBytes("clear")
+      this.altValues[0] = httpFieldBytes("clear")
+    }
     this.contentLengthName = httpFieldBytes("content-length")
     this.hostName = httpFieldBytes("host")
     this.outNames = []
@@ -1039,6 +1067,7 @@ export class HttpServer {
     }
     this.perConnection3 = per < toI64(1) ? 1 : toI32(per)
     this.h3 = new Http3Server(quic, config, fd, slots, entropy)
+    this.h3Fd = fd
     this.h3Gen = new Array<i32>(slots)
     this.h3Count = new Array<i32>(slots)
     this.h3Streams = new Array<i64>(slots * this.perConnection3)
@@ -1046,9 +1075,17 @@ export class HttpServer {
     for (let k: i32 = 0; k < toI32(this.h3Reqs.length); k++) {
       this.h3Reqs[k] = -1
     }
-    const port: i32 = this.altSvcPort > 0 ? this.altSvcPort : netLocalPort(fd)
-    this.altSvc = httpFieldBytes(this.altSvcMaxAge === 0 ? "clear" : `h3=":${port}"; ma=${this.altSvcMaxAge}`)
+    if (this.altSvcMaxAge > 0) {
+      const port: i32 = this.altSvcPort > 0 ? this.altSvcPort : netLocalPort(fd)
+      this.setAltSvc(httpFieldBytes(`h3=":${port}"; ma=${this.altSvcMaxAge}`))
+    }
     pollAdd(this.loop, fd, H1_WANT_READ, HTTP_SERVER_H3_SOCKET)
+  }
+
+  /** Sets the `alt-svc` value every HTTP/1.1 and HTTP/2 over TLS answer carries. */
+  private setAltSvc(value: u8[]): void {
+    this.altSvc = value
+    this.altValues[0] = value
   }
 
   // ---- The loop -------------------------------------------------------------------
@@ -1124,6 +1161,7 @@ export class HttpServer {
         timeout = due
       }
     }
+    timeout = this.sweepCap(now, timeout)
     const n: i32 = pollWait(this.loop, this.readyFds, timeout)
     now = monotonicNanos()
     this.turnAt = now
@@ -1163,6 +1201,21 @@ export class HttpServer {
       this.expireAll(now)
     }
     return this.queueCount
+  }
+
+  /**
+   * `timeout` shortened to wake by the next sweep while any connection is
+   * open, so that `bodyTimeout`, `idleTimeout`, `prefaceTimeout` and the
+   * HTTP/1.1 carrier's own clocks are enforced on a quiet server under
+   * `wait(-1)` too, at most one sweep late.
+   */
+  private sweepCap(now: i64, timeout: i32): i32 {
+    if (this.connections() === 0) {
+      return timeout
+    }
+    const left: i64 = this.sweepAt - now
+    const cap: i32 = left <= 0 ? HTTP_SERVER_ZERO : toI32(left / HTTP_SERVER_NANOS_PER_MS) + 1
+    return timeout < 0 || cap < timeout ? cap : timeout
   }
 
   /**
@@ -1401,7 +1454,7 @@ export class HttpServer {
     }
     const at: i32 = this.h1Current[slot]
     if (at >= 0 && this.requests[at].state === HTTP_SERVER_PARKED && this.roomy(conn)) {
-      this.enqueue(this.requests[at])
+      this.h1Ready(this.requests[at])
     }
   }
 
@@ -1433,6 +1486,11 @@ export class HttpServer {
     r.secure = false
     r.slot = slot
     r.gen = this.h1Gen[slot]
+    if (r.methodIs("CONNECT")) {
+      // Its 501 ends the connection: the client may already be sending what
+      // it meant for a tunnel.
+      conn.closeAfter = true
+    }
     this.admit(r)
     this.h1Current[slot] = r.index
   }
@@ -1453,10 +1511,32 @@ export class HttpServer {
     }
     const r: HttpServerRequest = this.requests[at]
     if (this.roomy(conn)) {
-      this.enqueue(r)
+      this.h1Ready(r)
     } else {
       r.state = HTTP_SERVER_PARKED
     }
+  }
+
+  /** A whole HTTP/1.1 request with room for its answer: answered at once when `h1Screen` says so, else queued for `take`. */
+  private h1Ready(r: HttpServerRequest): void {
+    const status: i32 = this.h1Screen(r)
+    if (status === 0) {
+      this.enqueue(r)
+      return
+    }
+    r.state = HTTP_SERVER_HELD
+    this.empty(r, status)
+  }
+
+  /** The status an HTTP/1.1 request is answered with at once, or 0 to serve it: 501 for CONNECT and 204 for `OPTIONS *`, as `screen` answers them on HTTP/2 and HTTP/3. */
+  private h1Screen(r: HttpServerRequest): i32 {
+    if (r.methodIs("CONNECT")) {
+      return 501
+    }
+    if (r.targetEnd - r.targetStart === 1 && toI32(r.head[r.targetStart]) === 42 && r.methodIs("OPTIONS")) {
+      return 204
+    }
+    return 0
   }
 
   /** `H1_WRITE`: the carrier has room again for the response under way. */
@@ -1576,6 +1656,10 @@ export class HttpServer {
     r.left = -1
     r.ended = false
     this.route(r)
+    const declared: i32 = this.declared(r)
+    if (declared > toI32(r.body.length)) {
+      this.growBody(r, declared)
+    }
   }
 
   /**
@@ -1615,16 +1699,61 @@ export class HttpServer {
     r.paramCount = route >= 0 ? this.router.paramCount(route) : 0
   }
 
-  /** Appends `buf[start .. start + n)` to `r`'s body. */
+  /** Appends `buf[start .. start + n)` to `r`'s body; the caller has kept it within `maxBody`. */
   private append(r: HttpServerRequest, buf: u8[], start: i32, n: i32): void {
     const need: i32 = r.bodyLength + n
     if (toI32(r.body.length) < need) {
-      const grown: u8[] = new Array<u8>(httpServerGrown(toI32(r.body.length), need))
-      copyBytes(grown, HTTP_SERVER_ZERO, r.body, HTTP_SERVER_ZERO, r.bodyLength)
-      r.body = grown
+      this.growBody(r, need)
     }
     copyBytes(r.body, r.bodyLength, buf, start, n)
     r.bodyLength = need
+  }
+
+  /**
+   * Grows `r`'s body to hold `need` bytes, in the two tiers of
+   * docs/http-one-handler.md §6. With `T = min(65536, maxBody)`, a body that
+   * fits in `T` grows to `min(T, max(need, 2 × current))`, from 64; one
+   * past `T` is replaced once by an array of exactly `maxBody`, which never
+   * grows again. An entry so holds less than `maxBody + 3 × T` in body
+   * arrays, the abandoned ones included.
+   */
+  private growBody(r: HttpServerRequest, need: i32): void {
+    const have: i32 = toI32(r.body.length)
+    const tier: i32 = this.maxBody < HTTP_SERVER_BODY_TIER ? this.maxBody : HTTP_SERVER_BODY_TIER
+    let size: i32 = this.maxBody
+    if (need <= tier) {
+      size = have < HTTP_SERVER_BODY_FIRST ? HTTP_SERVER_BODY_FIRST : have * 2
+      if (size < need) {
+        size = need
+      }
+      if (size > tier) {
+        size = tier
+      }
+    }
+    const grown: u8[] = new Array<u8>(size)
+    copyBytes(grown, HTTP_SERVER_ZERO, r.body, HTTP_SERVER_ZERO, r.bodyLength)
+    r.body = grown
+  }
+
+  /**
+   * The `content-length` `r` declared, or -1 for none: its body array is
+   * grown to it at once, in one step rather than many. The carrier has
+   * checked the value's syntax and refused one past `maxBody`.
+   */
+  private declared(r: HttpServerRequest): i32 {
+    const i: i32 = r.header("content-length")
+    if (i < 0) {
+      return -1
+    }
+    let n: i32 = 0
+    for (let k: i32 = r.valueStart(i); k < r.valueEnd(i); k++) {
+      const d: i32 = toI32(r.head[k]) - HTTP_SERVER_ZERO_DIGIT
+      if (d < 0 || d > 9 || n > (this.maxBody - d) / HTTP_SERVER_TEN) {
+        return -1
+      }
+      n = n * HTTP_SERVER_TEN + d
+    }
+    return n
   }
 
   /** Queues `r` for `take`. The ring holds every request, so it never fills. */
@@ -1669,13 +1798,18 @@ export class HttpServer {
     }
   }
 
-  /** Appends bytes to `r`'s pending buffer, growing it once to the largest response it has held. */
+  /**
+   * Appends bytes to `r`'s pending buffer, grown to
+   * `min(2^30, max(needed, 2 × current))`; `write` has refused a remainder
+   * past 2^30.
+   */
   private keep(r: HttpServerRequest, buf: u8[], off: i32, len: i32): void {
     const live: i32 = r.pendingEnd - r.pendingStart
     if (toI32(r.pending.length) - r.pendingEnd < len) {
+      const need: i64 = toI64(live) + toI64(len)
       const target: u8[] =
-        toI32(r.pending.length) < live + len
-          ? new Array<u8>(httpServerGrown(toI32(r.pending.length), live + len))
+        toI64(r.pending.length) < need
+          ? new Array<u8>(httpServerPendingSize(toI32(r.pending.length), need))
           : r.pending
       copyBytes(target, HTTP_SERVER_ZERO, r.pending, r.pendingStart, live)
       r.pending = target
@@ -2047,6 +2181,12 @@ export class HttpServer {
     }
     if (r.quiet || len === 0) {
       return HANDLER_SENT
+    }
+    if (toI64(r.pendingEnd - r.pendingStart) + toI64(len) > toI64(HTTP_SERVER_MAX_BODY)) {
+      // A remainder past 2^30, the longest array the runtime grows to:
+      // nothing of it is written, and the response is cut.
+      this.abort(r)
+      return HANDLER_DROPPED
     }
     if (r.left >= 0) {
       r.left -= len
@@ -2694,7 +2834,7 @@ export class HttpServer {
       const f: HttpFields = conn.fields
       const status: i32 = this.screen(f)
       if (status > 0) {
-        this.h2Direct(conn, id, status, conn.endStream)
+        this.h2Direct(slot, conn, id, status, conn.endStream)
         return
       }
       const e: i32 = this.h2Entry(slot)
@@ -2733,7 +2873,7 @@ export class HttpServer {
       }
       if (r.bodyLength + conn.dataLength > this.maxBody) {
         this.release(r)
-        this.h2Direct(conn, id, HTTP_SERVER_TOO_LARGE, conn.endStream)
+        this.h2Direct(slot, conn, id, HTTP_SERVER_TOO_LARGE, conn.endStream)
         return
       }
       this.append(r, conn.data, conn.dataStart, conn.dataLength)
@@ -2755,10 +2895,14 @@ export class HttpServer {
   /**
    * Answers stream `id` with `status` and no body, then resets it with
    * NO_ERROR when the client is still sending (RFC 9113 §8.1); with
-   * INTERNAL_ERROR when there is no room for the answer.
+   * INTERNAL_ERROR when there is no room for the answer. Over TLS it
+   * carries `alt-svc` like every other answer; over h2c it carries none.
    */
-  private h2Direct(conn: Http2Connection, id: i32, status: i32, ended: boolean): void {
-    if (conn.respond(id, status, this.noFields, this.noFields, true) !== 0) {
+  private h2Direct(slot: i32, conn: Http2Connection, id: i32, status: i32, ended: boolean): void {
+    const alt: boolean = this.altSvc !== null && !this.h2Clear[slot]
+    const names: u8[][] = alt ? this.altNames : this.noFields
+    const values: u8[][] = alt ? this.altValues : this.noFields
+    if (conn.respond(id, status, names, values, true) !== 0) {
       conn.reset(id, H2_INTERNAL_ERROR)
     } else if (!ended) {
       conn.reset(id, H2_NO_ERROR)
@@ -2880,7 +3024,10 @@ export class HttpServer {
     h3.clock(now / toI64(1000))
     if (this.h3Readable) {
       let round: i32 = 0
-      while (round < HTTP_SERVER_H3_ROUNDS && h3.receive(ms, key) > 0) {
+      while (
+        round < HTTP_SERVER_H3_ROUNDS &&
+        (this.draining ? this.h3Drained(h3, ms, key) : h3.receive(ms, key)) > 0
+      ) {
         round += 1
       }
     }
@@ -2891,6 +3038,63 @@ export class HttpServer {
       slot = h3.ready()
     }
     h3.flush(ms)
+  }
+
+  /**
+   * `receive` for a draining server: the same reads, but only a datagram a
+   * connection already owns goes on, so the drain starts no connection. An
+   * Initial for a new one, and anything else no connection owns, is dropped.
+   */
+  private h3Drained(h3: Http3Server, ms: i64, key: Secret<u8[]>): i32 {
+    if (toI32(this.h3Rx.length) === 0) {
+      this.h3Rx = new Array<u8>(HTTP_SERVER_UDP_SIZE)
+    }
+    const rx: u8[] = this.h3Rx
+    let count: i32 = 0
+    for (let burst: i32 = 0; burst < H3_SERVER_RECEIVE_BURST; burst++) {
+      const n: i32 = udpRecvFrom(
+        this.h3Fd,
+        rx,
+        HTTP_SERVER_ZERO,
+        HTTP_SERVER_UDP_SIZE,
+        this.h3From,
+        this.h3Meta
+      )
+      if (n < 0) {
+        return count
+      }
+      const segment: i32 = this.h3Meta[0] > 0 ? this.h3Meta[0] : n
+      let at: i32 = 0
+      while (at < n) {
+        const length: i32 = n - at < segment ? n - at : segment
+        if (this.h3Owned(h3, rx, at, length)) {
+          h3.datagram(rx, at, length, this.h3From, ms, key)
+        }
+        count += 1
+        at += length
+      }
+    }
+    return count
+  }
+
+  /** Whether a connection of `h3` owns the datagram `buf[at .. at + len)`, by its first packet's Destination Connection ID, read as `Http3Server.datagram` reads it. */
+  private h3Owned(h3: Http3Server, buf: u8[], at: i32, len: i32): boolean {
+    if (len < 1) {
+      return false
+    }
+    let dcidAt: i32 = at + 1
+    let dcidLength: i32 = QUIC_CONN_CID_LENGTH
+    if ((toI32(buf[at]) & 0x80) !== 0) {
+      if (len < 6) {
+        return false
+      }
+      dcidLength = toI32(buf[at + 5])
+      dcidAt = at + 6
+    }
+    if (dcidLength > QUIC_MAX_CID_LENGTH || dcidAt + dcidLength > at + len) {
+      return false
+    }
+    return h3.index.find(buf, dcidAt, dcidLength) >= 0
   }
 
   /** Serves `slot`'s HTTP/3 events, then pushes its responses. */
