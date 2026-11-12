@@ -8,7 +8,7 @@ the test that pins each property. It is written with the code rather than
 after an audit, so that the audit of the HTTP application layer starts from
 evidence.
 
-Anchors are function names in `std/net/router.ts` at `ad1dbeb`, the last
+Anchors are function names in `std/net/router.ts` at `2ab39e2`, the last
 commit to change it on the head that merges this record.
 
 **Result.** Every route a table would hold ambiguously is refused when it is
