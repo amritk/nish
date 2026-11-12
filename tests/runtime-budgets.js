@@ -855,11 +855,11 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * were declared widest first, which took out the padding the path fields had
  * added to the object (NL9010).
  *
- * Moved to **110,984 bytes** (+72) by path MTU discovery (RFC 9000 §14.3): the
+ * Moved to **110,976 bytes** (+64) by path MTU discovery (RFC 9000 §14.3): the
  * connection's path MTU, its limit, the search's bounds, the probe in flight and
  * its counters, and recovery's datagram size.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 110984
+export const HTTP3_SERVER_SLOT_BYTES = 110976
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

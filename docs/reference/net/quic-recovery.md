@@ -176,7 +176,7 @@ class QuicRecovery
 | `new QuicRecovery()` | Makes the state a new connection has, as `reset` leaves it: every space empty, the RTT estimate and the window at their initial values. |
 | `congestionEvents: i32` | How many congestion events reduced the window, and how many of them were persistent congestion. |
 | `congestionWindow: i64` | congestion_window (B.2), in bytes. |
-| `datagramSize: i64` | max_datagram_size (B.1): the largest datagram the connection sends on this path, 1200 until path MTU discovery validates more. The initial and minimum windows and congestion avoidance's step are counted in it. |
+| `datagramSize: i64` | max_datagram_size (B.1): the largest datagram the connection sends on this path, 1200 until path MTU discovery validates more. The initial and minimum windows and congestion avoidance's step are counted in it. `resetPath`, which the constructor runs, sets it to `QUIC_RECOVERY_DATAGRAM_SIZE`; a field's initializer must be a literal. |
 | `ecnCongestionEvents: i32` | How many congestion events a rise in the ECN-CE count caused (§7.1). |
 | `ecnState: i32` | ECN's state, `QUIC_RECOVERY_ECN_TESTING` until a marked packet's counts validate or fail. |
 | `ecnTestLost: i32` | How many marked packets were lost before ECN validated: once it reaches `ecnTestRecorded`, ECN fails (RFC 9000 A.4). |
