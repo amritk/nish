@@ -1510,6 +1510,10 @@ export const identifierBuiltinCalleesNamed = (
   if (name === "wrappingAdd" || name === "wrappingSub" || name === "wrappingMul") {
     return out
   }
+  // WP27 S5: a load of `@nish_errno_slot`; the foreign calls fill it.
+  if (name === "cErrno") {
+    return out
+  }
   return out
 }
 
