@@ -74,9 +74,27 @@ stages:
       - id: head-measure
         content: Put before/after Ir per request (total and head-write frames), the http1-request table, the browser-head wrk run, and run.sh medians with the band for /plaintext and /json in the PR body and a Measured trailer; regenerate tests/self/goldens/checked and docs/reference, and add DECLARED entries to tests/nish-cmp.js if any corpus program's IR moves
         status: pending
+  - id: codegen
+    title: "perf(codegen): close the HTTP/1 parser's remaining instructions with compiler support"
+    goal: The explicit TFB entry's /plaintext Ir per request reaches about 4,100 or below from codec's 4,817 (main @ 44358c01), via ONE general compiler change the worker chooses and justifies in the PR, either a dynamic byte shuffle (pshufb/tbl-style swizzle) in nish:simd that std/net/http1-codec.ts then uses for name lowering and token classing, or a codegen improvement (register allocation, spills, reloads, checked index arithmetic) that removes the glue the codec profile attributes, with no bench/http1-request case above base and every other program's IR change DECLARED.
+    verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js <touched sections> && node tests/run.js simd && node tests/run.js net_http1 && node tests/run.js net_http1_parse_diff && WASI_SYSROOT=/usr node tests/run.js wasi (skip line read) && node tests/run.js performance && bash scripts/fetch-seed.sh --force && NISH_BOOTSTRAP=build/seed/bin/nish node tests/nish-cmp.js && node tests/self/goldens.js --update && node tests/differential/goldens.js --update (new positive cases) && node scripts/gen-reference.mjs --check && bash bench/techempower/profile.sh --only plaintext (before on main, after on the branch) && node bench/http1-request/run.mjs --instructions --base 44358c01
+    status: pending
+    todos:
+      - id: codegen-choose
+        content: From codec's per-line attribution (http1LowerName and http1NonTokenLanes ~300 Ir, OWS trims, the request-line take and head append, ~356 Ir of moves/spills/reloads/ALU glue), measure which option removes more Ir per request for the least compiler risk, and say why in the PR with the numbers. The rolling freeze applies, so src/ may not itself use a new builtin until the next release; std/ may.
+        status: pending
+      - id: codegen-build
+        content: Implement it. A new nish:simd builtin is a new construct, so it ships the full checklist in docs/ARCHITECTURE.md "How to add a construct" (golden .ll, llvm-as pass, native round trip with expected stdout, negative tests for its NL codes, LANGUAGE.md rule, IR cookbook entry, guide page, NEON and SSE agreement, WASI and Node emit-ts paths). A codegen change is pinned by tests that fail without it.
+        status: pending
+      - id: codegen-use
+        content: Use it in std/net/http1-codec.ts where the attribution points, keeping net_http1_parse_diff (old.ts frozen at 44358c01's parser), every net_http1_* test, fuzz-smoke and the performance gate green, with the security record updated.
+        status: pending
+      - id: codegen-measure
+        content: Put before/after profile.sh Ir per request for /plaintext and /json (explicit and async), bench/http1-request --instructions and timed (11+ rounds) with every case at or below base, and the compiler's own size/perf effect (tests/run.js performance) in the PR body with a Measured line; add narrow DECLARED entries for every corpus program whose IR moves.
+        status: pending
   - id: regate
     title: "docs(runtime): re-measure the explicit TFB entry against uWS and go-fasthttp after the codec work"
-    goal: On main with codec and head merged, profile.sh and run.sh re-measure /plaintext and /json against the baseline and the twins, docs/BENCHMARKS.md and WP49 §6 item 3 carry the figures, and the acceptance criteria are answered with numbers, met or not.
+    goal: On main with codec, head and codegen merged, profile.sh and run.sh re-measure /plaintext and /json against the baseline and the twins, docs/BENCHMARKS.md and WP49 §6 item 3 carry the figures, and the acceptance criteria are answered with numbers, met or not.
     verification: npm run lint && node docs/check-links.mjs && bash bench/techempower/profile.sh --only plaintext && bash bench/techempower/run.sh (plaintext and json rows, entry, async, uws, go-fasthttp) && node bench/http1-request/run.mjs --instructions --base <baseline SHA> && node bench/http1-parse/run.mjs
     status: pending
     todos:
@@ -152,11 +170,17 @@ and `docs/security/http1-codec.md` are codec's; head adds its DECLARED lines
 and its record entry after codec merges, rebasing on it).
 Candidate (b). TFB's rule check goes in the PR body.
 
+### codegen
+
+**Owns:** `src/**`, `runtime/nish.d.ts`, `runtime/*.c` only if the builtin needs runtime support, `std/net/http1-codec.ts`, `std/simd*` if a std wrapper is needed, `tests/cases/**` (new cases), `tests/link/net_http1_parse_diff/**`, `tests/link/net_http1/**`, `tests/link/simd*/**`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/guide/**` (the nish:simd page), `docs/security/http1-codec.md`, `tests/nish-cmp.js`, `tests/differential/**` goldens, generated goldens and reference.
+
+Added at the owner's request (2026-11-12) after codec merged short of its parse goal. Depends on: codec (merged). Merges after head (#1457), because both touch `tests/nish-cmp.js` and `docs/security/http1-codec.md`; it updates from main before its merge. Regate waits for it.
+
 ### regate
 
 **Owns:** `docs/BENCHMARKS.md`, `docs/wp49-async-server.md` (§6 item 3 only), `bench/techempower/README.md`
 
-Depends on: codec and head (start and merge), and #1407's regate (merge —
+Depends on: codec, head and codegen (start and merge), and #1407's regate (merge —
 both edit BENCHMARKS.md and WP49 §6).
 
 ## Real traffic, not just the benchmark
