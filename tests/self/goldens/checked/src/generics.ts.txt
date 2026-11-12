@@ -355,7 +355,7 @@ function containsType(ctx: CheckContext, inner: i32, outer: i32): boolean -> @co
   callee +16:13 containsType -> @containsType
 function growingArgument(ctx: CheckContext, previous: i32[], args: i32[]): i32 -> @growingArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: containsType nish_panic_index
+  calls: containsType
   pointer ctx: size=320 writesThrough=false captured=false passedTo=containsType#0
   pointer previous: size=0 writesThrough=true captured=false
   pointer args: size=0 writesThrough=true captured=false

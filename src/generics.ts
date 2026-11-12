@@ -2087,6 +2087,12 @@ const resolveFunctionArgument = (
     if (type === T_ERROR) {
       return null
     }
+    // A runner that checks the body it is handed takes no reference at all
+    // (NL2734), whatever place the reference is read from.
+    const runsAtCall = captureMode(template) === CAPTURE_CALL && !promisesAnswer(fnType)
+    if (!runsAtCall && ctx.table.isFnRef(ctx.table.stripNull(type))) {
+      return referenceArgument(ctx, call, template, index, arg, written, type, names, bindings, scope)
+    }
     if (inLocal === null && ctx.table.isFnRef(ctx.table.stripNull(type))) {
       // The arrow the call is rewritten into reads the field or element at
       // each call the callee makes, where JavaScript reads it once at the
