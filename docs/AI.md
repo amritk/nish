@@ -96,6 +96,14 @@ what remains. A warning can carry a fix too, and `--fix` applies it only when th
 compiles and the warning would be printed: `NL9007`'s inserts the guard that
 proves an index in range (not under `--no-warn-performance`).
 
+Under `--warn-portability`, a portability warning can carry a **`review`**
+after `fix`, in the same edit shape: a rewrite that makes the line read the
+same under Node and compiles to byte-identical IR, but changes the source's
+words, so `--fix` never applies it. Today that is `NL8006`, an integer
+division, which `review` wraps in its type's conversion (`toI32(a / b)`).
+The loop: run `--fix`, compile with `--warn-portability --json`, apply each
+`review` you agree with, compile again and check the warning is gone.
+
 When it compiles, **check the native build against the program's TypeScript
 reading**. Run the project's tests natively; where it has none, write the
 program back out and run both:

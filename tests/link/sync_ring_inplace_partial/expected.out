@@ -1,0 +1,31 @@
+PASS  the ring's data follows its header
+PASS  record 1 of 8 bytes is pushed
+PASS  record 2 of 8 bytes is pushed
+PASS  record 3 of 8 bytes is pushed
+PASS  the consumer takes the first record
+PASS  a reservation that fits the rest of the lap is lent
+PASS  its window is the ring's bytes where the producer is
+PASS  one that must wrap answers empty while the free bytes are not contiguous
+PASS  the consumer takes the second record
+PASS  whole
+PASS  and is lent once the consumer has moved
+PASS  at the start of the lap
+PASS  behind a skip marker at the end of the last
+PASS  its length word at 0
+PASS  a reservation of 5 (12 bytes) does not fit the 8 free
+PASS  one of 4 (8 bytes) fills them exactly
+PASS  a full ring answers empty
+PASS  peek lends the third record pushed
+PASS  then the one reserved in the rest of the lap
+PASS  then steps over the skip marker to the one that wrapped
+PASS  tryPop takes the one that filled the ring
+PASS  whole
+PASS  leaving none
+PASS  a record of 8 is pushed into the empty ring
+PASS  and taken
+PASS  an empty ring has room for the largest reservation where it must wrap
+PASS  behind a skip marker
+PASS  which tryPop steps over
+PASS  to the record
+PASS  unlink the region
+nish/sync/ring in place, partly full: 30 passed, 0 failed, 0 skipped

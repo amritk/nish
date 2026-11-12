@@ -194,11 +194,11 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-sha256.c` | The SHA-256 block on SHA-NI or the ARMv8 SHA-256 instructions: `nish_sha256_compress` and `nish_sha256_hw` | 512 (`RUNTIME_SHA256_TEXT_BUDGET`) | 495 (2026-10-30) |
 | `runtime/runtime-chacha20.c` | ChaCha20's keystream, eight blocks at once on AVX2 or four on NEON: `nish_chacha20_xor` and `nish_chacha20_hw` | 3,840 (`RUNTIME_CHACHA20_TEXT_BUDGET`) | 3,771 (2026-11-03) |
 | `runtime/runtime-bytes.c` | the byte-class runs of `nish/bytes`: JSON's blanks, the digits and a JSON string's plain bytes, their scalar, SSE2 and AVX2 paths, the UTF-8 step and their resolver ([wp38](wp38-simd.md) S6a) | 1,536 (`RUNTIME_BYTES_TEXT_BUDGET`) | 1,303 (2026-10-23) |
-| `runtime/runtime-checksum.c` | CRC-32 on PCLMULQDQ folding (x86-64) or the CRC32 instructions (AArch64), the nibble-table tail and `nish_crc32_hw` ([wp38](wp38-simd.md) CRC) | 768 (`RUNTIME_CHECKSUM_TEXT_BUDGET`) | 718 (2026-10-30) |
+| `runtime/runtime-checksum.c` | CRC-32 on PCLMULQDQ folding (x86-64) or the CRC32 instructions (AArch64), the nibble-table tail and `nish_crc32_hw` ([wp38](wp38-simd.md) CRC); Adler-32 on SSSE3 or NEON and `nish_adler32_hw` (wp38 S8) | 1,280 (`RUNTIME_CHECKSUM_TEXT_BUDGET`) | 1,153 (2026-11-11) |
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
 | `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore, and the restore bytes | 2,048 (`RUNTIME_TERM_TEXT_BUDGET`) | 1,825 (2026-10-24) |
-| `runtime/runtime-sandbox.c` | `--sandbox`: the capability drop, the Landlock ruleset and the seccomp filter `nish_sandbox` applies from `.preinit_array`, and `nish_sandbox_check`, with the `fs.read=<dir>` / `fs.write=<dir>` scope rules ([wp37](wp37-os-sandbox.md) stages 1 and 2, [security/sandbox.md](security/sandbox.md)) | 2,560 (`RUNTIME_SANDBOX_TEXT_BUDGET`) | 2,545 (2026-10-30) |
+| `runtime/runtime-sandbox.c` | `--sandbox`: the capability drop, the Landlock ruleset and the seccomp filter `nish_sandbox` applies from `.preinit_array`, and `nish_sandbox_check`, with the `fs.read=<dir>` / `fs.write=<dir>` scope rules ([wp37](wp37-os-sandbox.md) stages 1 and 2, [security/sandbox.md](security/sandbox.md)), and the spawn-target check that keeps a granted program's interpreter out of reach (SBX-1) | 3,328 (`RUNTIME_SANDBOX_TEXT_BUDGET`) | 3,143 (2026-11-11) |
 | `runtime/runtime-shm.c` | `nish/sync/shm` and `nish/sync/ring`: the region handle table, a named region's create, open, unlink and close, the 32- and 64-bit slot atomics with their bounds, alignment and ordering checks, the byte copies and the futex wait and wake ([wp47](wp47-shared-memory.md), [security/shm.md](security/shm.md)) | 2,816 (`RUNTIME_SHM_TEXT_BUDGET`) | 2,539, 2,576 threaded (2026-10-30) |
 | `runtime/runtime-async.c` | the executor of [wp49](wp49-async-server.md): the task slabs, the epoll (kqueue) set, the timer heap, a spawned `string`'s copy, and part 7's cancellation: the cancel flag, a task's pending waits, the bounded waits' and `cancelAfter`'s timers | 3,840 (`RUNTIME_ASYNC_TEXT_BUDGET`) | 3,797 (2026-11-09) |
 
@@ -256,6 +256,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-11-09 | cancellation (WP49 stage 5, part 7): `runtime-async.c` 2,627 → 3,797 for a task's cancel flag and its list of pending waits, the bounded waits' and `cancelAfter`'s timers, and ASYNC-18's unlink of a task that finishes queued | async 3,840 |
 | 2026-11-11 | `spawnPipedWithin`, a captured run with a deadline (#1387): `runtime-os.c` 4,858 → 5,225. The capture loop moved into `nish_spawn_piped_within` (1,444 under `-ffunction-sections`, 1,089 as `nish_spawn_piped`) with the monotonic deadline, the bounded `poll` waits, and the `WNOHANG` reap that keeps the final wait inside the deadline (docs/security/runtime.md RT-49); `nish_spawn_piped` is a 9-byte call with no deadline | os 5,376 |
 | 2026-11-11 | WP44's streaming reads, `fileOpen`, `fileReadAt`, `fileSize`, `fileClose` (docs/wp44-streaming-files.md): `runtime-os.c` 5,225 → 5,705. Under `-ffunction-sections`, `nish_file_open` 169 (the empty-or-NUL path refusal and the `fstat` regular-file test), `nish_file_read_at` 115 (the `pos` refusal and the `EINTR` retry), `nish_file_size` 50, `nish_file_close` 27, each refusing a negative descriptor before the call, and `nish_fs_err` 96, the errno table that gives Darwin and WASI Linux's numbers (docs/security/runtime.md RT-50) | os 5,888 |
+| 2026-11-11 | the Adler-32 kernels, wp38 S8: `runtime-checksum.c` 718 → 1,153. The SSSE3 kernel with its tail inlined 297, `nish_adler32_hw` and its resolver 113, the entry point 22; the other 3 bytes are CRC-32's folding kernel, 514 → 517 in this build. The AArch64 build is 752, not gated (the shards run on x86-64). Raised in place rather than split out: the same seam reads the same `nish_array` window, and section GC keeps only the half a program reaches | checksum 1,280 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -435,6 +436,12 @@ resolver 121 and the entry point 25. It is an eleventh unit rather than more of
 seam; a module compiled for the host and linked with `--profile wasm` gets the
 file's wasm32 stub, whose `nish_crc32_hw` answers 0. A program that never
 reaches a CRC keeps none of it, by section GC.
+
+S8 put Adler-32 in the same unit on the same seam: `nish_adler32_hw` answers
+once per process (CPUID leaf 1, ECX bit 9, SSSE3, on x86-64; always yes on
+little-endian AArch64, where NEON is baseline), `NISH_ADLER32=soft` pins the
+Nish loop, and the compiler branches in front of `adler32Walk` as it does in
+front of `crc32Walk`. The unit is 1,153 bytes on x86-64 with it.
 
 ### Checked arithmetic
 

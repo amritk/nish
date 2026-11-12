@@ -370,7 +370,7 @@ for (const m of machines) {
 
 for (const v of verdicts) {
   say(
-    `${v.machine} (${v.hw ? "hardware counters available" : "substitute"}): arm ${v.arm} saves ${f0(v.saved)} ns/request against A; same-arm spread ${f0(v.noise)} ns${v.stop ? " — beyond noise and ≥ 3 µs" : ""}.`
+    `${v.machine} (${v.hw ? "hardware counters available" : "substitute"}): arm ${v.arm} ${v.saved < 0 ? `costs ${f0(-v.saved)}` : `saves ${f0(v.saved)}`} ns/request against A; same-arm spread ${f0(v.noise)} ns${v.stop ? " — beyond noise and ≥ 3 µs" : ""}.`
   )
 }
 // aarch64 decides step 1; x86 only when no aarch64 results exist.

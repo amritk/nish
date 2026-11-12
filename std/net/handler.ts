@@ -237,9 +237,15 @@ export class HttpRequest {
   targetEnd: i32 = 0
   /**
    * Where the path ends: the target's first `?`, or its end.
-   * @internal Set by `HttpHandler` in this module when it copies the head, and read by `pathIs` and `queryIndex`.
+   * @internal Set by `HttpHandler` in this module from the router's `pathEnd` once it has routed the request,
+   * so the path is scanned once; copied by std/net/serve.ts with the head, and read by `pathIs` and `queryIndex`.
    */
   pathEnd: i32 = 0
+  /**
+   * How many bytes of `head` are this request's head: every span lies inside `head[0 .. headLength)`.
+   * @internal Set by `HttpHandler` in this module when it copies the head, and read by std/net/serve.ts to copy a request.
+   */
+  headLength: i32 = 0
   /**
    * How many fields `spans` describes.
    * @internal Set by `HttpHandler` in this module when it copies the head, and read by `header`.
@@ -886,23 +892,18 @@ export class HttpHandler {
       r.head = new Array<u8>(handlerGrown(toI32(r.head.length), length))
     }
     copyBytes(r.head, HANDLER_ZERO, p.head, HANDLER_ZERO, length)
-    const spanCount: i32 = 4 * p.headerCount
-    if (toI32(r.spans.length) < spanCount) {
-      r.spans = new Array<i32>(handlerGrown(toI32(r.spans.length), spanCount))
+    // The parser's spans are copied whole, as one `set`: only the first
+    // `4 * headerCount` are this head's, and only those are ever read.
+    if (toI32(r.spans.length) < toI32(p.spans.length)) {
+      r.spans = new Array<i32>(handlerGrown(toI32(r.spans.length), toI32(p.spans.length)))
     }
-    for (let k: i32 = 0; k < spanCount; k++) {
-      r.spans[k] = p.spans[k]
-    }
+    r.spans.set(p.spans)
+    r.headLength = length
     r.headerCount = p.headerCount
     r.methodStart = p.methodStart
     r.methodEnd = p.methodEnd
     r.targetStart = p.targetStart
     r.targetEnd = p.targetEnd
-    let pathEnd: i32 = r.targetStart
-    while (pathEnd < r.targetEnd && toI32(r.head[pathEnd]) !== 63) {
-      pathEnd += 1
-    }
-    r.pathEnd = pathEnd
     r.bodyLength = 0
     r.slot = slot
     r.gen = this.slotGen[slot]
@@ -911,6 +912,8 @@ export class HttpHandler {
     r.pendingStart = 0
     r.pendingEnd = 0
     this.route(r)
+    // The router found where the path ends, before any query, as it matched.
+    r.pathEnd = this.router.pathEnd
     this.current[slot] = r.index
   }
 
