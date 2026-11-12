@@ -16,7 +16,8 @@
 //      connections hold the pool and a fifth is refused. `requests` 1, 2
 //      and 3: one stream per connection, the next connection refused.
 //   5. `bodyTimeout` on h2c (RST_STREAM CANCEL) and HTTP/3
-//      (H3_REQUEST_CANCELLED, sending stopped); `idleTimeout` over TLS.
+//      (H3_REQUEST_CANCELLED, sending stopped); `idleTimeout` spares an h2c
+//      connection with an open stream and closes one over TLS with none.
 //   6. Alt-Svc: on HTTP/1.1 and HTTP/2 over TLS (screen answers included),
 //      never on h2c or HTTP/3, absent with no HTTP/3 listener, `clear` at
 //      `altSvcMaxAge` 0 with and without one, `altSvcPort`'s port, and a
@@ -456,6 +457,16 @@ export const timeouts = (t: Suite, key: Secret<u8[]>): void => {
   t.ok(
     "bodyTimeout, h3: its stream is reset H3_REQUEST_CANCELLED and its sending stopped",
     q.stream(n64(0)).reset === H3_REQUEST_CANCELLED && q.stream(n64(0)).stopped === H3_REQUEST_CANCELLED
+  )
+  const busy = h2cOpen(rig, none, noValues)
+  busy.wire.headers(n32(1), getOf("/slow"), H2_FLAG_END_STREAM)
+  const holding: boolean = h2cHold(busy, key, rig, n32(1))
+  // 200 turns of the loop's 5 ms wait: past idleTimeout, with the stream open.
+  const open: boolean = holding && !busy.awaitClose(n32(200), key)
+  rig.answerHeld()
+  t.ok(
+    "idleTimeout, h2c: a connection with an open stream is not closed, and is answered",
+    open && h2cUntil(busy, key, "HEADERS 1 :status=200").indexOf("HEADERS 1 :status=200") >= 0
   )
   const h2 = new H2TlsClient(rig)
   h2.handshake(rig.h2.port, key)
