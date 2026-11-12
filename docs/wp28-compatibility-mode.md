@@ -1,11 +1,18 @@
 # WP28: Compatibility mode, and what `async` means in each dialect
 
-**Status: proposed, unbuilt.** One of its two gating measurements has been
-taken (§7.4); the other (§7.1 S2) has not. Nothing here has a flag yet.
-[wp33-round-trip.md](wp33-round-trip.md) schedules it as R6, after the way back
-out to TypeScript, and [MASTER_PLAN.md](MASTER_PLAN.md) lists it as additive
-and unscheduled. Two things have landed since this note was written that
-change its ground without building any of it:
+**Status: in progress. All six spikes are measured (§7.4 to §7.9), and no
+compatibility construct is built.** `--compat` parses as a bare flag that
+admits nothing and changes no lowering, held to that by the erasure test
+(S3, §7.6). The rest of C0 (the allow-list, `nish.compat`, the
+`!nish.compat` metadata) and every stage after it are unbuilt. Neither
+gating measurement stopped the package: S1 priced the function-value tier
+(§7.4), and S2 found `async` by contagion to be the majority on four
+applications, by a margin two of them do not settle (§7.5). What the
+measurements leave for the owner to decide is in §10.
+[wp33-round-trip.md](wp33-round-trip.md) schedules the package as R6, after
+the way back out to TypeScript; its stages and their state are on the
+[roadmap page](roadmap/wp28-compatibility-mode.md). Three things have landed
+since this note was written that change its ground:
 
 **2026-10-30:** an arrow passed to a function-typed parameter of a top-level
 function may read the `const` locals and the parameters of the function it is
@@ -32,6 +39,12 @@ environment and indirect call.
 - **Strict absorbed two of §7.3's rows**: the statically known callee (C2a) is
   the strict language's function-typed parameter, and `Map` and `Set` are
   strict globals ([wp32-map.md](wp32-map.md)).
+- **Strict has `async`** ([wp49-async-server.md](wp49-async-server.md),
+  [LANGUAGE.md](LANGUAGE.md#async-functions-async-and-await)): a restricted
+  `async`/`await` that compiles to a frame and a resume switch and runs on an
+  executor that waits on sockets and timers. §6 was written when strict
+  refused the keyword and nothing could be pending; §6.2 says what that
+  changes.
 
 The note answers two questions that arrived together and turn out to be one:
 
@@ -74,7 +87,7 @@ language.** Five rules, and every later section is one of them worked out:
    flag is deleted (§5).
 5. **The erasure invariant is a test, not a promise.** Every program in the
    corpus, compiled with the mode on and no compatibility construct used, must
-   emit **byte-identical IR**, and every `reject_*` case (946 today) whose
+   emit **byte-identical IR**, and every reject case (2696 today, §7.6) whose
    construct the allow-list does not name must still reject with the same code
    and words. That makes the mode provably a no-op until somebody uses it, and
    guards against this package's worst failure: a dialect flag that quietly
@@ -307,6 +320,10 @@ error[NL1015]: `async` functions are forbidden in Nish (no event loop or promise
     `performance` class will then report
 ```
 
+The example shows the two added lines, and its first line is of its time:
+strict accepts an `async` function now (§6.2), so the refusal it would print
+today is one of the shape rules §7.5 lists.
+
 **The list lives in `package.json`**, as `compat` in the root package's
 `"nish"` object beside `noPanic` and `capabilities` — `true` for every feature,
 or an array for exactly some. That is where a ratchet is reviewable: the diff
@@ -350,7 +367,25 @@ sequential suspension*, and what runs underneath is chosen by a flag.
 | --- | --- | --- | --- | --- |
 | `--compat --async-model sync` (the default under `--compat`) | call `f`, use the result | `f` then `g`, sequentially | none | none |
 | `--compat --async-model threads` | spawn `f`, join at the `await` | spawn both, join both | yes | **yes** |
-| strict (no `--compat`) | rejected, as today | rejected | — | `nish/threads`, `scope()` |
+| strict (no `--compat`) | accepted on a direct call: the caller's frame suspends until `f` finishes | rejected (NL2643); the strict spelling is `await awaitAll(f(), g())` | yes, on one thread's executor | `nish/threads`, `scope()` |
+
+**The strict row was "rejected, as today" when this note was written, and is
+no longer.** WP49 built a restricted `async` in strict
+([LANGUAGE.md](LANGUAGE.md#async-functions-async-and-await)): no expression
+has a promise type, an `await` takes a direct call, and a call to an `async`
+function is awaited where it is made, which are §6.3's two rules arrived at
+from the other side. Two things in the rest of this section are therefore
+stale as written, and are left as the argument they were:
+
+- §6.3's premise, "there is still no event loop, no callback and no promise,
+  so nothing can be pending", held for the language of that date. Strict now
+  has an executor, `spawn`, and waits on a timer or a descriptor, so a task
+  can be pending while another runs. The claim still covers a program that
+  uses none of those; whether the erasing lowering can stand beside the built
+  one is part of §10's first question.
+- "Compat `async`" is no longer the difference between a refused keyword and
+  an accepted one. What a ported application meets first is the shapes strict
+  refuses, counted in §7.5.
 
 ### 6.3 Why the erasing lowering is honest here, and wp24's refusal survives
 
@@ -431,8 +466,10 @@ event loop to run on. What it does buy is the common case: **most application
 TypeScript is `async` by contagion rather than by need** — one leaf did I/O
 once and four hundred callers took the colour. In Nish the colour has no
 semantics, so erasing it is a whole-program decolouring, and wp24 §4.2's cost
-is this note's asset. §7.1 S2 is the measurement that has to come before
-anyone believes it.
+is this note's asset. S2 took the measurement this paragraph asked for: on
+four applications the share by contagion is 53.6% to 64.7%, and only 8.6% to
+25.2% of `async` functions sit on chains that reach nothing outside the
+program (§7.5).
 
 ---
 
@@ -443,13 +480,15 @@ anyone believes it.
 | | Spike | What it decides |
 | ---: | --- | --- |
 | S1 | **done — §7.4.** One opaque callee in a hot loop, three ways, and the escape analysis it forfeits | priced the function-value tier: the call is worth 1.26x–1.40x and the *escape analysis* 8.76x |
-| S2 | on a real TypeScript application, count `async` functions against those that await something that can block | whether §6.6's decolouring is the common case or a story |
-| S3 | the erasure invariant, run against the corpus with a feature-less `--compat` | C0's acceptance test, runnable the day the flag parses |
-| S4 | `Promise.all` over two non-interfering calls under `--async-model threads`, against `parallelReduce` on the same work | whether §6.4's second payoff is real |
-| S5 | the benchmark suite under `--number-mode f64` | prices §5.3 |
-| S6 | `try`/`catch` by landing pads against a desugaring to `Result` | the lowering, by measurement rather than taste |
+| S2 | **done — §7.5.** On a real TypeScript application, count `async` functions against those that await something that can block | whether §6.6's decolouring is the common case or a story: of 2364 `async` functions in four applications, 53.6% to 64.7% are `async` by contagion, and two of the four are above half by less than a point |
+| S3 | **done — §7.6.** The erasure invariant, run against the corpus with a feature-less `--compat` | C0's acceptance test, and it runs: 1044 positive cases byte-identical and 2696 reject cases rejected alike, none skipped |
+| S4 | **done — §7.7.** `Promise.all` over two non-interfering calls as a fork/join, against `parallelReduce` on the same work | whether §6.4's second payoff is real: it is above a task of about 16 µs (0.504x at 10.7 ms) and a loss below it (9.419x at 1 µs) |
+| S5 | **done — §7.8.** The benchmark suite under `--number-mode f64` | prices §5.3: 1.008x on the 10 programs timed as they are, 1.10x and 1.19x on two integer-heavy ones, and 20 of 34 programs refused |
+| S6 | **done — §7.9.** `try`/`catch` by landing pads against a desugaring to `Result` | the lowering, by measurement rather than taste: the spike recommends the `Result` desugaring, on the targets that have no unwinder; a throw costs about 770 ns against 2 ns |
 
-S1 and S2 were the two that could stop the package. S1 did not; S2 is unrun.
+S1 and S2 were the two that could stop the package. S1 did not. S2's count
+came out on the side of the claim it tested, by a margin that §7.5 states
+and §10 leaves with the owner.
 
 ### 7.2 The ladder a team walks
 
@@ -468,15 +507,15 @@ S1 and S2 were the two that could stop the package. S1 did not; S2 is unrun.
 
 | | Stage | Contents | Size |
 | ---: | --- | --- | --- |
-| **C0** | the machinery, zero features | `--compat`, the allow-list, `nish.compat`, `!nish.compat` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op; every later stage becomes an entry rather than a redesign |
+| **C0** | the machinery, zero features | `--compat`, the allow-list, `nish.compat`, `!nish.compat` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op; every later stage becomes an entry rather than a redesign. The bare flag and S3's test are built (§7.6); the rest is not |
 | **C1** | the free tier | optional parameters and non-constant defaults (constant defaults are in strict mode), `?.`, `??` on nullables, string `switch`, `for...of` over a string, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M |
 | **C-lib** | the library tier | `Date` objects, `JSON`, `RegExp`, `Buffer`, under WP26's rules. `Map` and `Set` are strict already | L, and per §4.1 it outranks most of what follows |
 | ~~C1, labels~~ | labelled `break`/`continue`, once a C1 entry | **Built in strict**, as direct branches with no flag; it left C1 | — |
 | ~~C2a~~ | callbacks whose callee is statically known | **Built in strict**, as function-typed parameters: free at run time, as §7.4 predicted | — |
 | **C2b** | function values proper | a value whose target the checker cannot name: the indirect call, the captured-environment struct, and the escape proof it forfeits | L, and the expensive one — 1.26x for the call and up to 8.76x for what it does to WP6 (§7.4) |
-| **C3** | `async`/`await`, `--async-model sync` | §6.3's two rules, the erasure, §6.4's admission, and the unmodified-Node cases that hold it | M. S2 may yet retire it in favour of C4 alone |
-| **C4** | `--async-model threads` | §6.5, on `scope()`, which is built | M. The stage the ladder is for |
-| **C5** | exceptions | whichever lowering S6 chose | L |
+| **C3** | `async`/`await`, `--async-model sync` | §6.3's two rules, the erasure, §6.4's admission, and the unmodified-Node cases that hold it | M. Whether S2 retires it in favour of C4 alone is open (§7.5, §10) |
+| **C4** | `--async-model threads` | §6.5, on `scope()`, which is built | M. The stage the ladder is for. S4 priced its fork (§7.7) |
+| **C5** | exceptions | the lowering S6 measured (§7.9); the spike recommends the `Result` desugaring and the choice is open (§10) | L |
 | **C6** | generators as iterators | wp24 §3b's shape | M |
 | **C7** | `extends` with virtual dispatch | wp25 reversed in compat only; it costs exactly what C2b costs and lands behind it | M |
 
@@ -552,6 +591,221 @@ the third case
 [wp51-function-references.md](wp51-function-references.md) §1 argues out of
 C2b (proposed, design only).
 
+### 7.5 S2, measured: `async` by contagion
+
+The census, its method, its hand audit and every table are in
+[bench/wp28-s2/README.md](../bench/wp28-s2/README.md)
+(`node bench/wp28-s2/run.mjs`). It parses four applications published to npm
+with their TypeScript source, pinned by version and integrity: hardhat 3.21.2,
+appium 3.9.0, @stryker-mutator/core 10.1.1 and @budibase/server 3.38.1. The
+counts are exact for the pinned tarballs, so there is no noise band and a
+rerun prints the same tables (Node 22.23.4, `typescript` 5.9.3, nish 0.38.0,
+a 4-core x86-64 Linux container). The error bar is the functions the census
+could not place.
+
+| | `async` functions | share |
+| --- | ---: | ---: |
+| wait on nothing but functions of the same program (contagion) | 1268 | 53.6% |
+| wait on something outside the program | 835 | 35.3% |
+| not placed | 261 | 11.0% |
+| all | 2364 | |
+
+- **The share by contagion is 53.6% to 64.7%**, the unplaced column being the
+  whole of the gap. Per application the lower bound is 64.2% (hardhat), 54.4%
+  (appium), 50.3% (@stryker-mutator/core) and 50.2% (@budibase/server).
+- **Two applications sit within a point of half.** Those two margins are
+  smaller than the census's known undercounts of need, so for
+  @stryker-mutator/core and @budibase/server it does not settle which side of
+  half the true share is on. "Most" is supported across the corpus; "nearly
+  all" is not.
+- **By need in §6.6's sense is rare**: 89 functions (3.8%, one in 27) wait on
+  the platform directly. The rest of the 35.3% wait on a dependency, mostly
+  the application's own sibling packages; counting those as program
+  functions, the share by contagion is at most 96.2%.
+- **The colour comes off and the leaf stays**: only 8.6% to 25.2% of `async`
+  functions sit on chains that reach nothing outside the program. For the
+  rest, erasure leaves a call chain that still ends in a file read or a
+  socket, the missing library §4.1 and §6.6 name.
+- **More than one live promise is rare**: 94.7% of the 4487 `await`s are on a
+  direct call and 3.0% on the `Promise.all` family.
+- **Strict already accepts every class** the census sorts functions into. What
+  it refuses is shape: an `async` method (NL1063; 725 functions, 30.7%), an
+  inferred return type (NL2655; 1332, 56.3%), an `await` inside an expression
+  (NL2642; 428 of 4487 `await`s, 9.5%), a returned, unawaited call (NL2645;
+  168 of 2283 calls, 7.4%), `Promise.all` (NL2643), recursion through an
+  `await` (NL2648; 66 functions, 2.8%) and `for await` (NL2133; 8 loops).
+  These shares are marginal: the census does not count how many functions
+  pass every rule at once.
+
+**What it argues.** §6.6's sentence, "most application TypeScript is `async`
+by contagion rather than by need", holds on this corpus as "most", with the
+qualification above. The spike's README reads the figures as not the negative
+S2 that §10 said would argue for dropping C3; the opposite reading is also
+open, and both are set out in §10. The census covers four Node applications,
+counts functions and not calls, and does not run anything against Node.
+
+### 7.6 S3, measured: the erasure invariant
+
+`--compat` parses as a bare flag with no feature behind it
+([#1489](https://github.com/amritk/nish/pull/1489)): it admits no construct
+and changes no lowering, and `--compat=<anything>` is a usage error.
+`tests/compat-erasure.js` compiles every program in `tests/cases/` twice, with
+the flags its `.args` names and then with `--compat` after them, and compares
+the two: a positive case's output byte for byte, and for a reject case the
+exit code, the diagnostic code and the words.
+
+**1044 positive cases are byte-identical and 2696 reject cases are rejected
+alike, with none skipped.** These are counts, not timings, so there is no
+noise band. A self-test hands the harness a compiler that alters one IR line,
+one diagnostic word and one code under `--compat` and expects each caught by
+name. It runs in the suite as `node tests/run.js compat-erasure`.
+
+**What it decides.** §1 rule 5 is now a test that runs on every push, and it
+is the acceptance test C0 and every later stage are held to. One limit: the
+harness compares each case under its own `.args` and `.env`, and the suite's
+second compiles of a case under other flags are not yet compared.
+
+### 7.7 S4, measured: `Promise.all` as a fork/join
+
+`--async-model threads` is not built, so the spike writes the lowering by
+hand, a `scope()` with one spawned task and one run inline, and times it
+against the sequential pair and against `parallelReduce` over the same work.
+Programs, method and the full table:
+[bench/wp28-s4/README.md](../bench/wp28-s4/README.md)
+(`npm run build && node bench/wp28-s4/run.mjs`). 4 logical CPUs of an Intel
+Xeon at 2.30 GHz, linux-x64, nish 0.38.0, LLVM 18; 11 interleaved rounds after
+a warm-up; the band is the sequential binary against a byte-identical copy of
+itself in the same rounds.
+
+| one task | fork/join over sequential | band |
+| ---: | ---: | ---: |
+| 0.98 µs | 9.419x | ±0.3% |
+| 10.0 µs | 1.271x | ±1.6% |
+| 20.2 µs | 0.882x | ±0.5% |
+| 41.1 µs | 0.707x | ±1.9% |
+| 10.7 ms | 0.504x | ±0.4% |
+
+- **A fork/join of two tasks costs about 16 µs more than the work it shares
+  out**, so the break-even task is about 15.9 µs on this machine
+  (interpolated between the 10.0 µs and 20.2 µs rows).
+- **Against `parallelReduce`**: below 2^20 elements a reduce is one block on
+  the calling thread and runs as the sequential fold (0.977x to 1.014x), so
+  the fork/join is the only form that forks. At 5,000,000 elements in five
+  blocks the reduce runs in 0.381x of the sequential time and the fork/join
+  in 0.504x: the reduce uses more than the two cores a two-call `Promise.all`
+  can.
+
+**What it argues.** §6.4's second payoff is real for calls worth tens of
+microseconds or more. A fork taken on every non-interfering `Promise.all`,
+whatever its calls cost, would make the small ones up to nine times slower
+here, and how the lowering tells the two apart is a question the spike does
+not answer and C4's design has to. The hand-lowering measured one callee
+(`product`) over one array argument, two tasks, on one machine; two different
+callees or other argument shapes need the arrow-capture form of `spawn`, whose
+cost is not measured.
+
+### 7.8 S5, measured: the price of `--number-mode f64`
+
+Every program `bench/run.mjs` lists, built with and without the flag:
+[bench/wp28-s5/README.md](../bench/wp28-s5/README.md)
+(`npm run build && node bench/wp28-s5/run.mjs`). 4 vCPUs of an Intel Xeon at
+2.10 GHz, linux-x64, nish 0.38.0; 7 interleaved rounds after a warm-up; each
+band is a binary against a byte-identical copy of itself in the same rounds.
+
+Of 34 programs: 10 timed, 4 with the same IR (their `.args` already name
+`--number-mode f64`), **20 refused by the checker**, none with a changed
+output.
+
+- **Where it compiles as written, it costs nothing measurable**: 1.008x
+  geometric mean over the 10 timed programs (bands ±0.3% to ±8.4%), at most
+  +0.03% instructions. All ten are the `par-*` kernels, whose loops are
+  written `let i: i32`, so the mode does not reach their hot code. One row,
+  par-heavy-fold, reads 1.053x against ±4.3%, on instruction counts that
+  differ by 1237 in 29.9 billion.
+- **On integer-heavy code it costs 1.10x to 1.19x, from two programs**: fib
+  (1.099x, ±4.9%) and sieve (1.186x, ±2.5%), 1.141x geometric mean, each
+  measured from a copy whose `main` is declared `(): i32`.
+- **20 of 34 are refused**, for two reasons. `main` returns a bare `number`,
+  which is not an exit code as f64 (NL2140; fib, sieve, strbuild and result,
+  one error each). Or a bare `number` meets an `i32` (NL2100, NL2117, NL2178,
+  NL2231 and NL2236, with NL2021 in one program; the seven AWFY ports, the
+  four map prototypes, the three `Map` measurements, par-alloc and
+  par-histogram-atomic), because Nish has no implicit conversion between f64
+  and i32.
+- **One program compiles and computes something else.** With `main`
+  annotated, strbuild prints `2410293` where it printed `806394`: its
+  `(count + 31) / 32` is an integer division by default and a floating-point
+  one under f64. result is still refused (NL2101, `&` on two f64).
+
+**What it argues, for §5.3.** The sentence §5.3 was expected to get, "`--compat`
+costs N× on integer-heavy code, within noise on the rest", has an N of about
+1.1x to 1.2x from two programs. The larger finding is not a run-time one:
+code that leaves an integer as a bare `number` beside an `i32` does not
+compile under `--number-mode f64` until it is ported, so "`--compat` implies
+`--number-mode f64`" would turn a strict program that mixes the two into one
+`--compat` refuses, or (strbuild) one that prints a different answer. That
+meets §1 rule 5, under which a strict program compiles to the same bytes with
+the mode on, and S3's test holds the bare flag to exactly that today.
+Whether §5.3 stands as written is the owner's question (§10). One machine,
+one run.
+
+### 7.9 S6, measured: landing pads against a `Result` desugaring
+
+Three programs (a hot loop, a parser, a call chain), each as Nish compiles
+`Result` today and as hand-written IR with `invoke` and `landingpad` over the
+platform's Itanium unwinder and a personality of the spike's own:
+[bench/wp28-s6/README.md](../bench/wp28-s6/README.md)
+(`npm run build && node bench/wp28-s6/run.mjs --rounds 15`). 4 vCPUs of an
+Intel Xeon at 2.30 GHz, Linux 6.18, glibc 2.39, clang and LLVM 18.1.3,
+x86-64; 15 rounds, medians; a row's band is the `Result` binary against a
+byte-identical copy in the same rounds. Each side is built inlined (as LTO
+leaves it) and outlined (every function that can fail `noinline`). Ratios are
+landing pads over `Result`.
+
+| program | inlined | band | outlined | band |
+| --- | ---: | ---: | ---: | ---: |
+| hot loop, never throws | 0.98x (inside the band) | ±2.0% | 0.99x (inside the band) | ±2.6% |
+| parser, never throws | 0.67x | ±3.9% | 0.94x | ±1.6% |
+| parser, throws 1 in 1000 | 0.71x | ±2.1% | 0.99x (inside the band) | ±2.9% |
+| parser, throws 1 in 100 | 0.98x (inside the band) | ±2.9% | 1.53x | ±5.3% |
+| parser, throws 1 in 10 | 3.62x | ±3.8% | 6.70x | ±2.5% |
+| call chain, unwinds 1 frame | 447.82x | ±6.2% | 367.28x | ±7.7% |
+| call chain, unwinds 32 frames | 132.45x | ±0.8% | 111.97x | ±4.0% |
+
+- **A failure costs landing pads two to three orders of magnitude more**:
+  about 770 ns for a throw caught one frame up against about 2 ns, and about
+  135 ns for each further frame against about 1.2 ns. The spike chose
+  everything else to flatter landing pads (no allocation, an `i32` thrown, no
+  cleanups, two shared objects), so these are their floor.
+- **One row goes the other way: the inlined parser.** With nothing thrown,
+  landing pads run it in 0.67x of the `Result` time, and in 0.71x at one
+  failure in 1000. The README attributes most of that to the three-word
+  `Result` return keeping `parseField` out of line, not to the checks; the
+  outlined row, where both sides make the same calls, is 0.94x, and an
+  earlier run put it inside its band. The parser breaks even at about one
+  failure in 90 records inlined and one in 980 outlined.
+- **Landing pads are larger**: each kernel grows in total (parse 624 to 898
+  bytes), and the linked binary by 2.2 to 2.3 KB and a second shared library,
+  `libgcc_s`.
+- **Not every target has an unwinder.** Linux and macOS do. WASI and the
+  freestanding wasm profiles do not, and the wasm backend lowers `invoke` to
+  a plain `call`, so the `catch` is dropped without a diagnostic. On the
+  native targets the release profiles build the C runtime without unwind
+  tables, so a throw cannot cross a `runtime/*.c` frame, and every function
+  that may throw or call something opaque loses `nounwind`.
+
+**What it argues.** The spike recommends, for the owner to accept, that C5
+lower `try`/`catch` to the `Result` desugaring. Its rule takes landing pads
+only if they are faster outside the band in the outlined build both with
+nothing thrown and at one failure in 1000, and every target has an unwinder.
+The README says the recommendation stands on the second clause alone, the
+targets without an unwinder: the first clause covers rows that disagree, and
+read on the inlined build the parser would satisfy it. It names what the
+rule gives up, the inlined parser's 0.67x, and what to measure first if C5's
+programs show it (the `Result` ABI and the inliner's view of it). Frames with
+cleanups (`finally`, a region released on the way out), a large binary,
+AArch64 and macOS timings were not measured.
+
 ## 8. Declined, with the rule each one breaks
 
 - **Tier 3 in any dialect** (§2.2). A tagged value needs a collector.
@@ -596,18 +850,57 @@ C2b (proposed, design only).
   feature and `--compat=<list>` for exactly those. Strict is the absence of the
   flag, so a strict build's command line and IR do not change.
 - **Whether `async` belongs in compat at all**, or only as `--async-model
-  threads`. A negative S2 argues for dropping C3 and keeping C4. The engine it
-  would be measured against, `scope()`, is now built.
+  threads`: that is, whether S2 retires C3. This note said a negative S2
+  would argue for dropping C3 and keeping C4. S2 is measured (§7.5) and the
+  owner has not decided. The figure: 53.6% to 64.7% of 2364 `async` functions
+  are `async` by contagion, above half in each of four applications and by
+  less than a point in two. The two readings:
+  - *It is not the negative result, and C3 has a case.* Contagion is the
+    majority everywhere it was counted, 94.7% of `await`s are on a direct
+    call, where the threads model is a call with extra steps, and only 3.0%
+    are on the `Promise.all` family, where it has something to add.
+  - *It does not carry C3 either.* Two of the four margins are inside the
+    census's own undercount of need. Only 8.6% to 25.2% of `async` functions
+    sit on chains that end inside the program, so for the rest erasure leaves
+    a program that still wants a library that is missing. And strict now
+    accepts `async` under §6.3's two rules (§6.2), so what C3 would add is the
+    shapes strict refuses (an `async` method, 30.7%; an inferred return type,
+    56.3%), not the keyword.
+
+  S4 bears on the C4 half: the fork pays above a task of about 16 µs and
+  costs up to 9.4x below it (§7.7).
+- **Whether `--compat` implies `--number-mode f64` as §5.3 has it.** S5
+  (§7.8): the mode costs nothing measurable where a program compiles as
+  written and 1.10x to 1.19x on two integer-heavy programs, but 20 of the 34
+  benchmark programs are refused under it as written and one prints a
+  different answer once it compiles. A strict program that mixes a bare
+  `number` with an `i32` would not survive the implication, which §1 rule 5
+  does not allow for a program that uses no compatibility construct. The bare
+  `--compat` built today implies nothing.
+- **Which lowering C5 uses.** S6 (§7.9) recommends the `Result` desugaring,
+  for the owner to accept. The recommendation rests on WASI and the
+  freestanding profiles having no unwinder; a throw costs about 770 ns
+  against 2 ns; and one row, the inlined parser that never throws, goes the
+  other way at 0.67x.
+- **How C4 decides which `Promise.all` to fork.** S4 (§7.7) found the
+  break-even at about 15.9 µs a task on one machine and left the rule
+  unanswered: a fork on every non-interfering `Promise.all` loses on the
+  small ones.
 - **Whether the compat ceiling should be per-dependency.** §3 takes the simple
   rule; nobody has met the vendored dependency that would argue against it.
+  No spike measured it.
 - **What `--emit-dts`, `--emit-header` and `--emit-napi` do with a compat
   program.** A closure has no C spelling. Probably strict-only with a
-  diagnostic, but that is a decision not made here.
+  diagnostic, but that is a decision not made here. S3's test (§7.6) already
+  compiles every case under its own `.args` with and without the flag, so a
+  case that names an emitter holds whatever is decided.
 - **Whether the compat reference is a document or a section.** Not in
   LANGUAGE.md, which is normative for strict.
 - **Whether `--number-mode` should be per-module.** [wp26-stdlib.md](wp26-stdlib.md)
   §4 found that a `std/` module has to care, and a mixed-dialect program makes
-  that sharper.
+  that sharper. S5's refusals (§7.8) are this question met in the benchmark
+  suite: a program-wide f64 reaches every module that spells an integer as a
+  bare `number` beside an `i32`.
 
 ---
 

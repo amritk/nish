@@ -2593,6 +2593,23 @@ in is in parentheses.
   records in arrays addressed by `i32` (`node bench/wp48-refs/run.mjs`), the
   measurements behind
   [docs/wp48-compressed-references.md](../docs/wp48-compressed-references.md).
+- `wp28-s2/`, `wp28-s4/`, `wp28-s5/`, `wp28-s6/`: the spikes of
+  [docs/wp28-compatibility-mode.md](../docs/wp28-compatibility-mode.md) §7.1,
+  each with a README that holds its protocol and result. Not part of this
+  suite.
+  - [`wp28-s2/`](wp28-s2/README.md): a census of the `async` functions of
+    four published TypeScript applications, by what each waits on
+    (`node bench/wp28-s2/run.mjs`; needs the npm registry).
+  - [`wp28-s4/`](wp28-s4/README.md): `Promise.all` over two calls lowered by
+    hand to a `scope()` fork/join, against the sequential pair and
+    `parallelReduce` (`npm run build && node bench/wp28-s4/run.mjs`).
+  - [`wp28-s5/`](wp28-s5/README.md): every program of this suite with and
+    without `--number-mode f64`
+    (`npm run build && node bench/wp28-s5/run.mjs`, about 30 minutes;
+    `--quick` for a smoke run).
+  - [`wp28-s6/`](wp28-s6/README.md): `try`/`catch` as landing pads against
+    the `Result` desugaring
+    (`npm run build && node bench/wp28-s6/run.mjs --rounds 15`).
 - `math-ulp/`: the operands and the mpmath measure behind `std/math.ts`'s
   accuracy figures ("Math accuracy" above).
 - `pg-batch-clock.ts`: when to start a PostgreSQL batch, adaptive against
