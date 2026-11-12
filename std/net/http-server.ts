@@ -1610,16 +1610,25 @@ export class HttpServer {
   /**
    * Whether the client of `r` has hung up: its connection is closed or
    * reused, its HTTP/2 or HTTP/3 stream was reset, or, on HTTP/1.1, the
-   * peer ended its side while `r` is held.
+   * peer ended its side while `r` is held. Panics on another server's request.
    * @param r a request `take` handed over
    * @returns true once nobody is left to read `r`'s answer
    */
   hungUp(r: HttpServerRequest): boolean {
+    this.own(r, "hungUp")
     if (!this.live(r)) {
       return true
     }
     const h1: Http1Server | null = this.h1
     return r.kind === HTTP_SERVER_H1 && h1 !== null && h1.connection(r.slot).ended()
+  }
+
+  /** Panics, naming `who`, unless `r` is one of this server's own requests. */
+  private own(r: HttpServerRequest, who: string): void {
+    const index: i32 = r.index
+    if (index < 0 || index >= toI32(this.requests.length) || this.requests[index] !== r) {
+      panic(`HttpServer.${who}: the request is another server's`)
+    }
   }
 
   /** Whether `r`'s connection is the one it was read on, still open, and its stream not reset. */
@@ -1671,8 +1680,9 @@ export class HttpServer {
    * the field names must be lowercase, and a `content-length` is added for a
    * known length the fields do not give; on HTTP/1.1 and HTTP/2 the Alt-Svc
    * field is added when an HTTP/3 listener is set and the fields have none.
-   * Panics on a request not taken or already answered, a status outside the
-   * range, a body length below `HTTP1_CHUNKED`, or fields the carrier refuses.
+   * Panics on another server's request, a request not taken or already
+   * answered, a status outside the range, a body length below
+   * `HTTP1_CHUNKED`, or fields the carrier refuses.
    * @param r a request taken and not yet answered
    * @param status the response status, from 200 to 599
    * @param names the field names, as bytes, beside `values`
@@ -1683,6 +1693,7 @@ export class HttpServer {
    *   no room) and the request was aborted for it
    */
   start(r: HttpServerRequest, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32 {
+    this.own(r, "start")
     if (r.state !== HTTP_SERVER_HELD) {
       panic(`HttpServer.start: the request is not one taken and unanswered (state ${r.state})`)
     }
@@ -1869,7 +1880,7 @@ export class HttpServer {
    * Writes `buf[off .. off + len)` of `r`'s body. What the carrier has no room
    * for is copied and sent as room comes, so `buf` is the caller's again on
    * return. Body bytes of a HEAD, 204 or 304 response are dropped. Panics
-   * when the response is not started, on a window outside `buf`, or on more
+   * on another server's request, when the response is not started, on a window outside `buf`, or on more
    * bytes than the declared length leaves.
    * @param r a request whose response `start` began
    * @param buf the bytes to send from; the caller's again on return
@@ -1878,6 +1889,7 @@ export class HttpServer {
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection or stream closed first
    */
   write(r: HttpServerRequest, buf: u8[], off: i32, len: i32): i32 {
+    this.own(r, "write")
     if (r.state !== HTTP_SERVER_STREAMING) {
       panic(`HttpServer.write: the response is not started (state ${r.state})`)
     }
@@ -1961,12 +1973,13 @@ export class HttpServer {
 
   /**
    * Ends `r`'s response. `r` is the server's again: it goes back once the
-   * carrier has taken every byte. Panics when the response is not started,
-   * or its body is short of the declared length.
+   * carrier has taken every byte. Panics on another server's request, when the
+   * response is not started, or its body is short of the declared length.
    * @param r a request whose response `start` began; the server's again after this call
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection or stream closed first
    */
   end(r: HttpServerRequest): i32 {
+    this.own(r, "end")
     if (r.state !== HTTP_SERVER_STREAMING) {
       panic(`HttpServer.end: the response is not started (state ${r.state})`)
     }

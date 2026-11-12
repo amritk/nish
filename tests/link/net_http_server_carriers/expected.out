@@ -1,0 +1,18 @@
+PASS  the server listens: HTTP/2 over TLS and HTTP/3
+PASS  HTTP/2: a TLS handshake offering h2, the server's signature and Finished verified
+PASS  a GET of /hello: 200 and its body
+PASS  with alt-svc naming the HTTP/3 port, and its content-length
+PASS  a GET of /users/42: the parameter as JSON
+PASS  a POST of /echo: its body echoed
+PASS  a GET of a path no route has: 404 as problem+json
+PASS  every stream ended
+PASS  HTTP/3: the handshake through the listener into a slot, ALPN h3
+PASS  a GET of /hello answered and ended
+PASS  200 hello
+PASS  a GET of /users/42 answered and ended
+PASS  200 with the parameter as JSON
+PASS  a POST of /echo answered and ended
+PASS  200 with its body echoed
+PASS  a GET of a path no route has answered and ended
+PASS  404 as problem+json
+http server carriers: 17 passed, 0 failed, 0 skipped

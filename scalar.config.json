@@ -228,6 +228,11 @@
                 "title": "An async server",
                 "filepath": "docs/guide/using-nish/async-server.md"
               },
+              "/http-server": {
+                "type": "page",
+                "title": "One server for HTTP/1.1, 2 and 3",
+                "filepath": "docs/guide/using-nish/http-server.md"
+              },
               "/websocket": {
                 "type": "page",
                 "title": "WebSocket",
