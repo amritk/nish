@@ -201,6 +201,8 @@ const PG_CARRIER_TLS_OPEN: i32 = 3
 const PG_CARRIER_TLS_KEY_BYTES: i32 = 32
 /** The most ciphertext read from a socket at once: one largest record and its header. */
 const PG_CARRIER_TLS_READ_BYTES: i32 = 16645
+/** A zero that stays `i32` under `--number-mode f64`: no bytes, no offset, no alert. */
+const PG_CARRIER_ZERO: i32 = 0
 /** The byte a server answers an SSLRequest with to go on with TLS. */
 const PG_CARRIER_TLS_YES: i32 = 83
 
@@ -400,7 +402,9 @@ export class PgCarrier {
     this.tlsAsked = new Array<i32>(size)
     this.sslRequest = pgSslRequest()
     this.tlsAnswer = new Array<u8>(1)
-    this.tlsInput = new Array<u8>(this.tlsMode !== PG_TLS_DISABLE ? PG_CARRIER_TLS_READ_BYTES : 0)
+    this.tlsInput = new Array<u8>(
+      this.tlsMode !== PG_TLS_DISABLE ? PG_CARRIER_TLS_READ_BYTES : PG_CARRIER_ZERO
+    )
     for (let s: i32 = 0; s < size && s < toI32(this.fds.length); s++) {
       this.fds[s] = -1
     }
@@ -823,7 +827,7 @@ export class PgCarrier {
       if (got <= 0) {
         this.fail(s, got)
       } else if (toI32(this.tlsAnswer[0]) !== PG_CARRIER_TLS_YES) {
-        this.failTls(s, 0)
+        this.failTls(s, PG_CARRIER_ZERO)
       } else {
         this.tlsConns[s] = pgCarrierTlsStart(this.tlsName)
         this.tlsPhase[s] = PG_CARRIER_TLS_HANDSHAKE
@@ -841,7 +845,7 @@ export class PgCarrier {
     if (room > 0) {
       const got: i32 = netRead(fd, this.tlsInput, 0, room)
       if (got > 0) {
-        tls.receive(this.tlsInput, 0, got)
+        tls.receive(this.tlsInput, PG_CARRIER_ZERO, got)
       } else if (got === 0) {
         tls.end()
       } else if (got !== PG_CARRIER_AGAIN) {
@@ -891,7 +895,7 @@ export class PgCarrier {
         moved = true
       } else if (got === 0) {
         // The server's close_notify: the stream ended cleanly.
-        this.fail(s, 0)
+        this.fail(s, PG_CARRIER_ZERO)
         return true
       } else {
         if (tls.state === TLS_RECORD_STATE_FAILED) {
