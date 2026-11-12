@@ -207,8 +207,10 @@ is free, an HTTP/2 stream is refused with `REFUSED_STREAM` and an HTTP/3 one
 with `H3_REQUEST_REJECTED`, both of which a client may retry. No one
 connection holds more than a quarter of the pool, so one client cannot
 starve the rest. Each request keeps a head buffer of `maxHead` bytes, made
-the first time it is used, and holds its body whole: a server holds at most
-`requests` times `maxHead + maxBody`.
+the first time it is used, and holds its body whole. A body grows in steps:
+up to `T`, the smaller of 64 KiB and `maxBody`, it doubles; past `T` it moves
+once into an array of exactly `maxBody`. So the bodies a server holds stay
+below `requests` times `maxBody + 3T`, beside the heads.
 
 ## Stopping gracefully
 

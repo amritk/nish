@@ -16,11 +16,15 @@ import { netAddress, netRead, netWrite, tcpConnect, udpBind, udpRecvFrom, udpSen
 import {
   QUIC_FRAME_DATAGRAM,
   QUIC_FRAME_DATAGRAM_LENGTH,
+  QUIC_FRAME_MAX_STREAM_DATA,
+  QUIC_FRAME_RESET_STREAM,
+  QUIC_FRAME_STOP_SENDING,
   QUIC_FRAME_STREAM,
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
   quicPushStream,
+  quicPushStreamValue,
   quicPutDatagram,
 } from "nish/net/quic-frame";
 import { QPACK_OK, QpackDecoder } from "nish/net/qpack";
@@ -66,6 +70,10 @@ export class Received {
   id: i64 = 0;
   data: u8[];
   fin: boolean = false;
+  /** The error code of the server's RESET_STREAM on the stream, or -1. */
+  reset: i64 = -1;
+  /** The error code of the server's STOP_SENDING on the stream, or -1. */
+  stopped: i64 = -1;
 
   constructor(id: i64) {
     this.id = id;
@@ -161,6 +169,13 @@ export class QuicClient {
     this.packet(frames);
   }
 
+  /** A MAX_STREAM_DATA frame raising stream `id`'s receive limit to `value`. */
+  credit(id: i64, value: i64): void {
+    const frames: u8[] = [];
+    quicPushStreamValue(frames, QUIC_FRAME_MAX_STREAM_DATA, id, value);
+    this.packet(frames);
+  }
+
   /** One DATAGRAM frame carrying `data`. */
   datagram(data: u8[]): void {
     const size: i32 = quicDatagramSize(toI32(data.length));
@@ -201,6 +216,10 @@ export class QuicClient {
             }
             r.fin = r.fin || (f.fin && f.offset + toI64(f.dataLength) <= toI64(toI32(r.data.length)));
           }
+        } else if (f.type === QUIC_FRAME_RESET_STREAM) {
+          this.stream(f.streamId).reset = f.errorCode;
+        } else if (f.type === QUIC_FRAME_STOP_SENDING) {
+          this.stream(f.streamId).stopped = f.errorCode;
         } else if (f.type === QUIC_FRAME_DATAGRAM || f.type === QUIC_FRAME_DATAGRAM_LENGTH) {
           this.datagrams.push(range(payload, f.dataStart, f.dataStart + f.dataLength));
         }
@@ -209,30 +228,36 @@ export class QuicClient {
     }
   }
 
+  /** One turn of the server's loop, then every datagram waiting read and filed; how many there were. */
+  pump(key: Secret<u8[]>): i32 {
+    this.server.step(n32(5), key, null, null);
+    let read: i32 = 0;
+    let n: i32 = udpRecvFrom(this.fd, this.rx, n32(0), n32(65536), this.from, this.meta);
+    while (n >= 0) {
+      const d: u8[] = range(this.rx, ZERO, n);
+      this.c.datagrams.push(d);
+      qcReceive(this.c, d);
+      read++;
+      n = udpRecvFrom(this.fd, this.rx, n32(0), n32(65536), this.from, this.meta);
+    }
+    this.absorb();
+    return read;
+  }
+
   /**
    * Turns the server's loop and reads what it sends until stream `id` has
-   * ended (with `id` -1, until twenty turns in a row bring nothing; with
+   * ended or been reset (with `id` -1, until twenty turns in a row bring nothing; with
    * `datagram`, until a datagram has come). Answers whether it got there.
    */
   turnUntil(key: Secret<u8[]>, id: i64, datagram: boolean): boolean {
     let quiet: i32 = 0;
     const had: i32 = toI32(this.datagrams.length);
     for (let turn: i32 = 0; turn < TURNS; turn++) {
-      this.server.step(n32(5), key, null, null);
-      let read: i32 = 0;
-      let n: i32 = udpRecvFrom(this.fd, this.rx, n32(0), n32(65536), this.from, this.meta);
-      while (n >= 0) {
-        const d: u8[] = range(this.rx, ZERO, n);
-        this.c.datagrams.push(d);
-        qcReceive(this.c, d);
-        read++;
-        n = udpRecvFrom(this.fd, this.rx, n32(0), n32(65536), this.from, this.meta);
-      }
-      this.absorb();
+      const read: i32 = this.pump(key);
       if (datagram && toI32(this.datagrams.length) > had) {
         return true;
       }
-      if (id >= 0 && this.stream(id).fin) {
+      if (id >= 0 && (this.stream(id).fin || this.stream(id).reset >= 0)) {
         return true;
       }
       quiet = read === 0 ? quiet + 1 : 0;
@@ -244,9 +269,10 @@ export class QuicClient {
   }
 }
 
-/** An HTTP/3 response read from a stream's frames: its status and its body. */
+/** An HTTP/3 response read from a stream's frames: its status, its other fields as `name=value` joined by spaces, and its body. */
 export class H3Answer {
   status: string = "";
+  fields: string = "";
   body: string = "";
 }
 
@@ -267,8 +293,12 @@ export const h3Answer = (r: Received): H3Answer => {
     const start: i32 = at + size;
     if (header.type === H3_FRAME_HEADERS && dec.decode(r.data, start, length) === QPACK_OK) {
       for (let k: i32 = 0; k < dec.count; k++) {
-        if (textAt(dec.bytes, dec.nameStart[k], dec.nameLength[k]) === ":status") {
-          out.status = textAt(dec.bytes, dec.valueStart[k], dec.valueLength[k]);
+        const name: string = textAt(dec.bytes, dec.nameStart[k], dec.nameLength[k]);
+        const value: string = textAt(dec.bytes, dec.valueStart[k], dec.valueLength[k]);
+        if (name === ":status") {
+          out.status = value;
+        } else {
+          out.fields = out.fields === "" ? `${name}=${value}` : `${out.fields} ${name}=${value}`;
         }
       }
     } else if (header.type === H3_FRAME_DATA) {

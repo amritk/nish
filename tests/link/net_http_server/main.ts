@@ -7,6 +7,13 @@
 //      echoed, a chunked response streamed in pieces, a 204.
 //   2. Limits: a declared body over the cap is answered 413 and the
 //      connection ends; a body at the cap is taken whole.
+//   2a. The screen: CONNECT 501 and `OPTIONS *` 204 with no Allow, neither
+//      taken; a chunked body past the cap 413; a head of an 8000-byte target
+//      and 16000 bytes of fields served, 16400 bytes of fields 431, a
+//      9000-byte target 414. Eight bodies held under `requests` 8 add less
+//      to the arena than `requests × (maxBody + 3T)`, `T` = min(64 KiB,
+//      `maxBody`), with a `maxBody` that is not a power of two; small bodies
+//      less than `requests × 3T`.
 //   3. Pipelining: three requests in one write are answered in order.
 //   4. The late answer: a request held while its peer leaves answers
 //      HANDLER_DROPPED, also once a new connection has taken its slot, and the
@@ -52,6 +59,7 @@ const STREAM: i32 = 4
 const REMOVE: i32 = 5
 const PROBLEM: i32 = 6
 const BIG: i32 = 7
+const HOLD: i32 = 8
 
 const CAP: i32 = 65536
 const FIVE_SECONDS: i64 = 5000000000
@@ -77,8 +85,10 @@ class App {
   failures: i32 = 0
   /** How many `GET /big` the program has answered. */
   bigCount: i32 = 0
+  /** How many requests the program has taken. */
+  taken: i32 = 0
 
-  constructor(idleMs: i32, bodyMs: i32, requests: i32) {
+  constructor(idleMs: i32, bodyMs: i32, requests: i32, maxBody: i32) {
     const router = new Router(new RouterLimits())
     router.add("GET", "/")
     router.add("GET", "/users/:id")
@@ -88,9 +98,10 @@ class App {
     router.add("DELETE", "/users/:id")
     router.add("GET", "/problem")
     router.add("GET", "/big")
+    router.add("POST", "/hold")
     const limits = new HttpServerLimits()
     limits.requests = requests
-    limits.maxBody = CAP
+    limits.maxBody = maxBody
     limits.bodyTimeout = bodyMs
     const config = new Http1Config()
     config.idleTimeout = idleMs
@@ -119,6 +130,7 @@ class App {
 
   answer(req: HttpServerRequest): void {
     const h: HttpServer = this.h
+    this.taken += 1
     switch (req.route) {
       case HOME:
         h.send(req, 200, this.text, this.hello, ZERO, toI32(this.hello.length))
@@ -146,6 +158,7 @@ class App {
         h.send(req, 200, this.octets, req.body, ZERO, req.bodyLength)
         break
       case SLOW:
+      case HOLD:
         if (this.heldCount < toI32(this.held.length)) {
           this.held[this.heldCount] = req
         } else {
@@ -339,9 +352,18 @@ const response = (app: App, c: Client, head: boolean): boolean => {
   return false
 }
 
-/** Whether the last response's body is exactly `text`. */
-const bodyIs = (c: Client, text: string): boolean =>
-  c.bodyLength === toI32(text.length) && startsWith(c.buf, c.bodyStart, c.bodyStart + c.bodyLength, text)
+/** Whether the last response's body is exactly `text`, byte for byte (case counts, unlike `startsWith`). */
+const bodyIs = (c: Client, text: string): boolean => {
+  if (c.bodyLength !== toI32(text.length) || c.bodyStart + c.bodyLength > toI32(c.buf.length)) {
+    return false
+  }
+  for (let k: i32 = 0; k < c.bodyLength; k++) {
+    if (toI32(c.buf[c.bodyStart + k]) !== toI32(text.charCodeAt(k))) {
+      return false
+    }
+  }
+  return true
+}
 
 /** Whether the last response's head holds `text`. */
 const headHas = (c: Client, text: string): boolean => find(c.buf, ZERO, c.bodyStart, text) >= 0
@@ -463,6 +485,156 @@ const limits = (app: App): void => {
   check(app, "a body exactly at the cap is taken whole and echoed byte for byte", same)
   netClose(d.fd)
   check(app, "both clients are gone", awaitConnections(app, toI32(0)))
+}
+
+/** `n` bytes of `a`. */
+const pad = (n: i32): string => {
+  let out: string = ""
+  let piece: string = "a"
+  let left: i32 = n
+  while (left > 0) {
+    if ((left & 1) === 1) {
+      out = out + piece
+    }
+    piece = piece + piece
+    left = left >> 1
+  }
+  return out
+}
+
+/** A request head for `GET target` whose header lines (each with its CRLF) take `fieldBytes` bytes. */
+const sizedHead = (target: string, fieldBytes: i32): string =>
+  `GET ${target} HTTP/1.1\r\nHost: t\r\nX-Pad: ${pad(fieldBytes - 9 - 9)}\r\n\r\n`
+
+/** The answers the server gives before the program sees a request, and the request-head bounds. */
+const screens = (app: App): void => {
+  const taken: i32 = app.taken
+  const c = connect(app)
+  send(app, c, "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n")
+  check(app, "CONNECT is answered 501", response(app, c, false) && c.status === 501)
+  netClose(c.fd)
+  const d = connect(app)
+  send(app, d, "OPTIONS * HTTP/1.1\r\nHost: t\r\n\r\n")
+  check(app, "OPTIONS * is answered 204 with no Allow", response(app, d, true) && d.status === 204 && !headHas(d, "\r\nallow:"))
+  netClose(d.fd)
+  check(app, "the program takes neither", app.taken === taken)
+
+  const e = connect(app)
+  send(app, e, `POST /echo HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n10001\r\n`)
+  const body: u8[] = new Array<u8>(CAP + 1)
+  sendAll(app, e, body, ZERO, CAP + 1)
+  check(app, "a chunked body past the cap is answered 413", response(app, e, false) && e.status === 413)
+  check(app, "and the connection ends", awaitClose(app, e))
+  check(app, "the program never takes it", app.taken === taken)
+  netClose(e.fd)
+
+  const f = connect(app)
+  send(app, f, sizedHead(`/?p=${pad(8000 - 4)}`, 16000))
+  check(app, "an 8000-byte target with 16000 bytes of fields is served", response(app, f, false) && f.status === 200 && bodyIs(f, "hello"))
+  netClose(f.fd)
+  const g = connect(app)
+  send(app, g, sizedHead("/", 16400))
+  check(app, "16400 bytes of fields are answered 431", response(app, g, false) && g.status === 431)
+  netClose(g.fd)
+  const k = connect(app)
+  send(app, k, sizedHead(`/?p=${pad(9000 - 4)}`, 100))
+  check(app, "a 9000-byte target is answered 414", response(app, k, false) && k.status === 414)
+  netClose(k.fd)
+  check(app, "the screened clients are gone", awaitConnections(app, toI32(0)))
+}
+
+/**
+ * What eight requests held with a body each of `length` bytes add to the
+ * arena, under `requests` 8 and `maxBody`; the connections are made first, so
+ * only their requests count. `Arena.used` counts the current chunk only, so
+ * this measures bodies well inside one chunk.
+ */
+const bodyArena = (maxBody: i32, length: i32): i64 => {
+  const app = new App(toI32(60000), toI32(30000), toI32(8), maxBody)
+  const head: u8[] = ascii(`POST /hold HTTP/1.1\r\nHost: t\r\nContent-Length: ${length}\r\n\r\n`)
+  const body: u8[] = new Array<u8>(length)
+  const clients: Client[] = []
+  for (let k: i32 = 0; k < 8; k++) {
+    clients.push(connect(app))
+  }
+  awaitConnections(app, toI32(8))
+  const before: i64 = Arena.used()
+  for (const c of clients) {
+    sendAll(app, c, head, ZERO, toI32(head.length))
+    sendAll(app, c, body, ZERO, length)
+  }
+  const held: boolean = awaitHeld(app, toI32(8))
+  const added: i64 = Arena.used() - before
+  for (const c of clients) {
+    netClose(c.fd)
+  }
+  return held ? added : toI64(-1)
+}
+
+/**
+ * The bytes of body array eight requests hold, each sent a chunked body of
+ * exactly `maxBody` bytes in pieces of 1000, 70000 and the rest, under
+ * `requests` 8; -1 if they were not all held whole. A body this large takes
+ * a chunk of its own, past what `Arena.used` reads, so this reads the arrays.
+ */
+const bodyHeld = (maxBody: i32): i64 => {
+  const app = new App(toI32(60000), toI32(30000), toI32(8), maxBody)
+  const head: u8[] = ascii("POST /hold HTTP/1.1\r\nHost: t\r\nTransfer-Encoding: chunked\r\n\r\n")
+  const body: u8[] = new Array<u8>(maxBody)
+  const sizes: i32[] = [1000, 70000, maxBody - 71000]
+  const clients: Client[] = []
+  for (let k: i32 = 0; k < 8; k++) {
+    clients.push(connect(app))
+  }
+  awaitConnections(app, toI32(8))
+  for (const c of clients) {
+    sendAll(app, c, head, ZERO, toI32(head.length))
+    for (const n of sizes) {
+      const line: u8[] = ascii(`${httpHex(n)}\r\n`)
+      sendAll(app, c, line, ZERO, toI32(line.length))
+      sendAll(app, c, body, ZERO, n)
+      send(app, c, "\r\n")
+    }
+    send(app, c, "0\r\n\r\n")
+  }
+  let total: i64 = toI64(-1)
+  if (awaitHeld(app, toI32(8))) {
+    total = toI64(0)
+    for (let k: i32 = 0; k < 8; k++) {
+      const r: HttpServerRequest = app.held[k]
+      if (r.bodyLength !== maxBody) {
+        total = toI64(-1)
+        break
+      }
+      total += toI64(r.body.length)
+    }
+  }
+  for (const c of clients) {
+    netClose(c.fd)
+  }
+  return total
+}
+
+/** `n` in hexadecimal, as a chunk size line writes it. */
+const httpHex = (n: i32): string => {
+  const digits: string = "0123456789abcdef"
+  let out: string = ""
+  let v: i32 = n
+  while (v > 0 || out.length === 0) {
+    out = digits.substring(v % 16, (v % 16) + 1) + out
+    v = toI32(v / 16)
+  }
+  return out
+}
+
+/** The body arena's bound: below `requests × (maxBody + 3T)`, `T` the smaller of 64 KiB and `maxBody`. */
+const bodyBound = (app: App): void => {
+  const T: i64 = toI64(65536)
+  const big: i64 = bodyHeld(toI32(1048575))
+  check(app, "eight chunked bodies of maxBody 1048575 are held in arrays of exactly maxBody", big === toI64(8) * toI64(1048575))
+  check(app, "below 8 × (maxBody + 192 KiB)", big > toI64(0) && big < toI64(8) * (toI64(1048575) + toI64(3) * T))
+  const small: i64 = bodyArena(toI32(1048575), toI32(1000))
+  check(app, "eight held bodies of 1000 bytes add less than 8 × 192 KiB to the arena", small > toI64(0) && small < toI64(8) * toI64(3) * T)
 }
 
 const pipelining = (app: App): void => {
@@ -617,24 +789,26 @@ const drainingPipelined = (app: App): void => {
 }
 
 export const main = (): i32 => {
-  const app = new App(toI32(60000), toI32(30000), toI32(64))
+  const app = new App(toI32(60000), toI32(30000), toI32(64), CAP)
   check(app, "the handler answers its codes as named", HANDLER_SENT === 0 && HANDLER_DROPPED < 0 && HANDLER_ABSENT < 0)
   routing(app)
   limits(app)
+  screens(app)
+  bodyBound(app)
   pipelining(app)
   // A peer that closes may only have half-closed and still be waiting for
   // its answer, so a held request's connection ends at the idle timeout:
   // a short one here.
-  const late = new App(toI32(300), toI32(30000), toI32(2))
+  const late = new App(toI32(300), toI32(30000), toI32(2), CAP)
   lateAnswer(late)
   // The body deadline against a peer the idle timeout would keep.
-  const slow = new App(toI32(300), toI32(300), toI32(64))
+  const slow = new App(toI32(300), toI32(300), toI32(64), CAP)
   bodyDeadline(slow)
   backpressure(app)
   flat(app)
-  const drained = new App(toI32(60000), toI32(30000), toI32(64))
+  const drained = new App(toI32(60000), toI32(30000), toI32(64), CAP)
   draining(drained)
-  const drainedPipelined = new App(toI32(60000), toI32(30000), toI32(64))
+  const drainedPipelined = new App(toI32(60000), toI32(30000), toI32(64), CAP)
   drainingPipelined(drainedPipelined)
   const failures: i32 = app.failures + late.failures + slow.failures + drained.failures + drainedPipelined.failures
   return failures === 0 ? 0 : 1

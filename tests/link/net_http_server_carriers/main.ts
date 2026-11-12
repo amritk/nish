@@ -13,7 +13,7 @@
 //   5. `altSvcMaxAge` 0: `alt-svc: clear` over TLS, still none over h2c; an
 //      h2c connection silent before its preface is closed by
 //      `prefaceTimeout`, and one silent after it by `idleTimeout`.
-//   6. A server with the h2c listener alone turns by `wait`, no key lent.
+//   6. A server with no TLS or QUIC listener turns by `wait`, no key lent.
 import { Secret, secret, wipe } from "nish:secret"
 import { Suite } from "nish/testing"
 import { H2_CANCEL, H2_FLAG_END_STREAM } from "nish/net/http2-frame"
@@ -98,7 +98,7 @@ const clearChecks = (t: Suite, key: Secret<u8[]>): void => {
   limits.altSvcMaxAge = 0
   limits.prefaceTimeout = 300
   limits.idleTimeout = 300
-  const rig = new Rig(limits, true)
+  const rig = new Rig(limits, true, toI32(4))
   const h2 = new H2TlsClient(rig)
   t.ok("altSvcMaxAge 0: the TLS handshake", h2.handshake(rig.h2.port, key) && h2.verified)
   fourRequests(h2.wire)
@@ -123,11 +123,11 @@ const clearChecks = (t: Suite, key: Secret<u8[]>): void => {
   t.ok("one silent after its preface is closed by idleTimeout", idle.awaitClose(TURNS, key) && idle.log.take().indexOf("SETTINGS") >= 0)
 }
 
-/** A server with the h2c listener alone needs no key: its loop turns by `wait`. */
+/** A server with no TLS or QUIC listener needs no key: its loop turns by `wait`. */
 const waitChecks = (t: Suite, key: Secret<u8[]>): void => {
-  const rig = new Rig(rigLimits(n32(16)), false)
+  const rig = new Rig(rigLimits(n32(16)), false, toI32(4))
   const c = new H2cClient(rig)
-  t.ok("h2c alone: a connection", c.connect(rig.h2.h2cPort))
+  t.ok("no TLS listener: an h2c connection", c.connect(rig.h2.h2cPort))
   fourRequests(c.wire)
   c.flush(key)
   const frames: string = c.awaitFrames(n32(15), key)
@@ -136,7 +136,7 @@ const waitChecks = (t: Suite, key: Secret<u8[]>): void => {
 
 /** A reset of a stream still flushing its response hands its request back. */
 const h2ResetFlushing = (t: Suite, key: Secret<u8[]>): void => {
-  const rig = new Rig(rigLimits(n32(1)), true)
+  const rig = new Rig(rigLimits(n32(1)), true, toI32(4))
   const h2 = new H2TlsClient(rig)
   t.ok("a server with a pool of one: the TLS handshake", h2.handshake(rig.h2.port, key) && h2.verified)
   const none: i32[] = []
@@ -192,7 +192,7 @@ const h3Checks = (t: Suite, rig: Rig, key: Secret<u8[]>): void => {
 export const main = (): i32 => {
   const t = new Suite("http server carriers")
   const key: Secret<u8[]> = secret(leafPrivate())
-  const rig = new Rig(rigLimits(n32(1024)), true)
+  const rig = new Rig(rigLimits(n32(1024)), true, toI32(4))
   t.ok("the server listens: HTTP/2 over TLS, h2c and HTTP/3", rig.h2.port > 0 && rig.h2.h2cPort > 0 && rig.quicPort > 0)
   h2Checks(t, rig, key)
   h2cChecks(t, rig, key)

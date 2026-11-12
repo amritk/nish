@@ -23,6 +23,19 @@ PASS  a declared body one byte over the cap is answered 413
 PASS  and the connection ends
 PASS  a body exactly at the cap is taken whole and echoed byte for byte
 PASS  both clients are gone
+PASS  CONNECT is answered 501
+PASS  OPTIONS * is answered 204 with no Allow
+PASS  the program takes neither
+PASS  a chunked body past the cap is answered 413
+PASS  and the connection ends
+PASS  the program never takes it
+PASS  an 8000-byte target with 16000 bytes of fields is served
+PASS  16400 bytes of fields are answered 431
+PASS  a 9000-byte target is answered 414
+PASS  the screened clients are gone
+PASS  eight chunked bodies of maxBody 1048575 are held in arrays of exactly maxBody
+PASS  below 8 × (maxBody + 192 KiB)
+PASS  eight held bodies of 1000 bytes add less than 8 × 192 KiB to the arena
 PASS  the first of three pipelined requests is answered first
 PASS  then the second
 PASS  then the third

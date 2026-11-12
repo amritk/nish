@@ -29,6 +29,6 @@ PASS  HTTP/2 over TLS says alt-svc: clear
 PASS  h2c says nothing of alt-svc
 PASS  an h2c connection that never sends its preface is closed by prefaceTimeout
 PASS  one silent after its preface is closed by idleTimeout
-PASS  h2c alone: a connection
+PASS  no TLS listener: an h2c connection
 PASS  wait serves it: /hello answered and every stream ended
 http server carriers: 33 passed, 0 failed, 0 skipped
