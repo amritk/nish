@@ -1,7 +1,11 @@
 // WP34 K4 under the N6 assembly check: X25519's field multiply, its
 // conditional swap and one step of its Montgomery ladder, held by
 // tests/run.js to "no branch, no call it cannot follow, no secret-indexed
-// access". Secret is the scalar bit (`swap`, `bit`) and every limb.
+// access". Secret is the scalar bit (`swap`, `bit`) and every limb. The
+// `loops` checks read the rolled loops whole, back edge included: the
+// 255-step ladder (`ladderLoop`), the inversion's square chains
+// (`fieldSquareTimes`, `fieldInvert`) and the two encodings. Each loop's
+// condition must be public, and nothing secret may index a load on any pass.
 // ct-check: fieldMul secret=contents
 // ct-check: fieldSquare secret=contents
 // ct-check: fieldMulA24 secret=contents
@@ -20,9 +24,9 @@
 // ct-check: fieldAddUnrolled secret=contents loops expect=noloop
 //
 // **These are copies, not imports.** `std/crypto/x25519.ts` exports only
-// `x25519` and `x25519Base`, whose 255-step loop the check refuses by
-// design, so its cores are copied here, each under the name of the function
-// it mirrors. Three things differ, and none changes a value:
+// `x25519` and `x25519Base`, and a case compiles to one module, so its
+// cores are copied here, each under the name of the function it mirrors.
+// Three things differ, and none changes a value:
 //
 // - The early `return` on a short array is gone. It guards a public length,
 //   but it is a branch, and the check refuses every branch.
@@ -30,7 +34,8 @@
 //   where the module writes `a[i]`: a bounds check is a branch too.
 // - `fieldMul` writes the ten rows of `f25519Mul`'s outer loop out by hand,
 //   calling `fieldMulRow` once per row. `clang -O2` unrolls the inner loop
-//   and leaves the outer one rolled, and a rolled loop is a back-edge.
+//   and leaves the outer one rolled, and without `loops` a rolled loop is a
+//   back-edge the check refuses.
 //
 // `main` is what keeps the copies honest: it runs the whole of X25519 on
 // them, on RFC 7748's vectors, and ct_asm_x25519.out requires every answer.

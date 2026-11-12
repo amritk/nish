@@ -12469,6 +12469,41 @@ if (dealtHere("cryptoChecks")) {
           ? "no `for (let i: i32 = 0; i < 30; i++)` loop in std/crypto/p256.ts's p256Divsteps30"
           : `${blocks.length} blocks, ${stray.length} unlike the module's loop body:\n${stray[0] ?? ""}\n--- module:\n${loopBody}`
       )
+
+      // ct_asm_chacha20poly1305's loop copies are the module's text with a `ct`
+      // prefix and an `export`, so a module edit the copy misses fails here, not
+      // silently. `ctPoly1305AbsorbWhole` is the head of poly1305Absorb up to the
+      // end of its whole-blocks loop; the padded tail stays discipline.
+      const chachaSource = fs.readFileSync(path.join(root, "std", "crypto", "chacha20poly1305.ts"), "utf8")
+      const chachaFixture = fs
+        .readFileSync(path.join(casesDir, "ct_asm_chacha20poly1305.ts"), "utf8")
+        .replace(/\bct(Chacha20|Poly1305)/g, (_m, word) => word.toLowerCase())
+        .replace(/\bCT_POLY1305_/g, "POLY1305_")
+        .replace(/\nexport const /g, "\nconst ")
+      const bodyOf = (source, name) =>
+        source.match(new RegExp(`\\nconst ${name} = (?:[^\\n]*\\{\\n[\\s\\S]*?\\n\\}\\n|[^\\n]*[^{\\n]\\n)`))?.[0]
+      const drifted = []
+      for (const name of ["chacha20Rotl", "chacha20Core", "chacha20XorInto"]) {
+        const copy = bodyOf(chachaFixture, name)
+        if (copy === undefined || copy !== bodyOf(chachaSource, name)) {
+          drifted.push(name)
+        }
+      }
+      const absorbHead = bodyOf(chachaFixture, "poly1305AbsorbWhole")
+        ?.replace("poly1305AbsorbWhole", "poly1305Absorb")
+        .replace(", len: i32): void", ", len: i32, zeroPad: boolean): void")
+        .replace(/\}\n$/, "")
+      if (absorbHead === undefined || !bodyOf(chachaSource, "poly1305Absorb")?.startsWith(absorbHead)) {
+        drifted.push("poly1305Absorb's whole-blocks loop")
+      }
+      if (!chachaSource.includes("\nconst POLY1305_HIGH_BIT: i32 = 0x1000000\n")) {
+        drifted.push("POLY1305_HIGH_BIT")
+      }
+      check(
+        "ct_asm: ct_asm_chacha20poly1305's loop copies match std/crypto/chacha20poly1305.ts",
+        drifted.length === 0,
+        `differs from the module: ${drifted.join(", ")}`
+      )
     }
   }
 

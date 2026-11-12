@@ -120,9 +120,7 @@ export const ctSpecs = (source) => {
   const specs = []
   for (const line of source.split("\n").filter((l) => l.startsWith("// ct-check"))) {
     const m = line.match(
-      new RegExp(
-        `^// ct-check: (\\w+) secret=([\\w,]+)( loops)?(?: expect=(${KINDS})(?: via=(\\w+))?)?\\s*$`
-      )
+      new RegExp(`^// ct-check: (\\w+) secret=([\\w,]+)( loops)?(?: expect=(${KINDS})(?: via=(\\w+))?)?\\s*$`)
     )
     if (m === null) {
       specs.push({
@@ -361,6 +359,11 @@ const x86Width = (mnemonic, others) => {
   const extend = mnemonic.match(/^mov[sz]([bwl])[wlq]$/)
   if (extend !== null) {
     return [{ b: 1, w: 2, l: 4 }[extend[1]], true]
+  }
+  // `set<cc>` writes one byte and carries no size suffix: `seto 7(%rsp)` is
+  // that byte, not a 64-byte smear over the spill slots beside it.
+  if (/^set[a-z]+$/.test(mnemonic)) {
+    return [1, true]
   }
   const register = others.find((op) => !op.memory && op.registers.length > 0)
   if (register !== undefined) {
@@ -658,11 +661,16 @@ export class Taint {
   /** What `width` bytes of the stack at `at` hold; exactly what was stored when one store wrote them all. */
   readStack(at, width) {
     if (at === null) {
+      // A read this cannot place may be any slot, so it is secret if any is.
+      // It is a stack address only if it is wide enough to be one: both
+      // targets' addresses are eight bytes, and a narrower read through a
+      // counted index, `keystream[w]` in an array built on the stack, is an
+      // element, not the frame's own pointer beside it.
       let secret = this.unknownSecret
       let stack = false
       for (const b of this.bytes.values()) {
         secret = secret || b.secret
-        stack = stack || b.stack !== undefined
+        stack = stack || (width >= 8 && b.stack !== undefined)
       }
       return { secret, loaded: true, stack: stack ? null : undefined }
     }
