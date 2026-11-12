@@ -215,12 +215,12 @@ const screens = (app: App): void => {
 }
 
 /**
- * What eight requests held with a body each of `length` bytes add to the
- * arena, under `requests` 8 and `maxBody`; the connections are made first, so
- * only their requests count. `Arena.used` counts the current chunk only, so
- * this measures bodies well inside one chunk.
+ * The largest body array of eight requests held with a body each of `length`
+ * bytes, under `requests` 8 and `maxBody`; -1 if they were not all held
+ * whole. It reads the arrays, not `Arena.used`: that counts the newest chunk
+ * only, and an array past 64 KiB takes a chunk of its own.
  */
-const bodyArena = (maxBody: i32, length: i32): i64 => {
+const bodyLargest = (maxBody: i32, length: i32): i64 => {
   const app = new App(toI32(60000), toI32(30000), toI32(8), maxBody, toI32(16384))
   const head: u8[] = ascii(`POST /hold HTTP/1.1\r\nHost: t\r\nContent-Length: ${length}\r\n\r\n`)
   const body: u8[] = new Array<u8>(length)
@@ -229,17 +229,28 @@ const bodyArena = (maxBody: i32, length: i32): i64 => {
     clients.push(dial(app))
   }
   awaitConnections(app, toI32(8))
-  const before: i64 = Arena.used()
   for (const c of clients) {
     sendAll(app, c, head, ZERO, toI32(head.length))
     sendAll(app, c, body, ZERO, length)
   }
-  const held: boolean = awaitHeld(app, toI32(8))
-  const added: i64 = Arena.used() - before
+  let largest: i64 = toI64(-1)
+  if (awaitHeld(app, toI32(8))) {
+    largest = toI64(0)
+    for (let k: i32 = 0; k < 8; k++) {
+      const r: HttpServerRequest = app.held[k]
+      if (r.bodyLength !== length) {
+        largest = toI64(-1)
+        break
+      }
+      if (toI64(r.body.length) > largest) {
+        largest = toI64(r.body.length)
+      }
+    }
+  }
   for (const c of clients) {
     netClose(c.fd)
   }
-  return held ? added : toI64(-1)
+  return largest
 }
 
 /**
@@ -304,8 +315,8 @@ const bodyBound = (app: App): void => {
   const big: i64 = bodyHeld(toI32(1048575))
   check(app, "eight chunked bodies of maxBody 1048575 are held in arrays of exactly maxBody", big === toI64(8) * toI64(1048575))
   check(app, "below 8 × (maxBody + 192 KiB)", big > toI64(0) && big < toI64(8) * (toI64(1048575) + toI64(3) * T))
-  const small: i64 = bodyArena(toI32(1048575), toI32(1000))
-  check(app, "eight held bodies of 1000 bytes add less than 8 × 192 KiB to the arena", small > toI64(0) && small < toI64(8) * toI64(3) * T)
+  const small: i64 = bodyLargest(toI32(1048575), toI32(1000))
+  check(app, "eight held bodies of 1000 bytes are each in an array of at most 64 KiB, not maxBody", small > toI64(0) && small <= T)
 }
 
 const pipelining = (app: App): void => {

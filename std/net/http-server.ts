@@ -1886,8 +1886,11 @@ export class HttpServer {
   /**
    * Whether the client of `r` has hung up: its connection is closed or
    * reused, its HTTP/2 or HTTP/3 stream was reset, or, on HTTP/1.1 and
-   * HTTP/2, the peer ended its byte stream while `r` is held. Panics on
-   * another server's request.
+   * HTTP/2, the peer ended its byte stream while `r` is held. On HTTP/2 that
+   * is the connection's end of input, an end of file or a read error, so it
+   * includes a client that half-closed TCP after sending its request and
+   * may still read an answer: `send` then says which. Panics on another
+   * server's request.
    * @param r a request `take` handed over
    * @returns true once nobody is left to read `r`'s answer
    */
@@ -2648,17 +2651,18 @@ export class HttpServer {
     if (pathLength === 1 && toI32(f.path[0]) === 42 && httpFieldIs(f.method, "OPTIONS")) {
       return 204
     }
-    const count: i32 = toI32(f.names.length)
-    // `:authority` becomes a `host` field, so it takes a slot only when present.
-    const host: i32 = toI32(f.authority.length) > 0 ? 1 : 0
-    if (count + host > this.maxFields) {
-      return 431
-    }
+    // Counts what `fromFields` lays out: `:authority`, when present, as a
+    // `host` field in place of every `host` field the head carries.
+    const authority: boolean = toI32(f.authority.length) > 0
+    let fields: i32 = authority ? 1 : 0
     let bytes: i32 = toI32(f.method.length) + pathLength + 4 + toI32(f.authority.length)
-    for (let k: i32 = 0; k < count; k++) {
-      bytes += toI32(f.names[k].length) + toI32(f.values[k].length)
+    for (let k: i32 = 0; k < toI32(f.names.length); k++) {
+      if (!authority || !httpFieldIs(f.names[k], "host")) {
+        fields += 1
+        bytes += toI32(f.names[k].length) + toI32(f.values[k].length)
+      }
     }
-    if (bytes > this.maxHead) {
+    if (fields > this.maxFields || bytes > this.maxHead) {
       return 431
     }
     if (f.contentLength > toI64(this.maxBody)) {

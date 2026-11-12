@@ -3,21 +3,23 @@
 // names:
 //   1. a held request whose client hangs up (h2c RST_STREAM or a closed
 //      socket, HTTP/3 RESET_STREAM and STOP_SENDING or CONNECTION_CLOSE)
-//      reads `hungUp`, `send` answers HANDLER_DROPPED, and under `requests` 1
-//      the next request is served on the entry it gave back;
-//   2. eight held h2c requests with 1000-byte bodies grow the arena by less
-//      than a 64 KiB buffer and two halves each, and a second round as large
-//      after the first is answered does not grow it at all;
+//      reads `hungUp`, `send` answers HANDLER_DROPPED (on a closed socket,
+//      SENT or DROPPED: which is kernel timing), and under `requests` 1 the
+//      next request is served on the entry it gave back;
+//   2. eight held h2c requests with 1000-byte bodies each hold the body in a
+//      buffer of at most 64 KiB, not `maxBody`, and once warm, rounds as large
+//      after the first is answered do not grow the arena at all;
 //   3. `drain`: a new HTTP/3 connection gets no answer, the held h2c and
 //      HTTP/3 requests are answered, and each connection carries a GOAWAY;
 //   4. a request with no `:authority` and `maxFields` other fields is served,
-//      as is one with `:authority` and one field fewer; with `:authority` and
-//      `maxFields` others it is 431.
+//      as is one with `:authority` and one field fewer, and one with
+//      `:authority`, a `host` it replaces and one field fewer; with
+//      `:authority` and `maxFields` others it is 431.
 // The helpers are `net_http_server_matrix/rows.ts`'s.
 import { Secret, secret, wipe } from "nish:secret"
 import { Suite } from "nish/testing"
 import { netClose } from "nish:net"
-import { HANDLER_DROPPED } from "nish/net/handler"
+import { HANDLER_DROPPED, HANDLER_SENT } from "nish/net/handler"
 import { H2_FLAG_END_STREAM } from "nish/net/http2-frame"
 import { H3_FRAME_GOAWAY, Http3FrameHeader, h3ReadFrameHeader } from "nish/net/http3-frame"
 import { HttpServerRequest } from "nish/net/http-server"
@@ -75,6 +77,24 @@ const dropped = (t: Suite, what: string, rig: Rig, r: HttpServerRequest | null, 
   t.ok(`${what}: and send answers HANDLER_DROPPED`, rig.h.send(r, 200, rig.text, rig.hello, ZERO, toI32(rig.hello.length)) === HANDLER_DROPPED)
 }
 
+/**
+ * After `r`'s client closed its socket: whether it reads `hungUp` and `send`
+ * ends it, SENT or DROPPED. A close reaches the server as end of input; the
+ * write may still be accepted by the kernel, or refused if the close came as
+ * a reset because the client left the server's bytes unread, and which one is
+ * timing. Either way the entry must come back, which the next row pins.
+ */
+const closed = (t: Suite, what: string, rig: Rig, r: HttpServerRequest | null, key: Secret<u8[]>): void => {
+  if (r === null) {
+    t.ok(`${what}: the held request reads hungUp`, false)
+    t.ok(`${what}: and send ends it, SENT or DROPPED`, false)
+    return
+  }
+  t.ok(`${what}: the held request reads hungUp`, awaitHungUp(rig, r, key))
+  const status: i32 = rig.h.send(r, 200, rig.text, rig.hello, ZERO, toI32(rig.hello.length))
+  t.ok(`${what}: and send ends it, SENT or DROPPED`, status === HANDLER_SENT || status === HANDLER_DROPPED)
+}
+
 /** Whether HTTP/3 stream `id` of `q` has a 200 answer, turning until it ends. */
 const h3Served = (q: QuicClient, key: Secret<u8[]>, id: i64): boolean => {
   q.turnUntil(key, id, false)
@@ -120,9 +140,9 @@ const hangUps = (t: Suite, key: Secret<u8[]>): void => {
   const gone = h2cOpen(rig, none, noValues)
   gone.wire.headers(n32(1), getOf("/slow"), H2_FLAG_END_STREAM)
   h2cHold(gone, key, rig, n32(1))
-  const closed = heldOne(rig)
+  const shut = heldOne(rig)
   netClose(gone.fd)
-  dropped(t, "h2c socket closed", rig, closed, key)
+  closed(t, "h2c socket closed", rig, shut, key)
   const after = h2cOpen(rig, none, noValues)
   after.wire.headers(n32(1), getOf("/hello"), H2_FLAG_END_STREAM)
   t.ok("h2c socket closed: then a new connection's request is served on the returned entry", h2cUntil(after, key, "HEADERS 1 ").indexOf("HEADERS 1 :status=200") >= 0)
@@ -175,6 +195,15 @@ const answerBodies = (conns: H2cClient[], last: i32, rig: Rig, key: Secret<u8[]>
   return all
 }
 
+/** Whether `held` has eight requests, each with all `length` bytes of its body in a buffer of at most 64 KiB. */
+const tierSized = (held: HttpServerRequest[], length: i32): boolean => {
+  let all: boolean = toI32(held.length) === n32(8)
+  for (const r of held) {
+    all = all && r.bodyLength === length && toI32(r.body.length) <= n32(65536)
+  }
+  return all
+}
+
 const arena = (t: Suite, key: Secret<u8[]>): void => {
   const rig = new Rig(rigLimits(n32(8)), false, n32(4))
   const none: i32[] = []
@@ -188,16 +217,12 @@ const arena = (t: Suite, key: Secret<u8[]>): void => {
     conns.push(c)
   }
   t.ok("arena, h2c: four connections are each served once", warm)
-  // `rig.kept` counts only what the server's own calls leave allocated: the
-  // clients' logs and frames share the arena and would hide it.
-  const before: i64 = rig.kept
   const held: boolean = holdBodies(conns, n32(3), rig, key)
-  const added: i64 = rig.kept - before
   t.ok("arena, h2c: eight requests with 1000-byte bodies are held", held)
-  t.ok(
-    "arena, h2c: and the server keeps more of the arena, but less than a 64 KiB buffer and two halves each",
-    added > toI64(0) && added < toI64(8 * 3 * 65536)
-  )
+  // Each held request's own body buffer, not a total of arena bytes: the
+  // arena counts only its newest chunk, and a buffer past 64 KiB opens a
+  // chunk of its own, so eight `maxBody` buffers could read as small.
+  t.ok("arena, h2c: and each holds its body in at most 64 KiB, not maxBody's 1 MiB", tierSized(rig.held, n32(1000)))
   t.ok("arena, h2c: they are answered", answerBodies(conns, n32(5), rig, key))
   let rounds: boolean = true
   let warmed: i64 = 0
@@ -253,6 +278,12 @@ const fields = (t: Suite, key: Secret<u8[]>): void => {
     "maxFields, h2c: :authority and 100 others is 431",
     h2cUntil(c, key, "HEADERS 5 ").indexOf("HEADERS 5 end :status=431") >= 0
   )
+  // The `host` field gives way to `:authority`, so it takes no slot of its own.
+  const withHost: string[] = getOf("/hello")
+  withHost.push("host")
+  withHost.push("example.com")
+  c.wire.headers(n32(7), padPairs(withHost, MAX_FIELDS - 1), H2_FLAG_END_STREAM)
+  t.ok("maxFields, h2c: :authority, host and 99 others is served", h2cUntil(c, key, "HEADERS 7 ").indexOf("HEADERS 7 :status=200") >= 0)
 
   const q = h3Open(rig, key, h3ClientParams(new H3Limits()))
   const names: string[] = [":method", ":scheme", ":path"]

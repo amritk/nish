@@ -175,7 +175,10 @@ Each returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the client has gone:
 its connection closed, or its HTTP/2 or HTTP/3 stream was reset. Either way
 the request goes back to the server's pool, so do not keep it after
 answering. `server.hungUp(r)` asks the same question before you answer, for
-a request you hold while another service works.
+a request you hold while another service works. On HTTP/1.1 and HTTP/2 it
+is true once the client's side of the connection has ended, which includes a
+client that half-closed TCP after sending its request and may still read
+the answer; `send`'s result says whether it did.
 
 On HTTP/2 and HTTP/3, field names are lowercase. The server writes the
 length and connection fields itself. A status outside 200 to 599, more or

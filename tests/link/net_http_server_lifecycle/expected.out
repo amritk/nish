@@ -2,7 +2,7 @@ PASS  h2c RST_STREAM: the held request reads hungUp
 PASS  h2c RST_STREAM: and send answers HANDLER_DROPPED
 PASS  h2c RST_STREAM: then the next request is served on the returned entry
 PASS  h2c socket closed: the held request reads hungUp
-PASS  h2c socket closed: and send answers HANDLER_DROPPED
+PASS  h2c socket closed: and send ends it, SENT or DROPPED
 PASS  h2c socket closed: then a new connection's request is served on the returned entry
 PASS  h3 RESET_STREAM and STOP_SENDING: the held request reads hungUp
 PASS  h3 RESET_STREAM and STOP_SENDING: and send answers HANDLER_DROPPED
@@ -12,7 +12,7 @@ PASS  h3 CONNECTION_CLOSE: and send answers HANDLER_DROPPED
 PASS  h3 CONNECTION_CLOSE: then a new connection's request is served on the returned entry
 PASS  arena, h2c: four connections are each served once
 PASS  arena, h2c: eight requests with 1000-byte bodies are held
-PASS  arena, h2c: and the server keeps more of the arena, but less than a 64 KiB buffer and two halves each
+PASS  arena, h2c: and each holds its body in at most 64 KiB, not maxBody's 1 MiB
 PASS  arena, h2c: they are answered
 PASS  arena, h2c: eight more rounds as large are held and answered
 PASS  arena, h2c: and the server keeps no more of the arena for them
@@ -25,7 +25,8 @@ PASS  drain, h3: and the server's control stream carries a GOAWAY
 PASS  maxFields, h2c: no :authority and 100 other fields is served
 PASS  maxFields, h2c: :authority and 99 others is served
 PASS  maxFields, h2c: :authority and 100 others is 431
+PASS  maxFields, h2c: :authority, host and 99 others is served
 PASS  maxFields, h3: no :authority and 100 other fields is served
 PASS  maxFields, h3: :authority and 99 others is served
 PASS  maxFields, h3: :authority and 100 others is 431
-http server lifecycle: 30 passed, 0 failed, 0 skipped
+http server lifecycle: 31 passed, 0 failed, 0 skipped
