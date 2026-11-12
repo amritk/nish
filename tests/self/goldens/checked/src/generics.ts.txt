@@ -1184,14 +1184,14 @@ function resolveFunctionArgument(ctx: CheckContext, call: Node, template: Templa
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: arg index
-  calls: CheckContext.arrowMode CheckContext.capturesOuter CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.constant FunctionBindings.get FunctionSig.isAsync FunctionSig.writtenArity Scope.lookup Scope.typeOf TypeTable.isFnRef TypeTable.stripNull TypeTable.typeName answerAnnotation argumentLead argumentOf asyncArgumentMessage calleeSpelling capturesNothing checkExpression liftArrowArgument mismatchMessage nish_panic_index nish_panic_slice nish_str_concat nish_str_new notFunctionLocal outerFunctionMessage promisesAnswer referenceArgument refuseOnce rootedInLocal unifyAnnotation unwrapTypeParens
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=liftArrowArgument#0 checkExpression#0 refuseOnce#0 referenceArgument#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 notFunctionLocal#0 CheckContext.capturesOuter#0 CheckContext.arrowMode#0 refuseOnce#0 notFunctionLocal#0 refuseOnce#0 outerFunctionMessage#0 CheckContext.signature#0 CheckContext.template#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 unifyAnnotation#0 refuseOnce#0 unifyAnnotation#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=liftArrowArgument#1 argumentLead#0 calleeSpelling#0 referenceArgument#1 calleeSpelling#0 argumentOf#0 argumentLead#0 argumentLead#0 argumentLead#0
-  pointer template: size=64 writesThrough=false captured=false passedTo=liftArrowArgument#2 calleeSpelling#1 referenceArgument#2 calleeSpelling#1
-  pointer arg: size=40 writesThrough=true captured=true passedTo=refuseOnce#1 referenceArgument#4 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1
-  pointer names: size=8 writesThrough=false captured=false passedTo=liftArrowArgument#5 referenceArgument#7 unifyAnnotation#3 unifyAnnotation#3
-  pointer bindings: size=40 writesThrough=true captured=true passedTo=liftArrowArgument#6 referenceArgument#8 unifyAnnotation#4 unifyAnnotation#4
-  pointer scope: size=56 writesThrough=true captured=true passedTo=liftArrowArgument#7 Scope.lookup#0 rootedInLocal#1 Scope.typeOf#0 checkExpression#2 referenceArgument#9 Scope.lookup#0 Scope.typeOf#0
+  calls: CheckContext.arrowMode CheckContext.capturesOuter CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.constant FunctionBindings.get FunctionSig.isAsync FunctionSig.writtenArity Scope.lookup Scope.typeOf TypeTable.isFnRef TypeTable.stripNull TypeTable.typeName answerAnnotation argumentLead argumentOf asyncArgumentMessage calleeSpelling captureMode capturesNothing checkExpression liftArrowArgument mismatchMessage nish_panic_index nish_panic_slice nish_str_concat nish_str_new notFunctionLocal outerFunctionMessage promisesAnswer referenceArgument refuseOnce rootedInLocal unifyAnnotation unwrapTypeParens
+  pointer ctx: size=320 writesThrough=true captured=true passedTo=liftArrowArgument#0 checkExpression#0 referenceArgument#0 refuseOnce#0 referenceArgument#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 notFunctionLocal#0 CheckContext.capturesOuter#0 CheckContext.arrowMode#0 refuseOnce#0 notFunctionLocal#0 refuseOnce#0 outerFunctionMessage#0 CheckContext.signature#0 CheckContext.template#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 refuseOnce#0 unifyAnnotation#0 refuseOnce#0 unifyAnnotation#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=liftArrowArgument#1 argumentLead#0 referenceArgument#1 calleeSpelling#0 referenceArgument#1 calleeSpelling#0 argumentOf#0 argumentLead#0 argumentLead#0 argumentLead#0
+  pointer template: size=64 writesThrough=false captured=false passedTo=liftArrowArgument#2 captureMode#0 referenceArgument#2 calleeSpelling#1 referenceArgument#2 calleeSpelling#1
+  pointer arg: size=40 writesThrough=true captured=true passedTo=referenceArgument#4 refuseOnce#1 referenceArgument#4 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1 refuseOnce#1
+  pointer names: size=8 writesThrough=false captured=false passedTo=liftArrowArgument#5 referenceArgument#7 referenceArgument#7 unifyAnnotation#3 unifyAnnotation#3
+  pointer bindings: size=40 writesThrough=true captured=true passedTo=liftArrowArgument#6 referenceArgument#8 referenceArgument#8 unifyAnnotation#4 unifyAnnotation#4
+  pointer scope: size=56 writesThrough=true captured=true passedTo=liftArrowArgument#7 Scope.lookup#0 rootedInLocal#1 Scope.typeOf#0 checkExpression#2 referenceArgument#9 referenceArgument#9 Scope.lookup#0 Scope.typeOf#0
   stackSites=0 stackLocals=0
   local -5:9 param: Node (const)
   local -4:9 fnType: Node (const)
@@ -1208,62 +1208,68 @@ function resolveFunctionArgument(ctx: CheckContext, call: Node, template: Templa
   local +21:11 type: i32 (const)
   callee +21:37 Scope.typeOf -> @Scope.typeOf
   callee +21:61 checkExpression -> @checkExpression
-  callee +25:29 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +25:47 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +29:7 refuseOnce -> @refuseOnce
-  callee +32:98 calleeSpelling -> @calleeSpelling
-  callee +36:9 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +37:14 referenceArgument -> @referenceArgument
-  callee +41:7 refuseOnce -> @refuseOnce
-  callee +44:55 calleeSpelling -> @calleeSpelling
-  callee +48:5 refuseOnce -> @refuseOnce
-  callee +51:81 TypeTable.typeName -> @TypeTable.typeName
-  callee +56:5 refuseOnce -> @refuseOnce
-  local +63:9 name: string (const)
-  local +64:9 inScope: Local | null (const)
-  callee +64:19 Scope.lookup -> @Scope.lookup
-  callee +66:5 refuseOnce -> @refuseOnce
-  callee +66:26 notFunctionLocal -> @notFunctionLocal
-  callee +66:60 Scope.typeOf -> @Scope.typeOf
-  callee +69:7 CheckContext.capturesOuter -> @CheckContext.capturesOuter
-  local +70:9 outer: Local | null (let)
-  callee +72:15 Scope.lookup -> @Scope.lookup
-  callee +74:28 capturesNothing -> @capturesNothing
-  callee +74:44 CheckContext.arrowMode -> @CheckContext.arrowMode
-  callee +75:7 refuseOnce -> @refuseOnce
-  callee +75:28 notFunctionLocal -> @notFunctionLocal
-  callee +75:62 Scope.typeOf -> @Scope.typeOf
-  callee +77:7 refuseOnce -> @refuseOnce
-  callee +77:28 outerFunctionMessage -> @outerFunctionMessage
-  local +81:9 bound: FunctionSig | null (const)
-  callee +81:17 FunctionBindings.get -> @FunctionBindings.get
-  local +82:9 fn: FunctionSig | null (const)
-  callee +82:39 CheckContext.signature -> @CheckContext.signature
-  callee +84:9 CheckContext.template -> @CheckContext.template
-  callee +85:7 refuseOnce -> @refuseOnce
-  callee +88:75 argumentOf -> @argumentOf
-  callee +93:9 CheckedProgram.constant -> @CheckedProgram.constant
-  callee +94:7 refuseOnce -> @refuseOnce
-  callee +97:5 refuseOnce -> @refuseOnce
+  local +27:11 runsAtCall: boolean (const)
+  callee +27:24 captureMode -> @captureMode
+  callee +27:67 promisesAnswer -> @promisesAnswer
+  callee +28:24 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +28:42 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +29:14 referenceArgument -> @referenceArgument
+  callee +31:29 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +31:47 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +35:7 refuseOnce -> @refuseOnce
+  callee +38:98 calleeSpelling -> @calleeSpelling
+  callee +42:9 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +43:14 referenceArgument -> @referenceArgument
+  callee +47:7 refuseOnce -> @refuseOnce
+  callee +50:55 calleeSpelling -> @calleeSpelling
+  callee +54:5 refuseOnce -> @refuseOnce
+  callee +57:81 TypeTable.typeName -> @TypeTable.typeName
+  callee +62:5 refuseOnce -> @refuseOnce
+  local +69:9 name: string (const)
+  local +70:9 inScope: Local | null (const)
+  callee +70:19 Scope.lookup -> @Scope.lookup
+  callee +72:5 refuseOnce -> @refuseOnce
+  callee +72:26 notFunctionLocal -> @notFunctionLocal
+  callee +72:60 Scope.typeOf -> @Scope.typeOf
+  callee +75:7 CheckContext.capturesOuter -> @CheckContext.capturesOuter
+  local +76:9 outer: Local | null (let)
+  callee +78:15 Scope.lookup -> @Scope.lookup
+  callee +80:28 capturesNothing -> @capturesNothing
+  callee +80:44 CheckContext.arrowMode -> @CheckContext.arrowMode
+  callee +81:7 refuseOnce -> @refuseOnce
+  callee +81:28 notFunctionLocal -> @notFunctionLocal
+  callee +81:62 Scope.typeOf -> @Scope.typeOf
+  callee +83:7 refuseOnce -> @refuseOnce
+  callee +83:28 outerFunctionMessage -> @outerFunctionMessage
+  local +87:9 bound: FunctionSig | null (const)
+  callee +87:17 FunctionBindings.get -> @FunctionBindings.get
+  local +88:9 fn: FunctionSig | null (const)
+  callee +88:39 CheckContext.signature -> @CheckContext.signature
+  callee +90:9 CheckContext.template -> @CheckContext.template
+  callee +91:7 refuseOnce -> @refuseOnce
+  callee +94:75 argumentOf -> @argumentOf
+  callee +99:9 CheckedProgram.constant -> @CheckedProgram.constant
+  callee +100:7 refuseOnce -> @refuseOnce
   callee +103:5 refuseOnce -> @refuseOnce
-  callee +106:10 argumentLead -> @argumentLead
-  local +110:9 wanted: Node[] (const)
-  callee +111:7 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  callee +114:5 refuseOnce -> @refuseOnce
-  callee +117:7 mismatchMessage -> @mismatchMessage
-  callee +119:9 argumentLead -> @argumentLead
-  callee +122:9 CheckContext.textOf -> @CheckContext.textOf
-  local +127:7 k: i32 (let)
-  callee +128:35 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  callee +129:5 unifyAnnotation -> @unifyAnnotation
-  callee +132:7 FunctionSig.isAsync -> @FunctionSig.isAsync
-  callee +132:24 promisesAnswer -> @promisesAnswer
-  callee +133:5 refuseOnce -> @refuseOnce
-  callee +136:7 asyncArgumentMessage -> @asyncArgumentMessage
-  callee +136:28 argumentLead -> @argumentLead
-  callee +136:83 FunctionSig.isAsync -> @FunctionSig.isAsync
-  callee +140:3 unifyAnnotation -> @unifyAnnotation
-  callee +140:24 answerAnnotation -> @answerAnnotation
+  callee +109:5 refuseOnce -> @refuseOnce
+  callee +112:10 argumentLead -> @argumentLead
+  local +116:9 wanted: Node[] (const)
+  callee +117:7 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  callee +120:5 refuseOnce -> @refuseOnce
+  callee +123:7 mismatchMessage -> @mismatchMessage
+  callee +125:9 argumentLead -> @argumentLead
+  callee +128:9 CheckContext.textOf -> @CheckContext.textOf
+  local +133:7 k: i32 (let)
+  callee +134:35 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  callee +135:5 unifyAnnotation -> @unifyAnnotation
+  callee +138:7 FunctionSig.isAsync -> @FunctionSig.isAsync
+  callee +138:24 promisesAnswer -> @promisesAnswer
+  callee +139:5 refuseOnce -> @refuseOnce
+  callee +142:7 asyncArgumentMessage -> @asyncArgumentMessage
+  callee +142:28 argumentLead -> @argumentLead
+  callee +142:83 FunctionSig.isAsync -> @FunctionSig.isAsync
+  callee +146:3 unifyAnnotation -> @unifyAnnotation
+  callee +146:24 answerAnnotation -> @answerAnnotation
 function rootedInLocal(expr: Node, scope: Scope): boolean -> @rootedInLocal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: expr

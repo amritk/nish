@@ -51,9 +51,10 @@ crosses to C, then the exact rules.
   and `new Int32Array(n)` is `new Array<i32>(n)`), except that a receiver
   spelled with one has no `push` or `pop`, as in TypeScript
   ([Typed-array names have no `push` or `pop`](builtins.md#typed-array-names-have-no-push-or-pop)).
-- **Only a class, interface, array or string can be `null`.** A nullable
-  value allows only `=== null` / `!== null`, assignment, narrowing and a `??`
-  default ([Nullable types](#nullable-types)).
+- **Only a class, interface, array, string or function reference can be
+  `null`.** A nullable value allows only `=== null` / `!== null`, assignment,
+  narrowing and a `??` default ([Nullable types](#nullable-types)); a nullable
+  function reference is the tag `0` ([Function references](declarations.md#function-references)).
 - **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
   against every other type ([Enums](declarations.md#enums)).
 - **A function reports failure with a `Result`**, the only way it can; the

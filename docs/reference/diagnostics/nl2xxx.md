@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 732 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 734 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -5082,6 +5082,27 @@ export const main = (): i32 => apply(add, 1);
 
 ```text
 Argument 1 of `apply`: `add` is `(a: i32, b: i32) => i32`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type
+```
+
+[`nl2340_fnarg_reference_arity.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2340_fnarg_reference_arity.ts):
+
+```ts
+// NL2340: a function reference passed for a function parameter of another
+// parameter count.
+type G = (x: i32, y: i32) => i32;
+
+const add = (x: i32, y: i32): i32 => x + y;
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
+
+export const main = (): i32 => {
+  const g: G = add;
+  return apply(g, 2);
+};
+```
+
+```text
+Argument 1 of `apply`: `g` is `(i32, i32) => i32`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type
 ```
 
 ## NL2341
@@ -14082,4 +14103,70 @@ export const main = (): i32 => run(null)
 
 ```text
 `h` may be `null`: a nullable function reference is called only after a test such as `h !== null` proves it holds a function
+```
+
+## NL2741
+
+The message of an error contains:
+
+```text
+…` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const`
+```
+
+[`nl2741_fnarg_reference_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2741_fnarg_reference_field.ts):
+
+```ts
+// NL2741: a field of function reference type passed for a function parameter
+// would be read again at each call the callee makes; pass a `const` instead.
+type F = (x: i32) => i32;
+
+const inc = (x: i32): i32 => x + 1;
+
+class Box {
+  op: F;
+  constructor(op: F) {
+    this.op = op;
+  }
+}
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
+
+export const main = (): i32 => {
+  const b = new Box(inc);
+  return apply(b.op, 2);
+};
+```
+
+```text
+`b.op` is read again at each call `apply` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const`
+```
+
+## NL2742
+
+The message of an error contains:
+
+```text
+…` calls it: pass it once a test such as `…
+```
+
+[`nl2742_fnarg_nullable_reference.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2742_fnarg_nullable_reference.ts):
+
+```ts
+// NL2742: a nullable function reference passed for a function parameter
+// before a test has narrowed it.
+type F = (x: i32) => i32;
+
+const inc = (x: i32): i32 => x + 1;
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
+
+export const main = (): i32 => {
+  let h: F | null = null;
+  h = inc;
+  return apply(h, 2);
+};
+```
+
+```text
+`h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it
 ```

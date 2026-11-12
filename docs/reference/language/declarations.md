@@ -1851,7 +1851,9 @@ new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
 A parameter of a top-level function may have a **function type** written
 inline in its annotation, and its argument is then a function the checker can
 name at the call: a top-level
-function written by name, or an arrow written right there. Such a function is
+function written by name, an arrow written right there, or a local holding a
+function reference, which the call wraps in an arrow that calls it
+([Function references](#function-references)). Such a function is
 a template, with or without type parameters, and **each callee it is given is
 an instantiation of its own**, exactly as each type-argument tuple is: one
 `define` per (template, type arguments, function arguments), whose body calls
@@ -1965,14 +1967,23 @@ export const main = (): i32 => {
   that result:
   `` Argument 1 of `apply`: `widen` is `(x: i32) => i64`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type ``
   (`tests/cases/reject_fnarg_mismatch`). The argument must be the name of a
-  top-level function, an arrow, or a local, field or element that holds a
-  [function reference](#function-references) (`tests/cases/fnref_arg`), and
-  an arrow passed there may call a reference it captures, narrowed first if
-  it is nullable (`fnref_arg_capture`). The arrow reads a field or element
-  argument at each call it makes, so an argument that calls or assigns as it
-  is read, `ops[next(b)]`, is refused
-  `` `ops[next(b)]` calls or assigns as it is read, and it would be read at each call `twice` makes ``
-  (NL2734, `reject_fnref_arg_effect`); any
+  top-level function, an arrow, or a local that holds a
+  [function reference](#function-references) (`tests/cases/fnref_arg`): the
+  call passes an arrow that captures the local by value, so the callee calls
+  the function that was passed even if it reassigns where that came from
+  (`fnref_arg_reassign`). An arrow passed there may call a reference it
+  captures, narrowed first if it is nullable (`fnref_arg_capture`,
+  `fnref_arg_capture_param`). A field or element would be read again at
+  each call the callee makes, where JavaScript reads it once, so it is
+  refused, `ops[next(b)]` and `b.op` alike:
+  `` `ops[next(b)]` is read again at each call `twice` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const` ``
+  (NL2741, `reject_fnref_arg_effect`, `reject_fnref_arg_field`,
+  `reject_fnref_arg_element_nullable`). A nullable local is passed once a
+  test has narrowed it:
+  `` `h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it ``
+  (NL2742, `tests/wordings/nl2742_fnarg_nullable_reference`). A reference of
+  another signature is refused as any other function argument is (NL2340,
+  `tests/wordings/nl2340_fnarg_reference_arity`); any
   other value is refused and named by its type,
   `` `n` is `i32`, which is not a function `` (`reject_fnarg_not_name`). The
   builtins that check the body they are handed — `parallelMap`,
@@ -2017,7 +2028,8 @@ export const main = (): i32 => {
 ## Function references
 
 A name bound to a top-level function, in either spelling, written anywhere but
-a call's callee or a function argument is a **function reference**: a value
+a call's callee or a function argument is a **function reference**
+(a local holding one may itself be passed as a function argument, below): a value
 of the function's type, `(x: i32) => i32`. A function type names a reference
 everywhere but inline on a parameter of a top-level function
 ([Function parameters](#function-parameters)): on a local, a field, an array
@@ -2108,7 +2120,8 @@ export const main = (): void => {
   a template string or any other use is
   `` `f` is a function reference: it can be called, compared, stored and passed, nothing else ``
   (NL2737, `reject_fnref_print`, and as `JSON.stringify`'s argument,
-  `reject_fnref_stringify`); `jsonEncode` refuses a type that holds one
+  `reject_fnref_stringify`; a field, an element or a nullable reference
+  alike, `reject_fnref_stringify_place`); `jsonEncode` refuses a type that holds one
   (`` `jsonEncode` cannot handle `Stage.op`, which is `(i32) => i32` ``,
   `reject_fnref_json`); `<` and the other orderings take numbers only (`reject_fnref_order`,
   `reject_fnref_order_gt`), as `+` and the other arithmetic does
@@ -2122,7 +2135,10 @@ export const main = (): void => {
   early `return` on `h === null`; a call before one is
   `` `h` may be `null`: a nullable function reference is called only after a test such as `h !== null` proves it holds a function ``
   (NL2740, `reject_fnref_nullable_call`). A field is not narrowed: read it
-  into a `const` and test that (`reject_fnref_nullable_field_call`). The
+  into a `const` and test that (`reject_fnref_nullable_field_call`). A
+  number is no reference, so a nullable field initialised with one is
+  refused as a non-null one is (NL2013, `reject_fnref_nullable_field_literal`,
+  `reject_fnref_nullable_field_negative`). The
   rules otherwise follow [Nullable types](types.md#nullable-types)
   (`tests/cases/fnref_nullable`).
 - **In memory a reference is an `i32` tag**, the function's position, from 1,
@@ -2142,12 +2158,13 @@ export const main = (): void => {
   that mixes members that keep a pointer argument with members that do not is
   refused,
   `` this call through `h` can reach `u3`, which keeps `p`, and `u0`, which does not, so every call here would allocate `p` in the arena; ... ``
-  (NL2736, `reject_fnref_escape_join`, `fnref_escape_join`). A call whose
-  result has no place of its own, `Map.get` among them, can hold every
-  function of its type, so a call through what it returns dispatches over all
-  of them (`fnref_map`); where one of them keeps a pointer argument the
-  others leave alone, that call is the mixed set above and refused
-  (`reject_fnref_place_set_map`). A set past
+  (NL2736, `reject_fnref_escape_join`, `fnref_escape_join`). `Map.get`
+  reads the place a `Map`'s values share with the arrays of that type, so a
+  call through what it returns dispatches over the functions stored into any
+  of them (`fnref_map`, `fnref_place_set_map`); where one of those keeps a
+  pointer argument the others leave alone, that call is the mixed set above
+  and refused (`reject_fnref_place_set_map`). A call whose result has no
+  place of its own can hold every function of its type. A set past
   eight members is warning NL9017, a `switch` where a direct call would not
   branch (`tests/wordings/nl9017_fnref_wide_set`). Under `--profile debug` the
   dispatcher first checks that the tag is in its set and panics with
