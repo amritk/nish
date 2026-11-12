@@ -575,7 +575,7 @@ struct Http1Connection (class) size=256 align=8 exported
   field headFraming: i32 index=43 offset=212 initialized
   field headConnection: i32 index=44 offset=216 initialized
   field headFields: i32 index=45 offset=220 initialized
-  field headNames: i32[] index=46 offset=224
+  field headLengths: i32[] index=46 offset=224
   field headDate: HttpDate index=47 offset=232
   field headFormats: i64 index=48 offset=240 initialized
   field headCopies: i64 index=49 offset=248 initialized
@@ -1097,7 +1097,7 @@ function Http1Connection.respond(this: Http1Connection, status: i32, names: u8[]
   calls: nish.Http1Connection.answerable nish.Http1Connection.begin nish.Http1Connection.bodyRoom nish.Http1Connection.keepHead nish.Http1Connection.sameHead nish.Http1Parser.methodIs nish.HttpDate.current nish.copyBytes nish.http1ServerReason nish.http1ServerReserved nish.http1WriteResponseHead nish_panic_overflow
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.sameHead#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.begin#0 nish.Http1Connection.keepHead#0 nish.Http1Connection.begin#0
   pointer names: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.sameHead#2 nish.http1WriteResponseHead#4 nish.Http1Connection.keepHead#5
-  pointer values: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.sameHead#3 nish.http1WriteResponseHead#5
+  pointer values: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.sameHead#3 nish.http1WriteResponseHead#5 nish.Http1Connection.keepHead#6
   stackSites=0 stackLocals=0
   callee -38:10 Http1Connection.answerable -> @nish.Http1Connection.answerable
   local -32:11 interim: boolean (const)
@@ -1132,7 +1132,7 @@ function Http1Connection.begin(this: Http1Connection, close: boolean, framing: i
   stackSites=0 stackLocals=0
 function Http1Connection.sameHead(this: Http1Connection, status: i32, names: u8[][], values: u8[][], framing: i32, connection: i32): boolean -> @nish.Http1Connection.sameHead [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.HttpDate.formats nish.http1ServerKept nish_panic_index
+  calls: nish.HttpDate.formats nish.http1ServerKept nish_panic_index nish_panic_overflow
   pointer this: size=256 writesThrough=false captured=false
   pointer names: size=0 writesThrough=true captured=false
   pointer values: size=0 writesThrough=true captured=false
@@ -1144,22 +1144,23 @@ function Http1Connection.sameHead(this: Http1Connection, status: i32, names: u8[
   local +15:9 at: i32 (let)
   local +16:11 lengths: i32[] (const)
   local +17:14 i: i32 (let)
-  callee +21:12 http1ServerKept -> @nish.http1ServerKept
-  callee +22:12 http1ServerKept -> @nish.http1ServerKept
-function Http1Connection.keepHead(this: Http1Connection, start: i32, end: i32, status: i32, reason: string, names: u8[][], framing: i32, connection: i32): void -> @nish.Http1Connection.keepHead [exported method]
+  callee +23:12 http1ServerKept -> @nish.http1ServerKept
+  callee +24:12 http1ServerKept -> @nish.http1ServerKept
+function Http1Connection.keepHead(this: Http1Connection, start: i32, end: i32, status: i32, reason: string, names: u8[][], values: u8[][], framing: i32, connection: i32): void -> @nish.Http1Connection.keepHead [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: connection framing start status
   calls: nish.HttpDate.formats nish.copyBytes nish_panic nish_panic_index nish_panic_overflow
   pointer this: size=256 writesThrough=true captured=false
   pointer names: size=0 writesThrough=false captured=false
+  pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -7:11 n: i32 (const)
   local -6:11 fields: i32 (const)
   local -5:11 again: boolean (const)
   local +15:14 i: i32 (let)
-  callee +18:5 copyBytes -> @nish.copyBytes
-  callee +23:24 HttpDate.formats -> @nish.HttpDate.formats
+  callee +19:5 copyBytes -> @nish.copyBytes
+  callee +24:24 HttpDate.formats -> @nish.HttpDate.formats
 function Http1Connection.write(this: Http1Connection, buf: readonly u8[], off: i32, len: i32): i32 -> @nish.Http1Connection.write [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
