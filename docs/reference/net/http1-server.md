@@ -248,6 +248,8 @@ class Http1Config
 | `headTimeout: i32` | Milliseconds a request head may take, from its first byte to its blank line, before `expire` closes the slot however steadily its bytes come. The idle timeout alone restarts on every byte, so a client that sends one byte of its head each `idleTimeout` would hold its slot for good (slowloris). |
 | `idleInput: boolean` | Lend a slot's input and head buffers back to the server between exchanges: once a response is sent and no byte of the next request has come, the slot gives both to pools the server's slots share, and takes them again with the next byte. The memory they hold then follows the connections mid-request rather than every keep-alive connection open, for two pool operations a request. Off by default. |
 | `idleTimeout: i32` | Milliseconds without a byte read or written after which `expire` closes a slot. |
+| `lingerBytes: i32` | The most bytes a refused slot drains before it is closed whatever is left (RFC 9112 §9.6); 0 closes at once, without a lingering close. |
+| `lingerTimeout: i32` | Milliseconds `Http1Server` keeps reading, and throwing away, what a refused client still sends after its error response, before `expire` closes the slot (RFC 9112 §9.6). The server shuts its write side and drains rather than closing at once: a close with unread bytes resets the connection, and the reset can destroy the response before the client reads it. |
 | `maxBody: i32` | The longest request body, declared or de-chunked; past it, 413. |
 | `maxHeaderBytes: i32` | The longest header section, and trailer section; past it, 431. |
 | `maxHeaders: i32` | The most fields in a header section, trailers counted; past it, 431. |
@@ -280,6 +282,7 @@ class Http1Connection
 | `headTimed: boolean` | A head has begun to arrive and is not read whole yet: `headSince` is its deadline's start. |
 | `inputs: Http1OutputPool \| null` | Where the parser's input and head buffers go while the slot rests, with `Http1Config.idleInput`; null otherwise. |
 | `lastActive: i64` | When the carrier last moved a byte for the connection, in `monotonicNanos`. |
+| `lingerSince: i64` | When the lingering close began, in `monotonicNanos`; meaningful while `lingering`. |
 | `mss: i32` | The TCP maximum segment size the program sets for this connection, for `respondEncoded` under `HttpCompressor.segmentMode`; 0, the default, leaves it to the compressor and the socket (`segmentMss`). Each accept puts it back to 0. |
 | `noOutput: u8[]` | The empty array `output` is while the connection holds no buffer. |
 | `opcode: i32` | `H1_WS_MESSAGE`'s opcode: text or binary. |
@@ -310,6 +313,7 @@ class Http1Connection
 | `inputRoom(): i32` | How many bytes `feed` would take now: none while a write is held back or once the connection is closing. |
 | `isDone(): boolean` | Whether the connection is over and everything is sent: the carrier closes it. |
 | `isWebSocket(): boolean` | Whether the slot has switched to WebSocket and is open. |
+| `lingering(): boolean` | Whether the connection is in its lingering close: its refusal is sent and its carrier drains what the peer still sends. |
 | `next(): i32` | The next event; see the module comment. |
 | `park(): void` | Gives the parser's input and head buffers to `inputs` and `heads` while the connection rests between exchanges: speaking HTTP, no request open, nothing fed and unread. Does nothing without the pools or otherwise. |
 | `release(): void` | Gives `output` back to the pool once nothing in it is waiting: no bytes to send, no write held back for room. The carrier calls it after each send; a connection that keeps its own buffer keeps it. |
@@ -368,9 +372,9 @@ class Http1Server
 | `busy(): i32` | How many slots hold a connection. |
 | `close(slot: i32): void` | Closes `slot`'s socket, whatever is left unsent, and frees the slot. |
 | `connection(slot: i32): Http1Connection` | The connection of `slot`. A slot never accepted into, or out of range, names slot 0's connection, which this builds when no slot has been yet (the first `accept` then takes it, restarted). |
-| `expire(now: i64): i32` | Closes every slot that has been idle past `idleTimeout`, or reading one head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many. |
+| `expire(now: i64): i32` | Closes every slot that has been idle past `idleTimeout`, or reading one head for longer than `headTimeout`, or lingering past `lingerTimeout`, at `now` (`monotonicNanos`); answers how many. |
 | `fd(slot: i32): i32` | The descriptor of `slot`, for `pollAdd`; -1 for a free or unknown one. |
-| `flush(slot: i32): i32` | Sends what `slot`'s connection holds until the socket would block, and answers the interest: `H1_DONE` once the connection is over and sent, otherwise read while it has room and write while it holds bytes or a write is held back (its `H1_WRITE` comes from `next` once the socket is writable, even when this send emptied the output). It ends the serve call, so a response written after it reads the clock anew. |
+| `flush(slot: i32): i32` | Sends what `slot`'s connection holds until the socket would block, and answers the interest: `H1_DONE` once the connection is over and sent, otherwise read while it has room and write while it holds bytes or a write is held back (its `H1_WRITE` comes from `next` once the socket is writable, even when this send emptied the output). It ends the serve call, so a response written after it reads the clock anew. Once a refusal (`H1_ERROR`) is sent the slot lingers: its write side is shut and what the client still sends is drained, answering `H1_WANT_READ` until the client's end of stream, `lingerBytes`, or `expire` past `lingerTimeout`; `next` answers `H1_NEED_MORE` meanwhile. |
 | `holds(slot: i32): boolean` | Whether `slot` is a slot of this pool that holds a connection. |
 | `next(slot: i32): i32` | `slot`'s connection's next event; `H1_ERROR` for a free slot. While a write is held back the output is sent first, so that the room it waits for is made here and `H1_WRITE` comes in the same pass; otherwise what the program writes in answer to one event and the next goes out together at `flush`, as one segment rather than several. |
 | `readable(slot: i32): i32` | The socket of `slot` is readable: reads it while the connection has room and the socket has more, then sends. Answers the interest. It begins a serve call, which the program's `flush` of the slot ends: the responses written in between carry one clock reading as their `Date`. |

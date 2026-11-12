@@ -19,6 +19,8 @@
 //      reuses the connection.
 //  10. The Date: one on every final head, none on a 1xx or trailers, the
 //      program's own in its place, and none on a connection without a server.
+//  11. The clock: a client late with its SETTINGS acknowledgement is sent
+//      GOAWAY SETTINGS_TIMEOUT, an idle one GOAWAY NO_ERROR.
 //
 // The checks live here so that `tests/link/net_http2_f64` runs every one
 // again under `--number-mode f64`; the refusals are `tests/link/net_http2_errors`.
@@ -666,5 +668,36 @@ export const http2Checks = (): i32 => {
   t.eqI32("from the buffers the first gave back, not new ones", shared.made(), toI32(3));
   t.eqI32("and reads nothing the first wrote past what it wrote itself", toI32(second.conn.input.length) > 0 ? http2NonZeroFrom(second.conn.input, second.conn.inputUsed) : toI32(-1), ZERO);
   second.conn.drop();
+  // --- 11. The clock ----------------------------------------------------------------------------------------
+  const MS: i64 = toI64(1000000);
+  const brisk = new Http2Config();
+  brisk.settingsTimeout = toI32(100);
+  brisk.idleTimeout = toI32(1000);
+  const mute = new Client(brisk);
+  mute.conn.begin(toI64(0));
+  mute.takeFrames();
+  mute.wire.preface();
+  const noIds: i32[] = [];
+  const noValues: i64[] = [];
+  mute.wire.settings(noIds, noValues);
+  mute.send();
+  mute.takeFrames();
+  t.ok("a client that has not acknowledged the server's SETTINGS is not late at settingsTimeout", !mute.conn.expired(toI64(100) * MS));
+  t.ok("but is a nanosecond past it", mute.conn.expired(toI64(100) * MS + toI64(1)));
+  t.ok(`whose deadline is the soonest the connection can expire (${mute.conn.expiresNoSooner(toI64(0))})`, mute.conn.expiresNoSooner(toI64(0)) === toI64(100) * MS);
+  mute.conn.timeOut(toI64(101) * MS);
+  t.eqStr("timed out, it is sent GOAWAY SETTINGS_TIMEOUT", mute.takeFrames(), "GOAWAY 0 4");
+  const quiet = new Client(brisk);
+  quiet.conn.begin(toI64(0));
+  quiet.open();
+  t.ok("a client that acknowledged them is not late at settingsTimeout", !quiet.conn.expired(toI64(500) * MS));
+  t.ok(`and expires no sooner than idleTimeout (${quiet.conn.expiresNoSooner(toI64(0))})`, quiet.conn.expiresNoSooner(toI64(0)) === toI64(1000) * MS);
+  quiet.conn.lastActive = toI64(900) * MS;
+  t.ok("a byte moved puts its idle deadline off", !quiet.conn.expired(toI64(1500) * MS) && quiet.conn.expired(toI64(1900) * MS + toI64(1)));
+  t.ok("and a deadline gone by is now, never earlier", quiet.conn.expiresNoSooner(toI64(5000) * MS) === toI64(5000) * MS);
+  quiet.conn.timeOut(toI64(1901) * MS);
+  t.eqStr("timed out idle, it is sent GOAWAY NO_ERROR", quiet.takeFrames(), "GOAWAY 0 0");
+  quiet.conn.timeOut(toI64(1902) * MS);
+  t.eqStr("and once only", quiet.takeFrames(), "");
   return t.done();
 };
