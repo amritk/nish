@@ -18,17 +18,15 @@ kept here, and a pull request that lands a stage ticks its box.
 
 ## Up next
 
-In order, as of 2026-11-11. Each package's page says what its next stage is
+In order, as of 2026-11-12. Each package's page says what its next stage is
 and where it is specified.
 
 1. [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): meet stage 6's gate.
 2. [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): G1's interop, G2's open timeouts, then G7's one handler.
 3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
-4. [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md): stage 3, the soak.
-5. [WP21: Packages](wp21-packages.md): S4, the build cache.
-6. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
-7. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
-8. [WP37: The OS sandbox](wp37-os-sandbox.md): SBX-1.
+4. [WP21: Packages](wp21-packages.md): S4, the build cache.
+5. [WP33: The round trip to TypeScript](wp33-round-trip.md): R5's `review` tier.
+6. [WP38: SIMD](wp38-simd.md): S8, the Adler-32 kernels.
 
 [WP34: Hosting cs: the network stack](wp34-hosting-cs.md)'s remaining waves are in the cs repository.
 
@@ -61,11 +59,10 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP27: Calling C](wp27-ffi.md) | In progress | 3 of 5 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 6 of 9 |
 | [WP34: Hosting cs: the network stack](wp34-hosting-cs.md) | In progress | 9 of 18 |
-| [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 3 of 8 |
+| [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 4 of 8 |
 | [WP38: SIMD](wp38-simd.md) | In progress | 8 of 10 |
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 12 of 27 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
-| [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md) | In progress | 3 of 4 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 2 of 4 |
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | Proposed | 2 of 13 |
@@ -107,6 +104,7 @@ For a contributor, or an agent asked to "pick up WP50":
 | [WP42: A multi-core server from pre-forked processes](wp42-multicore-server.md) | Landed | 1 of 1 |
 | [WP44: Streaming file reads](wp44-streaming-files.md) | Landed | 4 of 4 |
 | [WP45: Name resolution: a DNS stub resolver](wp45-name-resolution.md) | Landed | 1 of 1 |
+| [WP46: Memory for programs that do not exit: regions](wp46-long-running-memory.md) | Landed | 4 of 4 |
 | [WP47: Shared work across cores: regions, atomics and rings](wp47-shared-memory.md) | Landed | 1 of 2 |
 | [WP48: Compressed 32-bit references](wp48-compressed-references.md) | Landed | 2 of 4 |
 | [WP50: A WebAssembly module a TypeScript page drives](wp50-wasm-host.md) | Landed | 6 of 6 |

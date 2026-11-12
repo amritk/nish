@@ -1221,7 +1221,9 @@ const runScripts = (text) => {
   check(
     "ci.yml takes every seed through scripts/fetch-seed.sh, never a bare download",
     !/gh release download|\bcurl\b|\bwget\b/.test(ci) &&
-      ["bootstrap", "nish-cmp"].every((name) => jobOf(ci, name).includes("bash scripts/fetch-seed.sh")),
+      ["bootstrap", "nish-cmp", "nish-cmp-elision"].every((name) =>
+        jobOf(ci, name).includes("bash scripts/fetch-seed.sh")
+      ),
     ci
       .split("\n")
       .filter((l) => /fetch-seed|release download|curl|wget/.test(l))
@@ -1235,7 +1237,7 @@ const runScripts = (text) => {
 // `binaries` job guards its own rows the same way, against `host`.
 {
   const ci = fs.readFileSync(path.join(workflowDir, "ci.yml"), "utf8")
-  const unguarded = ["bootstrap", "nish-cmp"].filter((name) => {
+  const unguarded = ["bootstrap", "nish-cmp", "nish-cmp-elision"].filter((name) => {
     const job = jobOf(ci, name)
     return !(
       /TARBALL: \$\{\{ matrix\.seed\.tarball \}\}/.test(job) &&

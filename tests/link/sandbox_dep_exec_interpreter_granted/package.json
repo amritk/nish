@@ -1,0 +1,14 @@
+{
+  "name": "sandbox-dep-exec-interpreter-granted",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_runner": [
+          "process.spawn=./bin/hello.sh",
+          "process.spawn=sh"
+        ]
+      }
+    }
+  }
+}

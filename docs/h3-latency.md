@@ -224,16 +224,19 @@ instructions per 16 kB request against about 157 k per 100 B one: some 148
 instructions per body byte. AES is about 1 % of the whole. The rest is
 loops that touch the body one byte at a time:
 
-- `streamWrite` copies the body into the stream's ring one byte per
-  iteration, with a bounds check each (`std/net/quic-stream.ts:1075`).
-- Each ring index is `offset % size` on 64-bit integers, per byte
-  (`std/net/quic-stream.ts:272`, about 8 % of instructions).
-- Acknowledged data is kept as one bit per byte: an ACK marks its range bit
-  by bit (`std/net/quic-stream.ts:1524`, the setter at :187), and the send
-  base advances by testing one bit per byte (`std/net/quic-stream.ts:1528`,
-  the test at :183). The two bitmap helpers are about 10 %.
-- `quicPacketCopy` copies a STREAM frame's payload into the datagram one
-  byte at a time (`std/net/quic-packet.ts:540`).
+- `streamWrite` copied the body into the stream's ring one byte per
+  iteration, with a bounds check each (`QuicStreams.write`).
+- Each ring index was `offset % size` on 64-bit integers, per byte
+  (`QuicStream.at`, about 8 % of instructions).
+- Acknowledged data is kept as one bit per byte: an ACK marked its range bit
+  by bit (`QuicStreams.chunkAcked`, through `quicStreamSetBit`), and the send
+  base advanced by testing one bit per byte (the same function, through
+  `quicStreamBit`). The two bitmap helpers were about 10 %.
+- `quicPacketCopy` copied a STREAM frame's payload into the datagram one
+  byte at a time (`std/net/quic-packet.ts`).
+
+The section [After the slice copies](#after-the-slice-copies) records what
+changed and what it saved; the function names above are where each loop was.
 
 Inclusively, processing incoming packets, mostly ACKs, is 46 % of the 16 kB
 profile; building and sealing datagrams 30 %, of which the frame copy is
@@ -398,3 +401,49 @@ How these compare with the acceptance bounds:
   band of the base, or better than it, at both sizes. The base's 4 kB
   c96m10 runs also end some requests with no status, more of them than
   nish's do, so that predates the fix.
+
+## After the slice copies
+
+The per-byte directions above, taken in #699:
+
+- **Copy in slices.** `QuicStreams.write`, `read` and `onStream` move bytes
+  between the caller's array and the ring with `copyBytes` (`nish/bytes`,
+  one `memmove` natively), in at most two runs: to the ring's end, then from
+  its start. `quicPacketCopy` clips its run to both windows once and copies
+  it with one `copyBytes`, so a wrong window still writes nothing outside
+  them and cannot panic.
+- **Ranges over the bitmaps.** The bitmaps stay a bit per byte, because the
+  pools lend and zero them with their buffers. Every walk over them now
+  works a range at a time: marking or clearing a run sets the ragged ends a
+  bit at a time and the whole bytes between with one `fill`, and finding
+  where a run of set bits ends passes over a full byte at once. That covers
+  an ACK's marks and the send base's advance (`chunkAcked`), the skip past
+  acknowledged bytes before a resend (`putResend`), the receive side's bits
+  and its contiguous edge (`onStream`, `read`).
+- **One modulo per run.** `QuicStream.at` runs once for each run's first
+  byte; the run wraps to index 0 by comparing against the ring's size.
+
+Nothing on the wire moves: every `net_quic*` and `net_http3*` link test
+passes with its expected output unchanged.
+
+**Measured** with callgrind on `main h3-load` of
+`tests/link/net_interop_server` (the server and the scripted client in one
+process, over loopback), serving an 8,192-byte `hello.txt`. The body fits in the 12,000-byte initial
+window: the scripted client acknowledges only when it sends its next request,
+so a larger one waits for a probe timeout. The
+instructions per request are the difference between 60 requests and 10,
+over 50:
+
+| build | Ir, 10 requests | Ir, 60 requests | Ir per request |
+| --- | --- | --- | --- |
+| `main` at `60e5be7` | 60,833,641 | 182,835,401 | 2,440,035 |
+| this change | 51,530,232 | 124,068,707 | 1,450,770 |
+
+Both builds come from `60e5be7`, the commit this change starts from, with the
+same seed and flags. They differ only in `std/net/quic-stream.ts` and
+`std/net/quic-packet.ts`.
+
+That is 40.5 % fewer instructions per 8 kB request, for the client and the
+server together. A second run of the base gave 2,440,138 per request, so the
+noise is about ±0.01 %. The count is the whole process: the client's own
+stream path is the same module and gains as well.
