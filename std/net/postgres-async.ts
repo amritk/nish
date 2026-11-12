@@ -240,6 +240,8 @@ const PG_ASYNC_QUEUE_WRAP: i32 = 1073741824
 const PG_ASYNC_LANES: i32 = 128
 // What a query reads first; it grows by doubling up to one `maxMessage`.
 const PG_ASYNC_INPUT_SIZE: i32 = 8192
+// Loop turns a seat yields for its turn before it parks on its slot's wake.
+const PG_ASYNC_TURN_YIELDS: i32 = 4
 // ReadyForQuery's transaction status for "idle", outside any transaction.
 const PG_ASYNC_IDLE: i32 = 73
 const PG_ASYNC_NONCE_BYTES: i32 = 18
@@ -317,9 +319,10 @@ export class PgAsyncPool {
   /** How many connections `pgAsyncConnect` made, in all. */
   connects: i32 = 0
   /**
-   * The queue number of the task `pgAsyncSeat` seats next. Tasks waiting for
-   * a seat take one in turn, in the order they began to wait, and a task
-   * that has not waited takes none while any is queued.
+   * The queue number of the first task still waiting for a seat. Of the
+   * tasks waiting, in the order they began to wait, the first as many as
+   * there are free seats may each take one, and a task that has not waited
+   * takes none while any is queued.
    */
   seatHead: i32 = 0
   /** The queue number the next task to wait for a seat takes. */
@@ -874,11 +877,45 @@ const pgAsyncSignal = (pool: PgAsyncPool, w: i32): void => {
   pool.wakeRings[w] = (pool.wakeRings[w] + 1) % PG_ASYNC_QUEUE_WRAP
 }
 
-/** Wakes the tasks waiting for a slot or seat: those outside the queue, and the queue's head. */
+/**
+ * The seats a task could take now: on each live connection no task claimed
+ * whole, none doomed and none mid-write, `depth` less those in flight. A
+ * connection mid-write is left out because a task woken for it would only
+ * wait again; the write's end wakes the pool once more.
+ */
+const pgAsyncFreeSeats = (pool: PgAsyncPool): i32 => {
+  let free: i32 = 0
+  for (let s: i32 = 0; s < pool.size; s++) {
+    if (
+      pool.fds[s] >= 0 &&
+      toI32(pool.claimed[s]) === 0 &&
+      pool.doomAt[s] < 0 &&
+      toI32(pool.writing[s]) === 0 &&
+      pool.seated[s] < pool.depth
+    ) {
+      free += pool.depth - pool.seated[s]
+    }
+  }
+  return free
+}
+
+/**
+ * Wakes the tasks waiting for a slot or seat: those outside the queue, and as
+ * many of the queue's first as there are free seats, at least its head, so
+ * seats freed together are taken in one loop turn and not one a turn.
+ */
 const pgAsyncWakePool = (pool: PgAsyncPool): void => {
   pgAsyncSignal(pool, pool.size)
-  if (pool.seatHead !== pool.seatTail) {
-    pgAsyncSignal(pool, pool.size + 1 + (pool.seatHead % PG_ASYNC_LANES))
+  const queued: i32 = (pool.seatTail - pool.seatHead + PG_ASYNC_QUEUE_WRAP) % PG_ASYNC_QUEUE_WRAP
+  if (queued === 0) {
+    return
+  }
+  const free: i32 = pgAsyncFreeSeats(pool)
+  let wake: i32 = free < 1 ? 1 : free
+  wake = wake > queued ? queued : wake
+  wake = wake > PG_ASYNC_LANES ? PG_ASYNC_LANES : wake
+  for (let k: i32 = 0; k < wake; k++) {
+    pgAsyncSignal(pool, pool.size + 1 + ((pool.seatHead + k) % PG_ASYNC_LANES))
   }
 }
 
@@ -1047,8 +1084,9 @@ const pgAsyncUnqueue = (pool: PgAsyncPool, n: i32): void => {
  * the ticket. Until `pgAsyncTurn` no other seat on the connection is taken,
  * so the statements go out in the order of their seats. While no connection has room it waits until a seat
  * or a connection frees and wakes it, for at most `pool.claimWaitMs` in all;
- * waiting tasks are seated in the order they began to wait, and a task that
- * has not waited is seated only while none waits.
+ * waiting tasks are seated in the order they began to wait, the first as many
+ * as there are seats free at once, and a task that has not waited is seated
+ * only while none waits.
  * It writes only numbers into the pool, so a spawned task may call it.
  * @param pool The pool.
  * @param statement A number `pgAsyncPrepare` answered; any other panics, as
@@ -1076,17 +1114,17 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
     }
     let live: boolean = false
     let best: i32 = -1
+    let free: i32 = 0
     for (let s: i32 = 0; s < pool.size; s++) {
       if (pool.fds[s] < 0) {
         continue
       }
       live = true
-      if (
-        toI32(pool.claimed[s]) !== 0 ||
-        pool.doomAt[s] >= 0 ||
-        toI32(pool.writing[s]) !== 0 ||
-        pool.seated[s] >= pool.depth
-      ) {
+      if (toI32(pool.claimed[s]) !== 0 || pool.doomAt[s] >= 0 || pool.seated[s] >= pool.depth) {
+        continue
+      }
+      free += pool.depth - pool.seated[s]
+      if (toI32(pool.writing[s]) !== 0) {
         continue
       }
       if (best < 0 || pool.seated[s] < pool.seated[best]) {
@@ -1094,8 +1132,14 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
       }
     }
     // First come, first seated: under load a task that lost the seat it was
-    // woken for to another would wait on until `claimWaitMs` failed it.
-    const turn: boolean = queued >= 0 ? queued === pool.seatHead : pool.seatHead === pool.seatTail
+    // woken for to another would wait on until `claimWaitMs` failed it. Of
+    // the queue, the first as many as there are free seats may take one, so
+    // seats freed together go in one loop turn; a task outside the queue
+    // takes one only while none waits.
+    const turn: boolean =
+      queued >= 0
+        ? (queued - pool.seatHead + PG_ASYNC_QUEUE_WRAP) % PG_ASYNC_QUEUE_WRAP < free
+        : pool.seatHead === pool.seatTail
     if (best >= 0 && turn) {
       for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
         const seat: i32 = best * PG_ASYNC_MAX_DEPTH + k
@@ -1533,6 +1577,7 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
   }
   pool.seatWaiting[seat] = 1
   let gaveUp: boolean = false
+  let yields: i32 = 0
   while (pool.served[s] !== seq && !pgAsyncLostSeat(pool, seat)) {
     if (cancelled()) {
       gaveUp = true
@@ -1541,6 +1586,11 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
     const ahead: i32 = pgAsyncSkippable(pool, s)
     if (ahead >= 0) {
       await pgAsyncSkip(pool, s, ahead)
+    } else if (yields < PG_ASYNC_TURN_YIELDS) {
+      // The answer ahead is usually read within a turn or two of the loop:
+      // yielding costs no system call, where parking on the wake costs six.
+      yields += 1
+      await sleep(0)
     } else {
       pool.turnWaits += 1
       await pgAsyncPark(pool, s, -1)
@@ -1640,9 +1690,7 @@ export const pgAsyncAnswer = async (pool: PgAsyncPool, ticket: i32, turn: i32): 
   const carried: u8[] = new Array<u8>(
     from >= 0 && from <= to && to <= toI32(input.length) ? to - from : toI32(0)
   )
-  for (let i: i32 = 0; i < toI32(carried.length); i++) {
-    carried[i] = input[from + i]
-  }
+  copyBytes(carried, 0, input, from, toI32(carried.length))
   return await pgAsyncRead(
     pool.fds[s],
     carried,
@@ -1960,15 +2008,13 @@ const pgAsyncRead = async (
   maxResultBytes: i32
 ): Promise<PgAsyncResult> => {
   const result = new PgAsyncResult()
-  let buf: u8[] = new Array<u8>(
-    toI32(seed.length) > PG_ASYNC_INPUT_SIZE ? toI32(seed.length) : PG_ASYNC_INPUT_SIZE
-  )
+  // The buffer starts the size of the seed, not a zero-filled 8 KiB: an answer
+  // already scanned whole is parsed without clearing memory it never reads, and
+  // only a read past it grows the buffer.
+  let buf: u8[] = new Array<u8>(toI32(seed.length))
+  copyBytes(buf, 0, seed, 0, toI32(seed.length))
   let start: i32 = 0
-  let end: i32 = 0
-  for (let i: i32 = 0; i < toI32(seed.length) && end < toI32(buf.length); i++) {
-    buf[end] = seed[i]
-    end += 1
-  }
+  let end: i32 = toI32(seed.length)
   let refused: boolean = false
   let tooBig: boolean = false
   let changed: boolean = false
@@ -2085,8 +2131,9 @@ const pgAsyncRead = async (
       start = 0
     }
     if (end === toI32(buf.length)) {
+      const twice: i32 = toI32(buf.length) < PG_ASYNC_INPUT_SIZE ? PG_ASYNC_INPUT_SIZE : toI32(buf.length) * 2
       const grown: u8[] = new Array<u8>(
-        toI32(buf.length) * 2 > maxMessage + 1 ? maxMessage + 1 : toI32(buf.length) * 2
+        twice > maxMessage + 1 && end < maxMessage + 1 ? maxMessage + 1 : twice
       )
       copyBytes(grown, 0, buf, 0, end)
       buf = grown

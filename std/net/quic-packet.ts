@@ -116,6 +116,7 @@ import {
 } from "nish/crypto/aes"
 import { chacha20HeaderMask, chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
 import { timingSafeEqual } from "nish/crypto/ct"
+import { copyBytes } from "nish/bytes"
 import {
   HkdfScratch,
   hkdfExpandLabelHeldInto,
@@ -627,8 +628,8 @@ const quicPacketCidWindowFits = (cid: u8[], length: i32): boolean =>
   length >= 0 && length <= QUIC_MAX_CID_LENGTH && length <= toI32(cid.length)
 
 /**
- * Writes `bytes[from .. from + length)` into `buf` at `at`; the caller has checked both windows.
- * A byte outside either window is skipped rather than written, so a wrong window cannot panic.
+ * Writes `bytes[from .. from + length)` into `buf` at `at`, as one slice copy; the caller has checked both windows.
+ * The part of the run outside either window is skipped rather than written, so a wrong window cannot panic.
  *
  * @param buf The buffer to write into; it is not grown.
  * @param at The byte offset in `buf` of the first byte written.
@@ -637,10 +638,22 @@ const quicPacketCidWindowFits = (cid: u8[], length: i32): boolean =>
  * @param length How many bytes to copy.
  */
 export const quicPacketCopy = (buf: u8[], at: i32, bytes: u8[], from: i32, length: i32): void => {
-  for (let k: i32 = 0; k < length; k += 1) {
-    if (at + k >= 0 && at + k < toI32(buf.length) && from + k >= 0 && from + k < toI32(bytes.length)) {
-      buf[at + k] = bytes[from + k]
-    }
+  let low: i32 = 0
+  if (low < -at) {
+    low = -at
+  }
+  if (low < -from) {
+    low = -from
+  }
+  let high: i32 = length
+  if (high > toI32(buf.length) - at) {
+    high = toI32(buf.length) - at
+  }
+  if (high > toI32(bytes.length) - from) {
+    high = toI32(bytes.length) - from
+  }
+  if (low < high) {
+    copyBytes(buf, at + low, bytes, from + low, high - low)
   }
 }
 
