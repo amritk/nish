@@ -57,9 +57,10 @@ export const PANIC_PARALLEL_LENGTH: i32 = 9
 export const PANIC_CALL: i32 = 10
 const PANIC_OOM: i32 = 11
 /**
- * `uncheckedGet`, `uncheckedSet` and `readCString` from `nish:unsafe`: no
- * check, so nothing panics, but nothing is proven either, and an index out of
- * range, or a `CPtr` that is not a live C string, is undefined behaviour. Listed so that a reader can find every one, and
+ * `uncheckedGet`, `uncheckedSet`, `readCString` and `readStruct` from
+ * `nish:unsafe`: no check, so nothing panics, but nothing is proven either,
+ * and an index out of range, or a `CPtr` that is not a live C string or
+ * struct of the layout read, is undefined behaviour. Listed so that a reader can find every one, and
  * allowed, as `oom` is: a call is accepted only through a `nish:unsafe`
  * import (`unsafeImportMessage` in `src/builtins.ts`), and that import at the
  * top of its module is the opt-in the no-panic scope asks for.
@@ -214,7 +215,7 @@ export const builtinPanicKind = (name: string): i32 => {
   ) {
     return PANIC_IO_EXIT
   }
-  if (name === "uncheckedGet" || name === "uncheckedSet" || name === "readCString") {
+  if (name === "uncheckedGet" || name === "uncheckedSet" || name === "readCString" || name === "readStruct") {
     return PANIC_UNCHECKED
   }
   // `netRead` and its siblings, `readStdin`, `writeBytes` and `fileReadAt` check

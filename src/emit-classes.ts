@@ -320,6 +320,26 @@ export const emitNewWithoutArguments = (emitter: Emitter, info: StructInfo, site
   return obj
 }
 
+/**
+ * `readStruct(p)` (WP27 S4.2): a fresh arena instance of the layout `info`,
+ * holding a copy of the `info.size` bytes at the C address `from`. One
+ * `llvm.memcpy`, so padding is copied as C left it, and nothing of the
+ * result points back into C's memory once the call returns. The source's
+ * alignment is unknown (C promised the struct, not the address), so it is
+ * read at `align 1`.
+ */
+export const emitStructCopy = (emitter: Emitter, info: StructInfo, from: string): string => {
+  const obj = arenaObject(emitter, info)
+  const bytes = emitter.fn.emitValue(`bitcast ${structTypeName(info)}* ${obj} to i8*`)
+  emitter.declare(
+    "declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)"
+  )
+  emitter.fn.emit(
+    `call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 ${bytes}, i8* align 1 ${from}, i64 ${info.size}, i1 false)`
+  )
+  return obj
+}
+
 // ---- Members --------------------------------------------------------------------------------
 
 /** `recv.name` where `recv` is a value: a field load, or the `.length` of a string or array. */

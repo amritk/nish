@@ -3977,11 +3977,11 @@ class FactCollector {
     // `uncheckedSet` the store `xs[i] = v` is (`collectArrayFacts`), less the
     // bounds check, so neither lists `nish_panic_index`. The store's receiver
     // is a shared write above, through its `w`. `readCString` reads C's bytes
-    // up to the `NUL` (WP27 S3.3).
+    // up to the `NUL` (WP27 S3.3), `readStruct` a struct's worth (S4.2).
     const name = builtinNameOf(this.unit.program, node)
     // `nish:simd`'s load reads elements and its store writes them, as an
     // element access does, through a bounds check (`isSimdAccess`).
-    if (name === "uncheckedGet" || name === "readCString" || isSimdLoad(name)) {
+    if (name === "uncheckedGet" || name === "readCString" || name === "readStruct" || isSimdLoad(name)) {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet" || name === "store") {
       this.facts.effect = EFFECT_WRITE

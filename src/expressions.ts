@@ -3280,7 +3280,13 @@ export const templateFix = (ctx: CheckContext, call: Node, value: Node): Edit[] 
  * The canonical name is recorded because the emitter dispatches builtins on
  * the identifier's own text, and under an import that text is the local name.
  */
-const checkImportedBuiltin = (ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 => {
+const checkImportedBuiltin = (
+  ctx: CheckContext,
+  expr: Node,
+  scope: Scope,
+  imported: BuiltinExport,
+  want: i32
+): i32 => {
   const callee = expr.children[0]
   if (imported.isProperty) {
     return ctx.errorType(callee, `\`${callee.text}\` is a builtin value and cannot be called`)
@@ -3288,7 +3294,7 @@ const checkImportedBuiltin = (ctx: CheckContext, expr: Node, scope: Scope, impor
   ctx.program.nodeBuiltins[expr.id] = imported.canonical
   return imported.namespace.length > 0
     ? checkImportedDottedBuiltin(ctx, expr, scope, imported.namespace, imported.member)
-    : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member)
+    : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member, want)
 }
 
 const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
@@ -3373,7 +3379,7 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
       if (refuseSecretArguments(ctx, expr, scope, imported.canonical)) {
         return T_ERROR
       }
-      return checkImportedBuiltin(ctx, expr, scope, imported)
+      return checkImportedBuiltin(ctx, expr, scope, imported, want)
     }
     if (isResultConstructor(callee.text)) {
       if (want === T_ERROR) {
