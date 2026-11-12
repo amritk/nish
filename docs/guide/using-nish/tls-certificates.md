@@ -138,3 +138,26 @@ they differ are listed in the security record.
 The security record,
 [crypto-pki.md](../../security/crypto-pki.md#path-validation-nishcryptopki),
 lists what was checked and what is open.
+
+## On the server side
+
+A server built on `nish/net/tls-tcp`'s `TlsTcpServer` presents its own chain
+and key; nothing here checks the client's, since client certificates are not
+offered. Its key exchange is x25519 whenever the client lists x25519, and
+secp256r1 (P-256) only for a client that lists P-256 alone. A client that
+sends no share of the chosen group is asked once, with a HelloRetryRequest,
+for one; and a P-256 share that is not an uncompressed point on the
+curve is refused with the `illegal_parameter` alert.
+
+The pool has a fixed number of slots, so a client that connects and then says
+nothing would hold one for good. Call `expire(monotonicNanos())` from the
+program's poll loop (`monotonicNanos` is in `nish:process`): it closes every
+slot that has neither read nor written for `idleTimeout` milliseconds and
+answers how many it closed. `idleTimeout` is 60,000 (a minute) by default;
+set it on the server to change it, or to 0 to turn it off and keep the
+timeout in the program. Call `expire` after the program has handled every
+event one `pollWait` returned, not between them, so an event for a slot it
+closes is not taken for the next connection in that slot. It bounds idleness,
+not the length of a handshake: a client that sends a byte within every
+timeout keeps its slot. The record,
+[tls.md](../../security/tls.md), lists this as TLS-4.
