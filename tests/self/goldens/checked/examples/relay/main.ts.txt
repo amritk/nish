@@ -44459,7 +44459,7 @@ struct WebTransportWaiting (class) size=64 align=8 exported
   method add -> @nish.WebTransportWaiting.add
   method first -> @nish.WebTransportWaiting.first
   method take -> @nish.WebTransportWaiting.take
-struct WebTransport (class) size=432 align=8 exported
+struct WebTransport (class) size=424 align=8 exported
   field config: WebTransportConfig index=0 offset=0
   field h3: Http3Connection index=1 offset=8
   field quic: QuicConnection index=2 offset=16
@@ -44492,35 +44492,35 @@ struct WebTransport (class) size=432 align=8 exported
   field free: i32[] index=29 offset=232
   field expiredSessions: i32[] index=30 offset=240
   field expiredIds: i64[] index=31 offset=248
-  field expiredCount: i32 index=32 offset=256 initialized
-  field now: i64 index=33 offset=264 initialized
-  field expireAfter: i64 index=34 offset=272 initialized
-  field sessionAt: i32[] index=35 offset=280
-  field streamIds: i64[] index=36 offset=288
-  field streamSession: i32[] index=37 offset=296
-  field nextStream: i32[] index=38 offset=304
-  field prevStream: i32[] index=39 offset=312
-  field streamBits: i32[] index=40 offset=320
-  field waiting: WebTransportWaiting index=41 offset=328
-  field adoptions: i32[] index=42 offset=336
-  field sessionId: i64 index=43 offset=344 initialized
-  field stream: i64 index=44 offset=352 initialized
-  field errorCode: i64 index=45 offset=360 initialized
-  field appCode: i64 index=46 offset=368 initialized
-  field capAt: i32 index=47 offset=376 initialized
-  field capEnd: i32 index=48 offset=380 initialized
-  field capSession: i32 index=49 offset=384 initialized
-  field session: i32 index=50 offset=388 initialized
-  field dataStart: i32 index=51 offset=392 initialized
-  field dataLength: i32 index=52 offset=396 initialized
-  field freeCount: i32 index=53 offset=400 initialized
-  field adoptCount: i32 index=54 offset=404 initialized
-  field generation: i32 index=55 offset=408 initialized
-  field datagramsDropped: i32 index=56 offset=412 initialized
-  field sessionsRefused: i32 index=57 offset=416 initialized
-  field streamsRefused: i32 index=58 offset=420 initialized
-  field bidirectional: boolean index=59 offset=424 initialized
-  field closedByPeer: boolean index=60 offset=425 initialized
+  field now: i64 index=32 offset=256 initialized
+  field expireAfter: i64 index=33 offset=264 initialized
+  field sessionAt: i32[] index=34 offset=272
+  field streamIds: i64[] index=35 offset=280
+  field streamSession: i32[] index=36 offset=288
+  field nextStream: i32[] index=37 offset=296
+  field prevStream: i32[] index=38 offset=304
+  field streamBits: i32[] index=39 offset=312
+  field waiting: WebTransportWaiting index=40 offset=320
+  field adoptions: i32[] index=41 offset=328
+  field sessionId: i64 index=42 offset=336 initialized
+  field stream: i64 index=43 offset=344 initialized
+  field errorCode: i64 index=44 offset=352 initialized
+  field appCode: i64 index=45 offset=360 initialized
+  field expiredCount: i32 index=46 offset=368 initialized
+  field capAt: i32 index=47 offset=372 initialized
+  field capEnd: i32 index=48 offset=376 initialized
+  field capSession: i32 index=49 offset=380 initialized
+  field session: i32 index=50 offset=384 initialized
+  field dataStart: i32 index=51 offset=388 initialized
+  field dataLength: i32 index=52 offset=392 initialized
+  field freeCount: i32 index=53 offset=396 initialized
+  field adoptCount: i32 index=54 offset=400 initialized
+  field generation: i32 index=55 offset=404 initialized
+  field datagramsDropped: i32 index=56 offset=408 initialized
+  field sessionsRefused: i32 index=57 offset=412 initialized
+  field streamsRefused: i32 index=58 offset=416 initialized
+  field bidirectional: boolean index=59 offset=420 initialized
+  field closedByPeer: boolean index=60 offset=421 initialized
   constructor -> @nish.WebTransport.constructor
   method restart -> @nish.WebTransport.restart
   method current -> @nish.WebTransport.current
@@ -44644,7 +44644,7 @@ function WebTransport.constructor(this: WebTransport, config: WebTransportConfig
   sharedWrite: via nish_monotonic_nanos
   escaping: config h3
   calls: nish.WebTransport.restart nish.WebTransportWaiting.constructor nish.httpFieldBytes nish.webtransportCheckCap nish_alloc_struct nish_monotonic_nanos nish_panic nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.restart#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.restart#0
   pointer config: size=16 writesThrough=true captured=true
   pointer h3: size=512 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -44664,7 +44664,7 @@ function WebTransport.restart(this: WebTransport): void -> @nish.WebTransport.re
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.WebTransportWaiting.reset nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false
+  pointer this: size=424 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +7:14 s: i32 (let)
   callee +11:5 WebTransportWaiting.reset -> @nish.WebTransportWaiting.reset
@@ -44672,14 +44672,14 @@ function WebTransport.current(this: WebTransport): void -> @nish.WebTransport.cu
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.WebTransport.restart
   calls: nish.WebTransport.restart
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.restart#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.restart#0
   stackSites=0 stackLocals=0
   callee +0:7 WebTransport.restart -> @nish.WebTransport.restart
 function WebTransport.sessionOf(this: WebTransport, id: i64): i32 -> @nish.WebTransport.sessionOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
   calls: nish.QuicStreams.slotOf
-  pointer this: size=432 writesThrough=false captured=false
+  pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 k: i32 (const)
   callee +0:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
@@ -44688,7 +44688,7 @@ function WebTransport.streamSlot(this: WebTransport, id: i64): i32 -> @nish.WebT
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
   calls: nish.QuicStreams.slotOf
-  pointer this: size=432 writesThrough=false captured=false
+  pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 k: i32 (const)
   callee +0:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
@@ -44697,7 +44697,7 @@ function WebTransport.openSession(this: WebTransport, id: i64): i32 -> @nish.Web
   sharedWrite: via nish.WebTransport.current
   escaping: id
   calls: nish.WebTransport.current nish.WebTransport.sessionOf nish_panic_index
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
   local +1:11 s: i32 (const)
@@ -44706,7 +44706,7 @@ function WebTransport.next(this: WebTransport): i32 -> @nish.WebTransport.next [
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http3Connection.next nish.WebTransport.adoptWaiting nish.WebTransport.capsules nish.WebTransport.closedEvent nish.WebTransport.current nish.WebTransport.receiveDatagram nish.WebTransport.route nish_monotonic_nanos nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.closedEvent#0 nish.WebTransport.adoptWaiting#0 nish.WebTransport.capsules#0 nish.WebTransport.receiveDatagram#0 nish.WebTransport.route#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.closedEvent#0 nish.WebTransport.adoptWaiting#0 nish.WebTransport.capsules#0 nish.WebTransport.receiveDatagram#0 nish.WebTransport.route#0
   stackSites=0 stackLocals=0
   callee -3:5 WebTransport.current -> @nish.WebTransport.current
   local -2:11 clock: i64 (const)
@@ -44727,7 +44727,7 @@ function WebTransport.receiveDatagram(this: WebTransport): i32 -> @nish.WebTrans
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http3Connection.fail nish.QuicConnection.readDatagram nish.WebTransport.sessionOf nish.h3Count nish.h3ReadVarint nish.h3VarintLength nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.sessionOf#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.sessionOf#0
   stackSites=0 stackLocals=0
   local -13:11 n: i32 (const)
   callee -13:20 QuicConnection.readDatagram -> @nish.QuicConnection.readDatagram
@@ -44746,7 +44746,7 @@ function WebTransport.route(this: WebTransport, event: i32): i32 -> @nish.WebTra
   sharedWrite: +0:5
   escaping: event
   calls: nish.WebTransport.arrived nish.WebTransport.asked nish.WebTransport.codes nish.WebTransport.connectEvent nish.WebTransport.dropPending nish.WebTransport.settle nish.WebTransport.touch nish_panic_index
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.arrived#0 nish.WebTransport.dropPending#0 nish.WebTransport.asked#0 nish.WebTransport.dropPending#0 nish.WebTransport.connectEvent#0 nish.WebTransport.touch#0 nish.WebTransport.settle#0 nish.WebTransport.codes#0 nish.WebTransport.settle#0 nish.WebTransport.codes#0 nish.WebTransport.settle#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.arrived#0 nish.WebTransport.dropPending#0 nish.WebTransport.asked#0 nish.WebTransport.dropPending#0 nish.WebTransport.connectEvent#0 nish.WebTransport.touch#0 nish.WebTransport.settle#0 nish.WebTransport.codes#0 nish.WebTransport.settle#0 nish.WebTransport.codes#0 nish.WebTransport.settle#0
   stackSites=0 stackLocals=0
   local -33:11 h3: Http3Connection (const)
   local -32:11 id: i64 (const)
@@ -44769,7 +44769,7 @@ function WebTransport.codes(this: WebTransport, code: i64): void -> @nish.WebTra
   sharedWrite: +0:5
   escaping: code
   calls: nish.wtCodeFromHttp3
-  pointer this: size=432 writesThrough=true captured=false
+  pointer this: size=424 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +1:20 wtCodeFromHttp3 -> @nish.wtCodeFromHttp3
 function WebTransport.connectEvent(this: WebTransport, s: i32, event: i32): i32 -> @nish.WebTransport.connectEvent [exported method]
@@ -44777,7 +44777,7 @@ function WebTransport.connectEvent(this: WebTransport, s: i32, event: i32): i32 
   sharedWrite: +0:5
   escaping: s
   calls: nish.Http3Connection.reset nish.WebTransport.capsules nish.WebTransport.closedEvent nish.WebTransport.finish nish.WebTransport.release nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.capsules#0 nish.WebTransport.release#0 nish.WebTransport.closedEvent#0 nish.WebTransport.closedEvent#0 nish.WebTransport.finish#0 nish.WebTransport.closedEvent#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.capsules#0 nish.WebTransport.release#0 nish.WebTransport.closedEvent#0 nish.WebTransport.closedEvent#0 nish.WebTransport.finish#0 nish.WebTransport.closedEvent#0
   stackSites=0 stackLocals=0
   local -1:11 h3: Http3Connection (const)
   callee +12:14 WebTransport.capsules -> @nish.WebTransport.capsules
@@ -44795,7 +44795,7 @@ function WebTransport.finish(this: WebTransport, id: i64): boolean -> @nish.WebT
   sharedWrite: via nish.Http3Connection.writeData
   escaping: id
   calls: nish.Http3Connection.reset nish.Http3Connection.writeData
-  pointer this: size=432 writesThrough=false captured=false
+  pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:9 Http3Connection.writeData -> @nish.Http3Connection.writeData
   callee +3:5 Http3Connection.reset -> @nish.Http3Connection.reset
@@ -44804,14 +44804,14 @@ function WebTransport.closedEvent(this: WebTransport, s: i32, code: i64, length:
   sharedWrite: +0:5
   escaping: byPeer length s
   calls: nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false
+  pointer this: size=424 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function WebTransport.asked(this: WebTransport, id: i64): i32 -> @nish.WebTransport.asked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: id
   calls: nish.QuicStreams.slotOf nish.WebTransport.answer nish.WebTransport.dropPending nish.WebTransport.release nish.httpFieldIs nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.release#0 nish.WebTransport.answer#0 nish.WebTransport.dropPending#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.release#0 nish.WebTransport.answer#0 nish.WebTransport.dropPending#0
   stackSites=0 stackLocals=0
   local -32:11 h3: Http3Connection (const)
   local -31:11 f: HttpFields (const)
@@ -44831,7 +44831,7 @@ function WebTransport.answer(this: WebTransport, id: i64, status: i32): void -> 
   sharedWrite: +0:5
   escaping: id status
   calls: nish.Http3Connection.discardRequest nish.Http3Connection.reset nish.Http3Connection.respond nish.h3Count
-  pointer this: size=432 writesThrough=true captured=false
+  pointer this: size=424 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:28 h3Count -> @nish.h3Count
   callee +1:9 Http3Connection.respond -> @nish.Http3Connection.respond
@@ -44842,7 +44842,7 @@ function WebTransport.accept(this: WebTransport, id: i64): i32 -> @nish.WebTrans
   sharedWrite: +0:5
   escaping: id
   calls: nish.Http3Connection.respond nish.WebTransport.current nish.WebTransport.sessionOf nish.WebTransportWaiting.first nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0
   stackSites=0 stackLocals=0
   callee -9:5 WebTransport.current -> @nish.WebTransport.current
   local -8:11 s: i32 (const)
@@ -44855,7 +44855,7 @@ function WebTransport.refuse(this: WebTransport, id: i64, status: i32): i32 -> @
   sharedWrite: via nish.WebTransport.current
   escaping: id status
   calls: nish.WebTransport.answer nish.WebTransport.current nish.WebTransport.release nish.WebTransport.sessionOf nish_panic_index
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0 nish.WebTransport.answer#0 nish.WebTransport.release#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.sessionOf#0 nish.WebTransport.answer#0 nish.WebTransport.release#0
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
   local +1:11 s: i32 (const)
@@ -44867,7 +44867,7 @@ function WebTransport.release(this: WebTransport, s: i32): void -> @nish.WebTran
   sharedWrite: +0:7
   escaping: s
   calls: nish.WebTransport.end nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.end#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.end#0
   stackSites=0 stackLocals=0
   callee -3:5 WebTransport.end -> @nish.WebTransport.end
   local -2:11 k: i32 (const)
@@ -44876,7 +44876,7 @@ function WebTransport.end(this: WebTransport, s: i32): void -> @nish.WebTranspor
   sharedWrite: +0:7
   escaping: s
   calls: nish.Http3Connection.refuseStream nish.WebTransport.dropPending nish_panic_index
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.dropPending#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.dropPending#0
   stackSites=0 stackLocals=0
   local -4:9 k: i32 (let)
   local -3:14 guard: i32 (let)
@@ -44888,7 +44888,7 @@ function WebTransport.dropPending(this: WebTransport, id: i64): void -> @nish.We
   sharedWrite: via nish.WebTransport.refuseStream
   escaping: id
   calls: nish.WebTransport.refuseStream nish.WebTransportWaiting.first nish.WebTransportWaiting.take
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.refuseStream#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.refuseStream#0
   stackSites=0 stackLocals=0
   local +0:9 e: i32 (let)
   callee +0:18 WebTransportWaiting.first -> @nish.WebTransportWaiting.first
@@ -44901,7 +44901,7 @@ function WebTransport.close(this: WebTransport, id: i64, code: i64, buf: u8[], o
   sharedWrite: +0:5
   escaping: id len off
   calls: nish.Http3Connection.writeDataWhole nish.WebTransport.end nish.WebTransport.openSession nish.h3CheckWindow nish.h3PutFrameHeader nish.quicPacketCopy nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0 nish.WebTransport.end#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0 nish.WebTransport.end#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.quicPacketCopy#2
   stackSites=0 stackLocals=0
   callee -12:5 h3CheckWindow -> @nish.h3CheckWindow
@@ -44921,7 +44921,7 @@ function WebTransport.drain(this: WebTransport, id: i64): i32 -> @nish.WebTransp
   sharedWrite: via nish.WebTransport.openSession
   escaping: id
   calls: nish.Http3Connection.writeDataWhole nish.WebTransport.openSession nish.h3PutFrameHeader
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
   stackSites=0 stackLocals=0
   local +0:11 s: i32 (const)
   callee +0:20 WebTransport.openSession -> @nish.WebTransport.openSession
@@ -44935,7 +44935,7 @@ function WebTransport.touch(this: WebTransport, k: i32): void -> @nish.WebTransp
   sharedWrite: +0:7
   escaping: k
   calls: nish_panic_index
-  pointer this: size=432 writesThrough=false captured=false
+  pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:11 t: i32 (const)
 function WebTransport.expire(this: WebTransport, now: i64): i32 -> @nish.WebTransport.expire [exported method]
@@ -44943,7 +44943,7 @@ function WebTransport.expire(this: WebTransport, now: i64): i32 -> @nish.WebTran
   sharedWrite: +0:5
   escaping: now
   calls: nish.WebTransport.current nish.WebTransport.timeOut nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.timeOut#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.timeOut#0
   stackSites=0 stackLocals=0
   callee -4:5 WebTransport.current -> @nish.WebTransport.current
   local +1:11 idle: i64 (const)
@@ -44957,7 +44957,7 @@ function WebTransport.expiresNoSooner(this: WebTransport, now: i64): i64 -> @nis
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=false captured=false
+  pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 idle: i64 (const)
   local +1:9 soonest: i64 (let)
@@ -44967,7 +44967,7 @@ function WebTransport.timeOut(this: WebTransport, s: i32, state: i32): void -> @
   sharedWrite: +0:7
   escaping: s
   calls: nish.Http3Connection.discardRequest nish.Http3Connection.reset nish.WebTransport.answer nish.WebTransport.close nish.WebTransport.release nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.answer#0 nish.WebTransport.release#0 nish.WebTransport.close#0 nish.WebTransport.release#0 nish.WebTransport.release#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.answer#0 nish.WebTransport.release#0 nish.WebTransport.close#0 nish.WebTransport.release#0 nish.WebTransport.release#0
   stackSites=0 stackLocals=0
   local -17:11 id: i64 (const)
   callee -15:7 WebTransport.answer -> @nish.WebTransport.answer
@@ -44981,7 +44981,7 @@ function WebTransport.capsules(this: WebTransport): i32 -> @nish.WebTransport.ca
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.WebTransport.capsule nish.WebTransport.malformed nish.h3ReadFrameHeader nish.quicPacketCopy nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.capsule#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.malformed#0 nish.WebTransport.capsule#0
   stackSites=0 stackLocals=0
   local -14:11 s: i32 (const)
   local -13:11 bytes: u8[] (const)
@@ -45004,7 +45004,7 @@ function WebTransport.capsule(this: WebTransport, s: i32, type: i64): i32 -> @ni
   sharedWrite: +0:5
   escaping: s
   calls: nish.WebTransport.closedEvent nish.WebTransport.end nish.WebTransport.finish nish.WebTransport.release nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.end#0 nish.WebTransport.finish#0 nish.WebTransport.release#0 nish.WebTransport.closedEvent#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.end#0 nish.WebTransport.finish#0 nish.WebTransport.release#0 nish.WebTransport.closedEvent#0
   stackSites=0 stackLocals=0
   local +15:11 at: i32 (const)
   local +16:9 code: i64 (let)
@@ -45019,7 +45019,7 @@ function WebTransport.malformed(this: WebTransport, s: i32, code: i64): i32 -> @
   sharedWrite: +0:5
   escaping: code s
   calls: nish.Http3Connection.discardRequest nish.Http3Connection.reset nish.WebTransport.closedEvent nish.WebTransport.release nish_panic_index
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.release#0 nish.WebTransport.closedEvent#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.release#0 nish.WebTransport.closedEvent#0
   stackSites=0 stackLocals=0
   local -2:11 id: i64 (const)
   local -1:11 wasGone: boolean (const)
@@ -45032,7 +45032,7 @@ function WebTransport.arrived(this: WebTransport, id: i64, session: i64): i32 ->
   sharedWrite: via nish.WebTransport.adopt
   escaping: id session
   calls: nish.Http3Connection.awaitsRequest nish.WebTransport.adopt nish.WebTransport.refuseStream nish.WebTransport.sessionOf nish.WebTransportWaiting.add nish_panic_index
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.sessionOf#0 nish.WebTransport.adopt#0 nish.WebTransport.refuseStream#0 nish.WebTransport.refuseStream#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.sessionOf#0 nish.WebTransport.adopt#0 nish.WebTransport.refuseStream#0 nish.WebTransport.refuseStream#0
   stackSites=0 stackLocals=0
   local +0:11 s: i32 (const)
   callee +0:20 WebTransport.sessionOf -> @nish.WebTransport.sessionOf
@@ -45045,7 +45045,7 @@ function WebTransport.adoptWaiting(this: WebTransport): i32 -> @nish.WebTranspor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.WebTransport.adopt nish.WebTransportWaiting.first nish.WebTransportWaiting.take nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.adopt#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.adopt#0
   stackSites=0 stackLocals=0
   local -7:11 s: i32 (const)
   local -5:13 e: i32 (const)
@@ -45057,7 +45057,7 @@ function WebTransport.refuseStream(this: WebTransport, id: i64, code: i64): void
   sharedWrite: +0:5
   escaping: code id
   calls: nish.Http3Connection.refuseStream nish.h3Count
-  pointer this: size=432 writesThrough=true captured=false
+  pointer this: size=424 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:27 h3Count -> @nish.h3Count
   callee +1:5 Http3Connection.refuseStream -> @nish.Http3Connection.refuseStream
@@ -45066,7 +45066,7 @@ function WebTransport.adopt(this: WebTransport, s: i32, id: i64): i32 -> @nish.W
   sharedWrite: +0:5
   escaping: id s
   calls: nish.Http3Connection.acceptStream nish.WebTransport.link nish.WebTransport.refuseStream nish.quicStreamIsUni nish_panic_index
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.refuseStream#0 nish.WebTransport.link#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.refuseStream#0 nish.WebTransport.link#0
   stackSites=0 stackLocals=0
   callee -7:7 WebTransport.refuseStream -> @nish.WebTransport.refuseStream
   local -4:11 bidi: boolean (const)
@@ -45078,7 +45078,7 @@ function WebTransport.link(this: WebTransport, s: i32, id: i64, bits: i32): i32 
   sharedWrite: +0:5
   escaping: bits id s
   calls: nish.QuicStreams.slotOf nish.WebTransport.unlink nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=false captured=false passedTo=nish.WebTransport.unlink#0
+  pointer this: size=424 writesThrough=false captured=false passedTo=nish.WebTransport.unlink#0
   stackSites=0 stackLocals=0
   local -9:11 k: i32 (const)
   callee -9:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
@@ -45089,7 +45089,7 @@ function WebTransport.settle(this: WebTransport, k: i32, bits: i32): void -> @ni
   sharedWrite: +0:5
   escaping: k
   calls: nish.WebTransport.unlink nish_panic_index
-  pointer this: size=432 writesThrough=false captured=false passedTo=nish.WebTransport.unlink#0
+  pointer this: size=424 writesThrough=false captured=false passedTo=nish.WebTransport.unlink#0
   stackSites=0 stackLocals=0
   callee +2:7 WebTransport.unlink -> @nish.WebTransport.unlink
 function WebTransport.unlink(this: WebTransport, k: i32): void -> @nish.WebTransport.unlink [exported method]
@@ -45097,7 +45097,7 @@ function WebTransport.unlink(this: WebTransport, k: i32): void -> @nish.WebTrans
   sharedWrite: +0:7
   escaping: k
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=false captured=false
+  pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -4:11 s: i32 (const)
   local -3:11 before: i32 (const)
@@ -45107,7 +45107,7 @@ function WebTransport.openStream(this: WebTransport, id: i64, bidirectional: boo
   sharedWrite: via nish.WebTransport.openSession
   escaping: bidirectional id
   calls: nish.Http3Connection.openStream nish.WebTransport.link nish.WebTransport.openSession nish_panic_index
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0 nish.WebTransport.link#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0 nish.WebTransport.link#0
   stackSites=0 stackLocals=0
   local +0:11 s: i32 (const)
   callee +0:20 WebTransport.openSession -> @nish.WebTransport.openSession
@@ -45119,7 +45119,7 @@ function WebTransport.write(this: WebTransport, id: i64, buf: u8[], off: i32, le
   sharedWrite: via nish.WebTransport.current
   escaping: fin id len off
   calls: nish.Http3Connection.writeStream nish.WebTransport.current nish.WebTransport.settle nish.WebTransport.streamSlot nish.WebTransport.touch
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamSlot#0 nish.WebTransport.touch#0 nish.WebTransport.settle#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamSlot#0 nish.WebTransport.touch#0 nish.WebTransport.settle#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.Http3Connection.writeStream#2
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
@@ -45134,7 +45134,7 @@ function WebTransport.resetStream(this: WebTransport, id: i64, code: i64): i32 -
   sharedWrite: via nish.WebTransport.current
   escaping: code id
   calls: nish.Http3Connection.resetStream nish.WebTransport.current nish.WebTransport.settle nish.WebTransport.streamSlot nish.wtCodeToHttp3
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamSlot#0 nish.WebTransport.settle#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamSlot#0 nish.WebTransport.settle#0
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
   local +1:11 k: i32 (const)
@@ -45148,7 +45148,7 @@ function WebTransport.stopSending(this: WebTransport, id: i64, code: i64): i32 -
   sharedWrite: via nish.WebTransport.current
   escaping: code id
   calls: nish.Http3Connection.stopStream nish.WebTransport.current nish.WebTransport.settle nish.WebTransport.streamSlot nish.wtCodeToHttp3 nish_panic_index
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamSlot#0 nish.WebTransport.settle#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.current#0 nish.WebTransport.streamSlot#0 nish.WebTransport.settle#0
   stackSites=0 stackLocals=0
   callee +0:5 WebTransport.current -> @nish.WebTransport.current
   local +1:11 k: i32 (const)
@@ -45162,7 +45162,7 @@ function WebTransport.maxDatagramPayload(this: WebTransport, id: i64): i32 -> @n
   sharedWrite: via nish.WebTransport.openSession
   escaping: id
   calls: nish.QuicConnection.maxDatagramPayload nish.WebTransport.openSession nish.quicVarintSize nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
   stackSites=0 stackLocals=0
   callee +0:9 WebTransport.openSession -> @nish.WebTransport.openSession
   local +3:11 room: i32 (const)
@@ -45173,7 +45173,7 @@ function WebTransport.sendDatagram(this: WebTransport, id: i64, buf: u8[], off: 
   sharedWrite: +0:7
   escaping: id len off
   calls: nish.QuicConnection.maxDatagramPayload nish.QuicConnection.sendDatagram nish.WebTransport.openSession nish.h3CheckWindow nish.h3Count nish.h3PutVarint nish.quicPacketCopy nish_panic_index nish_panic_overflow
-  pointer this: size=432 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
+  pointer this: size=424 writesThrough=true captured=false passedTo=nish.WebTransport.openSession#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.h3CheckWindow#1 nish.quicPacketCopy#2
   stackSites=0 stackLocals=0
   callee -14:5 h3CheckWindow -> @nish.h3CheckWindow
