@@ -35,6 +35,9 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 const args = process.argv.slice(2)
 const at = args.indexOf("--rounds")
 const rounds = Number(at >= 0 ? args[at + 1] : "9")
+if (!Number.isInteger(rounds) || rounds < 1) {
+  throw new Error("--rounds takes a whole number of rounds, 1 or more")
+}
 const here = "bench/wp28-s6"
 const out = "build/wp28-s6"
 
@@ -214,7 +217,7 @@ for (const mode of modes) {
   const line =
     (a - b) / a <= band(mode, never)
       ? "landing pads save nothing outside the noise band on a record that parses, so there is no rate at which they win"
-      : `landing pads save ${saved.toFixed(2)} ns a record that parses and cost ${extra.toFixed(0)} ns more a failure: they win below one failure in ${Math.round(extra / saved)} records`
+      : `landing pads save ${saved.toFixed(2)} ns a record that parses and cost ${extra.toFixed(0)} ns more a failure: they win below about one failure in ${Math.round(extra / saved)} records`
   console.log(`- ${mode}: ${line}`)
 }
 
@@ -245,10 +248,24 @@ const object = (source, name) => {
   run("clang", [...flags, source, "-o", `${out}/${name}.o`])
   return sections(`${out}/${name}.o`)
 }
-// A kernel's `Result` IR with `nounwind` taken off every function and declaration.
-const unwinding = (s) => {
-  const path = `${out}/result/${s}-unwinding.ll`
-  writeFileSync(path, readFileSync(`${out}/result/${s}.ll`, "utf8").replaceAll(" nounwind ", " "))
+// A kernel's `Result` IR with `nounwind` taken off: off its own functions
+// only ("definitions": each gets a copy of its attribute group without it, so
+// LLVM may work it out again from what the function calls), or off every
+// declaration too ("everywhere": the callees may unwind, as far as LLVM knows).
+const unwinding = (s, where) => {
+  const path = `${out}/result/${s}-unwinding-${where}.ll`
+  let text = readFileSync(`${out}/result/${s}.ll`, "utf8")
+  if (where === "everywhere") {
+    text = text.replaceAll(" nounwind ", " ")
+  } else {
+    const groups = [...text.matchAll(/^attributes #(\d+) = (.*)$/gm)]
+    const spare = 1 + Math.max(...groups.map((g) => Number(g[1])))
+    text = text.replace(/^(define .*) #(\d+) \{$/gm, (_, head, n) => `${head} #${Number(n) + spare} {`)
+    text += groups
+      .map((g) => `attributes #${Number(g[1]) + spare} = ${g[2].replace(" nounwind ", " ")}\n`)
+      .join("")
+  }
+  writeFileSync(path, text)
   return path
 }
 console.log("\n### Size, bytes, each kernel compiled alone\n")
@@ -260,7 +277,12 @@ const sizeRow = (kernel, lowering, s) =>
   )
 for (const s of shapes) {
   sizeRow(s, "`Result`", object(`${out}/result/${s}.ll`, `result-${s}`))
-  sizeRow(s, "`Result`, no `nounwind`", object(unwinding(s), `unwinding-${s}`))
+  sizeRow(
+    s,
+    "`Result`, no `nounwind` on definitions",
+    object(unwinding(s, "definitions"), `unwinding-d-${s}`)
+  )
+  sizeRow(s, "`Result`, no `nounwind` anywhere", object(unwinding(s, "everywhere"), `unwinding-e-${s}`))
   sizeRow(s, "landing pads", object(`${here}/${s}.ll`, `pads-${s}`))
 }
 sizeRow("throw.ll", "landing pads, once a program", object(`${here}/throw.ll`, "throw"))
@@ -284,18 +306,23 @@ for (const mode of modes) {
 }
 
 // What `nounwind` buys today: `opt -O2` on each kernel's `Result` IR with and
-// without it (the IR compared with comments and attribute groups aside), and on
-// nounwind.ll, where it decides whether a store is dead.
+// without it, and on nounwind.ll, where it decides whether a store is dead.
+// The comparison is of each function's body and of the attributes LLVM ends
+// up with for it (its `; Function Attrs:` line); only the numbering of the
+// attribute groups is set aside.
 console.log("\n### `nounwind`, with and without, under `opt -O2`\n")
-const bodies = (path) =>
+const optimised = (path) =>
   run("opt", ["-O2", "-S", path])
     .split("\n")
-    .filter((l) => !/^(attributes|;|source_filename)/.test(l))
+    .filter((l) => !/^(attributes|; ModuleID|source_filename)/.test(l))
     .map((l) => l.replace(/ #\d+/g, ""))
     .join("\n")
 for (const s of shapes) {
-  const same = bodies(`${out}/result/${s}.ll`) === bodies(unwinding(s))
-  console.log(`- ${s}: optimised IR ${same ? "identical" : "differs"}`)
+  const base = optimised(`${out}/result/${s}.ll`)
+  const verdict = (where) => (optimised(unwinding(s, where)) === base ? "identical" : "differs")
+  console.log(
+    `- ${s}: off the definitions ${verdict("definitions")}, off everything ${verdict("everywhere")}`
+  )
 }
 const stores = (path) =>
   run("opt", ["-O2", "-S", path])

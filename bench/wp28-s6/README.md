@@ -136,21 +136,24 @@ figures](#reading-the-figures) is `run.mjs`'s output, pasted.
 
 ### Break-even, the parser
 
-- inlined: landing pads save 5.18 ns a record that parses and cost 469 ns more a failure: they win below one failure in 90 records
-- outlined: landing pads save 1.10 ns a record that parses and cost 1081 ns more a failure: they win below one failure in 980 records
+- inlined: landing pads save 5.18 ns a record that parses and cost 469 ns more a failure: they win below about one failure in 90 records
+- outlined: landing pads save 1.10 ns a record that parses and cost 1081 ns more a failure: they win below about one failure in 980 records
 
 ### Size, bytes, each kernel compiled alone
 
 | kernel | lowering | `.text` | `.eh_frame` | `.gcc_except_table` | total |
 | --- | --- | ---: | ---: | ---: | ---: |
 | hot | `Result` | 149 | 0 | 0 | 149 |
-| hot | `Result`, no `nounwind` | 149 | 0 | 0 | 149 |
+| hot | `Result`, no `nounwind` on definitions | 149 | 0 | 0 | 149 |
+| hot | `Result`, no `nounwind` anywhere | 149 | 0 | 0 | 149 |
 | hot | landing pads | 138 | 56 | 4 | 198 |
 | parse | `Result` | 624 | 0 | 0 | 624 |
-| parse | `Result`, no `nounwind` | 624 | 128 | 0 | 752 |
+| parse | `Result`, no `nounwind` on definitions | 624 | 0 | 0 | 624 |
+| parse | `Result`, no `nounwind` anywhere | 624 | 128 | 0 | 752 |
 | parse | landing pads | 766 | 112 | 20 | 898 |
 | deep | `Result` | 184 | 0 | 0 | 184 |
-| deep | `Result`, no `nounwind` | 184 | 128 | 0 | 312 |
+| deep | `Result`, no `nounwind` on definitions | 184 | 0 | 0 | 184 |
+| deep | `Result`, no `nounwind` anywhere | 184 | 128 | 0 | 312 |
 | deep | landing pads | 179 | 160 | 16 | 355 |
 | throw.ll | landing pads, once a program | 20 | 48 | 0 | 68 |
 | unwind.c | landing pads, once a program | 738 | 0 | 0 | 738 |
@@ -166,9 +169,9 @@ figures](#reading-the-figures) is `run.mjs`'s output, pasted.
 
 ### `nounwind`, with and without, under `opt -O2`
 
-- hot: optimised IR identical
-- parse: optimised IR identical
-- deep: optimised IR identical
+- hot: off the definitions identical, off everything identical
+- parse: off the definitions identical, off everything differs
+- deep: off the definitions identical, off everything differs
 - nounwind.ll: 1 store left with `nounwind`, 2 without
 
 ## Reading the figures
@@ -182,8 +185,12 @@ machine can measure, is `Result`.
 inlining.** With nothing thrown, landing pads run it in 0.67x the time
 inlined and 0.94x outlined. The inlined gap is mostly not the checks: without
 the three-word returns the optimiser folds the whole parser into `parse`
-(766 bytes of `.text`, one function), while the `Result` side keeps
-`parseField` out of line and passes each `{ i1, i32, i32 }` back through it.
+while the `Result` side keeps `parseField` out of line and passes each
+`{ i1, i32, i32 }` back through it. The evidence for that is the kernel
+compiled alone: `llvm-nm build/wp28-s6/result-parse.o` lists `parse` and
+`parseField`, the landing-pad object lists `parse` only, and its `.text` is
+766 bytes against 624. The linked binaries are stripped and went through LTO,
+so the same shape was not confirmed in them.
 The outlined row, where both sides make the same calls, prices the checks
 themselves: 1.1 ns a record of twelve digits, 6%. That row moves: an earlier
 run of this head put it inside its band. So the honest range for what the
@@ -198,8 +205,10 @@ the unwinder's fixed work (two phases, each finding the frame's description
 and running its CFI), and it is the floor described above.
 
 **So landing pads win only when failures are rare, and the line is close.**
-The parser breaks even at one failure in 90 records inlined and one in 980
-outlined. At one in 100 the outlined build is already 1.53x slower; at one in
+The parser breaks even at about one failure in 90 records inlined and one in
+980 outlined. Those are approximate: they divide the saving by the cost of a
+failure at one in 10, and that cost moves with density (860, 1055 and 1090 ns
+outlined at one in 1000, 100 and 10). At one in 100 the outlined build is already 1.53x slower; at one in
 10 it is 3.6x and 6.7x.
 
 **Landing pads are larger everywhere.** Each kernel is bigger in total (hot
@@ -244,16 +253,22 @@ throw, so the compiler needs that fixpoint, and any call it cannot see
 through (a closure, an interface method, an import from compatibility-mode
 JavaScript) must be assumed to throw.
 
-What it buys today, from `opt -O2` with and without it (`run.mjs` strips the
-attribute from a copy of each `Result` kernel):
+What it buys today, from `opt -O2` with and without it. `run.mjs` strips the
+attribute from two copies of each `Result` kernel, one losing it on the
+definitions only and one on the declarations too, and compares the optimised
+IR with its `; Function Attrs:` lines kept:
 
-- **On these three kernels, no code**: the optimised IR is identical. LLVM
-  re-derives `nounwind` for a function whose callees it can see, and nothing
-  here writes memory across a call.
-- **128 bytes of `.eh_frame` in `parse` and in `deep`** (20% and 70% of the
-  kernel), for the functions that stay out of line. That is the size cost a
-  function pays for merely being reachable by a throw, and it is on by
-  default once `nounwind` goes.
+- **Off the definitions only, nothing**: the optimised IR and the attributes
+  LLVM infers are identical, and so are the sizes. LLVM re-derives `nounwind`
+  for a function when every callee it can see has it, and the declarations
+  still do.
+- **Off the declarations too, 128 bytes of `.eh_frame` in `parse` and in
+  `deep`** (20% and 70% of the kernel) and the same `.text`. Both still call
+  `nish_panic_overflow` after optimisation, and once that declaration may
+  unwind, so may they, and each gets an unwind table. `hot` keeps no such
+  call and does not change. So the cost is not for being reachable by a
+  throw; it is for calling anything LLVM cannot prove `nounwind`, which under
+  landing pads is every indirect or imported callee.
 - **A dead store, where there is memory**: in `nounwind.ll` a store before a
   call is overwritten after it. With a `nounwind` callee `opt -O2` deletes
   the first store; without, it keeps both, because a landing pad up the stack
@@ -290,9 +305,15 @@ reader can check against the tables:
 > the noise band both on a program that never throws and at one failure in
 > 1000, and (b) every target has an unwinder.
 
-Neither holds:
+Neither holds as written, but **the recommendation stands on (b) alone**. Clause (a) is
+judged on the outlined build, and "a program that never throws" covers two
+rows that disagree, the hot loop and the parser; in the inlined build the
+parser rows (0.67x and 0.71x) would satisfy it. A reader who weighs (a)
+otherwise reaches the same verdict through (b).
 
-- (a) The hot loop is inside the band in both builds. The outlined parser
+- (a) The hot loop is inside the band in both builds (inlined, that row
+  compares two near-identical loops: the throw is provably dead once `step`
+  is inlined, so it says little about landing pads). The outlined parser
   saves 1.1 ns a record when nothing fails (0.94x, and inside the band in
   another run), at one failure in 1000 it is inside the band, and at one in
   100 landing pads are 1.53x slower. Nothing holds compatibility-mode
