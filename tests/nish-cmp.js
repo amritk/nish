@@ -1247,6 +1247,12 @@ const DECLARED = [
     why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
   },
   {
+    program: "tests/link/region_sessions_soak/main.ts",
+    file: "exit",
+    changelog: "fileOpen, fileReadAt, fileSize and fileClose",
+    why: "fileOpen, fileReadAt, fileSize and fileClose are new builtins (WP44), which the seed does not know",
+  },
+  {
     program: "tests/cases/file_size_large.ts",
     file: "exit",
     changelog: "fileOpen, fileReadAt, fileSize and fileClose",
