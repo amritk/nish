@@ -1,5 +1,5 @@
 /* Driver for ffi_errno: `errno_says` sets errno and answers a C string, which
- * the program copies after it saves errno; `main` prints what `run` answers. */
+ * the program copies after it saves errno; `quiet` answers one and sets none; `main` prints what `run` answers. */
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -8,6 +8,7 @@ const char *errno_says(int32_t e) {
   errno = e;
   return "a string from C";
 }
+const char *quiet(void) { return "nothing set"; }
 int main(void) {
   int32_t r = run();
   fflush(stdout);

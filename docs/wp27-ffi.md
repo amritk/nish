@@ -603,8 +603,8 @@ first thing after the `call` instruction, ahead of the `NULL` check of a
 then reads 5 after the copy.
 
 The zeroing is the owner's decision at sign-off. A C function that reports
-failure only through errno, `strtol` out of range or `readdir` at the end of a
-directory against on an error, can only be checked if errno was 0 going in, and
+failure only through errno, `strtol` out of range or `readdir`, which answers `NULL` both at
+the end of a directory and on an error, can only be checked if errno was 0 going in, and
 Nish exposes no setter. So in such a program `cErrno()` after a successful
 call is 0 unless the callee set it: `strtol("42")` reads 0 right after an
 out-of-range `strtol` read `ERANGE` (34).

@@ -707,7 +707,7 @@ declare function isExecutableSync(path: string): boolean;
 // ---- Unsafe (`nish:unsafe`) --------------------------------------------------
 //
 // Declared as globals so `tsc` reads a program that imports them, as every
-// `nish:` export is, but `nish` refuses a call to any of the six that is not
+// `nish:` export is, but `nish` refuses a call to any of the seven that is not
 // imported from `nish:unsafe`: the import is the module's visible opt-in. The
 // refusal reads `` `uncheckedGet` is a `nish:unsafe` function and is called only
 // through an import of it `` (NL2456). An import may rename (`as`) and cannot be

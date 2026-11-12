@@ -13138,7 +13138,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawnPipedWithin` (`caps_process_spawn_piped_within`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority`, `setCpuAffinity` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
-| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
+| `unsafe` | the seven `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`, `cErrno` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`, `writeBytes`),
 `process.argv`, `process.platform` and `process.arch`, `availableParallelism` and `totalMemory` (`caps_host`), `panic`, `Arena.*` and `arena()`,

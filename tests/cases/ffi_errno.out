@@ -1,6 +1,6 @@
 before any call: 0
 open: -1 errno 2
-after an allocation: 14890 errno 2
+quiet: nothing set errno 0
 strtol out of range: true errno 34
 strtol in range: 42 errno 0
 errno_says: a string from C errno 5
