@@ -677,8 +677,15 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * strict refusal and best-effort line for a directory gone since the build, and the
  * metadata rows kept for a scoped write. Measured 2,545 against 2,264 before it on
  * 2026-10-30 with clang 18 on linux-x64. Only a sandboxed build links any of it.
+ *
+ * Raised to 3,328, the next 256-byte boundary, for SBX-1 (WP37): the identities of
+ * the interpreters the exec allowlist marks, and the spawn-target check that
+ * resolves a spawn's program as `posix_spawnp` would and refuses one of them.
+ * Measured 3,143 against 2,558 before it on 2026-11-11 with clang 18.1.3 on
+ * linux-x64. Here rather than in `runtime-os.c`, whose spawn reaches it through a
+ * pointer only `nish_sandbox` sets, so a build without `--sandbox` links none of it.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 2560
+const RUNTIME_SANDBOX_TEXT_BUDGET = 3328
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
  * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`

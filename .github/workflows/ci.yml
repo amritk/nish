@@ -906,9 +906,11 @@ jobs:
     # than a job with no rows, which is why the `if` is on the job.
     if: needs.seeds.outputs.cmp != '[]'
     runs-on: ${{ matrix.seed.runner }}
-    # About 8 minutes on the slower x86_64 runners since nish-cmp compiles four
-    # programs at a time; the serial run took 12 to 20 and timed out the 0.37.0
-    # release at 20. The margin is for a slow runner and a growing corpus.
+    # The byte compare and the two fuzz passes, about 6 minutes on the slower
+    # x86_64 runners now that nish-cmp compiles four programs at a time and the
+    # elision check runs beside it in `nish-cmp-elision`; the serial compare
+    # took 12 to 20 and timed out the 0.37.0 release at 20. The margin is for
+    # a slow runner and a growing corpus.
     timeout-minutes: 30
     strategy:
       # x86_64 and aarch64 have different registers and different calling
@@ -929,12 +931,13 @@ jobs:
       # (`buildCandidate` in tests/nish-cmp.js, the arrangement G3 puts in
       # scripts/bootstrap.sh), so this job wants the toolchain for the same
       # reason `bootstrap` does rather than only to read IR.
-      # The sanitizer runtimes are for the soundness step's ASan builds.
-      - name: Install LLVM 18 + lld + the sanitizer runtimes
+      # The sanitizer runtimes are not here: the ASan builds they serve are
+      # `nish-cmp-elision`'s.
+      - name: Install LLVM 18 + lld
         timeout-minutes: 5
         uses: ./.github/actions/apt-install
         with:
-          packages: clang-18 lld-18 llvm-18 libclang-rt-18-dev
+          packages: clang-18 lld-18 llvm-18
 
       - name: Link the LLVM 18 tools by their plain names
         run: |
@@ -994,6 +997,96 @@ jobs:
           node tests/differential/fuzz.js --emit-ts --seed 20261001 --count 200 \
             --candidate build/self/compile
 
+      # Reached only when the comparison agreed, which is the point: this line
+      # is a claim about a run that happened. The summary line carries its own
+      # counts -- programs compared, files, IR lines, and what was refused by
+      # both or written by neither -- so the notice is the tool's number rather
+      # than a restatement of it.
+      - name: Say what this proved
+        env:
+          TAG: ${{ matrix.seed.tag }}
+          ASSET: ${{ matrix.seed.asset }}
+        run: |
+          summary="$(tail -n 1 "$RUNNER_TEMP/nish-cmp.log")"
+          echo "::notice::$TAG's $ASSET compiler and HEAD agree byte for byte. $summary"
+          { echo "### nish-cmp (WP19 G2.1)"; echo; echo "\`$TAG\`'s \`$ASSET\` compiler and HEAD write the same bytes over the corpus."; echo; echo "\`\`\`"; echo "$summary"; echo "\`\`\`"; } >> "$GITHUB_STEP_SUMMARY"
+
+
+  # The soundness differential, beside the byte compare rather than after it:
+  # the two share nothing but the candidate, and run one after the other they
+  # made nish-cmp (x86_64-linux) one of the last jobs to finish -- the compare
+  # took 330 s and the elision 221 s of its 10 minutes. This row links its own
+  # candidate (about 15 s) from the same verified seed, so it answers for the
+  # same compiler, and it carries the same `seeds` gating for the same reason.
+  nish-cmp-elision:
+    name: nish-cmp elision (${{ matrix.seed.asset }})
+    needs: seeds
+    # Empty for the two reasons the `cmpSince` note in seed-targets.json
+    # separates: no release has happened, or every release so far carries a
+    # seed that cannot compile the corpus. Either way this is grey rather than
+    # green, because a green check here would claim a comparison that nothing
+    # made -- and an empty matrix is an error GitHub refuses to evaluate rather
+    # than a job with no rows, which is why the `if` is on the job.
+    if: needs.seeds.outputs.cmp != '[]'
+    runs-on: ${{ matrix.seed.runner }}
+    # About 4 minutes: the link and the step's own `--budget 360`. The margin
+    # is nish-cmp's, for a slow runner.
+    timeout-minutes: 30
+    strategy:
+      # x86_64 and aarch64 have different registers and different calling
+      # conventions, so one row failing must not cancel the row that would say
+      # whether it is the architecture or the change.
+      fail-fast: false
+      matrix:
+        seed: ${{ fromJSON(needs.seeds.outputs.cmp) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # The toolchain links the candidate, and the sanitizer runtimes are for
+      # the soundness step's ASan builds.
+      - name: Install LLVM 18 + lld + the sanitizer runtimes
+        timeout-minutes: 5
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18 libclang-rt-18-dev
+
+      - name: Link the LLVM 18 tools by their plain names
+        run: |
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # nish-cmp's verified download, with its refusal of a seed that is not
+      # this row's.
+      - name: Download the seed
+        id: download
+        env:
+          TAG: ${{ matrix.seed.tag }}
+          TARBALL: ${{ matrix.seed.tarball }}
+        run: |
+          bash scripts/fetch-seed.sh "${TAG#v}" --expect-tarball "$TARBALL"
+          echo "path=$PWD/build/seed/bin/nish" >> "$GITHUB_OUTPUT"
+
+      # The candidate nish-cmp builds (`buildCandidate` in tests/nish-cmp.js):
+      # src/ linked by this row's seed into build/self/compile.
+      - name: Build the candidate
+        env:
+          SEED: ${{ steps.download.outputs.path }}
+        run: |
+          "$SEED" --version
+          "$SEED" src/compile.ts --link build/self/compile
+
       # The soundness differential: the same candidate compiles every runnable
       # case, the fuzz corpus and 600 fixed-seed programs from proofgen.js (built
       # around the accesses the elision reasons about, each in an in-bounds and
@@ -1014,20 +1107,6 @@ jobs:
         run: |
           node tests/differential/soundness.js --compiler build/self/compile --corpus tests/cases \
             --corpus tests/differential/corpus --gen --seed 20261024 --count 600 --asan --budget 360
-
-      # Reached only when the comparison agreed, which is the point: this line
-      # is a claim about a run that happened. The summary line carries its own
-      # counts -- programs compared, files, IR lines, and what was refused by
-      # both or written by neither -- so the notice is the tool's number rather
-      # than a restatement of it.
-      - name: Say what this proved
-        env:
-          TAG: ${{ matrix.seed.tag }}
-          ASSET: ${{ matrix.seed.asset }}
-        run: |
-          summary="$(tail -n 1 "$RUNNER_TEMP/nish-cmp.log")"
-          echo "::notice::$TAG's $ASSET compiler and HEAD agree byte for byte. $summary"
-          { echo "### nish-cmp (WP19 G2.1)"; echo; echo "\`$TAG\`'s \`$ASSET\` compiler and HEAD write the same bytes over the corpus."; echo; echo "\`\`\`"; echo "$summary"; echo "\`\`\`"; } >> "$GITHUB_STEP_SUMMARY"
 
 
   # The golden cases again, through the harness written in the language rather
@@ -1108,13 +1187,23 @@ jobs:
       # the step shell with SIGPIPE ignored, `exec` keeps an ignored signal,
       # and `io_spawn_piped` checks that a child starts with SIGPIPE at its
       # default. Node reset it when it started the runner; nothing else does.
+      # The runner deals its link programs by their cost in
+      # tests/shard-costs.json (by position, the last slice carried 504 s of
+      # them against 351 s for the first); `--check-runner` reads that deal
+      # through `--list`, a slice per row of `jobs` parts, and fails one that
+      # misses or repeats a program or is uneven. `jobs` is the runner's own
+      # default (a core each, at most 8), passed to both so the deal checked
+      # is the deal run.
       - name: The corpus, through the Nish runner
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
           build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
-          env --default-signal build/nish-runner --compiler build/nish --shard "$SHARD/3" | tee "$RUNNER_TEMP/nish-runner.log"
+          jobs="$(nproc)"
+          if [ "$jobs" -gt 8 ]; then jobs=8; fi
+          node scripts/shard-costs.mjs --check-runner build/nish-runner 3 "$jobs"
+          env --default-signal build/nish-runner --compiler build/nish --shard "$SHARD/3" --jobs "$jobs" | tee "$RUNNER_TEMP/nish-runner.log"
 
       - name: Say what this proved
         if: always()

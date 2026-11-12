@@ -1,0 +1,8 @@
+PASS  the window is lent
+PASS  copied in at its offset
+PASS  an overlapping copy forward
+PASS  an overlapping copy backward
+PASS  a zero-byte copy commits an empty record
+PASS  leaving none
+PASS  unlink the region
+nish/sync/ring in place, copyBytes into the window: 7 passed, 0 failed, 0 skipped

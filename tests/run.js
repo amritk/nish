@@ -8808,6 +8808,32 @@ if (dealtHere("cryptoBench")) {
     markers.every((m) => /^[a-z-]+$/.test(m)),
     `markers: ${markers.join(", ")}`
   )
+  // The paired-rounds decision on run 43086306918's numbers: a mask that
+  // changed nothing passed its fourth set at 36 of 48 and 1.000x, the count's
+  // bound having covered two sets of the four two cases may take. Split over
+  // all four the count is 37, and a tie fails whatever the count; the real
+  // mask's lowest CI ratio, 1.029x, with 40 rounds still passes.
+  const { pairedProves, pairedWant } = await import("../bench/crypto/paired.mjs")
+  const want2 = pairedWant(2)
+  const tie = [36, 48].map((lost) => pairedProves(lost, want2, 1.0))
+  // run.mjs splits the bound over the family's own cases (curves has two), and
+  // the ratio's margin is a hard floor.
+  const runSrc = fs.readFileSync(path.join(root, "bench", "crypto", "run.mjs"), "utf8")
+  const curvesCases = JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", "curves", "family.json"), "utf8")).portableProof
+  check(
+    "crypto-bench: run.mjs asks for the count over the family's cases, curves' two need 37, and the ratio floor is 1.01",
+    runSrc.includes("pairedWant(cases.length)") &&
+      curvesCases.length === 2 &&
+      pairedWant(curvesCases.length) === 37 &&
+      !pairedProves(48, want2, 1.009) &&
+      pairedProves(48, want2, 1.011),
+    `pairedWant(cases.length) in run.mjs ${runSrc.includes("pairedWant(cases.length)")}; curves cases ${curvesCases.length}; 1.009x ${pairedProves(48, want2, 1.009)}; 1.011x ${pairedProves(48, want2, 1.011)}`
+  )
+  check(
+    "crypto-bench: the paired rounds fail CI's tie (36 of 48 at 1.000x over two cases) and pass the real mask's 40 at 1.029x",
+    want2 === 37 && tie.every((p) => !p) && !pairedProves(36, want2, 1.029) && pairedProves(40, want2, 1.029),
+    `want ${want2} of 48; 36 and 48 at 1.000x prove ${tie}; 36 at 1.029x ${pairedProves(36, want2, 1.029)}; 40 at 1.029x ${pairedProves(40, want2, 1.029)}`
+  )
   if (HAS_CLANG) {
     const families = fs
       .readdirSync(path.join(root, "bench", "crypto"))
@@ -10950,25 +10976,86 @@ if (dealtHere("fileServer")) {
     )
     // One fetch from a fresh server: the response head, the body's length and
     // SHA-256, and the server's VmHWM in kB once the body is in. The server is
-    // killed whatever happens, and the whole exchange has a deadline.
+    // killed whatever happens.
+    //
+    // The deadline is on progress, not on the whole exchange: the fetch fails
+    // once `FILE_SERVER_STALL_MS` pass with no byte while the reader is not
+    // pausing, and the clock restarts on every byte. A whole 64 MiB fetch
+    // takes 0.74 to 0.78 s on CI and its longest pause is 250 ms, so 20 s
+    // without a byte is a stall, not a slow runner. CI saw three of them, each
+    // the whole 60 s the old fixed deadline allowed, with the server alive and
+    // nothing to say which side had stopped. A stall now records where the
+    // fetch was (phase, bytes, ms since the last one), the server's scheduler
+    // state and kernel wait channel, and both ends' kernel queues from
+    // /proc/net/tcp: a full send queue with an empty receive queue is the
+    // reader, empty queues with the server asleep are a lost wake-up. That
+    // record named #1420 (27ad7dd8) as the cause of CI's three stalls, all on
+    // heads before it: with its write bit reverted, one run in ten stalled
+    // at 33 MB with the server in do_epoll_wait and both queues empty.
+    //
+    // A transfer that trickles a byte under the stall bound would never trip
+    // it, so the whole fetch also has a cap derived from the reader's pacing:
+    // its pauses (250 ms, then 5 ms per further MiB), the body at
+    // `FILE_SERVER_FLOOR` bytes a second (CI moves about 90 MiB/s), and one
+    // stall bound for start-up and the head.
+    const FILE_SERVER_STALL_MS = 20_000
+    const FILE_SERVER_FLOOR = 1 << 20
+    const fetchCapMs = (size) =>
+      FILE_SERVER_STALL_MS + 250 + 5 * Math.floor(size / (1 << 20)) + Math.ceil((size * 1000) / FILE_SERVER_FLOOR)
+    const tcpQueues = (port) => {
+      const hex = port.toString(16).toUpperCase().padStart(4, "0")
+      try {
+        return fs
+          .readFileSync("/proc/net/tcp", "utf8")
+          .split("\n")
+          .map((l) => l.trim().split(/\s+/))
+          .filter((f) => f.length > 4 && (f[1].endsWith(`:${hex}`) || f[2].endsWith(`:${hex}`)))
+          .map((f) => `${f[1]}->${f[2]} st ${f[3]} tx:rx ${f[4]}`)
+      } catch (e) {
+        return [String(e)]
+      }
+    }
+    const procLine = (pid, name) => {
+      try {
+        return fs.readFileSync(`/proc/${pid}/${name}`, "utf8").trim()
+      } catch (e) {
+        return String(e)
+      }
+    }
     const serveOnce = (file, method) =>
       new Promise((resolve) => {
-        const server = spawn(exe, [file, "0"], {
-          stdio: ["ignore", "pipe", "pipe"],
-          timeout: 90_000,
-          killSignal: "SIGKILL",
-        })
+        // Before the spawn, so that a throw here leaves no server running.
+        const cap = fetchCapMs(fs.statSync(file).size)
+        const server = spawn(exe, [file, "0"], { stdio: ["ignore", "pipe", "pipe"] })
+        const born = Date.now()
         let out = ""
         let fetching = false
         let settled = false
+        // Where the fetch is, for a stall's detail; `paused` stops the clock.
+        const at = { phase: "start", got: 0, last: Date.now(), paused: false, port: 0 }
         const finish = (r) => {
           if (settled) return
           settled = true
-          clearTimeout(timer)
+          clearInterval(watch)
           server.kill("SIGKILL")
           resolve({ ...r, out })
         }
-        const timer = setTimeout(() => finish({ error: "timed out after 60 s" }), 60_000)
+        const watch = setInterval(() => {
+          const now = Date.now()
+          const idle = now - at.last
+          const over = now - born >= cap
+          if (!over && (at.paused || idle < FILE_SERVER_STALL_MS)) return
+          finish({
+            error: over
+              ? `the fetch passed its ${cap} ms cap (the reader's pauses, the body at 1 MiB/s and one stall bound)`
+              : `no byte for ${idle} ms`,
+            phase: at.phase,
+            got: at.got,
+            server: procLine(server.pid, "stat").replace(/^.*\) /, "").split(" ")[0],
+            wchan: procLine(server.pid, "wchan"),
+            tcp: at.port > 0 ? tcpQueues(at.port) : [],
+          })
+        }, 1_000)
         server.on("error", (e) => finish({ error: String(e) }))
         server.on("exit", (code, signal) => finish({ error: `the server exited (${code ?? signal})` }))
         server.stderr.on("data", (d) => (out += d))
@@ -10977,30 +11064,48 @@ if (dealtHere("fileServer")) {
           const port = /http:\/\/127\.0\.0\.1:(\d+)\//.exec(out)
           if (port === null || fetching) return
           fetching = true
-          const socket = net.connect(Number(port[1]), "127.0.0.1")
+          at.port = Number(port[1])
+          at.phase = "connect"
+          at.last = Date.now()
+          const socket = net.connect(at.port, "127.0.0.1")
           const hash = crypto.createHash("sha256")
           let head = Buffer.alloc(0)
           let inBody = false
           let got = 0
           let sincePause = 0
           let pauses = 0
-          socket.on("connect", () => socket.write(`${method} / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`))
+          socket.on("connect", () => {
+            at.phase = "head"
+            at.last = Date.now()
+            socket.write(`${method} / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`)
+          })
           socket.on("data", (chunk) => {
+            at.last = Date.now()
             if (!inBody) {
               head = Buffer.concat([head, chunk])
               const end = head.indexOf("\r\n\r\n")
               if (end < 0) return
               inBody = true
+              at.phase = "body"
               chunk = head.subarray(end + 4)
               head = head.subarray(0, end)
             }
             hash.update(chunk)
             got += chunk.length
+            at.got = got
             sincePause += chunk.length
             if (sincePause >= 1 << 20) {
               sincePause = 0
               socket.pause()
-              setTimeout(() => socket.resume(), pauses++ === 0 ? 250 : 5)
+              at.paused = true
+              setTimeout(
+                () => {
+                  at.paused = false
+                  at.last = Date.now()
+                  socket.resume()
+                },
+                pauses++ === 0 ? 250 : 5
+              )
             }
           })
           socket.on("error", (e) => finish({ error: String(e) }))
@@ -28360,10 +28465,10 @@ if (!only || "sandbox dependency grants".includes(only)) {
         trueReal !== null && ir(runner).includes(`@.sandbox.exec = `) && ir(runner).includes(`c"${trueReal}\\00`),
         `the first \`true\` on PATH resolves to ${trueReal}\n${ir(runner)}`
       )
-      // SBX-1, recorded open in docs/security/sandbox.md: the allowlist grants
-      // EXECUTE on the granted program's ELF loader, and the loader runs any
-      // binary it is handed. This pins that it still does; closing SBX-1
-      // turns this check red, and it then pins the refusal instead.
+      // SBX-1, fixed (docs/security/sandbox.md): the allowlist must grant
+      // EXECUTE on the granted program's ELF loader, which runs any binary it
+      // is handed, so the compiler marks the loader `//` and the runtime
+      // refuses it, by file identity, as a spawn target of its own.
       const execList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(runner))
       const loaders =
         execList === null ? [] : execList[1].split("\\00").filter((p) => p !== "" && p !== trueReal)
@@ -28377,16 +28482,68 @@ if (!only || "sandbox dependency grants".includes(only)) {
       const ungrantedCc = spawnSync("clang", ["-O2", ungrantedSrc, "-o", ungranted], { encoding: "utf8" })
       if (loaders.length === 0 || ungrantedCc.status !== 0) {
         skip(
-          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or clang could not build the ungranted program (${ungrantedCc.stderr ?? ungrantedCc.error}); SBX-1 is not pinned`
+          `sandbox dependency grants: \`true\` here has no ELF loader on the allowlist (${loaders.length}) or clang could not build the ungranted program (${ungrantedCc.stderr ?? ungrantedCc.error}); SBX-1 is not checked`
         )
       } else {
-        const rLoader = run(allow, [loaders[0], ungranted])
+        const loader = loaders[0].replace(/^\/\//, "/")
+        const second = path.join(dir, "sbx-1-loader")
+        fs.rmSync(second, { force: true })
+        fs.symlinkSync(loader, second)
+        const rLoader = run(allow, [loader, ungranted])
+        const rSecond = run(allow, [second, ungranted])
+        const rLoaderPlain = run(open, [loader, ungranted])
         check(
-          "sandbox dependency grants: a granted program's ELF loader runs a program the grant does not name (SBX-1, open)",
-          rLoader !== null && rLoader.status === 0 && rLoader.stdout === "sbx-1\n0\n",
-          `${loaders[0]} ${ungranted}\n${said(rLoader)}`
+          "sandbox dependency grants: a granted program's ELF loader is refused as a spawn target (SBX-1)",
+          loaders[0].startsWith("//") &&
+            rLoader !== null &&
+            rLoader.status === 0 &&
+            rLoader.stdout === "-1\n" &&
+            rLoaderPlain !== null &&
+            rLoaderPlain.status === 0 &&
+            rLoaderPlain.stdout === "sbx-1\n0\n",
+          `${loaders[0]} ${ungranted}\n${said(rLoader)}\n--- without --sandbox\n${said(rLoaderPlain)}`
+        )
+        check(
+          "sandbox dependency grants: a second name for the loader is refused too (SBX-1)",
+          rSecond !== null && rSecond.status === 0 && rSecond.stdout === "-1\n",
+          `${second} -> ${loader}\n${said(rSecond)}`
         )
       }
+      // A `#!` script's interpreter is on the allowlist for the script's sake
+      // and refused named directly, unless the grant names it as well.
+      const script = (fixture) => fs.realpathSync(path.join(linkDir, fixture, "bin", "hello.sh"))
+      const scripted = "sandbox_dep_exec_script"
+      const sAllow = build(scripted, ["--sandbox"])
+      const sOpen = build(scripted, [])
+      const rScript = run(sAllow, [script(scripted)])
+      const rSh = run(sAllow, ["sh", "-c", "echo sh-ran"])
+      const rShPlain = run(sOpen, ["sh", "-c", "echo sh-ran"])
+      check(
+        "sandbox dependency grants: a granted #! script runs and its interpreter is refused as a spawn target (SBX-1)",
+        rScript !== null &&
+          rScript.status === 0 &&
+          rScript.stdout === "script-ran\n0\n" &&
+          rSh !== null &&
+          rSh.status === 0 &&
+          rSh.stdout === "-1\n" &&
+          rShPlain !== null &&
+          rShPlain.stdout === "sh-ran\n0\n",
+        `${said(rScript)}\n--- sh\n${said(rSh)}\n--- without --sandbox\n${said(rShPlain)}\n${ir(scripted)}`
+      )
+      const both = "sandbox_dep_exec_interpreter_granted"
+      const bAllow = build(both, ["--sandbox"])
+      const rBothScript = run(bAllow, [script(both)])
+      const rBothSh = run(bAllow, ["sh", "-c", "echo sh-ran"])
+      check(
+        "sandbox dependency grants: a program the grant names stays spawnable when it is also another's interpreter (SBX-1)",
+        rBothScript !== null &&
+          rBothScript.status === 0 &&
+          rBothScript.stdout === "script-ran\n0\n" &&
+          rBothSh !== null &&
+          rBothSh.status === 0 &&
+          rBothSh.stdout === "sh-ran\n0\n",
+        `${said(rBothScript)}\n--- sh\n${said(rBothSh)}\n${ir(both)}`
+      )
     }
   }
 }

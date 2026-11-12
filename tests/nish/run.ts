@@ -1,27 +1,33 @@
 /**
  * The golden-case runner, in Nish.
  *
- *     build/nish-runner [substring] [--compiler <nish>] [--shard <i>/<n>] [--jobs <p>]
+ *     build/nish-runner [substring] [--compiler <nish>] [--shard <i>/<n>] [--jobs <p>] [--list]
  *
  * The compiler under test defaults to `build/nish`, what `npm run build` leaves
  * behind; `--compiler <nish>` names another. A Node entry point (`.js`, `.mjs`,
  * `.cjs`) runs under `node` and anything else directly, the rule
  * `NISH_BOOTSTRAP` follows in `scripts/bootstrap.sh`. `--shard <i>/<n>` runs the
-`i`th of `n` slices of the selected cases and link programs, dealt round-robin
-over one list, so `n` CI jobs share the corpus between them.
+ * `i`th of `n` slices of the selected cases and link programs, so `n` CI jobs
+ * share the corpus between them: the cases are dealt round-robin, and the link
+ * programs by their `link` cost in `tests/shard-costs.json`, dearest first, each
+ * to the slice with the least so far.
  *
  * `--jobs <p>` runs that slice as `p` processes, one per core by default (at
  * most 8; at most 64 when given). Every check is a `spawnSyncTo` the runner
  * waits on, so one process leaves all but one core idle; with `p` above 1 the
- * runner starts itself `p` times through `spawn` instead, on the slices `i`,
- * `i + n`, ..., `i + n(p - 1)` of `n·p`. An item lands in one of those exactly
- * when its position is `i - 1` modulo `n`, which is the set `--shard i/n` names
- * alone, so `--jobs` changes how long a slice takes and never what it checks.
+ * runner starts itself `p` times through `spawn` instead, child `k` with
+ * `--shard i/n --part k/p`. A child deals the slice exactly as `--shard i/n`
+ * alone does and then deals that slice into `p` parts the same way, keeping
+ * part `k`, so `--jobs` changes how long a slice takes and never what it checks.
  * Each child keeps its work under `build/nish-runner-jobs/<slice>-of-<total>/`
- * (`--work <dir>`, the child's own flag, refused beside `--jobs` above 1),
- * its output is printed whole in slice order once it and every slice before
- * it are done, and the last line is the summary summed over them, so a
+ * (`--work <dir>` and `--part`, the child's own flags, refused beside `--jobs`
+ * above 1), its output is printed whole in slice order once it and every slice
+ * before it are done, and the last line is the summary summed over them, so a
  * `tail -n 1` reads it as one run's.
+ *
+ * `--list` runs nothing: it prints what those flags would run, one `case <name>`
+ * or `link <name>` per line, which is how `scripts/shard-costs.mjs --check-runner`
+ * reads the deal without a compiler.
  *
  * `tests/run.js` is the suite of record and this is not a replacement for it: it
  * covers section A, the golden cases in `tests/cases/`, and the `tests/link/`
@@ -317,6 +323,94 @@ const linkNames = (): string[] => {
     }
   }
   return names;
+};
+
+/** The cost table `tests/run.js` deals its shards by; its `link` costs deal this runner's link programs. */
+const SHARD_COSTS: string = "tests/shard-costs.json";
+
+/**
+ * Each program's cost in hundredths of a second, by name: the `link` entries
+ * of `SHARD_COSTS`, one `"name": seconds` per line, as `scripts/shard-costs.mjs`
+ * writes them. A missing table reads as no entries, so every program costs its
+ * floor and the deal still splits them by count.
+ */
+const linkCosts = (): Map<string, i32> => {
+  const costs = new Map<string, i32>();
+  const text = readFileSyncOrNull(SHARD_COSTS);
+  if (text === null) {
+    return costs;
+  }
+  let inLink = false;
+  for (const raw of splitLines(text)) {
+    const line = trim(raw);
+    if (!inLink) {
+      inLink = line.startsWith('"link"');
+      continue;
+    }
+    if (line.startsWith("}")) {
+      break;
+    }
+    const colon = line.indexOf('":');
+    if (!line.startsWith('"') || colon < 0) {
+      continue;
+    }
+    const rest = trim(line.substring(colon + 2));
+    const value = rest.endsWith(",") ? rest.substring(0, rest.length - 1) : rest;
+    const dot = value.indexOf(".");
+    // Hundredths, so `36.2` is 3620 and `0.05` is 5: whole seconds, then the first two decimals.
+    let hundredths = parseInt(dot < 0 ? value : value.substring(0, dot)) * 100;
+    if (dot >= 0) {
+      const decimals = `${value.substring(dot + 1)}00`;
+      hundredths += parseInt(decimals.substring(0, 2));
+    }
+    costs.set(line.substring(1, colon), hundredths);
+  }
+  return costs;
+};
+
+/**
+ * Which of `bins` each of `names` goes to, dealt by cost: the dearest first,
+ * each to the bin with the least so far (the lowest on a tie). A program costs
+ * at least the floor `tests/run.js` gives it, 0.05 s for a rejection
+ * (`expected.err`) and 0.5 s otherwise, so a program the table does not name
+ * still counts. The order depends on nothing but the names and the table, so
+ * every process dealing the same list deals it the same way.
+ */
+const dealByCost = (names: string[], costs: Map<string, i32>, bins: i32): Map<string, i32> => {
+  const priced: string[] = [];
+  const price = new Map<string, i32>();
+  for (const name of names) {
+    const floor = readFileSyncOrNull(`${LINKS}/${name}/expected.err`) === null ? 50 : 5;
+    const cost = costs.get(name) ?? 0;
+    price.set(name, cost > floor ? cost : floor);
+    priced.push(name);
+  }
+  // Stable, and `names` comes sorted, so programs of one cost keep their name order.
+  priced.sort((a: string, b: string): number => {
+    const x = price.get(a) ?? 0;
+    const y = price.get(b) ?? 0;
+    return x < y ? 1 : x > y ? -1 : 0;
+  });
+  const load: i32[] = [];
+  let bin: i32 = 0;
+  while (bin < bins) {
+    load.push(0);
+    bin += 1;
+  }
+  const dealt = new Map<string, i32>();
+  for (const name of priced) {
+    let least: i32 = 0;
+    bin = 1;
+    while (bin < bins) {
+      if (load[bin] < load[least]) {
+        least = bin;
+      }
+      bin += 1;
+    }
+    load[least] += price.get(name) ?? 0;
+    dealt.set(name, least);
+  }
+  return dealt;
 };
 
 /**
@@ -824,7 +918,8 @@ const runJobs = (filter: string, compiler: string, shard: i32, shards: i32, jobs
     if (filter.length > 0) {
       argv.push(filter);
     }
-    for (const arg of ["--compiler", compiler, "--shard", `${slice}/${total}`, "--jobs", "1", "--work", dir]) {
+    const part = `${p + 1}/${jobs}`;
+    for (const arg of ["--compiler", compiler, "--shard", `${shard}/${shards}`, "--part", part, "--jobs", "1", "--work", dir]) {
       argv.push(arg);
     }
     // `spawn` answers a pid or a negative errno; 0 stands for a directory that could not be made.
@@ -929,6 +1024,86 @@ const prepareFileCases = (work: string): string => {
   return said === null ? "sh failed and wrote nothing" : said;
 };
 
+/**
+ * The golden cases `--shard <shard>/<shards> --part <part>/<parts>` runs,
+ * in order: dealt round-robin by position in the selected list.
+ */
+const casesHere = (filter: string, shard: i32, shards: i32, part: i32, parts: i32): string[] => {
+  // The position in the selected list, which decides the shard: counted after
+  // the filter, so a filtered run still splits evenly. It depends on nothing
+  // but the list, so a `--jobs` child given `--shard i/n --part k/q` and this
+  // process given `--shard i/n` agree on every position.
+  let dealt: i32 = 0;
+  // The position the first case `sharesAFile` names was dealt, which the second reuses.
+  let sharedAt: i32 = -1;
+  // How many positions of this slice have gone by, which decides the part,
+  // and the part the first `sharesAFile` case went to, which the second joins.
+  let ofSlice: i32 = 0;
+  let sharedPart: i32 = 0;
+  const here: string[] = [];
+  for (const name of caseNames()) {
+    if (filter.length > 0 && name.indexOf(filter) < 0) {
+      continue;
+    }
+    let position = dealt;
+    const reused = sharesAFile(name) && sharedAt >= 0;
+    if (reused) {
+      position = sharedAt;
+    } else {
+      dealt += 1;
+      if (sharesAFile(name)) {
+        sharedAt = position;
+      }
+    }
+    if (position % shards !== shard - 1) {
+      continue;
+    }
+    // The slice's cases go round its parts in turn.
+    let inPart = sharedPart;
+    if (!reused) {
+      inPart = ofSlice % parts;
+      ofSlice += 1;
+      if (sharesAFile(name)) {
+        sharedPart = inPart;
+      }
+    }
+    if (inPart !== part - 1) {
+      continue;
+    }
+    here.push(name);
+  }
+  return here;
+};
+
+/** The `tests/link` programs the same flags run, in name order: dealt by cost. */
+const linksHere = (filter: string, shard: i32, shards: i32, part: i32, parts: i32): string[] => {
+  const selected: string[] = [];
+  for (const name of linkNames()) {
+    if (filter.length === 0 || name.indexOf(filter) >= 0) {
+      selected.push(name);
+    }
+  }
+  // Dealt by cost, not position: by position the dear programs bunched into
+  // the last slice. The slice is dealt first and then split into its parts,
+  // so a `--jobs` child's part is a share of exactly what `--shard` names.
+  const costs = linkCosts();
+  const toShard = dealByCost(selected, costs, shards);
+  const mine: string[] = [];
+  for (const name of selected) {
+    if ((toShard.get(name) ?? -1) === shard - 1) {
+      mine.push(name);
+    }
+  }
+  const toPart = dealByCost(mine, costs, parts);
+  const here: string[] = [];
+  for (const name of mine) {
+    if ((toPart.get(name) ?? -1) === part - 1) {
+      here.push(name);
+    }
+  }
+  return here;
+};
+
 export const main = (): number => {
   // One filter argument, matched as a substring, the way `node tests/run.js <sub>` does,
   // and `--compiler <nish>` anywhere around it.
@@ -940,10 +1115,15 @@ export const main = (): number => {
   // slices instead of all in the last one.
   let shard: i32 = 1;
   let shards: i32 = 1;
+  // `--part <k>/<q>`, a `--jobs` child's own flag: the `k`th of the `q` parts
+  // its parent's slice is dealt into.
+  let part: i32 = 1;
+  let parts: i32 = 1;
   const cores = availableParallelism();
   let jobs: i32 = cores < 8 ? cores : 8;
   let base = "build";
   let workGiven = false;
+  let list = false;
   let i = 1;
   while (i < process.argv.length) {
     if (process.argv[i] === "--compiler") {
@@ -966,6 +1146,18 @@ export const main = (): number => {
         panic(`--shard wants <i>/<n> with 1 <= i <= n, not ${spec}`);
       }
       i = i + 2;
+    } else if (process.argv[i] === "--part") {
+      if (i + 1 >= process.argv.length) {
+        panic("--part needs <k>/<q>");
+      }
+      const spec = process.argv[i + 1];
+      const slash = spec.indexOf("/");
+      part = slash > 0 ? parseInt(spec.substring(0, slash)) : 0;
+      parts = slash > 0 ? parseInt(spec.substring(slash + 1)) : 0;
+      if (parts < 1 || part < 1 || part > parts) {
+        panic(`--part wants <k>/<q> with 1 <= k <= q, not ${spec}`);
+      }
+      i = i + 2;
     } else if (process.argv[i] === "--jobs") {
       if (i + 1 >= process.argv.length) {
         panic("--jobs needs a count");
@@ -975,6 +1167,9 @@ export const main = (): number => {
         panic(`--jobs wants a count from 1 to 64, not ${process.argv[i + 1]}`);
       }
       i = i + 2;
+    } else if (process.argv[i] === "--list") {
+      list = true;
+      i = i + 1;
     } else if (process.argv[i] === "--work") {
       if (i + 1 >= process.argv.length) {
         panic("--work needs a directory");
@@ -987,10 +1182,22 @@ export const main = (): number => {
       i = i + 1;
     }
   }
+  if (list) {
+    for (const name of casesHere(filter, shard, shards, part, parts)) {
+      console.log(`case ${name}`);
+    }
+    for (const name of linksHere(filter, shard, shards, part, parts)) {
+      console.log(`link ${name}`);
+    }
+    return 0;
+  }
   if (readFileSyncOrNull(compiler) === null) {
     panic(`cannot read the compiler ${compiler} (run this from the repository root, after \`npm run build\`)`);
   }
   mkdirSync("build");
+  if (jobs > 1 && parts > 1) {
+    panic(`--part names one child's share of a slice; pass --jobs 1 with it, not --jobs ${jobs}`);
+  }
   if (jobs > 1 && workGiven) {
     panic(`--work names one process's directory; pass --jobs 1 with it (--jobs ${jobs} keeps each under ${JOB_WORK})`);
   }
@@ -1058,29 +1265,7 @@ export const main = (): number => {
   }
 
   const slow = new Slowest();
-  // The position in the selected list, which decides the shard: counted after
-  // the filter, so a filtered run still splits evenly. It depends on nothing
-  // but the list, so a `--jobs` child dealt `slice/total` and this process
-  // dealt `shard/shards` agree on every position.
-  let dealt: i32 = 0;
-  // The position the first case `sharesAFile` names was dealt, which the second reuses.
-  let sharedAt: i32 = -1;
-  for (const name of caseNames()) {
-    if (filter.length > 0 && name.indexOf(filter) < 0) {
-      continue;
-    }
-    let position = dealt;
-    if (sharesAFile(name) && sharedAt >= 0) {
-      position = sharedAt;
-    } else {
-      dealt += 1;
-      if (sharesAFile(name)) {
-        sharedAt = position;
-      }
-    }
-    if (position % shards !== shard - 1) {
-      continue;
-    }
+  for (const name of casesHere(filter, shard, shards, part, parts)) {
     const at = monotonicNanos();
     runGoldenCase(t, tools, name);
     slow.record(name, monotonicNanos() - at);
@@ -1090,14 +1275,7 @@ export const main = (): number => {
     t.skip("tests/link programs", `cannot empty ${linkWork}, and a stale module would read as this run's`);
   } else {
     const speedLink = speedLinkNames();
-    for (const name of linkNames()) {
-      if (filter.length > 0 && name.indexOf(filter) < 0) {
-        continue;
-      }
-      dealt += 1;
-      if ((dealt - 1) % shards !== shard - 1) {
-        continue;
-      }
+    for (const name of linksHere(filter, shard, shards, part, parts)) {
       const at = monotonicNanos();
       runLinkCase(t, tools, speedLink, name);
       slow.record(`link/${name}`, monotonicNanos() - at);
