@@ -69,6 +69,8 @@ export const parseServe = (argv: string[]): ServeArgs => {
       o.h1sPort = port(value);
     } else if (flag === "--h2-port") {
       o.h2Port = port(value);
+    } else if (flag === "--ws-port") {
+      o.wsPort = port(value);
     } else if (flag === "--slots") {
       o.slots = decimal(value);
     } else if (flag === "--only") {
@@ -80,7 +82,7 @@ export const parseServe = (argv: string[]): ServeArgs => {
     }
     k = k + 2;
   }
-  if (out.error === "" && (o.quicPort < 0 || o.h1Port < 0 || o.h1sPort < 0 || o.h2Port < 0)) {
+  if (out.error === "" && (o.quicPort < 0 || o.h1Port < 0 || o.h1sPort < 0 || o.h2Port < 0 || o.wsPort < 0)) {
     out.error = "a port outside 0 to 65535";
   }
   if (out.error === "" && (o.slots < 1 || o.slots > 4096)) {

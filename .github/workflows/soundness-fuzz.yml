@@ -43,8 +43,11 @@ permissions:
 # Every Ubuntu install goes through .github/actions/apt-install, which points
 # apt away from the Azure mirror (.github/apt-mirror.sh): that mirror served
 # libllvm18 at about 100 KB/s on #963 and timed the five-minute install out
-# before any test ran. The action also keeps the .debs in the Actions cache and
-# cuts a stalled download at a minute.
+# before any test ran. On arm64 the same list gives ports.ubuntu.com fallbacks:
+# it was the only host there, and on #1413 (run 43058055859) it stopped
+# resolving and three aarch64 jobs died at `apt-get update`. The action also
+# keeps the .debs and apt's index in the Actions cache, installs with no
+# network at all when both are there, and cuts a stalled download at a minute.
 env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30

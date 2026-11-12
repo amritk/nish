@@ -76,6 +76,7 @@ import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
+import { runFfiStructChecks } from "./ffi-struct.js"
 import { hardeningProblems } from "../scripts/check-hardening.mjs"
 import {
   packageRootOf,
@@ -4229,6 +4230,107 @@ if (!only || "net_http2_cleartext".includes(only)) {
   }
 }
 
+// ---- record_size_limit (RFC 8449) against openssl s_client (WP39 G3) ------------
+//
+// `tests/link/net_tls_record_size_limit` reads the record lengths the server
+// writes under a client's limit; this asks a third-party client the same, when
+// its openssl can send the extension: s_client offers a limit of 512 with
+// `-record_size_limit`, prints every record header it reads under `-msg`, and
+// no protected record the server sends may carry more than 512 + 16 bytes
+// (the inner plaintext and the AEAD tag). OpenSSL has no such option up to at
+// least 3.0, so most hosts skip, and say why.
+if (!only || "net_tls_record_size_limit".includes(only)) {
+  const help = spawnSync("openssl", ["s_client", "-help"], { encoding: "utf8" })
+  const helpText = `${help.stdout ?? ""}${help.stderr ?? ""}`
+  if (help.error !== undefined || !helpText.includes("-record_size_limit")) {
+    const version = spawnSync("openssl", ["version"], { encoding: "utf8" })
+    const which = help.error === undefined ? String(version.stdout).trim() : "no openssl on PATH"
+    skip(`net_tls_record_size_limit: ${which}: s_client has no -record_size_limit, so the interop run did not happen`)
+  } else {
+    const rslDir = path.join(buildDir, "net-tls-rsl")
+    fs.rmSync(rslDir, { recursive: true, force: true })
+    fs.mkdirSync(rslDir, { recursive: true })
+    const exe = path.join(rslDir, "app")
+    const built = spawnSync(
+      NISH,
+      [
+        path.join(root, "tests", "link", "net_tls_record_tcp", "main.ts"),
+        "-o",
+        rslDir + path.sep,
+        "--link",
+        exe,
+        ...linkProfile("net_tls_record_tcp"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    if (check("net_tls_record_size_limit: the server links", built.status === 0, String(built.stderr))) {
+      const server = spawn(exe, ["serve", "1"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+      const serverTimer = setTimeout(() => server.kill("SIGKILL"), 30000)
+      const serverDone = new Promise((resolve) =>
+        server.on("close", (code) => {
+          clearTimeout(serverTimer)
+          resolve(code)
+        })
+      )
+      let served = ""
+      const port = await new Promise((resolve) => {
+        server.stdout.on("data", (chunk) => {
+          served += chunk
+          const m = /^port (\d+)\n/.exec(served)
+          if (m !== null) {
+            resolve(Number(m[1]))
+          }
+        })
+        server.on("close", () => resolve(0))
+      })
+      // A line long enough that the echo must be cut into several records.
+      const line = `${"x".repeat(2000)}\n`
+      const got =
+        port > 0
+          ? await new Promise((resolve) => {
+              const child = spawn(
+                "openssl",
+                ["s_client", "-connect", `127.0.0.1:${port}`, "-tls1_3", "-servername", "localhost", "-msg", "-record_size_limit", "512"],
+                { stdio: ["pipe", "pipe", "pipe"] }
+              )
+              let all = ""
+              let sent = false
+              const timer = setTimeout(() => child.kill("SIGKILL"), 15000)
+              const onData = (chunk) => {
+                all += chunk
+                if (!sent && all.includes("Verify return code")) {
+                  sent = true
+                  child.stdin.write(line)
+                }
+                // The echo, whole: s_client prints what it reads, one record at a
+                // time between the `-msg` lines, and never what it was given.
+                if (sent && (all.match(/x{8,}/g) ?? []).join("").length >= 2000) {
+                  child.stdin.end()
+                }
+              }
+              child.stdout.on("data", onData)
+              child.stderr.on("data", onData)
+              child.on("close", (code) => {
+                clearTimeout(timer)
+                resolve({ code, all })
+              })
+            })
+          : { code: null, all: "" }
+      // `-msg` prints `<<< ... RecordHeader` and the five header bytes, in hex,
+      // on the next line, for every record s_client reads.
+      const lengths = [...got.all.matchAll(/<<< [^\n]*RecordHeader[^\n]*\n\s*17 03 03 ([0-9a-f]{2}) ([0-9a-f]{2})/gi)].map(
+        (m) => Number.parseInt(m[1] + m[2], 16)
+      )
+      check(
+        "net_tls_record_size_limit: openssl s_client -record_size_limit 512 completes, and no protected record it reads passes 512 + 16 bytes",
+        got.code === 0 && lengths.length > 1 && lengths.every((n) => n <= 512 + 16),
+        `exit ${got.code}, protected record lengths ${JSON.stringify(lengths)}\n${got.all.slice(-1500)}`
+      )
+      await serverDone
+    }
+  }
+}
+
 // ---- `nish/net/tls-tcp`'s client, against openssl s_server ----------------------
 //
 // What the loopback program in `tests/link/net_tls_client_tcp` cannot say:
@@ -6057,6 +6159,36 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       many.stderr.includes("\n...and 5 more portability warnings\n25 portability warnings"),
     many.stderr
   )
+
+  // WP33 R5's review tier, one `--json` line per row it covers. An NL8006
+  // whose rewrite compiles to the same IR carries `review` after `message`, in
+  // `fix`'s edit shape; NL8007 and NL8008 have no such rewrite (their
+  // conversions saturate under Node, or add an instruction here), so their
+  // lines are what they were before the tier, byte for byte.
+  const reviewSrc = path.join(buildDir, "port_class_review.ts")
+  fs.writeFileSync(
+    reviewSrc,
+    "const half = (a: i32): i32 => a / 2;\n" +
+      "const twice = (b: u8): u8 => b + b;\n" +
+      "const shifted = (k: i32, n: i32): i32 => k >>> n;\n\n" +
+      "export const main = (): number => {\n" +
+      "  console.log(half(7) + toI32(twice(250)) + shifted(-8, 0));\n" +
+      "  return 0;\n" +
+      "};\n"
+  )
+  const review = compile(reviewSrc, "port_class_review.ll", ["--warn-portability", "--json"])
+  const head = `{"file":${JSON.stringify(reviewSrc)},`
+  check(
+    "portability: --json carries `review` on NL8006 alone, after `message`, and NL8007 and NL8008 lines are unchanged",
+    review.status === 0 &&
+      objects(review.stdout).join("\n") ===
+        [
+          `${head}"line":1,"column":31,"endLine":1,"endColumn":36,"severity":"portability","code":"NL8006","message":"this \`/\` on i32 truncates here, and TypeScript divides exactly","review":[{"line":1,"column":31,"endLine":1,"endColumn":31,"text":"toI32("},{"line":1,"column":36,"endLine":1,"endColumn":36,"text":")"}]}`,
+          `${head}"line":2,"column":30,"endLine":2,"endColumn":35,"severity":"portability","code":"NL8007","message":"this \`+\` on u8 wraps here, and TypeScript keeps counting past the range"}`,
+          `${head}"line":3,"column":42,"endLine":3,"endColumn":49,"severity":"portability","code":"NL8008","message":"this \`>>>\` on i32 reads back signed here, and unsigned in TypeScript"}`,
+        ].join("\n"),
+    review.stdout + review.stderr
+  )
 }
 
 // ---- WP33 R4: `--emit-ts` ------------------------------------------------------------
@@ -6582,9 +6714,29 @@ if (!only || "arena_removed".includes(only)) {
     }
     fs.rmSync(work, { recursive: true, force: true })
   }
+  // `review` edits (WP33 R5) applied to `text` the way an agent would: each
+  // placed by line and UTF-16 column, end exclusive, applied from the end.
+  const applyReview = (text, objects) => {
+    const starts = [0]
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "\n") {
+        starts.push(i + 1)
+      }
+    }
+    const at = (line, column) => starts[line - 1] + column - 1
+    const edits = objects
+      .flatMap((d) => d.review ?? [])
+      .map((e) => [at(e.line, e.column), at(e.endLine, e.endColumn), e.text])
+      .sort((a, b) => b[0] - a[0] || b[1] - a[1])
+    let out = text
+    for (const [start, end, insert] of edits) {
+      out = out.slice(0, start) + insert + out.slice(end)
+    }
+    return out
+  }
   const inputs = fs
     .readdirSync(fixDir)
-    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts") && !f.endsWith(".reviewed.ts"))
     .sort()
   for (const file of inputs) {
     const noFix = file.endsWith(".nofix.ts")
@@ -6592,16 +6744,122 @@ if (!only || "arena_removed".includes(only)) {
     if (only && !name.includes(only) && !"fix".includes(only)) {
       continue
     }
+    // A `port-` case is a portability row's: every run is under
+    // `--warn-portability`, and its plain run, whose diagnostics are all
+    // warnings, exits 0 unless `plain-exit` says otherwise.
+    const portability = name.startsWith("port-")
+    const flags = portability ? ["--warn-portability"] : []
     const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
     const input = fs.readFileSync(path.join(fixDir, file))
     fs.writeFileSync(path.join(work, file), input)
-    const plain = spawnSync(NISH, ["--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
+    const plain = spawnSync(NISH, [...flags, "--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
     const plainObjects = diagnosticsOf(plain.stdout)
-    const fixed = spawnSync(NISH, ["--fix", "--json", file], { cwd: work, encoding: "utf8" })
+    const fixed = spawnSync(NISH, [...flags, "--fix", "--json", file], { cwd: work, encoding: "utf8" })
     const after = fs.readFileSync(path.join(work, file))
-    const wantPlain = plainExit(path.join(fixDir, `${name}.plain-exit`))
+    const wantPlain = Number(sidecar(path.join(fixDir, `${name}.plain-exit`), portability ? "0" : "1"))
     codeCheck(name, path.join(fixDir, `${name}.code`), plain)
-    if (noFix) {
+    const reviewedFile = path.join(fixDir, `${name}.reviewed.ts`)
+    if (!noFix && fs.existsSync(reviewedFile)) {
+      // The `review` tier: edits a reader approves, which `--fix` never
+      // applies. Applied by hand they give `.reviewed.ts`, which compiles to
+      // the input's IR byte for byte with the warning gone, and which runs
+      // under Node to print what the input prints natively.
+      const reviewed = fs.readFileSync(reviewedFile, "utf8")
+      // Checked per site: each diagnostic of the case's `code` carries a
+      // `review` unless `.reviewed-keeps` names its `line:column`, and the
+      // reviewed file reports that code at exactly those sites.
+      const code = sidecar(path.join(fixDir, `${name}.code`), "")
+      const keepSites = sidecar(path.join(fixDir, `${name}.reviewed-keeps`), "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+        .sort()
+      const siteOf = (d) => `${d.line}:${d.column}`
+      const sitesOf = (objects) =>
+        objects
+          .filter((d) => d.code === code)
+          .map(siteOf)
+          .sort()
+      check(
+        `fix ${name}: --json carries \`review\` at every ${code} site but ${keepSites.join(", ") || "none"}, and no \`fix\``,
+        plain.status === wantPlain &&
+          plainObjects.some((d) => d.code === code) &&
+          plainObjects
+            .filter((d) => d.code === code)
+            .every((d) => (Array.isArray(d.review) && d.review.length > 0) !== keepSites.includes(siteOf(d))) &&
+          plainObjects.every((d) => !("fix" in d)),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: the review edits make ${name}.reviewed.ts byte for byte`,
+        applyReview(input.toString("utf8"), plainObjects) === reviewed,
+        `got:\n${applyReview(input.toString("utf8"), plainObjects)}`
+      )
+      check(
+        `fix ${name}: --fix applies no review edit and leaves the file byte-identical`,
+        fixed.status === plain.status && after.equals(input),
+        shown(fixed)
+      )
+      // The same file name in a directory of its own, so the IR's
+      // `source_filename` and debug names match.
+      fs.mkdirSync(path.join(work, "reviewed"))
+      fs.writeFileSync(path.join(work, "reviewed", file), reviewed)
+      const clean = spawnSync(NISH, [...flags, "--json", file, "-o", "plain.ll"], {
+        cwd: path.join(work, "reviewed"),
+        encoding: "utf8",
+      })
+      check(
+        `fix ${name}: ${name}.reviewed.ts compiles with nothing left to review`,
+        clean.status === 0 &&
+          diagnosticsOf(clean.stdout).every((d) => d.severity !== "error" && !("review" in d) && !("fix" in d)),
+        shown(clean)
+      )
+      // A warning whose own edit was declined stands in the reviewed file (a
+      // `/=` around a reviewed `/`), at the site `.reviewed-keeps` names, with
+      // no `review` of its own, which the check above already holds.
+      check(
+        `fix ${name}: ${name}.reviewed.ts reports ${code} at ${keepSites.join(", ") || "no site"}`,
+        JSON.stringify(sitesOf(diagnosticsOf(clean.stdout))) === JSON.stringify(keepSites),
+        shown(clean)
+      )
+      const ll = path.join(work, "plain.ll")
+      const reviewedLl = path.join(work, "reviewed", "plain.ll")
+      check(
+        `fix ${name}: ${name}.reviewed.ts compiles to the input's IR byte for byte`,
+        fs.existsSync(ll) && fs.existsSync(reviewedLl) && fs.readFileSync(ll).equals(fs.readFileSync(reviewedLl)),
+        "the two .ll files differ"
+      )
+      // `.ll-lacks` names, one `<function> <text>` per line, a check the
+      // input's IR must not hold in that function's body: a case about the
+      // edit keeping a proof lists the checks the proof drops.
+      const lacks = sidecar(path.join(fixDir, `${name}.ll-lacks`), "")
+      const irText = fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+      for (const line of lacks === "" ? [] : lacks.split("\n")) {
+        const [fn, needle] = line.split(" ")
+        const head = irText.indexOf(` @${fn}(`)
+        const body = head === -1 ? "" : irText.slice(head, irText.indexOf("\n}\n", head))
+        check(`fix ${name}: the input's IR for ${fn} holds no \`${needle}\``, body !== "" && !body.includes(needle), body || `no @${fn} in plain.ll`)
+      }
+      const want = fs.readFileSync(path.join(fixDir, `${name}.stdout`), "utf8")
+      if (HAS_CLANG) {
+        const exe = path.join(work, "native")
+        const built = spawnSync(NISH, [file, "-o", `${exe}.ll`, "--link", exe], { cwd: work, encoding: "utf8" })
+        const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+        check(
+          `fix ${name}: the input prints ${name}.stdout natively`,
+          ran.status === 0 && ran.stdout === want,
+          shown(ran)
+        )
+      } else {
+        skip(`fix ${name}: the native run needs clang`)
+      }
+      const node = runUnderPrelude(path.join(work, "reviewed", file), [])
+      check(
+        `fix ${name}: ${name}.reviewed.ts prints ${name}.stdout under Node`,
+        node.status === 0 && node.stdout === want,
+        shown(node)
+      )
+    } else if (noFix) {
       // A refused shape must name the diagnostic it was written for: with
       // nothing to apply, a case whose diagnostic stopped firing, or that
       // another diagnostic now stops first, would otherwise pass for having
@@ -6611,8 +6869,10 @@ if (!only || "arena_removed".includes(only)) {
         sidecar(path.join(fixDir, `${name}.code`), "").length > 0
       )
       check(
-        `fix ${name}: reported with no \`fix\` key`,
-        plain.status === wantPlain && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
+        `fix ${name}: reported with no \`fix\` or \`review\` key`,
+        plain.status === wantPlain &&
+          plainObjects.length > 0 &&
+          plainObjects.every((d) => !("fix" in d) && !("review" in d)),
         shown(plain)
       )
       check(
@@ -29588,6 +29848,7 @@ if (!only || "c_symbol_private_libm".includes(only)) {
 }
 
 runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
+runFfiStructChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 

@@ -1,0 +1,1 @@
+`declare class Point` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the `declare function` that takes it in a native build

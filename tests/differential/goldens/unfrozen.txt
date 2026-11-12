@@ -223,6 +223,7 @@ cases/ffi_pointer stale since R6: tests/cases/ffi_pointer.ts changed since the r
 cases/ffi_string_loops added after R6: no rewriter to freeze it with
 cases/ffi_string_param added after R6: no rewriter to freeze it with
 cases/ffi_string_return added after R6: no rewriter to freeze it with
+cases/ffi_struct_param added after R6: no rewriter to freeze it with
 cases/file_open_errors added after R6: no rewriter to freeze it with
 cases/file_read_at added after R6: no rewriter to freeze it with
 cases/file_read_at_eof added after R6: no rewriter to freeze it with

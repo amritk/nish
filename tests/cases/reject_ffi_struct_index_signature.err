@@ -1,0 +1,1 @@
+`declare class Point` cannot have a member other than a field: a C struct layout has fields only
