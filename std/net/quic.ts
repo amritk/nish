@@ -1671,6 +1671,8 @@ export class QuicConnection {
   /** Whether the packet being read carries a non-probing frame (§9.1), and whether a packet of the datagram moves the connection (§9.3). */
   private nonProbing: boolean = false
   private migrateOwed: boolean = false
+  /** The packet number of the probe in flight. */
+  private pmtuProbePn: i64 = -1
   /**
    * Path MTU discovery (RFC 9000 §14.3, RFC 8899): once the handshake is
    * confirmed and the path validated, the server probes for a datagram
@@ -1704,8 +1706,6 @@ export class QuicConnection {
   /** The size the next probe tries, 0 when the search is over, and the size of the probe in flight, 0 for none. */
   private pmtuNext: i32 = 0
   private pmtuProbeSize: i32 = 0
-  /** The packet number of the probe in flight. */
-  private pmtuProbePn: i64 = -1
   /** Probes of `pmtuNext` lost so far, and loss events in a row that lost a packet larger than 1200 bytes. */
   private pmtuTries: i32 = 0
   private pmtuSuspect: i32 = 0
