@@ -554,13 +554,15 @@ export const memoryChecks = (): i32 => {
   // --- TlsP256Signer: tlsSignEcdsaP256's DER, keeping nothing ---------------------------------
   // Three hundred CertificateVerify-sized inputs: the same bytes as
   // `tlsSignEcdsaP256` every time, across every DER length they reach. The
-  // first `sign` builds the signer's comb table of G and keeps it; every `sign`
-  // after it, measured on its own, leaves `Arena.mark()` where it was.
+  // first `sign` builds the signer's comb table of G and keeps that and no more
+  // (22,528 bytes of entries); every `sign` after it, measured on its own,
+  // leaves `Arena.mark()` where it was.
   const signer = new TlsP256Signer();
   const signKey: Secret<u8[]> = secret(leafPrivate());
   const content: u8[] = new Array<u8>(130);
   let signedSame: i32 = 0;
   let signMoved: i32 = 0;
+  let firstKept: i64 = toI64(0);
   let lengths: i32 = 0;
   const seen: boolean[] = new Array<boolean>(80);
   for (let n: i32 = 0; n < 300; n++) {
@@ -569,7 +571,11 @@ export const memoryChecks = (): i32 => {
     }
     const mark: i64 = Arena.mark();
     const der: u8[] | null = signer.sign(signKey, content);
-    const kept: boolean = Arena.mark() !== mark;
+    const moved: i64 = Arena.mark() - mark;
+    const kept: boolean = moved !== toI64(0);
+    if (n === 0) {
+      firstKept = moved;
+    }
     const reference: u8[] | null = tlsSignEcdsaP256(signKey, content);
     signMoved = signMoved + (kept && n > 0 ? 1 : 0);
     if (der !== null && reference !== null && sameBytes(der, reference)) {
@@ -584,6 +590,7 @@ export const memoryChecks = (): i32 => {
   wipe(signKey);
   t.eqI32("TlsP256Signer: three hundred signatures, each tlsSignEcdsaP256's DER byte for byte", signedSame, toI32(300));
   t.ok(`across ${lengths} DER lengths`, lengths >= 3);
+  t.ok(`the first sign keeps the comb table of G and nothing more: ${firstKept} bytes, at most its 22,528 and 256`, firstKept > toI64(0) && firstKept <= toI64(22528 + 256));
   t.eqI32("and after the first, not one sign moved Arena.mark(): a signature keeps 0 bytes", signMoved, ZERO);
   const shortKey: Secret<u8[]> = secret(new Array<u8>(31));
   t.ok("a 31-byte key is refused with null", signer.sign(shortKey, content) === null);
