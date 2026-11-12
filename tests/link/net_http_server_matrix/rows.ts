@@ -45,11 +45,11 @@ import { RIG_ALT, Rig, rigLimits } from "../net_http_server_carriers/rig"
 const H2_NO_ERROR: i32 = 0
 const H2_INTERNAL_ERROR: i32 = 2
 const H2_REFUSED_STREAM: i32 = 7
-const H2_CANCEL_CODE: i32 = 8
-const H3_NO_ERROR: i64 = 0x0100
+export const H2_CANCEL_CODE: i32 = 8
+export const H3_NO_ERROR: i64 = 0x0100
 const H3_INTERNAL_ERROR: i64 = 0x0102
 const H3_REQUEST_REJECTED: i64 = 0x010b
-const H3_REQUEST_CANCELLED: i64 = 0x010c
+export const H3_REQUEST_CANCELLED: i64 = 0x010c
 
 /** A `maxBody` that is not a power of two. */
 export const SMALL_BODY: i32 = 1000
@@ -72,7 +72,7 @@ const occurrences = (text: string, needle: string): i32 => {
 }
 
 /** `n` request fields `x-pad-k: v`, as h2 pairs. */
-const padPairs = (pairs: string[], n: i32): string[] => {
+export const padPairs = (pairs: string[], n: i32): string[] => {
   for (let k: i32 = 0; k < n; k++) {
     pairs.push(`x-pad-${k}`)
     pairs.push("v")
@@ -123,7 +123,7 @@ const h1Get = (rig: Rig, key: Secret<u8[]>, method: string, path: string): strin
 // ---- h2c ------------------------------------------------------------------------
 
 /** An h2c connection to the rig with its preface, empty SETTINGS (or `ids`/`values`) and an ack queued. */
-const h2cOpen = (rig: Rig, ids: i32[], values: i64[]): H2cClient => {
+export const h2cOpen = (rig: Rig, ids: i32[], values: i64[]): H2cClient => {
   const c = new H2cClient(rig)
   c.connect(rig.h2.h2cPort)
   c.wire.preface()
@@ -133,7 +133,7 @@ const h2cOpen = (rig: Rig, ids: i32[], values: i64[]): H2cClient => {
 }
 
 /** Flushes `c`, then turns until what it has read since holds `needle`, or the server closes; everything read. */
-const h2cUntil = (c: H2cClient, key: Secret<u8[]>, needle: string): string => {
+export const h2cUntil = (c: H2cClient, key: Secret<u8[]>, needle: string): string => {
   c.flush(key)
   let acc: string = ""
   for (let turn: i32 = 0; turn < TURNS && acc.indexOf(needle) < 0 && !c.closed; turn++) {
@@ -144,7 +144,7 @@ const h2cUntil = (c: H2cClient, key: Secret<u8[]>, needle: string): string => {
 }
 
 /** Turns `c` until the rig holds `n` `/slow` requests. */
-const h2cHold = (c: H2cClient, key: Secret<u8[]>, rig: Rig, n: i32): boolean => {
+export const h2cHold = (c: H2cClient, key: Secret<u8[]>, rig: Rig, n: i32): boolean => {
   c.flush(key)
   for (let turn: i32 = 0; turn < TURNS && toI32(rig.held.length) < n && !c.closed; turn++) {
     c.turn(key)
@@ -154,8 +154,8 @@ const h2cHold = (c: H2cClient, key: Secret<u8[]>, rig: Rig, n: i32): boolean => 
 
 // ---- HTTP/3 ---------------------------------------------------------------------
 
-/** An HTTP/3 connection to the rig with transport parameters `params`, its control and QPACK streams open. */
-const h3Open = (rig: Rig, key: Secret<u8[]>, params: u8[]): QuicClient => {
+/** A QUIC client of the rig, not yet connected, with an original destination connection ID of its own. */
+export const h3Unopened = (rig: Rig): QuicClient => {
   const q = new QuicClient(rig)
   quicClients[0] = quicClients[0] + 1
   const odcid: u8[] = fromHex("0001020304050600")
@@ -167,6 +167,12 @@ const h3Open = (rig: Rig, key: Secret<u8[]>, params: u8[]): QuicClient => {
     q.c.initialWrite = quicKeysOf(QUIC_AEAD_AES_128_GCM, secrets.client)
     q.c.initialRead = quicKeysOf(QUIC_AEAD_AES_128_GCM, secrets.server)
   }
+  return q
+}
+
+/** An HTTP/3 connection to the rig with transport parameters `params`, its control and QPACK streams open. */
+export const h3Open = (rig: Rig, key: Secret<u8[]>, params: u8[]): QuicClient => {
+  const q = h3Unopened(rig)
   q.connect("h3", params, key)
   q.send(CLIENT_CONTROL, h3Cat([h3Varint(H3_STREAM_CONTROL), h3ClientSettings(n64(-1))]), false)
   q.send(CLIENT_ENCODER, h3Varint(H3_STREAM_QPACK_ENCODER), false)
@@ -175,10 +181,10 @@ const h3Open = (rig: Rig, key: Secret<u8[]>, params: u8[]): QuicClient => {
 }
 
 /** The HEADERS frame of an HTTP/3 request with exactly these fields. */
-const h3Fields = (names: string[], values: string[]): u8[] => h3Frame(H3_FRAME_HEADERS, h3Section(new QpackEncoder(), names, values))
+export const h3Fields = (names: string[], values: string[]): u8[] => h3Frame(H3_FRAME_HEADERS, h3Section(new QpackEncoder(), names, values))
 
 /** The HEADERS frame of an HTTP/3 request of `path` by `method`, then `extra` padding fields. */
-const h3Request = (method: string, path: string, extra: i32): u8[] => {
+export const h3Request = (method: string, path: string, extra: i32): u8[] => {
   const names: string[] = [":method", ":scheme", ":authority", ":path"]
   const values: string[] = [method, "https", "localhost", path]
   for (let k: i32 = 0; k < extra; k++) {
@@ -189,7 +195,7 @@ const h3Request = (method: string, path: string, extra: i32): u8[] => {
 }
 
 /** Turns `q` until the rig holds `n` `/slow` requests. */
-const h3Hold = (q: QuicClient, key: Secret<u8[]>, rig: Rig, n: i32): boolean => {
+export const h3Hold = (q: QuicClient, key: Secret<u8[]>, rig: Rig, n: i32): boolean => {
   for (let turn: i32 = 0; turn < TURNS && toI32(rig.held.length) < n; turn++) {
     q.pump(key)
   }
@@ -197,7 +203,7 @@ const h3Hold = (q: QuicClient, key: Secret<u8[]>, rig: Rig, n: i32): boolean => 
 }
 
 /** A run of turns after the stream ended, so a STOP_SENDING sent behind it is read. */
-const settle = (q: QuicClient, key: Secret<u8[]>): void => {
+export const settle = (q: QuicClient, key: Secret<u8[]>): void => {
   for (let k: i32 = 0; k < 20; k++) {
     q.pump(key)
   }
@@ -449,6 +455,7 @@ export const timeouts = (t: Suite, key: Secret<u8[]>): void => {
   const c = h2cOpen(rig, none, noValues)
   c.wire.headers(n32(1), postOf("/echo", n32(5)), 0)
   t.ok("bodyTimeout, h2c: a body that never comes has its stream reset CANCEL", h2cUntil(c, key, "RST_STREAM 1 ").indexOf(`RST_STREAM 1 ${H2_CANCEL_CODE}`) >= 0)
+  t.ok("bodyTimeout, h2c: and the program never took it", rig.taken === 0)
   const q = h3Open(rig, key, h3ClientParams(new H3Limits()))
   const declared: string[] = [":method", ":scheme", ":authority", ":path", "content-length"]
   q.send(n64(0), h3Fields(declared, ["POST", "https", "localhost", "/echo", "5"]), false)
@@ -458,6 +465,7 @@ export const timeouts = (t: Suite, key: Secret<u8[]>): void => {
     "bodyTimeout, h3: its stream is reset H3_REQUEST_CANCELLED and its sending stopped",
     q.stream(n64(0)).reset === H3_REQUEST_CANCELLED && q.stream(n64(0)).stopped === H3_REQUEST_CANCELLED
   )
+  t.ok("bodyTimeout, h3: and the program never took it", rig.taken === 0)
   const busy = h2cOpen(rig, none, noValues)
   busy.wire.headers(n32(1), getOf("/slow"), H2_FLAG_END_STREAM)
   const holding: boolean = h2cHold(busy, key, rig, n32(1))

@@ -69,6 +69,8 @@ export class Rig {
   manyValues: u8[][]
   /** How many requests the program has taken. */
   taken: i32 = 0
+  /** Arena bytes the server's own `wait` and `send` calls left allocated, summed over every `step` and `answerHeld`. */
+  kept: i64 = 0
   /** What `start` answered for the last `/many`, or 1 before one came. */
   manyResult: i32 = 1
 
@@ -126,14 +128,22 @@ export class Rig {
         h.send(r, 200, this.text, this.hello, ZERO, toI32(this.hello.length))
       }
     }
+    const before: i64 = Arena.used()
     if (this.signed) {
       h.waitSigned(wait, key)
     } else {
       h.wait(wait)
     }
+    this.keep(before)
     while (h.ready()) {
       this.answer(h.take())
     }
+  }
+
+  /** Adds what the arena gained since it read `before` to `kept`: all of what is in the chunk, if a new one was opened. */
+  private keep(before: i64): void {
+    const after: i64 = Arena.used()
+    this.kept = this.kept + (after < before ? after : after - before)
   }
 
   /** Answers every request `/slow` holds with `/hello`'s answer; how many there were. */
@@ -142,7 +152,9 @@ export class Rig {
     const held: HttpServerRequest[] = this.held
     this.held = []
     for (const r of held) {
+      const before: i64 = Arena.used()
       this.h.send(r, 200, this.text, this.hello, ZERO, toI32(this.hello.length))
+      this.keep(before)
     }
     return n
   }

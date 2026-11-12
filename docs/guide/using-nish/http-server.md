@@ -113,14 +113,15 @@ for (;;) {
 
 The `Alt-Svc` field reads `h3=":<port>"; ma=86400`: the UDP socket's own
 port, or `HttpServerLimits.altSvcPort` when a proxy in front of you
-publishes another. With `altSvcMaxAge` 0 every response says
-`alt-svc: clear` instead, so clients forget an earlier advertisement. A
+publishes another. With `altSvcMaxAge` 0 every HTTP/1.1 and HTTP/2
+over TLS response says `alt-svc: clear` instead, so clients forget an
+earlier advertisement. A
 response whose fields already name an `alt-svc` keeps yours. An HTTP/3
 response carries none.
 
 ### Cleartext HTTP/2
 
-`h.listenH2c(fd, new Http2Config(), slots)` serves HTTP/2 without TLS on a
+`server.listenH2c(fd, new Http2Config(), slots)` serves HTTP/2 without TLS on a
 TCP listener, to clients that already know it speaks HTTP/2 (prior
 knowledge: the client opens with the 24-byte preface). There is no
 `Upgrade: h2c` from HTTP/1.1. Its requests come out of `take` like the rest,
@@ -205,7 +206,8 @@ may be tighter: a target past its `maxTarget` is answered 414.
 With the pool full, an HTTP/1.1 connection stops being read until a request
 is free, an HTTP/2 stream is refused with `REFUSED_STREAM` and an HTTP/3 one
 with `H3_REQUEST_REJECTED`, both of which a client may retry. No one
-connection holds more than a quarter of the pool, so one client cannot
+connection holds more than a quarter of the pool, and never fewer than
+one request (so at `requests` 1 to 3, one each), so one client cannot
 starve the rest. Each request keeps a head buffer of `maxHead` bytes, made
 the first time it is used, and holds its body whole. A body grows in steps:
 up to `T`, the smaller of 64 KiB and `maxBody`, it doubles; past `T` it moves

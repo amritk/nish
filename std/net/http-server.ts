@@ -1885,8 +1885,9 @@ export class HttpServer {
 
   /**
    * Whether the client of `r` has hung up: its connection is closed or
-   * reused, its HTTP/2 or HTTP/3 stream was reset, or, on HTTP/1.1, the
-   * peer ended its side while `r` is held. Panics on another server's request.
+   * reused, its HTTP/2 or HTTP/3 stream was reset, or, on HTTP/1.1 and
+   * HTTP/2, the peer ended its byte stream while `r` is held. Panics on
+   * another server's request.
    * @param r a request `take` handed over
    * @returns true once nobody is left to read `r`'s answer
    */
@@ -1894,6 +1895,9 @@ export class HttpServer {
     this.own(r, "hungUp")
     if (!this.live(r)) {
       return true
+    }
+    if (r.kind === HTTP_SERVER_H2) {
+      return this.h2Conn(r.slot).inputEnded
     }
     const h1: Http1Server | null = this.h1
     return r.kind === HTTP_SERVER_H1 && h1 !== null && h1.connection(r.slot).ended()

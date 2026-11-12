@@ -1,5 +1,7 @@
 PASS  bodyTimeout, h2c: a body that never comes has its stream reset CANCEL
+PASS  bodyTimeout, h2c: and the program never took it
 PASS  bodyTimeout, h3: its stream is reset H3_REQUEST_CANCELLED and its sending stopped
+PASS  bodyTimeout, h3: and the program never took it
 PASS  idleTimeout, h2c: a connection with an open stream is not closed, and is answered
 PASS  idleTimeout, HTTP/2 over TLS: a connection with no stream is closed
-http server timeouts: 4 passed, 0 failed, 0 skipped
+http server timeouts: 6 passed, 0 failed, 0 skipped
