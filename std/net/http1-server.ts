@@ -261,11 +261,94 @@ const H1_CONN_NONE: i32 = 0
 const H1_CONN_CLOSE: i32 = 1
 const H1_CONN_KEEP_ALIVE: i32 = 2
 
+/** Whether `kept[at ..)` begins with all of `bytes`, a byte at a time: the path for a range a word load cannot prove inside its array. */
+const http1ServerSameByByte = (kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean => {
+  for (let k: i32 = 0; k < toI32(bytes.length); k += 1) {
+    if (kept[at + k] !== bytes[k]) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Whether `kept[at ..)` begins with all of `bytes`, eight to fifteen of them:
+ * two eight-byte loads a side, the second overlapping the first. One range
+ * check comes first and each load's ors are grouped in pairs, as `getU64BE`'s
+ * are, so LLVM folds every eight loads into one.
+ */
+const http1ServerSame8 = (kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean => {
+  const n: i32 = toI32(bytes.length)
+  const e: i32 = at + n - 8
+  const f: i32 = n - 8
+  if (
+    !(at >= 0 && at < 2147483640 && at + 8 <= toI32(kept.length)) ||
+    !(e >= 0 && e < 2147483640 && e + 8 <= toI32(kept.length)) ||
+    !(8 <= toI32(bytes.length) && f >= 0 && f < 2147483640 && f + 8 <= toI32(bytes.length))
+  ) {
+    return http1ServerSameByByte(kept, at, bytes)
+  }
+  return (
+    ((toU64(kept[at]) << toU64(56)) |
+      (toU64(kept[at + 1]) << toU64(48)) |
+      ((toU64(kept[at + 2]) << toU64(40)) | (toU64(kept[at + 3]) << toU64(32))) |
+      ((toU64(kept[at + 4]) << toU64(24)) |
+        (toU64(kept[at + 5]) << toU64(16)) |
+        ((toU64(kept[at + 6]) << toU64(8)) | toU64(kept[at + 7])))) ===
+      ((toU64(bytes[0]) << toU64(56)) |
+        (toU64(bytes[1]) << toU64(48)) |
+        ((toU64(bytes[2]) << toU64(40)) | (toU64(bytes[3]) << toU64(32))) |
+        ((toU64(bytes[4]) << toU64(24)) |
+          (toU64(bytes[5]) << toU64(16)) |
+          ((toU64(bytes[6]) << toU64(8)) | toU64(bytes[7])))) &&
+    ((toU64(kept[e]) << toU64(56)) |
+      (toU64(kept[e + 1]) << toU64(48)) |
+      ((toU64(kept[e + 2]) << toU64(40)) | (toU64(kept[e + 3]) << toU64(32))) |
+      ((toU64(kept[e + 4]) << toU64(24)) |
+        (toU64(kept[e + 5]) << toU64(16)) |
+        ((toU64(kept[e + 6]) << toU64(8)) | toU64(kept[e + 7])))) ===
+      ((toU64(bytes[f]) << toU64(56)) |
+        (toU64(bytes[f + 1]) << toU64(48)) |
+        ((toU64(bytes[f + 2]) << toU64(40)) | (toU64(bytes[f + 3]) << toU64(32))) |
+        ((toU64(bytes[f + 4]) << toU64(24)) |
+          (toU64(bytes[f + 5]) << toU64(16)) |
+          ((toU64(bytes[f + 6]) << toU64(8)) | toU64(bytes[f + 7]))))
+  )
+}
+
+/** `http1ServerSame8` for four to seven bytes, with four-byte loads. */
+const http1ServerSame4 = (kept: readonly u8[], at: i32, bytes: readonly u8[]): boolean => {
+  const n: i32 = toI32(bytes.length)
+  const e: i32 = at + n - 4
+  const f: i32 = n - 4
+  if (
+    !(at >= 0 && at < 2147483640 && at + 4 <= toI32(kept.length)) ||
+    !(e >= 0 && e < 2147483640 && e + 4 <= toI32(kept.length)) ||
+    !(4 <= toI32(bytes.length) && f >= 0 && f < 2147483640 && f + 4 <= toI32(bytes.length))
+  ) {
+    return http1ServerSameByByte(kept, at, bytes)
+  }
+  return (
+    ((toU32(kept[at]) << 24) |
+      (toU32(kept[at + 1]) << 16) |
+      ((toU32(kept[at + 2]) << 8) | toU32(kept[at + 3]))) ===
+      ((toU32(bytes[0]) << 24) | (toU32(bytes[1]) << 16) | ((toU32(bytes[2]) << 8) | toU32(bytes[3]))) &&
+    ((toU32(kept[e]) << 24) |
+      (toU32(kept[e + 1]) << 16) |
+      ((toU32(kept[e + 2]) << 8) | toU32(kept[e + 3]))) ===
+      ((toU32(bytes[f]) << 24) |
+        (toU32(bytes[f + 1]) << 16) |
+        ((toU32(bytes[f + 2]) << 8) | toU32(bytes[f + 3])))
+  )
+}
+
 /**
  * Where `kept[at ..)` holds `bytes` and then the byte `after`: the offset one
  * past the byte that follows `after` (the space of `: `, the LF of CR LF), or
  * -1 when it does not, or when `after` would be at or past `limit`. Sixteen
- * bytes at a time, then one at a time. A kept value holds no CR (it is field
+ * bytes at a time with a last load that overlaps the one before; a name or
+ * value under sixteen bytes is two overlapping eight- or four-byte loads, and
+ * one under four a byte at a time. A kept value holds no CR (it is field
  * text), so a value that matches is the whole kept value; a name is held to
  * the kept name's length by `sameHead`, since a kept value may hold a colon.
  */
@@ -274,20 +357,23 @@ const http1ServerKept = (kept: u8[], at: i32, limit: i32, bytes: u8[], after: i3
   if (at < 0 || limit > toI32(kept.length) || n > limit - at - 2 || toI32(kept[at + n]) !== after) {
     return -1
   }
-  let k: i32 = 0
-  while (k <= n - 16) {
-    if (any(ne(loadU8x16(kept, at + k), loadU8x16(bytes, k)))) {
-      return -1
+  if (n >= 16) {
+    let k: i32 = 0
+    while (k < n - 16) {
+      if (any(ne(loadU8x16(kept, at + k), loadU8x16(bytes, k)))) {
+        return -1
+      }
+      k += 16
     }
-    k += 16
+    return any(ne(loadU8x16(kept, at + n - 16), loadU8x16(bytes, n - 16))) ? -1 : at + n + 2
   }
-  while (k < n) {
-    if (kept[at + k] !== bytes[k]) {
-      return -1
-    }
-    k += 1
-  }
-  return at + n + 2
+  const same: boolean =
+    n >= 8
+      ? http1ServerSame8(kept, at, bytes)
+      : n >= 4
+        ? http1ServerSame4(kept, at, bytes)
+        : http1ServerSameByByte(kept, at, bytes)
+  return same ? at + n + 2 : -1
 }
 
 /** Panics unless `value` is in `low .. high`: a cap no connection could work with is the program's mistake. */

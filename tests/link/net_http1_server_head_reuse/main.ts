@@ -330,6 +330,32 @@ export const main = (): i32 => {
   t.eqStr("seventeen fields twice", drained(wide), times(`${wideHead}${body}`, 2));
   t.ok("written both times", wide.headCopies === 0);
 
+  // Every length class of the kept-field compare (a byte at a time, four-,
+  // eight- and sixteen-byte loads): a name and a value of each length, then
+  // one byte changed at its start, middle and end, each written fresh.
+  const lengths: i32[] = [1, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33];
+  for (const n of lengths) {
+    const kept: string = times("v", n);
+    const sizes = fed(times(GET, 6));
+    const at: i32[] = [0, n / 2, n - 1];
+    check(t, sizes, `a value of ${n}, first`, 200, fields(["X-L"]), fields([kept]), body, "OK", false);
+    check(t, sizes, `a value of ${n}, kept`, 200, fields(["X-L"]), fields([kept]), body, "OK", false);
+    check(t, sizes, `a value of ${n}, again`, 200, fields(["X-L"]), fields([kept]), body, "OK", true);
+    for (const k of at) {
+      const changed: string = `${times("v", k)}w${times("v", n - k - 1)}`;
+      check(t, sizes, `a value of ${n} changed at ${k}`, 200, fields(["X-L"]), fields([changed]), body, "OK", false);
+    }
+    const named = fed(times(GET, 6));
+    const name: string = times("n", n);
+    check(t, named, `a name of ${n}, first`, 200, fields([name]), fields(["v"]), body, "OK", false);
+    check(t, named, `a name of ${n}, kept`, 200, fields([name]), fields(["v"]), body, "OK", false);
+    check(t, named, `a name of ${n}, again`, 200, fields([name]), fields(["v"]), body, "OK", true);
+    for (const k of at) {
+      const changed: string = `${times("n", k)}m${times("n", n - k - 1)}`;
+      check(t, named, `a name of ${n} changed at ${k}`, 200, fields([changed]), fields(["v"]), body, "OK", false);
+    }
+  }
+
   // A head copied across many responses, drained as it goes.
   const busy = fed(times(GET, 200));
   let same: i32 = 0;
