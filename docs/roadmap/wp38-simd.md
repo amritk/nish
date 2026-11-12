@@ -1,6 +1,6 @@
 # WP38: SIMD
 
-**State:** In progress · **Done:** 8 of 10 · **Design note:** [`docs/wp38-simd.md`](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md)
+**State:** In progress · **Done:** 9 of 10 · **Design note:** [`docs/wp38-simd.md`](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md)
 
 ## Stages
 
@@ -12,12 +12,12 @@
 - [x] S6a and S6b: byte-run kernels for JSON and Eisel–Lemire in `numberF64`
 - [x] S7: crediting an offset index from the test that bounds it
 - [x] S9 and S10: SHA-256 on SHA-NI and ARMv8, ChaCha20 on AVX2 and NEON; CRC-32 on the same seam
-- [ ] S8: the SSSE3 and NEON Adler-32 kernels, measured past their bar ([#1079](https://github.com/amritk/nish/issues/1079))
+- [x] S8: the SSSE3 and NEON Adler-32 kernels, measured past their bar ([#1079](https://github.com/amritk/nish/issues/1079))
 - [ ] `--cpu` levels for AArch64 or `x86-64-v4`, each on its own measurement
 
 ## Next
 
-S8: ship the Adler-32 kernels that cleared their bar ([#1079](https://github.com/amritk/nish/issues/1079)). Spec: [§7](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear).
+`--cpu` levels for AArch64 or `x86-64-v4`, each on its own measurement. Spec: [§7](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear).
 
 ## Not planned
 
