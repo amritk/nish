@@ -36,9 +36,15 @@ bit 7 (`HWCAP_CRC32`) on Linux AArch64, and
 `sysctlbyname("hw.optional.armv8_crc32")` on Darwin. Any other OS, and a
 big-endian or 32-bit target, gets the tables.
 
-The one input from outside is `NISH_CRC32`, compared with the exact string
-`soft` and otherwise ignored, so whoever sets a process's environment can only
-send it to the tables, which answer the same. Two properties are accepted:
+The Adler-32 kernels sit behind the same seam and read only the window
+`adler32Update` checked (COMP-16). The x86-64 one runs where CPUID leaf 1,
+ECX bit 9 (SSSE3) says it can; the AArch64 one is NEON, which every
+little-endian AArch64 has, so it asks nothing. Every other target runs the
+Nish loop.
+
+The inputs from outside are `NISH_CRC32` and `NISH_ADLER32`, each compared with
+the exact string `soft` and otherwise ignored, so whoever sets a process's
+environment can only send it to the Nish code, which answers the same. Two properties are accepted:
 compressing a response that mixes a secret with attacker-chosen bytes leaks the
 secret through the length (COMP-9, the BREACH class), and a stream of many
 small dynamic blocks makes the decoder rebuild its tables for each (COMP-8).
@@ -51,8 +57,8 @@ small dynamic blocks makes the decoder rebuild its tables for each (COMP-8).
 | `std/compress/gzip.ts` | `GzipDecompressor`, `GzipReader`, `gzipReadHeader`; `GzipCompressor`, `GzipWriter`, `GzipFixedCompressor`, `gzipFixedBound` |
 | `std/compress/zlib.ts` | `ZlibDecompressor`, `ZlibCompressor` |
 | `std/compress/checksum.ts` | `Crc32`, `crc32`, `adler32`, `adler32Update` |
-| `runtime/runtime-checksum.c` | `nish_crc32_hw`, `nish_crc32_update`, `nish_crc32_path`, `nish_crc32_cpu`, `nish_crc32_sysctl`, `nish_crc32_clmul`, `nish_crc32_fold`, `nish_crc32_bytes`, `nish_crc32_arm`, `nish_crc32_insn`: the CRC-32 kernels `Crc32.update` runs where the CPU has them |
-| `src/kernels.ts`, `src/emit.ts` | `isCrc32Seam`, `emitCrc32KernelArm`: the call that hands `crc32Walk`'s window to the kernel |
+| `runtime/runtime-checksum.c` | `nish_crc32_hw`, `nish_crc32_update`, `nish_crc32_path`, `nish_crc32_cpu`, `nish_crc32_sysctl`, `nish_crc32_clmul`, `nish_crc32_fold`, `nish_crc32_bytes`, `nish_crc32_arm`, `nish_crc32_insn`: the CRC-32 kernels `Crc32.update` runs where the CPU has them; `nish_adler32_hw`, `nish_adler32_update`, `nish_adler32_path`, `nish_adler32_cpu`, `nish_adler32_ssse3`, `nish_adler32_neon`, `nish_adler32_hsum`, `nish_adler32_tail`: the Adler-32 kernels `adler32Update` runs |
+| `src/kernels.ts`, `src/emit.ts` | `isCrc32Seam`, `isAdler32Seam`, `emitSumKernelArm`, `joinSumArms`: the call that hands `crc32Walk`'s or `adler32Walk`'s window to the kernel |
 | `std/net/http-compress.ts` | `httpAcceptEncoding`, `httpQValue`, `httpCodingIs`, `httpIdentityRefused`, `httpSegments`, `HttpCompressor` |
 | `std/net/http1-server.ts` | `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded`, `unrespond` (the rest of the file is `http1-codec.md`'s) |
 
@@ -74,7 +80,7 @@ a negative `limit` or a level outside 0 to 9 panics, as caller misuse.
 
 ## Findings
 
-COMP-1 to COMP-7, COMP-10, COMP-14 and COMP-15 are the shapes an attacker's input can take,
+COMP-1 to COMP-7, COMP-10, COMP-14, COMP-15 and COMP-16 are the shapes an attacker's input can take,
 each checked and found to hold; they are recorded so that an audit can see
 what was tried. COMP-8 and COMP-9 are accepted. COMP-11, COMP-12 and COMP-13 were
 found by a review of the first version and fixed; they are the three counted
@@ -94,6 +100,7 @@ as fixed in the index, and none is open.
 | COMP-11 | Medium | `Http1Connection.respondEncoded` | A response that does not fit behind a half-sent one must leave the output as it was. `respondEncoded` saved `outputEnd`, then called `respond`, whose `room()` moves what is still unsent to the front of the buffer; on `H1_AGAIN` it put the saved end back over the moved bytes, so the connection queued for the wire bytes it had already sent and part of the head it withdrew. On a connection a proxy shares between clients, that desynchronises the responses. | **Fixed.** `respondEncoded` makes the room before it saves anything, so the end it puts back is one nothing moved. Before the fix, `h1 half sent: only the unsent rest is queued` failed (1,633 bytes queued where 633 were unsent); after it, it and `h1 half sent: and it is those bytes` pass. |
 | COMP-12 | Medium | `GzipWriter.bound`, `write`, `flush`, `finish` | A program that sizes each call's output by `bound(len)`, as the guide shows, must never be refused or panic. `bound` assumed at most 64 KB pending, but the writer compressed its first window only once 96 KB were pending, and one call over many 64 KB windows needs each window's framing; incompressible input written 1,000 bytes at a time panicked on about the 98th write (`GzipWriter.write: a block larger than its bound`), and `flush` and `finish` went on with the failed drain's -1. A server streaming an attacker's body through a `GzipWriter` could be stopped. | **Fixed.** The writer compresses whenever 64 KB are pending, the first window too; `bound` adds the framing of every compression one call makes; `flush` and `finish` check the drain. Before the fix, `writer: noise at level 0 into exactly bound` (and 1, 6, 9) panicked; after it, they and `writer: noise at level 6 comes back` pass. |
 | COMP-13 | Medium | `runtime/runtime-checksum.c` `nish_crc32_insn` | The kernels take `Crc32.update`'s window after `checksumWindow` has checked it, and must read no byte outside it: a read past the end of an array's storage can fault, or fold a neighbouring allocation's bytes into nothing the caller sees but the timing. The x86-64 path loads 16 bytes only while 16 remain and its tail is byte at a time. The AArch64 CRC32 path folded a 4-byte tail with a masked 8-byte load, reading up to four bytes past the window. The answer was right, so every agreement test passed. Nothing a CRC-32 covers is secret, so the kernels are not wiped or held to constant time. | **Fixed.** The tail loads exactly four bytes. `simd: crc32 native ${arch}` now runs every path on every length 0..256 ending against a no-access page; an over-read by one byte in the x86-64 tail made it fail (`the agreement driver`), and it passes on the fixed file. The AArch64 path before the fix was found by review and not run on ARM64 hardware; CI's `simd-arm64` job runs the test there on every push. |
+| COMP-16 | Medium if it failed | `runtime/runtime-checksum.c` `nish_adler32_update`, `nish_adler32_ssse3`, `nish_adler32_neon`, `nish_adler32_tail` | The Adler-32 kernels take `adler32Update`'s window after `checksumWindow` has checked it, read it without bounds checks, and keep 32-bit sums that must not overflow before they are reduced. A read past the window can fault or fold in a neighbour's bytes; an overflow answers a wrong checksum, which a zlib stream would then refuse or, worse, accept. | **Holds.** Both kernels load 32 bytes only while 32 remain, and the tail reads byte at a time. Each stretch is at most 173 blocks (5,536 bytes, under zlib's NMAX of 5,552), so s2 stays under 2^32 even from an unreduced start of 65,535 in each half. An empty window returns the start as it came, as the walk does. Nothing an Adler-32 covers is secret, so nothing is wiped or held to constant time. |
 | COMP-10 | Medium if it failed | `httpAcceptEncoding`, `Http1Connection.acceptEncoding` | A field value must not pick a coding the client refused, nor panic or allocate on any bytes. | **Holds.** `gzip;q=0`, `*;q=0` and `identity;q=0` are honoured; a malformed q-value or parameter skips its element only; the answer for a client that takes nothing offered and refuses identity is `HTTP_CODING_NONE`. One pass over the window, no allocation. A missing field answers identity. |
 | COMP-14 | High if it failed | `FixedDeflater.compress`, `GzipFixedCompressor.compress` | The small-body encoder writes and reads without bounds checks, and is handed incompressible bodies on purpose, with a room smaller than they are, to be abandoned part way. | **Holds.** Every store is a four-byte flush made only after `o <= at + room - 4` is checked, or one of the last bytes made only after they are checked to fit; `room` is inside `out` (`deflateWindow`). An output that does not fit answers `DEFLATE_NO_ROOM` and leaves nothing past `at + room` written; one that fits exactly is accepted. Input loads read eight bytes only at positions up to `off + len - 8`, a candidate is used only when it lies in `[off, p)` within the 16 KB window, and a match is measured to at most `off + len`. The hash table is cleared before each call, so nothing of one body reaches the next. |
 | COMP-15 | Medium if it failed | `Http1Connection.respondEncoded`, `unrespond`, `HttpCompressor.compressAnyway` | The policy must not send a coding the client refused, nor leave the output half-changed when segment mode takes a compressed head back, nor send gzip without the fields that say so. | **Holds.** Every path sends gzip only when `httpAcceptEncoding` chose it; a request that refuses identity and accepts gzip gets gzip whatever the length or saving (`compressAnyway`), since identity is the one form it refused. Segment mode withdraws the gzip head with `unrespond`, which restores the `outputEnd` and `closeAfter` saved after `room()` (so, as for COMP-11, nothing moved under them), and writes the identity head in its place before any body byte is queued. `Vary` follows whether the request decided the form, never the body's contents alone. The one-segment skip (`HttpCompressor.oneSegment`) sends identity without running the encoder only when the client accepts gzip and does not refuse identity, the body is within `minLength` and `maxLength`, and the identity head and body together, as written, fit one segment; a head that turns out longer is withdrawn with `unrespond` the same way and the response goes through the compress-then-compare path. Whether it skips depends on lengths alone, never on the body's bytes. |
@@ -171,6 +178,21 @@ byte by `link/std_compress: exits with 0 and stdout matches expected.out`,
   kernel: runtime-checksum.c for ${label} is the stub, nish_crc32_hw and
   nish_crc32_update and nothing it asks for` on i686, ARMv7, big-endian
   AArch64, and x86-64 and AArch64 with the intrinsics headers hidden.
+- **COMP-16** (`tests/simd/adler32.c`, through `tests/run.js`): `simd:
+  adler32 native ${arch}: N cases agree across <paths>`, which holds the
+  kernel to a byte-at-a-time reference on the check value, unreduced starts,
+  every length around the 32-byte block and the 5,536-byte stretch, long runs
+  of 0xff, and lengths 0..256 ending at a guard page and starting just after
+  one; `adler32 kernel: ${program} prints the same bytes with NISH_ADLER32
+  unset and with NISH_ADLER32=soft, and they are its expected.out` for
+  `std_compress_adler_paths` and `std_compress_adler_diff`; `adler32 kernel:
+  ${program} under NISH_ADLER32=soft calls no kernel`; `simd: --profile wasi
+  links runtime-checksum.c, and nish_adler32_hw answers 0 there`; and, for
+  the targets CI does not run, `adler32 kernel: runtime-checksum.c for
+  ${label} selects the kernel, ...` on x86-64 and arm64 Darwin and `... is the
+  stub, nish_adler32_hw and nish_adler32_update and no other nish_adler32_
+  symbol` on i686, ARMv7, big-endian AArch64, and x86-64 and AArch64 with the
+  intrinsics headers hidden.
 - Interoperability: `link/std_compress_node: each of the ${judged.lines} streams Nish compresses (every level, raw, gzip, zlib and GzipWriter) inflates under Node's zlib to its input`.
 
 Not fuzzed with libFuzzer yet: the corruption and prefix loops above are the

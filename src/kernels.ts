@@ -79,6 +79,11 @@
 // walker reads and nothing else; it ignores the walker's tables, which hold
 // the one polynomial it computes.
 //
+// WP38 S8: `adler32Update` hands its loop to `adler32Walk` the same way — a
+// branch on `nish_adler32_hw`, `nish_adler32_update` on one arm and the call
+// on the other, joined at a `phi`. A machine without SSSE3, a process run with
+// `NISH_ADLER32=soft`, and a wasm32 build run the Nish loop as written.
+//
 // `nish/json`'s `JsonWriter.f64` hands its digits to one private walk,
 // `jsonPutF64Walk(buf, at, v)`, lowered S1's way (`isJsonPutF64Walk`): the
 // call becomes `nish_json_put_f64` (runtime-text.c), which formats into its own
@@ -248,6 +253,23 @@ export const isCrc32Seam = (program: CheckedProgram, sig: FunctionSig): boolean 
   sig.owner === null &&
   sig.instance === null &&
   sig.sourceName === "crc32Walk" &&
+  sig.returnType === T_U32 &&
+  isCompressChecksumModule(program.packageName, program.source.path)
+
+/** The runtime's answer to whether this process runs the Adler-32 kernel. */
+export const ADLER32_HW: string = "nish_adler32_hw"
+
+/** The runtime kernel `adler32Walk`'s call becomes on the hardware arm. */
+export const ADLER32_KERNEL: string = "nish_adler32_update"
+
+/**
+ * Whether a call in `program` to `sig` is `adler32Walk(adler, buf, off,
+ * len)`, `adler32Update`'s loop, tested as `isCrc32Seam` tests its walker.
+ */
+export const isAdler32Seam = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  sig.owner === null &&
+  sig.instance === null &&
+  sig.sourceName === "adler32Walk" &&
   sig.returnType === T_U32 &&
   isCompressChecksumModule(program.packageName, program.source.path)
 

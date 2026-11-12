@@ -9,6 +9,11 @@
 #   bash bench/techempower/run.sh --rounds 3 --duration 10 --only plaintext
 #   bash bench/techempower/run.sh --nodelay-compare   adds `entry-nodelay0`,
 #                                            the entry with its nodelay argument 0
+#   bash bench/techempower/run.sh --cores-compare   plaintext and json only:
+#                                            the entry as one process (`entry`,
+#                                            `entry-copy`) against one worker a
+#                                            server CPU (`entry-cores`), the server
+#                                            on the first half of the CPUs
 #   bash bench/techempower/run.sh --browser-head --only plaintext
 #                                            the browser-head gauge, below
 #
@@ -82,6 +87,7 @@ duration=10
 quick=0
 only=""
 compare=0
+cores=0
 browser=0
 while [ $# -gt 0 ]; do
   case $1 in
@@ -97,12 +103,17 @@ while [ $# -gt 0 ]; do
       case $only in plaintext | json | db) ;; *) echo "run.sh: --only takes plaintext, json or db, not $only" >&2; exit 2 ;; esac
       ;;
     --nodelay-compare) compare=1 ;;
+    --cores-compare) cores=1 ;;
     --browser-head) browser=1 ;;
     -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echo "run.sh: unknown argument $1" >&2; exit 2 ;;
   esac
   shift
 done
+if [ "$cores" = 1 ] && [ "$only" = db ]; then
+  echo "run.sh: --cores-compare times plaintext and json, not db" >&2
+  exit 2
+fi
 
 plainLevels=(256 1024 4096 16384)
 jsonLevels=(16 32 64 128 256 512)
@@ -143,6 +154,14 @@ if [ "$cpus" -ge 2 ]; then
   # wrk needs a connection per thread, and the fewest connections measured is 16.
   threads=$((cpus - 1 > 16 ? 16 : cpus - 1))
   pinning="server on CPU 0, client on CPUs 1-$((cpus - 1)) (client-shared: $cpus cores)"
+  if [ "$cores" = 1 ]; then
+    # Half the CPUs serve, the other half drive them.
+    half=$((cpus / 2))
+    serverCpu=(taskset -c "0-$((half - 1))")
+    clientCpu=(taskset -c "$half-$((cpus - 1))")
+    threads=$((cpus - half > 16 ? 16 : cpus - half))
+    pinning="server on CPUs 0-$((half - 1)), client on CPUs $half-$((cpus - 1))"
+  fi
 else
   serverCpu=()
   clientCpu=()
@@ -195,7 +214,13 @@ if [ "$browser" = 1 ]; then
   contestants=("entry=build/tfb/entry" "entry-copy=build/tfb/entry-copy")
   twins=(uws go-fasthttp)
 fi
-for name in "${twins[@]}"; do
+if [ "$cores" = 1 ]; then
+  # The last argument is main.ts's workers: 1 one process, 0 one a CPU.
+  contestants=("entry=build/tfb/entry @1 127.0.0.1 16384 1" "entry-copy=build/tfb/entry-copy @1 127.0.0.1 16384 1"
+    "entry-cores=build/tfb/entry @1 127.0.0.1 16384 0")
+  twins=()
+fi
+for name in ${twins[@]+"${twins[@]}"}; do
   contestants+=("$name=build/http-twins/$name/serve")
 done
 
@@ -240,7 +265,7 @@ trap stop EXIT
 start() {
   local cmd=${1#*=} extra=()
   if [[ $cmd == *" @"* ]]; then
-    extra=("${cmd#* @}")
+    read -ra extra <<<"${cmd#* @}"
     cmd=${cmd%% @*}
   fi
   port=$((port + 1))
@@ -294,6 +319,7 @@ measure() {
 results=build/tfb/results.tsv
 : >"$results"
 notes=()
+[ "$cores" = 1 ] && notes+=("entry-cores's peak RSS is its supervisor's alone, not its workers'")
 
 # One test: $1 the path, then its concurrencies.
 run() {
@@ -362,7 +388,7 @@ pgStop() {
 trap 'stop; pgStop' EXIT
 pgSql() { ${pgAs[@]+"${pgAs[@]}"} "$pgBin/psql" -h "$pgDir" -p "$pgPort" -U postgres -qAt -v ON_ERROR_STOP=1 "$@"; }
 dbRan=0
-if wants db; then
+if [ "$cores" = 0 ] && wants db; then
   pgBin=${PG_BIN:-$(find /usr/lib/postgresql -maxdepth 2 -name bin -type d 2>/dev/null | sort -V | tail -n 1)}
   if [ -z "$pgBin" ] || [ ! -x "$pgBin/initdb" ]; then
     notes+=("the database tests were skipped: no Postgres binaries (set PG_BIN)")
@@ -472,7 +498,7 @@ report() {
   local verdict=""
   for level in "$@"; do
     local line
-    line=$(awk -F'\t' -v p="$path" -v l="$level" -v b="$base" -v cp="$copy" -v t="$twin" '
+    line=$(awk -F'\t' -v p="$path" -v l="$level" -v b="$base" -v cp="$copy" -v t="$twin" -v up="$cores" '
       function med(a, c,   i, j, t) {
         for (i = 0; i < c; i++) for (j = i + 1; j < c; j++) if (a[j] < a[i]) { t = a[i]; a[i] = a[j]; a[j] = t }
         return c % 2 ? a[(c - 1) / 2] : (a[c / 2 - 1] + a[c / 2]) / 2
@@ -490,7 +516,8 @@ report() {
         d = (med(g, cg) - a) * 100 / a
         # wrk counts a non-2xx answer in its rate, so a cell with failures
         # can be fast for the wrong reason: it is never called inside.
-        printf "%s: %.1f%%\t%s: %+.1f%% %s", l, band, l, d, (flagged ? (d >= -band ? "unknown*" : "outside*") : (d >= -band ? "inside" : "outside"))
+        # Under --cores-compare the question is a gain, so above the band is `faster`.
+        printf "%s: %.1f%%\t%s: %+.1f%% %s", l, band, l, d, (flagged ? (d >= -band ? "unknown*" : "outside*") : (up && d > band ? "faster" : d >= -band ? "inside" : "outside"))
       }' "$results")
     printf ' %s' "${line%%	*}"
     verdict+=" ${line#*	}"
@@ -504,10 +531,12 @@ report() {
   echo "A relative A/B on one machine, not a TechEmpower rank."
   if [ "$browser" = 1 ]; then echo "Browser head: a browser's request headers, one request at a time on /plaintext and /json."; fi
   lineup=(${contestants[@]+"${contestants[@]}"})
-  if wants plaintext; then report /plaintext entry entry-copy async "${plainLevels[@]}"; fi
+  twin=async
+  [ "$cores" = 1 ] && twin=entry-cores
+  if wants plaintext; then report /plaintext entry entry-copy "$twin" "${plainLevels[@]}"; fi
   if wants json; then
-    report /json entry entry-copy async "${jsonLevels[@]}"
-    echo 'The twins answer /json with {"message":"Hello, World!","n":<n>}: 8 bytes more than the entry, and a counter.'
+    report /json entry entry-copy "$twin" "${jsonLevels[@]}"
+    [ "$cores" = 1 ] || echo 'The twins answer /json with {"message":"Hello, World!","n":<n>}: 8 bytes more than the entry, and a counter.'
   fi
   if [ "$dbRan" = 1 ]; then
     echo

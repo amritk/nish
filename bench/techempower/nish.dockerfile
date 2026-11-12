@@ -3,15 +3,14 @@
 # the server on port 8080. It installs a released compiler with install.sh,
 # which checks the download's SHA-256 before unpacking it, and LLVM 18 for the
 # link. install.sh is fetched from the release's own tag, not from `main`.
-# NISH_VERSION must name a release after 0.18.0: 0.18.0 has neither
-# `tcpListenFlags` nor `JsonWriter`, which the entry uses, so the image builds
-# only once 0.19.0 is released.
+# NISH_VERSION must name 0.31.0 or later, the first release whose
+# nish/net/prefork binds the workers' shared listeners and pins them.
 FROM ubuntu:24.04
 
 # A failed download fails the build rather than piping nothing into sh.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-ARG NISH_VERSION=0.19.0
+ARG NISH_VERSION=0.31.0
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl clang-18 lld-18 llvm-18 \
@@ -29,5 +28,6 @@ RUN nish main.ts --link entry --profile speed
 
 EXPOSE 8080
 
-# Port 8080, TCP_NODELAY asked for, every interface, 16384 slots.
-CMD ["./entry", "8080", "1", "0.0.0.0", "16384"]
+# Port 8080, TCP_NODELAY asked for, every interface, 16384 slots a worker, and
+# one worker a core.
+CMD ["./entry", "8080", "1", "0.0.0.0", "16384", "0"]

@@ -291,6 +291,19 @@ export const crc32 = (buf: u8[], off: i32, len: i32): u32 => new Crc32().update(
  */
 export const adler32Update = (adler: u32, buf: u8[], off: i32, len: i32): u32 => {
   checksumWindow("adler32Update", buf, off, len)
+  return adler32Walk(adler, buf, off, len)
+}
+
+/**
+ * `adler32Update`'s loop: the Adler-32 of the bytes `adler` was the Adler-32
+ * of, followed by `buf[off .. off + len)`, a window its one caller has
+ * checked. Natively the compiler puts the call behind a branch on
+ * `nish_adler32_hw` and hands the same window to the runtime's
+ * `nish_adler32_update`, which runs it on SSSE3 or NEON vectors
+ * (`src/kernels.ts`); a machine without SSSE3, a process run with
+ * `NISH_ADLER32=soft`, a wasm32 build and Node run this.
+ */
+const adler32Walk = (adler: u32, buf: u8[], off: i32, len: i32): u32 => {
   let s1: u32 = adler & 0xffff
   let s2: u32 = adler >>> 16
   let p: i32 = off
