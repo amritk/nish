@@ -2818,6 +2818,24 @@ first bytes after the handshake, so a client that finishes its handshake and
 then sends nothing is closed after `headTimeout` too. Both are `Http1Config`
 fields, and a value of 0 or less stops start-up.
 
+A request `Http1Server` refuses (a 400, a 413) is not closed at once: the
+server shuts its write side and reads and throws away what the client still
+sends, so the client's TCP stack does not answer those bytes with a reset that
+destroys the error response (RFC 9112 §9.6). The drain stops when the client
+hangs up, after `lingerBytes` (64 KiB by default; 0 closes at once), or when
+`expire` finds it past `lingerTimeout` (2 s by default).
+
+`Http2TlsServer` has an `expire(now)` too. A client that has not acknowledged
+the server's SETTINGS within `Http2Config.settingsTimeout` (10 s by default,
+its TLS handshake included) is sent GOAWAY SETTINGS_TIMEOUT and closed; one
+that moves no byte for `Http2Config.idleTimeout` (60 s) is sent GOAWAY
+NO_ERROR and closed. A `WebTransport` session has its own clock:
+`expire(now)` ends one quiet for `WebTransportConfig.idleTimeout` (60 s) —
+refused with 503 if it was never answered, closed with code 0 if it was — and
+`next` reports it as `WT_CLOSED`. A session takes at most
+`maxDatagramsPerSecond` datagrams a second (1,024 by default); the rest are
+dropped and counted in `datagramsDropped`.
+
 Calling `expire` on every turn of the loop is cheap: it walks the slots only
 when one can be due, about once per the shorter of the two timeouts, and
 `expireScans` counts the walks. `TlsTcpServer`, `Http1TlsServer`,

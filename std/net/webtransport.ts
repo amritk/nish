@@ -105,6 +105,19 @@
  * state through the QUIC connection's stream index, never by a scan, and
  * nothing a warm session does allocates. Counters a peer drives saturate.
  *
+ * **The clock.** Each session keeps the time of its last activity
+ * (`monotonicNanos`, read once a call of `next`): its request, its accept,
+ * a datagram or a stream event either way, a capsule. `expire(now)`, called
+ * from the program's loop as `Http1Server.expire` is, ends every session
+ * quiet for longer than `WebTransportConfig.idleTimeout`: one never answered
+ * is refused with 503, an accepted one is closed (CLOSE with code 0 and the
+ * FIN, or a reset both ways when the capsule does not fit), and one already
+ * closed whose client never finished its half is let go. Each session it
+ * ends that the program still held is reported by the next calls of `next`
+ * as WT_CLOSED, `closedByPeer` false, code 0. A session takes at most
+ * `maxDatagramsPerSecond` datagrams in each second from its first; the rest
+ * are dropped and counted in `datagramsDropped`.
+ *
  * **Error codes.** A stream's reset and STOP_SENDING carry an HTTP/3 code;
  * a WebTransport application's 32-bit code maps into the range from
  * 0x52e4a40fa8db (`wtCodeToHttp3`, `wtCodeFromHttp3`), as Chrome maps it.
@@ -155,6 +168,7 @@ import {
 import { QUIC_DATAGRAM_ERR_FULL, QUIC_DATAGRAM_NONE, QUIC_DATAGRAM_OK, QuicConnection } from "nish/net/quic"
 import { quicPacketCopy, quicVarintSize } from "nish/net/quic-packet"
 import { quicStreamIsUni } from "nish/net/quic-stream"
+import { monotonicNanos } from "nish:process"
 
 /** A session asked for: `sessionId`, `fields`. */
 export const WT_SESSION: i32 = 16
@@ -198,6 +212,15 @@ export const WT_FIRST_APP_CODE: i64 = 0x52e4a40fa8db
 /** The most a configuration may set `maxStreams` and `maxPending` to. */
 const WT_MAX_CAP: i32 = 4096
 
+/** The longest `idleTimeout`, a day in milliseconds, and the highest `maxDatagramsPerSecond`. */
+const WT_MAX_IDLE: i32 = 86400000
+const WT_MAX_RATE: i32 = 1048576
+/** Nanoseconds in a millisecond, and in a second. */
+const WT_MILLI: i64 = 1000000
+const WT_SECOND: i64 = 1000000000
+/** The status a session asked for and never answered gets when `expire` ends it. */
+const WT_STATUS_UNANSWERED: i32 = 503
+
 /** Session states. */
 const WT_FREE: i32 = 0
 const WT_ASKED: i32 = 1
@@ -234,6 +257,14 @@ export class WebTransportConfig {
   maxStreams: i32 = 64
   /** Streams that may wait at once for a session not yet answered or not yet arrived (draft-02 §4.5). */
   maxPending: i32 = 16
+  /**
+   * Milliseconds a session may go without activity before `expire` ends it, 1 to 86,400,000: a
+   * session asked for counts from its request, an accepted one from its last datagram or stream
+   * event either way, and one this side closed from its close.
+   */
+  idleTimeout: i32 = 60000
+  /** Datagrams one session may deliver in a second, 1 to 1,048,576; the rest are dropped and counted. */
+  maxDatagramsPerSecond: i32 = 1024
 }
 
 /**
@@ -463,8 +494,19 @@ export class WebTransport {
   datagramsIn: i32[]
   /** How many datagrams each session sent, saturating at 2^31 - 1; zeroed when a session is asked for. */
   datagramsOut: i32[]
+  /** When each session was last active, and when its datagram second began and how many it took (`monotonicNanos`). */
+  private lastActive: i64[]
+  private rateSince: i64[]
+  private rateCount: i32[]
   /** The free sessions, a stack. */
   private free: i32[]
+  /** Sessions `expire` ended that `next` has not yet reported, `expiredCount` of them, with their IDs. */
+  private expiredSessions: i32[]
+  private expiredIds: i64[]
+  private expiredCount: i32 = 0
+  /** The time `next` last read, which stamps activity; and no session can expire before `expireAfter`. */
+  private now: i64 = 0
+  private expireAfter: i64 = 0
   // Per QUIC stream slot.
   /** The session whose CONNECT stream the slot holds, or -1. */
   sessionAt: i32[]
@@ -527,7 +569,8 @@ export class WebTransport {
   /**
    * The WebTransport layer of `h3`, whose `Http3Config` must have
    * `webtransportSessions` above 0. A cap out of range panics.
-   * @param config The caps: `maxStreams` 1 to 4096 and `maxPending` 0 to 4096; kept, not copied.
+   * @param config The caps: `maxStreams` 1 to 4096, `maxPending` 0 to 4096, `idleTimeout` 1 to
+   *   86,400,000 and `maxDatagramsPerSecond` 1 to 1,048,576; kept, not copied.
    * @param h3 The connection this layer reads and writes, kept for the layer's life; its restarts
    *   restart this layer too.
    */
@@ -539,6 +582,8 @@ export class WebTransport {
     }
     webtransportCheckCap("maxStreams", config.maxStreams, 1, WT_MAX_CAP)
     webtransportCheckCap("maxPending", config.maxPending, 0, WT_MAX_CAP)
+    webtransportCheckCap("idleTimeout", config.idleTimeout, 1, WT_MAX_IDLE)
+    webtransportCheckCap("maxDatagramsPerSecond", config.maxDatagramsPerSecond, 1, WT_MAX_RATE)
     this.config = config
     this.h3 = h3
     this.quic = h3.quic
@@ -566,7 +611,13 @@ export class WebTransport {
     this.capFill = new Array<i32>(sessions)
     this.datagramsIn = new Array<i32>(sessions)
     this.datagramsOut = new Array<i32>(sessions)
+    this.lastActive = new Array<i64>(sessions)
+    this.rateSince = new Array<i64>(sessions)
+    this.rateCount = new Array<i32>(sessions)
     this.free = new Array<i32>(sessions)
+    this.expiredSessions = new Array<i32>(sessions)
+    this.expiredIds = new Array<i64>(sessions)
+    this.now = monotonicNanos()
     const n: i32 = toI32(h3.quic.streams.slots.length)
     const slots: i32 = n > 0 ? n : WT_ONE
     this.sessionAt = new Array<i32>(slots)
@@ -595,6 +646,8 @@ export class WebTransport {
     }
     this.waiting.reset()
     this.adoptCount = 0
+    this.expiredCount = 0
+    this.expireAfter = 0
     this.capAt = 0
     this.capEnd = 0
     this.capSession = -1
@@ -659,6 +712,16 @@ export class WebTransport {
    */
   next(): i32 {
     this.current()
+    const clock: i64 = monotonicNanos()
+    // The clock never runs back, so a session's deadline only moves later.
+    this.now = clock > this.now ? clock : this.now
+    if (this.expiredCount > 0) {
+      this.expiredCount = this.expiredCount - 1
+      const id: i64 = this.expiredIds[this.expiredCount]
+      this.sessionId = id
+      this.stream = id
+      return this.closedEvent(this.expiredSessions[this.expiredCount], WT_ZERO64, WT_ZERO, false)
+    }
     for (let guard: i32 = 0; guard < 1000000; guard++) {
       if (this.adoptCount > 0) {
         const event: i32 = this.adoptWaiting()
@@ -717,6 +780,17 @@ export class WebTransport {
       this.datagramsDropped = h3Count(this.datagramsDropped)
       return WT_ONE
     }
+    if (this.now - this.rateSince[s] >= WT_SECOND) {
+      this.rateSince[s] = this.now
+      this.rateCount[s] = 0
+    }
+    if (this.rateCount[s] >= this.config.maxDatagramsPerSecond) {
+      // Past the session's datagrams a second: dropped, as one QUIC could not queue would be.
+      this.datagramsDropped = h3Count(this.datagramsDropped)
+      return WT_ONE
+    }
+    this.rateCount[s] = this.rateCount[s] + 1
+    this.lastActive[s] = this.now
     const at: i32 = h3VarintLength(this.datagram, WT_ZERO)
     this.datagramsIn[s] = h3Count(this.datagramsIn[s])
     this.session = s
@@ -761,6 +835,7 @@ export class WebTransport {
       return event === H3_STOPPED ? H3_NEED_MORE : event
     }
     const t: i32 = this.streamSession[k]
+    this.touch(k)
     this.stream = id
     this.session = t
     this.sessionId = t >= 0 && t < toI32(this.sessionIds.length) ? this.sessionIds[t] : WT_NONE64
@@ -796,6 +871,7 @@ export class WebTransport {
   /** An event of session `s`'s CONNECT stream. */
   private connectEvent(s: i32, event: i32): i32 {
     const h3: Http3Connection = this.h3
+    this.lastActive[s] = this.now
     this.session = s
     this.sessionId = this.sessionIds[s]
     this.stream = this.sessionIds[s]
@@ -914,6 +990,9 @@ export class WebTransport {
     this.capFill[s] = 0
     this.datagramsIn[s] = 0
     this.datagramsOut[s] = 0
+    this.lastActive[s] = this.now
+    this.rateSince[s] = this.now
+    this.rateCount[s] = 0
     this.sessionAt[k] = s
     this.session = s
     this.sessionId = id
@@ -952,6 +1031,7 @@ export class WebTransport {
       return result
     }
     this.states[s] = WT_OPEN
+    this.lastActive[s] = this.now
     // The streams that waited for it are taken by the next calls of `next`, each with its WT_STREAM.
     if (this.waiting.first(id) >= 0 && this.adoptCount < toI32(this.adoptions.length)) {
       this.adoptions[this.adoptCount] = s
@@ -1021,6 +1101,8 @@ export class WebTransport {
     this.streamCount[s] = 0
     this.dropPending(this.sessionIds[s])
     this.states[s] = WT_GONE
+    // A closed session's clock restarts: the client has `idleTimeout` to finish its half.
+    this.lastActive[s] = this.now
   }
 
   /** Refuses with WT_SESSION_GONE every stream waiting for session `id`. */
@@ -1097,6 +1179,94 @@ export class WebTransport {
     const end: i32 = toI32(out.length)
     const p: i32 = h3PutFrameHeader(out, WT_ZERO, end, WT_CAPSULE_DRAIN, toI64(0))
     return this.h3.writeDataWhole(id, out, WT_ZERO, p, false)
+  }
+
+  /** Stamps the session of the stream in QUIC slot `k` as active now. */
+  private touch(k: i32): void {
+    const t: i32 = this.streamSession[k]
+    if (t >= 0 && t < toI32(this.lastActive.length)) {
+      this.lastActive[t] = this.now
+    }
+  }
+
+  // ---- The clock -------------------------------------------------------------------
+
+  /**
+   * Ends every session quiet for longer than `idleTimeout` at `now` (see
+   * the module comment): one never answered is refused with 503, an
+   * accepted one closed with code 0, and one already closed whose client
+   * never finished its half let go. Call it from the program's loop; it
+   * returns at once before the soonest deadline it last saw. The next calls
+   * of `next` report each session the program held as WT_CLOSED.
+   * @param now The current time, from `monotonicNanos`.
+   * @returns How many sessions it ended.
+   */
+  expire(now: i64): i32 {
+    this.current()
+    if (now < this.expireAfter) {
+      return 0
+    }
+    this.now = now > this.now ? now : this.now
+    const idle: i64 = toI64(this.config.idleTimeout) * WT_MILLI
+    let soonest: i64 = now + idle
+    let n: i32 = 0
+    for (let s: i32 = 0; s < toI32(this.states.length); s++) {
+      const state: i32 = this.states[s]
+      if (state !== WT_FREE) {
+        const deadline: i64 = this.lastActive[s] + idle
+        if (now > deadline) {
+          this.timeOut(s, state)
+          n = n + 1
+        } else if (deadline < soonest) {
+          soonest = deadline
+        }
+      }
+    }
+    this.expireAfter = soonest
+    return n
+  }
+
+  /**
+   * The soonest `expire` could end a session, at or after `now`: activity
+   * only moves a session's deadline later.
+   * @param now The current time, from `monotonicNanos`.
+   * @returns The earliest `monotonicNanos` instant at which `expire` could end a session; `now` plus
+   *   `idleTimeout` when no session is held.
+   */
+  expiresNoSooner(now: i64): i64 {
+    const idle: i64 = toI64(this.config.idleTimeout) * WT_MILLI
+    let soonest: i64 = now + idle
+    for (let s: i32 = 0; s < toI32(this.states.length); s++) {
+      if (this.states[s] !== WT_FREE && this.lastActive[s] + idle < soonest) {
+        soonest = this.lastActive[s] + idle
+      }
+    }
+    return soonest > now ? soonest : now
+  }
+
+  /** Ends session `s`, in `state`, for its idleness, and queues its WT_CLOSED unless the program let go of it already. */
+  private timeOut(s: i32, state: i32): void {
+    const id: i64 = this.sessionIds[s]
+    if (state === WT_ASKED) {
+      this.answer(id, WT_STATUS_UNANSWERED)
+      this.release(s)
+    } else if (state === WT_OPEN) {
+      if (this.close(id, WT_ZERO64, this.reason, WT_ZERO, WT_ZERO) !== 0) {
+        // No room for the capsule: reset the CONNECT stream both ways, after which no event ends the session.
+        this.h3.reset(id, H3_NO_ERROR)
+        this.release(s)
+      }
+    } else {
+      // Closed here, or by the client's CLOSE, and the client never finished its half: stop reading it.
+      this.h3.discardRequest(id, H3_NO_ERROR)
+      this.release(s)
+      return
+    }
+    if (this.expiredCount < toI32(this.expiredSessions.length)) {
+      this.expiredSessions[this.expiredCount] = s
+      this.expiredIds[this.expiredCount] = id
+      this.expiredCount = this.expiredCount + 1
+    }
   }
 
   // ---- Capsules --------------------------------------------------------------------
@@ -1368,6 +1538,9 @@ export class WebTransport {
       return H3_CLOSED
     }
     const n: i32 = this.h3.writeStream(id, buf, off, len, fin)
+    if (n >= 0) {
+      this.touch(k)
+    }
     if (fin && n === len) {
       this.settle(k, WT_SENT)
     }
@@ -1463,6 +1636,7 @@ export class WebTransport {
     quicPacketCopy(out, p, buf, off, len)
     const result: i32 = this.quic.sendDatagram(out, WT_ZERO, p + len)
     if (result === QUIC_DATAGRAM_OK) {
+      this.lastActive[s] = this.now
       this.datagramsOut[s] = h3Count(this.datagramsOut[s])
       return 0
     }
