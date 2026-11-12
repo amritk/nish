@@ -27450,7 +27450,6 @@ import QUIC_CONN_MAX_STREAM_DATA from "nish/net/quic" -> const QUIC_CONN_MAX_STR
 import QUIC_CONN_MAX_STREAMS from "nish/net/quic" -> const QUIC_CONN_MAX_STREAMS
 import QuicConnection from "nish/net/quic" -> struct QuicConnection
 import QuicServerConfig from "nish/net/quic" -> struct QuicServerConfig
-import quicWorkerCheck from "nish/net/quic" -> function @nish.quicWorkerCheck
 import QUIC_MAX_CID_LENGTH from "nish/net/quic-packet" -> const QUIC_MAX_CID_LENGTH
 import QuicStreamPools from "nish/net/quic-stream" -> struct QuicStreamPools
 import quicStreamGrowFree from "nish/net/quic-stream" -> function @nish.quicStreamGrowFree
@@ -27720,30 +27719,29 @@ function Http3Server.constructor(this: Http3Server, quicConfig: QuicServerConfig
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.QuicListener.constructor
   escaping: config fd quicConfig size
-  calls: nish.BufferPool.constructor nish.Http3CidIndex.constructor nish.Http3Wheel.constructor nish.HttpDate.constructor nish.HttpDate.current nish.QuicListener.constructor nish.QuicListenerAnswer.constructor nish.QuicStreamPools.constructor nish.TlsP256Signer.constructor nish.quicStreamGrowFree nish.quicWorkerCheck nish_alloc_struct nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
+  calls: nish.BufferPool.constructor nish.Http3CidIndex.constructor nish.Http3Wheel.constructor nish.HttpDate.constructor nish.HttpDate.current nish.QuicListener.constructor nish.QuicListenerAnswer.constructor nish.QuicStreamPools.constructor nish.TlsP256Signer.constructor nish.quicStreamGrowFree nish_alloc_struct nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
   pointer this: size=280 writesThrough=true captured=false
-  pointer quicConfig: size=120 writesThrough=true captured=true passedTo=nish.quicWorkerCheck#0 nish.QuicListener.constructor#1
+  pointer quicConfig: size=120 writesThrough=true captured=true passedTo=nish.QuicListener.constructor#1
   pointer config: size=20 writesThrough=true captured=true
   pointer listenerEntropy: size=0 writesThrough=true captured=false passedTo=nish.Http3CidIndex.constructor#2 nish.QuicListener.constructor#2
   stackSites=0 stackLocals=0
-  callee +0:5 quicWorkerCheck -> @nish.quicWorkerCheck
-  callee +5:18 new Http3CidIndex -> @nish.Http3CidIndex.constructor
-  callee +6:21 new QuicListener -> @nish.QuicListener.constructor
-  callee +7:19 new QuicListenerAnswer -> @nish.QuicListenerAnswer.constructor
-  callee +8:18 new Http3Wheel -> @nish.Http3Wheel.constructor
-  callee +11:17 new HttpDate -> @nish.HttpDate.constructor
-  callee +13:5 HttpDate.current -> @nish.HttpDate.current
-  callee +16:21 new BufferPool -> @nish.BufferPool.constructor
-  callee +17:24 new BufferPool -> @nish.BufferPool.constructor
-  local +19:11 none: u8[] (const)
-  callee +20:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
-  callee +21:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
-  local +26:11 streamData: i64 (const)
-  local +27:11 bidi: i64 (const)
-  local +28:11 uni: i64 (const)
-  local +29:11 local: i64 (const)
-  callee +41:26 new QuicStreamPools -> @nish.QuicStreamPools.constructor
-  callee +48:19 new TlsP256Signer -> @nish.TlsP256Signer.constructor
+  callee +0:18 new Http3CidIndex -> @nish.Http3CidIndex.constructor
+  callee +1:21 new QuicListener -> @nish.QuicListener.constructor
+  callee +2:19 new QuicListenerAnswer -> @nish.QuicListenerAnswer.constructor
+  callee +3:18 new Http3Wheel -> @nish.Http3Wheel.constructor
+  callee +6:17 new HttpDate -> @nish.HttpDate.constructor
+  callee +8:5 HttpDate.current -> @nish.HttpDate.current
+  callee +11:21 new BufferPool -> @nish.BufferPool.constructor
+  callee +12:24 new BufferPool -> @nish.BufferPool.constructor
+  local +14:11 none: u8[] (const)
+  callee +15:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
+  callee +16:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
+  local +21:11 streamData: i64 (const)
+  local +22:11 bidi: i64 (const)
+  local +23:11 uni: i64 (const)
+  local +24:11 local: i64 (const)
+  callee +36:26 new QuicStreamPools -> @nish.QuicStreamPools.constructor
+  callee +43:19 new TlsP256Signer -> @nish.TlsP256Signer.constructor
 function Http3Server.build(this: Http3Server): void -> @nish.Http3Server.build [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

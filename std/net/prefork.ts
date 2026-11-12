@@ -482,6 +482,11 @@ const preforkBindUdp = (config: PreforkConfig, count: i32): i32[] => {
   }
   out.push(first)
   const port: i32 = config.listenPort === 0 ? netLocalPort(first) : config.listenPort
+  if (port <= 0) {
+    console.error(`nish/net/prefork: cannot read the UDP port bound (${port})`)
+    netClose(first)
+    return []
+  }
   for (let i: i32 = 1; i < count; i++) {
     const fd: i32 = udpBind(host, port, steered)
     if (fd < 0) {
@@ -907,6 +912,10 @@ class PreforkSupervisor {
     // With `listenUdp`, port 0 was chosen by the UDP group, bound first.
     let port: i32 =
       config.listenPort === 0 && this.udp.length > 0 ? netLocalPort(this.udp[0]) : config.listenPort
+    if (config.listenPort === 0 && this.udp.length > 0 && port <= 0) {
+      console.error(`nish/net/prefork: cannot read the UDP port bound (${port})`)
+      return false
+    }
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       const fd: i32 = tcpListenFlags(config.listenHost, port, config.listenBacklog, flags)
       if (fd < 0) {

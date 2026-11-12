@@ -124,7 +124,6 @@ import {
   QUIC_CONN_MAX_STREAMS,
   QuicConnection,
   QuicServerConfig,
-  quicWorkerCheck,
 } from "nish/net/quic"
 import { QUIC_MAX_CID_LENGTH } from "nish/net/quic-packet"
 import { QuicStreamPools, quicStreamGrowFree } from "nish/net/quic-stream"
@@ -618,14 +617,12 @@ export class Http3Server {
    *   size the shared buffer pools.
    * @param fd The bound UDP socket, kept; the server does not close it.
    * @param size How many slots, 1 to 65536; any other panics.
-   *   A `workerIndex` and `workerCount` pair `quicWorkerCheck` refuses panics too.
    * @param listenerEntropy `QUIC_LISTENER_ENTROPY_SIZE` random bytes, copied and then zeroed in this array.
    */
   constructor(quicConfig: QuicServerConfig, config: Http3Config, fd: i32, size: i32, listenerEntropy: u8[]) {
     if (size < 1 || size > 65536) {
       panic(`Http3Server: ${size} slots, outside 1 to 65536`)
     }
-    quicWorkerCheck(quicConfig)
     this.quicConfig = quicConfig
     this.config = config
     this.fd = fd

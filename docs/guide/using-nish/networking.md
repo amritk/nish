@@ -536,9 +536,10 @@ worker restarts on its own with a new pair. With `restart` off nothing is
 signalled: a worker sees its peer's exit as a hang-up on its end.
 
 A `serviceWorker` below `-1` or not below the worker count, more than 64
-workers with a service worker (the most descriptors one child is handed), a
-`channelKind` that is neither kind, or seqpacket channels off Linux stop the
-program with a panic.
+workers with a service worker (the most descriptors one child is handed: 63
+with `listenPort`, 62 with `listenUdp` too), `listenUdp` with a negative
+`listenPort`, a `channelKind` that is neither kind, or seqpacket channels off
+Linux stop the program with a panic.
 
 ## Serving a file
 

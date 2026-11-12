@@ -35115,9 +35115,9 @@ function preforkBindUdp(config: PreforkConfig, count: i32): i32[] -> @nish.prefo
   local +4:9 first: i32 (const)
   local +6:11 plain: i32 (const)
   local +18:9 port: i32 (const)
-  local +19:12 i: i32 (let)
-  local +20:11 fd: i32 (const)
-  local +23:16 j: i32 (let)
+  local +24:12 i: i32 (let)
+  local +25:11 fd: i32 (const)
+  local +28:16 j: i32 (let)
 function preforkNowMs(): i64 -> @nish.preforkNowMs
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
@@ -35259,9 +35259,9 @@ function PreforkSupervisor.listen(this: PreforkSupervisor, steer: boolean): bool
   calls: nish.PreforkSupervisor.closeListeners nish_array_grow nish_net_local_port nish_str_concat nish_str_from_i32 nish_tcp_listen_flags nish_write
   pointer this: size=88 writesThrough=true captured=false passedTo=nish.PreforkSupervisor.closeListeners#0
   stackSites=0 stackLocals=0
-  local -12:11 config: PreforkConfig (const)
-  local -11:11 flags: i32 (const)
-  local -9:9 port: i32 (let)
+  local -16:11 config: PreforkConfig (const)
+  local -15:11 flags: i32 (const)
+  local -13:9 port: i32 (let)
   local -7:14 i: i32 (let)
   local -6:13 fd: i32 (const)
   callee -3:9 PreforkSupervisor.closeListeners -> @nish.PreforkSupervisor.closeListeners
