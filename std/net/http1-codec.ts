@@ -194,10 +194,12 @@ export class Http1Parser {
    */
   buf: u8[]
   /**
-   * The request line and the kept field lines of the request, copied out of
-   * `buf` as each is read, names in lowercase: what the spans below index.
-   * Kept from one request to the next, so a slot that has seen its largest
-   * head allocates nothing for the next one.
+   * The request line (method to version, no CRLF) and then the header
+   * section's lines with their CRLFs, copied out of `buf` as each is read,
+   * names in lowercase: what the spans below index. The bytes from
+   * `headLength` on are slack: the section scan stores a line's first bytes
+   * there before the line is whole. Kept from one request to the next, so a
+   * slot that has seen its largest head allocates nothing for the next one.
    */
   head: u8[]
   /** Four entries per field, into `head`: name start and end, value start and end (OWS trimmed). */
@@ -1005,13 +1007,15 @@ const http1HeadGrow = (p: Http1Parser, n: i32): void => {
 }
 
 /**
- * Copies `buf[from .. to)` to the end of `head`, which the caller has grown
- * with `http1HeadGrow` when the line would leave it fewer than sixteen bytes
- * of slack, and answers where the copy starts. The head keeps sixteen bytes past its last
- * line, so a short line is copied as whole vectors and a vector load at any
- * byte of the head is in bounds: the name and value compares read one. A
+ * Copies `buf[from .. to)` to the end of `head` and answers where the copy
+ * starts: the request line, the one line the section scan does not copy
+ * itself. It relies on the caller having called `http1HeadGrow` when the
+ * line would leave fewer than sixteen bytes of slack; without that it copies
+ * nothing and only moves `headLength`. The head keeps sixteen bytes past its
+ * last line, so a short line is copied as whole vectors and a vector load at
+ * any byte of the head is in bounds: the name and value compares read one. A
  * vector's lanes past the line write bytes past `headLength`, which nothing
- * reads.
+ * reads until the section scan overwrites them.
  */
 const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   const n: i32 = to - from

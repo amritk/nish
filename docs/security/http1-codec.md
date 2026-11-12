@@ -177,16 +177,18 @@ frozen beside it in `old.ts`: both are fed the same bytes in the same pieces,
 and after every event they must agree on the event, the status and reason,
 and everything a caller can read.
 
-The default run, seed 1175, is 237,143 cases (the fuzz corpus and its
+The default run, seed 1175, is 427,992 cases (the fuzz corpus and its
 regressions cut every way, every byte at every position of three requests, nine
-inserted bytes at every position, each limit at -1, 0 and +1, and 100,000
-grammar requests) and 2,257,209 events, among them 202,969 refusals, in about 8
-s; it must print the summary in `expected.out`.
+inserted bytes at every position, each limit at -1, 0 and +1, the name, value,
+tight-limit and browser-head cases below, and 100,000 grammar requests) and
+3,809,375 events, among them 292,521 refusals, in about 8 s of the test's
+`--profile speed` build; it must print the summary in `expected.out` (counts
+as of 2026-11-12).
 
 A header section of maxHeaderBytes - 1 or maxHeaderBytes
 bytes, empty line included, as one field or two, reads a head, and one more
 byte is a 431. A soak of seeds 1 to 4 at 250,000 grammar requests each
-(1,361,104 cases) agreed. The test sees a one-lane error in either vector
+(577,992 cases a seed, 2,311,968 in all, on 2026-11-12) agreed. The test sees a one-lane error in either vector
 scan (checked 2026-11-08): taking the byte after the first set bit in the
 line scan (`32 -` for `31 -`) fails the default run at case 19 (a 400 for "a
 malformed HTTP version" where main reads the head), the same in the target
@@ -367,16 +369,27 @@ cases (`expected.out`).
 **A head read section-wide, its framing fields classified as read**
 (`net_http1`, `_f64`, `net_http1_parse_diff`, 2026-11-12, written against
 `main` at `b49794d8`). The header section's lines are found and parsed in one
-loop that keeps the control-byte mask of the last vector loaded, so a line
-after a short one is not loaded again; the line's control flag is the value
-check, as before. A kept line of 32 bytes or fewer is copied into the held
-head as one or two `u8x16` stores, a longer one as a single `copyBytes`. The
-stores run only where all 16 or 32 bytes they load and store lie inside `buf`
-and `head`; anywhere else the line is one `copyBytes`, and both are bounds
-checked. The caller grows the head first (`http1HeadGrow`) whenever the line
-would leave it fewer than 16 bytes of slack, so the stores' path is the
-common one; the lanes they write past the line are slack the next line
-overwrites, never read as part of this one.
+loop (`http1Section`) that keeps the control-byte mask of the last vector
+loaded, so a line after a short one is not loaded again; the line's control
+flag is the value check, as before.
+
+The head's layout changed. It holds the request line (method to version, no
+CRLF), copied by `http1HeadAppend`, and then the header section's lines with
+their CRLFs: the section scan stores each vector it loads into the head at
+the same offset from the section's start (`buf[x]` at `head[x + delta]`), so
+a field line is in the head before it is parsed, and a line that ends in a
+later read finds its first bytes, copied provisionally past `headLength`,
+where the earlier call left them. `http1HeadGrow` keeps every byte of the old
+array, those provisional bytes included, not only the first `headLength`.
+No copy starts at or past `copyStop`, the line's start plus what is left of
+`maxHeaderBytes` plus 2 (the line's CRLF), and a line reaching it is a 431
+before its value is read, so a section's copy ends within one vector of
+`maxHeaderBytes` + 2 bytes past the request line, whatever the peer sends. Every store is a bounds-checked `u8x16` store or `copyBytes`; the head
+is grown first whenever a store would come within 32 bytes of its end.
+`http1HeadAppend` relies on its caller having called `http1HeadGrow` when the
+request line would leave fewer than sixteen bytes of slack; without that it
+copies nothing (both of its paths check the bounds) and the spans would read
+stale bytes, never bytes outside the array.
 
 Every kept field's lowered name is then classified (`http1FramingField`) as
 Host, Content-Length, Transfer-Encoding, Connection, Upgrade or none, and the
@@ -390,24 +403,35 @@ its position, length or value, so a request cannot place a framing field
 where the classification misses it. There is no branch on the target, on a
 known header set or on the length of the head.
 
-`http1WriteResponseHead` checks a field name of sixteen bytes or more as
-`u8x16` lanes with `http1NonTokenLanes`, the same predicate the parser uses,
-the last vector overlapping the one before it; shorter names keep the byte
-test. Nothing accepted or refused changes, and no limit, status or reason
-string moved.
+The response writer (`http1WriteResponseHead`) is unchanged from `b49794d8`.
+Nothing accepted or refused changes, and no limit, status or reason string
+moved.
 
-Tests: `a long token name is written at every length` and `a long name with a
-space at any lane is refused` (names of 15 to 34 bytes, a space at each
-place; dropping the overlapping last vector fails the second), in
-`tests/link/net_http1` and `_f64`. In `net_http1_parse_diff`, 48,859 value
-cases against main's parser: a Cookie and an Authorization value and a target
-of every length 1 to 48 and of 255, 256, 257, 1000 and 4000 bytes, with CR,
-LF, NUL, HTAB, SP, DEL, a comma, 0x80 or 0xff at every place in the first
-and last 48 bytes; the same heads whole and cut at every two-feed split at
-the edge lengths; and a head of 60 fields cut every way. The default run is
-now 286,002 cases (`expected.out`). Masking the line scan's sixteenth lane
-fails it at case 33,582 ("a control character in a field value" where main
-reads the head).
+Tests: in `net_http1_parse_diff`, 168,091 value cases against main's parser:
+a Cookie and an Authorization value and a target of every length 1 to 48 and
+of 255, 256, 257, 1000 and 4000 bytes, with CR, LF, NUL, HTAB, SP, DEL, a
+comma, 0x80 or 0xff at every place in the first and last 48 bytes, each value
+in both fields under five setups (text kept, spans only, fresh arrays, a
+declined upgrade, and pieces of 13, 16 and 3 bytes in turn); the same heads
+whole and cut at every two-feed split at the edge lengths; and a head of 60
+fields cut every way. 19,920 tight-limit cases set `maxTarget`,
+`maxHeaderBytes` and `maxHeaders` to sixteen values in a row at -1, 0 and +1,
+so the byte that decides between a head and a 414 or 431 falls in every lane,
+each whole, a byte at a time and split at every point. 2,838 cases split a
+936-byte browser head, alone and pipelined after a short GET, at every point.
+
+Mutations tried against the default run, each a one-line change to
+`http1-codec.ts`, built and run on 2026-11-12:
+
+| Mutation | Result |
+| --- | --- |
+| The section scan's mask drops lane 16 (`& 32767`) | fails at case 33,582: "a control character in a field value" where main reads a bare LF |
+| The carried mask is dropped after each line (`bits = 0`) | fails at case 2: "a malformed field name" where main reads the head |
+| `http1HeadGrow` keeps only `headLength` bytes, losing the provisional copy | fails at case 88,755: "a malformed field name" where main reads the head |
+| The section scan never grows the head before a store | panics, "index out of range: 269 >= 256": the store's bounds check holds |
+| `copyStop` one byte short of the line's value (`- 1` for `+ 2`) | panics on an i32 overflow check |
+| `copyStop` without the CRLF's two bytes (`+ 0` or `+ 1` for `+ 2`) | survives: the CR and LF of the line at the limit are copied but never read |
+| The grow threshold at 16 bytes from the end, not 32 | survives: a store needs 16, so this only grows later |
 
 **Connection management** (`net_http1_server`): `Connection: close` in a
 request is answered with it, and the connection closes; HTTP/1.0 closes unless
