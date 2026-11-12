@@ -494,9 +494,10 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
 - **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FiatSelectznz`,
   `p256FiatScalarAdd`, `p256FieldInvert`, `p256ScalarInvert`,
   `p256ScalarMult`, `p256BaseMult`, `p256BaseMultWith`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
-  `p256ScalarInverse` with its safegcd helpers `p256ToSigned30`,
+  `p256ScalarInverse` with its safegcd helpers `p256Safegcd`, `p256ToSigned30`,
   `p256FromSigned30`, `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`,
-  `p256AddOrder30` and `p256Normalize30`,
+  `p256AddModulus30` and `p256Normalize30` (shared with `p256FieldInvert`
+  since #1430),
   `p256SubBorrow`, `p256Below`, `p256ReduceOnce`, `p256AffineX`,
   `p256EncodePoint`, `p256DigestScalar`, `p256NonceKey`, `p256SignScalar`,
   `p256PublicKey`, `p256Sign`, `p256SignSha256`.

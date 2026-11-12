@@ -77,8 +77,8 @@
  *  none, and the sum is then discarded by the same conditional move rather than
  *  skipped, so neither a branch nor an address depends on the scalar.
  *  `p256ScalarMult`, a fixed 4-bit window over sixteen multiples of a point, is
- *  what verification multiplies G and the received key by, and the reference the
- *  comb is held to bit for bit (`tests/link/crypto_p256_agree`).
+ *  what ECDH multiplies the peer's key by, and the reference the comb is held
+ *  to bit for bit (`tests/link/crypto_p256_agree`).
  *
  *  The signer inverts the nonce by Bernstein and Yang's safegcd,
  *  `p256ScalarInverse`: twenty batches of thirty divsteps, each a fixed run of
@@ -115,7 +115,12 @@
  *  limb loops among them), the encodings and the nonce derivation are constant
  *  time by construction rather than by that proof.
  *
- * Verification multiplies only public values, by `p256ScalarMult` alone.
+ * **Verification is variable time, on public values only.** `p256Verify`
+ * computes u1 G + u2 Q in one interleaved pass, `p256DoubleMultPublic`: both
+ * scalars recoded as width-5 wNAF, eight odd multiples of each point, the
+ * doublings shared, and both the digits and the table reads follow the
+ * scalars. Every input to it is the signature, the digest or the public key.
+ * Nothing secret may be passed to it.
  *
  * **The private key is a `Secret`** (`nish:secret`, docs/LANGUAGE.md
  * "Secrets"). `p256PublicKey` and `p256Sign` read it only inside `expose` /
@@ -5466,7 +5471,11 @@ const p256ByteBit = (k: u8[], i: i32): i32 => {
 }
 
 /** `table[j] = (2 j + 1) p` for each `j` in `table`, eight of them: one doubling and seven additions. */
-const p256OddMultiples = (table: P256ProjectivePoint[], p: P256ProjectivePoint, s: P256PointScratch): void => {
+const p256OddMultiples = (
+  table: P256ProjectivePoint[],
+  p: P256ProjectivePoint,
+  s: P256PointScratch
+): void => {
   if (toI32(table.length) < P256_WNAF_TABLE) {
     return
   }
