@@ -11516,7 +11516,11 @@ if (dealtHere("p256Seams")) {
   // 10,000 scalars. Neither inversion is exported, so the program reaches them
   // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
   // std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
-  // Its expected.out ends in a checksum of every inverse. Natively, and as a
+  // #1430 adds the field: `p256FieldInvert` (safegcd) against Fermat's a^(p-2)
+  // on 0, 1, p-1, p, every 2^k and 2^k-1 and 1,000 seeded values, and the
+  // verify's width-5 wNAF pass (`p256DoubleMultPublic`) against two
+  // `p256ScalarMult`s and a `p256PointAdd`, on n-1, n-2, zero, the identity
+  // and seeded sums. Its expected.out ends in a checksum of every result. Natively, and as a
   // `--profile wasi` module under Node.
   if (!only || ["p256 inverse", "crypto_p256_inverse", "wasi"].some((name) => name.includes(only))) {
     p256SeamProgram({
@@ -11526,7 +11530,7 @@ if (dealtHere("p256Seams")) {
       source: "inverse.ts",
       extra: [],
       nativeName:
-        "p256 inverse: safegcd and Fermat give the same inverse for every scalar of tests/link/crypto_p256_inverse, natively",
+        "p256 inverse: safegcd and Fermat give the same inverse for every scalar and field element, and the wNAF pass the comb's sum, in tests/link/crypto_p256_inverse, natively",
     })
   }
 

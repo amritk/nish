@@ -477,9 +477,9 @@ unsafe call 4663:28 uncheckedGet (node 51341)
 unsafe call 4684:3 uncheckedSet (node 51478)
 unsafe call 4687:33 uncheckedGet (node 51514)
 unsafe call 4687:53 uncheckedGet (node 51520)
-unsafe call 4691:33 uncheckedGet (node 51556)
-unsafe call 4691:67 uncheckedGet (node 51566)
-unsafe call 4692:33 uncheckedGet (node 51583)
+unsafe call 4691:35 uncheckedGet (node 51556)
+unsafe call 4691:69 uncheckedGet (node 51566)
+unsafe call 4692:35 uncheckedGet (node 51583)
 unsafe call 4698:25 uncheckedGet (node 51661)
 unsafe call 4699:7 uncheckedSet (node 51678)
 unsafe call 4699:31 uncheckedGet (node 51684)
@@ -5595,7 +5595,7 @@ function signed30Of(a: u32[]): u32[] -> @signed30Of
   local +1:12 i: i32 (let)
   local +2:11 limb: i32 (const)
   callee +4:58 bitOf -> @bitOf
-function addOrder30(a: u32[], n: u32[], mask: u32, negate: u32): void -> @addOrder30
+function addModulus30(a: u32[], n: u32[], mask: u32, negate: u32): void -> @addModulus30
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   pointer a: size=0 writesThrough=true captured=false
@@ -5607,7 +5607,7 @@ function inverseHex(modulus: string, inverse30: u32, text: string): string -> @i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via p256UpdateFg30
   escaping: inverse30 modulus text
-  calls: addOrder30 hexOfLimbs limbsOfHex p256Divsteps30 p256SignMask p256UpdateDe30 p256UpdateFg30 signed30Of
+  calls: addModulus30 hexOfLimbs limbsOfHex p256Divsteps30 p256SignMask p256UpdateDe30 p256UpdateFg30 signed30Of
   stackSites=4 stackLocals=4
   local +0:9 n: u32[] (const)
   callee +0:20 signed30Of -> @signed30Of
@@ -5626,11 +5626,11 @@ function inverseHex(modulus: string, inverse30: u32, text: string): string -> @i
   callee +9:12 p256Divsteps30 -> @p256Divsteps30
   callee +10:5 p256UpdateDe30 -> @p256UpdateDe30
   callee +11:5 p256UpdateFg30 -> @p256UpdateFg30
-  callee +13:3 addOrder30 -> @addOrder30
-  callee +13:20 p256SignMask -> @p256SignMask
-  callee +13:54 p256SignMask -> @p256SignMask
-  callee +14:3 addOrder30 -> @addOrder30
-  callee +14:20 p256SignMask -> @p256SignMask
+  callee +13:3 addModulus30 -> @addModulus30
+  callee +13:22 p256SignMask -> @p256SignMask
+  callee +13:56 p256SignMask -> @p256SignMask
+  callee +14:3 addModulus30 -> @addModulus30
+  callee +14:22 p256SignMask -> @p256SignMask
   local +15:9 out: u32[] (const)
   local +16:12 i: i32 (let)
   local +17:11 limb: i32 (const)

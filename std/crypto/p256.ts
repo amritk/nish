@@ -4017,7 +4017,7 @@ const p256Normalize30 = (d: u32[], sign: u32, n: u32[]): void => {
 }
 
 /**
- * `out = 1 / a` mod `m` for the plain limbs `a`, below 2^256, and the odd
+ * `out = 1 / a` mod `m` for the plain limbs `a`, below m, and the odd
  * modulus `m` in signed-30 limbs (n or p), with `inverse30` = m^-1 mod 2^30;
  * zero for an `a` that is zero mod `m`. Twenty batches of thirty divsteps
  * each: 600, past the 590 that bound any 256-bit input, so the count never

@@ -4654,7 +4654,7 @@ const signed30Of = (a: u32[]): u32[] => {
 }
 
 /** `a` plus the modulus n when `mask` is all ones, negated when `negate` is, then carried: the module's `p256AddModulus30`. */
-const addOrder30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
+const addModulus30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
   for (let i: i32 = 0; i < 9; i++) {
     uncheckedSet(a, i, ((uncheckedGet(a, i) + (uncheckedGet(n, i) & mask)) ^ negate) - negate);
   }
@@ -4688,8 +4688,8 @@ const inverseHex = (modulus: string, inverse30: u32, text: string): string => {
     p256UpdateDe30(d, e, t, n, inverse30)
     p256UpdateFg30(f, g, t)
   }
-  addOrder30(d, n, p256SignMask(uncheckedGet(d, 8)), p256SignMask(uncheckedGet(f, 8)))
-  addOrder30(d, n, p256SignMask(uncheckedGet(d, 8)), 0)
+  addModulus30(d, n, p256SignMask(uncheckedGet(d, 8)), p256SignMask(uncheckedGet(f, 8)))
+  addModulus30(d, n, p256SignMask(uncheckedGet(d, 8)), 0)
   const out: u32[] = new Array<u32>(8)
   for (let i: i32 = 0; i < 256; i++) {
     const limb: i32 = i / 30

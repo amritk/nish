@@ -23125,7 +23125,7 @@ for.end:
   ret %struct.nish_array* %37
 }
 
-define internal void @addOrder30(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %a, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %n, i32 noundef %mask, i32 noundef %negate) #1 {
+define internal void @addModulus30(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %a, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %n, i32 noundef %mask, i32 noundef %negate) #1 {
 entry:
   %i.addr = alloca i32, align 4
   %i.addr.1 = alloca i32, align 4
@@ -23352,7 +23352,7 @@ for.end:
   %65 = getelementptr inbounds i32, i32* %64, i64 8
   %66 = load i32, i32* %65, align 4, !alias.scope !4, !noalias !3, !tbaa !12
   %67 = call i32 @p256SignMask(i32 %66)
-  call void @addOrder30(%struct.nish_array* %52, %struct.nish_array* %53, i32 %60, i32 %67)
+  call void @addModulus30(%struct.nish_array* %52, %struct.nish_array* %53, i32 %60, i32 %67)
   %68 = load %struct.nish_array*, %struct.nish_array** %d.addr, align 8
   %69 = load %struct.nish_array*, %struct.nish_array** %n.addr, align 8
   %70 = load %struct.nish_array*, %struct.nish_array** %d.addr, align 8
@@ -23362,7 +23362,7 @@ for.end:
   %74 = getelementptr inbounds i32, i32* %73, i64 8
   %75 = load i32, i32* %74, align 4, !alias.scope !4, !noalias !3, !tbaa !12
   %76 = call i32 @p256SignMask(i32 %75)
-  call void @addOrder30(%struct.nish_array* %68, %struct.nish_array* %69, i32 %76, i32 0)
+  call void @addModulus30(%struct.nish_array* %68, %struct.nish_array* %69, i32 %76, i32 0)
   %77 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 0
   store i64 8, i64* %77, align 8, !alias.scope !3, !noalias !4, !tbaa !13
   %78 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 1
