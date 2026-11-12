@@ -2068,6 +2068,7 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
   const id = new X509DerElement(0, 0, 0, 0)
   const flag = new X509DerElement(0, 0, 0, 0)
   const value = new X509DerElement(0, 0, 0, 0)
+  const aia: u8[] = x509OidAuthorityInfoAccess()
   let at: i32 = seq.start
   while (at < seq.end) {
     if (
@@ -2104,7 +2105,7 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
       return false
     }
     if (
-      x509DerContentsAre(der, id, x509OidAuthorityInfoAccess()) &&
+      x509DerContentsAre(der, id, aia) &&
       !x509AuthorityInfoAccessSound(der, value.start, value.end)
     ) {
       return false
