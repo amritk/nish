@@ -110,8 +110,10 @@ import Node from "./nodes" -> struct Node
 import fitArguments from "./declarations" -> function @fitArguments
 import checkReferenceCall from "./fnrefs" -> function @checkReferenceCall
 import functionReference from "./fnrefs" -> function @functionReference
+import nullableReference from "./fnrefs" -> function @nullableReference
 import opaqueReferenceMessage from "./fnrefs" -> function @opaqueReferenceMessage
 import outerReference from "./fnrefs" -> function @outerReference
+import refuseNullableCall from "./fnrefs" -> function @refuseNullableCall
 import refuseValueArrow from "./fnrefs" -> function @refuseValueArrow
 import ParentTable from "./parents" -> struct ParentTable
 import isOptionalChain from "./emit-util" -> function @isOptionalChain
@@ -600,7 +602,7 @@ function refuseReferenceHole(ctx: CheckContext, part: Node): void -> @refuseRefe
 function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkTemplate
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
-  calls: CheckContext.error TypeTable.isFnRef TypeTable.isSecret TypeTable.typeName checkExpression isNumeric nish_str_concat refuseReferenceHole templateMessage
+  calls: CheckContext.error TypeTable.isFnRef TypeTable.isSecret TypeTable.stripNull TypeTable.typeName checkExpression isNumeric nish_str_concat refuseReferenceHole templateMessage
   pointer ctx: size=336 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 refuseReferenceHole#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
@@ -612,6 +614,7 @@ function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @che
   callee +9:7 CheckContext.error -> @CheckContext.error
   callee +9:23 templateMessage -> @templateMessage
   callee +12:9 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +12:27 TypeTable.stripNull -> @TypeTable.stripNull
   callee +13:7 refuseReferenceHole -> @refuseReferenceHole
   callee +16:10 isNumeric -> @isNumeric
   local +17:13 spelled: string (const)
@@ -2145,40 +2148,48 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: want
-  calls: CheckContext.capturesOuter CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.builtinImport FunctionBindings.get FunctionSig.foreign FunctionSig.isAsync Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.isFnRef TypeTable.typeName asyncBuiltinOf checkAsyncBuiltin checkBuiltinCall checkBuiltinFunction checkDirectCall checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkReferenceCall checkResultConstructor dateRefusal fitArguments isBuiltinFunction isResultConstructor isSimdExport isSimdOp isValueReceiver neverNullMessage nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 outerFunctionMessage outerReference promiseMethodMessage refuseForeignNullable refuseOnce refuseSecretArguments refuseUnawaitedCall simdImportMessage stringCallFix unwrapParens
-  pointer ctx: size=336 writesThrough=true captured=true passedTo=checkExpression#0 promiseMethodMessage#0 CheckContext.errorType#0 isValueReceiver#0 checkMethodCall#0 CheckContext.errorAtProperty#0 neverNullMessage#0 refuseSecretArguments#0 checkBuiltinCall#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 CheckContext.errorType#0 checkExpression#0 checkReferenceCall#0 CheckContext.capturesOuter#0 outerReference#0 checkExpression#0 checkReferenceCall#0 refuseOnce#0 outerFunctionMessage#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 checkAsyncBuiltin#0 refuseSecretArguments#0 checkImportedBuiltin#0 checkResultConstructor#0 refuseSecretArguments#0 checkBuiltinFunction#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorFix#0 stringCallFix#0 refuseUnawaitedCall#0 fitArguments#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0
+  calls: CheckContext.capturesOuter CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.builtinImport FunctionBindings.get FunctionSig.foreign FunctionSig.isAsync Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.isFnRef TypeTable.typeName asyncBuiltinOf checkAsyncBuiltin checkBuiltinCall checkBuiltinFunction checkDirectCall checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkReferenceCall checkResultConstructor dateRefusal fitArguments isBuiltinFunction isResultConstructor isSimdExport isSimdOp isValueReceiver neverNullMessage nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 nullableReference outerFunctionMessage outerReference promiseMethodMessage refuseForeignNullable refuseNullableCall refuseOnce refuseSecretArguments refuseUnawaitedCall simdImportMessage stringCallFix unwrapParens
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=checkExpression#0 promiseMethodMessage#0 CheckContext.errorType#0 isValueReceiver#0 checkMethodCall#0 CheckContext.errorAtProperty#0 neverNullMessage#0 refuseSecretArguments#0 checkBuiltinCall#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 nullableReference#0 refuseNullableCall#0 CheckContext.textOf#0 CheckContext.errorType#0 checkExpression#0 checkReferenceCall#0 nullableReference#0 refuseNullableCall#0 CheckContext.capturesOuter#0 outerReference#0 checkExpression#0 nullableReference#0 refuseNullableCall#0 checkReferenceCall#0 refuseOnce#0 outerFunctionMessage#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 checkAsyncBuiltin#0 refuseSecretArguments#0 checkImportedBuiltin#0 checkResultConstructor#0 refuseSecretArguments#0 checkBuiltinFunction#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorFix#0 stringCallFix#0 refuseUnawaitedCall#0 fitArguments#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 checkMethodCall#1 refuseSecretArguments#1 checkBuiltinCall#1 checkReferenceCall#1 CheckContext.errorType#1 checkReferenceCall#1 checkReferenceCall#1 checkDirectCall#1 checkGenericCall#1 checkAsyncBuiltin#1 refuseSecretArguments#1 checkImportedBuiltin#1 checkResultConstructor#1 refuseSecretArguments#1 checkBuiltinFunction#1 CheckContext.errorType#1 CheckContext.errorType#1 stringCallFix#1 refuseUnawaitedCall#1 fitArguments#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 promiseMethodMessage#2 isValueReceiver#2 checkMethodCall#2 refuseSecretArguments#2 checkBuiltinCall#2 checkExpression#2 checkReferenceCall#4 Scope.lookup#0 Scope.typeOf#0 checkExpression#2 checkReferenceCall#4 checkExpression#2 checkReferenceCall#4 checkDirectCall#4 checkGenericCall#3 checkAsyncBuiltin#2 refuseSecretArguments#2 checkImportedBuiltin#2 checkResultConstructor#2 refuseSecretArguments#2 checkBuiltinFunction#2 Scope.typeOf#0 stringCallFix#3 checkExpression#2
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 promiseMethodMessage#2 isValueReceiver#2 checkMethodCall#2 refuseSecretArguments#2 checkBuiltinCall#2 checkExpression#2 checkReferenceCall#4 Scope.lookup#0 Scope.typeOf#0 checkExpression#2 checkReferenceCall#4 Scope.typeOf#0 checkExpression#2 checkReferenceCall#4 checkDirectCall#4 checkGenericCall#3 checkAsyncBuiltin#2 refuseSecretArguments#2 checkImportedBuiltin#2 checkResultConstructor#2 refuseSecretArguments#2 checkBuiltinFunction#2 Scope.typeOf#0 stringCallFix#3 checkExpression#2
   stackSites=0 stackLocals=0
-  local -133:9 callee: Node (const)
-  callee -131:12 checkExpression -> @checkExpression
-  local -128:11 promised: string (const)
-  callee -128:22 promiseMethodMessage -> @promiseMethodMessage
-  callee -126:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -122:9 isValueReceiver -> @isValueReceiver
-  callee -121:14 checkMethodCall -> @checkMethodCall
-  callee -118:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -118:35 neverNullMessage -> @neverNullMessage
-  local -113:11 receiver: Node (const)
-  callee -110:7 refuseSecretArguments -> @refuseSecretArguments
-  callee -106:12 checkBuiltinCall -> @checkBuiltinCall
-  local -102:11 computed: i32 (const)
-  callee -102:22 checkExpression -> @checkExpression
-  callee -98:9 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -97:14 checkReferenceCall -> @checkReferenceCall
-  callee -97:54 CheckContext.textOf -> @CheckContext.textOf
-  callee -95:12 CheckContext.errorType -> @CheckContext.errorType
-  local -90:9 local: Local | null (const)
-  callee -90:17 Scope.lookup -> @Scope.lookup
-  callee -88:25 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -88:43 Scope.typeOf -> @Scope.typeOf
-  local -87:11 held: i32 (const)
-  callee -87:18 checkExpression -> @checkExpression
-  callee -86:41 checkReferenceCall -> @checkReferenceCall
-  callee -83:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
-  callee -80:11 outerReference -> @outerReference
-  local -79:15 held: i32 (const)
-  callee -79:22 checkExpression -> @checkExpression
+  local -142:9 callee: Node (const)
+  callee -140:12 checkExpression -> @checkExpression
+  local -137:11 promised: string (const)
+  callee -137:22 promiseMethodMessage -> @promiseMethodMessage
+  callee -135:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -131:9 isValueReceiver -> @isValueReceiver
+  callee -130:14 checkMethodCall -> @checkMethodCall
+  callee -127:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -127:35 neverNullMessage -> @neverNullMessage
+  local -122:11 receiver: Node (const)
+  callee -119:7 refuseSecretArguments -> @refuseSecretArguments
+  callee -115:12 checkBuiltinCall -> @checkBuiltinCall
+  local -111:11 computed: i32 (const)
+  callee -111:22 checkExpression -> @checkExpression
+  callee -107:9 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -106:14 checkReferenceCall -> @checkReferenceCall
+  callee -106:54 CheckContext.textOf -> @CheckContext.textOf
+  callee -104:9 nullableReference -> @nullableReference
+  callee -103:14 refuseNullableCall -> @refuseNullableCall
+  callee -103:46 CheckContext.textOf -> @CheckContext.textOf
+  callee -101:12 CheckContext.errorType -> @CheckContext.errorType
+  local -96:9 local: Local | null (const)
+  callee -96:17 Scope.lookup -> @Scope.lookup
+  callee -94:25 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -94:43 Scope.typeOf -> @Scope.typeOf
+  local -93:11 held: i32 (const)
+  callee -93:18 checkExpression -> @checkExpression
+  callee -92:41 checkReferenceCall -> @checkReferenceCall
+  callee -90:25 nullableReference -> @nullableReference
+  callee -90:48 Scope.typeOf -> @Scope.typeOf
+  callee -89:12 refuseNullableCall -> @refuseNullableCall
+  callee -86:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
+  callee -83:11 outerReference -> @outerReference
+  local -82:15 held: i32 (const)
+  callee -82:22 checkExpression -> @checkExpression
+  callee -81:33 nullableReference -> @nullableReference
+  callee -80:18 refuseNullableCall -> @refuseNullableCall
   callee -78:45 checkReferenceCall -> @checkReferenceCall
   callee -76:7 refuseOnce -> @refuseOnce
   callee -76:31 outerFunctionMessage -> @outerFunctionMessage

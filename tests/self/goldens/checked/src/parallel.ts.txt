@@ -1519,7 +1519,7 @@ function arrowsNamingBefore(node: Node, name: string, at: i32): i32 -> @arrowsNa
   local +1:14 child: Node (const)
   callee +5:35 mentionsName -> @mentionsName
   callee +8:23 arrowsNamingBefore -> @arrowsNamingBefore
-function assignsName(node: Node, name: string): boolean -> @assignsName
+function assignsName(node: Node, name: string): boolean -> @assignsName [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: assignsName isAssignmentOperator nish_panic_index nish_str_eq unwrapParens

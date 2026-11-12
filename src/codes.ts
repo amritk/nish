@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 918
+export const RULE_COUNT: i32 = 923
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -411,6 +411,8 @@ const diagnosticRules = (): string[] => [
   "NL2389",
   "` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many",
   "NL2682",
+  "` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array",
+  "NL2762",
   "` that this exit leaves neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2440",
   "`: a decoder finds a union's tag before it knows which variant the object is, so every variant of a union writes its tag under the same key",
@@ -449,6 +451,8 @@ const diagnosticRules = (): string[] => [
   "NL2327",
   "` writes the argument `exposeWith` hands it, a channel out of `expose` its result type does not name: return what it computes instead",
   "NL2450",
+  "`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const`",
+  "NL2761",
   "`: only a value of a class or interface the program declares has fields an object spread copies one by one, so set each field by name",
   "NL2705",
   "` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself",
@@ -514,7 +518,7 @@ const diagnosticRules = (): string[] => [
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
   "NL4011",
   "`readStruct(p)` needs a contextual `declare class` type to copy into (annotate it, e.g. `const s: Stat = readStruct(p)`)",
-  "NL2759",
+  "NL2764",
   "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",
   "NL3043",
   "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)",
@@ -600,7 +604,7 @@ const diagnosticRules = (): string[] => [
   "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)",
   "NL2288",
   ": `readStruct` copies into the `declare class` its context names, so write `const s: Stat = readStruct(p)`",
-  "NL2758",
+  "NL2763",
   ".capabilities` is an object with an `allow` list, a `deny` list or both, each an array of capability names",
   "NL3032",
   "` returns a `Promise`, which wasm cannot wait for: await it in the page and call an export with the result",
@@ -631,6 +635,8 @@ const diagnosticRules = (): string[] => [
   "NL2165",
   "; a `declare function` binds the C symbol of its name in every package, so rename the defined function",
   "NL3040",
+  "` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const`",
+  "NL2759",
   "` takes one `i32`: the milliseconds `sleep` waits, or the descriptor `readable` and `writable` wait on",
   "NL2672",
   "`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear",
@@ -773,6 +779,8 @@ const diagnosticRules = (): string[] => [
   "NL2320",
   "` must be the name of a top-level function or an arrow written at the call, because `",
   "NL2339",
+  "` may be `null`: a nullable function reference is called only after a test such as `",
+  "NL2758",
   "` specifier names a module inside it, so no segment may be empty or begin with a `.`",
   "NL3016",
   "` under a type constructor instead of passing it on, so the chain has no end; name `",
@@ -1074,7 +1082,7 @@ const diagnosticRules = (): string[] => [
   "`integer` needs exactly two bounds, e.g. `integer<0, 255>`",
   "NL2378",
   "`readStruct(p)` copies into a `declare class` layout, and ",
-  "NL2760",
+  "NL2765",
   ", and a declared C function takes scalars and `CPtr` only",
   "NL2322",
   "; compare a signed value, or against a bound other than 0",
@@ -1306,6 +1314,8 @@ const diagnosticRules = (): string[] => [
   "NL1006",
   " (object layout is fixed at compile time)",
   "NL1007",
+  "` calls it: pass it once a test such as `",
+  "NL2760",
   "` in a constant requires boolean operands",
   "NL2069",
   "` is a builtin value and cannot be called",

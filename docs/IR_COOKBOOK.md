@@ -1524,6 +1524,160 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end fnref-field -->
 
+### A nullable function reference passed as an argument
+
+`Op | null` is the same `i32` tag, with `null` as tag 0, which no function
+has: `return null` returns `i32 0`, and `h !== null` is `icmp ne i32 %h, 0`.
+A reference passed for an inline function parameter is wrapped in an arrow
+that calls it, so `apply` is instantiated for the call, and that copy calls
+through `h`'s dispatcher, a `switch` over the functions `pick` can return,
+with no indirect call (docs/LANGUAGE.md, "Function references").
+
+<!-- cookbook:begin fnref-arg-nullable -->
+```ts
+// A nullable reference narrowed and passed for an inline function parameter.
+// `null` is tag 0, `h !== null` compares the tag with 0, and `apply(h, x)`
+// passes an arrow that calls `h`, so `apply` is instantiated for the call and
+// calls through the dispatcher of `h`'s place.
+type Op = (x: i32) => i32
+
+const double = (x: i32): i32 => x * 2
+const negate = (x: i32): i32 => 0 - x
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x)
+
+const pick = (k: i32): Op | null => {
+  if (k === 0) {
+    return null
+  }
+  return k === 1 ? double : negate
+}
+
+export const run = (k: i32, x: i32): i32 => {
+  const h = pick(k)
+  if (h !== null) {
+    return apply(h, x)
+  }
+  return -1
+}
+```
+
+```llvm
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
+
+define internal noundef i32 @double(i32 noundef %x) #0 {
+entry:
+  %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %x, i32 2)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
+}
+
+define internal noundef i32 @negate(i32 noundef %x) #0 {
+entry:
+  %0 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 0, i32 %x)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
+}
+
+define internal noundef i32 @pick(i32 noundef %k) #1 {
+entry:
+  %0 = icmp eq i32 %k, 0
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  ret i32 0
+
+if.end:
+  %1 = icmp eq i32 %k, 1
+  br i1 %1, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %2 = phi i32 [ 1, %cond.true ], [ 2, %cond.false ]
+  ret i32 %2
+}
+
+define noundef i32 @run(i32 noundef %k, i32 noundef %x) #0 {
+entry:
+  %h.addr = alloca i32, align 4
+  %0 = call i32 @pick(i32 %k)
+  store i32 %0, i32* %h.addr, align 4
+  %1 = load i32, i32* %h.addr, align 4
+  %2 = icmp ne i32 %1, 0
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = load i32, i32* %h.addr, align 4
+  %4 = call i32 @apply$fn.10.run$arrow0(i32 %x, i32 %3)
+  ret i32 %4
+
+if.end:
+  ret i32 -1
+}
+
+define internal noundef i32 @run$arrow0(i32 noundef %$a0, i32 noundef %h) #0 {
+entry:
+  %0 = call i32 @$ref.0.fr1.i32.i32.0(i32 %h, i32 %$a0)
+  ret i32 %0
+}
+
+define internal noundef i32 @apply$fn.10.run$arrow0(i32 noundef %x, i32 noundef %cap.0) #0 {
+entry:
+  %0 = call i32 @run$arrow0(i32 %x, i32 %cap.0)
+  ret i32 %0
+}
+
+define internal noundef i32 @$ref.0.fr1.i32.i32.0(i32 noundef %$t, i32 noundef %$a0) #0 {
+entry:
+  switch i32 %$t, label %sw.default [
+    i32 1, label %sw.case
+  ]
+
+sw.case:
+  %0 = tail call i32 @double(i32 %$a0)
+  ret i32 %0
+
+sw.default:
+  %1 = tail call i32 @negate(i32 %$a0)
+  ret i32 %1
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end fnref-arg-nullable -->
+
 ### Default and rest parameters, filled at the call
 
 A default and a rest parameter are both the **caller's** work

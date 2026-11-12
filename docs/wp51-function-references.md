@@ -146,10 +146,10 @@ that signature, named without calling it: `const h: (x: i32) => i32 = double;`.
 | `const ops: ((x: i32) => i32)[] = [inc, dec];` | refused | admitted: an `i32[]` of tags |
 | `return pick ? inc : dec;` with a function return type | refused | admitted |
 | `h(3)`, `this.f(a, b)`, `ops[i]` called with `x` | — | a call through the reference: `switch` over the signature's set (§2.3) |
-| `apply(h, 3)` where `apply` has a function-typed parameter | refused: `h` is not nameable | admitted: `apply` instantiates **once per set**, `$fn.ref.<set>`, its call through the parameter a `switch` |
+| `apply(h, 3)` where `apply` has a function-typed parameter | refused: `h` is not nameable | admitted: `apply` instantiates **once per set**, `$fn.ref.<set>`, its call through the parameter a `switch` (as shipped, once per call site: see §9 stage 2, "As shipped") |
 | `apply(double, 3)` | admitted, a direct-call instantiation | unchanged |
 | `h === double`, `h !== k` | refused | admitted: tag equality (§5.1) |
-| `h: ((x: i32) => i32) \| null`, `h === null` | refused: `T \| null` takes a class, interface, array or string, never a scalar (`reject_nullable_scalar`) | admitted by a **new rule**, an exception to `reject_nullable_scalar` for function types only: tag `0` is `null` (§2.3), so zero-filled storage reads as `null` as it does for every other `U \| null` |
+| `h: ((x: i32) => i32) \| null`, `h === null` | refused: `T \| null` takes a class, interface, array or string, never a scalar (`reject_nullable_scalar`) | (see §9 stage 2, "As shipped") admitted by a **new rule**, an exception to `reject_nullable_scalar` for function types only: tag `0` is `null` (§2.3), so zero-filled storage reads as `null` as it does for every other `U \| null` |
 | `new Array<(x: i32) => i32>(n)`, module storage of a function type | — | refused, as for an enum with no zero member (NL2520; NL2687 in `src/module-storage.ts:306`): zero is no member's tag. Module storage refuses `\| null` already (NL2686), so it holds no reference at all. `new Array<((x: i32) => i32) \| null>(n)` is admitted. A field is covered by definite assignment (`LANGUAGE.md:2764`) |
 
 ### 2.2 What stays refused
@@ -193,8 +193,8 @@ gets one set. Stage 1's places are, exactly:
 | --- | --- | --- |
 | a local or a parameter | declaration (a generic body's, once for every instantiation) | every caller's argument for one parameter |
 | a field | class field declaration | every object of the class, and of every subclass that inherits the field |
-| an array element | element type `S[]` (stage 2: `(S \| null)[]`) | every array of that element type in the program |
-| a `Map` value (stage 2) | value type | every `Map` with that value type |
+| an array element | element type `S[]`; `(S \| null)[]` shares `S[]`'s set | every array of that element type in the program |
+| a `Map` value | value type, the same set as the arrays of that type (stage 2 shipped it so: `m.get(k)` reads it, `m.set` stores through the map's own value array) | every `Map` and every array with that value type |
 | a return | function declaration | every call of that function |
 
 Per allocation — one set for each `new Array`, each literal, each object —
@@ -218,7 +218,7 @@ written:
 | `a = e`, a declaration initializer, a compound `??=` | the local's or parameter's |
 | `o.h = e`, a field initializer, a constructor argument stored to a field | the field declaration's, through the constructor parameter's |
 | `a[i] = e`, `a.push(e)`, `a.unshift(e)`, `a.fill(e)`, `a.splice(i, n, e…)`, an array literal `[e, …]` | the element type's |
-| `m.set(k, e)` (stage 2) | the `Map` value type's |
+| `m.set(k, e)` | the element type's (a `Map`'s values are an array of it) |
 | `for (const h of a)` | the loop variable's, from the element type's |
 | an argument for parameter `a` | the parameter's |
 | `return e`, a concise arrow body | the function's return place |
@@ -900,14 +900,23 @@ reference never crosses the boundary in either direction:
     handed out, so the field is refused in every class of such a build, not
     only the reachable ones.
 
+  **As shipped**, the export rule reads only the root package: a function
+  of a dependency package is skipped even when it is exported
+  (`src/fnrefs.ts`, `rootPackage`). That narrows the refusal on purpose: the
+  C ABI's foreign surface is the root package's alone
+  (`src/interop-abi.ts`, "Every function of the *root package* that is an
+  external symbol"), so a dependency's exported function is no external
+  symbol and no host can hand it a tag. A `declare function` is checked in
+  every package.
+
   In a closed-world `--link` build an exported function is not host-visible,
   and an `export` between Nish modules is never external: neither is
   refused. **A compile-time function parameter is not in the refusal's
   scope, in any build.** `sortWith` (`std/sort.ts:162`) and `expose`
   (`std/secret.ts:77`) take function-typed parameters; such a parameter is
   bound when its function is instantiated (NL2587's wording), to a named
-  callee or, from stage 2, to a set's tag in the `$fn.ref.<set>`
-  instantiation, and a function holding one has no single body a host could
+  callee or, from stage 2, to the arrow a reference argument is rewritten
+  into, one instantiation per call site, and a function holding one has no single body a host could
   call (§2.2). Every instantiation is made at a call the compiler checked,
   so its callers are in the program whatever the build mode. What is
   refused is a reference a host could hold: a return, a field, or a
@@ -1006,8 +1015,8 @@ promises, module storage, classes or a parameter's own storage, not functions
 | --- | --- | --- | --- |
 | `src/codes.ts:274` (NL2336, `tests/wordings/nl2336_fnarg_arrow_returned`), `docs/LANGUAGE.md:3392`, `src/generics.ts:2398` | an arrow outside a function-typed argument is refused: "a function is never a value" | **rewritten in stage 1** | NL2336 now reads `an arrow in value position is not yet a function reference: declare it as a top-level function and name it` (`reject_fnarg_arrow_value`), and a capturing arrow is NL2731, `` this arrow captures `k`: a function reference names a top-level function and carries no environment `` (`reject_arrow_as_value`, `reject_fnref_capture`); `docs/LANGUAGE.md` → "Function parameters" and "Function references". Stage 3 still lifts a capture-free arrow |
 | `src/codes.ts:480` (NL2334, `tests/wordings/nl2334_fnarg_parameter_as_value`), `src/expressions.ts:984`–`993`, `docs/LANGUAGE.md:3337` | a function parameter can only be called or passed on | **rewritten in stage 1** | a parameter typed through an alias is an ordinary reference parameter, of a function, a method or a constructor, and may be stored and returned (`fnref_stores`); a parameter whose function type is written inline stays a compile-time function parameter, and NL2334 names it: `` `f` is a function parameter and can only be called or passed on as a function argument: it names the callee each call is compiled for, not a value, so it cannot be stored, returned, compared or put in an array ``. `docs/LANGUAGE.md` → "Function parameters"; `docs/guide/language/functions.md`. No `$fn.ref.<set>` instantiation was needed for this |
-| `src/codes.ts:150`–`151` (NL2587, `tests/wordings/nl2587_fnarg_capture_function_param`), `docs/LANGUAGE.md:3358`–`3360` (`reject_fnarg_capture_function_param`) | an arrow argument may not name a function parameter of the function it is written in, which "is bound at instantiation and is no value" | intact | a function-typed parameter is still bound at instantiation, to a named callee or (stage 2) to a set's tag in `$fn.ref.<set>`, and the template is checked once from its source, so an arrow that names it is refused in every instantiation, `$fn.ref.<set>` included: one body is accepted or refused the same way whatever its argument. An arrow may capture a reference-typed *local* or field read: that is an `i32` tag, captured by copy like any `const` |
-| `src/generics.ts:2008`–`2010` (now 2048) | an argument for a function-typed parameter must be a name or an arrow: "a function is never a value computed at run time" | **broken** in stage 2 | stage 1 keeps the rule and refuses a reference handed to an inline function parameter with NL2734 (`tests/wordings/nl2734_fnref_to_function_parameter`); a reference-typed expression is admitted and selects the `$fn.ref.<set>` instantiation in stage 2. Typing the parameter through an alias already takes a reference in stage 1 |
+| `src/codes.ts:150`–`151` (NL2587, `tests/wordings/nl2587_fnarg_capture_function_param`), `docs/LANGUAGE.md:3358`–`3360` (`reject_fnarg_capture_function_param`) | an arrow argument may not name a function parameter of the function it is written in, which "is bound at instantiation and is no value" | intact | a function-typed parameter is still bound at instantiation, to a named callee or (stage 2) to the arrow a reference argument becomes, `($a0) => h($a0)` capturing the local `h`, one instantiation per call site; the template is checked once from its source, so an arrow that names it is refused in every instantiation: one body is accepted or refused the same way whatever its argument. An arrow may capture a reference-typed *local* or parameter: that is an `i32` tag, captured by copy like any `const` (`fnref_arg_capture_param`); a field or element passed directly is refused (NL2759) because the arrow would read it again at each call |
+| `src/generics.ts:2008`–`2010` (now 2048) | an argument for a function-typed parameter must be a name or an arrow: "a function is never a value computed at run time" | **rewritten in stage 2** | stage 1 refused a reference handed to an inline function parameter with NL2734; stage 2 admits a reference-typed local by passing an arrow that captures it and calls it, one instantiation per call site (`tests/cases/fnref_arg`); a field or element is refused (NL2759: read it into a `const`), and a nullable local until it is narrowed (NL2760). NL2734 now covers only the runners that check their body, `parallelMap`, `parallelMapInto`, `parallelReduce`, `spawn`, `expose`, `exposeWith`, `region` and `enterWith` (`tests/wordings/nl2734_fnref_to_function_parameter`, `tests/cases/reject_fnarg_ref_*`) |
 | `src/codes.ts:494` (NL2337, `tests/wordings/nl2337_fnarg_function_type_element`), `docs/LANGUAGE.md:3409`, `src/annotations.ts:224` | a function type annotates only a parameter | **rewritten in stage 1** | NL2337 is retired (`tests/wordings/unreachable.txt`): a function type in a field, local, element or return is a reference type, an `i32` tag (`fnref_array`, `fnref_field`). An inline function type on a method or constructor parameter, or on a function type's own parameter, is refused: `` `f` cannot have a function type here: a function type may only annotate a parameter of a top-level function, which is monomorphised for each function it is given, and this is a parameter of a method or a constructor `` (`reject_fnarg_method`, `reject_fnarg_nested`) |
 | `src/nodes.ts:129` | an `N_ARROW` is never a value | intact until stage 3 | stage 3's lifted arrow is a reference, not an `N_ARROW` value |
 | `docs/LANGUAGE.md:12476`, `src/validator.ts:146` | `Function` as a type name is forbidden | intact | `Function` stays refused (§2.2) |
@@ -1016,7 +1025,7 @@ promises, module storage, classes or a parameter's own storage, not functions
 | `src/attributes.ts:13`–`17`, 830, 4967, 5677 | the fact collector records direct callees; an unknown callee is `EFFECT_ANY` | weakened | none if §2.4's record holds: the dispatcher is an ordinary checked function, and its arm calls are direct calls recorded like any other; §4.2 is the evidence |
 | `src/attributes.ts:27`, `src/expressions.ts:4`–`10`, `src/emit.ts:24`, `src/emit-classes.ts:19` | "a table needs function values; D2 took a central `switch`" | weakened | a table becomes possible after the freeze (§5.4); the `switch` stays valid |
 | `src/emit-async.ts:27` | async state machines dispatch by `switch` | intact | — |
-| `src/generics.ts:1693`, 1740 | a function-typed parameter instantiates per callee | intact | a reference argument adds one `$fn.ref.<set>` instantiation per set |
+| `src/generics.ts:1693`, 1740 | a function-typed parameter instantiates per callee | intact | a reference argument adds one instantiation per call site, of the arrow it is rewritten into (stage 2; the plan's one per set, `$fn.ref.<set>`, was not built) |
 | `src/members.ts:883` | `Map.forEach` waits for function values | weakened | `forEach` with a capture-free callback could ship; with a closure it still waits |
 | `src/portability-records.ts:904`, 1093 | a call through a function value is `EFFECT_ANY` | weakened | a reference call's effect is the join of its set's effects, not `EFFECT_ANY` |
 | `src/region-rules.ts:206` (`noFactsMessage`, used at 810 and 987) | a callee without facts is refused inside a region | intact, if | the reference call is recorded in `nodeCallees` as its dispatcher, which has facts (§2.4); otherwise every reference call in a region would be refused |
@@ -1036,10 +1045,10 @@ promises, module storage, classes or a parameter's own storage, not functions
 | --- | --- | --- | --- |
 | `docs/LANGUAGE.md:3291`–`3292` | "There is no function pointer, no indirect call and no function value anywhere; the parameter has no LLVM parameter at all" | weakened | true of a parameter bound to a named callee; a parameter holding a reference has an `i32` parameter, and its calls go through the dispatcher, still no function pointer |
 | `docs/LANGUAGE.md:2305`–`2314` | the `--link` closed-world rule: every call to an exported function is one the compiler sees, which `ARCHITECTURE.md`'s call-site ranges row makes sound | intact, if | it rests on that row's premise, so it holds while every dispatcher's arm calls are recorded (§2.4); §5.2 keeps references out of every host-visible signature, so no host can hand one in |
-| `docs/LANGUAGE.md:3398`–`3402` (`reject_fnarg_not_name`) | a function argument must be the name of a top-level function or an arrow; a local, a member or any other expression is refused | **broken** in stage 2 | a reference-typed local, member or element is admitted as the argument and selects the `$fn.ref.<set>` instantiation; `reject_fnarg_not_name` keeps an expression of any other type (§9) |
+| `docs/LANGUAGE.md:3398`–`3402` (`reject_fnarg_not_name`) | a function argument must be the name of a top-level function or an arrow; a local, a member or any other expression is refused | **broken** in stage 2 | a reference-typed local is admitted as the argument (`fnref_arg`); a member or element argument is refused (NL2759, `reject_fnref_arg_field`: read it into a `const`); `reject_fnarg_not_name` keeps a local of any other type and names it (§9) |
 | `docs/LANGUAGE.md:12606` (`reject_fnarg_store`, `reject_fnarg_return`) | the summary row: a function parameter used as a value is refused | **rewritten in stage 1** | the summary row keeps the refusal for a parameter whose function type is written inline; an alias-typed parameter is a reference and is not in the row |
 | `docs/LANGUAGE.md:12609` (`reject_fnarg_arrow_value`) | an arrow anywhere but as a function argument is refused | intact until stage 3 | stage 3 admits a capture-free arrow in value position by lifting it |
-| `docs/LANGUAGE.md:12610` | a function type anywhere but on a parameter of a top-level function is refused | **rewritten in stage 1** | the summary row now names only an inline function type on a method, constructor or function-type parameter, and a new row lists the reference codes NL2725–NL2739 |
+| `docs/LANGUAGE.md:12610` | a function type anywhere but on a parameter of a top-level function is refused | **rewritten in stage 1** | the summary row now names only an inline function type on a method, constructor or function-type parameter, and a new row lists the reference codes NL2725–NL2739 (stage 2 adds NL2758–NL2762) |
 | `docs/LANGUAGE.md:1585`–`1590` (`reject_arrow_as_value`) | "A function is not a value": `const alias = double` is an unknown identifier; a function in a field, a local or an array does not exist | **rewritten in stage 1** | the bullet is "A capture-free top-level function is a value", citing `fnref_field`, `fnref_array`, `fnref_eq` and `fnref_stores`; `reject_arrow_as_value` keeps only a capturing arrow (NL2731). The rules are the new "Function references" section |
 | `docs/AI.md:178`, 421, 584, 827 | a stored or returned callback is refused; write a `switch` | **rewritten in stage 1** (178, 584), weakened (421, 827) | the table row is now "a closure stored or returned" with the NL2731 and NL2336 wordings; the "A function is not a value" bullet became "A capture-free top-level function is a value", and AI.md has a "Function references" section. 421 and 827 do not lean on it and were left |
 | `docs/guide/language/functions.md:195` | "A function is not a value in Nish: you cannot store one" | **rewritten in stage 1** | the paragraph now points to `docs/guide/language/function-references.md`, the new page (route `/function-references`) |
@@ -1249,7 +1258,11 @@ program, do.
    whether a `hidden` member keeps its call-site entry facts. Any function
    reachable from a host-visible signature taking a reference is refused
    (§5.2).
-2. **Stage 2 — references as arguments, `| null` and `Map` values.** A
+2. **Stage 2 — references as arguments, `| null` and `Map` values.** *As
+   shipped: a reference argument instantiates the callee once per call site,
+   with an arrow that captures the local by value, not once per set; a field
+   or element argument is refused (NL2759), so it is read once as in
+   JavaScript; `Map` values share the set of the arrays of their type.* A
    function-typed parameter accepts a reference, instantiating
    `$fn.ref.<set>` once per set; `S | null` with tag `0`, the exception to
    `reject_nullable_scalar` (§2.1), and zero-filled `new Array<S | null>(n)`;
@@ -1257,8 +1270,8 @@ program, do.
    it in the same stage, and `fnref_place_set` gains a variant with the
    reference passed as an argument, through `| null` and through a `Map`.
    `reject_fnarg_not_name` flips (`docs/LANGUAGE.md:3398`–`3402`): a
-   reference-typed local, member or element is admitted as an argument, and
-   the case is rewritten to an expression of another type, which stays
+   reference-typed local is admitted as an argument (as shipped, a member or
+   element is refused, NL2759), and the case is rewritten to an expression of another type, which stays
    refused. **What `functionArgs` holds.** Every reader of
    `Instantiation.functionArgs` assumes one named callee and treats any other
    length as "no callee": `src/region-rules.ts:981` and `src/secret.ts:2716`
@@ -1266,7 +1279,9 @@ program, do.
    `2477` no flow; `src/parallel.ts:1192` and `src/inline-arrays.ts:757` walk
    whatever it holds. An empty list in a `$fn.ref.<set>` instantiation would
    therefore let a region, a parallel body or an `expose` through unchecked.
-   So the reference parameter's slot holds the set's dispatcher, a checked
+   *(Superseded by "As shipped" below: the slot holds a per-call-site
+   arrow, not the set's dispatcher.)* So the reference parameter's slot
+   holds the set's dispatcher, a checked
    function with facts (§2.3): every reader then runs on it, and its facts,
    captures and calls are its arms' join. One reader looks past the callee's
    facts to its parameter list, `src/secret.ts:2094`'s `paramNames[1]`, and
@@ -1276,6 +1291,24 @@ program, do.
    reference argument to `expose`, `exposeWith`, `parallelMapInto` and
    `parallelReduce`, each with a negative test, and admits it everywhere
    else.
+   **As shipped.** A reference argument is passed as an arrow that calls it,
+   so the callee is instantiated per call site rather than per set, and
+   `functionArgs` holds that arrow, a checked function every reader already
+   handles; the refusal covers `parallelMap`, a scope's `spawn`, `region` and
+   `enterWith` as well (`tests/cases/reject_fnarg_ref_*`). A call through
+   `F | null` needs a null test first (NL2758). A `Map` value is the element
+   place of the `Map`'s value array, so no new place kind was needed; a call
+   through what `Map.get` returns dispatches over the functions stored into
+   that element place, by `set` or by any array or `Map` of the same value
+   type, which is sound and less precise than one set per map: when those
+   stored functions include one that keeps `p`, that call is a mixed set, refused by NL2736
+   (`reject_fnref_place_set_map`), where an array of the same functions
+   compiles (`fnref_place_set_nullable`, `fnref_place_set_arg`). A function-type `Map` key stays
+   refused (`reject_fnref_map_key`), and NL2738 is retired. A `Result` arm
+   is not a place, so a reference directly in one (`Result<S, E>`,
+   `Result<S | null, E>`, `Result<T, S>`) is refused (NL2762,
+   `reject_fnref_result`); `Result<S[], E>` holds the element place and
+   compiles (`fnref_result_array`).
 3. **Stage 3 — capture-free arrows in value position**, lifted to a generated
    top-level function and then a reference. Capturing arrows stay refused.
 

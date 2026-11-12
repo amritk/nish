@@ -1,0 +1,1 @@
+`b.op` is read again at each call `apply` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const`

@@ -1173,31 +1173,34 @@ function Emitter.enterLocation(this: Emitter, node: Node): string -> @Emitter.en
 function Emitter.emitRawExpression(this: Emitter, expr: Node): string -> @Emitter.emitRawExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
-  calls: Emitter.emitBinaryExpression Emitter.emitCall Emitter.emitExpression Emitter.emitIdentifier Emitter.emitMember Emitter.guardedRead Emitter.stringConstant Emitter.typeOf TypeTable.isHostHandle emitArrayLiteral emitConditional emitElementAccess emitNew emitObjectLiteral emitTemplate emitUnary internalErrorFor nish_exit nish_panic_index nish_str_concat nodeName numericConstant
-  pointer this: size=376 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.typeOf#0 Emitter.stringConstant#0 emitTemplate#0 Emitter.emitIdentifier#0 emitUnary#0 Emitter.emitBinaryExpression#0 emitConditional#0 Emitter.emitCall#0 emitNew#0 Emitter.guardedRead#0 Emitter.emitMember#0 Emitter.guardedRead#0 emitElementAccess#0 emitArrayLiteral#0 emitObjectLiteral#0
-  pointer expr: size=40 writesThrough=true captured=true passedTo=Emitter.typeOf#1 Emitter.typeOf#1 emitTemplate#1 Emitter.emitIdentifier#1 emitUnary#1 Emitter.emitBinaryExpression#1 emitConditional#1 Emitter.emitCall#1 emitNew#1 Emitter.guardedRead#1 Emitter.emitMember#1 Emitter.guardedRead#1 emitElementAccess#1 emitArrayLiteral#1 emitObjectLiteral#1
+  calls: Emitter.emitBinaryExpression Emitter.emitCall Emitter.emitExpression Emitter.emitIdentifier Emitter.emitMember Emitter.guardedRead Emitter.stringConstant Emitter.typeOf TypeTable.isFnRef TypeTable.isHostHandle TypeTable.stripNull emitArrayLiteral emitConditional emitElementAccess emitNew emitObjectLiteral emitTemplate emitUnary internalErrorFor nish_exit nish_panic_index nish_str_concat nodeName numericConstant
+  pointer this: size=376 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.typeOf#0 Emitter.typeOf#0 Emitter.stringConstant#0 emitTemplate#0 Emitter.emitIdentifier#0 emitUnary#0 Emitter.emitBinaryExpression#0 emitConditional#0 Emitter.emitCall#0 emitNew#0 Emitter.guardedRead#0 Emitter.emitMember#0 Emitter.guardedRead#0 emitElementAccess#0 emitArrayLiteral#0 emitObjectLiteral#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=Emitter.typeOf#1 Emitter.typeOf#1 Emitter.typeOf#1 emitTemplate#1 Emitter.emitIdentifier#1 emitUnary#1 Emitter.emitBinaryExpression#1 emitConditional#1 Emitter.emitCall#1 emitNew#1 Emitter.guardedRead#1 Emitter.emitMember#1 Emitter.guardedRead#1 emitElementAccess#1 emitArrayLiteral#1 emitObjectLiteral#1
   stackSites=0 stackLocals=0
   callee +0:16 Emitter.emitExpression -> @Emitter.emitExpression
   callee +3:16 numericConstant -> @numericConstant
   callee +5:11 TypeTable.isHostHandle -> @TypeTable.isHostHandle
   callee +5:35 Emitter.typeOf -> @Emitter.typeOf
   callee +5:64 Emitter.typeOf -> @Emitter.typeOf
-  callee +14:16 Emitter.stringConstant -> @Emitter.stringConstant
-  callee +16:16 emitTemplate -> @emitTemplate
-  callee +18:16 Emitter.emitIdentifier -> @Emitter.emitIdentifier
-  callee +22:16 emitUnary -> @emitUnary
-  callee +24:16 Emitter.emitBinaryExpression -> @Emitter.emitBinaryExpression
-  callee +26:16 emitConditional -> @emitConditional
-  callee +28:16 Emitter.emitCall -> @Emitter.emitCall
-  callee +30:16 emitNew -> @emitNew
-  callee +32:16 Emitter.guardedRead -> @Emitter.guardedRead
-  callee +32:39 Emitter.emitMember -> @Emitter.emitMember
+  callee +14:16 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +14:35 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +14:56 Emitter.typeOf -> @Emitter.typeOf
+  callee +16:16 Emitter.stringConstant -> @Emitter.stringConstant
+  callee +18:16 emitTemplate -> @emitTemplate
+  callee +20:16 Emitter.emitIdentifier -> @Emitter.emitIdentifier
+  callee +24:16 emitUnary -> @emitUnary
+  callee +26:16 Emitter.emitBinaryExpression -> @Emitter.emitBinaryExpression
+  callee +28:16 emitConditional -> @emitConditional
+  callee +30:16 Emitter.emitCall -> @Emitter.emitCall
+  callee +32:16 emitNew -> @emitNew
   callee +34:16 Emitter.guardedRead -> @Emitter.guardedRead
-  callee +34:39 emitElementAccess -> @emitElementAccess
-  callee +36:16 emitArrayLiteral -> @emitArrayLiteral
-  callee +38:16 emitObjectLiteral -> @emitObjectLiteral
-  callee +41:11 internalErrorFor -> @internalErrorFor
-  callee +41:62 nodeName -> @nodeName
+  callee +34:39 Emitter.emitMember -> @Emitter.emitMember
+  callee +36:16 Emitter.guardedRead -> @Emitter.guardedRead
+  callee +36:39 emitElementAccess -> @emitElementAccess
+  callee +38:16 emitArrayLiteral -> @emitArrayLiteral
+  callee +40:16 emitObjectLiteral -> @emitObjectLiteral
+  callee +43:11 internalErrorFor -> @internalErrorFor
+  callee +43:62 nodeName -> @nodeName
 function Emitter.emitIdentifier(this: Emitter, expr: Node): string -> @Emitter.emitIdentifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via storageDeclaration

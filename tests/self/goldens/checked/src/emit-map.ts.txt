@@ -784,32 +784,33 @@ function emitNullableCoalesce(emitter: Emitter, expr: Node): string -> @emitNull
   pointer expr: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
-  local +1:9 ty: string (const)
-  callee +1:14 Emitter.llvm -> @Emitter.llvm
-  callee +1:27 intrinsicType -> @intrinsicType
-  local +2:9 value: string (const)
-  callee +2:17 Emitter.emitExpression -> @Emitter.emitExpression
-  local +3:9 present: string (const)
-  callee +3:19 isSet -> @isSet
-  callee +4:7 isPlainOperand -> @isPlainOperand
-  local +5:11 fallback: string (const)
-  callee +5:22 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +6:12 IRFunction.emitValue -> @IRFunction.emitValue
-  local +8:9 valueEdge: string (const)
-  callee +8:21 IRFunction.currentBlock -> @IRFunction.currentBlock
-  local +9:9 missing: IRBlock (const)
-  callee +9:19 IRFunction.newBlock -> @IRFunction.newBlock
-  local +10:9 done: IRBlock (const)
-  callee +10:16 IRFunction.newBlock -> @IRFunction.newBlock
-  callee +11:3 IRFunction.emit -> @IRFunction.emit
-  callee +12:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +13:9 fallback: string (const)
-  callee +13:20 Emitter.emitExpression -> @Emitter.emitExpression
-  local +14:9 missingEdge: string (const)
-  callee +14:23 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee +15:3 IRFunction.emit -> @IRFunction.emit
-  callee +16:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +17:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local +1:9 type: i32 (const)
+  callee +1:16 intrinsicType -> @intrinsicType
+  local +2:9 ty: string (const)
+  callee +2:14 Emitter.llvm -> @Emitter.llvm
+  local +3:9 value: string (const)
+  callee +3:17 Emitter.emitExpression -> @Emitter.emitExpression
+  local +4:9 present: string (const)
+  callee +4:19 isSet -> @isSet
+  callee +5:7 isPlainOperand -> @isPlainOperand
+  local +6:11 fallback: string (const)
+  callee +6:22 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +7:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +9:9 valueEdge: string (const)
+  callee +9:21 IRFunction.currentBlock -> @IRFunction.currentBlock
+  local +10:9 missing: IRBlock (const)
+  callee +10:19 IRFunction.newBlock -> @IRFunction.newBlock
+  local +11:9 done: IRBlock (const)
+  callee +11:16 IRFunction.newBlock -> @IRFunction.newBlock
+  callee +12:3 IRFunction.emit -> @IRFunction.emit
+  callee +13:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +14:9 fallback: string (const)
+  callee +14:20 Emitter.emitExpression -> @Emitter.emitExpression
+  local +15:9 missingEdge: string (const)
+  callee +15:23 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee +16:3 IRFunction.emit -> @IRFunction.emit
+  callee +17:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +18:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitChainCoalesce(emitter: Emitter, expr: Node): string -> @emitChainCoalesce
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -817,11 +818,12 @@ function emitChainCoalesce(emitter: Emitter, expr: Node): string -> @emitChainCo
   pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.emitExpression#0 Emitter.typeOf#0 isSet#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
   stackSites=0 stackLocals=0
-  local -5:9 fn: IRFunction (const)
-  local -4:9 chain: Node (const)
+  local -6:9 fn: IRFunction (const)
+  local -5:9 chain: Node (const)
+  local -4:9 type: i32 (const)
+  callee -4:16 intrinsicType -> @intrinsicType
   local -3:9 ty: string (const)
   callee -3:14 Emitter.llvm -> @Emitter.llvm
-  callee -3:27 intrinsicType -> @intrinsicType
   local -2:9 missing: IRBlock (const)
   callee -2:19 IRFunction.newBlock -> @IRFunction.newBlock
   local -1:9 done: IRBlock (const)
@@ -874,13 +876,18 @@ function emitChainTest(emitter: Emitter, receiver: Node, value: string): void ->
   callee -3:16 IRFunction.newBlock -> @IRFunction.newBlock
   callee -2:3 IRFunction.emit -> @IRFunction.emit
   callee -1:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-function isSet(emitter: Emitter, ty: string, value: string): string -> @isSet
+function isSet(emitter: Emitter, type: i32, value: string): string -> @isSet
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
-  calls: IRFunction.emitValue nish_str_concat
-  pointer emitter: size=376 writesThrough=false captured=false
+  escaping: type
+  calls: Emitter.llvm IRFunction.emitValue TypeTable.isFnRef TypeTable.stripNull nish_str_concat
+  pointer emitter: size=376 writesThrough=false captured=false passedTo=Emitter.llvm#0
   stackSites=0 stackLocals=0
-  callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
+  local +0:9 empty: string (const)
+  callee +0:17 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +0:39 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +1:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +1:42 Emitter.llvm -> @Emitter.llvm
 function isPlainOperand(emitter: Emitter, expr: Node): boolean -> @isPlainOperand
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index

@@ -156,9 +156,11 @@ function DebugInfo.typeRef(this: DebugInfo, type: i32): string -> @DebugInfo.typ
   sharedWrite: via DebugInfo.typeRef
   escaping: type
   calls: CheckedProgram.enumNamed CheckedProgram.struct DebugInfo.arrayHeader DebugInfo.composite DebugInfo.enumeration DebugInfo.foreignPointer DebugInfo.pointerTo DebugInfo.referenceEnumeration DebugInfo.resultComposite DebugInfo.setTypeRef DebugInfo.typeRef DebugInfo.unionComposite IRModule.addMetadata StringMap.get TypeTable.isArray TypeTable.isEnum TypeTable.isEnumMemberType TypeTable.isFnRef TypeTable.isHostHandle TypeTable.isMask TypeTable.isNullable TypeTable.isRanged TypeTable.isRegion TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.isVector TypeTable.laneCount TypeTable.mangle TypeTable.nameOf TypeTable.refOf TypeTable.typeName basicType internalErrorFor nish_exit nish_panic_index nish_str_concat nish_str_from_i32 quote resultLayout
-  pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.foreignPointer#0 DebugInfo.pointerTo#0 DebugInfo.pointerTo#0 DebugInfo.arrayHeader#0 DebugInfo.pointerTo#0 DebugInfo.composite#0 DebugInfo.enumeration#0 DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.pointerTo#0 DebugInfo.resultComposite#0 DebugInfo.pointerTo#0 DebugInfo.unionComposite#0 DebugInfo.referenceEnumeration#0 DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.setTypeRef#0
+  pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.foreignPointer#0 DebugInfo.pointerTo#0 DebugInfo.pointerTo#0 DebugInfo.arrayHeader#0 DebugInfo.pointerTo#0 DebugInfo.composite#0 DebugInfo.enumeration#0 DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.pointerTo#0 DebugInfo.resultComposite#0 DebugInfo.pointerTo#0 DebugInfo.unionComposite#0 DebugInfo.referenceEnumeration#0 DebugInfo.referenceEnumeration#0 DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.setTypeRef#0
   stackSites=0 stackLocals=0
   callee +0:9 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +0:41 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +0:60 TypeTable.refOf -> @TypeTable.refOf
   callee +1:14 DebugInfo.typeRef -> @DebugInfo.typeRef
   callee +1:27 TypeTable.refOf -> @TypeTable.refOf
   callee +5:9 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
@@ -214,29 +216,32 @@ function DebugInfo.typeRef(this: DebugInfo, type: i32): string -> @DebugInfo.typ
   callee +67:16 TypeTable.isUnion -> @TypeTable.isUnion
   callee +68:13 DebugInfo.pointerTo -> @DebugInfo.pointerTo
   callee +68:28 DebugInfo.unionComposite -> @DebugInfo.unionComposite
-  callee +69:16 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +72:13 DebugInfo.referenceEnumeration -> @DebugInfo.referenceEnumeration
-  callee +73:16 TypeTable.isVector -> @TypeTable.isVector
-  local +76:13 range: string (const)
-  callee +76:21 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +76:67 TypeTable.laneCount -> @TypeTable.laneCount
-  local +77:13 elements: string (const)
-  callee +77:24 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +78:13 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +79:63 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee +79:76 TypeTable.refOf -> @TypeTable.refOf
-  callee +81:16 TypeTable.isMask -> @TypeTable.isMask
-  local +83:13 lanes: i32 (const)
-  callee +83:21 TypeTable.laneCount -> @TypeTable.laneCount
-  local +84:13 range: string (const)
-  callee +84:21 IRModule.addMetadata -> @IRModule.addMetadata
-  local +85:13 elements: string (const)
-  callee +85:24 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +86:13 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +87:63 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee +90:13 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +90:37 basicType -> @basicType
-  callee +92:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
+  callee +69:16 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +71:13 DebugInfo.referenceEnumeration -> @DebugInfo.referenceEnumeration
+  callee +71:39 TypeTable.refOf -> @TypeTable.refOf
+  callee +72:16 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +75:13 DebugInfo.referenceEnumeration -> @DebugInfo.referenceEnumeration
+  callee +76:16 TypeTable.isVector -> @TypeTable.isVector
+  local +79:13 range: string (const)
+  callee +79:21 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +79:67 TypeTable.laneCount -> @TypeTable.laneCount
+  local +80:13 elements: string (const)
+  callee +80:24 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +81:13 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +82:63 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee +82:76 TypeTable.refOf -> @TypeTable.refOf
+  callee +84:16 TypeTable.isMask -> @TypeTable.isMask
+  local +86:13 lanes: i32 (const)
+  callee +86:21 TypeTable.laneCount -> @TypeTable.laneCount
+  local +87:13 range: string (const)
+  callee +87:21 IRModule.addMetadata -> @IRModule.addMetadata
+  local +88:13 elements: string (const)
+  callee +88:24 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +89:13 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +90:63 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee +93:13 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +93:37 basicType -> @basicType
+  callee +95:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
 function DebugInfo.byValue(this: DebugInfo, info: StructInfo): string -> @DebugInfo.byValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DebugInfo.typeRef
@@ -342,25 +347,26 @@ function DebugInfo.enumeration(this: DebugInfo, info: EnumInfo): string -> @Debu
   callee +13:63 quote -> @quote
   callee +13:105 DebugInfo.lineOf -> @DebugInfo.lineOf
   callee +13:199 DebugInfo.typeRef -> @DebugInfo.typeRef
-function DebugInfo.referenceEnumeration(this: DebugInfo, type: i32): string -> @DebugInfo.referenceEnumeration [exported method]
+function DebugInfo.referenceEnumeration(this: DebugInfo, type: i32, named: i32): string -> @DebugInfo.referenceEnumeration [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.addMetadata
-  escaping: type
+  escaping: named type
   calls: DebugInfo.typeRef IRModule.addMetadata TypeTable.refOf TypeTable.typeName nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 quote
   pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.typeRef#0
   stackSites=1 stackLocals=1
   local +0:11 names: string[] (const)
   callee +0:43 TypeTable.refOf -> @TypeTable.refOf
   local +1:11 enumerators: string[] (const)
-  local +2:9 i: i32 (let)
-  callee +4:24 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +4:71 quote -> @quote
-  local +7:11 elements: string (const)
-  callee +7:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +8:12 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +9:63 quote -> @quote
-  callee +9:69 TypeTable.typeName -> @TypeTable.typeName
-  callee +9:174 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee +3:24 IRModule.addMetadata -> @IRModule.addMetadata
+  local +5:9 i: i32 (let)
+  callee +7:24 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +7:71 quote -> @quote
+  local +10:11 elements: string (const)
+  callee +10:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +11:12 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +12:63 quote -> @quote
+  callee +12:69 TypeTable.typeName -> @TypeTable.typeName
+  callee +12:175 DebugInfo.typeRef -> @DebugInfo.typeRef
 function DebugInfo.arraySlice(this: DebugInfo, elem: i32, name: string): string -> @DebugInfo.arraySlice [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.reserveMetadata
