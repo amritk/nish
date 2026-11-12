@@ -87,7 +87,7 @@ the record that found it. The notes below the table name each such finding.
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
-| **Total** ⁸ | | | **3 / 15 / 81 / 177** | **0 / 1 / 3 / 40** |
+| **Total** ⁸ | | | **3 / 16 / 81 / 177** | **0 / 0 / 3 / 40** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -371,8 +371,9 @@ the record that found it. The notes below the table name each such finding.
     were found by a review of the first version and fixed. COMP-8 (Low) and COMP-9
     (Medium), a stream of small dynamic blocks rebuilding the decoder's
     tables and the BREACH class of length leaks, are accepted, with the reason
-    in their record, and are not counted. COMP-1 to COMP-7 and COMP-10 are
-    properties checked and found to hold.
+    in their record, and are not counted. COMP-1 to COMP-7, COMP-10 and
+    COMP-16 (the Adler-32 kernels' window and sums) are properties checked
+    and found to hold.
 20. P384-1 to P384-3 are properties checked and recorded, not findings: high
     `s` accepted, variable time on public input, and digest truncation.
 21. PKI-R6 and PKI-R7 (Low) are accepted, with the reason in their record, and

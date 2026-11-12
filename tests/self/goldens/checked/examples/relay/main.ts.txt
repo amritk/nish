@@ -31295,11 +31295,11 @@ unsafe call 146:11 uncheckedSet (node 818)
 unsafe call 146:44 uncheckedGet (node 828)
 unsafe call 261:9 uncheckedGet (node 1414)
 unsafe call 261:42 uncheckedGet (node 1429)
-unsafe call 304:19 uncheckedGet (node 1591)
-unsafe call 306:19 uncheckedGet (node 1608)
-unsafe call 308:19 uncheckedGet (node 1627)
-unsafe call 310:19 uncheckedGet (node 1646)
-unsafe call 315:19 uncheckedGet (node 1674)
+unsafe call 317:19 uncheckedGet (node 1624)
+unsafe call 319:19 uncheckedGet (node 1641)
+unsafe call 321:19 uncheckedGet (node 1660)
+unsafe call 323:19 uncheckedGet (node 1679)
+unsafe call 328:19 uncheckedGet (node 1707)
 const CRC32_POLY: i64 = 3988292384
 const CRC32_TABLE_SIZE: i32 = 2048
 const CRC32_BRAIDS: i32 = 5
@@ -31411,17 +31411,24 @@ function crc32(buf: u8[], off: i32, len: i32): u32 -> @nish.crc32 [exported]
   callee +0:62 Crc32.update -> @nish.Crc32.update
   callee +0:62 new Crc32 -> @nish.Crc32.constructor
 function adler32Update(adler: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.adler32Update [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: len off
-  calls: nish.checksumWindow nish_panic_div nish_panic_overflow
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: adler len off
+  calls: nish.adler32Walk nish.checksumWindow
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1 nish.adler32Walk#1
   stackSites=0 stackLocals=0
   callee +0:3 checksumWindow -> @nish.checksumWindow
-  local +1:7 s1: u32 (let)
-  local +2:7 s2: u32 (let)
-  local +3:7 p: i32 (let)
-  local +4:9 end: i32 (const)
-  local +6:9 stop: i32 (let)
+  callee +1:10 adler32Walk -> @nish.adler32Walk
+function adler32Walk(adler: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.adler32Walk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_div nish_panic_overflow
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 s1: u32 (let)
+  local +1:7 s2: u32 (let)
+  local +2:7 p: i32 (let)
+  local +3:9 end: i32 (const)
+  local +5:9 stop: i32 (let)
 function adler32(buf: u8[], off: i32, len: i32): u32 -> @nish.adler32 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off

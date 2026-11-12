@@ -1165,6 +1165,13 @@ const DECLARED = [
     changelog: "Refuse the mistakes every type accepts",
     why: "the hygiene rules found a local in std/compress/deflate.ts's Huffman length limiter that nothing read, and deleting it renumbers that function's allocas, so the module every importer of nish/compress writes moves; no importer's own module does",
   },
+  // WP38 S8: adler32Update branches on nish_adler32_hw() to the runtime's
+  // SSSE3 or NEON kernel, the walk on the other arm.
+  {
+    file: "checksum.ll",
+    changelog: "Ship the SSSE3 and NEON Adler-32 kernels (WP38 S8)",
+    why: "std/compress/checksum.ts's adler32Update now calls nish_adler32_hw and nish_adler32_update on one arm and the extracted walk on the other, so the module every importer of nish/compress writes declares two runtime functions and gains a function; no importer's own module moves",
+  },
   // std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd.
   {
     file: "text.ll",
