@@ -62,4 +62,15 @@ PASS  closing it and enabling tickets build nothing
 PASS  an accept with no listener answers tcpAccept's -9 and builds nothing
 PASS  a never-built slot's connection is one no slot holds, made once, failed, with no ALPN, and building no slot
 PASS  a slot built after enableTickets has tickets on as the pool's are, and is not the vacant connection
-tls over tcp: 64 passed, 0 failed, 0 skipped
+PASS  the idle timeout is a minute by default
+PASS  expire closes no slot that has been idle under a minute
+PASS  so both stay busy
+PASS  past a minute it closes both
+PASS  leaving every slot free
+PASS  a readable socket restarts its slot's clock: at a second past it only the quiet slot is closed
+PASS  the active slot is still busy, the quiet one free
+PASS  a writable socket restarts its slot's clock too: a second after it only the slot that did not write is closed
+PASS  the writing slot is still busy, the other free
+PASS  an idleTimeout of 0 closes nothing however long
+PASS  and the slot stays busy
+tls over tcp: 75 passed, 0 failed, 0 skipped

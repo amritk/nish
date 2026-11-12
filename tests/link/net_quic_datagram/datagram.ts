@@ -75,6 +75,9 @@ const receivedParts = (c: QcClient): string[] => {
 /** The same, joined with `|`. */
 const received = (c: QcClient): string => receivedParts(c).join("|");
 
+/** Every DATAGRAM payload the client received, joined with `|`, for the GSO checks. */
+export const datagramsReceived = (c: QcClient): string => received(c);
+
 /** Reads the next datagram the server holds, as text, or `none`. */
 const readOne = (conn: QuicConnection): string => {
   const buf: u8[] = new Array<u8>(1200);

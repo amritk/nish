@@ -2921,6 +2921,14 @@ own: once one server stops, any other listener, connection or server made with
 the same configuration would sign its Retry tokens and stateless resets with a
 key of zeros, which anyone can forge.
 
+A `QuicConnection` sends 1,200-byte datagrams until path MTU discovery has
+validated a larger path, up to 1,452 bytes, and falls back to 1,200 if that
+path stops carrying them. `datagramSize()` is the size it sends now, and
+`maxDatagramPayload` the largest DATAGRAM it takes. Give
+`takeDatagramInto` a buffer of `QUIC_CONN_DATAGRAM_MAX` bytes to let it probe;
+`QuicListener` flights and `Http3Server` already do. Set `pathMtuLimit` to
+what your link carries, or to 1,200 to turn discovery off.
+
 The HTTP/1.1 and WebSocket modules were
 written with a security record of their own
 ([docs/security/http1-codec.md](../../security/http1-codec.md)) rather than audited after
