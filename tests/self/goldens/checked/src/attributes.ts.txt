@@ -2400,8 +2400,8 @@ function FactCollector.collectIdentifierBuiltinFacts(this: FactCollector, node: 
   callee +39:5 FactCollector.noteWrittenArguments -> @FactCollector.noteWrittenArguments
   local +45:11 name: string (const)
   callee +45:18 builtinNameOf -> @builtinNameOf
-  callee +49:108 isSimdLoad -> @isSimdLoad
-  callee +58:7 StringSet.add -> @StringSet.add
+  callee +54:7 isSimdLoad -> @isSimdLoad
+  callee +64:7 StringSet.add -> @StringSet.add
 function initialisesFields(sig: FunctionSig): boolean -> @initialisesFields
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer sig: size=200 writesThrough=false captured=false
