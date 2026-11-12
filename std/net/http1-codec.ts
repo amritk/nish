@@ -1334,20 +1334,29 @@ const http1RequestLine = (p: Http1Parser): i32 => {
   }
   const targetEnd: i32 = i
   i += 1
-  // "HTTP/" DIGIT "." DIGIT, case-sensitive (§2.3), and the end of the line.
-  if (
-    b - i !== 8 ||
-    buf[i] !== 72 ||
-    buf[i + 1] !== 84 ||
-    buf[i + 2] !== 84 ||
-    buf[i + 3] !== 80 ||
-    buf[i + 4] !== 47 ||
-    buf[i + 5] < 48 ||
-    buf[i + 5] > 57 ||
-    buf[i + 6] !== 46 ||
-    buf[i + 7] < 48 ||
-    buf[i + 7] > 57
-  ) {
+  // "HTTP/" DIGIT "." DIGIT, case-sensitive (§2.3), and the end of the line:
+  // with sixteen bytes to load, one compare for the five letters and the dot
+  // and one range test for the two digits, else a byte at a time.
+  let version: boolean = false
+  if (b - i === 8 && i >= 0 && i <= toI32(buf.length) - 16) {
+    const v: u8x16 = loadU8x16(buf, i)
+    const fixed: i32 = bitmask(eq(v, u8x16(72, 84, 84, 80, 47, 0, 46, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+    const digits: i32 = bitmask(lt(subWrapping(v, splatU8x16(48)), splatU8x16(10)))
+    version = (fixed & 95) === 95 && (digits & 160) === 160
+  } else if (b - i === 8) {
+    version =
+      buf[i] === 72 &&
+      buf[i + 1] === 84 &&
+      buf[i + 2] === 84 &&
+      buf[i + 3] === 80 &&
+      buf[i + 4] === 47 &&
+      buf[i + 5] >= 48 &&
+      buf[i + 5] <= 57 &&
+      buf[i + 6] === 46 &&
+      buf[i + 7] >= 48 &&
+      buf[i + 7] <= 57
+  }
+  if (!version) {
     return http1Fail(p, 400, "a malformed HTTP version")
   }
   if (buf[i + 5] !== 49) {
@@ -1381,9 +1390,6 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
   const n: i32 = toI32(buf.length)
   const a: i32 = p.lineStart
   const b: i32 = p.lineEnd < n ? p.lineEnd : n
-  if (a >= 0 && a < b && (buf[a] === 32 || buf[a] === 9)) {
-    return http1Fail(p, 400, "a field line that starts with whitespace (obs-fold)")
-  }
   // A kept line's name is read in the head's copy, each upper-case letter
   // lowered as the scan passes it: one walk over the name, not a check of
   // `buf` and then a second walk of the copy. The copy of a line refused
@@ -1399,6 +1405,11 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
     }
   }
   if (i === a || i >= b || buf[i] !== 58) {
+    // Whitespace is no tchar, so an obs-fold line has an empty name: its
+    // own refusal is told apart here, off the path every field takes.
+    if (i === a && a >= 0 && a < b && (buf[a] === 32 || buf[a] === 9)) {
+      return http1Fail(p, 400, "a field line that starts with whitespace (obs-fold)")
+    }
     return http1Fail(p, 400, "a malformed field name")
   }
   const nameEnd: i32 = i
@@ -1416,8 +1427,8 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
     let valueStart: i32 = nameEnd + 1
     let valueEnd: i32 = b
     while (
-      valueStart < valueEnd &&
       valueStart >= 0 &&
+      valueStart < valueEnd &&
       valueStart < toI32(buf.length) &&
       (buf[valueStart] === 32 || buf[valueStart] === 9)
     ) {
@@ -1709,6 +1720,11 @@ const http1Section = (p: Http1Parser): i32 => {
   const delta: i32 = p.headLength - p.start
   const room: i32 = p.maxHeaderBytes - p.sectionBytes + 2
   const copyStop: i32 = p.start > 2147483647 - room ? 2147483647 : p.start + room
+  // A vector at `q` is copied when `q < copyEnd`; the head is grown when `q`
+  // passes `growAt`, so most vectors pay one compare for each.
+  const copyEnd: i32 = copy ? copyStop : -2147483647
+  let head: u8[] = p.head
+  let growAt: i32 = toI32(head.length) - 32 - delta
   // Bit `k` of `bits` is set when `buf[base + k]` is a control byte or DEL
   // at or past `i`: the vector last loaded, its lanes before `i` cleared.
   let base: i32 = i - 16
@@ -1730,12 +1746,13 @@ const http1Section = (p: Http1Parser): i32 => {
           // there are dropped from `bits`, and its copy of them is
           // overwritten when they arrive.
           const v: u8x16 = loadU8x16(buf, q)
-          if (copy && q < copyStop) {
-            const at: i32 = q + delta
-            if (at > toI32(p.head.length) - 32) {
-              http1HeadGrow(p, at + 16 - p.headLength)
+          if (q < copyEnd) {
+            if (q > growAt) {
+              http1HeadGrow(p, q + delta + 16 - p.headLength)
+              head = p.head
+              growAt = toI32(head.length) - 32 - delta
             }
-            store(v, p.head, at)
+            store(v, head, q + delta)
           }
           bits = bitmask(or(lt(v, splatU8x16(32)), eq(v, splatU8x16(127))))
           if (q > stop - 16) {
@@ -1755,6 +1772,8 @@ const http1Section = (p: Http1Parser): i32 => {
               http1HeadGrow(p, end + delta - p.headLength)
             }
             copyBytes(p.head, q + delta, buf, q, end - q)
+            head = p.head
+            growAt = toI32(head.length) - 32 - delta
           }
           j = k
           base = k + 1 - 16
@@ -1778,24 +1797,29 @@ const http1Section = (p: Http1Parser): i32 => {
       if (lf === start || buf[lf - 1] !== 13) {
         return http1Fail(p, 400, "a line ended in a bare LF")
       }
-      if (lf - 1 - start > p.maxHeaderBytes - p.sectionBytes) {
+      const sectionBytes: i32 = p.sectionBytes + (lf + 1 - start)
+      if (sectionBytes - 2 > p.maxHeaderBytes) {
         return http1Fail(p, 431, "a line over its limit")
       }
       // The scan stops at the CR, so the LF after it may be in no vector
       // or tail copied: store it, and the head holds each line's CRLF.
       const at: i32 = lf + delta
-      if (copy && at >= 0 && at < toI32(p.head.length)) {
-        p.head[at] = 10
+      if (copy && at >= 0 && at < toI32(head.length)) {
+        head[at] = 10
       }
       p.lineStart = start
       p.lineEnd = lf - 1
       p.start = lf + 1
       p.scan = lf + 1
       i = lf + 1
-      const consumed: i32 = i - base
-      bits = consumed >= 31 ? 0 : bits & ~((1 << consumed) - 1)
-      p.sectionBytes += lf + 1 - start
-      if (p.sectionBytes > p.maxHeaderBytes) {
+      // The lowest bit is the line's end at `j`, and a CR's LF is the next
+      // one when it is in this vector, as a control byte: drop them both.
+      bits = bits & (bits - 1)
+      if (c === 13) {
+        bits = bits & (bits - 1)
+      }
+      p.sectionBytes = sectionBytes
+      if (sectionBytes > p.maxHeaderBytes) {
         return http1Fail(p, 431, "a header section over the limit")
       }
       if (lf - 1 === start) {
