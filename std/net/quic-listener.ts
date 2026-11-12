@@ -83,8 +83,8 @@
  * **GSO and GRO** (`nish:net`'s `UDP_SEGMENT` and `UDP_GRO`). A carrier that
  * sends with segmentation offload takes a whole flight at once:
  * `quicListenerTakeFlight` writes as many datagrams as the pacer has credit for
- * back to back into one buffer, every one `QUIC_CONN_DATAGRAM_SIZE` bytes but
- * the last, which is what one `udpSendTo` with that segment size cuts back into
+ * back to back into one buffer, every one the connection's `datagramSize()`
+ * but the last, which is what one `udpSendTo` with that segment size cuts back into
  * datagrams; each is written in place, so a flight allocates nothing.
  *
  *  The flight is paced as a whole: it is as long as the pacer's credit, and
@@ -980,7 +980,7 @@ export const QUIC_LISTENER_FLIGHT_QUANTUM: i32 = 4800
  * `QUIC_LISTENER_FLIGHT_QUANTUM`.
  */
 const quicListenerQuantum = (conn: QuicConnection): i32 =>
-  conn.recovery.pacerQuantum(QUIC_CONN_DATAGRAM_SIZE, QUIC_LISTENER_FLIGHT_QUANTUM)
+  conn.recovery.pacerQuantum(conn.datagramSize(), QUIC_LISTENER_FLIGHT_QUANTUM)
 
 /**
  * When `quicListenerTakeFlight` next lets `conn` start a flight, in the
@@ -1015,11 +1015,15 @@ export class QuicFlight {
  * waits for, a millisecond's earning of one to four datagrams; then each
  * datagram goes only when the pacer has credit for a full one (RFC 9002 §7.7)
  * and is charged at its real size, as `quicListenerTakePaced` does, so the
- * flight is the pacer's whole credit and no more. It stops at the first
- * datagram shorter than `QUIC_CONN_DATAGRAM_SIZE`, which can only be the last
- * of a segmented send, at `QUIC_LISTENER_FLIGHT_MAX` datagrams, when `cap` has
- * no room for another, and before a datagram whose ECN codepoint would not be
- * the first's.
+ * flight is the pacer's whole credit and no more. Every datagram after the
+ * first is held to the first's size, the segment, and the flight stops at the
+ * first datagram shorter than the segment or than the connection's
+ * `datagramSize()`, which can only be the last of a segmented send, at
+ * `QUIC_LISTENER_FLIGHT_MAX` datagrams, when `cap` has no room for another,
+ * and before a datagram whose ECN codepoint would not be the first's. A path
+ * MTU probe (see `QuicConnection.pathMtu`) goes only when `cap` has room for
+ * it, so a carrier gives `QUIC_CONN_DATAGRAM_MAX` bytes or more to let the
+ * connection discover a larger path.
  *
  * @param conn The connection to send for.
  * @param now The caller's time in milliseconds.
@@ -1048,14 +1052,15 @@ export const quicListenerTakeFlight = (
   while (
     flight.count < QUIC_LISTENER_FLIGHT_MAX &&
     length + QUIC_CONN_DATAGRAM_SIZE <= cap &&
-    conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE) <= 0
+    conn.recovery.pacerDelay(now, conn.datagramSize()) <= 0
   ) {
     // The codepoint `takeDatagramInto` would mark the next datagram with: one send carries one.
     const next: i32 = conn.ecnMarking ? conn.recovery.ecnCodepoint() : 0
     if (flight.count > 0 && next !== flight.ecn) {
       return length
     }
-    const n: i32 = conn.takeDatagramInto(buf, at + length, now)
+    const room: i32 = flight.count > 0 && flight.segment < cap - length ? flight.segment : cap - length
+    const n: i32 = conn.takeDatagramWithin(buf, at + length, room, now)
     if (n <= 0) {
       return length
     }
@@ -1066,7 +1071,7 @@ export const quicListenerTakeFlight = (
     }
     flight.count = flight.count + 1
     length = length + n
-    if (n < QUIC_CONN_DATAGRAM_SIZE) {
+    if (n < flight.segment || n < conn.datagramSize()) {
       return length
     }
   }
