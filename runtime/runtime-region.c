@@ -65,6 +65,16 @@
  * children, is never a lane's, and adopting one panics: its chunks would
  * outlive the tree `free` walks (ASYNC-19).
  *
+ * **Recycling** a region (`nish_region_recycle`) empties it as `free` does
+ * but keeps the slot, the handle and its generation: the executor's task
+ * nodes each keep one region for every task they hold in turn
+ * (runtime-async.c), so a finished task costs no slot and no lock. The
+ * region keeps its newest chunk, rewound (`nish_reset_arena`), when that
+ * chunk holds no more than the caller's `keep` bytes, and its next chunk size
+ * as it stood, so a task that outgrew the kept chunk leaves a larger one;
+ * past `keep` every chunk is freed and the chunk size starts at 8 again. The
+ * handle never left the runtime, so no copy of it is made stale by living on.
+ *
  * **Children.** `nish_region_child_new` makes a region whose parent is the
  * region entered last on this thread (`child` and `childWith`), and panics
  * when none is. A slot links its parent and its children through slot indices
@@ -331,7 +341,12 @@ static nish_region_slot *nish_region_next_in(nish_region_slot *s, nish_region_sl
   return 0;
 }
 
-void nish_region_free(uint64_t r) {
+/* Empty the tree under `r`, deepest first. Every region below the top is
+   freed and retired, and so is the top unless `recycle`: then the top keeps
+   its slot and its generation, so `r` stays live, and its newest chunk when
+   that holds no more than `keep` bytes; a larger one is freed and the region
+   starts again from its first chunk size. Answers the bytes the top kept. */
+static uint64_t nish_region_empty(uint64_t r, int recycle, uint64_t keep) {
   nish_region_slot *top = nish_region_slot_of(r);
   /* Nothing is freed unless nothing in the tree is entered. */
   for (nish_region_slot *s = top; s; s = nish_region_next_in(s, top))
@@ -345,13 +360,28 @@ void nish_region_free(uint64_t r) {
     uint64_t index = s == top ? (r & (NISH_REGION_SLOTS - 1)) : (uint64_t)up->first_child - 1;
     nish_region_unlink(s);
     nish_region_swap(s);
-    nish_free_arena();
+    uint64_t kept = 0;
+    if (!up && recycle) {
+      nish_reset_arena();
+      if (nish_arena.cap > keep) {
+        nish_free_arena();
+        nish_region_chunk = 8;
+      }
+      kept = nish_arena.cap;
+    } else {
+      nish_free_arena();
+    }
     nish_region_swap(s);
-    nish_region_retire(s, index);
-    if (!up) return;
+    if (!up && recycle) s->root = 0;
+    else nish_region_retire(s, index);
+    if (!up) return kept;
     s = up;
   }
 }
+
+void nish_region_free(uint64_t r) { nish_region_empty(r, 0, 0); }
+
+uint64_t nish_region_recycle(uint64_t r, uint64_t keep) { return nish_region_empty(r, 1, keep); }
 
 /* An `awaitAll` lane's region, once the lane has finished: its chunks go on
    top of the arena in `nish_arena`, newest first as there, so what the lane
