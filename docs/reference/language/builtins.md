@@ -113,9 +113,9 @@ import { write } from "nish:io";
   with an import is `` `panic` is already declared in this module `` instead
   (`reject_nish_import_clash`).
 - A name keeps its kind. `argv`, `platform` and `arch` are values, and calling
-  one is refused (`reject_nish_property_call`); the functions are not values,
-  for the reason no function in this language is one
-  (`reject_nish_builtin_value`).
+  one is refused (`reject_nish_property_call`); the functions are not values:
+  a builtin is not a capture-free top-level function of this program, so it
+  cannot be a reference (`reject_nish_builtin_value`).
 - `exit` terminates control flow exactly as `process.exit` does, so a
   non-`void` function may end with it (`io_nish_rename`).
 - Diagnostics name the canonical builtin whatever the call site calls it:

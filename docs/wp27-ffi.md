@@ -2,7 +2,8 @@
 
 **Status:** S1 and S2 are built; S3 (§8) is built: S3.1, `string`
 parameters, S3.2, `string` returns, and S3.3, `readCString` and the
-literal-`null` `CPtr | null` parameter; S4 and S5 are proposed and unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
+literal-`null` `CPtr | null` parameter; S4 (§9) is being built: S4.1, a `declare class`
+as a C struct layout passed by pointer, is built; S4.2 (`readStruct`) and S5 are unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
 ([#62](https://github.com/amritk/nish/pull/62), `tests/cases/ffi_scalar`); S2,
 the opaque pointer `CPtr`, in 0.3.0 (`tests/cases/ffi_pointer`, §7), with its
 debug-info type in 0.4.0 ([#90](https://github.com/amritk/nish/pull/90), §7e).
@@ -12,8 +13,9 @@ program that reaches C
 ([wp36-capability-policy.md](wp36-capability-policy.md)), and a declaration in
 a package or a `std/` module binds the bare C name rather than the package's
 prefixed one, with duplicate declarations required to agree
-(`tests/link/ffi_package_declare`). Whether S4 and S5
-should happen at all is a language question (§3); §8 answers it for S3. The rules are normative in
+(`tests/link/ffi_package_declare`). Whether S5
+should happen at all is a language question (§3); §8 answers it for S3 and
+§9 for S4, which is being built. The rules are normative in
 [LANGUAGE.md](LANGUAGE.md#calling-c) and the lowering is in
 [IR_COOKBOOK.md](IR_COOKBOOK.md#declare-function-calling-c).
 
@@ -83,7 +85,7 @@ conservatism is the feature and the stages are small.
 | S1 | scalar-only `declare function`: `i32`, `i64`, `f64`, `boolean`, `void`, `u8`–`u64` | **built**, 0.2.0 |
 | S2 | an opaque pointer type, `null` only from a foreign call, no arithmetic | **built**, 0.3.0, §7 |
 | S3 | `string` ↔ `char *` marshalling, and who owns the bytes | **built**, §8: S3.1 (`string` parameters), S3.2 (`string` returns), S3.3 (`readCString`, the literal-`null` `CPtr \| null` parameter) |
-| S4 | C structs by layout declaration | proposed |
+| S4 | C structs by layout declaration | §9: S4.1 (`declare class` as a layout, passed by pointer) **built**; S4.2 (`readStruct`) planned |
 | S5 | `errno`: `cErrno()` in `nish:unsafe`, zeroed before and saved after each foreign call | **built**, §10 |
 
 S1 calls a great deal of libc (`getpid`, `abs`, `isatty`, `sysconf`). It is not
@@ -104,8 +106,8 @@ stage is a real decision rather than a missing line:
   than know.
 - **S5, `errno`.** A thread-local the runtime does not model.
 
-Whether S4 and S5 should happen at all is a language question, not a
-schedule (§8 answers it for S3): a
+Whether S5 should happen at all is a language question, not a
+schedule (§8 answers it for S3, §9 for S4): a
 language whose selling point is that every value has one known layout may
 decide that the OS is reached through builtins on purpose.
 [wp34-hosting-cs.md](wp34-hosting-cs.md) weighed C crypto through FFI against
@@ -559,6 +561,186 @@ correct-looking program has undefined behaviour, so the LANGUAGE.md text has to
 say so in the first sentence and name `putenv` as the example. If that is not
 acceptable, the fallback is to stop at S3.2's *return* direction (copying out
 is sound by construction) and leave string parameters to a shim.
+
+## 9. S4: C structs by layout declaration
+
+S4 lets a program name a C struct's layout and hand C a pointer to an instance
+of it. It is the first layout in the language that the compiler did not choose
+for its own reasons, so the rule below is stated as the C rule the targets
+share, and the compiler computes the offsets from it rather than being told
+them.
+
+### 9a. The spelling
+
+```ts
+declare class Rlimit {
+  rlim_cur: u64;
+  rlim_max: u64;
+}
+declare function getrlimit(resource: i32, rl: Rlimit): i32;
+
+const rl = new Rlimit(); // every field zero
+if (getrlimit(7, rl) === 0) {
+  console.log(rl.rlim_cur);
+}
+```
+
+`declare` is TypeScript's "this exists elsewhere", as for `declare function`;
+the elsewhere is C. Before S4.1 the checker refused every `declare class`
+(`reject_cls_declare`: a layout from elsewhere, and no elsewhere).
+
+### 9b. The layout rule
+
+A *layout class* is a `declare class` whose members are fields only, each one
+of:
+
+- a foreign scalar: `i32`, `i64`, `u8`–`u64`, `f32`, `f64`;
+- `CPtr` or `CPtr | null`, one pointer-sized word: eight bytes on a 64-bit
+  target and four on wasm32 (§9g);
+- another layout class, nested **by value**: its bytes sit inside the outer
+  struct, as a C `struct inner in;` member does.
+
+The fields are laid out in declaration order, each at its natural alignment,
+and the size is rounded up to the largest alignment among them. This is the
+rule the System V x86-64 and AArch64 ABIs and Apple's arm64 ABI agree on for
+these member types; `tests/cases/ffi_struct_layout` holds the compiler to a C
+compiler's own `offsetof` and `sizeof` for a struct that mixes every width,
+nests a struct and ends in padding. The widest-first reorder
+`src/structs.ts` applies to an ordinary class, and the padding warning that
+suggests it, never apply: the order is C's, not the compiler's to improve.
+
+Refused, each by its own diagnostic: a `string` (C has no length-prefixed
+string), an array (a fixed inline C array is a later decision), an ordinary
+class (a Nish pointer C would have to keep alive), `boolean` (`_Bool`'s width
+is the ABI's business; write `u8`), `number` (its width is whatever
+`--number-mode` picks, and a struct has one layout; write `i32` or `f64`), an
+initialiser, a method, a constructor, a
+`static` member, an accessor, a type parameter, `extends`, `implements`, and
+`export`. A class whose nesting reaches itself has no finite size and is
+refused. A C `int8_t` or `int16_t` member has no field type yet, because the
+type system has no `i8` or `i16`; a field of either width waits on that, and
+until then a declaration spells one as `u8`/`u16` and reinterprets the sign.
+
+### 9c. Instances
+
+`new Name()` takes no arguments and gives an instance whose every byte is zero,
+which is C's `= {0}`: one `llvm.memset` of the struct's size, not a
+`zeroinitializer` store, because LLVM may leave a store's padding bytes
+unwritten and arena memory is not cleared, while C may `memcmp` or hash the
+whole struct. Fields read and write as an ordinary class's do. A layout
+instance lives in a local, a field of an ordinary class, or a parameter or
+return of a function the module keeps to itself. It is not an array element,
+and no exported signature holds one, however deep (§9g); a `declare function`
+borrows it and never returns it.
+
+A nested field is the one new shape: `o.inner` names bytes inside `o`, not a
+separate object. It may be the head of a member chain (`o.inner.tv_sec`,
+`o.inner.tv_sec = 0n`) and an argument to a layout parameter of a `declare
+function`, which receives the interior address. It may not be assigned (`o.inner
+= x` would be a copy the language has no spelling for yet) or taken as a value
+(`const i = o.inner` would be a pointer into `o` that outlives nothing the
+escape analysis tracks). Both are refused by name.
+
+### 9d. Crossing: by pointer, borrowed
+
+A `declare function` parameter typed as a layout class, or `Name | null` under
+S3.3's rule (the literal `null` or a narrowed value), lowers to a pointer to the
+struct. A struct never crosses by value, in either direction: the C ABI for
+struct arguments and results differs per target (registers, a hidden pointer,
+split across classes) and LLVM leaves that lowering to the front end. A layout
+class as a `declare function` result is refused (`reject_ffi_struct_return`);
+S4.2's `readStruct` is how a C-owned struct comes back, by copy.
+
+The pointer is **borrowed for the call**, S3.1's rule (§8b) applied to a
+struct: C may read and write through it while the call runs and must not keep
+it. The compiler cannot check that, so it is a stated contract, and the
+LANGUAGE.md rule says so first. In the compiler it reads as follows:
+
+- `src/escape.ts` treats the argument as a use for the call's length, so an
+  instance in a function's arena scope or on its stack stays live across the
+  call and the foreign callee's escaping facts stay empty;
+- C may write any field, so the call ends every fact about the instance's
+  fields (a narrowed `CPtr | null` field, a known value), as WP53 §3c does for
+  a `u8[]` buffer, and no attribute marks a parameter passed on to C
+  `readonly`.
+
+### 9e. What does not change
+
+The `ffi` capability still names every foreign call and `--deny ffi` refuses
+the program; FFI programs stay outside the differential oracle (§5);
+`--emit-header`, `--emit-dts` and `--emit-napi` never see a layout class
+(§9g); `--emit-ts` refuses a layout class as it
+refuses a `declare function`. Out of scope: structs by value, unions,
+bit-fields, packing, fixed inline array fields, writing C-owned memory,
+callbacks and variadics.
+
+### 9f. Steps
+
+| Step | Delivers | Tests |
+| --- | --- | --- |
+| **S4.1** (built) | `declare class` as a layout (§9b, §9c); a layout-class `declare function` parameter lowered to a borrowed pointer (§9d) | `ffi_struct_param` (`getrlimit`/`setrlimit` round trip, `clock_gettime` twice, a nested layout); `ffi_struct_layout` (a C sidecar's `offsetof`/`sizeof` against the fields Nish read); one `reject_ffi_struct_*` per refusal; `reject_cls_declare` rewritten |
+| **S4.2** | `readStruct<T>(p: CPtr): T` in `nish:unsafe`, a copy of a C-owned struct into a Nish-owned instance | `ffi_struct_read` and its refusals |
+
+### 9g. Headers, bindings and targets
+
+A layout class must not reach `--emit-header`, `--emit-dts` or `--emit-napi`.
+Refusing `export` on the class is not enough: an exported function's parameter
+or return type, an exported class's field and an exported method's signature
+all name their types, and before this rule `export const f = (p: Point)`
+compiled and its header carried a `struct Point` the generator had written as
+an ordinary Nish class, which C would have read as a different object. Two
+answers were open:
+
+1. **Describe the layout in the header**, as the C struct it is. The header
+   could, but the `.d.ts` and N-API generators would then need a JavaScript
+   shape for a struct C fills, which is S4.2's question, and every exported
+   signature would turn a borrowed pointer into a contract with a caller this
+   program never sees.
+2. **Keep the layout in its module.** The checker refuses a layout class as a
+   parameter or return type of an exported function or an exported class's
+   method, and as a field of an exported class or interface
+   (`reject_ffi_struct_export_param`, `_return`, `_method`, `_field`); the
+   header generator also skips a layout when it lists structs.
+
+"Names a layout" is transitive: `Result<Point, string>`, `Point | null`, an
+array, a generic instance `Box<Point>` and a class of this program with a
+layout field all hold one, and each is refused where the layout itself is
+(`reject_ffi_struct_export_result`, `_generic`, `_holder`). The check runs
+once every struct has its fields, after signatures and again after bodies, since
+a holder may be declared below the export that names it and a generic instance
+may first appear in a body. The `.d.ts` and N-API generators read only exported
+signatures, so the refusal keeps a layout from them. The header lists every
+class of the program, exported or not, so a private class that holds a layout
+is declared there opaque, `typedef struct Holder Holder;`, with no fields for C
+to misread.
+
+S4.1 takes the second. It is the smaller promise, it matches §9d's contract (a
+layout is lent to a `declare function`, by this program), and lifting it later
+is additive. `tests/ffi-struct.js` pins the result: the `--emit-header` of a
+module with a private layout and an exported function has no `struct` for the
+layout, a private holder is opaque, and both headers compile under
+`-Wall -Wextra -Werror`.
+
+**Targets.** A `CPtr` field is the target's `void *`, so a layout's sizes and
+offsets follow the target: on wasm32 (`--profile wasi`) a pointer field is four
+bytes, aligned to four, and the struct `{ u8; CPtr; { u16; CPtr | null }; u8 }`
+is 20 bytes where it is 40 natively. `tests/ffi-struct.js` measures Nish's
+build, never a constant: the `memset` length and the `dereferenceable` a
+lending parameter claims are read from the IR, `llc` lays the IR's own struct
+type out for the triple, and clang must give the same C struct those
+`offsetof`s and that `sizeof`.
+
+A page module — freestanding wasm, or any build that writes `--emit-dts` — is
+compiled once for the host and its IR recompiled for wasm32 later, so a size
+fixed at check time would be the wrong target's; and nothing on a page links C
+to lend a struct to. A `declare class` there is refused (NL2757,
+`tests/wordings/nl2757_declare_class_emit_dts`). A `--profile wasi` build knows
+it is wasm32 from the start and is sized for it. Debug info still describes a pointer member as 64 bits wide on
+wasm32, as it does for every pointer the compiler emits; the offsets it gives
+are the layout's.
+
+The rolling freeze (§8h) holds: `std/` may declare a layout class from the
+commit that lands S4.1, `src/` not until the release after it.
 
 ## 10. S5 as built: `cErrno`
 

@@ -45,7 +45,19 @@ PASS  written back to back
 PASS  read back, they are seven datagrams again
 PASS  byte for byte
 PASS  and the client opens them all: the stream arrives whole
-PASS  with the flight out and nothing new, the next flight is empty
+PASS  with the flight out and nothing new, the next flight is one path MTU probe of 1452 bytes
+PASS  a single datagram, its own segment
+PASS  counted as a probe
+PASS  and the path is still held to 1200 bytes until it is acknowledged
+PASS  over loopback the probe arrives whole, in one datagram
+PASS  once the client acknowledges it, the path is 1452 bytes
+PASS  and so is every datagram the connection sends
+PASS  a DATAGRAM payload may now be 1420 bytes, past 1,164
+PASS  one is queued
+PASS  it goes out in one 1449-byte datagram: its packet number is one byte, not the four the bound allows for
+PASS  by itself
+PASS  which loopback carries in one piece
+PASS  and the client reads all 1420 bytes
 PASS  the server reads the three packets' stream from the GRO receive, in place
 PASS  having dropped none
-quic datagrams: 50 passed, 0 failed, 0 skipped
+quic datagrams: 62 passed, 0 failed, 0 skipped

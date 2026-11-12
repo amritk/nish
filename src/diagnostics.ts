@@ -102,11 +102,24 @@ export class SourceFile {
    * module `host`, so nothing here is checked as Nish or emitted.
    */
   host: boolean
+  /**
+   * The package this file belongs to when it is a dependency's, read off where
+   * its import resolved (WP21 S3): the name `package.json` gives it, or empty
+   * for the root package's own files and the standard library's. A diagnostic
+   * in such a file says whose it is, in its report and in `--json`'s
+   * `package`, so a reader does not go looking for the mistake in their own
+   * source.
+   */
+  dependency: string
+  /** The dependency's `version`, as its `package.json` gives it; empty when it gives none or this is no dependency's file. */
+  dependencyVersion: string
 
   constructor(path: string, text: string) {
     this.path = path
     this.text = text
     this.host = false
+    this.dependency = ""
+    this.dependencyVersion = ""
     this.starts = []
     this.starts.push(0)
     let i = 0
@@ -272,6 +285,13 @@ export class Diagnostic {
    * rather than through the constructor, so every other report stays as it is.
    */
   edits: Edit[]
+  /**
+   * The `review` tier (WP33 R5): a rewrite that compiles to the same IR and
+   * makes the site portable, but that changes what the source says, so a
+   * reader approves it. Printed as `review` in `--json`; `nish --fix` never
+   * applies it. Empty everywhere but a portability row that knows one.
+   */
+  review: Edit[]
 
   constructor(source: SourceFile, start: i32, end: i32, kind: string, text: string) {
     this.source = source
@@ -282,6 +302,7 @@ export class Diagnostic {
     this.line = source.lineOf(start)
     this.column = source.columnOf(start)
     this.edits = []
+    this.review = []
   }
 
   /**
@@ -381,9 +402,22 @@ export class Diagnostic {
     return this.styledMessage(new Style(false, false))
   }
 
-  /** `message`, painted by `style` (`summary`, `excerpt`). */
+  /** `message`, painted by `style` (`summary`, `excerpt`, and `note` for a dependency's file). */
   styledMessage(style: Style): string {
-    return `${this.summary(style)}\n${this.excerpt(style)}`
+    const report = `${this.summary(style)}\n${this.excerpt(style)}`
+    return this.source.dependency.length > 0 ? `${report}\n${this.note(style)}` : report
+  }
+
+  /**
+   * The line under the excerpt of a diagnostic in a dependency's file (WP21
+   * S3): whose code it is, so the reader fixes it upstream, pins another
+   * version or reports it, rather than searching their own source.
+   */
+  note(style: Style): string {
+    const version = this.source.dependencyVersion
+    const named =
+      version.length > 0 ? `\`${this.source.dependency}\` ${version}` : `\`${this.source.dependency}\``
+    return `  ${style.faint("=")} ${style.bold("note:")} ${paintText(style, `this is in the dependency ${named}, not in this program's own source`)}`
   }
 
   /**
@@ -398,9 +432,13 @@ export class Diagnostic {
    * The key order is the one stage0's `diagnosticJson` printed, and a reader
    * that compared lines byte for byte still can: `fix` comes last, after
    * `message`, and only when there is at least one edit, so a diagnostic
-   * without a fix prints exactly the line it always has. Each edit is placed
-   * the way the diagnostic is — 1-based, columns in UTF-16 code units, the end
-   * exclusive.
+   * without a fix prints exactly the line it always has. `review` follows
+   * `fix` on the same terms, so a line without review edits is unchanged too.
+   * `package` sits between `message` and the edits, and only for a diagnostic
+   * in a dependency's file (WP21 S3): the dependency's name, so a tool can tell
+   * the program's own errors from the ones it can only report upstream. Each
+   * edit is placed the way the diagnostic is — 1-based, columns in UTF-16 code
+   * units, the end exclusive.
    */
   json(): string {
     const endLine = this.source.lineOf(this.end)
@@ -409,20 +447,25 @@ export class Diagnostic {
     const severity = warning ? this.kind : "error"
     const message = this.kind === "error" || warning ? this.text : `${this.kind}: ${this.text}`
     const code = codeFor(this.kind, this.text)
-    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}${this.fixJson()}}`
+    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}${this.packageJson()}${this.editsJson("fix", this.edits)}${this.editsJson("review", this.review)}}`
   }
 
-  /** `,"fix":[...]` for `json()`, or `""` when there is no fix to print. */
-  fixJson(): string {
-    if (this.edits.length === 0) {
+  /** `,"package":"<name>"` for `json()` when the file is a dependency's, or `""`. */
+  packageJson(): string {
+    return this.source.dependency.length > 0 ? `,"package":${jsonQuote(this.source.dependency)}` : ""
+  }
+
+  /** `,"<key>":[...]` for `json()`, or `""` when `edits` is empty. */
+  editsJson(key: string, edits: Edit[]): string {
+    if (edits.length === 0) {
       return ""
     }
     const source = this.source
     const out = new StringBuilder()
-    out.add(`,"fix":[`)
+    out.add(`,"${key}":[`)
     let i = 0
-    while (i < this.edits.length) {
-      const edit = this.edits[i]
+    while (i < edits.length) {
+      const edit = edits[i]
       out.add(i === 0 ? "{" : ",{")
       out.add(
         `"line":${source.lineOf(edit.start)},"column":${source.columnOf(edit.start)},"endLine":${source.lineOf(edit.end)},"endColumn":${source.columnOf(edit.end)},"text":`
@@ -578,6 +621,17 @@ export class DiagnosticSink {
   reportPortabilityFix(source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void {
     const warning = new Diagnostic(source, start, end, PORTABILITY, text)
     warning.edits = edits
+    this.insertWarning(this.portability, warning)
+  }
+
+  /**
+   * `reportPortability` with `review` edits (WP33 R5): a rewrite the row
+   * found to compile to the same IR, offered for a reader to approve and
+   * never applied by `nish --fix`.
+   */
+  reportPortabilityReview(source: SourceFile, start: i32, end: i32, text: string, review: Edit[]): void {
+    const warning = new Diagnostic(source, start, end, PORTABILITY, text)
+    warning.review = review
     this.insertWarning(this.portability, warning)
   }
 

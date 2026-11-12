@@ -143,8 +143,8 @@ space (RFC 9001 §4.1.3). Neither needs anything else from here.
 <scalar-detail title="Sans-IO">
 
 Nothing here reads a socket, a clock or the random device. The
-server random and the ephemeral x25519 private key are constructor
-arguments, so a test injects RFC 8448's and a server draws them with
+server random and the ephemeral private key (32 bytes, the x25519 key or,
+its top bit cleared, the secp256r1 scalar) are constructor arguments, so a test injects RFC 8448's and a server draws them with
 `crypto.getRandomValues`. Signing is handed off the same way: once the
 Certificate is written the server stops at `TLS_STATE_WAIT_SIGNATURE`, the
 caller signs `signatureInput()` with its own key (`tlsSignEcdsaP256` for a
@@ -158,10 +158,13 @@ replayed with its own signature.
 
 TLS 1.3 only. The suites `TLS_AES_128_GCM_SHA256`,
 `TLS_CHACHA20_POLY1305_SHA256` and `TLS_AES_256_GCM_SHA384`, the first of
-them the client lists; the group x25519; the configuration's one signature
-scheme. A client that offers x25519 in `supported_groups` without a share
-gets one HelloRetryRequest (§4.1.4), and a second ClientHello still without
-the share is refused. `server_name` is read and exposed as `serverName`.
+them the client lists; the group x25519 whenever the client lists it, and
+secp256r1 for a client that lists only that; the configuration's one
+signature scheme. A client that lists the chosen group in `supported_groups`
+without a share for it gets one HelloRetryRequest (§4.1.4), and a second
+ClientHello still without the share is refused. A secp256r1 share must be
+an uncompressed point on the curve (§4.2.8.2); any other is
+`illegal_parameter`. `server_name` is read and exposed as `serverName`.
 ALPN picks the first of the configuration's protocols the client offers.
 `quic_transport_parameters` is read and written only when the configuration
 says the carrier is QUIC. 0-RTT and client authentication are not here:
@@ -506,17 +509,19 @@ class TlsServer
 
 | Member | |
 | --- | --- |
-| `new TlsServer(config: TlsServerConfig, serverRandom: u8[], ephemeralPrivate: u8[])` | A server for one connection under `config`, with the 32-byte server random and the 32-byte x25519 private key drawn for it. A random or key of another length, or a configuration `tlsConfigFits` refuses, leaves the server failed with `internal_error` before it reads anything. |
+| `new TlsServer(config: TlsServerConfig, serverRandom: u8[], ephemeralPrivate: u8[])` | A server for one connection under `config`, with the 32-byte server random and the 32-byte ephemeral private key drawn for it. A random or key of another length, or a configuration `tlsConfigFits` refuses, leaves the server failed with `internal_error` before it reads anything. |
 | `alert: i32` | The alert the server failed with, or 0. |
 | `alpn: string` | The ALPN protocol chosen, one of the configuration's, or empty. |
 | `clientTransportParameters: u8[]` | The client's `quic_transport_parameters`, opaque; empty unless the carrier is QUIC. |
 | `config: TlsServerConfig` | The configuration this server was built with: its certificate chain, ALPN list and QUIC transport parameters. |
-| `readonly ephemeral: Secret<u8[]>` | The connection's x25519 private key, copied in by `restart` and wiped by the record layer once the ServerHello is written. |
+| `readonly ephemeral: Secret<u8[]>` | The connection's 32-byte ephemeral private key (x25519, or the secp256r1 scalar with its top bit cleared), copied in by `restart` and wiped by the record layer once the ServerHello is written. |
 | `exchange: TlsExchangeWords` | The exchange's words (`tlsExchange`). |
+| `group: i32` | The key exchange group: `TLS_GROUP_X25519` or `TLS_GROUP_SECP256R1` once the ClientHello chose it or a HelloRetryRequest asked for it, 0 before. |
 | `held: i32` | Which of the negotiated pool's secrets the handshake has derived: bit `1 << TLS_SECRET_*` for each. A secret wiped by `wipeSecret` keeps its bit, since its place is still the one it was derived into. |
 | `input: u8[]` | The bytes received at the current level and not yet a whole message: `input[0 .. inputLength)`. |
 | `issuing: TlsTicketState` | What `issue` seals; its PSK is zeroed once sealed. |
 | `opened: TlsTicketState` | What the ticket `resume` is reading opened to; its PSK is zeroed once read. |
+| `peerRecordSizeLimit: i32` | The client's `record_size_limit` (RFC 8449): the most plaintext, content type and padding included, a protected record to it may carry, from `TLS_RECORD_SIZE_LIMIT_MIN` to `TLS_RECORD_SIZE_LIMIT_MAX`. 0 when the client sent none, and always over QUIC, which has no TLS records. |
 | `resumed: boolean` | Whether this connection resumed a ticket (row 1 of the record's table). |
 | `retried: boolean` | Whether a HelloRetryRequest was sent, so a second miss is fatal. |
 | `salt: u8[]` | The salt the handshake secret is extracted under, HashLen bytes of it: the `TLS_DERIVED_SALT_*` constant on a full handshake, derived from the PSK early secret on a resumed one. `exchangeKeys` reads it into the exchange's words and zeroes it. |
@@ -531,7 +536,7 @@ class TlsServer
 | `known(index: i32): boolean` | Whether the handshake has derived secret `index` (`TLS_SECRET_*`) for this connection. |
 | `readKnown(level: i32): boolean` | Whether the secret the server *reads* `level` under — the client's traffic secret, `clientHandshake` or `clientApplication` of `secrets()` — is known yet. The Initial level has none: it is cleartext in TLS, and QUIC derives its own from the connection id. |
 | `receive(level: i32, data: u8[], off: i32, len: i32): i32` | Takes the handshake bytes `data[off .. off + len)` the client sent at `level`, a whole message, part of one or several, and handles every message they complete. Answers 0, or the alert the server fails with.<br><br>A level other than the one the state expects is `unexpected_message`, as is a byte left over once a message ends the client's flight: each of the three messages a client sends here (two ClientHellos and a Finished) is the last of its flight, and RFC 8446 §5.1 forbids a message to straddle a key change. A window outside `data` is `internal_error`, the caller's fault and not the peer's. Once the handshake is done, any further bytes are `unexpected_message` too: the post-handshake messages a client may send (KeyUpdate) belong to the record layer, which handles them itself. |
-| `restart(serverRandom: u8[], ephemeralPrivate: u8[]): void` | Starts the next connection in this server's buffers, with its own 32-byte random and x25519 private key, as a fresh `TlsServer` would: every secret the last connection left is wiped (`wipe`) and none is held. The random is kept, as the constructor keeps it; the key is copied into `ephemeral` and the caller's array zeroed with `secureZero`, so the only copy left is the one the server wipes. A random or key of another length, or a configuration `tlsConfigFits` refused, leaves the server failed with `internal_error`. |
+| `restart(serverRandom: u8[], ephemeralPrivate: u8[]): void` | Starts the next connection in this server's buffers, with its own 32-byte random and ephemeral private key, as a fresh `TlsServer` would: every secret the last connection left is wiped (`wipe`) and none is held. The random is kept, as the constructor keeps it; the key is copied into `ephemeral` and the caller's array zeroed with `secureZero`, so the only copy left is the one the server wipes. A random or key of another length, or a configuration `tlsConfigFits` refused, leaves the server failed with `internal_error`. |
 | `resume(current: Secret<u8[]>, currentInfo: TlsTicketKeyInfo, previous: Secret<u8[]>, previousInfo: TlsTicketKeyInfo, strikes: TlsTicketStrikes, now: i64): i32` | In `TLS_STATE_WAIT_TICKET`: reads the hello's tickets under the keys the carrier lends, `current` and `previous` with what each `info` says of them (a program with one key passes it as both), records the one it resumes in `strikes`, and answers the hello, resumed or in full, as the table of "Resumption" in `docs/security/tls.md` says. A selected ticket whose binder fails is `decrypt_error`, with nothing recorded (row 9). Answers 0, or the alert the server fails with. |
 | `secrets(): TlsSecretPool` | The pool of the negotiated hash: SHA-384's for a SHA-384 suite, SHA-256's otherwise. |
 | `sign(signature: u8[]): i32` | Takes the signature over `signatureInput()`, as it goes on the wire (DER for ECDSA), and writes CertificateVerify and the server's Finished, after which the application secrets are known. Answers 0, or `internal_error` when called in another state or with an empty or over-long signature. The signature is not checked here: a wrong one is the caller's bug, and the client's verification is what catches it. |
@@ -558,7 +563,7 @@ interface TlsServerConfig
 | --- | --- |
 | `alpn: string[]` | The ALPN protocols the server speaks, most preferred first. Empty means the server does not negotiate ALPN over TCP, and refuses every client over QUIC, where ALPN is mandatory (RFC 9001 §8.1). |
 | `certificateChain: u8[][]` | DER certificates, leaf first. At least one. |
-| `extraExtensions: u8[]` | Extensions this module does not interpret, already encoded (each a type, a length and a body), written first in EncryptedExtensions: `record_size_limit` is the record layer's, for one. Empty for none. |
+| `extraExtensions: u8[]` | Extensions this module does not interpret, already encoded (each a type, a length and a body), written first in EncryptedExtensions. Empty for none. Not for ALPN, `server_name` or `quic_transport_parameters`, which the server writes itself: a client refuses a repeated extension. A `record_size_limit` here replaces the one the server would write. |
 | `quic: boolean` | Whether the carrier is QUIC, which turns `quic_transport_parameters` on both ways. |
 | `quicTransportParameters: u8[]` | The server's transport parameters, opaque, sent in EncryptedExtensions only when `quic`. |
 | `signatureScheme: i32` | The signature scheme the caller's key signs with, sent in CertificateVerify: `TLS_SIGNATURE_ECDSA_SECP256R1_SHA256` for a P-256 key. A client that does not list it is refused with `handshake_failure`. |

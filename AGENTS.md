@@ -90,7 +90,9 @@ itself.
 
 Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,
-1-based, `endLine`/`endColumn` exclusive, and a trailing `"fix"` when there is one.
+1-based, `endLine`/`endColumn` exclusive, a `"package"` after `"message"` when the
+diagnostic is in a dependency's source, and a trailing `"fix"` and then `"review"`
+when there is one.
 
 - **`severity`** is `"error"`, `"performance"`, `"portability"` or
   `"deprecation"`. A warning never changes the exit code, a portability warning
@@ -134,6 +136,14 @@ Every `--json` object is flat:
   index is an `i32`, the access is not behind a branch or in a loop's
   header, nothing else the statement runs before its branches calls,
   allocates or assigns, and `panic` and `toI32` are the builtins.
+- **`review`** (WP33 R5) comes after `fix`, on a portability warning, in the
+  same edit shape and on the same terms (absent, never empty): a rewrite that
+  makes the site read the same under Node and compiles to byte-identical IR,
+  but changes what the source says, so it is left to the reader.
+  `nish --fix` never applies one. A site reports it through
+  `DiagnosticSink.reportPortabilityReview`; NL8006 is the one row that has
+  one (`src/portability-numbers.ts`, `divisionReview`), and every case is a
+  `port-` case in [`tests/fix/`](./tests/fix/README.md).
 - **`nish --fix <files> [flags]`** applies them (`src/fix.ts`): it compiles,
   takes every fix in a file named on the command line (never one under
   `node_modules`, the standard library or a `nish:` module), drops a fix that

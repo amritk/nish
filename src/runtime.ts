@@ -1577,6 +1577,23 @@ export class RuntimeTable {
         EFFECT_READ
       )
     )
+    // WP38 S8: Adler-32 on SSSE3 or NEON, the same unit and the same shapes.
+    this.add(
+      new RuntimeFunction(
+        "nish_adler32_hw",
+        "declare i32 @nish_adler32_hw()",
+        attrs3("nounwind", "willreturn", "memory(inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_adler32_update",
+        `declare i32 @nish_adler32_update(i32 noundef, ${AES_ARRAY} readonly, i32 noundef, i32 noundef)`,
+        attrs2("nounwind", "willreturn"),
+        EFFECT_READ
+      )
+    )
     this.buildIntrinsics()
   }
 

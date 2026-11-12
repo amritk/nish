@@ -7,12 +7,14 @@
 - [x] S1: `declare function` with scalars
 - [x] S2: the opaque `CPtr`
 - [x] S3: `string` in and out, `readCString`, a literal-`null` `CPtr | null` parameter
-- [ ] S4: C structs by a layout declaration *(owner's decision)*
+- [ ] S4: C structs by a layout declaration
+  - [x] S4.1: `declare class` as a C struct layout, passed by pointer
+  - [ ] S4.2: `readStruct`, a copy of a C-owned struct
 - [x] S5: `errno`: `cErrno()` in `nish:unsafe`, zeroed before and saved after each C call
 
 ## Next
 
-S4, C structs by a layout declaration.
+S4.2, `readStruct` ([§9](https://github.com/amritk/nish/blob/main/docs/wp27-ffi.md#9-s4-c-structs-by-layout-declaration)).
 
 ## Waiting on a decision
 

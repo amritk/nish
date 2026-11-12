@@ -210,6 +210,8 @@ PASS  refused: a Connection field beside the server's
 PASS  refused: a CR in the connection value
 PASS  refused: a LF in a value's octets
 PASS  refused: a name that is not a token
+PASS  a long token name is written at every length
+PASS  a long name with a space at any lane is refused
 PASS  refused: the caller's Transfer-Encoding
 PASS  refused: names and values of different lengths
 PASS  refused: status 600
@@ -510,4 +512,4 @@ PASS  and writes only the bytes from the start on
 PASS  http1WriteLastChunk writes the last chunk at its offset
 PASS  and is HTTP1_NO_ROOM four bytes from the end
 PASS  http1BytesAre compares octets with a lowercase word in any case, and nothing longer or shorter
-http1: 512 passed, 0 failed, 0 skipped
+http1: 514 passed, 0 failed, 0 skipped

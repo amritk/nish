@@ -112,6 +112,7 @@ const FLAG_DEFER: i32 = 33554432 [exported]
 const FLAG_SIGNATURE: i32 = 67108864 [exported]
 const FLAG_GATHERED: i32 = 67108864 [exported]
 const FLAG_SPREAD_ARGUMENT: i32 = 67108864 [exported]
+const FLAG_REFERENCE_ARROW: i32 = 67108864 [exported]
 const FLAG_SCRIPT: i32 = 134217728 [exported]
 const FLAG_OBJECT_SPREAD: i32 = 268435456 [exported]
 struct Node (class) size=40 align=8 exported

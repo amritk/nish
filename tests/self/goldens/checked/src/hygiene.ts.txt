@@ -52,7 +52,7 @@ function checkHygiene(ctx: CheckContext, body: Node): void -> @checkHygiene [exp
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectDeclared
   calls: collectDeclared markUse reportUnread walkHygiene
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=reportUnread#0 walkHygiene#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=reportUnread#0 walkHygiene#0
   pointer body: size=40 writesThrough=true captured=true passedTo=collectDeclared#1 markUse#1 walkHygiene#1
   stackSites=1 stackLocals=1
   local +0:9 declared: Declared[] (const)
@@ -66,7 +66,7 @@ function holdFinding(ctx: CheckContext, node: Node, message: string): void -> @h
   sharedWrite: +0:3
   escaping: message
   calls: Diagnostic.constructor StringSet.add StringSet.has nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -5:9 key: string (const)
@@ -132,7 +132,7 @@ function reportUnread(ctx: CheckContext, d: Declared): void -> @reportUnread
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: TypeTable.isResult holdFinding nish_panic_index nish_str_at nish_str_concat
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=holdFinding#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0
   pointer d: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -143,7 +143,7 @@ function walkHygiene(ctx: CheckContext, node: Node): void -> @walkHygiene
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: checkRepeatedCondition checkSameOperands checkUnsignedZero holdFinding hygieneUnwrap isPure nish_panic_index nish_str_concat nish_str_eq walkHygiene
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=holdFinding#0 checkRepeatedCondition#0 checkSameOperands#0 checkUnsignedZero#0 walkHygiene#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0 checkRepeatedCondition#0 checkSameOperands#0 checkUnsignedZero#0 walkHygiene#0
   pointer node: size=40 writesThrough=false captured=false passedTo=checkRepeatedCondition#1 checkSameOperands#1 checkUnsignedZero#1
   stackSites=0 stackLocals=0
   local +0:11 expr: Node (const)
@@ -215,7 +215,7 @@ function sameShape(program: CheckedProgram, a: Node, b: Node): boolean -> @sameS
 function isFloating(ctx: CheckContext, node: Node): boolean -> @isFloating
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isVector nish_panic_index
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -224,7 +224,7 @@ function checkSameOperands(ctx: CheckContext, node: Node): void -> @checkSameOpe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: CheckContext.textOf holdFinding isFloating nish_panic_index nish_str_concat nish_str_eq sameValue
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0 isFloating#0 holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0 isFloating#0 holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=holdFinding#1 CheckContext.textOf#1 holdFinding#1 CheckContext.textOf#1
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)
@@ -246,7 +246,7 @@ function checkRepeatedCondition(ctx: CheckContext, node: Node): void -> @checkRe
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: CheckContext.textOf holdFinding nish_panic_index nish_str_concat sameValue
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 condition: Node (const)
@@ -266,7 +266,7 @@ function checkUnsignedZero(ctx: CheckContext, node: Node): void -> @checkUnsigne
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via holdFinding
   calls: CheckContext.textOf TypeTable.typeName holdFinding isUnsigned isZero nish_panic_index nish_str_concat nish_str_eq
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=holdFinding#0 CheckContext.textOf#0 CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=holdFinding#1 CheckContext.textOf#1
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)

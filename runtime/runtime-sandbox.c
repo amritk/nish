@@ -23,6 +23,11 @@
  * `exec_paths` is the programs a dependency's `process.spawn=<program>`
  * grants name (WP40 §2a), and their interpreters, in the same shape: with
  * it, `EXECUTE` leaves the rule on `/` and each program gets a rule of its own.
+ * An interpreter the grants do not name themselves is written `//<path>`, the
+ * same file to the kernel, and is kept out of a spawn's reach (SBX-1): its
+ * identity is recorded before step 2, and `nish_spawn_target`, which
+ * runtime-os.c's spawn calls once it is set, refuses a target that is that
+ * file and hands back a descriptor of any other, which the child executes.
  *
  * What it does, in the order of the note's section 3, each step before the
  * next because each needs the one before it:
@@ -47,7 +52,9 @@
  * could not withhold, once, and runs. No environment variable, file or
  * argument is read that could widen any of it: step 1 reaches
  * `getenv("NISH_NUM_THREADS")` through `nish_cpu_online`, which can only
- * lower the pool's ceiling, and confines nothing. The one knob,
+ * lower the pool's ceiling, and confines nothing; a spawn reads `PATH` to
+ * find its program as `posix_spawnp` would, which can only refuse more. The
+ * one knob,
  * `-DNISH_SANDBOX_SIMULATE_ABI=<n>`, makes the ABI probe answer `n` in a
  * test-only build of this file; scripts/build.sh never passes it.
  *
@@ -62,8 +69,12 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <linux/audit.h>
@@ -436,8 +447,78 @@ static void nish_sb_seccomp(int32_t caps) {
   if (loaded != 0) nish_sb_fail("cannot load the seccomp filter");
 }
 
+/* SBX-1: the exec allowlist must hold each granted program's interpreter (its
+ * ELF loader, or its `#!` line's program), because the kernel opens that file
+ * for execution too, and an interpreter runs whatever it is handed. The
+ * compiler writes an entry that is on the list only as another entry's
+ * interpreter with a second leading `/` (`//lib64/ld-linux-x86-64.so.2`),
+ * which names the same file. Each such file's identity is kept here when the
+ * sandbox is applied, and `nish_sb_spawn_open` refuses a spawn target that is
+ * one of them, by identity, so a symlink, a hardlink or any second name is
+ * refused as well. More marked entries than the table holds refuse every
+ * spawn rather than some. */
+#define NISH_SB_REFUSED 16
+static struct {
+  dev_t dev;
+  ino_t ino;
+} nish_sb_refused[NISH_SB_REFUSED];
+static int nish_sb_nrefused;
+
+/* The file `posix_spawnp` would execute for `file`: `file` itself when it
+ * holds a `/`, else the first executable regular file of that name in a PATH
+ * directory (an empty entry is the working directory). It is opened O_PATH and
+ * moved to a descriptor at or above `low` that a child inherits, and `proc`
+ * gets its /proc/self/fd name, so the child executes the very file checked: a
+ * name swapped between this check and the exec reaches nothing, and a script's
+ * interpreter can open the script by that name. Returns the descriptor, or
+ * -EACCES for a kept interpreter, or -ENOENT when there is no such file. */
+static int nish_sb_spawn_open(const char *file, int low, char *proc) {
+  const char *dir = strchr(file, '/') ? "" : getenv("PATH");
+  char buf[PATH_MAX];
+  struct stat st;
+  if (!dir) dir = "/bin:/usr/bin";
+  for (;;) {
+    const char *end = strchrnul(dir, ':'), *path = file;
+    size_t len = (size_t)(end - dir);
+    /* A directory too long to join with `file` holds nothing it could run. */
+    int fd = -1;
+    if (len && len + strlen(file) + 2 <= sizeof buf) {
+      memcpy(buf, dir, len);
+      buf[len] = '/';
+      strcpy(buf + len + 1, file);
+      path = buf;
+    }
+    if (!len || path == buf) fd = open(path, O_PATH | O_CLOEXEC);
+    if (fd >= 0 && !fstat(fd, &st) && S_ISREG(st.st_mode) && (st.st_mode & 0111)) {
+      int k = nish_sb_nrefused > NISH_SB_REFUSED ? -1 : nish_sb_nrefused;
+      while (k > 0 && (nish_sb_refused[k - 1].dev != st.st_dev || nish_sb_refused[k - 1].ino != st.st_ino)) k--;
+      int moved = k ? -EACCES : fcntl(fd, F_DUPFD, low);
+      if (moved == -1) moved = -errno;
+      close(fd);
+      if (moved >= 0) snprintf(proc, 32, "/proc/self/fd/%d", moved);
+      return moved;
+    }
+    if (fd >= 0) close(fd);
+    if (!*end) return -ENOENT;
+    dir = end + 1;
+  }
+}
+
+static void nish_sb_keep_interpreters(const char *paths) {
+  struct stat st;
+  for (; paths && *paths; paths += strlen(paths) + 1) {
+    /* An entry gone since the build has no identity to keep, and Landlock
+     * grants it nothing to execute either. */
+    if (paths[1] != '/' || stat(paths, &st)) continue;
+    int n = nish_sb_nrefused++;
+    if (n < NISH_SB_REFUSED) nish_sb_refused[n].dev = st.st_dev, nish_sb_refused[n].ino = st.st_ino;
+  }
+  if (nish_sb_nrefused) nish_spawn_target = nish_sb_spawn_open;
+}
+
 void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths) {
   nish_cpu_prime();
+  nish_sb_keep_interpreters(exec_paths);
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) nish_sb_fail("cannot set no_new_privs");
   nish_sb_drop_capabilities();
   nish_sb_landlock(caps, mode, read_dirs, write_dirs, exec_paths);

@@ -51,9 +51,10 @@ crosses to C, then the exact rules.
   and `new Int32Array(n)` is `new Array<i32>(n)`), except that a receiver
   spelled with one has no `push` or `pop`, as in TypeScript
   ([Typed-array names have no `push` or `pop`](builtins.md#typed-array-names-have-no-push-or-pop)).
-- **Only a class, interface, array or string can be `null`.** A nullable
-  value allows only `=== null` / `!== null`, assignment, narrowing and a `??`
-  default ([Nullable types](#nullable-types)).
+- **Only a class, interface, array, string or function reference can be
+  `null`.** A nullable value allows only `=== null` / `!== null`, assignment,
+  narrowing and a `??` default ([Nullable types](#nullable-types)); a nullable
+  function reference is the tag `0` ([Function references](declarations.md#function-references)).
 - **An `enum` is its own type**, not a spelling of `i32`: `sameType` fails
   against every other type ([Enums](declarations.md#enums)).
 - **A function reports failure with a `Result`**, the only way it can; the
@@ -169,7 +170,7 @@ interned, and two types are the same type exactly when they are the same
   the operator only before a type on its own line, so a class a program names
   `keyof` is still a type everywhere else (`tests/parser/names-declarations.ts`).
   `T | null` (or `null | T`) is accepted when `T` is a class, interface,
-  array, or string; a scalar is
+  array, string or [function reference](declarations.md#function-references) type; a scalar is
   `` `i32 | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value) ``
   (`tests/cases/reject_nullable_scalar`). A type may be **parenthesised**, and
   `(T | null)[]` is where it matters: `T | null[]` groups the other way and
@@ -522,10 +523,14 @@ the IR; only a computed count costs the mask
 
 ## Nullable types
 
-`T | null` is available for `T` a class, interface, array, or string
-(`tests/cases/mem_nullable`; [wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md#4-t--null)). It
-is the same LLVM pointer type as `T` with the constant `null` as one more
-value, so nothing is boxed; `null` takes its type from context.
+`T | null` is available for `T` a class, interface, array, string, or
+function reference (`tests/cases/mem_nullable`;
+[wp6-memory.md](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md#4-t--null)). For a pointer type it is the same
+LLVM pointer type as `T` with the constant `null` as one more
+value, so nothing is boxed; `null` takes its type from context. A
+[function reference](declarations.md#function-references) may be nullable too: it is an
+`i32` tag, and `null` is tag 0, which names no function
+(`tests/cases/fnref_nullable`).
 
 - **Where `null` may appear**: an annotated initializer
   (`let p: Node | null = null`), a field initializer (`next: Node | null = null`),

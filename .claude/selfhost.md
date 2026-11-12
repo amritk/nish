@@ -135,7 +135,7 @@ its siblings in the same round.
 ## Nish-0, the subset `src/` is written in
 
 No generics, closures (capturing arrow arguments are allowed: they
-shipped in 0.29.0, which the seed is past), nested functions or function values; no `type` aliases,
+shipped in 0.29.0, which the seed is past), nested functions or function values (in `src/`, until the release after WP51); no `type` aliases,
 `enum`, `namespace`, `static` members, getters or setters; no `try`/`catch`; no
 inheritance and no downcasts. **Arrow functions came off that list in WP22**:
 a top-level `const` bound to an arrow is a *declaration*, not a value, and the

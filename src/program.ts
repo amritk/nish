@@ -1034,9 +1034,17 @@ export class FieldInfo {
    * (`src/json-typed.ts`, docs/LANGUAGE.md, "Typed JSON").
    */
   wireName: string
+  /**
+   * WP27 S4.1: the layout class this field of a layout class embeds by
+   * value, as C embeds a nested struct; `null` for any other field. The
+   * LLVM member is `%struct.<nested>`, not a pointer, and a read is the
+   * address of that member inside the object (`emitPropertyAccess`).
+   */
+  nested: StructInfo | null
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
+    this.nested = null
     this.type = type
     this.index = 0
     this.offset = 0
@@ -1153,9 +1161,20 @@ export class StructInfo {
    * shape 2); shape 1 calls it on the field as it is, `null` included.
    */
   handleTested: boolean
+  /**
+   * WP27 S4.1: a `declare class`, a C struct layout. Its fields are foreign
+   * scalars, `CPtr`s and nested layouts, laid out as clang lays out the C
+   * struct; `new` zero-fills it and a `declare function` takes it by pointer
+   * (docs/wp27-ffi.md §9).
+   */
+  layout: boolean
+  /** Pass 1b is collecting this layout's fields, so a nesting cycle is caught. */
+  laying: boolean
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
+    this.layout = false
+    this.laying = false
     this.kind = kind
     this.origin = origin
     this.type = type
@@ -1295,6 +1314,11 @@ export class AliasInfo {
   exported: boolean
   /** In progress, which is how a cycle is caught, across modules too. */
   resolving: boolean
+  /**
+   * The right-hand side went through `number`, however deep, so the resolved
+   * type is the one `--number-mode` chose: a `declare class` field refuses it.
+   */
+  viaNumber: boolean
 
   constructor(name: string, decl: Node, origin: SourceFile, home: CheckContext) {
     this.name = name
@@ -1304,6 +1328,7 @@ export class AliasInfo {
     this.exported = false
     this.type = -1
     this.resolving = false
+    this.viaNumber = false
   }
 }
 
@@ -1549,6 +1574,13 @@ export class CheckedProgram {
    * module's parent links are taken again after checking.
    */
   gathered: boolean
+  /**
+   * WP51 stage 2: the next free node id. The parser numbers the tree; a
+   * reference passed for a function parameter is rewritten into an arrow
+   * written at the call, whose nodes the checker numbers from here
+   * (`newNode`), and the compilation takes the count back after checking.
+   */
+  nodeCount: i32
   /**
    * The package this module belongs to (WP21 S1, `src/packages.ts`). `""` is
    * the root package — the program being compiled — which is where every
@@ -1949,6 +1981,7 @@ export class CheckedProgram {
     this.source = source
     this.file = file
     this.isEntry = isEntry
+    this.nodeCount = nodeCount
     this.scriptLocals = new StringSet()
     this.packageName = packageName
     this.symbolPrefix = packageSymbolPrefix(packageName)
@@ -2104,6 +2137,36 @@ export class CheckedProgram {
       this.nodeSpreadCopies.push(noCopy)
       this.memberSets.push(-1)
     }
+  }
+
+  /**
+   * WP51 stage 2: a node the checker writes into the tree, numbered after the
+   * parser's, with the source span of the text it stands for. Call
+   * `grewNodes` once the new nodes are built and before any is checked.
+   */
+  newNode(kind: i32, start: i32, end: i32, text: string, children: Node[]): Node {
+    const made = new Node(kind, start, end)
+    made.id = this.nodeCount
+    this.nodeCount = this.nodeCount + 1
+    made.text = text
+    made.children = children
+    return made
+  }
+
+  /**
+   * Lengthen the installed tables, and the module's own under an installed
+   * instantiation, to cover the nodes `newNode` numbered; every other
+   * instantiation is lengthened by `enterInstance`.
+   */
+  grewNodes(): void {
+    const info = this.activeInstance
+    if (info === null) {
+      this.growTables(this.nodeCount)
+      return
+    }
+    this.leaveInstance()
+    this.growTables(this.nodeCount)
+    this.enterInstance(info)
   }
 
   /**
@@ -2380,6 +2443,9 @@ export class CheckedProgram {
    * drained in a loop and every other caller walks one function at a time.
    */
   enterInstance(info: Instantiation): void {
+    // An instantiation made before the checker numbered new nodes is
+    // lengthened to cover them when it is next walked.
+    info.growTables(this.nodeCount)
     this.savedNodeTypes = this.nodeTypes
     this.savedNodeLocals = this.nodeLocals
     this.savedNodeConstants = this.nodeConstants

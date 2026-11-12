@@ -1,0 +1,1 @@
+`Result<(i32) => i32, string>` cannot hold a function reference in an arm

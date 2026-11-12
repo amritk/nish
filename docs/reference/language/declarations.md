@@ -1180,6 +1180,31 @@ and their `.ll` goldens are byte-identical files.
     may each keep a private `helper()`; the root package — the program being
     compiled — has no prefix and its IR is unchanged (`docs/wp21-packages.md`
     §9).
+  - **A diagnostic in a dependency says it is the dependency's.** An error or
+    warning spanned in a package's own source keeps its code and wording, adds
+    `` = note: this is in the dependency `pkg_broken` 0.3.1, not in this
+    program's own source `` under the excerpt (the version as its manifest
+    gives it, left out when it gives none), and under `--json` carries
+    `"package":"pkg_broken"` (`tests/link/package_dependency_error`). What
+    decides is where the module was resolved, so a dependency that calls
+    itself `nish` is still one, and the standard library never is.
+  - **A builtin with no runtime on the target is refused by what the program
+    reaches**, once every module is checked. A freestanding `--target wasm32`
+    build has no file, clock, environment, process, signal, terminal or
+    entropy call (`runtime/runtime-wasm.c`), so a program whose `main` or
+    any exported function of its own modules reaches one — `readFileSync`,
+    `getenv`, `spawnSync`, `monotonicNanos` among the ones no call-site rule
+    refuses — is refused with the N3 rule's words (NL2404), one error per
+    capability, spanned at the first call of the witness chain, which names
+    every hop; when the chain passes through a dependency the message names
+    the one nearest the builtin: `` `getenv` reaches the operating system,
+    and a wasm32 build has none to reach; the dependency `pkg_conf` calls it
+    in `load` `` (`tests/link/package_wasm_hostless`,
+    `tests/link/wasm_hostless_own`, `reject_read_file_wasm`). A module that
+    calls one in a function the program never reaches is not refused: a
+    wasm32 program may import `nish/cli` for `Style` (`npm test` "wasm
+    hostless"). `--target wasm32-wasi` and `--profile wasi` have the calls,
+    and refuse none of them.
 - An imported constant contributes no `declare` and no relocation: it is
   folded into every use site in the importing module exactly as it is in the
   exporting one (`tests/link/const_export`,
@@ -1369,7 +1394,10 @@ class Point {
   (`` Index signatures are not supported in class `Point` (object layout is fixed) ``,
   `reject_cls_index_signature`), `!` assertions, `abstract` on the class or a
   member (`Abstract classes are not supported`, `reject_generic_abstract`),
-  `declare class` (`` `declare class` is not supported ``, `reject_cls_declare`),
+  a `declare class` that is not a C struct layout (a method, accessor,
+  constructor or initializer in one is refused as the
+  [`declare class` section](#a-declare-class-a-c-struct-lent-by-pointer) lists,
+  `reject_cls_declare`, `reject_ffi_struct_*`),
   a class with no name — `export default class { }` or a class expression —
   (`Classes must be named`, `reject_cls_anonymous`; a named class expression is
   `Unsupported expression in Phase 1: ClassExpression`), a member named by a
@@ -1649,9 +1677,11 @@ export const main = (): i32 => {
   (`tests/cases/reject_generic_type_param_args`).
 - **A template obeys every rule a declared class obeys.** Type parameters
   change what a declaration *means*, not what it may be written with, so
-  `declare class Box<T>`, `export default class Box<T>`, `abstract class
-  Box<T>` and `interface Box<T> extends Base` are refused in the same words as
-  their non-generic spellings (`tests/cases/reject_generic_declare_class`,
+  `export default class Box<T>`, `abstract class Box<T>` and `interface
+  Box<T> extends Base` are refused in the same words as their non-generic
+  spellings, and `declare class Box<T>` is
+  `` A generic `declare class` is not supported `` (a C struct has one layout;
+  `tests/cases/reject_generic_declare_class`,
   `reject_generic_export_default`, `reject_generic_abstract`,
   `reject_generic_interface_extends`).
 - **A template claims its name in the one declaration namespace.** `class
@@ -1826,7 +1856,9 @@ new Box<i32>(7).keep("seven");   // @Box$i32.keep$str
 A parameter of a top-level function may have a **function type** written
 inline in its annotation, and its argument is then a function the checker can
 name at the call: a top-level
-function written by name, or an arrow written right there. Such a function is
+function written by name, an arrow written right there, or a local holding a
+function reference, which the call wraps in an arrow that calls it
+([Function references](#function-references)). Such a function is
 a template, with or without type parameters, and **each callee it is given is
 an instantiation of its own**, exactly as each type-argument tuple is: one
 `define` per (template, type arguments, function arguments), whose body calls
@@ -1940,10 +1972,35 @@ export const main = (): i32 => {
   that result:
   `` Argument 1 of `apply`: `widen` is `(x: i32) => i64`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type ``
   (`tests/cases/reject_fnarg_mismatch`). The argument must be the name of a
-  top-level function or an arrow — a local, a member or any other expression is
-  refused (`reject_fnarg_not_name`), a function reference among them
-  (`` `h` is a function reference: `apply` takes a top-level function or an arrow named at the call ``,
-  NL2734, `tests/wordings/nl2734_fnref_to_function_parameter`), a generic function names no one function
+  top-level function, an arrow, or a local that holds a
+  [function reference](#function-references) (`tests/cases/fnref_arg`): the
+  call passes an arrow that captures the local by value, so the callee calls
+  the function that was passed even if it reassigns where that came from
+  (`fnref_arg_reassign`). An arrow passed there may call a reference it
+  captures, narrowed first if it is nullable (`fnref_arg_capture`,
+  `fnref_arg_capture_param`). A field or element would be read again at
+  each call the callee makes, where JavaScript reads it once, so it is
+  refused, `ops[next(b)]` and `b.op` alike:
+  `` `ops[next(b)]` is read again at each call `twice` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const` ``
+  (NL2759, `reject_fnref_arg_effect`, `reject_fnref_arg_field`,
+  `reject_fnref_arg_element_nullable`). A nullable local is passed once a
+  test has narrowed it:
+  `` `h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it ``
+  (NL2760, `tests/wordings/nl2760_fnarg_nullable_reference`). A local that a
+  later argument of the same call assigns is refused, since the call reads it
+  after its arguments where JavaScript reads it before them:
+  `` `h` is assigned by a later argument of `apply`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const` ``
+  (NL2761, `reject_fnarg_ref_assigned_later`). A reference of
+  another signature is refused as any other function argument is (NL2340,
+  `tests/wordings/nl2340_fnarg_reference_arity`); any
+  other value is refused and named by its type,
+  `` `n` is `i32`, which is not a function `` (`reject_fnarg_not_name`). The
+  builtins that check the body they are handed — `parallelMap`,
+  `parallelMapInto`, `parallelReduce`, a scope's `spawn`, `expose`,
+  `exposeWith`, `region` and `enterWith` — take only a function or an arrow
+  named at the call, so a reference there is
+  `` `h` is a function reference: `parallelMap` takes a top-level function or an arrow named at the call ``
+  (NL2734, `tests/wordings/nl2734_fnref_to_function_parameter`). A generic function names no one function
   and is refused with the arrow to write instead (`reject_fnarg_generic_name`),
   and an arrow takes exactly its type's parameters (`reject_fnarg_arity`). An
   unannotated arrow parameter whose type no value argument binds
@@ -1980,7 +2037,8 @@ export const main = (): i32 => {
 ## Function references
 
 A name bound to a top-level function, in either spelling, written anywhere but
-a call's callee or a function argument is a **function reference**: a value
+a call's callee or a function argument is a **function reference**
+(a local holding one may itself be passed as a function argument, below): a value
 of the function's type, `(x: i32) => i32`. A function type names a reference
 everywhere but inline on a parameter of a top-level function
 ([Function parameters](#function-parameters)): on a local, a field, an array
@@ -2021,7 +2079,7 @@ export const main = (): void => {
   - `` `abs` is declared in C: a function reference names a function this program defines ``
     (NL2728, `reject_fnref_ffi`);
   - `` `sum` has a rest parameter: a function reference names a function whose every parameter the caller passes ``
-    (NL2729, `reject_fnref_rest`), and a written function type with a rest,
+    (NL2729, `reject_fnref_rest`; a defaulted parameter the same, `nl2729_fnref_default`), and a written function type with a rest,
     optional or defaulted parameter,
     `` `(x: i32, y?: i32) => i32` has an optional parameter: a function reference names a function whose every parameter the caller passes ``
     (NL2729, `reject_fnref_type_optional`, `reject_fnref_type_rest`);
@@ -2041,14 +2099,24 @@ export const main = (): void => {
     `` an arrow in value position is not yet a function reference: declare it as a top-level function and name it ``
     (NL2336, `reject_fnarg_arrow_value`).
 - **Where a reference goes.** It is held in a local, a field (of a class or an
-  interface), an array element or a return value, and passed as an argument
-  to a parameter typed through an alias, of a function, a method or a
-  constructor (`tests/cases/fnref_field`, `fnref_array`, `fnref_stores`,
-  `fnref_generic`). A reference has no zero value: a local is initialised
+  interface), an array element, a `Map` value or a return value, and passed as
+  an argument to a parameter typed through an alias, of a function, a method
+  or a constructor (`tests/cases/fnref_field`, `fnref_array`, `fnref_stores`,
+  `fnref_generic`, `fnref_map`), or to an inline function-typed parameter
+  ([Function parameters](#function-parameters), `fnref_arg`): that call
+  passes an arrow that calls the reference, so the callee is instantiated for
+  the call and calls through the dispatcher of the argument's place. A `Map`
+  may hold an array of references or a nullable of either as its value
+  (`fnref_map_array`, `fnref_map_nullable`); `??` on a nullable reference
+  tests it against `null`, tag 0 (`fnref_nullable_coalesce`); a `Map` key may not be a reference,
+  `` `(i32) => i32` cannot be the key type of `Map<(i32) => i32, i32>` ``
+  (`reject_fnref_map_key`). A reference has no zero value: a local is initialised
   where it is declared (`reject_fnarg_local`), and
   `new Array<(i32) => i32>(n)` is
   `` `new Array<(i32) => i32>(n)` would zero-fill with 0, which names no function; build it with `[]` and `push` instead ``
-  (NL2730, `reject_fnref_zero_fill`). For the same reason an array of
+  (NL2730, `reject_fnref_zero_fill`); `new Array<F | null>(n)` fills with
+  `null` and is allowed, except as module storage, which holds no `| null`
+  (NL2686, `reject_fnref_storage_nullable`). For the same reason an array of
   references has no `fill`, `unshift` or `splice`: `fill` is refused as a
   byte copy (`reject_fnref_row_fill`), the other two as an unknown method
   (`reject_fnref_row_unshift`, `reject_fnref_row_splice`). A module constant may not hold one
@@ -2060,13 +2128,28 @@ export const main = (): void => {
   name the same function (`fnref_eq`). Nothing else: printing it, putting it in
   a template string or any other use is
   `` `f` is a function reference: it can be called, compared, stored and passed, nothing else ``
-  (NL2737, `reject_fnref_print`); `jsonEncode` refuses a type that holds one
+  (NL2737, `reject_fnref_print`, and as `JSON.stringify`'s argument,
+  `reject_fnref_stringify`; a field, an element or a nullable reference
+  alike, `reject_fnref_stringify_place`); `jsonEncode` refuses a type that holds one
   (`` `jsonEncode` cannot handle `Stage.op`, which is `(i32) => i32` ``,
-  `reject_fnref_json`); `<` and the other orderings take numbers only; and a
+  `reject_fnref_json`); `<` and the other orderings take numbers only (`reject_fnref_order`,
+  `reject_fnref_order_gt`), as `+` and the other arithmetic does
+  (`reject_fnref_arith`); and a
   function type inside another type prints in parentheses,
-  `((i32) => i32)[]` (`reject_fnref_type_name`). A reference is not passed
-  for an inline function parameter (NL2734,
-  [Function parameters](#function-parameters)).
+  `((i32) => i32)[]` (`reject_fnref_type_name`).
+- **A reference may be `null`.** `F | null` holds a function or nothing: a
+  field of that type starts `null`, `new Array<F | null>(n)` holds `n`
+  `null`s, and in memory `null` is tag 0, a tag no function has. A call goes
+  through it only once a test proves it holds a function, `h !== null` or an
+  early `return` on `h === null`; a call before one is
+  `` `h` may be `null`: a nullable function reference is called only after a test such as `h !== null` proves it holds a function ``
+  (NL2758, `reject_fnref_nullable_call`). A field is not narrowed: read it
+  into a `const` and test that (`reject_fnref_nullable_field_call`). A
+  number is no reference, so a nullable field initialised with one is
+  refused as a non-null one is (NL2013, `reject_fnref_nullable_field_literal`,
+  `reject_fnref_nullable_field_negative`). The
+  rules otherwise follow [Nullable types](types.md#nullable-types)
+  (`tests/cases/fnref_nullable`).
 - **In memory a reference is an `i32` tag**, the function's position, from 1,
   among the program's functions of that signature: never an address. A call
   through it is a direct call of an internal **dispatcher**,
@@ -2075,7 +2158,7 @@ export const main = (): void => {
   the `default` arm; there is no function pointer and no indirect call
   (`tests/cases/fnref_field`). Each place — a local or a parameter, a
   function's return, a field, and the elements of every array of one reference
-  type — has a set, the functions that can flow into it, and a call dispatches
+  type (a `Map`'s values are such elements) — has a set, the functions that can flow into it, and a call dispatches
   over its place's set only: a set of one's dispatcher is one tail call with
   no `switch`, and an empty set's dispatcher traps (`fnref_empty_set`,
   `fnref_place_set`).
@@ -2084,7 +2167,19 @@ export const main = (): void => {
   that mixes members that keep a pointer argument with members that do not is
   refused,
   `` this call through `h` can reach `u3`, which keeps `p`, and `u0`, which does not, so every call here would allocate `p` in the arena; ... ``
-  (NL2736, `reject_fnref_escape_join`, `fnref_escape_join`), and a set past
+  (NL2736, `reject_fnref_escape_join`, `fnref_escape_join`). `Map.get`
+  reads the place a `Map`'s values share with the arrays of that type, so a
+  call through what it returns dispatches over the functions stored into any
+  of them (`fnref_map`, `fnref_place_set_map`); where one of those keeps a
+  pointer argument the others leave alone, that call is the mixed set above
+  and refused (`reject_fnref_place_set_map`). A `Result` arm is not a place,
+  so a reference directly in one — `Result<F, E>`, `Result<F | null, E>`,
+  `Result<T, F>`, including through a generic's type parameter — is refused,
+  `` `Result<(i32) => i32, string>` cannot hold a function reference in an arm: ... ``
+  (NL2762, `reject_fnref_result`, `reject_fnref_result_generic`); an array of references in an arm holds the
+  element place and compiles (`fnref_result_array`). An assignment used as a value,
+  `k((r = inc))`, stores into its target and hands the same function on
+  (`fnref_assign_value`). A set past
   eight members is warning NL9017, a `switch` where a direct call would not
   branch (`tests/wordings/nl9017_fnref_wide_set`). Under `--profile debug` the
   dispatcher first checks that the tag is in its set and panics with
@@ -2102,16 +2197,8 @@ export const main = (): void => {
   (`tests/link/fnref_cross_module`).
 
 Still refused: a closure (an arrow that captures), a reference to a method, a
-generic or an `async` function, a nullable reference (`F | null` is the
-nullable-scalar refusal of [Nullable types](types.md#nullable-types)), a reference as
-a `Map` value (a `Map` value is not yet a place the compiler tracks, so
-`` `Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map ``,
-NL2738, `reject_fnref_map`; keep the references in an array and the index in
-the `Map`), and a reference passed for an inline function parameter (NL2734).
-An array of references, or a nullable, `Maybe` or `Result` holding one, is
-refused as a `Map` value the same way (`Map<string, Op[]>`,
-`Map<string, Op[] | null>`; `reject_fnref_map_array`,
-`reject_fnref_map_nullable`).
+generic or an `async` function, and a reference as a `Map` key
+(`reject_fnref_map_key`).
 
 ## Async functions: `async` and `await`
 
@@ -4602,14 +4689,17 @@ declare i32 @abs(i32)
 The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
-**A parameter is a scalar, a `CPtr`, a borrowed `string` or a `u8[]` buffer
-with its count; a return is a scalar, a `CPtr` or a copied `string`** — `i32`,
+**A parameter is a scalar, a `CPtr`, a borrowed `string`, a `u8[]` buffer
+with its count or a borrowed `declare class`; a return is a scalar, a `CPtr` or
+a copied `string`** — `i32`,
 `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `boolean`, `void`, the foreign
 pointer below, `string` and `string | null` in either position, and
-[a buffer](#a-u8-parameter-a-buffer-and-its-count) as a parameter. A class
-or an interface is rejected with
+[a buffer](#a-u8-parameter-a-buffer-and-its-count) and
+[a C struct](#a-declare-class-a-c-struct-lent-by-pointer) as a parameter. Any
+other class or an interface is rejected with
 `` and a declared C function takes scalars, `CPtr`, a `string` it borrows as
-`const char *` and a `u8[]` buffer followed by its `u64` count `` in a
+`const char *` and a `u8[]` buffer followed by its `u64` count, or a `declare
+class` it borrows by pointer `` in a
 parameter (`reject_ffi_class_param`), any other array with
 `` the only array a declared C function takes is a `u8[]` or a `readonly u8[]` ``
 (`tests/cases/reject_ffi_string_array_param`: a `string[]` too, which would be
@@ -4752,8 +4842,8 @@ declare function free(block: CPtr): void;
   for an address whose provenance and lifetime are unknown. The type-argument
   clause is stated where a generic function or class is instantiated
   (`reject_ffi_pointer_type_argument`), so `new Empty<CPtr>()` is refused even
-  when no member of `Empty<T>` names `T`. The one field that may hold a `CPtr`
-  is a handle class's, below.
+  when no member of `Empty<T>` names `T`. The fields that may hold a `CPtr`
+  are a handle class's and a [`declare class`](#a-declare-class-a-c-struct-lent-by-pointer)'s, below.
 - **A `null` reaches C only as the literal.** A `declare function` may return
   `CPtr | null` and may take one, and a call passes a `CPtr | null` parameter
   either the literal `null` — `realpath(path, null)`, `getcwd(null, 0)`, the
@@ -5137,6 +5227,128 @@ another name, `close(fileno(p))`, or a C function returning its argument are
 not seen by the rules above. And the constructor's foreign call returns a
 pointer the object owns: two objects built from one shared pointer would both
 close it.
+
+### A `declare class`: a C struct, lent by pointer
+
+**A `declare class` is a C struct: its fields are laid out in declaration order,
+each at its natural alignment, and the size is rounded up to the widest
+alignment, as a C compiler lays out the same fields. `new Name()` takes no
+arguments and zero-fills it, and a `declare function` parameter typed `Name`
+borrows it as a `struct Name *`** (`tests/cases/ffi_struct_param`,
+`ffi_struct_layout`, [cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#declare-class-a-c-struct-lent-by-pointer),
+`docs/wp27-ffi.md` §9b):
+
+```ts
+declare class Timespec {
+  sec: i64
+  nsec: i64
+}
+declare function clock_gettime(clock: i32, ts: Timespec): i32
+
+const now = new Timespec()
+clock_gettime(1, now)
+console.log(now.sec)
+```
+
+```llvm
+%struct.Timespec = type { i64, i64 }
+declare i32 @clock_gettime(i32, %struct.Timespec*)
+  %Timespec.obj = alloca %struct.Timespec, align 8
+  %0 = bitcast %struct.Timespec* %Timespec.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 16, i1 false)
+  store %struct.Timespec* %Timespec.obj, %struct.Timespec** %now.addr, align 8
+  %1 = load %struct.Timespec*, %struct.Timespec** %now.addr, align 8
+  %2 = call i32 @clock_gettime(i32 1, %struct.Timespec* %1)
+```
+
+- **`new` zero-fills every byte, padding included**, with one `llvm.memset` of
+  the struct's size: C may compare or hash the whole struct, and a
+  `zeroinitializer` store need not write the padding (`ffi_struct_layout`).
+- **A `CPtr` field is the target's `void *`**: eight bytes natively, four under
+  `--profile wasi` (wasm32), where the struct's size and offsets are the ones
+  clang gives the same C struct for that target (`tests/ffi-struct.js`).
+- **A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
+  `CPtr | null`, or another `declare class`, embedded by value** — C's
+  `struct timespec it_value;`, not a pointer to one. A `number` field is
+  refused whatever the mode and however it is spelled — in parentheses, through a
+  `type` alias or a chain of them, imported or not — since `--number-mode` picks
+  its width and a C struct has one layout. The resolver decides it where it meets
+  `number`, so no spelling escapes; an alias of `i32` stays a field: `` has type
+  `number`, whose width `--number-mode` chooses `` (NL2755,
+  `reject_ffi_struct_field_number`, `_paren`, `_alias`, `_alias_paren`,
+  `_alias_chain`; `tests/ffi-struct.js`: the imported alias, the `i32` alias). Any other type is
+  `` Field `ok` of `declare class Flags` has type `boolean`, which has no C
+  layout `` (NL2752, `reject_ffi_struct_field_type`, `reject_cls_declare`,
+  `reject_ffi_struct_field_array`, `reject_ffi_struct_field_class`): a
+  `boolean`, a `string`, an array and a Nish class have no C spelling the
+  compiler could promise. A struct cannot embed
+  itself, directly or through another (NL2749, `reject_ffi_struct_self`,
+  `reject_ffi_struct_cycle`).
+- **A field is plain and has no initializer, and the class has nothing but
+  fields**: no `readonly`, `static` or optional field (NL2747), no initializer,
+  because `new` zero-fills (NL2748), no constructor, method, accessor or other
+  member such as an index signature (NL2751, `reject_ffi_struct_index_signature`), no type parameter (NL2741, `reject_generic_declare_class`), no `extends` or `implements` (NL2750),
+  and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
+- **It stays in its module.** It cannot be a parameter or the return type of an
+  exported function or an exported class's method, or a field of an exported
+  class or interface: `` `declare class Point` cannot be a parameter of an
+  exported function `` (`reject_ffi_struct_export_param`, `_return`, `_method`,
+  `_field`, `_interface`). A type that holds one is refused there too, however deep —
+  through `Result`, `T | null`, an array, a generic instance or a class of
+  this program: `` `Wrap` holds a `declare class Point` and cannot be a
+  parameter of an exported function `` (NL2756,
+  `reject_ffi_struct_export_result`, `_generic`, `_holder`, `_holder_nullable`). So no `.d.ts`
+  or N-API binding ever describes one, and `--emit-header`, which lists every
+  class of the program, declares a class that holds one only as an opaque
+  `typedef struct Holder Holder;` (`tests/ffi-struct.js`, `docs/wp27-ffi.md`
+  §9g).
+- **It is a native build's.** A wasm module a page loads — freestanding wasm,
+  or any build that writes `--emit-dts` — links no C to lend a struct to, and
+  its IR is laid out for wasm32 later: `` `declare class Point` declares a C
+  struct, and a wasm module a page loads links no C to lend it to `` (NL2757,
+  `tests/wordings/nl2757_declare_class_emit_dts`, `nl2757_declare_class_wasm32`).
+  A `--profile wasi` build is wasm32 from the start and keeps it.
+- **It is built with `new` and nothing else.** `new Point(1)` is refused as for
+  any class without a constructor (`reject_ffi_struct_new_args`), and an object
+  literal typed as one is
+  `` an object literal cannot lay out a C struct `` (NL2744,
+  `reject_ffi_struct_literal`).
+- **C borrows it for the length of the call**, as it borrows a `string`: it may
+  read and write the fields until it returns, and may not keep the address. The
+  escape analysis treats the argument as a read, so an instance that does not
+  otherwise escape stays in the caller's stack frame; a C function that keeps
+  the pointer (an `aio_read` control block, a struct handed to a thread) is
+  outside the contract. Its accesses carry no TBAA tag, so a field read after
+  the call sees what C wrote, and a function of this program that passes its
+  parameter on to C writes through that parameter, so the parameter is not
+  `readonly` and its caller's read sees the write too (`ffi_struct_param`).
+- **`Name | null` passes `NULL` for `null`**, under the rule a `CPtr | null`
+  parameter follows: the literal `null`, or a value narrowed with `!== null`
+  (NL2539, `reject_ffi_struct_nullable_held`).
+- **An embedded struct is part of its owner.** `stamp.at.sec` reads and writes a
+  field in place, and `clock_gettime(1, stamp.at)` lends C the address inside
+  `stamp`; those are the only two uses. Holding it — `const at = stamp.at`, or
+  passing it to a function this program defines — is
+  `` cannot be held as a value `` (NL2743, `reject_ffi_struct_nested_bind`,
+  `reject_ffi_struct_nested_nish_arg`), and replacing it is
+  `` a `declare class` embedded in its object is written field by field ``
+  (NL2745, `reject_ffi_struct_nested_assign`).
+- **It is not a return type or an array element.** C returning a struct by
+  value, or a pointer into memory it owns, leaves the copy with no owner on
+  this side: `` a C struct is only lent to C by pointer: take a `Point`
+  parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); an array of
+  them would be a C array the program lays out element by element, and is
+  `` cannot be an array element `` (NL2740, `reject_ffi_struct_array`,
+  `reject_ffi_struct_array_literal`, `reject_ffi_struct_array_new`), however
+  the array's type is spelled.
+- **Its fields are C's to fill.** Typed JSON does not decode into one or
+  encode one: `` a `declare class`: C reads and writes its fields `` (NL2753,
+  `reject_ffi_struct_json`). A spread copies a flat one's fields into a class
+  of this program, but not one that embeds another, whose embedded struct is
+  not a value: `` which a spread cannot copy `` (NL2754,
+  `reject_ffi_struct_spread`).
+- **`--emit-ts` refuses a module that declares one**, with the same message as
+  for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
 
 ### What a declaration cannot say
 

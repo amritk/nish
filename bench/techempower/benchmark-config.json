@@ -18,7 +18,7 @@
         "os": "Linux",
         "database_os": "Linux",
         "display_name": "nish",
-        "notes": "One process, one thread: the standard library's Http1Server on one pollWait loop. The JSON is serialized by JsonWriter on every request.",
+        "notes": "One process a core under nish/net/prefork, each the standard library's Http1Server on one pollWait loop over an SO_REUSEPORT listener. The JSON is serialized by JsonWriter on every request.",
         "versus": "None"
       }
     },
