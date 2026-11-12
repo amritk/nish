@@ -9,7 +9,7 @@
 // that does not resolve is by that fact outside the program. README.md has the
 // method, the classes and the shapes the classification is known to get wrong.
 import { builtinModules } from "node:module"
-import { dirname, join, relative } from "node:path"
+import { join, relative } from "node:path"
 import ts from "typescript"
 
 const repoRoot = join(import.meta.dirname, "..", "..")
@@ -28,7 +28,7 @@ export const CLASSES = [
 const AGGREGATES = new Set(["all", "allSettled", "race", "any"])
 const CHAINS = new Set(["then", "catch", "finally"])
 const TIMER = /\bset(?:Timeout|Interval|Immediate)\b/
-const CHASE_DEPTH = 6
+const CHASE_DEPTH = 16
 
 const isFunction = (node) => ts.isFunctionLike(node) && node.body !== undefined
 const isAsync = (node) =>
@@ -106,7 +106,10 @@ export const census = (root, files) => {
     }
     if (type.isUnion()) {
       const parts = type.types.map(thenable)
-      return parts.includes("yes") ? "yes" : parts.includes("any") ? "any" : "no"
+      if (parts.includes("yes")) {
+        return "yes"
+      }
+      return parts.includes("any") ? "any" : "no"
     }
     if ((type.flags & ts.TypeFlags.TypeParameter) !== 0) {
       const constraint = checker.getBaseConstraintOfType(type)
@@ -162,33 +165,39 @@ export const census = (root, files) => {
       : null
   }
 
-  /** The first name in a type annotation that an unresolved import brought in. */
-  const externalType = (typeNode) => {
-    let found = null
-    const step = (node) => {
-      if (found !== null) {
-        return
-      }
-      if (ts.isTypeReferenceNode(node) || ts.isExpressionWithTypeArguments(node)) {
-        let name = ts.isTypeReferenceNode(node) ? node.typeName : node.expression
-        while (ts.isQualifiedName(name) || ts.isPropertyAccessExpression(name)) {
-          name = ts.isQualifiedName(name) ? name.left : name.expression
-        }
-        const from = checker.getSymbolAtLocation(name)?.declarations?.[0]
-        if (from !== undefined && inProgram(from)) {
-          found = importOf(from)
-        }
-      } else if (
-        ts.isImportTypeNode(node) &&
-        ts.isLiteralTypeNode(node.argument) &&
-        ts.isStringLiteral(node.argument.literal)
-      ) {
-        found = external(node.argument.literal)
-      }
-      ts.forEachChild(node, step)
+  /** The module an unresolved import brought a type's own name in from, or null. */
+  const externalType = (typeNode, depth = 0) => {
+    if (depth > CHASE_DEPTH) {
+      return null
     }
-    step(typeNode)
-    return found
+    if (ts.isParenthesizedTypeNode(typeNode) || ts.isTypeOperatorNode(typeNode)) {
+      return externalType(typeNode.type, depth + 1)
+    }
+    if (ts.isArrayTypeNode(typeNode)) {
+      return externalType(typeNode.elementType, depth + 1)
+    }
+    if (ts.isUnionTypeNode(typeNode) || ts.isIntersectionTypeNode(typeNode)) {
+      return typeNode.types.map((t) => externalType(t, depth + 1)).find((found) => found !== null) ?? null
+    }
+    if (ts.isImportTypeNode(typeNode)) {
+      const { argument } = typeNode
+      return ts.isLiteralTypeNode(argument) && ts.isStringLiteral(argument.literal)
+        ? external(argument.literal)
+        : null
+    }
+    if (!ts.isTypeReferenceNode(typeNode) && !ts.isExpressionWithTypeArguments(typeNode)) {
+      return null
+    }
+    // The head only: `Promise<Row>` is the platform's, whatever package `Row` is from.
+    let name = ts.isTypeReferenceNode(typeNode) ? typeNode.typeName : typeNode.expression
+    while (ts.isQualifiedName(name) || ts.isPropertyAccessExpression(name)) {
+      name = ts.isQualifiedName(name) ? name.left : name.expression
+    }
+    const from = checker.getSymbolAtLocation(name)?.declarations?.[0]
+    if (from === undefined || !inProgram(from)) {
+      return null
+    }
+    return ts.isTypeAliasDeclaration(from) ? externalType(from.type, depth + 1) : importOf(from)
   }
 
   /**
@@ -256,9 +265,7 @@ export const census = (root, files) => {
       if (typed !== null) {
         return typed
       }
-      return declaration.initializer === undefined || depth > CHASE_DEPTH
-        ? null
-        : externalRoot(declaration.initializer, depth + 1)
+      return declaration.initializer === undefined ? null : externalRoot(declaration.initializer, depth + 1)
     }
     return null
   }
@@ -268,7 +275,7 @@ export const census = (root, files) => {
   const leaf = (kind, detail) => [{ kind: "leaf", leaf: kind, detail }]
   const unknown = (why) => [{ kind: "unknown", why }]
   const none = (why) => [{ kind: "none", why }]
-  const outside = (root, why) => (root === null ? unknown(why) : leaf(root.kind, root.detail))
+  const outside = (origin, why) => (origin === null ? unknown(why) : leaf(origin.kind, origin.detail))
 
   /** A call to a function of the program: an edge, unless it plainly answers a value. */
   const edge = (fn) => (!isAsync(fn) && returns(fn) === "no" ? none("plain value") : [{ kind: "edge", fn }])
@@ -297,22 +304,97 @@ export const census = (root, files) => {
     return leaf("dependency", "(declared in a .d.ts)")
   }
 
-  const fromDeclaration = (declaration, call, hasBody) => {
-    if (!inProgram(declaration)) {
-      return platform(declaration, call)
+  // Who extends or implements what, by the symbol of the type named in the clause.
+  const subtypes = new Map()
+  const indexHeritage = (node) => {
+    if ((ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) && node.name !== undefined) {
+      for (const base of (node.heritageClauses ?? []).flatMap((clause) => clause.types)) {
+        const head = base.expression
+        const symbol =
+          ts.isIdentifier(head) || ts.isPropertyAccessExpression(head)
+            ? symbolAt(ts.isIdentifier(head) ? head : head.name)
+            : null
+        if (symbol !== null) {
+          subtypes.set(symbol.target, [...(subtypes.get(symbol.target) ?? []), node])
+        }
+      }
     }
+    ts.forEachChild(node, indexHeritage)
+  }
+  for (const sf of sources) {
+    indexHeritage(sf)
+  }
+
+  /** The bodies the program's classes give an interface member or abstract method. */
+  const implementations = (member) => {
+    const holder = member.parent
+    if (
+      !(ts.isInterfaceDeclaration(holder) || ts.isClassDeclaration(holder)) ||
+      holder.name === undefined ||
+      member.name === undefined
+    ) {
+      return []
+    }
+    const start = checker.getSymbolAtLocation(holder.name)
+    const name = member.name.getText()
+    const bodies = new Set()
+    const seen = new Set([holder])
+    const queue = start === undefined ? [] : [...(subtypes.get(start) ?? [])]
+    while (queue.length > 0) {
+      const sub = queue.pop()
+      if (seen.has(sub)) {
+        continue
+      }
+      seen.add(sub)
+      const symbol = checker.getSymbolAtLocation(sub.name)
+      if (symbol === undefined) {
+        continue
+      }
+      queue.push(...(subtypes.get(symbol) ?? []))
+      if (ts.isClassDeclaration(sub)) {
+        const property = checker.getPropertyOfType(checker.getDeclaredTypeOfSymbol(symbol), name)
+        for (const d of property?.declarations ?? []) {
+          const initializer =
+            ts.isPropertyDeclaration(d) && d.initializer !== undefined ? bare(d.initializer) : null
+          const body = isFunction(d) ? d : initializer
+          if (body !== null && isFunction(body) && inProgram(body)) {
+            bodies.add(body)
+          }
+        }
+      }
+    }
+    return [...bodies]
+  }
+
+  const dispatched = (declaration, why) => {
+    const bodies = implementations(declaration)
+    return bodies.length > 0 ? bodies.flatMap(edge) : unknown(why)
+  }
+
+  /** What a call that resolves to `declarations` waits on. */
+  const fromDeclarations = (declarations, call) => {
+    const mine = declarations.filter(inProgram)
+    if (mine.length === 0) {
+      return platform(declarations[0], call)
+    }
+    const hasBody = mine.some(isFunction)
+    return mine.flatMap((d) => fromDeclaration(d, call, hasBody))
+  }
+
+  const fromDeclaration = (declaration, call, hasBody) => {
     if (isFunction(declaration)) {
       return edge(declaration)
     }
     if (ts.isFunctionDeclaration(declaration) || ts.isMethodDeclaration(declaration)) {
       // An overload signature beside its implementation says nothing more.
-      return hasBody ? [] : unknown("abstract method")
+      return hasBody ? [] : dispatched(declaration, "abstract method")
     }
     if (ts.isMethodSignature(declaration) || ts.isPropertySignature(declaration)) {
-      return outside(
-        declaration.type === undefined ? null : externalType(declaration.type),
-        "interface member"
-      )
+      const from =
+        ts.isPropertySignature(declaration) && declaration.type !== undefined
+          ? externalType(declaration.type)
+          : null
+      return from === null ? dispatched(declaration, "interface member") : leaf(from.kind, from.detail)
     }
     if (ts.isShorthandPropertyAssignment(declaration)) {
       const value = checker.getShorthandAssignmentValueSymbol(declaration)?.declarations?.[0]
@@ -365,8 +447,7 @@ export const census = (root, files) => {
             : null
         const declarations = named?.target.declarations ?? []
         if (declarations.length > 0) {
-          const hasBody = declarations.some(isFunction)
-          return declarations.flatMap((d) => fromDeclaration(d, e, hasBody))
+          return fromDeclarations(declarations, e)
         }
         return outside(externalRoot(callback), "gathered promises")
       }
@@ -397,6 +478,26 @@ export const census = (root, files) => {
     return unknown("gathered promises")
   }
 
+  let wrappedCallbacks = 0
+
+  /**
+   * A dependency's function handed an inline `async` function (a tracer span, a
+   * retry, a transaction) waits on that function: the wait is the program's own.
+   */
+  const wrapped = (call, found) => {
+    if (!found.every((s) => s.kind === "leaf" && s.leaf === "dependency")) {
+      return found
+    }
+    const callbacks = call.arguments
+      .map(bare)
+      .filter((arg) => isFunction(arg) && (isAsync(arg) || returns(arg) === "yes"))
+    if (callbacks.length === 0) {
+      return found
+    }
+    wrappedCallbacks += 1
+    return callbacks.flatMap(edge)
+  }
+
   const callWaitsOn = (call, fn, depth) => {
     const callee = bare(call.expression)
     if (callee.kind === ts.SyntaxKind.ImportKeyword) {
@@ -419,25 +520,21 @@ export const census = (root, files) => {
         }
       }
     }
-    const nameNode = ts.isPropertyAccessExpression(callee)
-      ? callee.name
-      : ts.isElementAccessExpression(callee)
-        ? callee.argumentExpression
-        : callee
+    const member = ts.isElementAccessExpression(callee) ? callee.argumentExpression : callee
+    const nameNode = ts.isPropertyAccessExpression(callee) ? callee.name : member
     const symbol = symbolAt(nameNode)
     const declarations = symbol?.target.declarations ?? []
     if (declarations.length > 0) {
-      const hasBody = declarations.some(isFunction)
-      return declarations.flatMap((d) => fromDeclaration(d, call, hasBody))
+      return fromDeclarations(declarations, call)
     }
     if (symbol !== null && symbol.alias !== null) {
       const from = symbol.alias.declarations?.[0]
-      return outside(from === undefined ? null : importOf(from), "unresolved import")
+      return wrapped(call, outside(from === undefined ? null : importOf(from), "unresolved import"))
     }
     if (thenableAt(call) === "no") {
       return none("plain value")
     }
-    return outside(externalRoot(callee), "unresolved call")
+    return wrapped(call, outside(externalRoot(callee), "unresolved call"))
   }
 
   /**
@@ -582,9 +679,9 @@ export const census = (root, files) => {
     return "direct call"
   }
 
-  /** Strict's rule: the `await` is a whole statement, initializer, `return` or right side of `=`. */
-  const atStatementTop = (awaitNode) => {
-    let n = awaitNode
+  /** The outermost of the parentheses, `as` casts and `!` that wrap a node and nothing else. */
+  const unwrapped = (node) => {
+    let n = node
     while (
       ts.isParenthesizedExpression(n.parent) ||
       ts.isAsExpression(n.parent) ||
@@ -592,6 +689,12 @@ export const census = (root, files) => {
     ) {
       n = n.parent
     }
+    return n
+  }
+
+  /** Strict's rule: the `await` is a whole statement, initializer, `return` or right side of `=`. */
+  const atStatementTop = (awaitNode) => {
+    const n = unwrapped(awaitNode)
     const p = n.parent
     return (
       ts.isExpressionStatement(p) ||
@@ -665,7 +768,6 @@ export const census = (root, files) => {
     }
     const file = fn.getSourceFile()
     functions.set(fn, {
-      fn,
       async,
       name: nameOf(fn),
       file: relative(root, file.fileName),
@@ -688,14 +790,7 @@ export const census = (root, files) => {
 
   // Where a call to one of the program's `async` functions stands (strict: NL2645).
   const callShape = (call) => {
-    let n = call
-    while (
-      ts.isParenthesizedExpression(n.parent) ||
-      ts.isAsExpression(n.parent) ||
-      ts.isNonNullExpression(n.parent)
-    ) {
-      n = n.parent
-    }
+    const n = unwrapped(call)
     const p = n.parent
     if (ts.isAwaitExpression(p)) {
       return "awaited where made"
@@ -783,7 +878,10 @@ export const census = (root, files) => {
     if (!direct.has("edge")) {
       return "no-wait"
     }
-    return f.blocks ? "contagion-blocks" : f.unsure ? "contagion-unknown" : "contagion-never"
+    if (f.blocks) {
+      return "contagion-blocks"
+    }
+    return f.unsure ? "contagion-unknown" : "contagion-never"
   }
 
   const counts = Object.fromEntries(CLASSES.map((c) => [c, 0]))
@@ -793,12 +891,16 @@ export const census = (root, files) => {
   const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1)
   const rows = []
   let recursive = 0
+  let platformLeaf = 0
   for (const f of functions.values()) {
     if (!f.async) {
       continue
     }
     const cls = classOf(f)
     counts[cls] += 1
+    if (f.sources.some((s) => s.kind === "leaf" && s.leaf !== "dependency")) {
+      platformLeaf += 1
+    }
     if (reachesSelf(f)) {
       recursive += 1
     }
@@ -834,11 +936,11 @@ export const census = (root, files) => {
     functions: functions.size,
     async: rows.length,
     counts,
+    platformLeaf,
     leafKinds: sorted(leafKinds),
     leafDetails: sorted(leafDetails),
     unknownWhys: sorted(unknownWhys),
-    shapes: { ...shapes, recursive },
+    shapes: { ...shapes, recursive, wrappedCallbacks },
     rows,
-    root: dirname(join(root, "x")),
   }
 }

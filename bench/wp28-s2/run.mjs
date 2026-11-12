@@ -75,9 +75,11 @@ const table = (head, rows) => {
   console.log("")
 }
 
+const totalOf = (c) => CLASSES.reduce((n, cls) => n + c[cls], 0)
+
 /** The two readings of one application's counts, each with unknown as its error bar. */
 const readings = (c) => {
-  const total = CLASSES.reduce((sum, cls) => sum + c[cls], 0)
+  const total = totalOf(c)
   const need = c.leaf + c.mixed
   const contagion = c["contagion-blocks"] + c["contagion-unknown"] + c["contagion-never"] + c["no-wait"]
   const never = c["contagion-never"] + c["no-wait"]
@@ -112,29 +114,39 @@ table(
 )
 
 console.log("## `async` functions by class\n")
-const classRow = (name, c) => [
-  name,
-  CLASSES.reduce((n, cls) => n + c[cls], 0),
-  ...CLASSES.map((cls) => c[cls]),
-]
+const classRow = (name, c) => [name, totalOf(c), ...CLASSES.map((cls) => c[cls])]
 table(
   ["application", "`async`", ...CLASSES],
   [...results.map(({ app, result }) => classRow(app.name, result.counts)), classRow("all", totalCounts)]
 )
 
 console.log("## By contagion, as a share of `async` functions (low to high: the unknown column is the gap)\n")
-const readingRow = (name, c) => {
+const readingRow = (name, c, platform) => {
   const r = readings(c)
   return [
     name,
     percent(r.need, r.total),
+    percent(platform, r.total),
     `${percent(r.direct.low, r.total)} to ${percent(r.direct.high, r.total)}`,
     `${percent(r.transitive.low, r.total)} to ${percent(r.transitive.high, r.total)}`,
   ]
 }
 table(
-  ["application", "waits outside itself", "waits only on the program", "reaches nothing outside"],
-  [...results.map(({ app, result }) => readingRow(app.name, result.counts)), readingRow("all", totalCounts)]
+  [
+    "application",
+    "waits outside itself",
+    "of which on the platform",
+    "waits only on the program",
+    "reaches nothing outside",
+  ],
+  [
+    ...results.map(({ app, result }) => readingRow(app.name, result.counts, result.platformLeaf)),
+    readingRow(
+      "all",
+      totalCounts,
+      sum((r) => r.platformLeaf)
+    ),
+  ]
 )
 
 const merged = (pick) => {
@@ -185,6 +197,10 @@ table(
   [
     ["`for await` loops", sum((r) => r.shapes.forAwait)],
     ["`async` functions on a cycle of awaits", sum((r) => r.shapes.recursive)],
+    [
+      "dependency calls read as a wait on their inline `async` argument",
+      sum((r) => r.shapes.wrappedCallbacks),
+    ],
   ]
 )
 
@@ -228,11 +244,11 @@ if (existsSync(compiler)) {
     .filter((f) => f.endsWith(".ts"))
     .sort()
     .map((file) => {
-      const run = spawnSync(compiler, [join(here, "strict", file), "-o", join(out, "out.ll")], {
+      const run = spawnSync(compiler, [join(here, "strict", file), "--json", "-o", join(out, "out.ll")], {
         encoding: "utf8",
       })
-      const code = /\bNL\d{4}\b/.exec(`${run.stderr}${run.stdout}`)
-      return [file, run.status, code === null ? "accepted" : code[0]]
+      const first = run.stdout.split("\n").find((line) => line.startsWith("{"))
+      return [file, run.status, first === undefined ? "accepted" : JSON.parse(first).code]
     })
   rmSync(out, { recursive: true, force: true })
   table(["example", "exit", "diagnostic"], rows)
