@@ -309,4 +309,39 @@ PASS  and is not counted as dropped
 PASS  in a full ring the oldest becomes the newest
 PASS  and the rest keep their order
 PASS  a ring of one is left as it is
-quic recovery: 311 passed, 0 failed, 0 skipped
+PASS  ∛0 is 0
+PASS  5000³ is 1.25 × 10¹¹, so its cube root is 5000
+PASS  and one below it rounds down to 4999
+PASS  40000³, 6.4 × 10¹³, has root 40000
+PASS  and past it the root stops there: 40000 ms
+PASS  one congestion event
+PASS  multiplicative decrease by β = 0.7: ssthresh and the window 140000, not NewReno's 100000
+PASS  W_max is the window before the loss
+PASS  and cwnd_prior with it
+PASS  the epoch starts at the first acknowledgement after recovery, not at the loss
+PASS  fast convergence: a loss below the last W_max remembers 0.85 of the window
+PASS  the decrease itself is still 0.7
+PASS  so K, the time back to W_max, is 3968 ms, where 200000 would have taken 5000
+PASS  K = ∛((W_max − cwnd) / C) = 5000 ms exactly
+PASS  the epoch is the first ACK after recovery, at 201
+PASS  the window at t = 0, 1, 2, 3, 4, 5 and 6 s
+PASS  concave below W_max: each second adds less than the one before
+PASS  at K the window has reached W_max to within 0.1%, and holds below it
+PASS  convex past K: the second after K adds more than the second before it
+PASS  the Reno estimate W_est, far below: 9/17 of a datagram a window of ACKs
+PASS  every round the window is W_est
+PASS  the window at t = 0, 0.5 and 1 s: past W(1 s) = 169280, and the 169251 a 100 ms RTT reaches
+PASS  ten rounds in, at 1101
+PASS  draining the flight grows the window while it is still half full
+PASS  the ACK that finds less than half in flight starts the idle time
+PASS  the rounds of one packet in flight, to 2201, leave the window where it was
+PASS  the epoch has not moved yet
+PASS  the first ACK of a full flight again moves the epoch by the idle time
+PASS  and growth resumes from t = 1000
+PASS  the losses of `unit.ts`'s persistent-congestion case are persistent congestion under CUBIC too
+PASS  ssthresh is 0.7 of the window, and the window the minimum plus the ACK's own packet
+PASS  and the next stage of congestion avoidance starts a new epoch
+PASS  congestion 0 is NewReno
+PASS  congestion QUIC_RECOVERY_CUBIC runs CUBIC, and fits
+PASS  an unknown controller, 2 or -1, does not fit: the connection closes with INTERNAL_ERROR
+quic recovery: 346 passed, 0 failed, 0 skipped
