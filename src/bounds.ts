@@ -2819,6 +2819,11 @@ const judgeVectorAccess = (walk: BoundsWalk, state: State, call: Node, lanes: i3
   const last = lanes - 1
   const constant = literalValue(index)
   if (constant >= 0) {
+    // Past `INT_MAX` the access cannot pass its check, and the sum is no
+    // length: it keeps its check and leaves nothing behind.
+    if (toI64(constant) + toI64(lanes) > I32_MAX) {
+      return
+    }
     if (knownMinLength(state, holder, constant + lanes)) {
       noteProof(walk, call)
     }
@@ -2828,6 +2833,9 @@ const judgeVectorAccess = (walk: BoundsWalk, state: State, call: Node, lanes: i3
   // A passed `w[i + c]` says nothing about `i >= 0`, as in `recordPassedCheck`.
   const offset = offsetIndex(walk.ctx, index)
   if (offset !== null) {
+    if (toI64(offset.c) + toI64(last) > I32_MAX) {
+      return
+    }
     if (knownNonNegative(state, offset.v) && belowReach(state, offset.v, holder) >= offset.c + last) {
       noteProof(walk, call)
     }

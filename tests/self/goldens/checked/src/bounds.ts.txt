@@ -1652,26 +1652,26 @@ function judgeVectorAccess(walk: BoundsWalk, state: State, call: Node, lanes: i3
   local +6:9 last: i32 (const)
   local +7:9 constant: i32 (const)
   callee +7:20 literalValue -> @literalValue
-  callee +9:9 knownMinLength -> @knownMinLength
-  callee +10:7 noteProof -> @noteProof
-  callee +12:5 addFact -> @addFact
-  callee +12:20 new Fact -> @Fact.constructor
-  local +16:9 offset: Offset | null (const)
-  callee +16:18 offsetIndex -> @offsetIndex
-  callee +18:9 knownNonNegative -> @knownNonNegative
-  callee +18:46 belowReach -> @belowReach
-  callee +19:7 noteProof -> @noteProof
-  callee +21:5 addFact -> @addFact
-  callee +21:20 new Fact -> @Fact.constructor
-  local +24:9 i: Local | null (const)
-  callee +24:13 indexLocal -> @indexLocal
-  callee +28:7 knownNonNegative -> @knownNonNegative
-  callee +28:37 belowReach -> @belowReach
-  callee +29:5 noteProof -> @noteProof
-  callee +31:3 addFact -> @addFact
-  callee +31:18 new Fact -> @Fact.constructor
-  callee +32:3 addFact -> @addFact
-  callee +32:18 new Fact -> @Fact.constructor
+  callee +14:9 knownMinLength -> @knownMinLength
+  callee +15:7 noteProof -> @noteProof
+  callee +17:5 addFact -> @addFact
+  callee +17:20 new Fact -> @Fact.constructor
+  local +21:9 offset: Offset | null (const)
+  callee +21:18 offsetIndex -> @offsetIndex
+  callee +26:9 knownNonNegative -> @knownNonNegative
+  callee +26:46 belowReach -> @belowReach
+  callee +27:7 noteProof -> @noteProof
+  callee +29:5 addFact -> @addFact
+  callee +29:20 new Fact -> @Fact.constructor
+  local +32:9 i: Local | null (const)
+  callee +32:13 indexLocal -> @indexLocal
+  callee +36:7 knownNonNegative -> @knownNonNegative
+  callee +36:37 belowReach -> @belowReach
+  callee +37:5 noteProof -> @noteProof
+  callee +39:3 addFact -> @addFact
+  callee +39:18 new Fact -> @Fact.constructor
+  callee +40:3 addFact -> @addFact
+  callee +40:18 new Fact -> @Fact.constructor
 function isUncheckedElementCall(program: CheckedProgram, call: Node): boolean -> @isUncheckedElementCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
