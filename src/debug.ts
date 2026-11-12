@@ -450,7 +450,9 @@ export class DebugInfo {
       }
       const nested = f.nested
       if (nested !== null) {
-        members.push(this.member(f.name, ref, this.byValue(nested), nested.size * 8, f.offset * 8, file, line))
+        members.push(
+          this.member(f.name, ref, this.byValue(nested), nested.size * 8, f.offset * 8, file, line)
+        )
         continue
       }
       const base = this.typeRef(f.type)

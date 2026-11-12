@@ -2060,32 +2060,32 @@ function FactCollector.addCallee(this: FactCollector, callee: FunctionSig, call:
   callee +22:9 FactCollector.noteSite -> @FactCollector.noteSite
   local +32:9 b: i32 (let)
   local +34:13 buffer: Node (const)
-  callee +38:20 layoutClass -> @layoutClass
-  callee +38:63 TypeTable.stripNull -> @TypeTable.stripNull
-  local +39:13 held: Node (let)
-  callee +39:20 unwrapParens -> @unwrapParens
-  callee +40:9 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
-  callee +42:18 unwrapParens -> @unwrapParens
-  callee +43:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
-  callee +46:11 lentBuffer -> @lentBuffer
-  callee +47:14 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
-  callee +48:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
-  local +50:15 proven: boolean (const)
-  callee +50:24 hostFunction -> @hostFunction
-  callee +51:13 hostWindowProven -> @hostWindowProven
-  callee +52:13 foreignBufferCountProven -> @foreignBufferCountProven
-  callee +57:15 foreignBufferCount -> @foreignBufferCount
-  local +62:17 tail: string[] (const)
-  callee +63:11 panicTailCallees -> @panicTailCallees
-  callee +64:11 FactCollector.addCallees -> @FactCollector.addCallees
-  callee +66:9 FactCollector.noteSite -> @FactCollector.noteSite
-  callee +72:9 TypeTable.stripNull -> @TypeTable.stripNull
-  local +73:13 nullable: boolean (const)
-  callee +73:24 TypeTable.isNullable -> @TypeTable.isNullable
-  local +74:13 copy: string[] (const)
-  callee +75:7 foreignResultCallees -> @foreignResultCallees
-  callee +76:7 FactCollector.addCallees -> @FactCollector.addCallees
-  callee +78:9 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +40:9 layoutClass -> @layoutClass
+  callee +40:52 TypeTable.stripNull -> @TypeTable.stripNull
+  local +42:13 held: Node (let)
+  callee +42:20 unwrapParens -> @unwrapParens
+  callee +43:9 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
+  callee +45:18 unwrapParens -> @unwrapParens
+  callee +46:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
+  callee +49:11 lentBuffer -> @lentBuffer
+  callee +50:14 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee +51:11 FactCollector.noteSlotWrite -> @FactCollector.noteSlotWrite
+  local +53:15 proven: boolean (const)
+  callee +53:24 hostFunction -> @hostFunction
+  callee +54:13 hostWindowProven -> @hostWindowProven
+  callee +55:13 foreignBufferCountProven -> @foreignBufferCountProven
+  callee +60:15 foreignBufferCount -> @foreignBufferCount
+  local +65:17 tail: string[] (const)
+  callee +66:11 panicTailCallees -> @panicTailCallees
+  callee +67:11 FactCollector.addCallees -> @FactCollector.addCallees
+  callee +69:9 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +75:9 TypeTable.stripNull -> @TypeTable.stripNull
+  local +76:13 nullable: boolean (const)
+  callee +76:24 TypeTable.isNullable -> @TypeTable.isNullable
+  local +77:13 copy: string[] (const)
+  callee +78:7 foreignResultCallees -> @foreignResultCallees
+  callee +79:7 FactCollector.addCallees -> @FactCollector.addCallees
+  callee +81:9 FactCollector.noteSite -> @FactCollector.noteSite
 function FactCollector.noteBuiltin(this: FactCollector, name: string, call: Node, resolved: boolean): void -> @FactCollector.noteBuiltin [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit

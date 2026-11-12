@@ -3337,7 +3337,10 @@ class FactCollector {
       // WP27 S4.1: C fills a `declare class` it is lent, and `o.inner` is
       // `o`'s own memory, so the write is to the argument and to every
       // object that embeds it.
-      if (!host && layoutClass(this.unit.program, this.table, this.table.stripNull(callee.paramTypes[b])) !== null) {
+      if (
+        !host &&
+        layoutClass(this.unit.program, this.table, this.table.stripNull(callee.paramTypes[b])) !== null
+      ) {
         let held = unwrapParens(buffer)
         this.noteSlotWrite(call, held)
         while (held.kind === N_MEMBER) {

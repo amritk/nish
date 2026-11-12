@@ -15126,6 +15126,7 @@ declare class Stamp {
   at: Timespec
   seq: i32
 }
+// biome-ignore lint/style/useNamingConvention: the C function's own name
 declare function clock_gettime(clock: i32, ts: Timespec): i32
 
 export const main = (): i32 => {

@@ -536,26 +536,26 @@ function Checker.registerStructTemplate(this: Checker, stmt: Node, kind: i32): v
   local +1:11 name: string (const)
   local +2:11 what: string (const)
   callee +6:7 CheckContext.error -> @CheckContext.error
-  callee +10:7 CheckContext.error -> @CheckContext.error
-  callee +14:7 CheckContext.error -> @CheckContext.error
-  callee +17:9 rejectDollarInSymbolName -> @rejectDollarInSymbolName
-  callee +20:9 StringMap.has -> @StringMap.has
-  callee +20:43 StringMap.has -> @StringMap.has
-  callee +21:7 CheckContext.error -> @CheckContext.error
-  callee +24:9 StringMap.has -> @StringMap.has
-  callee +24:36 StringMap.has -> @StringMap.has
-  callee +25:7 CheckContext.error -> @CheckContext.error
-  callee +28:9 Checker.nameTaken -> @Checker.nameTaken
-  callee +29:7 CheckContext.error -> @CheckContext.error
-  local +35:18 member: Node (const)
-  callee +39:11 isHandleFieldAnnotation -> @isHandleFieldAnnotation
-  callee +41:11 CheckContext.error -> @CheckContext.error
-  callee +41:36 handleHeaderMessage -> @handleHeaderMessage
-  local +46:11 template: StructTemplateInfo (const)
-  callee +46:22 new StructTemplateInfo -> @StructTemplateInfo.constructor
-  callee +47:25 isExported -> @isExported
-  callee +48:27 collectStructTypeParamNames -> @collectStructTypeParamNames
-  callee +49:5 CheckedProgram.addStructTemplate -> @CheckedProgram.addStructTemplate
+  callee +13:7 CheckContext.error -> @CheckContext.error
+  callee +17:7 CheckContext.error -> @CheckContext.error
+  callee +20:9 rejectDollarInSymbolName -> @rejectDollarInSymbolName
+  callee +23:9 StringMap.has -> @StringMap.has
+  callee +23:43 StringMap.has -> @StringMap.has
+  callee +24:7 CheckContext.error -> @CheckContext.error
+  callee +27:9 StringMap.has -> @StringMap.has
+  callee +27:36 StringMap.has -> @StringMap.has
+  callee +28:7 CheckContext.error -> @CheckContext.error
+  callee +31:9 Checker.nameTaken -> @Checker.nameTaken
+  callee +32:7 CheckContext.error -> @CheckContext.error
+  local +38:18 member: Node (const)
+  callee +42:11 isHandleFieldAnnotation -> @isHandleFieldAnnotation
+  callee +44:11 CheckContext.error -> @CheckContext.error
+  callee +44:36 handleHeaderMessage -> @handleHeaderMessage
+  local +49:11 template: StructTemplateInfo (const)
+  callee +49:22 new StructTemplateInfo -> @StructTemplateInfo.constructor
+  callee +50:25 isExported -> @isExported
+  callee +51:27 collectStructTypeParamNames -> @collectStructTypeParamNames
+  callee +52:5 CheckedProgram.addStructTemplate -> @CheckedProgram.addStructTemplate
 function Checker.drainInstantiations(this: Checker): boolean -> @Checker.drainInstantiations [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9

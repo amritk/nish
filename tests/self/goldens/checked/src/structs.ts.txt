@@ -513,17 +513,17 @@ function collectLayoutField(ctx: CheckContext, owner: StructInfo, decl: Node): v
   pointer owner: size=176 writesThrough=false captured=false passedTo=StructInfo.hasMember#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
-  local -38:9 name: string (const)
-  local -37:9 what: string (const)
-  callee -36:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee -35:5 CheckContext.error -> @CheckContext.error
-  callee -31:5 CheckContext.error -> @CheckContext.error
-  callee -27:5 CheckContext.error -> @CheckContext.error
-  local -24:9 type: i32 (const)
-  callee -24:16 resolveType -> @resolveType
-  local -18:9 nested: StructInfo | null (const)
-  callee -18:18 layoutClass -> @layoutClass
-  callee -15:7 CheckContext.error -> @CheckContext.error
+  local -44:9 name: string (const)
+  local -43:9 what: string (const)
+  callee -42:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee -41:5 CheckContext.error -> @CheckContext.error
+  callee -37:5 CheckContext.error -> @CheckContext.error
+  callee -30:5 CheckContext.error -> @CheckContext.error
+  local -27:9 type: i32 (const)
+  callee -27:16 resolveType -> @resolveType
+  local -21:9 nested: StructInfo | null (const)
+  callee -21:18 layoutClass -> @layoutClass
+  callee -18:7 CheckContext.error -> @CheckContext.error
   callee -12:5 collectStructMembers -> @collectStructMembers
   callee -11:15 isLayoutScalar -> @isLayoutScalar
   callee -11:39 TypeTable.stripNull -> @TypeTable.stripNull
@@ -542,11 +542,11 @@ function collectLayoutMembers(ctx: CheckContext, info: StructInfo): void -> @col
   local -1:9 decl: Node (const)
   local +2:11 clause: Node (const)
   callee +3:5 CheckContext.error -> @CheckContext.error
-  local +6:14 member: Node (const)
-  callee +8:7 collectLayoutField -> @collectLayoutField
-  local +10:13 word: string (const)
-  callee +11:7 CheckContext.error -> @CheckContext.error
-  callee +14:3 computeLayout -> @computeLayout
+  local +9:14 member: Node (const)
+  callee +11:7 collectLayoutField -> @collectLayoutField
+  local +13:13 word: string (const)
+  callee +14:7 CheckContext.error -> @CheckContext.error
+  callee +20:3 computeLayout -> @computeLayout
 function collectStructMembers(ctx: CheckContext, info: StructInfo): void -> @collectStructMembers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

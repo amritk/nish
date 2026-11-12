@@ -1079,7 +1079,10 @@ const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
   // pass 1a's to refuse, and the sweep never reads it (NL2018).
   if ((node.flags & FLAG_DEFAULT) !== 0) {
     ctx.error(node, "`export default` is not supported; use a named `export`")
-  } else if ((node.flags & FLAG_FOREIGN) !== 0 && (node.kind !== N_CLASS || (node.flags & FLAG_ABSTRACT) !== 0)) {
+  } else if (
+    (node.flags & FLAG_FOREIGN) !== 0 &&
+    (node.kind !== N_CLASS || (node.flags & FLAG_ABSTRACT) !== 0)
+  ) {
     // WP27 S4.1: a plain `declare class` is a C struct layout, whose
     // members `collectStructMembers` judges; an interface or an abstract
     // class declares no layout.

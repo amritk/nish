@@ -311,18 +311,18 @@ function DebugInfo.composite(this: DebugInfo, info: StructInfo): string -> @Debu
   callee +18:24 DebugInfo.member -> @DebugInfo.member
   callee +18:49 DebugInfo.arrayHeader -> @DebugInfo.arrayHeader
   local +22:13 nested: StructInfo | null (const)
-  callee +24:22 DebugInfo.member -> @DebugInfo.member
-  callee +24:47 DebugInfo.byValue -> @DebugInfo.byValue
-  local +27:13 base: string (const)
-  callee +27:20 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee +28:20 DebugInfo.member -> @DebugInfo.member
-  callee +28:51 bitsOfIn -> @bitsOfIn
-  local +30:11 elements: string (const)
-  callee +30:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +31:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee +33:70 quote -> @quote
-  callee +33:76 TypeTable.typeName -> @TypeTable.typeName
-  callee +33:133 DebugInfo.lineOf -> @DebugInfo.lineOf
+  callee +25:11 DebugInfo.member -> @DebugInfo.member
+  callee +25:36 DebugInfo.byValue -> @DebugInfo.byValue
+  local +29:13 base: string (const)
+  callee +29:20 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee +30:20 DebugInfo.member -> @DebugInfo.member
+  callee +30:51 bitsOfIn -> @bitsOfIn
+  local +32:11 elements: string (const)
+  callee +32:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +33:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee +35:70 quote -> @quote
+  callee +35:76 TypeTable.typeName -> @TypeTable.typeName
+  callee +35:133 DebugInfo.lineOf -> @DebugInfo.lineOf
 function DebugInfo.enumeration(this: DebugInfo, info: EnumInfo): string -> @DebugInfo.enumeration [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DebugInfo.fileOf

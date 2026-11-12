@@ -929,7 +929,14 @@ const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): v
 
 /** The scalar types a C struct layout's field may have: C's fixed-width integers and floats. */
 const isLayoutScalar = (t: i32): boolean =>
-  t === T_I32 || t === T_I64 || t === T_U8 || t === T_U16 || t === T_U32 || t === T_U64 || t === T_F32 || t === T_F64
+  t === T_I32 ||
+  t === T_I64 ||
+  t === T_U8 ||
+  t === T_U16 ||
+  t === T_U32 ||
+  t === T_U64 ||
+  t === T_F32 ||
+  t === T_F64
 
 /**
  * The `declare class` (WP27 S4.1) the non-null type `type` names, or `null`:
@@ -958,7 +965,10 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
     return
   }
   if ((decl.flags & (FLAG_STATIC | FLAG_OPTIONAL | FLAG_DEFINITE | FLAG_READONLY)) !== 0) {
-    ctx.error(decl, `${what} must be a plain field: a C struct field is not \`static\`, optional or \`readonly\``)
+    ctx.error(
+      decl,
+      `${what} must be a plain field: a C struct field is not \`static\`, optional or \`readonly\``
+    )
     return
   }
   if (decl.children[2].kind !== N_EMPTY) {
@@ -974,7 +984,10 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
   const nested = layoutClass(ctx.program, ctx.table, type)
   if (nested !== null) {
     if (nested.laying) {
-      ctx.error(decl.children[1], `${what} embeds \`${nested.name}\` in itself: a C struct cannot contain itself by value`)
+      ctx.error(
+        decl.children[1],
+        `${what} embeds \`${nested.name}\` in itself: a C struct cannot contain itself by value`
+      )
       return
     }
     collectStructMembers(ctx, nested)
@@ -1003,7 +1016,10 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
   info.laying = true
   if (decl.children[1].kind !== N_EMPTY || decl.children[2].children.length > 0) {
     const clause = decl.children[1].kind !== N_EMPTY ? decl.children[1] : decl.children[2].children[0]
-    ctx.error(clause, `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`)
+    ctx.error(
+      clause,
+      `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`
+    )
     info.poisoned = true
   }
   for (const member of decl.children[3].children) {
@@ -1011,7 +1027,10 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
       collectLayoutField(ctx, info, member)
     } else {
       const word = member.kind === N_CONSTRUCTOR ? "a constructor" : "a method or accessor"
-      ctx.error(member, `\`declare class ${info.name}\` cannot have ${word}: a C struct layout has fields only`)
+      ctx.error(
+        member,
+        `\`declare class ${info.name}\` cannot have ${word}: a C struct layout has fields only`
+      )
     }
   }
   computeLayout(ctx, info)

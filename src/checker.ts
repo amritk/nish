@@ -793,7 +793,10 @@ export class Checker {
     // WP27 S4.1: a C struct has one layout, and a template has none until `T`
     // is bound. An abstract or interface `declare` is refused by its header.
     if (kind === STRUCT_CLASS && (stmt.flags & (FLAG_FOREIGN | FLAG_ABSTRACT)) === FLAG_FOREIGN) {
-      this.ctx.error(stmt, "A generic `declare class` is not supported: a C struct layout has no type parameters")
+      this.ctx.error(
+        stmt,
+        "A generic `declare class` is not supported: a C struct layout has no type parameters"
+      )
       return
     }
     if (name.length === 0) {
