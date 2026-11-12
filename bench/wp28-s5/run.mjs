@@ -391,10 +391,15 @@ const READING = { within: "within the band", edge: "at the band's edge", slower:
 /** The first line of an output that differs between the two, cut to a width a table can hold. */
 const firstDifference = (a, b) => {
   const [x, y] = [a.split("\n"), b.split("\n")]
-  const at = x.findIndex((line, i) => line !== y[i])
-  const line = at < 0 ? x.length : at
-  const cut = (s) => (s === undefined ? "(no such line)" : s.length > 60 ? `${s.slice(0, 60)}…` : s)
-  return `line ${line + 1}: \`${cut(x[line])}\` became \`${cut(y[line])}\``
+  const differs = x.findIndex((text, i) => text !== y[i])
+  const at = differs < 0 ? x.length : differs
+  const cut = (s) => {
+    if (s === undefined) {
+      return "(no such line)"
+    }
+    return s.length > 60 ? `${s.slice(0, 60)}…` : s
+  }
+  return `line ${at + 1}: \`${cut(x[at])}\` became \`${cut(y[at])}\``
 }
 
 const cpu = os.cpus()
