@@ -473,6 +473,20 @@ against 5,411) and 3,300 more on `json` (9,887 against 6,588):
 Those two items are the follow-up for stage 6. `db` at 64 connections was not
 profiled after #1419.
 
+**The baseline the gate is read against from here on (2026-11-12).** #1448
+made the explicit entry fork one worker a core when it is given no count, and
+`run.sh` gives it none, so the comparison was checked: under `run.sh`'s
+`taskset -c 0` the default is one, and `entry`, `entry-copy` and `async` were
+each read from `/proc` as one process with one thread on CPU 0. The gate was
+one worker against one worker in every run above; only `run.sh`'s comment
+changed. `main` was then re-measured and re-profiled, and
+[that section](BENCHMARKS.md#techempower-the-gates-baseline-checked-and-re-measured-wp49-stage-6)
+is the before for the fixes that follow: 7 of the 11 judged cells outside
+(`plaintext` at 256, 1,024 and 4,096; `json` at 128, 256 and 512; `db` at 64),
+and per request 7,848 instructions against 4,814 on `plaintext` and 9,276
+against 5,962 on `json`. Its `json` rounds are 8 s and its database rounds
+2 s, so a fix is compared at the same durations.
+
 ## 7. A non-blocking call from a handler today, without `async`
 
 Until §2 lands, a handler makes an outbound call in the explicit style,

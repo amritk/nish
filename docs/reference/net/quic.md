@@ -44,11 +44,14 @@ import {
   QUIC_STATE_HANDSHAKE,
   QUIC_STATE_TIMED_OUT,
   QUIC_STATE_WAIT_INITIAL,
+  QUIC_WORKER_MAX,
   QuicConnection,
   QuicServerConfig,
   QuicStreamData,
   quicConnResetTokenInto,
   quicStatelessResetToken,
+  quicWorkerByte,
+  quicWorkerCheck,
 } from "nish/net/quic";
 ```
 
@@ -85,6 +88,18 @@ let id: i64 = conn.nextStreamEvent();                 // a stream with news: rea
 <scalar-card title="quic​Stateless​Reset​Token" icon="phosphor/regular/function" href="#quicstatelessresettoken">
 
 The stateless reset token for the connection ID `cid` (RFC 9000 §10.3.2): the first 16 bytes of HMAC-SHA256 under the server's static `key`.
+
+</scalar-card>
+
+<scalar-card title="quic​Worker​Byte" icon="phosphor/regular/function" href="#quicworkerbyte">
+
+The byte a server writes at the start of every connection ID it issues: `config.workerIndex` when the pair names a worker of a steered group, -1 (write nothing) otherwise.
+
+</scalar-card>
+
+<scalar-card title="quic​Worker​Check" icon="phosphor/regular/function" href="#quicworkercheck">
+
+Panics, with the pair in the message, unless `config`'s worker fields are both unset (`workerIndex` -1 and `workerCount` 0) or name a worker of a steered group (0 <= k < N <= 255).
 
 </scalar-card>
 
@@ -451,6 +466,49 @@ A fresh 16-byte token (`QUIC_RESET_TOKEN_SIZE`); the full MAC it was cut from is
 
 </scalar-field>
 
+### quicWorkerByte
+
+The byte a server writes at the start of every connection ID it issues:
+`config.workerIndex` when the pair names a worker of a steered group, -1
+(write nothing) otherwise.
+
+```ts
+function quicWorkerByte(
+  config: QuicServerConfig,
+): i32
+```
+
+<scalar-field name="config" type="QuicServerConfig" required>
+
+The server's configuration.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The worker index k, from 0 to 254, or -1 when the IDs carry no worker.
+
+</scalar-field>
+
+### quicWorkerCheck
+
+Panics, with the pair in the message, unless `config`'s worker fields are
+both unset (`workerIndex` -1 and `workerCount` 0) or name a worker of a
+steered group (0 <= k < N <= 255). `QuicListener` calls it when it is built,
+before it reads a datagram, so an `Http3Server` panics through its listener.
+
+```ts
+function quicWorkerCheck(
+  config: QuicServerConfig,
+): void
+```
+
+<scalar-field name="config" type="QuicServerConfig" required>
+
+The configuration whose `workerIndex` and `workerCount` are checked.
+
+</scalar-field>
+
 ## Classes
 
 ### QuicConnection
@@ -624,6 +682,8 @@ interface QuicServerConfig
 | `retryTokenLifetime: i64` | How long, in milliseconds, a Retry token is accepted after it was issued: 1 to 60000. |
 | `signatureScheme: i32` | The signature scheme the caller's key signs with, as `TlsServerConfig` takes it. |
 | `statelessResetKey: u8[]` | The static key every stateless reset token is derived from (`quicStatelessResetToken`, RFC 9000 §10.3.2), `QUIC_CONN_STATIC_KEY_SIZE` bytes. Keep it across restarts: a server that lost a connection resets it with the token this key gives for the connection ID the client sends to. |
+| `workerCount: i32` | How many processes N share the steered UDP port (`preforkUdpCount`), or 0 outside a prefork group. Valid with `workerIndex` when 0 <= k < N <= 255, or both unset (-1 and 0); `QuicListener` and `Http3Server` panic on any other pair. |
+| `workerIndex: i32` | This process's index k in a prefork group whose UDP sockets are steered by connection ID (`preforkIndex`), or -1 outside one. With a valid pair, every connection ID the server issues carries k in byte 0, so the kernel hands the connection's packets to this process whatever address they come from. Copy it from the supervisor's flags, never compute it. |
 
 ## Limits
 
@@ -745,6 +805,15 @@ nothing in ACK ranges.
 How many distances past `QUIC_CONN_SKIP_MIN` a skip may fall at: the next
 skipped number is `QUIC_CONN_SKIP_MIN` plus 0 to 896 past the number after
 the last skip, so skips fall 129 to 1025 numbers apart.
+
+</scalar-card>
+
+<scalar-card title="255" icon="phosphor/regular/hash">
+
+`QUIC_WORKER_MAX: i32`
+
+The most processes a steered UDP group may have (`QuicServerConfig.workerCount`):
+the worker index is one byte of the connection ID, read modulo the count.
 
 </scalar-card>
 

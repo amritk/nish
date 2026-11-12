@@ -259,10 +259,31 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
       {BPF_RET | BPF_A, 0, 0, 0},
   };
   static const struct sock_fprog steer = {2, cpu};
+  /* `udpBind` flag 4's program (docs/h3-multicore.md §3.1): byte 0 of the
+     Destination Connection ID, from byte 1 of a short header or byte 6 of a
+     long one, modulo the group's count in bits 8-15 of the flags, so every
+     datagram names a socket by its DCID alone and the kernel's address hash
+     is never used. A load past a runt's end returns 0: socket 0. The count
+     is the call's, so the program is built here and not shared. */
+  static const struct sock_filter dcid0[] = {
+      {BPF_LD | BPF_B | BPF_ABS, 0, 0, 0},
+      {BPF_JMP | BPF_JSET | BPF_K, 2, 0, 0x80},
+      {BPF_LD | BPF_B | BPF_ABS, 0, 0, 1},
+      {BPF_JMP | BPF_JA, 0, 0, 1},
+      {BPF_LD | BPF_B | BPF_ABS, 0, 0, 6},
+      {BPF_ALU | BPF_MOD | BPF_K, 0, 0, 0},
+      {BPF_RET | BPF_A, 0, 0, 0},
+  };
+  struct sock_filter dcid[7];
+  memcpy(dcid, dcid0, sizeof dcid);
+  dcid[5].k = (uint32_t)((arg >> 8) & 255);
+  const struct sock_fprog quic = {7, dcid};
+  int udp_steer = type == SOCK_DGRAM && (arg & 4);
 #endif
   if (bad != 0 || bind(fd, &s.sa, n) != 0 || (type == SOCK_STREAM && listen(fd, arg) != 0)
 #if defined(__linux__)
       || ((opts & 4) && setsockopt(fd, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF, &steer, sizeof steer) != 0)
+      || (udp_steer && setsockopt(fd, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF, &quic, sizeof quic) != 0)
 #endif
   ) {
     int e = errno;
@@ -519,11 +540,19 @@ int32_t nish_net_mss(int32_t fd) {
 
 /* `udpBind(host, port, flags)`: a datagram socket, non-blocking and
    close-on-exec, bound like `tcpListen`'s, with `SO_REUSEPORT` for flag 1
-   and `UDP_GRO` for flag 2; any other bit is -22. */
+   and `UDP_GRO` for flag 2. Flag 4 steers QUIC (docs/h3-multicore.md): it
+   needs flag 1 and a group count N from 1 to 255 in bits 8-15, refuses
+   flag 2, and attaches a reuseport program that hands each datagram to the
+   group's socket at index (DCID byte 0) mod N. A refused attach closes the
+   socket and answers the error. Any other bit, flag 4 without 1, with 2 or
+   with a count of 0, or a count without 4, is -22; Linux alone has 2 and 4,
+   elsewhere they are -95. */
 int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags) {
-  if ((uint32_t)flags > 3) return -22;
+  /* Without flag 4, 0 to 3; with it, flag 1 alone below it and a count. */
+  if ((flags & 4) ? (uint32_t)flags > 0xffff || flags < 0x100 || (flags & 0xfb) != 1 : (uint32_t)flags > 3)
+    return -22;
 #if !defined(__linux__)
-  if (flags & 2) return -95;
+  if (flags & 6) return -95;
 #endif
   return nish_net_bound(host, port, SOCK_DGRAM, flags, flags & 1);
 }

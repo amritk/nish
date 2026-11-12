@@ -46,9 +46,16 @@
 # tests, each beside its own band (`entry` and `entry-copy`, `db-entry` and
 # `db-entry-copy`). The report's verdict line says inside or outside it per
 # concurrency. Each contestant pair is run the same way: the same port, host,
-# slots, workers (one) and Postgres connections (4). It is a relative A/B on
-# one machine, not a TechEmpower rank. Every measurement also records the
-# server's peak resident memory (VmHWM from /proc), reported in MiB.
+# slots and Postgres connections (4), and one process each on the server CPU.
+# `entry` and `entry-copy` are given no worker count, and main.ts's default is
+# one worker for each CPU the process may run on: `taskset -c 0` leaves one, so
+# the entry serves in the process it started in, as `async` always does (read
+# from /proc while they serve: docs/BENCHMARKS.md → "TechEmpower: the gate's
+# baseline checked and re-measured"). The database wrappers pass the count 1.
+# With NISH_WORKERS above 1 exported the entry refuses to start, since it will
+# not pin more workers than it has CPUs, and the run exits 1. It is a relative
+# A/B on one machine, not a TechEmpower rank. Every measurement also records
+# the server's peak resident memory (VmHWM from /proc), reported in MiB.
 #
 # The database tests start a cluster in build/tfb/pg with the newest
 # /usr/lib/postgresql/*/bin, or $PG_BIN (run as the postgres user under root),
@@ -532,7 +539,7 @@ report() {
   if [ "$browser" = 1 ]; then echo "Browser head: a browser's request headers, one request at a time on /plaintext and /json."; fi
   lineup=(${contestants[@]+"${contestants[@]}"})
   twin=async
-  [ "$cores" = 1 ] && twin=entry-cores
+  [ "$cores" = 1 ] && twin="entry-cores"
   if wants plaintext; then report /plaintext entry entry-copy "$twin" "${plainLevels[@]}"; fi
   if wants json; then
     report /json entry entry-copy "$twin" "${jsonLevels[@]}"
