@@ -33,7 +33,7 @@ with its own `WS_HS_*` code; it adds no finding.
 
 | File | Functions |
 | --- | --- |
-| `std/net/http1-codec.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
+| `std/net/http1-codec.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`, `http1HeadGrow`, `http1FramingField`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
 | `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `sendBody`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
 | `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
 | `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload`, `websocketIsUtf8`; the handshake's `websocketAcceptKey`, `websocketKeyIsValid`, `websocketOfferedProtocols`; the client's `websocketClientKey`, `websocketUpgradeRequest`, `WsHandshake`, `websocketCheckResponse` and their helpers (`websocketSpanIs`, `websocketListInto`, `websocketListHas`) |
@@ -178,16 +178,18 @@ frozen beside it in `old.ts`: both are fed the same bytes in the same pieces,
 and after every event they must agree on the event, the status and reason,
 and everything a caller can read.
 
-The default run, seed 1175, is 237,143 cases (the fuzz corpus and its
+The default run, seed 1175, is 464,424 cases (the fuzz corpus and its
 regressions cut every way, every byte at every position of three requests, nine
-inserted bytes at every position, each limit at -1, 0 and +1, and 100,000
-grammar requests) and 2,257,209 events, among them 202,969 refusals, in about 8
-s; it must print the summary in `expected.out`.
+inserted bytes at every position, each limit at -1, 0 and +1, the name, value,
+tight-limit and browser-head cases below, and 100,000 grammar requests) and
+4,129,500 events, among them 310,737 refusals, in about 8 s of the test's
+`--profile speed` build; it must print the summary in `expected.out` (counts
+as of 2026-11-12).
 
 A header section of maxHeaderBytes - 1 or maxHeaderBytes
 bytes, empty line included, as one field or two, reads a head, and one more
 byte is a 431. A soak of seeds 1 to 4 at 250,000 grammar requests each
-(1,361,104 cases) agreed. The test sees a one-lane error in either vector
+(577,992 cases a seed, 2,311,968 in all, on 2026-11-12) agreed. The test sees a one-lane error in either vector
 scan (checked 2026-11-08): taking the byte after the first set bit in the
 line scan (`32 -` for `31 -`) fails the default run at case 19 (a 400 for "a
 malformed HTTP version" where main reads the head), the same in the target
@@ -195,6 +197,15 @@ scan fails it at case 1 (a 400 for "a malformed request target"), and
 letting DEL into the target (`94` for `93`) fails it at case 16,366, where
 main refuses `GET \x7fa` and the mutant reads a head. No limit, status or
 reason string changed.
+
+The version check reads the eight bytes `HTTP/d.d` as one 16-byte load
+where at least 16 bytes of `buf` remain, and byte by byte in the tail; a
+field line that starts with whitespace (obs-fold) is told apart only once its
+name has failed, since whitespace is no tchar and such a line's name is
+empty. Both keep main's status and reason. The test sees a lost lane in the
+vector version check (checked 2026-11-12): dropping the `.` lane from its
+mask (`31` for `95`) fails the default run at case 18,543, where main refuses
+`HTTP/1\x001` as "a malformed HTTP version" and the mutant reads a head.
 
 **One exchange at a time, in order** (`net_http1_server`): pipelined requests
 are answered in the order they came, because the next head is not read until
@@ -364,6 +375,80 @@ length; names of 15, 16, 17, 31, 32 and 33 bytes after an `X:` line of
 head's last byte; and a short name read over a head
 an earlier request's upper-case lines filled. The default run is now 237,143
 cases (`expected.out`).
+
+**A head read section-wide, its framing fields classified as read**
+(`net_http1`, `_f64`, `net_http1_parse_diff`, 2026-11-12, written against
+`main` at `b49794d8`). The header section's lines are found and parsed in one
+loop (`http1Section`) that keeps the control-byte mask of the last vector
+loaded, so a line after a short one is not loaded again; the line's control
+flag is the value check, as before.
+
+The head's layout changed. It holds the request line (method to version, no
+CRLF), copied by `http1HeadAppend`, and then the header section's lines with
+their CRLFs: the section scan stores each vector it loads into the head at
+the same offset from the section's start (`buf[x]` at `head[x + delta]`), so
+a field line is in the head before it is parsed, and a line that ends in a
+later read finds its first bytes, copied provisionally past `headLength`,
+where the earlier call left them. `http1HeadGrow` keeps every byte of the old
+array, those provisional bytes included, not only the first `headLength`.
+No copy starts at or past `copyStop`, the line's start plus what is left of
+`maxHeaderBytes` plus 2 (the line's CRLF), and a line reaching it is a 431
+before its value is read, so a section's copy ends within one vector of
+`maxHeaderBytes` + 2 bytes past the request line, whatever the peer sends. Every store is a bounds-checked `u8x16` store or `copyBytes`; the head
+is grown first whenever a store would come within 32 bytes of its end.
+So `headLength` is the old head's length plus two bytes for each kept field
+line and two for the closing CRLF, and with those CRLFs taken out the head is
+main's byte for byte; `net_http1_parse_diff` pins both, and that each CRLF
+ends where the next field's name span starts (`mixHead`). A line whose CR is the last byte a vector
+or the byte-at-a-time tail copies has its LF stored when the line is taken,
+so no stale byte from an earlier request is left between a CR and the next
+line. `http1HeadAppend` relies on its caller having called `http1HeadGrow` when the
+request line would leave fewer than sixteen bytes of slack; without that it
+copies nothing (both of its paths check the bounds) and the spans would read
+stale bytes, never bytes outside the array.
+
+Every kept field's lowered name is then classified (`http1FramingField`) as
+Host, Content-Length, Transfer-Encoding, Connection, Upgrade or none, and the
+counts, the Content-Length field's index and the Connection options are kept
+as the line is read. `http1EndOfHead` applies RFC 9112 §6.3's framing rules
+to those counts exactly as it applied them to its own walk over every field:
+one Host on HTTP/1.1, Content-Length and Transfer-Encoding together refused,
+two Content-Lengths refused, a coding list that must end in a single
+`chunked`. A field is classified by its whole name, in any case, whatever
+its position, length or value, so a request cannot place a framing field
+where the classification misses it. There is no branch on the target, on a
+known header set or on the length of the head.
+
+The response writer (`http1WriteResponseHead`) is unchanged from `b49794d8`.
+Nothing accepted or refused changes, and no limit, status or reason string
+moved.
+
+Tests: in `net_http1_parse_diff`, 204,523 value cases against main's parser:
+a Cookie and an Authorization value and a target of every length 1 to 48 and
+of 255, 256, 257, 1000 and 4000 bytes, with CR, LF, NUL, HTAB, SP, 0x1f, DEL,
+0x7e, a comma, 0x80 or 0xff at every place in the first and last 48 bytes, each value
+in both fields under five setups (text kept, spans only, fresh arrays, a
+declined upgrade, and pieces of 13, 16 and 3 bytes in turn); the same heads
+whole and cut at every two-feed split at the edge lengths; and a head of 60
+fields cut every way. 19,920 tight-limit cases set `maxTarget`,
+`maxHeaderBytes` and `maxHeaders` to sixteen values in a row at -1, 0 and +1,
+so the byte that decides between a head and a 414 or 431 falls in every lane,
+each whole, a byte at a time and split at every point. 2,838 cases split a
+936-byte browser head, alone and pipelined after a short GET, at every point.
+
+Mutations tried against the default run, each a one-line change to
+`http1-codec.ts`, built and run on 2026-11-12:
+
+| Mutation | Result |
+| --- | --- |
+| The section scan's mask drops lane 16 (`& 32767`) | fails at case 33,582: "a control character in a field value" where main reads a bare LF |
+| The carried mask is dropped after each line (`bits = 0`) | fails at case 2: "a malformed field name" where main reads the head |
+| `http1HeadGrow` keeps only `headLength` bytes, losing the provisional copy | fails at case 88,755: "a malformed field name" where main reads the head |
+| The section scan never grows the head before a store | panics, "index out of range: 269 >= 256": the store's bounds check holds |
+| `copyStop` one byte short of the line's value (`- 1` for `+ 2`) | panics on an i32 overflow check |
+| `copyStop` without the CRLF's two bytes (`+ 0` or `+ 1` for `+ 2`) | survives: the CR and LF of the line at the limit are copied but never read |
+| No LF stored when a line is taken (the head before this fix) | fails at case 24, a chunked POST cut after 21 bytes: the last field line's CR is the last lane of a vector, and the head holds a stale byte where its LF belongs |
+| The grow threshold at 16 bytes from the end, not 32 | survives: a store needs 16, so this only grows later |
 
 **Connection management** (`net_http1_server`): `Connection: close` in a
 request is answered with it, and the connection closes; HTTP/1.0 closes unless
