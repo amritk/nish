@@ -1066,7 +1066,8 @@ const leftToCollector = (member: Node, owner: Node, flags: i32): boolean =>
 
 /**
  * The header of a class or an interface declaration, before its type
- * parameters: `export default` (NL2131), `declare` (NL2083) and `abstract`
+ * parameters: `export default` (NL2131), `declare` on an interface or an
+ * abstract class (NL2083) and `abstract`
  * (NL2168). An anonymous class is not swept at all: pass 1a named it (NL2018,
  * `declareStruct`).
  */
@@ -1078,8 +1079,14 @@ const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
   // pass 1a's to refuse, and the sweep never reads it (NL2018).
   if ((node.flags & FLAG_DEFAULT) !== 0) {
     ctx.error(node, "`export default` is not supported; use a named `export`")
-  } else if ((node.flags & FLAG_FOREIGN) !== 0) {
-    ctx.error(node, `\`declare ${node.kind === N_CLASS ? "class" : "interface"}\` is not supported`)
+  } else if (
+    (node.flags & FLAG_FOREIGN) !== 0 &&
+    (node.kind !== N_CLASS || (node.flags & FLAG_ABSTRACT) !== 0)
+  ) {
+    // WP27 S4.1: a plain `declare class` is a C struct layout, whose
+    // members `collectStructMembers` judges; an interface or an abstract
+    // class declares no layout.
+    ctx.error(node, `\`declare ${node.kind === N_CLASS ? "abstract class" : "interface"}\` is not supported`)
   } else if ((node.flags & FLAG_ABSTRACT) !== 0) {
     ctx.error(node, "Abstract classes are not supported")
   }
@@ -1127,7 +1134,13 @@ const isMemberList = (node: Node, i: i32): boolean =>
 const refuseMembers = (ctx: CheckContext, owner: Node, members: Node): void => {
   const name = owner.children[0].text
   const kind = owner.kind === N_CLASS ? "class" : "interface"
+  // A `declare class` is a C struct layout (WP27 S4.1), and its collector
+  // refuses any member but a field with the rule that says so.
+  const layout = owner.kind === N_CLASS && (owner.flags & FLAG_FOREIGN) !== 0
   for (const member of members.children) {
+    if (layout && member.kind !== N_FIELD) {
+      continue
+    }
     if (
       member.kind === N_FIELD &&
       owner.kind === N_CLASS &&

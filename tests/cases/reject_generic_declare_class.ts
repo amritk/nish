@@ -1,5 +1,5 @@
-// `declare class` promises a layout from elsewhere, and there is no elsewhere —
-// least of all for a template, whose layout does not exist until `T` is bound.
+// A generic `declare class` has no layout until `T` is bound, and a C struct
+// has no type parameters, so the checker refuses the template outright.
 declare class Box<T> {
   value: T;
 }

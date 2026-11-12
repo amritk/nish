@@ -432,7 +432,8 @@ const isFirstBody = (walk: PortabilityWalk): boolean => {
 const moduleFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void => {
   const program = walk.program
   for (const struct of program.structList) {
-    if (struct.origin !== program.source) {
+    // A `declare class` is C's struct, which TypeScript never sees.
+    if (struct.origin !== program.source || struct.layout) {
       continue
     }
     for (const field of struct.fields) {
