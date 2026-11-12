@@ -21046,14 +21046,14 @@ function QuicListener.handleWindow(this: QuicListener, datagram: u8[], at: i32, 
   callee +12:5 quicParseHeaderInto -> @nish.quicParseHeaderInto
   callee +17:9 QuicListener.versionNegotiation -> @nish.QuicListener.versionNegotiation
   local +28:13 owner: i32 (const)
-  callee +29:11 quicWorkerByte -> @nish.quicWorkerByte
-  callee +32:7 QuicListener.statelessReset -> @nish.QuicListener.statelessReset
-  local +40:11 tokenAt: i32 (const)
-  callee +46:7 QuicListener.retry -> @nish.QuicListener.retry
-  callee +49:9 QuicListener.tokenValid -> @nish.QuicListener.tokenValid
-  callee +52:7 quicListenerRefill -> @nish.quicListenerRefill
-  callee +58:7 quicListenerRefill -> @nish.quicListenerRefill
-  callee +61:5 QuicListener.invalidToken -> @nish.QuicListener.invalidToken
+  callee +30:9 quicWorkerByte -> @nish.quicWorkerByte
+  callee +36:7 QuicListener.statelessReset -> @nish.QuicListener.statelessReset
+  local +44:11 tokenAt: i32 (const)
+  callee +50:7 QuicListener.retry -> @nish.QuicListener.retry
+  callee +53:9 QuicListener.tokenValid -> @nish.QuicListener.tokenValid
+  callee +56:7 quicListenerRefill -> @nish.quicListenerRefill
+  callee +62:7 quicListenerRefill -> @nish.quicListenerRefill
+  callee +65:5 QuicListener.invalidToken -> @nish.QuicListener.invalidToken
 function QuicListener.handle(this: QuicListener, datagram: u8[], address: u8[], now: i64): QuicListenerAnswer -> @nish.QuicListener.handle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via nish.QuicListener.handleWindow

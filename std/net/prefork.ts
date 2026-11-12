@@ -417,8 +417,8 @@ const preforkUdpField = (args: string[], at: i32): i32 => {
     if (flag.startsWith(PREFORK_UDP_FLAG)) {
       const value: string = flag.substring(PREFORK_UDP_FLAG.length)
       const comma: i32 = toI32(value.indexOf(","))
-      const fd: string = comma < 0 ? "" : value.substring(0, comma)
-      const size: string = comma < 0 ? "" : value.substring(comma + 1)
+      const fd: string = comma < 0 ? "" : value.slice(0, comma)
+      const size: string = comma < 0 ? "" : value.slice(comma + 1)
       if (!preforkDigits(fd) || !preforkDigits(size)) {
         return -1
       }
@@ -1105,7 +1105,7 @@ export const preforkSupervise = <S>(
   }
   // A held listener is one more descriptor for every worker, the service one
   // too, and a held UDP socket one more again.
-  const fdMax: i32 = (config.listenPort >= 0 ? 63 : 64) - (config.listenUdp ? 1 : 0)
+  const fdMax: i32 = toI32(config.listenPort >= 0 ? 63 : 64) - toI32(config.listenUdp ? 1 : 0)
   if (config.serviceWorker >= count || (config.serviceWorker >= 0 && count > fdMax)) {
     panic(`nish/net/prefork: serviceWorker not below ${count} workers, or above ${fdMax} workers`)
   }
