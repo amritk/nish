@@ -284,7 +284,7 @@ const tlsConfigFits = (config: TlsServerConfig): boolean => {
 const tlsExtensionsHave = (extensions: u8[], type: i32): boolean => {
   const end: i32 = toI32(extensions.length)
   let at: i32 = 0
-  while (at + 4 <= end) {
+  while (at >= 0 && at + 3 < end) {
     if (((toI32(extensions[at]) << 8) | toI32(extensions[at + 1])) === type) {
       return true
     }

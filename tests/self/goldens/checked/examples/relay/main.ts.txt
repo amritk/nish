@@ -11233,7 +11233,7 @@ function tlsConfigFits(config: TlsServerConfig): boolean -> @nish.tlsConfigFits
   local +15:11 n: i32 (const)
 function tlsExtensionsHave(extensions: u8[], type: i32): boolean -> @nish.tlsExtensionsHave
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
+  calls: nish_panic_overflow
   pointer extensions: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 end: i32 (const)
