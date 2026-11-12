@@ -50,6 +50,8 @@ and the same program prints `3`.
 the ones you want. `[]` is the dialect with no feature, which is what `true`
 means today. `--compat=<feature>,...` is the array on the command line.
 
+## A name that is no feature
+
 A name that is no feature is refused, on the command line (exit 2) and in
 `package.json` (`NL3056`), so a typo cannot quietly leave a feature off:
 
