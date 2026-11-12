@@ -610,16 +610,21 @@ const serveTask = async (
   for (let i: i32 = 0; i < toI32(spans.length) && i < toI32(src.spans.length); i++) {
     spans[i] = src.spans[i]
   }
-  const params: i32[] = new Array<i32>(2 * src.paramCount)
-  for (let i: i32 = 0; i < toI32(params.length) && i < toI32(src.params.length); i++) {
-    params[i] = src.params[i]
+  // No parameters and no body keep the empty arrays the constructor made.
+  if (src.paramCount > 0) {
+    const params: i32[] = new Array<i32>(2 * src.paramCount)
+    for (let i: i32 = 0; i < toI32(params.length) && i < toI32(src.params.length); i++) {
+      params[i] = src.params[i]
+    }
+    r.params = params
   }
-  const body: u8[] = new Array<u8>(src.bodyLength)
-  copyBytes(body, 0, src.body, 0, src.bodyLength)
+  if (src.bodyLength > 0) {
+    const body: u8[] = new Array<u8>(src.bodyLength)
+    copyBytes(body, 0, src.body, 0, src.bodyLength)
+    r.body = body
+  }
   r.head = head
   r.spans = spans
-  r.params = params
-  r.body = body
   r.route = src.route
   r.paramCount = src.paramCount
   r.methodStart = src.methodStart
