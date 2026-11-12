@@ -111,7 +111,10 @@ const listed = (found, separator = "\n") => found.map((v) => `${v.kind}: ${v.lin
  * that are secret beside every array's elements.
  */
 const runtimeViolations = (body, secretArgs, target) => {
-  const { found, branches } = settle(new Taint({ contents: true, secretArgs, preciseFlags: true }, target), body)
+  const { found, branches } = settle(
+    new Taint({ contents: true, secretArgs, preciseFlags: true }, target),
+    body
+  )
   return { found, branches }
 }
 

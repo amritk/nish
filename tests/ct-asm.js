@@ -173,6 +173,10 @@ export const ctSpecs = (source) => {
         "secret=contents, and no parameter is an array: nothing is secret, so the check proves nothing"
       )
     }
+    const clean =
+      loops === undefined
+        ? "no branch, call, secret-indexed access or secret-dependent latency"
+        : "loops on public bounds only; no secret branch, call, secret-indexed access or secret-dependent latency"
     specs.push({
       name,
       problems,
@@ -186,9 +190,7 @@ export const ctSpecs = (source) => {
       // What the suite names the check by: clean, or refused for its kind and where.
       promise:
         expect === undefined
-          ? loops === undefined
-            ? "no branch, call, secret-indexed access or secret-dependent latency"
-            : "loops on public bounds only; no secret branch, call, secret-indexed access or secret-dependent latency"
+          ? clean
           : `refused for ${EXPECT_KINDS[expect]}${via === undefined ? "" : ` inside ${via}`}`,
     })
   }

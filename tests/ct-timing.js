@@ -123,6 +123,15 @@ const DOMAINS = {
     fieldSub: { limbs: 26 },
     condSwap: { limbs: 26, scalar: 1 },
     ladderStep: { limbs: 26, scalar: 1 },
+    // The loops read whole (`loops`) are handed reduced elements too: the square
+    // chains and the encoding take what a multiply leaves, and the ladder its own
+    // state and a decoded u. The decoder only writes its array.
+    fieldSquareTimes: { limbs: 26 },
+    fieldInvert: { limbs: 26 },
+    fieldDecodeInto: { limbs: 26 },
+    fieldEncodeInto: { limbs: 26 },
+    ladderLoop: { limbs: 26 },
+    ladderLoopToTopBit: { limbs: 26 },
   },
 }
 
@@ -383,7 +392,8 @@ const driverFor = (specs, domain) => {
         decls.push(`static _Alignas(16) unsigned char ${buffer}[${bytes}];`)
         decls.push(`static ct_array f${n}_a${i} = { ${ELEMENTS}, ${ELEMENTS}, ${buffer} };`)
         const filled = secret || spec.contents
-        const narrowed = entry !== undefined && filled
+        // Every byte is in a module's domain (a scalar, a u in X25519), so a `u8[]` is never narrowed.
+        const narrowed = entry !== undefined && filled && type !== "u8[]"
         if (narrowed && (type !== "i64[]" || entry.limbs === undefined)) {
           return { error: `the domain of ${spec.name} gives no limbs for its secret ${type}` }
         }
