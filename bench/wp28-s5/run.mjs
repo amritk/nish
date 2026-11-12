@@ -3,7 +3,7 @@
 //
 //   node bench/wp28-s5/run.mjs            # every program, about 25 minutes
 //   node bench/wp28-s5/run.mjs --quick    # three programs, three rounds
-//   node bench/wp28-s5/run.mjs --rounds 9 --compiler build/nish
+//   node bench/wp28-s5/run.mjs --only fib,sieve --rounds 9 --compiler build/nish
 //
 // Every program bench/run.mjs lists is built twice, as the suite builds it and
 // with `--number-mode f64` added, and lands in one of three places:
@@ -15,6 +15,10 @@
 //   timed    the two binaries and a byte-identical copy of each run in
 //            interleaved rounds; the ratio is f64 over the default, and the
 //            band is the larger gap between a binary and its own copy
+//
+// A program refused for NL2140 alone (`main` returns a bare `number`) is then
+// measured a second time from a copy under build/ whose `main` is declared
+// `(): i32`, and reported in a section of its own: the as-is result stands.
 //
 // A timed program is also counted under cachegrind, at the size
 // bench/instructions.json names when it has the program and at the source's
@@ -44,19 +48,24 @@ const nishc = compilerFrom(process.argv.slice(2))
 /** The three programs `--quick` runs: one of each outcome, the timed one the shortest that is not all start-up. */
 const QUICK = ["fib", "nbody", "par-single"]
 
-const options = { quick: false, rounds: undefined }
+const options = { quick: false, rounds: undefined, only: undefined }
 for (let i = 0; i < nishc.rest.length; i++) {
   const arg = nishc.rest[i]
   if (arg === "--quick") {
     options.quick = true
+  } else if (arg === "--only" && nishc.rest[i + 1] !== undefined) {
+    options.only = nishc.rest[++i].split(",")
   } else if (arg === "--rounds" && /^[1-9]\d*$/.test(nishc.rest[i + 1] ?? "")) {
     options.rounds = Number(nishc.rest[++i])
   } else {
-    console.error("usage: node bench/wp28-s5/run.mjs [--quick] [--rounds <n>] [--compiler <nish>]")
+    console.error(
+      "usage: node bench/wp28-s5/run.mjs [--quick] [--only <name,...>] [--rounds <n>] [--compiler <nish>]"
+    )
     process.exit(2)
   }
 }
 const rounds = options.rounds ?? (options.quick ? 3 : 7)
+const chosen = options.quick ? QUICK : options.only
 
 // ---- The suite ----------------------------------------------------------------------
 
@@ -142,11 +151,11 @@ const programs = [
     runs: [["seq"], ["par"]],
   })),
   ...[...suite.MAPS, ...suite.MAP_MEASURES].map(single),
-].filter((p) => !options.quick || QUICK.includes(p.name))
+].filter((p) => chosen === undefined || chosen.includes(p.name))
 
-if (options.quick && programs.length !== QUICK.length) {
+if (chosen !== undefined && programs.length !== chosen.length) {
   fail(
-    `--quick names ${QUICK.join(", ")}, and bench/run.mjs lists only ${programs.map((p) => p.name).join(", ")}`
+    `asked for ${chosen.join(", ")}, and bench/run.mjs lists only ${programs.map((p) => p.name).join(", ")}`
   )
 }
 
@@ -236,7 +245,7 @@ const compareIr = (a, b) => {
  * with it twice, which is how its IR comes out the same.
  */
 const builds = new Map()
-const buildBoth = (program, file = path.join(benchDir, program.source), into = "") => {
+const buildBoth = (program, file, into) => {
   const key = `${program.source}${into}`
   if (!builds.has(key)) {
     const dir = path.join(outDir, program.source.replace(/\.ts$/, "").replace("/", "-") + into)
@@ -252,18 +261,36 @@ const buildBoth = (program, file = path.join(benchDir, program.source), into = "
   return builds.get(key)
 }
 
+const ANNOTATED = "-annotated"
+
+/** Write `text` as the variant `into` of a program's source, under build/bench/wp28-s5/src<into>/. */
+const copyOf = (program, into, text) => {
+  const file = path.join(outDir, `src${into}`, program.source)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, text)
+  return file
+}
+
 /** A copy of the source with the number on its `bench:n` line rewritten, as bench/run.mjs's `prepare` does it. */
-const resized = (program, size) => {
-  const lines = fs.readFileSync(path.join(benchDir, program.source), "utf8").split("\n")
+const resized = (program, file, into, size) => {
+  const lines = fs.readFileSync(file, "utf8").split("\n")
   const at = lines.findIndex((l) => l.includes("bench:n"))
   if (at < 0) {
     fail(`${program.source} has no \`bench:n\` line to set to ${size}`)
   }
   lines[at] = lines[at].replace(/\b\d+\b/, size)
-  const file = path.join(outDir, "src", program.source)
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, lines.join("\n"))
-  return file
+  return copyOf(program, `${into}-sized`, lines.join("\n"))
+}
+
+/**
+ * A copy of the source with `main` declared to return `i32`, the one thing
+ * NL2140 asks of a program under f64. Null when `main` is not spelled the way
+ * the suite's programs spell it, which leaves the program refused.
+ */
+const annotated = (program) => {
+  const text = fs.readFileSync(path.join(benchDir, program.source), "utf8")
+  const fixed = text.replace(/^(export const main = \(\): )number( =>)/m, "$1i32$2")
+  return fixed === text ? null : copyOf(program, ANNOTATED, fixed)
 }
 
 // ---- Running ----------------------------------------------------------------------------
@@ -368,13 +395,14 @@ const count = (exe, args) => {
 // ---- Measuring ----------------------------------------------------------------------------
 
 /**
- * Where one program lands. A refusal carries the f64 build's diagnostics, an
- * output change carries both outputs of the first run that disagreed, and
- * only a program that builds both ways, differs in IR and prints the same
- * thing is timed and counted.
+ * Where one program lands, built from `file` as the variant `into` (the
+ * suite's own source, or the annotated copy). A refusal carries the f64
+ * build's diagnostics, an output change carries both outputs of the first run
+ * that disagreed, and only a program that builds both ways, differs in IR and
+ * prints the same thing is timed and counted.
  */
-const measure = (program) => {
-  const built = buildBoth(program)
+const measure = (program, file = path.join(benchDir, program.source), into = "") => {
+  const built = buildBoth(program, file, into)
   if (built.errors.length > 0) {
     return { outcome: "refused", errors: built.errors }
   }
@@ -391,7 +419,10 @@ const measure = (program) => {
   let counts = null
   if (valgrind) {
     const { size, args = program.runs[0] } = program.counted ?? {}
-    const exes = size === undefined ? built.exes : buildBoth(program, resized(program, size), "-sized").exes
+    const exes =
+      size === undefined
+        ? built.exes
+        : buildBoth(program, resized(program, file, into, size), `${into}-sized`).exes
     counts = exes.map((exe) => count(exe, args))
   }
   return {
@@ -410,6 +441,7 @@ const percent = (n) => `${(n * 100).toFixed(1)}%`
 const signed = (n) => `${n >= 0 ? "+" : ""}${(n * 100).toFixed(2)}%`
 const geomean = (xs) => Math.exp(xs.reduce((sum, x) => sum + Math.log(x), 0) / xs.length)
 const READING = { within: "within the band", edge: "at the band's edge", slower: "slower", faster: "faster" }
+const cell = (text) => text.replaceAll("|", "\\|")
 
 /** The first line of an output that differs between the two, cut to a width a table can hold. */
 const firstDifference = (a, b) => {
@@ -420,40 +452,31 @@ const firstDifference = (a, b) => {
   return `line ${at + 1}: \`${cut(x[at])}\` became \`${cut(y[at])}\``
 }
 
-const cpu = os.cpus()
-const version = spawnSync(nishc.cmd, [...nishc.prefix, "--version"], { encoding: "utf8" }).stdout.trim()
-const head = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim()
-
-const results = programs.map((program) => {
-  console.error(`${program.name}...`)
-  return { ...program, ...measure(program) }
+/** The four outcomes of a list of results, in the order the report prints them. */
+const sorted = (results) => ({
+  timed: results.filter((r) => r.outcome === "timed"),
+  sameIr: results.filter((r) => r.outcome === "same-ir"),
+  refused: results.filter((r) => r.outcome === "refused"),
+  changed: results.filter((r) => r.outcome === "output"),
 })
 
-const timed = results.filter((r) => r.outcome === "timed")
-const sameIr = results.filter((r) => r.outcome === "same-ir")
-const refused = results.filter((r) => r.outcome === "refused")
-const changed = results.filter((r) => r.outcome === "output")
+const tally = ({ timed, sameIr, refused, changed }) =>
+  `${timed.length} timed, ${sameIr.length} with the same IR, ${refused.length} refused, ${changed.length} with a changed output`
 
-const out = []
-out.push(
-  `${results.length} programs under \`--number-mode f64\` against the suite's own build: ` +
-    `${timed.length} timed, ${sameIr.length} with the same IR, ${refused.length} refused, ` +
-    `${changed.length} with a changed output.`,
-  "",
-  `Machine: ${cpu.length} x ${cpu[0]?.model ?? "unknown CPU"}, ${os.platform()}-${os.arch()}, ` +
-    `${version} at ${head}, node ${process.version}. ${rounds} interleaved rounds after one warm-up.`,
-  ""
-)
-
-if (timed.length > 0) {
-  out.push(
-    "### Timed",
+/** The table of timed programs, their geometric mean and their instruction counts. */
+const timedSection = (title, { timed, sameIr }) => {
+  if (timed.length === 0) {
+    return []
+  }
+  const out = [
+    title,
     "",
-    "Ratio is f64 over the default, on the median; the band is the larger gap between a binary and its byte-identical copy in the same rounds.",
+    "Ratio is f64 over the default, on the median; the band is the larger gap between a binary and its byte-identical copy in the same rounds. " +
+      "IR lines changed is lines removed plus lines added over every module with `%N` masked, so a replaced line counts twice.",
     "",
-    "| program | default (ms) | f64 (ms) | ratio | band | reading | ratio (min) | band (min) | instructions | IR lines changed, `%N` masked |",
-    "| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |"
-  )
+    "| program | default (ms) | f64 (ms) | ratio | band | reading | ratio (min) | band (min) | instructions | IR lines changed |",
+    "| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |",
+  ]
   for (const r of timed) {
     const { median: m, min } = r.timing
     const counted = r.counts
@@ -464,14 +487,15 @@ if (timed.length > 0) {
         `${times3(min.ratio)} | ±${percent(min.band)} | ${counted} | ${r.changed} |`
     )
   }
+  const medians = timed.map((r) => r.timing.median.ratio)
   const outside = timed.filter((r) => r.timing.median.side === "slower" || r.timing.median.side === "faster")
   out.push(
     "",
-    `Geometric mean of the ${timed.length} timed ratios: ${times3(geomean(timed.map((r) => r.timing.median.ratio)))} on the median, ` +
+    `Geometric mean of the ${timed.length} timed ratios: ${times3(geomean(medians))} on the median, ` +
       `${times3(geomean(timed.map((r) => r.timing.min.ratio)))} on the minimum` +
       (sameIr.length > 0
         ? `; with the ${sameIr.length} same-IR programs at 1.000x, ` +
-          `${times3(geomean([...timed.map((r) => r.timing.median.ratio), ...sameIr.map(() => 1)]))} on the median.`
+          `${times3(geomean([...medians, ...sameIr.map(() => 1)]))} on the median.`
         : "."),
     `Outside its band on the median: ${outside.length === 0 ? "none" : outside.map((r) => `${r.name} (${r.timing.median.side})`).join(", ")}.`
   )
@@ -487,52 +511,107 @@ if (timed.length > 0) {
   } else {
     out.push("", "Instructions were not counted: no `valgrind` on PATH.")
   }
-  out.push("")
+  return [...out, ""]
 }
 
-if (sameIr.length > 0) {
-  out.push(
-    "### Same IR",
-    "",
-    "The sidecar already builds these with `--number-mode f64`, so the flag changes nothing. Each command prints nothing:",
-    "",
-    "```"
-  )
-  for (const r of sameIr) {
-    out.push(`diff -r ${rel(r.dir)}/default/ir ${rel(r.dir)}/f64/ir`)
+const sameIrSection = (title, lead, { sameIr }) => {
+  if (sameIr.length === 0) {
+    return []
   }
-  out.push("```", "")
+  const commands = sameIr.map((r) => `diff -r ${rel(r.dir)}/default/ir ${rel(r.dir)}/f64/ir`)
+  return [title, "", `${lead} Each command prints nothing:`, "", "```", ...commands, "```", ""]
 }
 
-if (refused.length > 0) {
-  out.push(
-    "### Refused",
-    "",
-    "| program | source | errors | by code | first diagnostic |",
-    "| --- | --- | ---: | --- | --- |"
-  )
-  for (const r of refused) {
+const refusedSection = (title, { refused }) => {
+  if (refused.length === 0) {
+    return []
+  }
+  const rows = refused.map((r) => {
     const codes = new Map()
     for (const e of r.errors) {
       codes.set(e.code, (codes.get(e.code) ?? 0) + 1)
     }
-    const tally = [...codes].map(([code, n]) => `${code} x${n}`).join(", ")
+    const byCode = [...codes].map(([code, n]) => `${code} x${n}`).join(", ")
     const first = r.errors[0]
-    out.push(
-      `| ${r.name} | bench/${r.source} | ${r.errors.length} | ${tally} | ${first.file}:${first.line}: ${first.message.replaceAll("|", "\\|")} |`
-    )
-  }
-  out.push("")
+    return `| ${r.name} | bench/${r.source} | ${r.errors.length} | ${byCode} | ${first.file}:${first.line}: ${cell(first.message)} |`
+  })
+  return [
+    title,
+    "",
+    "| program | source | errors | by code | first diagnostic |",
+    "| --- | --- | ---: | --- | --- |",
+    ...rows,
+    "",
+  ]
 }
 
-if (changed.length > 0) {
-  out.push("### Output changed", "", "| program | arguments | first difference |", "| --- | --- | --- |")
-  for (const r of changed) {
-    out.push(
-      `| ${r.name} | ${r.args.join(" ") || "(none)"} | ${firstDifference(r.base, r.f64).replaceAll("|", "\\|")} |`
-    )
+const changedSection = (title, { changed }) => {
+  if (changed.length === 0) {
+    return []
   }
-  out.push("")
+  const rows = changed.map(
+    (r) => `| ${r.name} | ${r.args.join(" ") || "(none)"} | ${cell(firstDifference(r.base, r.f64))} |`
+  )
+  return [title, "", "| program | arguments | first difference |", "| --- | --- | --- |", ...rows, ""]
+}
+
+const cpu = os.cpus()
+const version = spawnSync(nishc.cmd, [...nishc.prefix, "--version"], { encoding: "utf8" }).stdout.trim()
+const head = spawnSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim()
+
+const asIs = sorted(
+  programs.map((program) => {
+    console.error(`${program.name}...`)
+    return { ...program, ...measure(program) }
+  })
+)
+
+// A program whose only refusal is NL2140 is one annotation from compiling,
+// and those are the integer-heavy ones the price is asked about: each is
+// measured again from a copy with `main(): i32`, both modes built from that
+// copy, and reported apart from the suite as it stands.
+const withAnnotation = sorted(
+  asIs.refused
+    .filter((r) => r.errors.every((e) => e.code === "NL2140"))
+    .flatMap((r) => {
+      const program = programs.find((p) => p.name === r.name)
+      const file = annotated(program)
+      if (file === null) {
+        return []
+      }
+      console.error(`${program.name}, annotated...`)
+      return [{ ...program, ...measure(program, file, ANNOTATED) }]
+    })
+)
+const reran = Object.values(withAnnotation).flat().length
+
+const out = [
+  `${programs.length} programs under \`--number-mode f64\` against the suite's own build: ${tally(asIs)}.`,
+  "",
+  `Machine: ${cpu.length} x ${cpu[0]?.model ?? "unknown CPU"}, ${os.platform()}-${os.arch()}, ` +
+    `${version} at ${head}, node ${process.version}. ${rounds} interleaved rounds after one warm-up.`,
+  "",
+  ...timedSection("### Timed", asIs),
+  ...sameIrSection(
+    "### Same IR",
+    "The sidecar already builds these with `--number-mode f64`, so the flag changes nothing.",
+    asIs
+  ),
+  ...refusedSection("### Refused", asIs),
+  ...changedSection("### Output changed", asIs),
+]
+if (reran > 0) {
+  out.push(
+    "### Suite programs with the one annotation f64 demands",
+    "",
+    `${reran} of the refused programs are refused for NL2140 alone. Each is built again, both modes, ` +
+      `from a copy under ${rel(outDir)}/src${ANNOTATED}/ whose \`main\` is declared \`(): i32\`: ${tally(withAnnotation)}.`,
+    "",
+    ...timedSection("#### Timed, annotated", withAnnotation),
+    ...sameIrSection("#### Same IR, annotated", "The flag changes nothing in these.", withAnnotation),
+    ...refusedSection("#### Still refused, annotated", withAnnotation),
+    ...changedSection("#### Output changed, annotated", withAnnotation)
+  )
 }
 
 console.log(out.join("\n"))

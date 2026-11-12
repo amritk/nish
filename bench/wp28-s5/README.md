@@ -8,39 +8,51 @@ difference.
 
 ```sh
 npm run build                          # build/nish
-node bench/wp28-s5/run.mjs             # all 34 programs, about 25 minutes
+node bench/wp28-s5/run.mjs             # all 34 programs, about 30 minutes
 node bench/wp28-s5/run.mjs --quick     # fib, nbody, par-single: one of each outcome
+node bench/wp28-s5/run.mjs --only fib,sieve,strbuild,result   # named programs only
 ```
 
 `--rounds <n>` sets the timed rounds (7, or 3 under `--quick`) and
-`--compiler <nish>` names another compiler. The program list is read out of
-`bench/run.mjs`'s source, so a program added there is measured here.
+`--compiler <nish>` names another compiler. The program lists are read out of
+`bench/run.mjs`'s source, so a program added to one of its existing lists
+(`BENCHMARKS`, `PAR`, `MAPS`, `MAP_MEASURES`) is measured here. A new list, or
+new arguments for the AWFY harness or the `seq`/`par` kernels, is wired by
+hand in `run.mjs`.
 
 ## The price
 
-**On the 14 suite programs that compile under it, `--number-mode f64` costs
-nothing measurable: 1.008x geometric mean over the 10 that were timed, each
-inside or at the edge of its noise band but one, and at most +0.03%
-instructions. On integer-heavy code the suite cannot price it at all: the
-other 20 programs are refused by the checker.**
+**On the 14 suite programs that compile under it as they are,
+`--number-mode f64` costs nothing measurable: 1.008x geometric mean over the
+10 that were timed, each inside or at the edge of its noise band but one, and
+at most +0.03% instructions. The other 20 are refused by the checker. On the
+two integer-heavy programs that compile and print the same once `main` is
+declared `(): i32`, it costs 1.10x (fib, ±4.9%) and 1.19x (sieve, ±2.5%),
+1.141x geometric mean.**
 
 So the sentence §5.3 was expected to get, "`--compat` costs N× on
-integer-heavy code, within noise on the rest", has no N from this suite. What
-the suite supports is: **`--compat` is within noise on code whose integers are
-spelled `i32`, and code that leaves an integer as a bare `number` beside an
-`i32` does not compile under it until it is ported.** The price of
-`--number-mode f64` on such code is a porting cost before it is a run-time
-one, and the run-time one needs ported programs to measure, which is outside
-this spike.
+integer-heavy code, within noise on the rest", has an N of **about 1.1x to
+1.2x, from two programs**: fib and sieve, whose integers are bare `number`s
+and so become doubles. It is a thin N, and it comes with a condition the
+sentence did not anticipate: **code that leaves an integer as a bare `number`
+beside an `i32` does not compile under `--compat` until it is ported, and
+code whose integers are spelled `i32` is within noise.** For most of the
+suite the price of `--number-mode f64` is a porting cost before it is a
+run-time one.
 
-Three things qualify the figures:
+Four things qualify the figures:
 
-- **The timed set is narrow.** All ten are the `par-*` kernels, timed as
-  their sequential loop (`seq`). They compile because their loops are written
-  `let i: i32`, which is also why the mode does not reach their hot code. No
-  program in the suite does integer arithmetic in a bare `number` and still
-  compiles under f64, so the case a JavaScript author would hit, a `for`
-  loop counting in doubles, is not measured here.
+- **The as-is timed set is narrow.** All ten are the `par-*` kernels, timed
+  as their sequential loop (`seq`). They compile because their loops are
+  written `let i: i32`, which is also why the mode does not reach their hot
+  code. No program in the suite does integer arithmetic in a bare `number`
+  and compiles under f64 unedited.
+- **The integer-heavy N rests on two programs, each edited in one line.** The
+  case a JavaScript author would hit, a `for` loop counting in doubles, is
+  measured only by fib and sieve from a copy whose `main` returns `i32`
+  ([below](#with-the-one-annotation-f64-demands)). Of the four programs that
+  annotation could have unlocked, one is still refused and one prints a
+  different answer.
 - **par-heavy-fold reads "slower" (1.053x against a ±4.3% band) and is not.**
   Its two binaries execute the same instructions to within 1237 of 29.9
   billion, and its minimum is 1.032x against ±1.7% on a machine where the
@@ -62,7 +74,7 @@ Machine: 4 x Intel(R) Xeon(R) Processor @ 2.10GHz, linux-x64, nish 0.38.0 at 6c0
 
 Ratio is f64 over the default, on the median; the band is the larger gap between a binary and its byte-identical copy in the same rounds.
 
-| program | default (ms) | f64 (ms) | ratio | band | reading | ratio (min) | band (min) | instructions | IR lines changed, `%N` masked |
+| program | default (ms) | f64 (ms) | ratio | band | reading | ratio (min) | band (min) | instructions | IR lines changed |
 | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
 | par-compute | 964 | 984 | 1.021x | ±2.3% | within the band | 1.007x | ±1.4% | +0.00% † | 46 |
 | par-nbody | 195 | 198 | 1.019x | ±3.8% | within the band | 1.003x | ±1.0% | +0.03% † | 76 |
@@ -126,9 +138,10 @@ diff -r build/bench/wp28-s5/math/default/ir build/bench/wp28-s5/math/f64/ir
 | map-presize | bench/map-presize.ts | 5 | NL2100 x3, NL2117 x2 | bench/map-presize.ts:29: Operator `<` requires two numeric operands, got f64 and i32 |
 | map-vs-stringmap | bench/map-vs-stringmap.ts | 27 | NL2236 x1, NL2100 x21, NL2117 x2, NL2178 x1, NL2231 x2 | bench/map-vs-stringmap.ts:90: Return type mismatch: function returns i32 but expression is f64 |
 
-"IR lines changed" counts lines that differ over every module once SSA
-numbers are masked, because one added instruction renumbers every `%N` after
-it. Each kernel differs in 11 to 58 lines of its own module and 12 to 23 of
+"IR lines changed" is lines removed plus lines added over every module once
+SSA numbers are masked (`%N`), because one added instruction renumbers every
+`%N` after it. A replaced line is one removed and one added, so it counts
+twice. Each kernel differs in 11 to 58 lines of its own module and 12 to 23 of
 `std/threads`.
 
 ## What does not survive
@@ -139,8 +152,8 @@ it. Each kernel differs in 11 to 58 lines of its own module and 12 to 23 of
   one error each). `const main = (): number =>` becomes `(): f64`, which is
   not an exit code. The diagnostic names the fix, `main(): i32`. It is the only
   error the checker reports for each, and these four are the suite's
-  integer-heavy programs; whether they compile once `main` is annotated was
-  not tried, because the spike measures the suite as it is.
+  integer-heavy programs. What happens once `main` is annotated is
+  [the next section](#with-the-one-annotation-f64-demands).
 - **A bare `number` meets an `i32`** (NL2100, NL2117, NL2178, NL2231, NL2236;
   the AWFY harness, the four map prototypes, the three `Map` measurements,
   par-alloc, par-histogram-atomic). A literal-initialised `let n = 0` or a
@@ -149,7 +162,8 @@ it. Each kernel differs in 11 to 58 lines of its own module and 12 to 23 of
   two is an error: `i < n`, `AtomicI32.exchange(x)`, a `number[]` element
   stored into an `i32` field. The seven AWFY ports share one harness and one
   build, so they share its 23 errors.
-- No program compiled and then printed something else: the output check
+- No program of the suite as it is compiled and then printed something else
+  (strbuild does once `main` is annotated, below): the output check
   (every program's checksum line, and both `seq` and `par` for a kernel)
   found no difference.
 
@@ -157,9 +171,63 @@ This is a finding about §5.3 in its own right: on a codebase that mixes
 `number` and `i32`, `--number-mode f64` is not a flag that makes it slower,
 it is a flag that stops it compiling.
 
+## With the one annotation f64 demands
+
+fib, sieve, strbuild and result are refused for NL2140 alone, and they are the
+integer-heavy programs §5.3 is about. The harness writes a copy of each under
+`build/bench/wp28-s5/src-annotated/` with `main` declared `(): i32` and nothing
+else changed, builds that copy both ways and measures it like any other
+program. The suite's own sources are not touched, and the refusal table above
+is the suite as it is. This table is a separate run of the same harness on the
+same machine (`--only fib,sieve,strbuild,result`, 7 interleaved rounds, nish
+0.38.0 at de623ad9):
+
+| program | default (ms) | f64 (ms) | ratio | band | reading | ratio (min) | band (min) | instructions | IR lines changed |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| fib | 587 | 646 | 1.099x | ±4.9% | slower | 1.095x | ±3.8% | -22.57% | 60 |
+| sieve | 866 | 1027 | 1.186x | ±2.5% | slower | 1.209x | ±2.0% | +39.38% | 180 |
+
+Geometric mean of the 2 timed ratios: 1.141x on the median, 1.151x on the
+minimum. Both are outside their band on the median and on the minimum.
+Instructions, default then f64: fib 462988530 and 358476746, sieve 280327305
+and 390732189, both at the size `bench/instructions.json` names.
+
+- **fib is slower on fewer instructions.** Under f64 `fib` takes and returns a
+  double. The checked add (`llvm.sadd.with.overflow.i32`, two `extractvalue`s
+  and a branch to `nish_panic_overflow`) becomes one `fadd`, which is where
+  the 22.57% of instructions goes; `icmp slt` and `sub nsw` become `fcmp olt`
+  and `fsub`. The time still rises by a tenth outside the band. The spike did
+  not profile why; the instruction count is not a proxy for time here, and the
+  wall-clock figure is the price.
+- **sieve pays on every element access.** Every loop counter is a double
+  (`fadd`, `fmul` for `i * i`, `fcmp ole` against `n`), and each of the four
+  `composite[i]` accesses converts its index with `fptosi` before the bounds
+  check. 39.38% more instructions and 1.19x the time.
+
+```sh
+p=fib   # or sieve
+diff build/bench/wp28-s5/$p-annotated/default/ir/$p.ll \
+     build/bench/wp28-s5/$p-annotated/f64/ir/$p.ll
+```
+
+The other two do not get a ratio:
+
+| program | outcome | detail |
+| --- | --- | --- |
+| result | still refused, NL2101 x1 | `result.ts:33`: Operator `&` requires two operands of the same integer type, got f64 and f64 (`number` is f64 under --number-mode f64; convert with toI32/toI64) |
+| strbuild | output changed | line 1: `806394` became `2410293` |
+
+result masks with `&` on bare `number`s, which f64 has no meaning for.
+strbuild compiles and runs and prints a different checksum: its
+`const step = (count + 31) / 32 // ceil(count / 32)` is an integer division by
+default and a floating-point one under f64, so the loop takes different
+steps. That is the mode's hazard in one line: a program that compiles under
+`--number-mode f64` can still compute something else, silently, wherever it
+relied on `/` truncating.
+
 ## The three worst, and the IR behind them
 
-By median ratio: par-heavy-fold (1.053x), par-single (1.030x) and
+Of the suite as it is, by median ratio: par-heavy-fold (1.053x), par-single (1.030x) and
 par-histogram (1.028x). All three differ from their default build in the same
 way, and in no hot loop. To see it, mask the SSA numbers:
 
@@ -229,7 +297,7 @@ conversion away. At 33 ms a run, its 1.028x is start-up noise inside a ±8.4%
 band.
 
 The largest instruction difference is par-nbody's, +0.03% (296 thousand in
-1.18 billion): it has the most such conversions (seventeen `toI32(_.length)` sites), several
+1.18 billion): it has the most such conversions (12 `toI32(_.length)` sites), several
 of them bounds of the inner pair loop.
 
 ## The four that are already f64
