@@ -25,7 +25,7 @@ It says which functions hold secrets and which of them are wiped, as CLAUDE.md
 | `std/net/quic.ts` | `QuicConnection`: `receive`, `receiveWindow`, `sign`, `takeDatagram`, `takeDatagramInto`, `readStream`, `writeStream`, `nextStreamEvent`, `openStream`, `streamRead`, `streamWrite`, `streamReset`, `streamStopSending`, `sendDatagram`, `readDatagram`, `close`, `release`, `reset`, `acceptRetry`, `deadline`, `handleTimer`, `updateKeys`; `quicStatelessResetToken` |
 | `std/net/quic-stream.ts` | `QuicStreams`: `onStream`, `onReset`, `onStopSending`, `onMaxStreamData`, `onStreamDataBlocked`, `onMaxData`, `onMaxStreams`, `open`, `write`, `read`, `resetStream`, `stopSending`, `putNextChunk`, `putNextControl`, `chunkAcked`, `chunkLost`, `controlAcked`, `controlLost`, `nextEvent` |
 | `std/net/quic-datagram.ts` | `QuicDatagramQueue`: `push`, `pop`, `putFrame` |
-| `std/net/quic-recovery.ts` | `QuicRecovery`: `onPacketSent`, `onAck`, `deadline`, `onTimeout`, `discardSpace`, `evictOldest`, `pacerDelay`, `onPaced`; `QuicSentPackets` |
+| `std/net/quic-recovery.ts` | `QuicRecovery`: `onPacketSent`, `onAck`, `deadline`, `onTimeout`, `discardSpace`, `evictOldest`, `pacerDelay`, `onPaced`, and the CUBIC controller it runs when asked; `quicRecoveryCbrt`; `QuicSentPackets` |
 | `std/net/quic-listener.ts` | `QuicListener`: `handleWindow`, and `handle` over it (Version Negotiation, Retry and its token, the stateless reset), and `release`; `QuicListenerAnswer.wipe`; `quicListenerTakePaced`, `quicListenerPaceTime`, `quicListenerTakeFlight`, `quicListenerReceiveSegments` |
 
 Out of scope: the primitives they call, `nish/crypto/aes`,
@@ -248,6 +248,66 @@ replays of Q2 (`net_quic_conn_replay`, `net_quic_lifecycle_replay` and their
   came from it until its PATH_CHALLENGE is answered, the next packet from the
   real address takes it back at once, and an unanswered validation falls
   back to the last validated address.
+
+### Congestion control
+
+`QuicServerConfig.congestion` picks the controller every connection runs:
+`QUIC_RECOVERY_NEWRENO` (0, RFC 9002 Appendix B, the default) or
+`QUIC_RECOVERY_CUBIC` (1, RFC 9438). Any other value fails
+`quicConnConfigFits`, so a server never starts on a controller it does not
+have. Both share slow start, the recovery period, the 2400-byte floor and
+persistent congestion; CUBIC replaces what happens in congestion avoidance
+and on a congestion event. Its properties are pinned in
+`tests/link/net_quic_recovery` (`cubic.ts`, and its `_f64` twin), each window
+worked by hand in the test's comments.
+
+- **The arithmetic is integer and the same on every machine.** W_cubic(t)
+  is W_max + 2 × size × (t − K)³ / (5 × 10⁹) bytes with t in milliseconds
+  (C = 0.4 segments/s³); K comes from `quicRecoveryCbrt`, a bisection with
+  no floating point, so `--number-mode f64` builds give the same windows.
+  K and every t − K are clamped to ±40 s, so the cube times twice the
+  largest UDP payload stays inside an `i64` (2 × 65535 × 40000³ < 2⁶³); the
+  clamp is reached only after a fall of about 30 MB.
+- **What a peer controls is what it always did.** A congestion event keeps
+  0.7 of the window (β, §4.6) and, under fast convergence, plateaus W_max at
+  0.85 of a window that fell below the last W_max (§4.7); the Reno-friendly
+  estimate W_est grows with α = 0.53 of a datagram a round trip until W_est
+  reaches cwnd_prior, then one (§4.3); a step toward the curve is at
+  most half the window a round trip (§4.4's target bound). A peer can still
+  shrink the window by not acknowledging, and widen it only by
+  acknowledging, which QUIC-7's skipped numbers bound as before.
+- **An idle sender does not bank growth** (§5.8, the app-limited rule). A
+  window with less than half of it in flight is not grown, and the time it
+  sat so is added to the epoch, so the curve resumes where it stopped
+  rather than leaping ahead; persistent congestion and a new path start
+  CUBIC over from slow start with no epoch.
+
+**The default stays NewReno.** `bench/quic-goodput.ts` measures goodput
+through a userspace shim on a virtual clock: a 20 Mbit/s bottleneck with a
+drop-tail queue of one bandwidth-delay product (125,000 bytes), 25 ms each
+way, 1% of datagrams lost at random each way, and a client that acknowledges
+every second datagram or after 25 ms. Each of 41 seeds runs NewReno then
+CUBIC on the same loss pattern; the noise band is the spread across seeds
+(no wall clock is read). In kbit/s:
+
+| Transfer | Controller | Median | Quartiles | Range | CUBIC first |
+| --- | --- | ---: | --- | --- | --- |
+| 125,000 B (1 BDP) | NewReno | 3537 | 2732..4029 | 1034..4029 | |
+| 125,000 B (1 BDP) | CUBIC | 3547 | 2612..4029 | 1696..4029 | 17 of 41 |
+| 4,000,000 B (32 BDP) | NewReno | 2257 | 2054..2490 | 1706..3574 | |
+| 4,000,000 B (32 BDP) | CUBIC | 2659 | 2312..3307 | 1897..4627 | 41 of 41 |
+
+On the BDP-sized transfer the two are level: the medians differ by 0.3%,
+well inside either's quartiles, and CUBIC finishes first on fewer than half
+the seeds, since slow start carries most of a one-BDP transfer and the two
+share it. So the default stays NewReno. On a transfer 32 times longer, CUBIC
+is ahead on every seed and its median (+18%) is above NewReno's upper
+quartile, a win outside the band; NewReno's median there matches the Mathis
+estimate for 1% loss at 50 ms (about 2.3 Mbit/s), which says the shim is
+sane. That is the evidence for making CUBIC the default once longer
+transfers matter; a server that wants it now sets `congestion`. What the
+shim leaves out: the handshake crosses it at no delay, and nothing is paced
+against the bottleneck.
 
 ### Q4: streams, datagrams and the slot
 
