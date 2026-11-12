@@ -578,7 +578,7 @@ No row retires more than main's but typed, by 28 instructions in 306 million, wh
 <!-- techempower:begin -->
 ## TechEmpower json and plaintext
 
-Measured by `bash bench/techempower/run.sh` (3 interleaved rounds of 10 s, every contestant started afresh and warmed for 1 s before each count), and copied here from the report it writes to `build/tfb/results.md`. `bench/run.mjs` carries this section over between its `techempower` markers when it rewrites the file. The entry is [bench/techempower/](https://github.com/amritk/nish/blob/main/bench/techempower/README.md): one process, one thread, one `pollWait` loop on `Http1Server`. The other rows are the HTTP twins of [bench/http-twins/](https://github.com/amritk/nish/blob/main/bench/http-twins/README.md), each run as its own `serve <port>`.
+Measured by `bash bench/techempower/run.sh` (3 interleaved rounds of 10 s, every contestant started afresh and warmed for 1 s before each count), and copied here from the report it writes to `build/tfb/results.md`. `bench/run.mjs` carries this section over between its `techempower` markers when it rewrites the file. The entry is [bench/techempower/](https://github.com/amritk/nish/blob/main/bench/techempower/README.md): one `pollWait` loop on `Http1Server`, run here as one process: pinned to one CPU, it starts one worker (the multi-core figures are [below](#one-process-against-one-worker-a-core-wp39-e5)). The other rows are the HTTP twins of [bench/http-twins/](https://github.com/amritk/nish/blob/main/bench/http-twins/README.md), each run as its own `serve <port>`.
 
 `entry-copy` is a second build of the same `main.ts` that `cmp` finds byte-identical, so the gap between `entry` and `entry-copy` is the noise band every other difference is read against. `entry-nodelay0` is `entry` started with its `nodelay` argument 0, so its accepted sockets keep Nagle on. A cell marked `*` had non-2xx answers or socket errors in at least one round; `n/a` is a cell no round gave a figure for.
 
@@ -642,6 +642,47 @@ What the rows say, read against that band:
 - `rust-actix` answers about 10,000 req/s up to 1024 connections, falls to 5,632 at 4096 with timeouts in every round, and has no figure at 16384: in all three rounds wrk reported 0.00 req/s and no socket errors, so the cell is `n/a`. An earlier run of this section recorded that cell as 0, which was the failed measurement rather than a rate. Run alone, the twin shows 6.4 ms of latency per request too, so its figures are its own, reported as measured.
 - `TCP_NODELAY` (WP39 E2, `tcpListenFlags` flag 2) is the entry's default. Against `entry-nodelay0` it is faster outside the band at four levels (`/plaintext` 256 connections by 2.0% against a 1.0% band, and 4096 by 0.9% against 0.7%; `/json` 128 by 7.5% against 0.1%, and 256 by 8.2% against 0.2%) and within the band at the other six, slower outside it at none. So the flag stays on.
 - The benchmarked build is `5ee6e7c`. The head adds only the listener's pause when an accept runs out of descriptors, which this run never reached: with `ulimit -n` at 20000, no accept failed for want of one.
+
+### One process against one worker a core (WP39 E5)
+
+`main.ts` takes a fifth argument, its workers: 0, the default, runs one worker a CPU under `nish/net/prefork` on one `SO_REUSEPORT` port; 1 runs the one process the tables above measure. `run.sh --cores-compare` times both from the same build. `entry` and `entry-copy` are the byte-identical pair started with workers 1, and so give the noise band. `entry-cores` is `entry` started with workers 0. The server gets CPUs 0-1, so `entry-cores` runs two pinned workers, and wrk gets CPUs 2-3. These figures are not comparable with the one-core tables above: they come from a different machine, build and pinning.
+
+| | |
+| --- | --- |
+| Date | 2026-11-12 |
+| nish | nish 0.38.0 (commit a15917f), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores (a cloud VM) |
+| OS | linux 6.18.44-fc-v378 (x64) |
+| Client | wrk 4.1.0, `-t 2`, TFB's request headers, `--timeout 8`; `/plaintext` through `pipeline.lua` 16 deep |
+| Pinning | server on CPUs 0-1, wrk on CPUs 2-3. **Client-shared**: two wrk cores drive two server cores |
+| Limits | `ulimit -n` 20000, `net.core.somaxconn` 4096; no concurrency was clamped |
+| Command | `npm run build && bash bench/techempower/run.sh --cores-compare` |
+
+`/plaintext`, req/s, median (min) of 3 rounds of 10 s:
+
+| contestant | 256 | 1024 | 4096 | 16384 |
+| --- | ---: | ---: | ---: | ---: |
+| entry | 1359317 (1309460) | 1170871 (901448) | 964963 (941896) | 888618 (786206)* |
+| entry-copy | 1287849 (1122980) | 1235716 (1228138) | 933724 (875067) | 1020255 (858148) |
+| entry-cores | 2716939 (2684038) | 2570961 (2524748) | 2253033 (2192759) | 1689248 (1649006) |
+
+Noise band (medians): 5.3%, 5.5%, 3.2%, 14.8%. `entry-cores` against `entry`: +99.9%, +119.6%, +133.5%, +90.1%, each outside its band.
+
+`/json`, req/s, median (min) of 3 rounds of 10 s:
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 128488 (124765) | 141208 (138229) | 155871 (145938) | 160087 (157302) | 167444 (167011) | 196739 (185709) |
+| entry-copy | 126916 (124397) | 141923 (139049) | 152071 (141611) | 157385 (149838) | 170613 (169851) | 191569 (172509) |
+| entry-cores | 248324 (240201) | 272422 (258128) | 284092 (272414) | 306074 (299083) | 321831 (318143) | 341548 (328258) |
+
+Noise band (medians): 1.2%, 0.5%, 2.4%, 1.7%, 1.9%, 2.6%. `entry-cores` against `entry`: +93.3%, +92.9%, +82.3%, +91.2%, +92.2%, +73.6%, each outside its band.
+
+- Two workers on two cores serve 1.7 to 2.3 times the one process at every concurrency. A gain above 2x, as on `/plaintext` at 1024 and 4096, is not explained by these runs. One unmeasured hypothesis: the one process is not pinned inside its two CPUs, so it pays for migrations the pinned workers do not.
+- The gain shrinks at the top concurrencies: 16384 on `/plaintext` and 512 on `/json`. Two wrk cores are likely the ceiling there, since this machine is client-shared.
+- At `/plaintext` 16384, `entry` had 4,679 read errors (connections reset) in one round, which the `*` marks. The 14.8% band at that level is wide, but the +90.1% gain is several times larger.
+- The peak RSS `run.sh` reads for `entry-cores` (1.9 MiB) is the supervisor's alone, so it is left out of these tables. The one process peaked at 91 MiB on `/plaintext` and 3.1 MiB on `/json`.
+- The TechEmpower image runs one worker per core of the machine (`nish.dockerfile`). TFB's own servers have more cores than this VM, so these figures say only that the second core pays off here.
 <!-- techempower:end -->
 
 ## TechEmpower: the async entry against the explicit one (WP49 stage 6)
@@ -1402,6 +1443,150 @@ async, top 12 user-space frames by self samples (perf, cpu-clock:u):
 
 </details>
 
+## TechEmpower: the async entry re-measured after the profile-led fixes (WP49 stage 6)
+
+The same gate as [the first measurement](#techempower-the-async-entry-against-the-explicit-one-wp49-stage-6) and [the 2026-11-11 re-measurement](#techempower-the-async-entry-re-measured-after-the-serve-and-pool-fixes-wp49-stage-6), which stay above as the befores, run again once [the profile](#techempower-where-the-async-entrys-time-goes-a-profile-wp49-stage-6) (#1410) had ranked where the async entry's time goes and three PRs had acted on it: #1421 cut `serve`'s per-request copies and slot scans, #1419 cut the async Postgres pool's buffer fill and waits and batched the async entry's concurrent `/db` ids into one statement, and #1459 trimmed the router's walk and `serveTask`'s copies. The method, the pinning, the `*` rule and the caveats are the first measurement's: one 4-core VM shared by wrk, Postgres and the server, so a relative A/B and not a TechEmpower rank ([D6](https://github.com/amritk/nish/blob/main/docs/wp49-async-server.md#9-decisions-for-the-owner)). The cells are req/s, median (minimum) of 3 interleaved rounds of 10 s, and the band is the gap between each pair of identical builds' medians in this run. `run.sh`'s inside rule is one-sided: a delta `d` is inside when `d >= −band`. Peak RSS is the server's `VmHWM`, the largest over every round and concurrency of the test.
+
+The tree measured is #1459's head `f9ffe352` merged locally with `main` at `747126db`, which #1459 had not yet taken in (#1444, #1448, #1452). The merge's only conflict is `tests/nish-cmp.js`, which no benchmark binary reads. #1448 makes the explicit entry fork one worker a CPU by default, but the worker count is `availableParallelism()`, which reads the affinity mask, and `run.sh` starts every server under `taskset -c 0`: the explicit entry still runs as one process, as in the earlier runs.
+
+| | |
+| --- | --- |
+| Date | 2026-11-12 |
+| nish | `build/nish` built from #1459's head `f9ffe352` merged locally with `main` at `747126db`, a merge that has no published SHA (nish 0.38.0 sources), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 15 GiB |
+| OS | linux 6.18.44 (x64) |
+| Postgres | 16, a throwaway cluster in `build/tfb/pg`, `fsync=off`, TFB's `world` (10,000 rows) and `fortune` tables |
+| Client | wrk 4.1.0, TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
+| Pinning | plaintext and json: server on CPU 0, wrk `-t 3` on CPUs 1-3. Database: server on CPU 0, Postgres on CPU 1, wrk `-t 2` on CPUs 2-3 |
+| Command | `npm run build && PG_BIN=/usr/lib/postgresql/16/bin bash bench/techempower/run.sh` |
+
+**Outcome: the gate is still not met.** Six of the eleven judged cells are outside:
+
+- **`plaintext`**: outside at all three judged concurrencies, 27.7%, 15.0% and 26.9% below the explicit entry at 256, 1,024 and 4,096 connections (they were 32–38% below). At 16,384, recorded and not judged, it is 68.0% below, a `*` cell again.
+- **`json`**: inside at 16, 32, 64 and 256 connections and outside at 128 (−4.9% against a 0.5% band) and 512 (−13.0% against 5.7%). The 256 cell is inside on a 9.5% band, so it is a weak inside.
+- **`db`**: outside at 64 connections (−5.7% against a 2.2% band) and inside at 256 (+7.3%). It was 74.2% and 79.4% below. The 16-connection cell is bimodal again (below) and recorded, not judged.
+
+Of the database tests outside the gate, `/updates` and `/cached-queries` are inside at all three concurrencies, `/queries` at 16 and 64 connections, and `/fortunes` nowhere.
+
+| test | connections | band | async vs entry | verdict | 2026-11-11 |
+| --- | ---: | ---: | ---: | --- | ---: |
+| `/plaintext` | 256 | 11.1% | −27.7% | outside | −33.3% |
+| `/plaintext` | 1024 | 1.1% | −15.0% | outside | −32.0% |
+| `/plaintext` | 4096 | 1.2% | −26.9% | outside | −38.3% |
+| `/plaintext` | 16384 | 0.8% | −68.0% | not judged (`run.sh`: outside*) | −70.9%* |
+| `/json` | 16 | 2.9% | −2.0% | inside | −2.5% |
+| `/json` | 32 | 2.9% | −0.5% | inside | −4.1% |
+| `/json` | 64 | 0.3% | +0.5% | inside | −6.2% |
+| `/json` | 128 | 0.5% | −4.9% | outside | −7.4% |
+| `/json` | 256 | 9.5% | −3.6% | inside | −6.3% |
+| `/json` | 512 | 5.7% | −13.0% | outside | −17.1% |
+| `/db` | 16 | 64.9% (bimodal) | −23.4% | not judged (`run.sh`: inside) | −61.7% |
+| `/db` | 64 | 2.2% | −5.7% | outside | −74.2% |
+| `/db` | 256 | 0.7% | +7.3% | inside | −79.4% |
+| `/queries?queries=20` | 16 | 0.3% | +10.8% | inside | +3.0% |
+| `/queries?queries=20` | 64 | 1.5% | +19.3% | inside | −10.6% |
+| `/queries?queries=20` | 256 | 1.7% | −18.0% | outside | −47.1% |
+| `/updates?queries=20` | 16 | 1.0% | +6.4% | inside | +2.9% |
+| `/updates?queries=20` | 64 | 3.6% | +7.0% | inside | +4.4% |
+| `/updates?queries=20` | 256 | 3.4% | +8.7% | inside | +4.8% |
+| `/fortunes` | 16 | 2.1% | −31.2% | outside | −42.7% |
+| `/fortunes` | 64 | 0.3% | −11.2% | outside | −66.8% |
+| `/fortunes` | 256 | 0.8% | −44.1% | outside | −73.8% |
+| `/cached-queries?count=100` | 16 | 0.4% | +8.2% | inside | +6.4% |
+| `/cached-queries?count=100` | 64 | 1.0% | +19.1% | inside | +1.1% |
+| `/cached-queries?count=100` | 256 | 2.8% | +17.3% | inside | −1.5% |
+
+The `/db` band at 16 connections is bimodal as it was on 2026-11-11: each explicit build landed at about 24–25k or 72–75k req/s from round to round (`db-entry` 24,250, 72,613 and 75,228; `db-entry-copy` 75,169, 25,484 and 24,521), so the band measures which mode each median fell in. The async entry gave 47.3–57.0k. `run.sh` prints inside; this record does not judge the cell, and the `db` verdict rests on 64 and 256 connections. The cause of the two modes is still not looked into. The `/plaintext` band at 256 connections is wide for one round: `entry-copy`'s first round gave 1,067,409 against 1,428,775 and 1,240,902 in its others. The async entry, at 1,005,222–1,030,827, is below every explicit round of both builds, so the cell is outside however that round is read.
+
+The async entry now beats the explicit one on `/queries` at 16 and 64 connections, on `/updates` and on `/cached-queries`. The gain is most likely the pool's changes in #1419; that is inferred, not traced.
+
+### /plaintext, req/s, median (min) of 3 rounds of 10 s, after the profile-led fixes
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1396208 (1344380) | 1095950 (1001872) | 943732 (800621) | 1080717 (731886) | 91.4 |
+| entry-copy | 1240902 (1067409) | 1108102 (1030718) | 932337 (879035) | 1071958 (1013306) | 91.4 |
+| async | 1008885 (1005222) | 931658 (897180) | 689535 (673403) | 346017 (319578)* | 95.8 |
+
+noise band (|entry - entry-copy| / entry, medians): 256: 11.1% 1024: 1.1% 4096: 1.2% 16384: 0.8%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 256: -27.7% outside 1024: -15.0% outside 4096: -26.9% outside 16384: -68.0% outside*
+
+### /json, req/s, median (min) of 3 rounds of 10 s, after the profile-led fixes
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 105795 (104852) | 124321 (122100) | 143372 (143235) | 168990 (165456) | 181760 (179787) | 201539 (183377) | 3.3 |
+| entry-copy | 108840 (107895) | 127949 (125784) | 143794 (139751) | 168113 (160339) | 164446 (148537) | 189963 (188113) | 3.3 |
+| async | 103722 (103013) | 123661 (121990) | 144040 (139898) | 160681 (157016) | 175217 (169509) | 175407 (164065) | 7.6 |
+
+noise band (|entry - entry-copy| / entry, medians): 16: 2.9% 32: 2.9% 64: 0.3% 128: 0.5% 256: 9.5% 512: 5.7%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -2.0% inside 32: -0.5% inside 64: +0.5% inside 128: -4.9% outside 256: -3.6% inside 512: -13.0% outside
+
+### /db, req/s, median (min) of 3 rounds of 10 s, after the profile-led fixes
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 72613 (24250) | 104902 (100258) | 107434 (107129) | 65.6 |
+| db-entry-copy | 25484 (24521) | 102587 (99192) | 106712 (104700) | 65.6 |
+| async-db | 55613 (47297) | 98905 (93916) | 115322 (114011) | 33.1 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 64.9% 64: 2.2% 256: 0.7%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: -23.4% inside 64: -5.7% outside 256: +7.3% inside
+
+### /queries?queries=20, req/s, median (min) of 3 rounds of 10 s, after the profile-led fixes
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 25005 (24747) | 26334 (26214) | 36489 (34628) | 66.2 |
+| db-entry-copy | 24938 (23799) | 26729 (26609) | 35874 (34204) | 66.1 |
+| async-db | 27700 (27458) | 31429 (31041) | 29922 (29336) | 24.2 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 0.3% 64: 1.5% 256: 1.7%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +10.8% inside 64: +19.3% inside 256: -18.0% outside
+
+### /updates?queries=20, req/s, median (min) of 3 rounds of 10 s, after the profile-led fixes
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 6796 (6079) | 7054 (6811) | 8098 (7742) | 66.1 |
+| db-entry-copy | 6862 (6849) | 6801 (6747) | 7820 (7512) | 66.1 |
+| async-db | 7231 (6906) | 7549 (7286) | 8805 (7789) | 25.6 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 1.0% 64: 3.6% 256: 3.4%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +6.4% inside 64: +7.0% inside 256: +8.7% inside
+
+### /fortunes, req/s, median (min) of 3 rounds of 10 s, after the profile-led fixes
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 59273 (56004) | 71431 (70409) | 72460 (70852) | 65.5 |
+| db-entry-copy | 58014 (56903) | 71239 (70620) | 71885 (70521) | 65.5 |
+| async-db | 40755 (38151) | 63458 (61786) | 40509 (39601) | 24.7 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 2.1% 64: 0.3% 256: 0.8%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: -31.2% outside 64: -11.2% outside 256: -44.1% outside
+
+### /cached-queries?count=100, req/s, median (min) of 3 rounds of 10 s, after the profile-led fixes
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 63416 (62559) | 69900 (69102) | 69778 (68378) | 65.4 |
+| db-entry-copy | 63652 (62930) | 70618 (70062) | 71740 (68509) | 65.4 |
+| async-db | 68592 (68369) | 83261 (78516) | 81876 (81556) | 18.7 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 0.4% 64: 1.0% 256: 2.8%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +8.2% inside 64: +19.1% inside 256: +17.3% inside
+
+- /plaintext c=16384 round 1: async had 0 Non-2xx responses and socket errors c/r/w/t 0/5955/0/0
+- /plaintext c=16384 round 2: async had 0 Non-2xx responses and socket errors c/r/w/t 0/4570/0/0
+- /plaintext c=16384 round 3: async had 0 Non-2xx responses and socket errors c/r/w/t 0/4249/0/0
+
+No database cell has a `*`, and neither explicit build has one anywhere. The async entry's read errors at 16,384 connections, in every round as on 2026-11-11, are still not looked into.
+
+**Memory.** On `plaintext` and `json` the async entry's peak RSS is where it was on 2026-11-11 (95.8 MiB against the explicit entry's 91.4, and 7.6 against 3.3). On the database tests it stays below the explicit entry's (18.7–33.1 against 65.4–66.2 MiB), but `/db`'s rose from 22.6 to 33.1 MiB, which follows #1419's batching of concurrent ids into one statement; that is inferred from the timing, not traced.
+
+**What remains, as far as this run and the profiles go.** No new profile was taken for this run; #1459's callgrind tables, on its head, are the latest (its PR body has them). Per request, the async entry still runs about 3,100 (`plaintext`) and 3,300 (`json`) more instructions than the explicit one, about 8,500 against 5,400 and 9,900 against 6,600. About 750 of it is the task's memory in `runtime/runtime-async.c` (`malloc`/`free` of the frame and region, `nish_async_spawn`, `nish_async_done`, `nish_arena_release`), not the per-wait system calls #1374 ruled out; about 2,100 is the layered hand-off from `serveOn` through `HttpHandler` to `serveTask` and the router's walk; about 190 (`plaintext`) and 450 (`json`) is shared `std/net/http1-server.ts` and JSON-writer code. The database tests' remaining gap was not profiled after #1419.
+
 <!-- http-codec-baseline:begin -->
 ## HTTP/1 codec baseline
 
@@ -1596,6 +1781,35 @@ For `bench/http1-server.ts` at 2.07 syscalls a request that is 0.22 µs of about
 
 Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#tls-handshake) describes it, and [WP34 K5](https://github.com/amritk/nish/blob/main/docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline and [its result](https://github.com/amritk/nish/blob/main/docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-result).
 <!-- tls-handshake:end -->
+
+<!-- http-load:begin -->
+## HTTP/2 and HTTP/3
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/h2load.mjs` drives `tests/link/net_interop_server` (`main serve`, pinned to CPU 0, 64 slots) with h2load on the other CPUs for HTTPS/1.1 and HTTP/2 over TLS, and with the server's own scripted QUIC client for HTTP/3, one build against another in interleaved rounds (a b, then b a). Run with one `--bin` it measures the build against itself, so the spread of the b / a ratios is the noise band.
+
+```bash
+build/seed/bin/nish tests/link/net_interop_server/main.ts -o build/interop.ir/ --link build/interop
+node bench/h2load.mjs --bin build/interop --rounds 5
+```
+
+Measured 2026-11-12 with the interop server built from commit `747126db` (the main the branch started from, no source change) by the 0.38.0 seed, `build/seed/bin/nish ... --link build/interop`, profile `speed` (-O3 with LTO). Machine: a KVM guest, Intel Xeon @ 2.10 GHz, 4 vCPUs (one thread per core), 15 GB, Linux 6.18.44, h2load nghttp2 1.59.0 (Ubuntu 24.04), loopback. 5 rounds, 64 slots, 20,000 requests per round for the two h2load rows (16 clients; 8 streams each for HTTP/2, none for HTTPS/1.1) and 2,000 requests over one connection for HTTP/3.
+
+| scenario | a req/s | b req/s | b / a (min–max) |
+| --- | ---: | ---: | ---: |
+| HTTPS/1.1 `h2load --h1` c=16 | 88,771 | 85,270 | 0.911 (0.787–1.187) |
+| HTTP/2 over TLS, `h2load` c=16 m=8 | 177,277 | 171,397 | 0.967 (0.704–1.173) |
+| HTTP/3, `main h3-load` c=1, 2,000 requests, in process | 28,986 | 29,412 | 1.046 (0.920–1.566) |
+
+A second identical run a few minutes later on the same VM gave 85,703 / 102,403 (1.137, 0.956–1.232), 155,584 / 166,240 (1.051, 0.805–1.213) and 30,303 / 30,303 (1.000, 0.881–1.241): the levels repeat to about 15%, so they are this machine's, not one run's luck.
+
+a and b are the same binary, so the ratios are the noise band: about ±20 to 30% between the extremes of five rounds, and up to +57% on HTTP/3 in the first run. A difference between two builds smaller than that is not shown by five rounds; widen `--rounds` first.
+
+**Against the table in [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md)** (the same harness, 64 slots, 5 rounds: 47,354 / 74,411 / 13,245 req/s, HTTP/3 band 0.886–1.081). These figures are 1.9x, 2.4x and 2.2x higher. That table names no machine, compiler or commit, so the gap cannot be attributed here; what is shown is that it is not noise, since this VM reproduced its own levels twice. The likely causes are the host's CPU (this guest's cores are a different part and a shared host) and the build, and neither was varied. The two tables are each a ratio on one machine and are not to be read against each other; compare a build with another only within one table.
+
+Not h2load's HTTP/3 number: Ubuntu's nghttp2-client is built without ngtcp2 and nghttp3, so the script falls back to `main h3-load`, the server and `client.ts`'s QUIC client in one process on CPU 0, one connection with its requests one after another. That figure is the two sides' work together and falls as the connection's streams pile up; it compares builds and is not a server capacity, nor comparable with an h2load HTTP/3 run.
+
+What the cloud VM allows: the median requests per second of one shared-host guest, useful against another build measured the same way on the same machine, in the same session. They are not comparable with bare metal, another VM size or another h2load.
+<!-- http-load:end -->
 
 <!-- postgres-profile:begin -->
 ## PostgreSQL client: where the time goes

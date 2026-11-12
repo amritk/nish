@@ -1,0 +1,2 @@
+this call through `h` can reach `keepIt`, which keeps `p`, and `readX`, which does not
+`keepIt` reaches `h` through `hot.set(3, keepIt)`

@@ -12,7 +12,7 @@ and [Builtin modules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#
 Put `export` on the declaration itself. It works on functions, constants,
 classes, interfaces, enums and type aliases:
 
-```ts
+```ts nish:ok file=geometry.ts
 // geometry.ts
 export interface Point {
   x: i32;
@@ -29,7 +29,7 @@ export const distance2 = (a: Point, b: Point): i32 => {
 Then import what you need by name, with a path that starts with `./` or
 `../`. The `.ts` extension is optional:
 
-```ts
+```ts nish:ok file=main.ts
 // main.ts
 import { distance2, Point } from "./geometry";
 
@@ -178,7 +178,7 @@ A package is compiled from its TypeScript source, not from built JavaScript,
 so it is checked and optimised exactly as your own code is. Its
 `package.json` says which file to compile under the `nish` export condition:
 
-```json
+```json nish:ok file=node_modules/hash/package.json
 {
   "name": "hash",
   "version": "1.0.0",
@@ -189,6 +189,40 @@ so it is checked and optimised exactly as your own code is. Its
   "engines": { "nish": ">=0.18.0" }
 }
 ```
+
+With `src/index.ts` and `src/blake3.ts` beside it in the package,
+
+```ts nish:ok file=node_modules/hash/src/index.ts
+// node_modules/hash/src/index.ts
+export const fnv1a = (text: string): u32 => {
+  let h: u32 = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h = (h ^ toU32(text.charCodeAt(i))) * 16777619;
+  }
+  return h;
+};
+```
+
+```ts nish:ok file=node_modules/hash/src/blake3.ts
+// node_modules/hash/src/blake3.ts
+export const blake3Name = (): string => "BLAKE3";
+```
+
+a program imports the package by its name, and the subpath by the name of
+its export:
+
+```ts nish:ok file=main.ts
+// main.ts
+import { fnv1a } from "hash";
+import { blake3Name } from "hash/blake3";
+
+export const main = (): i32 => {
+  console.log(`${fnv1a("nish")} ${blake3Name()}`);
+  return 0;
+};
+```
+
+`nish run main.ts` prints `4149877227 BLAKE3`.
 
 - An ordinary npm package has no `nish` condition, so importing it is an
   error saying it has no Nish entry point: there is nothing in a `.js` file

@@ -1,0 +1,1 @@
+`h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it

@@ -1420,6 +1420,12 @@ export class Compilation {
     let gathered = false
     for (const unit of this.modules) {
       gathered = gathered || unit.checker.program.gathered
+      // WP51 stage 2: the nodes the checker numbered after the parser's.
+      const none: Node | null = null
+      unit.nodeCount = unit.checker.program.nodeCount
+      while (unit.parents.parents.length < unit.nodeCount) {
+        unit.parents.parents.push(none)
+      }
     }
     if (gathered) {
       for (const unit of this.modules) {
@@ -3049,11 +3055,12 @@ export class Compilation {
   reportPortability(): void {
     for (const unit of this.analysisUnits) {
       for (const finding of portabilityFindings(unit, this.table, this.opts)) {
-        this.sink.reportPortability(
+        this.sink.reportPortabilityReview(
           unit.program.source,
           finding.node.start,
           finding.node.end,
-          finding.message
+          finding.message,
+          finding.review
         )
       }
     }
@@ -3865,9 +3872,9 @@ export class Compilation {
    * `fs.read`, `fs.write` or `process.spawn`, and each of them is granted it
    * with arguments, `--sandbox` confines the program to those arguments — the
    * granted directories become its Landlock roots, the granted programs (and
-   * their interpreters) its exec allowlist. A reach the root package makes
-   * itself, an `ffi` call, or a scope given on the command line leaves the
-   * capability as it was.
+   * their interpreters, marked `//` unless granted too) its exec allowlist. A
+   * reach the root package makes itself, an `ffi` call, or a scope given on
+   * the command line leaves the capability as it was.
    */
   narrowSandbox(facts: FactsTable): void {
     const caps = this.opts.sandboxCapabilities
@@ -3930,6 +3937,11 @@ export class Compilation {
       if (!reached || !scoped) {
         continue
       }
+      // An interpreter the grant does not name itself is written with a
+      // second leading `/`, the same file to Landlock, which the runtime keeps
+      // out of a spawn's reach by identity (SBX-1). Grant values and
+      // interpreters are real paths, so no other entry starts `//`.
+      const granted = values.length
       if (c === capabilityIndex("process.spawn")) {
         let k = 0
         while (k < values.length) {
@@ -3940,8 +3952,10 @@ export class Compilation {
           k = k + 1
         }
       }
-      for (const value of values) {
-        cli.push(value)
+      let v = 0
+      while (v < values.length) {
+        cli.push(v < granted ? values[v] : `/${values[v]}`)
+        v = v + 1
       }
     }
   }

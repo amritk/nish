@@ -76,14 +76,14 @@ The shape of the language, as a style guide:
   compiles and is the legacy spelling, so convert one when you open its file
   and write new code as an arrow. No function expressions, nested functions,
   generics, overloads, optional / default / rest / destructured parameters, and
-  a function is never a value. Every parameter and every return type is
+  a function is never a value (in `src/`, until the release after WP51). Every parameter and every return type is
   annotated. `export const main = (): number => ...` is the entry and its
   return value is the exit code.
 - **Types.** `number`, `i32`, `i64`, `f64`, `boolean`, `string`, `void`, `T[]`
   / `Array<T>`, the typed-array aliases, class and interface names, and
   `T | null` for a class, interface, array or string. Nothing else: no `any`,
   `unknown`, `undefined`, `bigint`, `symbol`, no unions beyond `T | null`, no
-  function types, no `as` or `satisfies` (there is no cast; convert with
+  function types (in `src/`, until the release after WP51), no `as` or `satisfies` (there is no cast; convert with
   `toI32` / `toI64` / `toF64`). `number` is `i32` unless `--number-mode f64`.
 - **Objects.** A `class` is a struct: annotated fields, literal initializers,
   one constructor, methods. An `interface` is a struct with fields only, and

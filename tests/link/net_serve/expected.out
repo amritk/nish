@@ -9,6 +9,9 @@ response cap: 500 [application/problem+json] {"type":"about:blank","title":"Inte
 bad status: 500 [application/problem+json] {"type":"about:blank","title":"Internal Server Error","status":500}
 bad type: 500 [application/problem+json] {"type":"about:blank","title":"Internal Server Error","status":500}
 negative length: 500 [application/problem+json] {"type":"about:blank","title":"Internal Server Error","status":500}
+length past the body: 500 [application/problem+json] {"type":"about:blank","title":"Internal Server Error","status":500}
+body past its length: 200 [text/plain] yyy
+body past the slot: 200 [text/plain] zzzz
 204 with a body: 204 [text/plain; charset=utf-8]
 no content type: 200 [] xxx
 in flight: 503 [application/problem+json] {"type":"about:blank","title":"Service Unavailable","status":503}
@@ -18,4 +21,4 @@ after a hang-up: 200 [text/plain; charset=utf-8] hello
 pipelined 1: 200 [text/plain; charset=utf-8] slept 60
 pipelined 2: 200 [text/plain; charset=utf-8] slept 1
 after drain: closed
-serve: 0, answered 17, busy 1, failed 4, slots 1
+serve: 0, answered 20, busy 1, failed 5, slots 1

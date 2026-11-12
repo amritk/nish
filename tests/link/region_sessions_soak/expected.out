@@ -1,0 +1,5 @@
+PASS  2000000 requests served from sessions in regions, 1000 live
+PASS  Arena.mark() flat over 1900000 requests past warm-up: the same position at every checkpoint
+PASS  anonymous resident memory flat over 1900000 requests past warm-up, within 524288 bytes at every checkpoint
+PASS  the same checks fail on the baseline's cache over 300000 requests, its sessions in the process's arena
+region sessions soak: 4 passed, 0 failed, 0 skipped

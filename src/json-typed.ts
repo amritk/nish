@@ -657,13 +657,14 @@ const jsonScalar = (type: i32): i32 => {
   return 0
 }
 
-/** The class `type` is, when it is one the route can read and write: declared, not generic. */
+/** The class `type` is, when it is one the route can read and write: declared, not generic, not a `declare class`. */
 const jsonClassOf = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
   if (!table.isStruct(type)) {
     return null
   }
   const info = program.struct(table.nameOf(type))
-  if (info === null || info.kind !== STRUCT_CLASS || info.instance !== null) {
+  // WP27 S4.1: a `declare class` is C's memory, filled by C, not by a decoder.
+  if (info === null || info.kind !== STRUCT_CLASS || info.instance !== null || info.layout) {
     return null
   }
   return info
@@ -1129,6 +1130,11 @@ export const jsonRefusal = (
   // Only `jsonDecodeUnion`'s value may be `| null`: the object it decodes into when there is one.
   const none: StructInfo[] = []
   const roots = type !== base && role !== JSON_DECODE_UNION ? none : jsonRootsOf(program, table, type)
+  const declared: StructInfo | null = table.isStruct(base) ? program.struct(table.nameOf(base)) : null
+  if (roots.length === 0 && declared !== null && declared.layout) {
+    // WP27 S4.1: a `declare class` is C's memory, filled by C, not by a decoder.
+    return `\`${name}\`'s value is \`${table.typeName(base)}\`, a \`declare class\`: C reads and writes its fields, and typed JSON only those of a class Nish lays out`
+  }
   if (roots.length === 0) {
     return (
       `\`${name}\`'s value is \`${table.typeName(type)}\`, which is not a class: ` +

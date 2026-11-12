@@ -38,7 +38,7 @@ struct Edit (class) size=16 align=8 exported
   field end: i32 index=1 offset=4
   field text: string index=2 offset=8
   constructor -> @Edit.constructor
-struct Diagnostic (class) size=48 align=8 exported
+struct Diagnostic (class) size=56 align=8 exported
   field source: SourceFile index=0 offset=0
   field start: i32 index=1 offset=8
   field end: i32 index=2 offset=12
@@ -47,6 +47,7 @@ struct Diagnostic (class) size=48 align=8 exported
   field line: i32 index=5 offset=32
   field column: i32 index=6 offset=36
   field edits: Edit[] index=7 offset=40
+  field review: Edit[] index=8 offset=48
   constructor -> @Diagnostic.constructor
   method summary -> @Diagnostic.summary
   method severity -> @Diagnostic.severity
@@ -57,7 +58,7 @@ struct Diagnostic (class) size=48 align=8 exported
   method note -> @Diagnostic.note
   method json -> @Diagnostic.json
   method packageJson -> @Diagnostic.packageJson
-  method fixJson -> @Diagnostic.fixJson
+  method editsJson -> @Diagnostic.editsJson
 struct DiagnosticSink (class) size=48 align=8 exported
   field items: Diagnostic[] index=0 offset=0
   field warnings: Diagnostic[] index=1 offset=8
@@ -76,6 +77,7 @@ struct DiagnosticSink (class) size=48 align=8 exported
   method reportDeprecation -> @DiagnosticSink.reportDeprecation
   method reportDeprecationFix -> @DiagnosticSink.reportDeprecationFix
   method reportPortabilityFix -> @DiagnosticSink.reportPortabilityFix
+  method reportPortabilityReview -> @DiagnosticSink.reportPortabilityReview
   method insertWarning -> @DiagnosticSink.insertWarning
   method compareWarnings -> @DiagnosticSink.compareWarnings
   method hasErrors -> @DiagnosticSink.hasErrors
@@ -158,7 +160,7 @@ function Diagnostic.constructor(this: Diagnostic, source: SourceFile, start: i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: end kind source start text
   calls: SourceFile.columnOf SourceFile.lineOf
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=56 writesThrough=true captured=false
   pointer source: size=48 writesThrough=true captured=true passedTo=SourceFile.lineOf#0 SourceFile.columnOf#0
   stackSites=0 stackLocals=0
   callee +0:17 SourceFile.lineOf -> @SourceFile.lineOf
@@ -166,7 +168,7 @@ function Diagnostic.constructor(this: Diagnostic, source: SourceFile, start: i32
 function Diagnostic.summary(this: Diagnostic, style: Style): string -> @Diagnostic.summary [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Diagnostic.severity Style.bold nish_str_concat nish_str_from_i32 paintText
-  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.severity#0
+  pointer this: size=56 writesThrough=false captured=false passedTo=Diagnostic.severity#0
   pointer style: size=88 writesThrough=false captured=false passedTo=Style.bold#0 Diagnostic.severity#1 paintText#0
   stackSites=0 stackLocals=0
   local +0:11 location: string (const)
@@ -177,7 +179,7 @@ function Diagnostic.severity(this: Diagnostic, style: Style, text: string): stri
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
   calls: Diagnostic.isWarning boldColour
-  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.isWarning#0
+  pointer this: size=56 writesThrough=false captured=false passedTo=Diagnostic.isWarning#0
   pointer style: size=88 writesThrough=false captured=false passedTo=boldColour#0
   stackSites=0 stackLocals=0
   callee +0:12 boldColour -> @boldColour
@@ -185,12 +187,12 @@ function Diagnostic.severity(this: Diagnostic, style: Style, text: string): stri
 function Diagnostic.isWarning(this: Diagnostic): boolean -> @Diagnostic.isWarning [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer this: size=48 writesThrough=false captured=false
+  pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Diagnostic.excerpt(this: Diagnostic, style: Style): string -> @Diagnostic.excerpt [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Diagnostic.severity SourceFile.codeUnits SourceFile.lineIndex SourceFile.lineText StringBuilder.addChar StringBuilder.constructor StringBuilder.toText Style.faint isFourByteLead nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_new startsCharacter
-  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.severity#0 Diagnostic.severity#0
+  pointer this: size=56 writesThrough=false captured=false passedTo=Diagnostic.severity#0 Diagnostic.severity#0
   pointer style: size=88 writesThrough=false captured=false passedTo=Diagnostic.severity#1 Style.faint#0 Style.faint#0 Diagnostic.severity#1
   stackSites=3 stackLocals=3
   local +0:11 line: i32 (const)
@@ -236,14 +238,14 @@ function Diagnostic.excerpt(this: Diagnostic, style: Style): string -> @Diagnost
 function Diagnostic.message(this: Diagnostic): string -> @Diagnostic.message [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Diagnostic.styledMessage Style.constructor
-  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.styledMessage#0
+  pointer this: size=56 writesThrough=false captured=false passedTo=Diagnostic.styledMessage#0
   stackSites=1 stackLocals=0
   callee +0:12 Diagnostic.styledMessage -> @Diagnostic.styledMessage
   callee +0:31 new Style -> @Style.constructor
 function Diagnostic.styledMessage(this: Diagnostic, style: Style): string -> @Diagnostic.styledMessage [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Diagnostic.excerpt Diagnostic.note Diagnostic.summary nish_str_concat
-  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.summary#0 Diagnostic.excerpt#0 Diagnostic.note#0
+  pointer this: size=56 writesThrough=false captured=false passedTo=Diagnostic.summary#0 Diagnostic.excerpt#0 Diagnostic.note#0
   pointer style: size=88 writesThrough=false captured=false passedTo=Diagnostic.summary#1 Diagnostic.excerpt#1 Diagnostic.note#1
   stackSites=0 stackLocals=0
   local +0:11 report: string (const)
@@ -253,7 +255,7 @@ function Diagnostic.styledMessage(this: Diagnostic, style: Style): string -> @Di
 function Diagnostic.note(this: Diagnostic, style: Style): string -> @Diagnostic.note [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Style.bold Style.faint nish_str_concat paintText
-  pointer this: size=48 writesThrough=false captured=false
+  pointer this: size=56 writesThrough=false captured=false
   pointer style: size=88 writesThrough=false captured=false passedTo=Style.faint#0 Style.bold#0 paintText#0
   stackSites=0 stackLocals=0
   local +0:11 version: string (const)
@@ -263,8 +265,8 @@ function Diagnostic.note(this: Diagnostic, style: Style): string -> @Diagnostic.
   callee +3:60 paintText -> @paintText
 function Diagnostic.json(this: Diagnostic): string -> @Diagnostic.json [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: Diagnostic.fixJson Diagnostic.isWarning Diagnostic.packageJson SourceFile.columnOf SourceFile.lineOf codeFor jsonQuote nish_str_concat nish_str_eq nish_str_from_i32
-  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.isWarning#0 Diagnostic.packageJson#0 Diagnostic.fixJson#0
+  calls: Diagnostic.editsJson Diagnostic.isWarning Diagnostic.packageJson SourceFile.columnOf SourceFile.lineOf codeFor jsonQuote nish_str_concat nish_str_eq nish_str_from_i32
+  pointer this: size=56 writesThrough=false captured=false passedTo=Diagnostic.isWarning#0 Diagnostic.packageJson#0 Diagnostic.editsJson#0 Diagnostic.editsJson#0
   stackSites=0 stackLocals=0
   local +0:11 endLine: i32 (const)
   callee +0:21 SourceFile.lineOf -> @SourceFile.lineOf
@@ -279,17 +281,19 @@ function Diagnostic.json(this: Diagnostic): string -> @Diagnostic.json [exported
   callee +6:23 jsonQuote -> @jsonQuote
   callee +6:196 jsonQuote -> @jsonQuote
   callee +6:217 Diagnostic.packageJson -> @Diagnostic.packageJson
-  callee +6:238 Diagnostic.fixJson -> @Diagnostic.fixJson
+  callee +6:238 Diagnostic.editsJson -> @Diagnostic.editsJson
+  callee +6:274 Diagnostic.editsJson -> @Diagnostic.editsJson
 function Diagnostic.packageJson(this: Diagnostic): string -> @Diagnostic.packageJson [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: jsonQuote nish_str_concat
-  pointer this: size=48 writesThrough=false captured=false
+  pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:62 jsonQuote -> @jsonQuote
-function Diagnostic.fixJson(this: Diagnostic): string -> @Diagnostic.fixJson [exported method]
+function Diagnostic.editsJson(this: Diagnostic, key: string, edits: Edit[]): string -> @Diagnostic.editsJson [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText jsonQuote nish_str_concat nish_str_from_i32
-  pointer this: size=48 writesThrough=false captured=false
+  pointer this: size=56 writesThrough=false captured=false
+  pointer edits: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 source: SourceFile (const)
   local +1:11 out: StringBuilder (const)
@@ -352,7 +356,7 @@ function DiagnosticSink.add(this: DiagnosticSink, diagnostic: Diagnostic): void 
   escaping: diagnostic
   calls: StringMap.has StringMap.set StringMap.size nish_array_grow
   pointer this: size=48 writesThrough=false captured=false
-  pointer diagnostic: size=48 writesThrough=true captured=true
+  pointer diagnostic: size=56 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -3:10 StringMap.has -> @StringMap.has
   callee -2:7 StringMap.set -> @StringMap.set
@@ -423,6 +427,18 @@ function DiagnosticSink.reportPortabilityFix(this: DiagnosticSink, source: Sourc
   local +0:11 warning: Diagnostic (const)
   callee +0:21 new Diagnostic -> @Diagnostic.constructor
   callee +2:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
+function DiagnosticSink.reportPortabilityReview(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string, review: Edit[]): void -> @DiagnosticSink.reportPortabilityReview [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via DiagnosticSink.insertWarning
+  escaping: end review start text
+  calls: Diagnostic.constructor DiagnosticSink.insertWarning nish_alloc_struct
+  pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
+  pointer source: size=48 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
+  pointer review: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local +0:11 warning: Diagnostic (const)
+  callee +0:21 new Diagnostic -> @Diagnostic.constructor
+  callee +2:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
 function DiagnosticSink.insertWarning(this: DiagnosticSink, list: Diagnostic[], warning: Diagnostic): void -> @DiagnosticSink.insertWarning [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -430,7 +446,7 @@ function DiagnosticSink.insertWarning(this: DiagnosticSink, list: Diagnostic[], 
   calls: DiagnosticSink.compareWarnings StringMap.has StringMap.set StringMap.size nish_array_grow nish_panic_index
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.compareWarnings#0
   pointer list: size=0 writesThrough=true captured=false
-  pointer warning: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.compareWarnings#2
+  pointer warning: size=56 writesThrough=true captured=true passedTo=DiagnosticSink.compareWarnings#2
   stackSites=0 stackLocals=0
   callee -3:10 StringMap.has -> @StringMap.has
   callee -2:7 StringMap.set -> @StringMap.set
@@ -441,8 +457,8 @@ function DiagnosticSink.compareWarnings(this: DiagnosticSink, a: Diagnostic, b: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: StringMap.get codeFor compareStrings nish_arena_mark nish_arena_release nish_panic_overflow
   pointer this: size=48 writesThrough=false captured=false
-  pointer a: size=48 writesThrough=false captured=false
-  pointer b: size=48 writesThrough=false captured=false
+  pointer a: size=56 writesThrough=false captured=false
+  pointer b: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 fileA: i32 (const)
   callee +0:19 StringMap.get -> @StringMap.get
@@ -467,8 +483,8 @@ function DiagnosticSink.compare(this: DiagnosticSink, a: Diagnostic, b: Diagnost
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.get nish_panic_overflow
   pointer this: size=48 writesThrough=false captured=false
-  pointer a: size=48 writesThrough=false captured=false
-  pointer b: size=48 writesThrough=false captured=false
+  pointer a: size=56 writesThrough=false captured=false
+  pointer b: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 fileA: i32 (const)
   callee +0:19 StringMap.get -> @StringMap.get

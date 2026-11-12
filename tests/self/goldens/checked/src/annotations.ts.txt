@@ -7,11 +7,15 @@ import simdImportMessage from "./simd" -> function @simdImportMessage
 import simdLaneType from "./simd" -> function @simdLaneType
 import simdMaskLane from "./simd" -> function @simdMaskLane
 import LANGUAGE from "./branding" -> const LANGUAGE
+import StringSet from "./map" -> struct StringSet
 import CheckContext from "./context" -> struct CheckContext
+import ExportedLayoutUse from "./context" -> struct ExportedLayoutUse
 import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
 import AliasInfo from "./program" -> struct AliasInfo
+import CheckedProgram from "./program" -> struct CheckedProgram
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import StructInfo from "./program" -> struct StructInfo
+import layoutClass from "./structs" -> function @layoutClass
 import isFractional from "./constants" -> function @isFractional
 import numericLiteralValue from "./constants" -> function @numericLiteralValue
 import parseIntegerLiteral from "./constants" -> function @parseIntegerLiteral
@@ -41,6 +45,9 @@ import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
 import Node from "./nodes" -> struct Node
 import CPTR_NAME from "./types" -> const CPTR_NAME
 import K_ARRAY from "./types" -> const K_ARRAY
+import K_NULLABLE from "./types" -> const K_NULLABLE
+import K_RESULT from "./types" -> const K_RESULT
+import K_STRUCT from "./types" -> const K_STRUCT
 import T_BOOL from "./types" -> const T_BOOL
 import T_CPTR from "./types" -> const T_CPTR
 import T_ERROR from "./types" -> const T_ERROR
@@ -55,6 +62,7 @@ import T_U64 from "./types" -> const T_U64
 import T_U8 from "./types" -> const T_U8
 import T_VOID from "./types" -> const T_VOID
 import R_UNKNOWN from "./types" -> const R_UNKNOWN
+import TypeTable from "./types" -> struct TypeTable
 const SUPPORTED_REFERENCES: string = "(supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)"
 const SUPPORTED_TYPES: string = "(Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)"
 const PROMISE_HERE_MESSAGE: string = "`Promise<T>` is only an `async` function's return type: a promise is never a value, so it cannot be held, passed or stored — `await` the call where it is made"
@@ -69,36 +77,110 @@ function scalarNamed(name: string, numberMode: i32): i32 -> @scalarNamed
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
+function rejectLayoutElement(ctx: CheckContext, elem: i32, node: Node): boolean -> @rejectLayoutElement [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  escaping: elem
+  calls: CheckContext.error TypeTable.stripNull layoutClass nish_str_concat
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  stackSites=0 stackLocals=0
+  local +0:9 layout: StructInfo | null (const)
+  callee +0:18 layoutClass -> @layoutClass
+  callee +0:54 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +4:3 CheckContext.error -> @CheckContext.error
 function elementType(node: Node, ctx: CheckContext): i32 -> @elementType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via resolveType
-  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.typeName containerMessage nish_str_concat rejectForeignPointer rejectStoredMask resolveType
-  pointer node: size=40 writesThrough=true captured=true passedTo=resolveType#0 rejectForeignPointer#3 rejectStoredMask#3 CheckContext.errorType#1
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=resolveType#1 rejectForeignPointer#0 rejectStoredMask#0 CheckContext.errorType#0
+  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.typeName containerMessage nish_str_concat rejectForeignPointer rejectLayoutElement rejectStoredMask resolveType
+  pointer node: size=40 writesThrough=true captured=true passedTo=resolveType#0 rejectForeignPointer#3 rejectStoredMask#3 rejectLayoutElement#2 CheckContext.errorType#1
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=resolveType#1 rejectForeignPointer#0 rejectStoredMask#0 rejectLayoutElement#0 CheckContext.errorType#0
   stackSites=0 stackLocals=0
   local +0:9 elem: i32 (const)
   callee +0:16 resolveType -> @resolveType
   callee +1:7 rejectForeignPointer -> @rejectForeignPointer
   callee +4:7 rejectStoredMask -> @rejectStoredMask
-  callee +8:7 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee +9:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +9:32 containerMessage -> @containerMessage
-  callee +9:58 TypeTable.typeName -> @TypeTable.typeName
+  callee +7:7 rejectLayoutElement -> @rejectLayoutElement
+  callee +11:7 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee +12:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +12:32 containerMessage -> @containerMessage
+  callee +12:58 TypeTable.typeName -> @TypeTable.typeName
 function rejectForeignPointer(ctx: CheckContext, type: i32, position: string, node: Node): boolean -> @rejectForeignPointer [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   escaping: type
   calls: CheckContext.error TypeTable.stripNull nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.stripNull -> @TypeTable.stripNull
   callee +3:3 CheckContext.error -> @CheckContext.error
+function deferExportedLayout(ctx: CheckContext, type: i32, position: string, node: Node): void -> @deferExportedLayout [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: position type
+  calls: ExportedLayoutUse.constructor nish_alloc_struct nish_array_grow
+  pointer ctx: size=336 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=true captured=true passedTo=ExportedLayoutUse.constructor#3
+  stackSites=0 stackLocals=0
+  callee +0:31 new ExportedLayoutUse -> @ExportedLayoutUse.constructor
+function checkExportedLayouts(ctx: CheckContext): void -> @checkExportedLayouts [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: StringSet.constructor TypeTable.stripNull heldLayout layoutClass refuseExportedLayout
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=refuseExportedLayout#0
+  stackSites=1 stackLocals=0
+  local -1:14 use: ExportedLayoutUse (const)
+  local +1:11 direct: StructInfo | null (const)
+  callee +1:20 layoutClass -> @layoutClass
+  callee +1:56 TypeTable.stripNull -> @TypeTable.stripNull
+  local +2:11 layout: StructInfo | null (const)
+  callee +2:47 heldLayout -> @heldLayout
+  callee +2:92 new StringSet -> @StringSet.constructor
+  callee +4:7 refuseExportedLayout -> @refuseExportedLayout
+function refuseExportedLayout(ctx: CheckContext, use: ExportedLayoutUse, layout: StructInfo, direct: boolean): void -> @refuseExportedLayout
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error TypeTable.typeName nish_str_concat
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer use: size=24 writesThrough=false captured=false
+  pointer layout: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 what: string (const)
+  callee +2:12 TypeTable.typeName -> @TypeTable.typeName
+  callee +3:3 CheckContext.error -> @CheckContext.error
+function heldLayout(program: CheckedProgram, table: TypeTable, t: i32, seen: StringSet): StructInfo | null -> @heldLayout
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via heldLayout
+  escaping: t
+  calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.errOf TypeTable.kindOf TypeTable.nameOf TypeTable.okOf TypeTable.refOf heldLayout
+  pointer program: size=800 writesThrough=false captured=false passedTo=heldLayout#0 heldLayout#0 heldLayout#0 CheckedProgram.struct#0 heldLayout#0
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 heldLayout#1 TypeTable.refOf#0 heldLayout#1 TypeTable.okOf#0 heldLayout#1 TypeTable.errOf#0 TypeTable.nameOf#0 heldLayout#1
+  pointer seen: size=8 writesThrough=false captured=false passedTo=heldLayout#3 heldLayout#3 heldLayout#3 StringSet.has#0 StringSet.add#0 heldLayout#3
+  stackSites=0 stackLocals=0
+  local +0:9 kind: i32 (const)
+  callee +0:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +2:12 heldLayout -> @heldLayout
+  callee +2:39 TypeTable.refOf -> @TypeTable.refOf
+  local +5:11 ok: StructInfo | null (const)
+  callee +5:16 heldLayout -> @heldLayout
+  callee +5:43 TypeTable.okOf -> @TypeTable.okOf
+  callee +6:31 heldLayout -> @heldLayout
+  callee +6:58 TypeTable.errOf -> @TypeTable.errOf
+  local +11:9 name: string (const)
+  callee +11:16 TypeTable.nameOf -> @TypeTable.nameOf
+  local +12:9 info: StructInfo | null (const)
+  callee +12:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +13:24 StringSet.has -> @StringSet.has
+  callee +19:3 StringSet.add -> @StringSet.add
+  local +20:14 field: FieldInfo (const)
+  local +21:11 held: StructInfo | null (const)
+  callee +21:18 heldLayout -> @heldLayout
 function namesRegion(ctx: CheckContext, name: string): boolean -> @namesRegion [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.importNamed CheckedProgram.isRegionLibrary nish_str_eq
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 imported: ImportBinding | null (const)
   callee +0:20 CheckedProgram.importNamed -> @CheckedProgram.importNamed
@@ -115,7 +197,7 @@ function resolveFunctionReference(node: Node, ctx: CheckContext): i32 -> @resolv
   sharedWrite: via CheckContext.errorType
   calls: CheckContext.errorType CheckContext.textOf TypeTable.fnRefOf nish_array_grow nish_panic_index nish_str_concat nish_str_eq resolveType unwrapTypeParen
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.textOf#0 CheckContext.errorType#0 CheckContext.errorType#0 resolveType#1 resolveType#1
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.textOf#0 CheckContext.errorType#0 CheckContext.errorType#0 resolveType#1 resolveType#1
   stackSites=1 stackLocals=1
   local +0:9 params: i32[] (const)
   local +1:9 shown: string (const)
@@ -135,7 +217,7 @@ function resolveType(node: Node, ctx: CheckContext): i32 -> @resolveType [export
   sharedWrite: via resolveType
   calls: CheckContext.errorType TypeTable.arrayOf elementType isStringLiteralType nish_panic_index nish_str_concat resolveFunctionReference resolveReadonly resolveReference resolveType resolveUnion unsupportedType
   pointer node: size=40 writesThrough=true captured=true passedTo=resolveReadonly#0 resolveUnion#0 resolveReference#0 resolveFunctionReference#0 isStringLiteralType#0 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 unsupportedType#1
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=resolveType#1 elementType#1 resolveReadonly#1 resolveUnion#1 resolveReference#1 resolveFunctionReference#1 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 unsupportedType#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=resolveType#1 elementType#1 resolveReadonly#1 resolveUnion#1 resolveReference#1 resolveFunctionReference#1 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 unsupportedType#0
   stackSites=0 stackLocals=0
   callee +0:14 resolveType -> @resolveType
   callee +2:14 TypeTable.arrayOf -> @TypeTable.arrayOf
@@ -152,7 +234,7 @@ function resolveType(node: Node, ctx: CheckContext): i32 -> @resolveType [export
 function unsupportedType(ctx: CheckContext, node: Node): string -> @unsupportedType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_str_concat
-  pointer ctx: size=320 writesThrough=false captured=false passedTo=CheckContext.textOf#0
+  pointer ctx: size=336 writesThrough=false captured=false passedTo=CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1
   stackSites=0 stackLocals=0
   callee +0:25 CheckContext.textOf -> @CheckContext.textOf
@@ -160,7 +242,7 @@ function refuseTypeForm(ctx: CheckContext, node: Node): void -> @refuseTypeForm 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error unsupportedType
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0 unsupportedType#0 CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0 unsupportedType#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 unsupportedType#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:5 CheckContext.error -> @CheckContext.error
@@ -171,7 +253,7 @@ function resolveReadonly(node: Node, ctx: CheckContext): i32 -> @resolveReadonly
   sharedWrite: via resolveType
   calls: CheckContext.errorType TypeTable.kindOf TypeTable.readonlyArrayOf TypeTable.refOf TypeTable.typeName nish_panic_index nish_str_concat resolveType
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=resolveType#1 CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=resolveType#1 CheckContext.errorType#0
   stackSites=0 stackLocals=0
   local +0:9 inner: i32 (const)
   callee +0:17 resolveType -> @resolveType
@@ -188,88 +270,89 @@ function promiseArgument(annotation: Node): Node | null -> @promiseArgument [exp
   local +0:9 args: Node (const)
 function resolveReference(node: Node, ctx: CheckContext): i32 -> @resolveReference
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via resolveResult
+  sharedWrite: +0:7
   calls: CheckContext.errorType CheckContext.textOf CheckedProgram.alias CheckedProgram.enumNamed CheckedProgram.importNamed CheckedProgram.struct CheckedProgram.structTemplate StringMap.get StringSet.add StringSet.has TypeTable.arrayOf TypeTable.maskOf TypeTable.readonlyArrayOf TypeTable.regionOf TypeTable.structOf TypeTable.typeName TypeTable.vectorOf aliasType deferInstantiation elementType instantiateWritten namesRegion nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new resolveEnumMemberType resolveHostHandle resolveRanged resolveResult resolveType scalarNamed simdImportMessage simdLaneType simdMaskLane simdMaskWidth typedArrayElement
   pointer node: size=40 writesThrough=true captured=true passedTo=resolveResult#0 resolveEnumMemberType#0 resolveRanged#0 resolveHostHandle#0 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 instantiateWritten#3 deferInstantiation#3 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.textOf#1 CheckContext.errorType#1 CheckContext.errorType#1 instantiateWritten#3 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.textOf#1
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=resolveResult#3 resolveEnumMemberType#4 resolveRanged#3 resolveHostHandle#3 CheckContext.errorType#0 elementType#1 CheckContext.errorType#0 elementType#1 CheckContext.errorType#0 namesRegion#0 CheckContext.errorType#0 resolveType#1 instantiateWritten#0 deferInstantiation#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.textOf#0 CheckContext.errorType#0 CheckContext.errorType#0 instantiateWritten#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.textOf#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=resolveResult#3 resolveEnumMemberType#4 resolveRanged#3 resolveHostHandle#3 CheckContext.errorType#0 elementType#1 CheckContext.errorType#0 elementType#1 CheckContext.errorType#0 namesRegion#0 CheckContext.errorType#0 resolveType#1 instantiateWritten#0 deferInstantiation#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.textOf#0 CheckContext.errorType#0 CheckContext.errorType#0 instantiateWritten#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.textOf#0
   stackSites=0 stackLocals=0
-  local +0:9 name: string (const)
-  local +1:9 args: Node (const)
-  local +2:9 argc: i32 (const)
-  callee +5:12 resolveResult -> @resolveResult
-  local +10:9 dot: i32 (const)
-  callee +12:12 resolveEnumMemberType -> @resolveEnumMemberType
-  callee +19:12 resolveRanged -> @resolveRanged
-  callee +23:12 resolveHostHandle -> @resolveHostHandle
-  callee +28:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +30:12 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee +30:30 elementType -> @elementType
-  callee +36:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +41:12 TypeTable.readonlyArrayOf -> @TypeTable.readonlyArrayOf
-  callee +41:38 elementType -> @elementType
-  local +44:9 alias: i32 (const)
-  callee +44:17 typedArrayElement -> @typedArrayElement
-  local +46:11 spelled: string (const)
-  callee +46:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +46:40 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee +47:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +59:9 namesRegion -> @namesRegion
-  callee +61:16 CheckContext.errorType -> @CheckContext.errorType
-  callee +66:14 TypeTable.regionOf -> @TypeTable.regionOf
-  callee +66:33 resolveType -> @resolveType
-  local +68:11 written: StructTemplateInfo | null (const)
-  callee +68:21 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
-  local +70:13 instantiated: StructInfo | null (const)
-  callee +70:28 instantiateWritten -> @instantiateWritten
-  local +78:11 imported: ImportBinding | null (const)
-  callee +78:22 CheckedProgram.importNamed -> @CheckedProgram.importNamed
-  callee +80:14 deferInstantiation -> @deferInstantiation
-  callee +83:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +85:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +85:64 CheckContext.textOf -> @CheckContext.textOf
-  callee +89:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +92:12 CheckContext.errorType -> @CheckContext.errorType
-  local +95:9 scalar: i32 (const)
-  callee +95:18 scalarNamed -> @scalarNamed
-  callee +100:12 TypeTable.arrayOf -> @TypeTable.arrayOf
-  local +107:9 bare: StructTemplateInfo | null (const)
-  callee +107:16 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
-  callee +109:5 instantiateWritten -> @instantiateWritten
-  local +117:9 bound: i32 (const)
-  callee +117:17 StringMap.get -> @StringMap.get
-  local +124:9 declared: AliasInfo | null (const)
-  callee +124:20 CheckedProgram.alias -> @CheckedProgram.alias
-  callee +126:12 aliasType -> @aliasType
-  local +132:9 declaredEnum: EnumInfo | null (const)
-  callee +132:24 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
-  local +140:9 vectorImport: ImportBinding | null (const)
-  callee +140:24 CheckedProgram.importNamed -> @CheckedProgram.importNamed
-  local +142:11 lane: i32 (const)
-  callee +142:18 simdLaneType -> @simdLaneType
-  callee +144:14 TypeTable.vectorOf -> @TypeTable.vectorOf
-  local +148:11 width: i32 (const)
-  callee +148:19 simdMaskWidth -> @simdMaskWidth
-  callee +150:14 TypeTable.maskOf -> @TypeTable.maskOf
-  callee +150:31 simdMaskLane -> @simdMaskLane
-  callee +157:7 StringSet.has -> @StringSet.has
-  local +158:11 struct: StructInfo | null (const)
-  callee +158:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +162:5 StringSet.add -> @StringSet.add
-  callee +163:12 TypeTable.structOf -> @TypeTable.structOf
-  callee +166:7 simdLaneType -> @simdLaneType
-  callee +166:41 simdMaskWidth -> @simdMaskWidth
-  callee +167:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +167:32 simdImportMessage -> @simdImportMessage
-  callee +171:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +174:10 CheckContext.errorType -> @CheckContext.errorType
-  callee +174:62 CheckContext.textOf -> @CheckContext.textOf
+  local -98:9 name: string (const)
+  local -97:9 args: Node (const)
+  local -96:9 argc: i32 (const)
+  callee -93:12 resolveResult -> @resolveResult
+  local -88:9 dot: i32 (const)
+  callee -86:12 resolveEnumMemberType -> @resolveEnumMemberType
+  callee -79:12 resolveRanged -> @resolveRanged
+  callee -75:12 resolveHostHandle -> @resolveHostHandle
+  callee -70:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -68:12 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee -68:30 elementType -> @elementType
+  callee -62:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -57:12 TypeTable.readonlyArrayOf -> @TypeTable.readonlyArrayOf
+  callee -57:38 elementType -> @elementType
+  local -54:9 alias: i32 (const)
+  callee -54:17 typedArrayElement -> @typedArrayElement
+  local -52:11 spelled: string (const)
+  callee -52:21 TypeTable.typeName -> @TypeTable.typeName
+  callee -52:40 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee -51:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -39:9 namesRegion -> @namesRegion
+  callee -37:16 CheckContext.errorType -> @CheckContext.errorType
+  callee -32:14 TypeTable.regionOf -> @TypeTable.regionOf
+  callee -32:33 resolveType -> @resolveType
+  local -30:11 written: StructTemplateInfo | null (const)
+  callee -30:21 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  local -28:13 instantiated: StructInfo | null (const)
+  callee -28:28 instantiateWritten -> @instantiateWritten
+  local -20:11 imported: ImportBinding | null (const)
+  callee -20:22 CheckedProgram.importNamed -> @CheckedProgram.importNamed
+  callee -18:14 deferInstantiation -> @deferInstantiation
+  callee -15:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -13:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -13:64 CheckContext.textOf -> @CheckContext.textOf
+  callee -9:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -6:12 CheckContext.errorType -> @CheckContext.errorType
+  local -3:9 scalar: i32 (const)
+  callee -3:18 scalarNamed -> @scalarNamed
+  callee +5:12 TypeTable.arrayOf -> @TypeTable.arrayOf
+  local +12:9 bare: StructTemplateInfo | null (const)
+  callee +12:16 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  callee +14:5 instantiateWritten -> @instantiateWritten
+  local +22:9 bound: i32 (const)
+  callee +22:17 StringMap.get -> @StringMap.get
+  local +29:9 declared: AliasInfo | null (const)
+  callee +29:20 CheckedProgram.alias -> @CheckedProgram.alias
+  local +31:11 aliased: i32 (const)
+  callee +31:21 aliasType -> @aliasType
+  local +41:9 declaredEnum: EnumInfo | null (const)
+  callee +41:24 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
+  local +49:9 vectorImport: ImportBinding | null (const)
+  callee +49:24 CheckedProgram.importNamed -> @CheckedProgram.importNamed
+  local +51:11 lane: i32 (const)
+  callee +51:18 simdLaneType -> @simdLaneType
+  callee +53:14 TypeTable.vectorOf -> @TypeTable.vectorOf
+  local +57:11 width: i32 (const)
+  callee +57:19 simdMaskWidth -> @simdMaskWidth
+  callee +59:14 TypeTable.maskOf -> @TypeTable.maskOf
+  callee +59:31 simdMaskLane -> @simdMaskLane
+  callee +66:7 StringSet.has -> @StringSet.has
+  local +67:11 struct: StructInfo | null (const)
+  callee +67:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +71:5 StringSet.add -> @StringSet.add
+  callee +72:12 TypeTable.structOf -> @TypeTable.structOf
+  callee +75:7 simdLaneType -> @simdLaneType
+  callee +75:41 simdMaskWidth -> @simdMaskWidth
+  callee +76:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +76:32 simdImportMessage -> @simdImportMessage
+  callee +80:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +83:10 CheckContext.errorType -> @CheckContext.errorType
+  callee +83:62 CheckContext.textOf -> @CheckContext.textOf
 function resolveEnumMemberType(node: Node, qualifier: string, member: string, argc: i32, ctx: CheckContext): i32 -> @resolveEnumMemberType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: member qualifier
   calls: CheckContext.errorType CheckContext.textOf CheckedProgram.enumNamed EnumInfo.hasMember EnumInfo.memberNameOf EnumInfo.memberValue TypeTable.enumMemberOf nish_str_concat
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.textOf#1
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.textOf#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.textOf#0
   stackSites=0 stackLocals=0
   local +0:9 info: EnumInfo | null (const)
   callee +0:16 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
@@ -288,7 +371,7 @@ function resolveRanged(node: Node, args: Node, argc: i32, ctx: CheckContext): i3
   calls: CheckContext.errorType TypeTable.rangedOf nish_panic_index nish_str_concat rangedBound
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1
   pointer args: size=40 writesThrough=false captured=false
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.errorType#0 rangedBound#0 rangedBound#0 CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.errorType#0 rangedBound#0 rangedBound#0 CheckContext.errorType#0
   stackSites=0 stackLocals=0
   callee +0:12 CheckContext.errorType -> @CheckContext.errorType
   local +2:9 loNode: Node (const)
@@ -310,7 +393,7 @@ function resolveHostHandle(node: Node, args: Node, argc: i32, ctx: CheckContext)
   calls: CheckContext.errorType TypeTable.hostHandleOf isHandleKind isStringLiteralType nish_panic_index nish_str_new
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   pointer args: size=40 writesThrough=false captured=false
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.errorType#0
   stackSites=0 stackLocals=0
   local +0:9 kind: string (const)
   callee +0:30 isStringLiteralType -> @isStringLiteralType
@@ -329,7 +412,7 @@ function rangedBound(ctx: CheckContext, bound: Node): i64 -> @rangedBound
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error CheckContext.textOf isFractional isStringLiteralType nish_panic_overflow nish_str_at nish_str_concat nish_str_new numericLiteralValue parseIntegerLiteral
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.textOf#0 CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.textOf#0 CheckContext.error#0 CheckContext.error#0
   pointer bound: size=40 writesThrough=false captured=false passedTo=isStringLiteralType#0 CheckContext.error#1 CheckContext.textOf#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:40 isStringLiteralType -> @isStringLiteralType
@@ -345,13 +428,22 @@ function rangedBound(ctx: CheckContext, bound: Node): i64 -> @rangedBound
   callee +17:67 parseIntegerLiteral -> @parseIntegerLiteral
   local +18:9 value: i64 (const)
   callee +20:5 CheckContext.error -> @CheckContext.error
+function resultArmIsReference(ctx: CheckContext, arm: i32): boolean -> @resultArmIsReference
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: arm
+  calls: TypeTable.isFnRef TypeTable.isNullable nish_panic_index
+  pointer ctx: size=336 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +0:30 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +0:59 TypeTable.isFnRef -> @TypeTable.isFnRef
 function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i32 -> @resolveResult
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
-  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.holdsUnion TypeTable.resultOf TypeTable.typeName containerMessage nish_panic_index nish_str_concat rejectForeignPointer rejectStoredMask resolveType unionArgumentMessage
-  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
+  calls: CheckContext.errorType TypeTable.holdsSecret TypeTable.holdsUnion TypeTable.resultOf TypeTable.typeName containerMessage nish_panic_index nish_str_concat rejectForeignPointer rejectStoredMask resolveType resultArmIsReference unionArgumentMessage
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer args: size=40 writesThrough=false captured=false
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.errorType#0 resolveType#1 resolveType#1 rejectForeignPointer#0 rejectForeignPointer#0 rejectStoredMask#0 rejectStoredMask#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.errorType#0 resolveType#1 resolveType#1 rejectForeignPointer#0 rejectForeignPointer#0 rejectStoredMask#0 rejectStoredMask#0 CheckContext.errorType#0 CheckContext.errorType#0 resultArmIsReference#0 resultArmIsReference#0 CheckContext.errorType#0 CheckContext.errorType#0
   stackSites=0 stackLocals=0
   callee +0:12 CheckContext.errorType -> @CheckContext.errorType
   local +2:9 ok: i32 (const)
@@ -375,8 +467,14 @@ function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i3
   callee +26:7 unionArgumentMessage -> @unionArgumentMessage
   callee +26:38 TypeTable.typeName -> @TypeTable.typeName
   callee +26:65 TypeTable.typeName -> @TypeTable.typeName
-  callee +30:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +35:10 TypeTable.resultOf -> @TypeTable.resultOf
+  callee +29:7 resultArmIsReference -> @resultArmIsReference
+  callee +29:40 resultArmIsReference -> @resultArmIsReference
+  local +30:11 spelled: string (const)
+  callee +30:31 TypeTable.typeName -> @TypeTable.typeName
+  callee +30:58 TypeTable.typeName -> @TypeTable.typeName
+  callee +31:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +37:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +42:10 TypeTable.resultOf -> @TypeTable.resultOf
 function unionArgumentMessage(spelled: string): string -> @unionArgumentMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -386,7 +484,7 @@ function resolveUnion(node: Node, ctx: CheckContext): i32 -> @resolveUnion
   sharedWrite: via nullableOfChecked
   calls: CheckContext.errorType CheckedProgram.struct TypeTable.baseOf TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.nullableOf TypeTable.stripNull TypeTable.typeName TypeTable.unionOf TypeTable.variantsOf clashingTag nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nullableOfChecked reportTagClash resolveType tagsDisagree variantTagName variantTagOf
   pointer node: size=40 writesThrough=false captured=false passedTo=nullableOfChecked#1 CheckContext.errorType#1 tagsDisagree#1 reportTagClash#1 CheckContext.errorType#1
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=nullableOfChecked#0 resolveType#1 CheckContext.errorType#0 resolveType#1 CheckContext.errorType#0 CheckContext.errorType#0 variantTagOf#0 tagsDisagree#0 clashingTag#0 reportTagClash#0 CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=nullableOfChecked#0 resolveType#1 CheckContext.errorType#0 resolveType#1 CheckContext.errorType#0 CheckContext.errorType#0 variantTagOf#0 tagsDisagree#0 clashingTag#0 reportTagClash#0 CheckContext.errorType#0
   stackSites=5 stackLocals=5
   local +0:7 nulls: i32 (let)
   local +1:9 members: Node[] (const)
@@ -435,7 +533,7 @@ function variantTagOf(ctx: CheckContext, at: Node, variant: i32, info: StructInf
   sharedWrite: via CheckContext.errorType
   escaping: variant
   calls: CheckContext.errorType TypeTable.isEnumMemberType TypeTable.typeName nish_panic_slice nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new variantTag variantTagName variantTagReadonly wholeEnumTag
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=CheckContext.errorType#0 variantTag#0 wholeEnumTag#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=CheckContext.errorType#0 variantTag#0 wholeEnumTag#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer info: size=176 writesThrough=false captured=false passedTo=variantTag#1 wholeEnumTag#1 variantTagName#0 variantTagName#0 variantTagReadonly#0 variantTagName#0
   stackSites=0 stackLocals=0
@@ -461,7 +559,7 @@ function tagsDisagree(ctx: CheckContext, node: Node, first: i32, firstTag: i32, 
   sharedWrite: via CheckContext.error
   escaping: first firstTag tag variant
   calls: CheckContext.error TypeTable.baseOf TypeTable.typeName nish_str_concat nish_str_eq
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:9 firstName: string (const)
@@ -480,7 +578,7 @@ function clashingTag(ctx: CheckContext, distinct: i32[], tags: i32[], tag: i32):
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: tag
   calls: TypeTable.memberValue
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   pointer distinct: size=0 writesThrough=false captured=false
   pointer tags: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -492,7 +590,7 @@ function reportTagClash(ctx: CheckContext, node: Node, other: i32, variant: i32,
   sharedWrite: via CheckContext.errorType
   escaping: other tag variant
   calls: CheckContext.errorType TypeTable.typeName nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.errorType#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.errorType#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.errorType -> @CheckContext.errorType
@@ -514,7 +612,7 @@ function firstField(info: StructInfo): Node | null -> @firstField
 function wholeEnumTag(ctx: CheckContext, info: StructInfo): string -> @wholeEnumTag
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.enumNamed EnumInfo.hasMember firstField nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from
-  pointer ctx: size=320 writesThrough=false captured=false
+  pointer ctx: size=336 writesThrough=false captured=false
   pointer info: size=176 writesThrough=false captured=false passedTo=firstField#0
   stackSites=0 stackLocals=0
   local +0:9 field: Node | null (const)
@@ -528,7 +626,7 @@ function variantTag(ctx: CheckContext, info: StructInfo): i32 -> @variantTag
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via resolveType
   calls: firstField nish_panic_index nish_str_index_of nish_str_index_of_from resolveType
-  pointer ctx: size=320 writesThrough=true captured=true passedTo=resolveType#1
+  pointer ctx: size=336 writesThrough=true captured=true passedTo=resolveType#1
   pointer info: size=176 writesThrough=false captured=false passedTo=firstField#0
   stackSites=0 stackLocals=0
   local +0:9 field: Node | null (const)
@@ -553,17 +651,18 @@ function nullableOfChecked(ctx: CheckContext, node: Node, inner: i32): i32 -> @n
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: inner
-  calls: CheckContext.errorType TypeTable.isPointer TypeTable.isResult TypeTable.nullableOf TypeTable.typeName nish_str_concat
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0
+  calls: CheckContext.errorType TypeTable.isFnRef TypeTable.isPointer TypeTable.isResult TypeTable.nullableOf TypeTable.typeName nish_str_concat
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isResult -> @TypeTable.isResult
   callee +1:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +6:8 TypeTable.isPointer -> @TypeTable.isPointer
-  local +7:11 spelled: string (const)
-  callee +7:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +8:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +13:10 TypeTable.nullableOf -> @TypeTable.nullableOf
+  callee +7:8 TypeTable.isPointer -> @TypeTable.isPointer
+  callee +7:39 TypeTable.isFnRef -> @TypeTable.isFnRef
+  local +8:11 spelled: string (const)
+  callee +8:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +9:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +14:10 TypeTable.nullableOf -> @TypeTable.nullableOf
 function builtinTypeName(name: string): boolean -> @builtinTypeName [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -575,7 +674,7 @@ function rejectRangedIntegerName(ctx: CheckContext, nameNode: Node, what: string
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.error nish_str_concat nish_str_eq
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=336 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer nameNode: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +1:3 CheckContext.error -> @CheckContext.error
@@ -586,5 +685,6 @@ function aliasType(info: AliasInfo): i32 -> @aliasType [exported]
   pointer info: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -6:5 CheckContext.error -> @CheckContext.error
-  local +1:9 resolved: i32 (const)
-  callee +1:20 resolveType -> @resolveType
+  local +1:9 before: i32 (const)
+  local +2:9 resolved: i32 (const)
+  callee +2:20 resolveType -> @resolveType

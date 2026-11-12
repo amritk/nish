@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 731 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 754 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -1095,17 +1095,18 @@ The message of an error contains:
 …` is not supported
 ```
 
-[`nl2083_declare_class.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2083_declare_class.ts):
+[`nl2083_declare_interface.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2083_declare_interface.ts):
 
 ```ts
-// NL2083: `declare class` describes something the compiler cannot lay out.
-declare class Point {
+// NL2083: `declare interface` describes a type the compiler has no layout for;
+// a plain `declare class` is a C struct layout (NL2740 and on).
+declare interface Point {
   x: i32;
 }
 ```
 
 ```text
-`declare class` is not supported
+`declare interface` is not supported
 ```
 
 ## NL2084
@@ -5082,6 +5083,27 @@ export const main = (): i32 => apply(add, 1);
 
 ```text
 Argument 1 of `apply`: `add` is `(a: i32, b: i32) => i32`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type
+```
+
+[`nl2340_fnarg_reference_arity.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2340_fnarg_reference_arity.ts):
+
+```ts
+// NL2340: a function reference passed for a function parameter of another
+// parameter count.
+type G = (x: i32, y: i32) => i32;
+
+const add = (x: i32, y: i32): i32 => x + y;
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
+
+export const main = (): i32 => {
+  const g: G = add;
+  return apply(g, 2);
+};
+```
+
+```text
+Argument 1 of `apply`: `g` is `(i32, i32) => i32`, and `f` is `(x: i32) => i32`; a function argument must have exactly its parameter's type
 ```
 
 ## NL2341
@@ -10509,7 +10531,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` is a `CPtr | null` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested
+` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested
 ```
 
 ## NL2540
@@ -13771,6 +13793,24 @@ The message of an error contains:
 …: a function reference names a function whose every parameter the caller passes
 ```
 
+[`nl2729_fnref_default.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2729_fnref_default.ts):
+
+```ts
+// NL2729: a function with a defaulted parameter named as a value. A call
+// through a reference passes every parameter, so the function must take
+// exactly those.
+const scale = (x: i32, by: i32 = 2): i32 => x * by;
+
+export const main = (): i32 => {
+  const f = scale;
+  return 0;
+};
+```
+
+```text
+`scale` has a parameter with a default: a function reference names a function whose every parameter the caller passes
+```
+
 [`nl2729_fnref_rest.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2729_fnref_rest.ts):
 
 ```ts
@@ -13902,21 +13942,22 @@ The message of an error contains:
 [`nl2734_fnref_to_function_parameter.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2734_fnref_to_function_parameter.ts):
 
 ```ts
-// NL2734: a reference passed where a function parameter is. The parameter
-// names the callee a call is compiled for, and a reference is known only at
-// run time; passing one is the next stage of function references.
+// NL2734: a reference passed where a function parameter of `parallelMap` is.
+// An ordinary function takes a reference as the arrow that calls it; what runs
+// on other threads takes only a function or an arrow named at the call.
+import { parallelMap } from "nish/threads";
+
+type F = (x: i32) => i32;
 const double = (x: i32): i32 => x * 2;
 
-const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
-
 export const main = (): i32 => {
-  const h = double;
-  return apply(h, 2);
+  const h: F = double;
+  return parallelMap([1, 2], h).length;
 };
 ```
 
 ```text
-`h` is a function reference: `apply` takes a top-level function or an arrow named at the call
+`h` is a function reference: `parallelMap` takes a top-level function or an arrow named at the call
 ```
 
 ## NL2735
@@ -14008,22 +14049,7 @@ The message of an error contains:
 … cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map
 ```
 
-[`nl2738_fnref_map_value.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2738_fnref_map_value.ts):
-
-```ts
-// NL2738: a function reference as a `Map` value is refused until a `Map`
-// value is a place the reference pass tracks.
-type Op = (x: i32) => i32
-
-export const main = (): void => {
-  const m = new Map<string, Op>()
-  console.log(`${m.size}`)
-}
-```
-
-```text
-`Map<string, (i32) => i32>` cannot hold a function reference as its value: a `Map` value is not yet a place whose functions the compiler tracks; keep the references in an array and store the index in the map
-```
+**Retired**: `... cannot hold a function reference as its value: a `Map` value is not yet a place ...`; WP51 stage 2 made a `Map` value a place, so a reference, an array of them or a nullable of either is a value now (tests/cases/fnref_map*)
 
 ## NL2739
 
@@ -14055,4 +14081,327 @@ export const main = (): i32 => {
 
 ```text
 `bump` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name
+```
+
+## NL2740
+
+The message of an error contains:
+
+```text
+` cannot be an array element: a C struct layout is lent to C one at a time, by pointer
+```
+
+## NL2741
+
+The message of an error contains:
+
+```text
+A generic `declare class` is not supported: a C struct layout has no type parameters
+```
+
+## NL2742
+
+The message of an error contains:
+
+```text
+…, and a C struct is only lent to C by pointer: take a `
+```
+
+## NL2743
+
+The message of an error contains:
+
+```text
+….<field>`) or pass it to a `declare function`, but it cannot be held as a value
+```
+
+## NL2744
+
+The message of an error contains:
+
+```text
+…()`, which zero-fills it: an object literal cannot lay out a C struct
+```
+
+## NL2745
+
+The message of an error contains:
+
+```text
+`: a `declare class` embedded in its object is written field by field
+```
+
+## NL2746
+
+The message of an error contains:
+
+```text
+` cannot be exported: a C struct layout is used in the module that declares it
+```
+
+## NL2747
+
+The message of an error contains:
+
+```text
+… must be a plain field: a C struct field is not `static`, optional or `readonly`
+```
+
+## NL2748
+
+The message of an error contains:
+
+```text
+… cannot have an initializer: `new` zero-fills a C struct
+```
+
+## NL2749
+
+The message of an error contains:
+
+```text
+` in itself: a C struct cannot contain itself by value
+```
+
+## NL2750
+
+The message of an error contains:
+
+```text
+` cannot `extends` or `implements`: a C struct layout is its own fields
+```
+
+## NL2751
+
+The message of an error contains:
+
+```text
+…: a C struct layout has fields only
+```
+
+## NL2752
+
+The message of an error contains:
+
+```text
+…, which has no C layout: a field of a `declare class` is i32, i64, u8, u16, u32, u64, f32, f64, `CPtr`, `CPtr | null` or another `declare class`
+```
+
+## NL2753
+
+The message of an error contains:
+
+```text
+`, a `declare class`: C reads and writes its fields, and typed JSON only those of a class Nish lays out
+```
+
+## NL2754
+
+The message of an error contains:
+
+```text
+` is a `declare class` embedded in its object, which a spread cannot copy, so set each field by name
+```
+
+## NL2755
+
+The message of an error contains:
+
+```text
+… has type `number`, whose width `--number-mode` chooses: a C struct field has one layout, so spell it `i32` or `f64`
+```
+
+## NL2756
+
+The message of an error contains:
+
+```text
+…: a C struct layout stays in the module that declares it and is lent only to a `declare function`, so no header, `.d.ts` or N-API binding describes it
+```
+
+## NL2757
+
+The message of an error contains:
+
+```text
+…` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the `declare function` that takes it in a native build
+```
+
+[`nl2757_declare_class_emit_dts.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2757_declare_class_emit_dts.ts) (compiled with `--emit-dts build/test/wordings/nl2757_declare_class_emit_dts.d.ts`):
+
+```ts
+declare class Point {
+  x: i32
+}
+export function f(): i32 {
+  return 0
+}
+```
+
+```text
+`declare class Point` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the `declare function` that takes it in a native build
+```
+
+[`nl2757_declare_class_wasm32.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2757_declare_class_wasm32.ts) (compiled with `--target wasm32`):
+
+```ts
+declare class Point {
+  x: i32
+}
+export function f(): i32 {
+  return 0
+}
+```
+
+```text
+`declare class Point` declares a C struct, and a wasm module a page loads links no C to lend it to: keep the layout and the `declare function` that takes it in a native build
+```
+
+## NL2758
+
+The message of an error contains:
+
+```text
+…` may be `null`: a nullable function reference is called only after a test such as `…
+```
+
+[`nl2758_fnref_nullable_call.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2758_fnref_nullable_call.ts):
+
+```ts
+// NL2758: a call through a nullable function reference no test has narrowed.
+type F = (x: i32) => i32
+
+export const run = (h: F | null): i32 => h(1)
+
+export const main = (): i32 => run(null)
+```
+
+```text
+`h` may be `null`: a nullable function reference is called only after a test such as `h !== null` proves it holds a function
+```
+
+## NL2759
+
+The message of an error contains:
+
+```text
+…` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const`
+```
+
+[`nl2759_fnarg_reference_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2759_fnarg_reference_field.ts):
+
+```ts
+// NL2759: a field of function reference type passed for a function parameter
+// would be read again at each call the callee makes; pass a `const` instead.
+type F = (x: i32) => i32;
+
+const inc = (x: i32): i32 => x + 1;
+
+class Box {
+  op: F;
+  constructor(op: F) {
+    this.op = op;
+  }
+}
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
+
+export const main = (): i32 => {
+  const b = new Box(inc);
+  return apply(b.op, 2);
+};
+```
+
+```text
+`b.op` is read again at each call `apply` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const`
+```
+
+## NL2760
+
+The message of an error contains:
+
+```text
+…` calls it: pass it once a test such as `…
+```
+
+[`nl2760_fnarg_nullable_reference.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2760_fnarg_nullable_reference.ts):
+
+```ts
+// NL2760: a nullable function reference passed for a function parameter
+// before a test has narrowed it.
+type F = (x: i32) => i32;
+
+const inc = (x: i32): i32 => x + 1;
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
+
+export const main = (): i32 => {
+  let h: F | null = null;
+  h = inc;
+  return apply(h, 2);
+};
+```
+
+```text
+`h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it
+```
+
+## NL2761
+
+The message of an error contains:
+
+```text
+…`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const`
+```
+
+[`nl2761_fnarg_reference_assigned_later.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2761_fnarg_reference_assigned_later.ts):
+
+```ts
+// NL2761: a reference local passed for a function parameter that a later
+// argument of the same call assigns.
+type F = (x: i32) => i32;
+
+const sq = (x: i32): i32 => x * x;
+const inc = (x: i32): i32 => x + 1;
+
+const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
+const k = (f: F): i32 => f(1);
+
+export const main = (): i32 => {
+  let h: F = sq;
+  return apply(h, k((h = inc)));
+};
+```
+
+```text
+`h` is assigned by a later argument of `apply`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const`
+```
+
+## NL2762
+
+The message of an error contains:
+
+```text
+…` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array
+```
+
+[`nl2762_fnref_result_arm.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2762_fnref_result_arm.ts):
+
+```ts
+// NL2762: a function reference directly in a `Result` arm, which is not a
+// place a reference's set is built from.
+type F = (x: i32) => i32;
+
+const inc = (x: i32): i32 => x + 1;
+
+const pick = (): Result<F, string> => Ok(inc);
+
+export const main = (): i32 => {
+  const r = pick();
+  return r.ok ? 1 : 0;
+};
+```
+
+```text
+`Result<(i32) => i32, string>` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array
 ```

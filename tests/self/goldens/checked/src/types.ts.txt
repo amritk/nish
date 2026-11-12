@@ -927,9 +927,11 @@ function TypeTable.llvmType(this: TypeTable, type: i32): string -> @TypeTable.ll
 function TypeTable.alignOf(this: TypeTable, type: i32): i32 -> @TypeTable.alignOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: nish_panic_index
-  pointer this: size=112 writesThrough=false captured=false
+  calls: TypeTable.alignOf nish_panic_index
+  pointer this: size=112 writesThrough=false captured=false passedTo=TypeTable.alignOf#0 TypeTable.alignOf#0
   stackSites=0 stackLocals=0
+  callee +0:16 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +2:16 TypeTable.alignOf -> @TypeTable.alignOf
 function TypeTable.typeName(this: TypeTable, type: i32): string -> @TypeTable.typeName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
