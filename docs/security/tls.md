@@ -129,13 +129,13 @@ resumption", what the tests pin and where the code departs from the design.
 
 | File | Functions |
 | --- | --- |
-| `std/net/tls.ts` | `TlsServer` (`restart`, `receive`, `reserveInput`, `reserveOutput`, `handleMessage`, `handleClientHello`, `chooseSuite`, `chooseAlpn`, `takeServerName`, `exchangeKeys`, `writeServerFlight`, `signatureInput`, `sign`, `handleFinished`, `fail`, `wipeResumption`, `enableTickets`, `ticketFits`, `selectTicket`, `bindTicket`, `saltFromEarly`, `resume`, `writeResumedFlight`, `writeResumedHello`, `masterSecretStep`, `resumptionPsk`, `writeTicket`, `issue`, `sent`, `takeOutput`, `clearOutput`, `secrets`, `known`, `readKnown`, `writeKnown`, `wipeSecret`, `wipeEphemeral`, `wipe`), `TlsSecretPool` (`zero`, `wipe`), `tlsExchange` and its `TlsExchangeWords`, `tlsServerStrikeProbe`, `tlsServerTicketCapacity`, `tlsSignEcdsaP256`, `tlsEcdsaDerSignature`, `TlsP256Signer` (`sign`), and the in-place DER writers both encoders share (`tlsEcdsaDerLength`, `tlsEcdsaDerInto`, `tlsDerIntegerLength`, `tlsDerIntegerInto`) |
-| `std/net/tls/codec.ts` | `tlsReadClientHello` into a `TlsClientHelloView` and its readers (`tlsRead*`, `tlsReadServerName`, `tlsReadKeyShare`, `tlsReadAlpn`, `tlsReadExtension`, `tlsMarkSeen`), `tlsParseClientHello`, the six `tlsWrite*` writers with their `tlsEncode*` wrappers, and `tlsWriteCertificateVerifyContent` / `tlsCertificateVerifyContent`; for the client, `tlsWriteClientHello` / `tlsEncodeClientHello`, and the readers into a `TlsServerFlightView` (`tlsReadServerHello`, `tlsServerHelloDowngrade`, `tlsReadEncryptedExtensions`, `tlsReadCertificate`, `tlsReadCertificateVerify`, `tlsReadNewSessionTicket`, `tlsCopyCertificates`, and under them `tlsFlightOpen`, `tlsFlightClose`, `tlsFlightRefuseExtension`, `tlsReadServerHelloExtension`, `tlsReadEncryptedExtension`, `tlsReadServerExtensions`) |
+| `std/net/tls.ts` | `TlsServer` (`restart`, `receive`, `reserveInput`, `reserveOutput`, `handleMessage`, `handleClientHello`, `ownRecordSizeLimit`, `chooseSuite`, `chooseAlpn`, `takeServerName`, `exchangeKeys`, `writeServerFlight`, `signatureInput`, `sign`, `handleFinished`, `fail`, `wipeResumption`, `enableTickets`, `ticketFits`, `selectTicket`, `bindTicket`, `saltFromEarly`, `resume`, `writeResumedFlight`, `writeResumedHello`, `masterSecretStep`, `resumptionPsk`, `writeTicket`, `issue`, `sent`, `takeOutput`, `clearOutput`, `secrets`, `known`, `readKnown`, `writeKnown`, `wipeSecret`, `wipeEphemeral`, `wipe`), `TlsSecretPool` (`zero`, `wipe`), `tlsExchange` and its `TlsExchangeWords`, `tlsServerStrikeProbe`, `tlsServerTicketCapacity`, `tlsSignEcdsaP256`, `tlsEcdsaDerSignature`, `TlsP256Signer` (`sign`), and the in-place DER writers both encoders share (`tlsEcdsaDerLength`, `tlsEcdsaDerInto`, `tlsDerIntegerLength`, `tlsDerIntegerInto`) |
+| `std/net/tls/codec.ts` | `tlsReadClientHello` into a `TlsClientHelloView` and its readers (`tlsRead*`, `tlsReadServerName`, `tlsReadKeyShare`, `tlsReadAlpn`, `tlsReadRecordSizeLimit`, `tlsReadExtension`, `tlsMarkSeen`), `tlsParseClientHello`, the six `tlsWrite*` writers with their `tlsEncode*` wrappers, and `tlsWriteCertificateVerifyContent` / `tlsCertificateVerifyContent`; for the client, `tlsWriteClientHello` / `tlsEncodeClientHello`, and the readers into a `TlsServerFlightView` (`tlsReadServerHello`, `tlsServerHelloDowngrade`, `tlsReadEncryptedExtensions`, `tlsReadCertificate`, `tlsReadCertificateVerify`, `tlsReadNewSessionTicket`, `tlsCopyCertificates`, and under them `tlsFlightOpen`, `tlsFlightClose`, `tlsFlightRefuseExtension`, `tlsReadServerHelloExtension`, `tlsReadEncryptedExtension`, `tlsReadServerExtensions`) |
 | `std/net/tls/schedule.ts` | the key schedule (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`), its in-place forms (`tlsDeriveSecretInto`, `tlsMasterSecretInto`, `tlsFinishedVerifyDataInto`, `tlsTrafficKeysInto`) and `TlsTranscript` |
 | `std/net/tls/record.ts` (T2) | `tlsRecordLength`, `TlsRecordReader`, `TlsRecordProtection` (`install`, `reserve`, `derive`, `clear`, `nonceInto`, `seal`, `open`), `tlsNextTrafficSecret` |
 | `std/net/tls/record-server.ts` (T2) | `TlsRecordServer`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sendKeyUpdate`, `keyUpdate`, `read`, `write`, `close`, `sealClose`, `sign`, `resume`, `issue`, `end`, `checkTruncation`, `abort`, `fail`, `wipeKeys`, `wipe`, `wipeTraffic`, `wipeRead`, `wipeWrite` |
 | `std/net/tls/client.ts` (the client) | `TlsClientConfig`, `tlsClientIsIpLiteral`, `TlsClient` (`start`, `writeHello`, `receive`, `drain`, `handleMessage`, `checkHello`, `handleServerHello`, `handleRetry`, `exchangeKeys`, `handleEncryptedExtensions`, `handleCertificate`, `handleCertificateVerify`, `authenticate`, `reject`, `handleFinished`, `handleTicket`, `peerCertificates`, `verifyScheme`, `verifyContent`, `verifySignature`, `alpn`, `expectedLevel`, `startTranscript`, `reserveInput`, `reserveOutput`, `takeOutput`, `clearOutput`, `sent`, `secrets`, `known`, `readKnown`, `writeKnown`, `fail`, `wipeKeys`, `wipeUnpicked`, `wipeSecret`, `wipe`) and the helpers under it (`tlsClientConfigFits`, `tlsClientKnowsSuite`, `tlsClientKnowsGroup`, `tlsClientIsAscii`; it shares `tlsIsZeroSecret` and `tlsZeroHeld` with `nish/net/tls` and `tlsCopyWindow` with the codec) |
-| `std/net/tls/record-client.ts` (the client) | `TlsRecordClient`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sealChangeCipherSpec`, `sealQueue`, `sealRecord`, `sealWith`, `sendKeyUpdate`, `keyUpdate`, `authenticate`, `reject`, `interest`, `read`, `write`, `consume`, `close`, `sealClose`, `sendAlert`, `end`, `checkTruncation`, `abort`, `fail`, `wipe`, `wipeRead`, `wipeWrite`; `tlsClientInstallHeld`, `tlsClientAdvanceHeld` |
+| `std/net/tls/record-client.ts` (the client) | `TlsRecordClient`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sealChangeCipherSpec`, `sealQueue`, `writeCap`, `sealRecord`, `sealWith`, `sendKeyUpdate`, `keyUpdate`, `authenticate`, `reject`, `interest`, `read`, `write`, `consume`, `close`, `sealClose`, `sendAlert`, `end`, `checkTruncation`, `abort`, `fail`, `wipe`, `wipeRead`, `wipeWrite`; `tlsClientInstallHeld`, `tlsClientAdvanceHeld` |
 | `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close`; for the client, `TlsTcpClient` (`fd`, `open`, `failure`, `interest`, `connected`, `readable`, `writable`, `flush`, `read`, `write`, `keyUpdate`, `shutdown`, `close`), `tlsConnect` and `tlsConnectWith` |
 | `std/net/tls/verify.ts` (the client) | `tlsVerifyCertificateVerify`, `tlsVerifyKeyUsable`, `tlsClientChain`, `tlsClientVerdict`, `tlsClientAuthenticate`, `TlsClientTrust`, `tlsClientTrust`, `tlsClientSystemTrust` |
 
@@ -557,6 +557,36 @@ resume a second connection accepted into the restarted slot through
 `TlsTcpServer.resume`, unsigned and on identity 0, refuse the same ticket a
 third time as a replay, and answer `resume` and `issue` on a slot the carrier
 does not hold with `TLS_RECORD_DONE`.
+
+## Properties verified: record_size_limit (WP39 G3)
+
+RFC 8449 lets a client cap the records it is sent: a client with little
+memory, or one that must authenticate a record before it can use any of it,
+sends `record_size_limit` (extension 28), and the server may then send no
+protected record whose inner plaintext — content, content type and padding —
+is longer. The server reads it in `tlsReadRecordSizeLimit` and keeps it in
+`TlsServer.peerRecordSizeLimit`; `TlsRecordServer.writeCap` turns it into
+the most content and padding one record may carry, which `maxChunk` and
+`sealRecord` both apply, so a handshake flight, an application write, a
+KeyUpdate and an alert are all held to it. Records in the clear (the
+ServerHello, an alert before keys) are not, as §4 says.
+
+| Property | How it holds | Test |
+| --- | --- | --- |
+| No protected record passes the client's limit | `writeCap` is the limit less one for the content type, never above 2^14; `maxChunk` is that less the padding; `sealRecord` refuses with internal_error any record that does not fit, so nothing past it is ever sealed | `net_tls_record_size_limit`: limits of 64 and 512, with and without padding, read off the record lengths on the wire for the flight and a write; the fullest record is exactly the limit |
+| A limit below 64 is illegal_parameter (§4) | `tlsReadRecordSizeLimit` refuses it; the first fault of the hello wins | `net_tls_record_size_limit`: 63 and 0, each a fatal alert in the clear |
+| A malformed extension is decode_error | the body must be exactly two bytes, checked before the value, so a short or long body is never read as a limit | `net_tls_record_size_limit`: bodies of 0, 1 and 3 bytes |
+| A limit past 2^14 + 1 is the TLS 1.3 maximum (§4) | clamped as it is read | `net_tls_record_size_limit`: 65535 is kept as 16385 and the records are the usual ones |
+| The server answers with its own limit only when asked (§4) | `ownRecordSizeLimit`: 16385 in EncryptedExtensions when the client sent the extension and the configuration's `extraExtensions` carries none; nothing otherwise | `net_tls_record_size_limit`; RFC 8448's trace, whose EncryptedExtensions passes its own through `extraExtensions`, still reproduces byte for byte (`net_tls_record_refusals`) |
+| QUIC is untouched | QUIC carries the handshake in its own frames, not TLS records, so over QUIC the limit is never kept and none is sent | the `quic` and `net_tls` sections pass unchanged |
+
+**Cost.** Each protected record carries 22 bytes it does not deliver: the
+5-byte header, the content type and the 16-byte tag. At 2^14 that is about
+0.13% of what is sent; at a client's limit of 64, which leaves 63 bytes of
+content a record, it is about 35%, and a write is cut into that many more
+records, each a seal. The client chose the limit, and pays in bandwidth what
+the server pays in work; the work is bounded per byte written, so a small
+limit does not let a client ask for more than a slow reader could.
 
 ## Properties verified: resumption
 
