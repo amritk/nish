@@ -14720,6 +14720,15 @@ by the caller.
 - **`--deny-retention`** refuses a program whose own code keeps arena memory
   that nothing can reach, for a long-running program that cannot afford it; see
   [Retention as an error](#retention-as-an-error) below.
+- **`--compat`** selects the compatibility dialect. It is a dialect flag, not
+  a diagnostic one, and it accepts nothing yet: every rule of this document
+  holds under it, a program that compiles emits the same bytes of IR with it
+  as without, and a program that is refused is refused with the same exit
+  status, code and message. The flag takes no value: `--compat=<anything>` is
+  a usage error (exit 2). The invariant outlives this stage: a later
+  `--compat` may accept a program the strict dialect refuses, and may never
+  change the answer for one it does not
+  (`tests/compat-erasure.js`, over every program in `tests/cases`).
 - **`--emit-arena <file.json>`** writes every allocation site of the program
   with where its memory goes, beside the IR, and changes no byte of it; see
   [Arena placement](#arena-placement) below.

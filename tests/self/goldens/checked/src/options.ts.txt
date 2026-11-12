@@ -43,6 +43,7 @@ struct Options (class) size=216 align=8 exported
   field sandboxWrite: string[] index=37 offset=192
   field sandboxExec: string[] index=38 offset=200
   field updateCapabilityLock: boolean index=39 offset=208
+  field compat: boolean index=40 offset=209
   constructor -> @Options.constructor
   method recordsPanics -> @Options.recordsPanics
 function Options.constructor(this: Options): void -> @Options.constructor [exported constructor]

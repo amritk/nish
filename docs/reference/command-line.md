@@ -217,6 +217,12 @@ what a bare number is; i32 by default
 
 </scalar-field>
 
+<scalar-field name="--compat">
+
+the compatibility dialect; accepts nothing yet
+
+</scalar-field>
+
 <scalar-field name="--plain">
 
 the IR without LLVM's attributes
