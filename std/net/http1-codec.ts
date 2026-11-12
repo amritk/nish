@@ -1243,6 +1243,15 @@ const http1MethodOverrun = (p: Http1Parser): boolean => {
   }
   const buf: u8[] = p.buf
   const n: i32 = toI32(buf.length)
+  // A space, CR or LF in the first sixteen bytes, buffered or not, is
+  // before `HTTP1_MAX_METHOD`: the loop below would answer false at it, or
+  // at `end` before it.
+  if (p.start >= 0 && p.start <= n - 16) {
+    const v: u8x16 = loadU8x16(buf, p.start)
+    if (any(or(or(eq(v, splatU8x16(32)), eq(v, splatU8x16(13))), eq(v, splatU8x16(10))))) {
+      return false
+    }
+  }
   const stop: i32 = p.start + HTTP1_MAX_METHOD
   for (let k: i32 = p.start; k >= 0 && k < p.end && k < n; k += 1) {
     if (buf[k] === 32 || buf[k] === 13 || buf[k] === 10) {
