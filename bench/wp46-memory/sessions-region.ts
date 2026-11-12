@@ -169,8 +169,14 @@ export const main = (): i32 => {
       event = conn.next()
     }
     if ((r + 1) % every === 0) {
+      // Read before the line is built, which the block then releases: the
+      // baseline's own lines stay in its arena, a few hundred bytes a
+      // checkpoint, lost in its growth but not in this server's flat figures.
+      const mark: i64 = Arena.mark()
+      const used: i64 = Arena.used()
+      using _scope = arena()
       console.log(
-        `requests ${r + 1} made ${cache.made} held ${cache.held} mark ${Arena.mark()} used ${Arena.used()} anon ${anonBytes(argv, scratch, pages)}`
+        `requests ${r + 1} made ${cache.made} held ${cache.held} mark ${mark} used ${used} anon ${anonBytes(argv, scratch, pages)}`
       )
     }
   }
