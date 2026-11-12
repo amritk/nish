@@ -120,7 +120,14 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   runs it runs none of the others it used to run beside.
 
   Regenerate the table when a shard drifts more than about a fifth from the
-  others: the costs are the gaps between consecutive programs' last lines in a
+  others, with `scripts/shard-costs.mjs` over at least three green `ci.yml`
+  runs of `main` (each unzipped from its run page's "Download log archive"):
+  `node scripts/shard-costs.mjs --write <dir> <dir> <dir>` takes each piece's
+  median, so one slow runner does not set it, and fails rather than guess at
+  a section it cannot find by its first check (`RECOGNIZERS`, one per
+  `DEALT_SECTIONS` key) or a shard whose link programs do not number what
+  shard 1 says it dealt it. It reads the same spans this paragraph names: the
+  costs are the gaps between consecutive programs' last lines in a
   CI shard's log, `shardOne` the span of shard 1's sections after the link
   programs that are not dealt, plus its steps after the suite, and each dealt
   section's entry the span of its lines in the shard that ran it. Runners
@@ -169,6 +176,16 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   shard 5 at `ea8b601` was, takes longer).
   A filtered run sends every `tail` group to shard 1, as it sent all of
   that, and counts none of them in its deal.
+
+  Hand-written from one run, that table drifted until shard 8 was the
+  longest job of every run: in
+  [run 43116599932](https://github.com/amritk/nish/actions/runs/43116599932)
+  its four sections took 333 s against the 221 s the table gave them
+  (`sanitizers` alone 152 s against 80 s), and the shards took 7.2 to 12.5
+  minutes. `scripts/shard-costs.mjs` regenerated it from the median of that
+  run and runs 43109728024 and 43114281714; dealt on it, the old deal's
+  pieces measure 5.0 to 8.4 minutes a shard after the setup every shard
+  runs, and the new deal's 6.5 minutes each.
 
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
