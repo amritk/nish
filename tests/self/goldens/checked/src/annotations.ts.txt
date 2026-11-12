@@ -108,6 +108,18 @@ function rejectForeignPointer(ctx: CheckContext, type: i32, position: string, no
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.stripNull -> @TypeTable.stripNull
   callee +3:3 CheckContext.error -> @CheckContext.error
+function rejectExportedLayout(ctx: CheckContext, type: i32, position: string, node: Node): boolean -> @rejectExportedLayout [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  escaping: type
+  calls: CheckContext.error TypeTable.stripNull layoutClass nish_str_concat
+  pointer ctx: size=328 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  stackSites=0 stackLocals=0
+  local +0:9 layout: StructInfo | null (const)
+  callee +0:18 layoutClass -> @layoutClass
+  callee +0:54 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +4:3 CheckContext.error -> @CheckContext.error
 function namesRegion(ctx: CheckContext, name: string): boolean -> @namesRegion [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name

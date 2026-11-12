@@ -7,11 +7,13 @@
 declare void @fillMixed(%struct.Mixed*)
 declare i32 @checkMixed(%struct.Mixed*)
 declare i32 @isSentinel(i8*)
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
@@ -42,12 +44,13 @@ entry:
   %m.addr = alloca %struct.Mixed*, align 8
   %0 = call i8* @nish_alloc_struct(i64 72)
   %1 = bitcast i8* %0 to %struct.Mixed*
-  store %struct.Mixed zeroinitializer, %struct.Mixed* %1, align 8
+  %2 = bitcast %struct.Mixed* %1 to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %2, i8 0, i64 72, i1 false)
   store %struct.Mixed* %1, %struct.Mixed** %m.addr, align 8
-  %2 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  call void @fillMixed(%struct.Mixed* %2)
   %3 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  ret %struct.Mixed* %3
+  call void @fillMixed(%struct.Mixed* %3)
+  %4 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  ret %struct.Mixed* %4
 }
 
 define noundef i8 @readA() #0 {
@@ -145,66 +148,77 @@ cond.true:
   br label %cond.end
 
 cond.false:
+  %11 = load i8*, i8** %link.addr, align 8
+  %12 = call i32 @isSentinel(i8* %11)
+  %13 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %12, i32 2)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
   br label %cond.end
 
 cond.end:
-  %11 = phi i32 [ 2, %cond.true ], [ 0, %cond.false ]
-  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %11)
-  %13 = extractvalue { i32, i1 } %12, 0
-  %14 = extractvalue { i32, i1 } %12, 1
-  br i1 %14, label %ovf.fail, label %ovf.ok
+  %16 = phi i32 [ 0, %cond.true ], [ %14, %ovf.ok ]
+  %17 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %16)
+  %18 = extractvalue { i32, i1 } %17, 0
+  %19 = extractvalue { i32, i1 } %17, 1
+  br i1 %19, label %ovf.fail, label %ovf.ok.1
 
-ovf.ok:
+ovf.ok.1:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %13
+  ret i32 %18
 
 ovf.fail:
-  call void @nish_panic_overflow(i32 0)
+  %ovf.op = phi i32 [ 2, %cond.false ], [ 0, %cond.end ]
+  call void @nish_panic_overflow(i32 %ovf.op)
   unreachable
 }
 
 define noundef i32 @zeroFields() #0 {
 entry:
   %Mixed.obj = alloca %struct.Mixed, align 8
-  store %struct.Mixed zeroinitializer, %struct.Mixed* %Mixed.obj, align 8
-  %0 = call i32 @checkMixed(%struct.Mixed* %Mixed.obj)
-  ret i32 %0
+  %0 = bitcast %struct.Mixed* %Mixed.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 72, i1 false)
+  %1 = call i32 @checkMixed(%struct.Mixed* %Mixed.obj)
+  ret i32 %1
 }
 
 define noundef i32 @writtenFields() #0 {
 entry:
   %m.addr = alloca %struct.Mixed*, align 8
   %Mixed.obj = alloca %struct.Mixed, align 8
-  store %struct.Mixed zeroinitializer, %struct.Mixed* %Mixed.obj, align 8
+  %0 = bitcast %struct.Mixed* %Mixed.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 72, i1 false)
   store %struct.Mixed* %Mixed.obj, %struct.Mixed** %m.addr, align 8
-  %0 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %1 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %0, i32 0, i32 0
-  store i8 200, i8* %1, align 1
-  %2 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %3 = sext i32 16909060 to i64
-  %4 = shl i64 %3, 32
-  %5 = or i64 %4, 84281096
-  %6 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %2, i32 0, i32 1
-  store i64 %5, i64* %6, align 8
-  %7 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %8 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %7, i32 0, i32 2
-  store i32 -5, i32* %8, align 4
-  %9 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %10 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %9, i32 0, i32 3
-  store double 0x4004000000000000, double* %10, align 8
-  %11 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %12 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %11, i32 0, i32 4
-  store i16 65535, i16* %12, align 2
-  %13 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %14 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %13, i32 0, i32 6
-  %15 = getelementptr inbounds %struct.Inner, %struct.Inner* %14, i32 0, i32 0
-  store i16 48879, i16* %15, align 2
-  %16 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %17 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %16, i32 0, i32 7
-  store i8 9, i8* %17, align 1
-  %18 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %19 = call i32 @checkMixed(%struct.Mixed* %18)
-  ret i32 %19
+  %1 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %2 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %1, i32 0, i32 0
+  store i8 200, i8* %2, align 1
+  %3 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %4 = sext i32 16909060 to i64
+  %5 = shl i64 %4, 32
+  %6 = or i64 %5, 84281096
+  %7 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %3, i32 0, i32 1
+  store i64 %6, i64* %7, align 8
+  %8 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %9 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %8, i32 0, i32 2
+  store i32 -5, i32* %9, align 4
+  %10 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %11 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %10, i32 0, i32 3
+  store double 0x4004000000000000, double* %11, align 8
+  %12 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %13 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %12, i32 0, i32 4
+  store i16 65535, i16* %13, align 2
+  %14 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %15 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %14, i32 0, i32 6
+  %16 = getelementptr inbounds %struct.Inner, %struct.Inner* %15, i32 0, i32 0
+  store i16 48879, i16* %16, align 2
+  %17 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %18 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %17, i32 0, i32 7
+  store i8 9, i8* %18, align 1
+  %19 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %20 = call i32 @checkMixed(%struct.Mixed* %19)
+  ret i32 %20
 }
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }

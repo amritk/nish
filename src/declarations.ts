@@ -17,7 +17,13 @@ import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
 import { rejectStoredMask } from "./simd"
 import { hostTypeProblem } from "./host-module"
-import { ASYNC_RETURN_MESSAGE, promiseArgument, rejectForeignPointer, resolveType } from "./annotations"
+import {
+  ASYNC_RETURN_MESSAGE,
+  promiseArgument,
+  rejectExportedLayout,
+  rejectForeignPointer,
+  resolveType,
+} from "./annotations"
 import { annotationSpelling } from "./arrays"
 import { functionTypeHereMessage, isContextualLiteral, isFunctionParameter } from "./generics"
 import { isScalarArgument } from "./escape"
@@ -138,6 +144,11 @@ export const collectParams = (
     if (sig.exported || owner >= 0) {
       const where = sig.exported ? "a parameter of an exported function" : "a parameter of a method"
       rejectStoredMask(ctx, type, where, param.children[1])
+    }
+    if (sig.exported) {
+      const where =
+        owner >= 0 ? "a parameter of an exported class's method" : "a parameter of an exported function"
+      rejectExportedLayout(ctx, type, where, param.children[1])
     }
     sig.paramNames.push(name)
     sig.paramTypes.push(type)
@@ -501,6 +512,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
     )
     if (sig.exported) {
       rejectStoredMask(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
+      rejectExportedLayout(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
     }
   }
   return sig

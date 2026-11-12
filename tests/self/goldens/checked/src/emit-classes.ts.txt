@@ -252,8 +252,8 @@ function emitObjectLiteral(emitter: Emitter, expr: Node): string -> @emitObjectL
 function emitNew(emitter: Emitter, expr: Node): string -> @emitNew [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
-  calls: Emitter.typeOf IRFunction.emit TypeTable.isArray allocate constructObject emitNewArray initInlineArrays intrinsicType nish_panic_index nish_str_concat structInfoOf structTypeName
-  pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.typeOf#0 emitNewArray#0 structInfoOf#0 allocate#0 initInlineArrays#0 constructObject#0
+  calls: Emitter.declare Emitter.typeOf IRFunction.emit IRFunction.emitValue TypeTable.isArray allocate constructObject emitNewArray initInlineArrays intrinsicType nish_panic_index nish_str_concat nish_str_from_i32 structInfoOf structTypeName
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.typeOf#0 emitNewArray#0 structInfoOf#0 allocate#0 Emitter.declare#0 initInlineArrays#0 constructObject#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 emitNewArray#1 intrinsicType#1 allocate#2 constructObject#4
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.isArray -> @TypeTable.isArray
@@ -264,11 +264,13 @@ function emitNew(emitter: Emitter, expr: Node): string -> @emitNew [exported]
   callee +4:38 intrinsicType -> @intrinsicType
   local +5:9 obj: string (const)
   callee +5:15 allocate -> @allocate
-  local +8:11 ty: string (const)
-  callee +8:16 structTypeName -> @structTypeName
-  callee +9:5 IRFunction.emit -> @IRFunction.emit
-  callee +12:3 initInlineArrays -> @initInlineArrays
-  callee +13:3 constructObject -> @constructObject
+  local +11:11 bytes: string (const)
+  callee +11:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:51 structTypeName -> @structTypeName
+  callee +12:5 Emitter.declare -> @Emitter.declare
+  callee +13:5 IRFunction.emit -> @IRFunction.emit
+  callee +16:3 initInlineArrays -> @initInlineArrays
+  callee +17:3 constructObject -> @constructObject
 function emitNewWithoutArguments(emitter: Emitter, info: StructInfo, site: Node): string -> @emitNewWithoutArguments [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via arenaObject

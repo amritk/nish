@@ -973,6 +973,7 @@ declare function getrlimit(resource: i32, limit: Rlimit): i32;
 
 export const main = (): i32 => {
   const limit = new Rlimit();
+  // 7 is RLIMIT_NOFILE on Linux; macOS and the BSDs number it 8.
   if (getrlimit(7, limit) !== 0) {
     return 1;
   }
@@ -986,8 +987,11 @@ A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
 embeds one struct in another. `stamp.at.sec` reads a field of the embedded
 struct in place, and `clock_gettime(1, stamp.at)` hands C its address inside
 `stamp`. The class has fields and nothing else: no initialiser, no method or
-constructor, no `readonly`, no `extends`, no `export`. Any other field type is
-refused, since it has no C spelling:
+constructor, no `readonly`, no `extends`, no `export`, and it cannot appear in
+an exported function's or class's signature, so no generated header or
+binding has to describe it. A `CPtr` field is the target's pointer, four bytes
+under `--profile wasi`. Any other field type is refused, since it has no C
+spelling; that includes `number`, whose width `--number-mode` picks:
 
 ```ts nish:err NL2752
 declare class Flags {

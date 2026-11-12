@@ -594,7 +594,8 @@ A *layout class* is a `declare class` whose members are fields only, each one
 of:
 
 - a foreign scalar: `i32`, `i64`, `u8`–`u64`, `f32`, `f64`;
-- `CPtr` or `CPtr | null`, one pointer-sized word;
+- `CPtr` or `CPtr | null`, one pointer-sized word: eight bytes on a 64-bit
+  target and four on wasm32 (§9g);
 - another layout class, nested **by value**: its bytes sit inside the outer
   struct, as a C `struct inner in;` member does.
 
@@ -610,15 +611,22 @@ suggests it, never apply: the order is C's, not the compiler's to improve.
 Refused, each by its own diagnostic: a `string` (C has no length-prefixed
 string), an array (a fixed inline C array is a later decision), an ordinary
 class (a Nish pointer C would have to keep alive), `boolean` (`_Bool`'s width
-is the ABI's business; write `u8`), an initialiser, a method, a constructor, a
+is the ABI's business; write `u8`), `number` (its width is whatever
+`--number-mode` picks, and a struct has one layout; write `i32` or `f64`), an
+initialiser, a method, a constructor, a
 `static` member, an accessor, a type parameter, `extends`, `implements`, and
 `export`. A class whose nesting reaches itself has no finite size and is
-refused.
+refused. A C `int8_t` or `int16_t` member has no field type yet, because the
+type system has no `i8` or `i16`; a field of either width waits on that, and
+until then a declaration spells one as `u8`/`u16` and reinterprets the sign.
 
 ### 9c. Instances
 
 `new Name()` takes no arguments and gives an instance whose every byte is zero,
-which is C's `= {0}`. Fields read and write as an ordinary class's do. A layout
+which is C's `= {0}`: one `llvm.memset` of the struct's size, not a
+`zeroinitializer` store, because LLVM may leave a store's padding bytes
+unwritten and arena memory is not cleared, while C may `memcmp` or hash the
+whole struct. Fields read and write as an ordinary class's do. A layout
 instance lives wherever an ordinary class instance may: in a local, a field of
 an ordinary class, a parameter, a return.
 
@@ -657,8 +665,8 @@ LANGUAGE.md rule says so first. In the compiler it reads as follows:
 
 The `ffi` capability still names every foreign call and `--deny ffi` refuses
 the program; FFI programs stay outside the differential oracle (§5);
-`--emit-header`, `--emit-dts` and `--emit-napi` are untouched because a
-`declare class` is never exported; `--emit-ts` refuses a layout class as it
+`--emit-header`, `--emit-dts` and `--emit-napi` never see a layout class
+(§9g); `--emit-ts` refuses a layout class as it
 refuses a `declare function`. Out of scope: structs by value, unions,
 bit-fields, packing, fixed inline array fields, writing C-owned memory,
 callbacks and variadics.
@@ -669,6 +677,43 @@ callbacks and variadics.
 | --- | --- | --- |
 | **S4.1** (built) | `declare class` as a layout (§9b, §9c); a layout-class `declare function` parameter lowered to a borrowed pointer (§9d) | `ffi_struct_param` (`getrlimit`/`setrlimit` round trip, `clock_gettime` twice, a nested layout); `ffi_struct_layout` (a C sidecar's `offsetof`/`sizeof` against the fields Nish read); one `reject_ffi_struct_*` per refusal; `reject_cls_declare` rewritten |
 | **S4.2** | `readStruct<T>(p: CPtr): T` in `nish:unsafe`, a copy of a C-owned struct into a Nish-owned instance | `ffi_struct_read` and its refusals |
+
+### 9g. Headers, bindings and targets
+
+A layout class must not reach `--emit-header`, `--emit-dts` or `--emit-napi`.
+Refusing `export` on the class is not enough: an exported function's parameter
+or return type, an exported class's field and an exported method's signature
+all name their types, and before this rule `export const f = (p: Point)`
+compiled and its header carried a `struct Point` the generator had written as
+an ordinary Nish class, which C would have read as a different object. Two
+answers were open:
+
+1. **Describe the layout in the header**, as the C struct it is. The header
+   could, but the `.d.ts` and N-API generators would then need a JavaScript
+   shape for a struct C fills, which is S4.2's question, and every exported
+   signature would turn a borrowed pointer into a contract with a caller this
+   program never sees.
+2. **Keep the layout in its module.** The checker refuses a layout class as a
+   parameter or return type of an exported function or an exported class's
+   method, and as a field of an exported class or interface
+   (`reject_ffi_struct_export_param`, `_return`, `_method`, `_field`); the
+   header generator also skips a layout when it lists structs.
+
+S4.1 takes the second. It is the smaller promise, it matches §9d's contract (a
+layout is lent to a `declare function`, by this program), and lifting it later
+is additive. `tests/ffi-struct.js` pins the result: the `--emit-header` of a
+module with a private layout and an exported function has no `struct` for the
+layout and compiles under `-Wall -Wextra -Werror`.
+
+**Targets.** A `CPtr` field is the target's `void *`, so a layout's sizes and
+offsets follow the target: on wasm32 (`--profile wasi`) a pointer field is four
+bytes, aligned to four, and the struct `{ u8; CPtr; { u16; CPtr | null }; u8 }`
+is 20 bytes where it is 40 natively. `tests/ffi-struct.js` checks both against
+clang's `sizeof` and `offsetof` for the same C struct on each triple, and the
+`memset` length and the `dereferenceable` a lending parameter claims are the
+target's size. Debug info still describes a pointer member as 64 bits wide on
+wasm32, as it does for every pointer the compiler emits; the offsets it gives
+are the layout's.
 
 The rolling freeze (§8h) holds: `std/` may declare a layout class from the
 commit that lands S4.1, `src/` not until the release after it.

@@ -14,6 +14,7 @@ import JSON_OPTIONS from "./json-typed" -> const JSON_OPTIONS
 import checkJsonOptions from "./json-typed" -> function @checkJsonOptions
 import noteJsonOptions from "./json-typed" -> function @noteJsonOptions
 import rejectStoredMask from "./simd" -> function @rejectStoredMask
+import rejectExportedLayout from "./annotations" -> function @rejectExportedLayout
 import rejectForeignPointer from "./annotations" -> function @rejectForeignPointer
 import resolveType from "./annotations" -> function @resolveType
 import annotationSpelling from "./arrays" -> function @annotationSpelling
@@ -91,35 +92,39 @@ function roundUpTo(value: i32, align: i32): i32 -> @roundUpTo [exported]
   calls: nish_panic_div nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 remainder: i32 (const)
-function fieldAlign(table: TypeTable, field: FieldInfo): i32 -> @fieldAlign
+function fieldAlign(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @fieldAlign
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.alignOf#0 TypeTable.alignOf#0 TypeTable.refOf#0
+  escaping: pointer
+  calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf TypeTable.stripNull
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.alignOf#0 TypeTable.alignOf#0 TypeTable.refOf#0
   pointer field: size=80 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
-  callee +7:8 FieldInfo.inline -> @FieldInfo.inline
-  callee +8:12 TypeTable.alignOf -> @TypeTable.alignOf
-  local +10:9 slot: i32 (const)
-  callee +10:16 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +10:30 TypeTable.refOf -> @TypeTable.refOf
-function fieldWidth(table: TypeTable, field: FieldInfo): i32 -> @fieldWidth
+  callee +4:7 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +10:8 FieldInfo.inline -> @FieldInfo.inline
+  callee +11:12 TypeTable.alignOf -> @TypeTable.alignOf
+  local +13:9 slot: i32 (const)
+  callee +13:16 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +13:30 TypeTable.refOf -> @TypeTable.refOf
+function fieldWidth(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @fieldWidth
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf fieldAlign nish_panic_overflow roundUpTo
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.alignOf#0 fieldAlign#0 TypeTable.alignOf#0 TypeTable.refOf#0
+  escaping: pointer
+  calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf TypeTable.stripNull fieldAlign nish_panic_overflow roundUpTo
+  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.alignOf#0 fieldAlign#0 TypeTable.alignOf#0 TypeTable.refOf#0
   pointer field: size=80 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
-  callee +7:8 FieldInfo.inline -> @FieldInfo.inline
-  callee +8:12 TypeTable.alignOf -> @TypeTable.alignOf
-  local +10:9 align: i32 (const)
-  callee +10:17 fieldAlign -> @fieldAlign
-  local +11:9 stride: i32 (const)
-  callee +11:18 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +11:32 TypeTable.refOf -> @TypeTable.refOf
-  local +12:9 slots: i32 (const)
-  callee +12:17 roundUpTo -> @roundUpTo
-  callee +13:10 roundUpTo -> @roundUpTo
+  callee +4:7 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +10:8 FieldInfo.inline -> @FieldInfo.inline
+  callee +11:12 TypeTable.alignOf -> @TypeTable.alignOf
+  local +13:9 align: i32 (const)
+  callee +13:17 fieldAlign -> @fieldAlign
+  local +14:9 stride: i32 (const)
+  callee +14:18 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +14:32 TypeTable.refOf -> @TypeTable.refOf
+  local +15:9 slots: i32 (const)
+  callee +15:17 roundUpTo -> @roundUpTo
+  callee +16:10 roundUpTo -> @roundUpTo
 function computeLayout(ctx: CheckContext, info: StructInfo): i32 -> @computeLayout [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -127,6 +132,7 @@ function computeLayout(ctx: CheckContext, info: StructInfo): i32 -> @computeLayo
   pointer ctx: size=328 writesThrough=false captured=false
   pointer info: size=176 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+  local -8:9 pointer: i32 (const)
   local -7:7 offset: i32 (let)
   local -6:7 align: i32 (let)
   local -5:7 used: i32 (let)
@@ -348,35 +354,36 @@ function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node
 function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.holdsSecret TypeTable.stripNull admitsSecretField annotationSpelling checkLiteralInitializer handleFieldMessage handleJsonMessage isHandleFieldAnnotation kindWord nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noteJsonOptions rejectForeignPointer rejectStoredMask resolveType secretFieldMessage spelled
-  pointer ctx: size=328 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 noteJsonOptions#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 rejectForeignPointer#0 rejectStoredMask#0 admitsSecretField#0 CheckContext.error#0 annotationSpelling#0 checkLiteralInitializer#0
+  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.holdsSecret TypeTable.stripNull admitsSecretField annotationSpelling checkLiteralInitializer handleFieldMessage handleJsonMessage isHandleFieldAnnotation kindWord nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noteJsonOptions rejectExportedLayout rejectForeignPointer rejectStoredMask resolveType secretFieldMessage spelled
+  pointer ctx: size=328 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 noteJsonOptions#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 rejectForeignPointer#0 rejectStoredMask#0 rejectExportedLayout#0 admitsSecretField#0 CheckContext.error#0 annotationSpelling#0 checkLiteralInitializer#0
   pointer owner: size=176 writesThrough=true captured=false passedTo=kindWord#0 spelled#1 noteJsonOptions#1 StructInfo.hasMember#0 kindWord#0 spelled#1 admitsSecretField#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=noteJsonOptions#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
-  local -95:9 name: string (const)
-  local -94:9 what: string (const)
-  callee -94:40 kindWord -> @kindWord
-  callee -94:61 spelled -> @spelled
-  callee -88:7 CheckContext.error -> @CheckContext.error
-  callee -88:35 handleJsonMessage -> @handleJsonMessage
-  callee -85:5 noteJsonOptions -> @noteJsonOptions
-  callee -82:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee -81:5 CheckContext.error -> @CheckContext.error
-  callee -79:42 kindWord -> @kindWord
-  callee -79:63 spelled -> @spelled
-  callee -59:5 CheckContext.error -> @CheckContext.error
-  callee -55:5 CheckContext.error -> @CheckContext.error
+  local -100:9 name: string (const)
+  local -99:9 what: string (const)
+  callee -99:40 kindWord -> @kindWord
+  callee -99:61 spelled -> @spelled
+  callee -93:7 CheckContext.error -> @CheckContext.error
+  callee -93:35 handleJsonMessage -> @handleJsonMessage
+  callee -90:5 noteJsonOptions -> @noteJsonOptions
+  callee -87:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee -86:5 CheckContext.error -> @CheckContext.error
+  callee -84:42 kindWord -> @kindWord
+  callee -84:63 spelled -> @spelled
+  callee -64:5 CheckContext.error -> @CheckContext.error
+  callee -60:5 CheckContext.error -> @CheckContext.error
+  callee -56:5 CheckContext.error -> @CheckContext.error
+  local -53:9 type: i32 (const)
+  callee -53:16 resolveType -> @resolveType
   callee -51:5 CheckContext.error -> @CheckContext.error
-  local -48:9 type: i32 (const)
-  callee -48:16 resolveType -> @resolveType
-  callee -46:5 CheckContext.error -> @CheckContext.error
-  callee -39:23 TypeTable.stripNull -> @TypeTable.stripNull
-  local -38:11 sole: boolean (const)
-  callee -38:48 isHandleFieldAnnotation -> @isHandleFieldAnnotation
-  callee -36:7 CheckContext.error -> @CheckContext.error
-  callee -36:35 handleFieldMessage -> @handleFieldMessage
-  callee -33:14 rejectForeignPointer -> @rejectForeignPointer
-  callee -31:14 rejectStoredMask -> @rejectStoredMask
+  callee -44:23 TypeTable.stripNull -> @TypeTable.stripNull
+  local -43:11 sole: boolean (const)
+  callee -43:48 isHandleFieldAnnotation -> @isHandleFieldAnnotation
+  callee -41:7 CheckContext.error -> @CheckContext.error
+  callee -41:35 handleFieldMessage -> @handleFieldMessage
+  callee -38:14 rejectForeignPointer -> @rejectForeignPointer
+  callee -36:14 rejectStoredMask -> @rejectStoredMask
+  callee -32:5 rejectExportedLayout -> @rejectExportedLayout
   callee -25:5 TypeTable.holdsSecret -> @TypeTable.holdsSecret
   callee -24:6 admitsSecretField -> @admitsSecretField
   callee -22:5 CheckContext.error -> @CheckContext.error
@@ -444,8 +451,8 @@ function collectMethodSignature(ctx: CheckContext, owner: StructInfo, decl: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=200
   sharedWrite: via collectParams
   escaping: owner shownName symbol
-  calls: FunctionSig.constructor annotationSpelling collectParams nish_alloc_struct nish_panic_index rejectForeignPointer rejectStoredMask resolveType
-  pointer ctx: size=328 writesThrough=true captured=true passedTo=collectParams#0 resolveType#1 annotationSpelling#0 rejectForeignPointer#0 rejectStoredMask#0
+  calls: FunctionSig.constructor annotationSpelling collectParams nish_alloc_struct nish_panic_index rejectExportedLayout rejectForeignPointer rejectStoredMask resolveType
+  pointer ctx: size=328 writesThrough=true captured=true passedTo=collectParams#0 resolveType#1 annotationSpelling#0 rejectForeignPointer#0 rejectStoredMask#0 rejectExportedLayout#0
   pointer owner: size=176 writesThrough=true captured=true
   pointer decl: size=40 writesThrough=true captured=true passedTo=FunctionSig.constructor#3
   stackSites=0 stackLocals=0
@@ -457,6 +464,7 @@ function collectMethodSignature(ctx: CheckContext, owner: StructInfo, decl: Node
   callee +12:26 annotationSpelling -> @annotationSpelling
   callee +13:5 rejectForeignPointer -> @rejectForeignPointer
   callee +19:5 rejectStoredMask -> @rejectStoredMask
+  callee +21:7 rejectExportedLayout -> @rejectExportedLayout
 function declareMethodTemplate(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @declareMethodTemplate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -508,17 +516,19 @@ function layoutClass(program: CheckedProgram, table: TypeTable, type: i32): Stru
 function collectLayoutField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectLayoutField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.stripNull TypeTable.typeName collectStructMembers isLayoutScalar layoutClass nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat resolveType
-  pointer ctx: size=328 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 collectStructMembers#0 CheckContext.error#0
+  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.stripNull TypeTable.typeName collectStructMembers isLayoutScalar layoutClass nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq resolveType
+  pointer ctx: size=328 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 collectStructMembers#0 CheckContext.error#0
   pointer owner: size=176 writesThrough=false captured=false passedTo=StructInfo.hasMember#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
-  local -44:9 name: string (const)
-  local -43:9 what: string (const)
-  callee -42:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee -41:5 CheckContext.error -> @CheckContext.error
-  callee -37:5 CheckContext.error -> @CheckContext.error
-  callee -30:5 CheckContext.error -> @CheckContext.error
+  local -54:9 name: string (const)
+  local -53:9 what: string (const)
+  callee -52:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee -51:5 CheckContext.error -> @CheckContext.error
+  callee -47:5 CheckContext.error -> @CheckContext.error
+  callee -40:5 CheckContext.error -> @CheckContext.error
+  local -35:9 annotation: Node (const)
+  callee -33:5 CheckContext.error -> @CheckContext.error
   local -27:9 type: i32 (const)
   callee -27:16 resolveType -> @resolveType
   local -21:9 nested: StructInfo | null (const)

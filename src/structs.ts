@@ -26,7 +26,7 @@ import {
 import { CheckContext } from "./context"
 import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
 import { rejectStoredMask } from "./simd"
-import { rejectForeignPointer, resolveType } from "./annotations"
+import { rejectExportedLayout, rejectForeignPointer, resolveType } from "./annotations"
 import { annotationSpelling } from "./arrays"
 import {
   collectTypeParamNames,
@@ -121,10 +121,13 @@ const SLICE_BYTES: i32 = 16
  * the larger of the header's 8 and its slots' own, as the LLVM literal struct
  * `{ %struct.nish_array, [K x T] }` is aligned. A vector slot asks sixteen.
  */
-const fieldAlign = (table: TypeTable, field: FieldInfo): i32 => {
+const fieldAlign = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   const nested = field.nested
   if (nested !== null) {
     return nested.align
+  }
+  if (table.stripNull(field.type) === T_CPTR) {
+    return pointer
   }
   if (field.boxed) {
     return 8
@@ -144,10 +147,13 @@ const fieldAlign = (table: TypeTable, field: FieldInfo): i32 => {
  * The slots are values, never records: `src/inline-arrays.ts` refuses a record
  * element type.
  */
-const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
+const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   const nested = field.nested
   if (nested !== null) {
     return nested.size
+  }
+  if (table.stripNull(field.type) === T_CPTR) {
+    return pointer
   }
   if (field.boxed) {
     return SLICE_BYTES
@@ -155,7 +161,7 @@ const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
   if (!field.inline()) {
     return table.alignOf(field.type)
   }
-  const align = fieldAlign(table, field)
+  const align = fieldAlign(table, field, pointer)
   const stride = table.alignOf(table.refOf(field.type))
   const slots = roundUpTo(INLINE_HEADER_BYTES, align)
   return roundUpTo(slots + field.inlineCapacity * stride, align)
@@ -173,12 +179,16 @@ const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
  * reordering, and almost every struct is one of those.
  */
 export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
+  // A `declare class`'s `CPtr` field is the target's `void *`, four bytes on
+  // wasm32 as its LLVM `i8*` is (WP27 S4.1); every other class keeps the
+  // eight-byte slot its arena object has always had.
+  const pointer = info.layout && ctx.wasm ? 4 : 8
   let offset = 0
   let align = 1
   let used = 0
   for (const field of info.fields) {
-    const need = fieldAlign(ctx.table, field)
-    const width = fieldWidth(ctx.table, field)
+    const need = fieldAlign(ctx.table, field, pointer)
+    const width = fieldWidth(ctx.table, field, pointer)
     offset = roundUpTo(offset, need)
     field.offset = offset
     offset = offset + width
@@ -704,6 +714,11 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     return
   } else if (rejectStoredMask(ctx, type, "a field", decl.children[1])) {
     return
+  } else if (
+    owner.exported &&
+    rejectExportedLayout(ctx, type, "a field of an exported class or interface", decl.children[1])
+  ) {
+    return
   }
   // `nish:secret`: a field outlives the function that made the secret, unless
   // it is a holder's `readonly` field, which its `wipe()` ends (`secret.ts`).
@@ -868,6 +883,14 @@ export const collectMethodSignature = (
       returnAnnotation
     )
     rejectStoredMask(ctx, sig.returnType, "the return type of a method", returnAnnotation)
+    if (sig.exported) {
+      rejectExportedLayout(
+        ctx,
+        sig.returnType,
+        "the return type of an exported class's method",
+        returnAnnotation
+      )
+    }
   }
   return sig
 }
@@ -975,7 +998,17 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
     ctx.error(decl.children[2], `${what} cannot have an initializer: \`new\` zero-fills a C struct`)
     return
   }
-  const type = resolveType(decl.children[1], ctx)
+  // `number` is i32 or f64 as `--number-mode` says, and a C struct has one
+  // layout whatever flag the program is built with.
+  const annotation = decl.children[1]
+  if (annotation.kind === N_TYPE_REF && annotation.text === "number") {
+    ctx.error(
+      annotation,
+      `${what} has type \`number\`, whose width \`--number-mode\` chooses: a C struct field has one layout, so spell it \`i32\` or \`f64\``
+    )
+    return
+  }
+  const type = resolveType(annotation, ctx)
   if (type === T_ERROR) {
     return
   }

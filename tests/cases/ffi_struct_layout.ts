@@ -60,11 +60,11 @@ export function readZ(): u8 {
   return filled().z
 }
 
-/** 1 when C's `p` is its sentinel, plus 2 when the nested `link` it set is null. */
+/** 1 when C's `p` is its sentinel, plus 2 when the nested `link` it set is the sentinel too. */
 export function readPointers(): i32 {
   const m = filled()
   const link = m.inner.link
-  return isSentinel(m.p) + (link === null ? 2 : 0)
+  return isSentinel(m.p) + (link === null ? 0 : isSentinel(link) * 2)
 }
 
 /** A fresh instance is all zeros: C sees 0 in every field before the program writes. */

@@ -195,7 +195,7 @@ rejects. This table is the highest-value part of the page.
 | `const [a, b] = xs`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
 | `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body |
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
-| `abstract class`, `declare class`, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class` is not supported `` / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
+| `abstract class`, a `declare class` with methods, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class Point` cannot have a method or accessor `` (a `declare class` is a C struct: fields only) / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
 | `{ m() { … } }`, `{ "a": 1 }`, `const C = class { }` | ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` / `Object literal keys must be plain identifiers` / `Classes must be named` | fields with identifier keys, a top-level function over the interface, a named top-level class |
 | `const o = { ...base }` with no annotation; `{ ...maybe }` for a `T \| null`; `{ ...base }` copying a field the target lacks | ``An object literal with a spread needs a contextual class or interface type…`` / ``Spread of `T \| null` into `T` may spread `null`…`` / ``Spread of `Point3` into `Point` copies field `z`, which `Point` does not declare…`` | annotate the literal's type (`const p: Point = { ...base, x: 1 }`); narrow the source first; spread a value whose fields the target declares, or set the fields by name |
 | `{ [k]: v }`, `[k]: i32` in a class or interface | `Computed property names are forbidden in Nish (member names are fixed at compile time)` | a `Map` for a keyed table |
@@ -794,10 +794,11 @@ export const main = (): i32 => {
 - **A type parameter takes no type arguments of its own.** `T` is whatever the
   instantiation bound it to, so `const y: T<i32>` is
   `` Unsupported type reference `T<i32>` ``.
-- **A template obeys every rule a declared class obeys**: `declare class
-  Box<T>`, `export default class Box<T>`, `abstract class Box<T>` and
-  `interface Box<T> extends Base` are refused in the words their non-generic
-  spellings are refused in.
+- **A template obeys every rule a declared class obeys**: `export default
+  class Box<T>`, `abstract class Box<T>` and `interface Box<T> extends Base`
+  are refused in the words their non-generic spellings are refused in, and
+  `declare class Box<T>` (a C struct has one layout) is
+  `` A generic `declare class` is not supported ``.
 - **A template claims its name.** `class Box<T>` is a declaration of `Box`, so
   a function, constant, alias, enum or second class of that name is refused
   whichever was written first: `` `Box` is already declared in this module ``,

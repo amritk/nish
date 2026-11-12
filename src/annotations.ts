@@ -210,6 +210,25 @@ export const rejectForeignPointer = (ctx: CheckContext, type: i32, position: str
   return true
 }
 
+/**
+ * Refuses a `declare class` (WP27 S4.1) in `position`, a place an exported
+ * signature or an exported class's field puts it: the header, `.d.ts` and
+ * N-API generators describe every class as a pointer to an arena object,
+ * and a layout is C's struct, embedded by value where it nests and lent only
+ * to a `declare function` (docs/wp27-ffi.md §9g).
+ */
+export const rejectExportedLayout = (ctx: CheckContext, type: i32, position: string, node: Node): boolean => {
+  const layout = layoutClass(ctx.program, ctx.table, ctx.table.stripNull(type))
+  if (layout === null) {
+    return false
+  }
+  ctx.error(
+    node,
+    `\`declare class ${layout.name}\` cannot be ${position}: a C struct layout stays in the module that declares it and is lent only to a \`declare function\`, so no header, \`.d.ts\` or N-API binding describes it`
+  )
+  return true
+}
+
 /** Whether `name` spells `nish:region`'s `Region` here: imported from it, under any local name, or inside it. */
 export const namesRegion = (ctx: CheckContext, name: string): boolean => {
   const imported = ctx.program.importNamed(name)

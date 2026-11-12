@@ -85,6 +85,7 @@ function readPointers(): i32 -> @readPointers [exported]
   callee +0:13 filled -> @filled
   local +1:9 link: CPtr | null (const)
   callee +2:10 isSentinel -> @isSentinel
+  callee +2:49 isSentinel -> @isSentinel
 function zeroFields(): i32 -> @zeroFields [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:10

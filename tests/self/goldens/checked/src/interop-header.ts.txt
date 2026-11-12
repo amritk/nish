@@ -73,32 +73,32 @@ function structDefinitions(compilation: Compilation): string[] -> @structDefinit
   local +2:9 files: string[] (const)
   local +3:14 unit: ModuleUnit (const)
   local +4:16 info: StructInfo (const)
-  local +11:9 lines: string[] (const)
-  local +15:9 vectored: StringSet (const)
-  callee +15:20 structsHoldingVectors -> @structsHoldingVectors
-  local +20:14 info: StructInfo (const)
-  callee +21:26 cStructName -> @cStructName
-  local +23:7 i: i32 (let)
-  local +25:11 info: StructInfo (const)
-  local +26:11 file: string (const)
-  local +27:11 ifaces: string (const)
-  local +28:11 kind: string (const)
-  local +29:11 cName: string (const)
-  callee +29:19 cStructName -> @cStructName
-  callee +34:9 isCollectionStruct -> @isCollectionStruct
-  callee +44:9 isSecretStruct -> @isSecretStruct
-  callee +54:9 secretFieldOf -> @secretFieldOf
-  callee +65:9 StringSet.has -> @StringSet.has
-  local +80:16 f: FieldInfo (const)
-  local +81:13 t: string (const)
-  callee +81:17 cFieldType -> @cFieldType
-  local +83:13 name: string (const)
-  callee +83:20 cParamName -> @cParamName
-  local +85:13 note: string (const)
-  callee +86:9 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +86:45 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +87:31 tsKeyword -> @tsKeyword
-  callee +89:27 spaceAfter -> @spaceAfter
+  local +14:9 lines: string[] (const)
+  local +18:9 vectored: StringSet (const)
+  callee +18:20 structsHoldingVectors -> @structsHoldingVectors
+  local +23:14 info: StructInfo (const)
+  callee +24:26 cStructName -> @cStructName
+  local +26:7 i: i32 (let)
+  local +28:11 info: StructInfo (const)
+  local +29:11 file: string (const)
+  local +30:11 ifaces: string (const)
+  local +31:11 kind: string (const)
+  local +32:11 cName: string (const)
+  callee +32:19 cStructName -> @cStructName
+  callee +37:9 isCollectionStruct -> @isCollectionStruct
+  callee +47:9 isSecretStruct -> @isSecretStruct
+  callee +57:9 secretFieldOf -> @secretFieldOf
+  callee +68:9 StringSet.has -> @StringSet.has
+  local +83:16 f: FieldInfo (const)
+  local +84:13 t: string (const)
+  callee +84:17 cFieldType -> @cFieldType
+  local +86:13 name: string (const)
+  callee +86:20 cParamName -> @cParamName
+  local +88:13 note: string (const)
+  callee +89:9 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +89:45 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +90:31 tsKeyword -> @tsKeyword
+  callee +92:27 spaceAfter -> @spaceAfter
 function structFieldTypes(compilation: Compilation): i32[] -> @structFieldTypes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.has isCollectionStruct isSecretStruct nish_array_grow secretFieldOf structsHoldingVectors
@@ -109,11 +109,11 @@ function structFieldTypes(compilation: Compilation): i32[] -> @structFieldTypes
   callee +1:20 structsHoldingVectors -> @structsHoldingVectors
   local +2:14 unit: ModuleUnit (const)
   local +3:16 info: StructInfo (const)
-  callee +6:9 isCollectionStruct -> @isCollectionStruct
-  callee +7:9 isSecretStruct -> @isSecretStruct
-  callee +8:9 secretFieldOf -> @secretFieldOf
-  callee +9:9 StringSet.has -> @StringSet.has
-  local +13:18 f: FieldInfo (const)
+  callee +8:9 isCollectionStruct -> @isCollectionStruct
+  callee +9:9 isSecretStruct -> @isSecretStruct
+  callee +10:9 secretFieldOf -> @secretFieldOf
+  callee +11:9 StringSet.has -> @StringSet.has
+  local +15:18 f: FieldInfo (const)
 function prototypeComment(table: TypeTable, fn: ExternalFunction): string -> @prototypeComment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: cAliasReason cFunctionName elementNotes nish_str_concat tsSignatureLine

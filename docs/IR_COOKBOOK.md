@@ -15142,26 +15142,28 @@ export const main = (): i32 => {
 %struct.Stamp = type { i8, %struct.Timespec, i32 }
 
 declare i32 @clock_gettime(i32, %struct.Timespec*)
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare void @nish_free_arena() #1
 
 define noundef i32 @nish_main() #0 {
 entry:
   %stamp.addr = alloca %struct.Stamp*, align 8
   %Stamp.obj = alloca %struct.Stamp, align 8
-  store %struct.Stamp zeroinitializer, %struct.Stamp* %Stamp.obj, align 8
+  %0 = bitcast %struct.Stamp* %Stamp.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 32, i1 false)
   store %struct.Stamp* %Stamp.obj, %struct.Stamp** %stamp.addr, align 8
-  %0 = load %struct.Stamp*, %struct.Stamp** %stamp.addr, align 8
-  %1 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %0, i32 0, i32 0
-  store i8 7, i8* %1, align 1
-  %2 = load %struct.Stamp*, %struct.Stamp** %stamp.addr, align 8
-  %3 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %2, i32 0, i32 1
-  %4 = call i32 @clock_gettime(i32 1, %struct.Timespec* %3)
-  %5 = load %struct.Stamp*, %struct.Stamp** %stamp.addr, align 8
-  %6 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %5, i32 0, i32 1
-  %7 = getelementptr inbounds %struct.Timespec, %struct.Timespec* %6, i32 0, i32 0
-  %8 = load i64, i64* %7, align 8
-  %9 = icmp sgt i64 %8, 0
-  br i1 %9, label %cond.true, label %cond.false
+  %1 = load %struct.Stamp*, %struct.Stamp** %stamp.addr, align 8
+  %2 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %1, i32 0, i32 0
+  store i8 7, i8* %2, align 1
+  %3 = load %struct.Stamp*, %struct.Stamp** %stamp.addr, align 8
+  %4 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %3, i32 0, i32 1
+  %5 = call i32 @clock_gettime(i32 1, %struct.Timespec* %4)
+  %6 = load %struct.Stamp*, %struct.Stamp** %stamp.addr, align 8
+  %7 = getelementptr inbounds %struct.Stamp, %struct.Stamp* %6, i32 0, i32 1
+  %8 = getelementptr inbounds %struct.Timespec, %struct.Timespec* %7, i32 0, i32 0
+  %9 = load i64, i64* %8, align 8
+  %10 = icmp sgt i64 %9, 0
+  br i1 %10, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -15170,8 +15172,8 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %10 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
-  ret i32 %10
+  %11 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  ret i32 %11
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {

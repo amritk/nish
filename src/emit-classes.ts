@@ -291,9 +291,13 @@ export const emitNew = (emitter: Emitter, expr: Node): string => {
   const info = structInfoOf(emitter, intrinsicType(emitter.program, expr))
   const obj = allocate(emitter, info, expr)
   if (info.layout) {
-    // A C struct layout (WP27 S4.1) has no constructor: `new` zero-fills it.
-    const ty = structTypeName(info)
-    emitter.fn.emit(`store ${ty} zeroinitializer, ${ty}* ${obj}, align 8`)
+    // A C struct layout (WP27 S4.1) has no constructor: `new` zero-fills it,
+    // every byte, padding included. A `zeroinitializer` store need not write
+    // the padding, and the arena hands out memory nobody cleared, so C (which
+    // may copy the whole struct out) would read what was there before.
+    const bytes = emitter.fn.emitValue(`bitcast ${structTypeName(info)}* ${obj} to i8*`)
+    emitter.declare("declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)")
+    emitter.fn.emit(`call void @llvm.memset.p0i8.i64(i8* align 8 ${bytes}, i8 0, i64 ${info.size}, i1 false)`)
     return obj
   }
   initInlineArrays(emitter, info, obj)

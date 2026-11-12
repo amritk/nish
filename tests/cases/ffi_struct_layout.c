@@ -30,7 +30,7 @@ void fillMixed(struct Mixed *m) {
   m->e = 0x1234;
   m->p = &sentinel;
   m->inner.tag = 0xcafe;
-  m->inner.link = NULL;
+  m->inner.link = &sentinel;
   m->z = 0x7f;
 }
 

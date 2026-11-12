@@ -2952,7 +2952,10 @@ class Point {
   (`` Index signatures are not supported in class `Point` (object layout is fixed) ``,
   `reject_cls_index_signature`), `!` assertions, `abstract` on the class or a
   member (`Abstract classes are not supported`, `reject_generic_abstract`),
-  `declare class` (`` `declare class` is not supported ``, `reject_cls_declare`),
+  a `declare class` that is not a C struct layout (a method, accessor,
+  constructor or initializer in one is refused as the
+  [`declare class` section](#a-declare-class-a-c-struct-lent-by-pointer) lists,
+  `reject_cls_declare`, `reject_ffi_struct_*`),
   a class with no name — `export default class { }` or a class expression —
   (`Classes must be named`, `reject_cls_anonymous`; a named class expression is
   `Unsupported expression in Phase 1: ClassExpression`), a member named by a
@@ -3232,9 +3235,11 @@ export const main = (): i32 => {
   (`tests/cases/reject_generic_type_param_args`).
 - **A template obeys every rule a declared class obeys.** Type parameters
   change what a declaration *means*, not what it may be written with, so
-  `declare class Box<T>`, `export default class Box<T>`, `abstract class
-  Box<T>` and `interface Box<T> extends Base` are refused in the same words as
-  their non-generic spellings (`tests/cases/reject_generic_declare_class`,
+  `export default class Box<T>`, `abstract class Box<T>` and `interface
+  Box<T> extends Base` are refused in the same words as their non-generic
+  spellings, and `declare class Box<T>` is
+  `` A generic `declare class` is not supported `` (a C struct has one layout;
+  `tests/cases/reject_generic_declare_class`,
   `reject_generic_export_default`, `reject_generic_abstract`,
   `reject_generic_interface_extends`).
 - **A template claims its name in the one declaration namespace.** `class
@@ -6677,15 +6682,25 @@ console.log(now.sec)
 %struct.Timespec = type { i64, i64 }
 declare i32 @clock_gettime(i32, %struct.Timespec*)
   %Timespec.obj = alloca %struct.Timespec, align 8
-  store %struct.Timespec zeroinitializer, %struct.Timespec* %Timespec.obj, align 8
+  %0 = bitcast %struct.Timespec* %Timespec.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 16, i1 false)
   store %struct.Timespec* %Timespec.obj, %struct.Timespec** %now.addr, align 8
-  %0 = load %struct.Timespec*, %struct.Timespec** %now.addr, align 8
-  %1 = call i32 @clock_gettime(i32 1, %struct.Timespec* %0)
+  %1 = load %struct.Timespec*, %struct.Timespec** %now.addr, align 8
+  %2 = call i32 @clock_gettime(i32 1, %struct.Timespec* %1)
 ```
 
+- **`new` zero-fills every byte, padding included**, with one `llvm.memset` of
+  the struct's size: C may compare or hash the whole struct, and a
+  `zeroinitializer` store need not write the padding (`ffi_struct_layout`).
+- **A `CPtr` field is the target's `void *`**: eight bytes natively, four under
+  `--profile wasi` (wasm32), where the struct's size and offsets are the ones
+  clang gives the same C struct for that target (`tests/ffi-struct.js`).
 - **A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
   `CPtr | null`, or another `declare class`, embedded by value** — C's
-  `struct timespec it_value;`, not a pointer to one. Any other type is
+  `struct timespec it_value;`, not a pointer to one. A `number` field is
+  refused whatever the mode, since `--number-mode` picks its width and a C
+  struct has one layout: `` has type `number`, whose width `--number-mode`
+  chooses `` (`reject_ffi_struct_field_number`). Any other type is
   `` Field `ok` of `declare class Flags` has type `boolean`, which has no C
   layout `` (NL2752, `reject_ffi_struct_field_type`, `reject_cls_declare`): a
   `boolean`, a `number` in the default mode, a `string`, an array and a Nish
@@ -6697,6 +6712,12 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   because `new` zero-fills (NL2748), no method, accessor or constructor
   (NL2751), no type parameter (NL2741), no `extends` or `implements` (NL2750),
   and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
+- **It stays in its module.** It cannot be a parameter or the return type of an
+  exported function or an exported class's method, or a field of an exported
+  class or interface: `` `declare class Point` cannot be a parameter of an
+  exported function `` (`reject_ffi_struct_export_param`, `_return`, `_method`,
+  `_field`). So no `--emit-header`, `.d.ts` or N-API binding ever describes one
+  (`docs/wp27-ffi.md` §9g).
 - **It is built with `new` and nothing else.** `new Point(1)` is refused as for
   any class without a constructor (`reject_ffi_struct_new_args`), and an object
   literal typed as one is
@@ -15486,8 +15507,10 @@ messages are exact for the cases cited; other entries quote the checker
   `Classes must be named` (a named class expression:
   `Unsupported expression in Phase 1: ClassExpression`)
   (`reject_cls_anonymous`, `nl2018_anonymous_class`)
-- **`declare class`, `declare interface`; `abstract` on a class or a member**:
-  `` `declare class` is not supported `` /
+- **a `declare class` that is not a C struct layout, a generic one, `declare
+  interface`; `abstract` on a class or a member**: the refusals the
+  [`declare class` section](#a-declare-class-a-c-struct-lent-by-pointer) lists /
+  `` A generic `declare class` is not supported `` /
   `Abstract classes are not supported` (`reject_cls_declare`,
   `reject_generic_declare_class`, `reject_generic_abstract`)
 - **a method or a constructor with no body, a constructor's return type**:

@@ -96,7 +96,8 @@ const elementNote = (program: CheckedProgram, table: TypeTable, t: i32): string 
 }
 
 /**
- * `struct <Name> { ... };` for every class and interface of every module:
+ * `struct <Name> { ... };` for every class and interface of every module but
+ * a `declare class`:
  * forward declarations first (a field may point at a struct defined later),
  * then the bodies in module order. The fields are exactly the compiled
  * `%struct.<Name>` at natural alignment, which is clang's layout for the same
@@ -112,7 +113,10 @@ const structDefinitions = (compilation: Compilation): string[] => {
   const files: string[] = []
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
-      if (info.origin === unit.source) {
+      // A `declare class` is C's own struct, which no exported signature or
+      // exported field can name (`rejectExportedLayout`), so the header has
+      // no use for it and does not restate it.
+      if (info.origin === unit.source && !info.layout) {
         structs.push(info)
         files.push(unit.name)
       }
@@ -210,8 +214,10 @@ const structFieldTypes = (compilation: Compilation): i32[] => {
   const vectored = structsHoldingVectors(compilation)
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
-      // An opaque `Map`, `Set` (WP32), `Secret`, holder or vector holder contributes no field to describe.
+      // An opaque `Map`, `Set` (WP32), `Secret`, holder or vector holder contributes no field to describe;
+      // nor does a `declare class`, which the header leaves out.
       if (
+        info.layout ||
         isCollectionStruct(info) ||
         isSecretStruct(info) ||
         secretFieldOf(compilation.table, info) !== null ||
