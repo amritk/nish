@@ -593,17 +593,17 @@ function checkSpreadSource(ctx: CheckContext, spread: Node, info: StructInfo, li
   local +36:11 spelled: string (const)
   callee +36:21 TypeTable.typeName -> @TypeTable.typeName
   callee +37:5 CheckContext.error -> @CheckContext.error
-  local +46:14 field: FieldInfo (const)
-  callee +48:7 CheckContext.error -> @CheckContext.error
-  callee +50:24 TypeTable.typeName -> @TypeTable.typeName
-  callee +50:60 TypeTable.typeName -> @TypeTable.typeName
-  local +57:7 bad: FieldInfo | null (let)
-  local +58:7 badInto: FieldInfo | null (let)
-  local +59:14 field: FieldInfo (const)
-  local +60:11 into: FieldInfo | null (const)
-  callee +60:18 StructInfo.field -> @StructInfo.field
-  callee +63:56 setByNameAfter -> @setByNameAfter
-  callee +72:3 reportSpreadField -> @reportSpreadField
+  local +47:16 field: FieldInfo (const)
+  callee +49:9 CheckContext.error -> @CheckContext.error
+  callee +51:26 TypeTable.typeName -> @TypeTable.typeName
+  callee +51:62 TypeTable.typeName -> @TypeTable.typeName
+  local +59:7 bad: FieldInfo | null (let)
+  local +60:7 badInto: FieldInfo | null (let)
+  local +61:14 field: FieldInfo (const)
+  local +62:11 into: FieldInfo | null (const)
+  callee +62:18 StructInfo.field -> @StructInfo.field
+  callee +65:56 setByNameAfter -> @setByNameAfter
+  callee +74:3 reportSpreadField -> @reportSpreadField
 function reportSpreadField(ctx: CheckContext, value: Node, source: StructInfo, info: StructInfo, got: i32, field: FieldInfo, into: FieldInfo | null): void -> @reportSpreadField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

@@ -3419,10 +3419,11 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   if (!fitArguments(ctx, expr, args, sig, 0, sig.name)) {
     return T_ERROR
   }
+  const foreign = sig.foreign()
   let i = 0
   while (i < args.children.length) {
     const arg = args.children[i]
-    if (sig.foreign()) {
+    if (foreign) {
       // WP27 S4.1: C borrows a nested layout field by its interior address.
       ctx.embeddedRead = unwrapParens(arg).id
     }

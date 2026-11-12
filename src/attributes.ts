@@ -6779,13 +6779,13 @@ export const hostFunction = (sig: FunctionSig): boolean => {
  * the call: a C function's `u8[]` (WP53 B1) or a host function's window
  * (WP50 S3, `isHostWindow`). Either crosses as its data pointer.
  */
+export const lentBuffer = (table: TypeTable, sig: FunctionSig, i: i32): boolean =>
+  hostFunction(sig) ? isHostWindow(table, sig.paramTypes[i]) : isForeignBuffer(table, sig.paramTypes[i])
+
 /** Whether C writes through pointer parameter `i` of the foreign `sig`: a `u8[]` buffer, or a `declare class` it fills (WP27 S4.1). */
 const filledByC = (program: CheckedProgram, table: TypeTable, sig: FunctionSig, i: i32): boolean =>
   (lentBuffer(table, sig, i) && !table.isReadonlyArray(sig.paramTypes[i])) ||
   layoutClass(program, table, table.stripNull(sig.paramTypes[i])) !== null
-
-export const lentBuffer = (table: TypeTable, sig: FunctionSig, i: i32): boolean =>
-  hostFunction(sig) ? isHostWindow(table, sig.paramTypes[i]) : isForeignBuffer(table, sig.paramTypes[i])
 
 /**
  * Whether the window check of buffer argument `index` of the host call `call`

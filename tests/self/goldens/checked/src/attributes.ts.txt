@@ -3631,6 +3631,16 @@ function hostFunction(sig: FunctionSig): boolean -> @hostFunction [exported]
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 origin: SourceFile | null (const)
+function lentBuffer(table: TypeTable, sig: FunctionSig, i: i32): boolean -> @lentBuffer [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: hostFunction isForeignBuffer isHostWindow nish_panic_index
+  pointer table: size=112 writesThrough=false captured=false passedTo=isHostWindow#0 isForeignBuffer#0
+  pointer sig: size=200 writesThrough=false captured=false passedTo=hostFunction#0
+  stackSites=0 stackLocals=0
+  callee +0:3 hostFunction -> @hostFunction
+  callee +0:23 isHostWindow -> @isHostWindow
+  callee +0:64 isForeignBuffer -> @isForeignBuffer
 function filledByC(program: CheckedProgram, table: TypeTable, sig: FunctionSig, i: i32): boolean -> @filledByC
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
@@ -3643,16 +3653,6 @@ function filledByC(program: CheckedProgram, table: TypeTable, sig: FunctionSig, 
   callee +0:34 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
   callee +1:3 layoutClass -> @layoutClass
   callee +1:31 TypeTable.stripNull -> @TypeTable.stripNull
-function lentBuffer(table: TypeTable, sig: FunctionSig, i: i32): boolean -> @lentBuffer [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: i
-  calls: hostFunction isForeignBuffer isHostWindow nish_panic_index
-  pointer table: size=112 writesThrough=false captured=false passedTo=isHostWindow#0 isForeignBuffer#0
-  pointer sig: size=200 writesThrough=false captured=false passedTo=hostFunction#0
-  stackSites=0 stackLocals=0
-  callee +0:3 hostFunction -> @hostFunction
-  callee +0:23 isHostWindow -> @isHostWindow
-  callee +0:64 isForeignBuffer -> @isForeignBuffer
 function hostWindowProven(program: CheckedProgram, table: TypeTable, call: Node, index: i32, known: FactsTable | null): boolean -> @hostWindowProven [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index

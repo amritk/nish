@@ -2144,74 +2144,75 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   pointer expr: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 checkMethodCall#1 refuseSecretArguments#1 checkBuiltinCall#1 checkReferenceCall#1 CheckContext.errorType#1 checkReferenceCall#1 checkReferenceCall#1 checkDirectCall#1 checkGenericCall#1 checkAsyncBuiltin#1 refuseSecretArguments#1 checkImportedBuiltin#1 checkResultConstructor#1 refuseSecretArguments#1 checkBuiltinFunction#1 CheckContext.errorType#1 CheckContext.errorType#1 stringCallFix#1 refuseUnawaitedCall#1 fitArguments#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 promiseMethodMessage#2 isValueReceiver#2 checkMethodCall#2 refuseSecretArguments#2 checkBuiltinCall#2 checkExpression#2 checkReferenceCall#4 Scope.lookup#0 Scope.typeOf#0 checkExpression#2 checkReferenceCall#4 checkExpression#2 checkReferenceCall#4 checkDirectCall#4 checkGenericCall#3 checkAsyncBuiltin#2 refuseSecretArguments#2 checkImportedBuiltin#2 checkResultConstructor#2 refuseSecretArguments#2 checkBuiltinFunction#2 Scope.typeOf#0 stringCallFix#3 checkExpression#2
   stackSites=0 stackLocals=0
-  local -132:9 callee: Node (const)
-  callee -130:12 checkExpression -> @checkExpression
-  local -127:11 promised: string (const)
-  callee -127:22 promiseMethodMessage -> @promiseMethodMessage
-  callee -125:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -121:9 isValueReceiver -> @isValueReceiver
-  callee -120:14 checkMethodCall -> @checkMethodCall
-  callee -117:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -117:35 neverNullMessage -> @neverNullMessage
-  local -112:11 receiver: Node (const)
-  callee -109:7 refuseSecretArguments -> @refuseSecretArguments
-  callee -105:12 checkBuiltinCall -> @checkBuiltinCall
-  local -101:11 computed: i32 (const)
-  callee -101:22 checkExpression -> @checkExpression
-  callee -97:9 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -96:14 checkReferenceCall -> @checkReferenceCall
-  callee -96:54 CheckContext.textOf -> @CheckContext.textOf
-  callee -94:12 CheckContext.errorType -> @CheckContext.errorType
-  local -89:9 local: Local | null (const)
-  callee -89:17 Scope.lookup -> @Scope.lookup
-  callee -87:25 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -87:43 Scope.typeOf -> @Scope.typeOf
-  local -86:11 held: i32 (const)
-  callee -86:18 checkExpression -> @checkExpression
-  callee -85:41 checkReferenceCall -> @checkReferenceCall
-  callee -82:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
-  callee -79:11 outerReference -> @outerReference
-  local -78:15 held: i32 (const)
-  callee -78:22 checkExpression -> @checkExpression
-  callee -77:45 checkReferenceCall -> @checkReferenceCall
-  callee -75:7 refuseOnce -> @refuseOnce
-  callee -75:31 outerFunctionMessage -> @outerFunctionMessage
-  local -72:11 bound: FunctionSig | null (const)
-  callee -72:19 FunctionBindings.get -> @FunctionBindings.get
-  callee -70:14 checkDirectCall -> @checkDirectCall
-  local -67:9 template: TemplateInfo | null (const)
-  callee -67:20 CheckContext.template -> @CheckContext.template
-  callee -65:12 checkGenericCall -> @checkGenericCall
-  local -63:9 sig: FunctionSig | null (const)
-  callee -63:15 CheckContext.signature -> @CheckContext.signature
-  local -59:11 imported: BuiltinExport | null (const)
-  callee -59:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee -57:11 asyncBuiltinOf -> @asyncBuiltinOf
-  callee -56:16 checkAsyncBuiltin -> @checkAsyncBuiltin
-  callee -54:11 refuseSecretArguments -> @refuseSecretArguments
-  callee -51:14 checkImportedBuiltin -> @checkImportedBuiltin
-  callee -49:9 isResultConstructor -> @isResultConstructor
-  callee -45:14 checkResultConstructor -> @checkResultConstructor
-  callee -43:9 isBuiltinFunction -> @isBuiltinFunction
-  callee -42:11 refuseSecretArguments -> @refuseSecretArguments
-  callee -39:14 checkBuiltinFunction -> @checkBuiltinFunction
-  callee -35:27 Scope.typeOf -> @Scope.typeOf
-  callee -29:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -26:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -26:34 dateRefusal -> @dateRefusal
-  callee -22:27 isSimdExport -> @isSimdExport
-  callee -22:57 isSimdOp -> @isSimdOp
-  callee -21:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -21:36 simdImportMessage -> @simdImportMessage
-  callee -19:5 CheckContext.errorFix -> @CheckContext.errorFix
-  callee -16:7 stringCallFix -> @stringCallFix
-  callee -12:7 refuseUnawaitedCall -> @refuseUnawaitedCall
-  callee -12:38 FunctionSig.isAsync -> @FunctionSig.isAsync
-  local -9:9 args: Node (const)
-  callee -8:8 fitArguments -> @fitArguments
+  local -133:9 callee: Node (const)
+  callee -131:12 checkExpression -> @checkExpression
+  local -128:11 promised: string (const)
+  callee -128:22 promiseMethodMessage -> @promiseMethodMessage
+  callee -126:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -122:9 isValueReceiver -> @isValueReceiver
+  callee -121:14 checkMethodCall -> @checkMethodCall
+  callee -118:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -118:35 neverNullMessage -> @neverNullMessage
+  local -113:11 receiver: Node (const)
+  callee -110:7 refuseSecretArguments -> @refuseSecretArguments
+  callee -106:12 checkBuiltinCall -> @checkBuiltinCall
+  local -102:11 computed: i32 (const)
+  callee -102:22 checkExpression -> @checkExpression
+  callee -98:9 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -97:14 checkReferenceCall -> @checkReferenceCall
+  callee -97:54 CheckContext.textOf -> @CheckContext.textOf
+  callee -95:12 CheckContext.errorType -> @CheckContext.errorType
+  local -90:9 local: Local | null (const)
+  callee -90:17 Scope.lookup -> @Scope.lookup
+  callee -88:25 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -88:43 Scope.typeOf -> @Scope.typeOf
+  local -87:11 held: i32 (const)
+  callee -87:18 checkExpression -> @checkExpression
+  callee -86:41 checkReferenceCall -> @checkReferenceCall
+  callee -83:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
+  callee -80:11 outerReference -> @outerReference
+  local -79:15 held: i32 (const)
+  callee -79:22 checkExpression -> @checkExpression
+  callee -78:45 checkReferenceCall -> @checkReferenceCall
+  callee -76:7 refuseOnce -> @refuseOnce
+  callee -76:31 outerFunctionMessage -> @outerFunctionMessage
+  local -73:11 bound: FunctionSig | null (const)
+  callee -73:19 FunctionBindings.get -> @FunctionBindings.get
+  callee -71:14 checkDirectCall -> @checkDirectCall
+  local -68:9 template: TemplateInfo | null (const)
+  callee -68:20 CheckContext.template -> @CheckContext.template
+  callee -66:12 checkGenericCall -> @checkGenericCall
+  local -64:9 sig: FunctionSig | null (const)
+  callee -64:15 CheckContext.signature -> @CheckContext.signature
+  local -60:11 imported: BuiltinExport | null (const)
+  callee -60:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee -58:11 asyncBuiltinOf -> @asyncBuiltinOf
+  callee -57:16 checkAsyncBuiltin -> @checkAsyncBuiltin
+  callee -55:11 refuseSecretArguments -> @refuseSecretArguments
+  callee -52:14 checkImportedBuiltin -> @checkImportedBuiltin
+  callee -50:9 isResultConstructor -> @isResultConstructor
+  callee -46:14 checkResultConstructor -> @checkResultConstructor
+  callee -44:9 isBuiltinFunction -> @isBuiltinFunction
+  callee -43:11 refuseSecretArguments -> @refuseSecretArguments
+  callee -40:14 checkBuiltinFunction -> @checkBuiltinFunction
+  callee -36:27 Scope.typeOf -> @Scope.typeOf
+  callee -30:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -27:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -27:34 dateRefusal -> @dateRefusal
+  callee -23:27 isSimdExport -> @isSimdExport
+  callee -23:57 isSimdOp -> @isSimdOp
+  callee -22:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -22:36 simdImportMessage -> @simdImportMessage
+  callee -20:5 CheckContext.errorFix -> @CheckContext.errorFix
+  callee -17:7 stringCallFix -> @stringCallFix
+  callee -13:7 refuseUnawaitedCall -> @refuseUnawaitedCall
+  callee -13:38 FunctionSig.isAsync -> @FunctionSig.isAsync
+  local -10:9 args: Node (const)
+  callee -9:8 fitArguments -> @fitArguments
+  local -6:9 foreign: boolean (const)
+  callee -6:19 FunctionSig.foreign -> @FunctionSig.foreign
   local -5:7 i: i32 (let)
   local -3:11 arg: Node (const)
-  callee -2:9 FunctionSig.foreign -> @FunctionSig.foreign
   callee +0:26 unwrapParens -> @unwrapParens
   local +2:11 got: i32 (const)
   callee +2:17 checkExpression -> @checkExpression
