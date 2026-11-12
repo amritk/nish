@@ -289,8 +289,10 @@ const quicStreamScan = (bits: u8[], from: i32, to: i32, on: boolean): i32 => {
   }
   const length: i32 = toI32(bits.length) << 3
   const whole: i32 = (to < length ? to : length) & ~7
-  while (k >= 0 && k < whole && toI32(bits[k >> 3]) === full) {
+  let at: i32 = k >> 3
+  while (k >= 0 && k < whole && toI32(bits[at]) === full) {
     k = k + 8
+    at = at + 1
   }
   while (k < to) {
     if (quicStreamBit(bits, k) !== on) {
