@@ -5236,19 +5236,19 @@ const DECLARED = [
   {
     program: "tests/link/net_http2_cleartext/main.ts",
     file: "exit",
-    changelog: "cleartext HTTP/2 with prior knowledge",
+    changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
   {
     program: "tests/link/net_http2_cleartext_bad_slots/main.ts",
     file: "exit",
-    changelog: "cleartext HTTP/2 with prior knowledge",
+    changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
   {
     program: "tests/link/net_http2_cleartext_bad_timeout/main.ts",
     file: "exit",
-    changelog: "cleartext HTTP/2 with prior knowledge",
+    changelog: "Cleartext HTTP/2 with prior knowledge",
     why: "the 0.38.0 seed's std has no `std/net/http2-cleartext.ts`, so only the candidate compiles the program (WP39 G7)",
   },
 ]
