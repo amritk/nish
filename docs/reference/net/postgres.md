@@ -818,7 +818,7 @@ class PgConnection
 
 | Member | |
 | --- | --- |
-| `new PgConnection(config: PgConfig, password: Secret<u8[]>, nonce: u8[])` | A connection that has queued its startup message. `password` is copied, so the caller may wipe its own; `nonce` must be at least 18 bytes from a cryptographic random source (`crypto.getRandomValues`), and is fixed only in a test. Panics on a `PgConfig` that is a mistake (no user, a cap out of range, a NUL in a startup parameter) or a nonce shorter than 18 bytes. |
+| `new PgConnection(config: PgConfig, password: Secret<u8[]>, nonce: u8[])` | A connection that has queued its startup message. `password` is copied, so the caller may wipe its own; `nonce` must be at least 18 bytes from a cryptographic random source (`crypto.getRandomValues`), and is fixed only in a test. Panics on a `PgConfig` that is a mistake (no user, a cap out of range, a NUL in a startup parameter), on one whose `tls` asks for TLS, which only `PgCarrier` speaks, so a connection driven by hand never runs in the clear when TLS was asked for, or on a nonce shorter than 18 bytes. |
 | `backendPid: i32` | The server's process id, from BackendKeyData. |
 | `readonly binary: PgBinary` | The decoders `binaryInt`, `binaryBool` and `binaryFloat` use, for a bind `bindStartBinary` opened; `binary.failed` as `text.failed`. |
 | `columns: i32` | The columns of the current row, or of the statement just described. |
@@ -929,7 +929,7 @@ class PgPool
 | `new PgPool(config: PgConfig, password: Secret<u8[]>, size: i32, queueSize: i32)` | A pool of up to `size` connections (1 to 1024) and up to `queueSize` waiting requests (1 to 2^20). `password` is copied and kept until `dispose()`, since a connection is made again after a failure. Panics as `PgConnection` does on `config`, and on a `maxInFlight` over 1024. |
 | `readonly size: i32` | The number of slots, the most connections the pool makes. |
 | `ticket: i32` | The request the last `dispatch()`, or event from `next(slot)`, is about; -1 for none. |
-| `connect(slot: i32, nonce: u8[]): void` | Makes the wanted `slot`'s connection, `nonce` as `PgConnection` takes it: send its output once the socket is connected, and if the socket fails, call `connection(slot).closed()`. Panics when `slot` is not wanted or the pool is disposed. |
+| `connect(slot: i32, nonce: u8[]): void` | Makes the wanted `slot`'s connection, `nonce` as `PgConnection` takes it: send its output once the socket is connected, and if the socket fails, call `connection(slot).closed()`. Panics when `slot` is not wanted, the pool is disposed, or its `PgConfig.tls` asks for TLS and no `PgCarrier` drives the pool: only the carrier speaks TLS. |
 | `connection(slot: i32): PgConnection` | The connection in `slot`, its buffers the carrier's to fill and drain; the last one made after it fails. Panics when none was made. |
 | `dispatch(): i32` | Hands the oldest waiting request to a ready connection with room (the one with the fewest in flight, or under `PgConfig.pack` the first), and answers its slot, `ticket` set to the request: build its group on `connection(slot)`, then `send()`. `PG_POOL_NONE` when nothing waits, a request is still being built, or no ready connection has room; then a connection may be wanted (`wanted()`): one more for every `maxInFlight` waiting requests that the connections already starting cannot take. A request handed out is the program's to end with `send()`: until then no other is handed out. |
 | `dispose(): void` | Wipes the pool's password and every connection's; `connect` panics after it. |

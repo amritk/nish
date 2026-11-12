@@ -459,9 +459,9 @@ the caller, so the connection itself reads no randomness.
 The connection accepts `trust` and `scram-sha-256`, PostgreSQL's default
 since version 14, and checks the server's signature before it believes the
 server. It refuses a server that asks for a cleartext or `md5` password, and
-fails with `PG_ERR_AUTH_UNSUPPORTED`: outside TLS the first would
-send the password as it is, and the second sends a hash anyone who sees it can
-replay. Set the role's password with `password_encryption = scram-sha-256`.
+fails with `PG_ERR_AUTH_UNSUPPORTED`, over TLS as well: the first
+sends the password as it is, and the second a hash anyone who sees it can
+replay, where SCRAM proves the password without sending it. Set the role's password with `password_encryption = scram-sha-256`.
 
 The password's bytes are used as they are, without SASLprep (RFC 4013), the
 normalisation PostgreSQL applies to a non-ASCII password. An ASCII password
@@ -979,7 +979,10 @@ built with OpenSSL 1.1.1 or later does.
 
 Only the carrier speaks TLS: the [async pool](#awaiting-a-query-from-a-task)
 and a `PgPool` you drive yourself do not, and neither does a client
-certificate.
+certificate. Rather than connect in the clear, they refuse a `PgConfig` that
+asks for TLS: the `PgConnection` constructor, `pgAsyncConnect` and
+`PgPool.connect` on a pool no carrier drives panic on a `tls` other than
+`PG_TLS_DISABLE`.
 
 ## Awaiting a query from a task
 

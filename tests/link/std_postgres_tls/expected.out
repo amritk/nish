@@ -5,11 +5,13 @@ PASS  verify-full: a trusted chain for 127.0.0.1 answers the query
 PASS  and the StartupMessage went inside TLS
 PASS  the next query reuses the TLS connection
 PASS  close() ends it with a close_notify
-PASS  verify-full refuses a chain from a root the file does not hold with PG_ERR_TLS and an alert
+PASS  verify-full refuses a chain from a root the file does not hold with PG_ERR_TLS and alert 48
 PASS  and the server never sees a StartupMessage
-PASS  verify-full refuses a leaf for another name with PG_ERR_TLS and an alert
+PASS  verify-full refuses a leaf for another name with PG_ERR_TLS and alert 42
 PASS  and the server never sees a StartupMessage
 PASS  tlsServerName localhost is checked in place of the address
-PASS  verify-full refuses a good leaf under another tlsServerName with PG_ERR_TLS and an alert
+PASS  verify-full refuses a good leaf under another tlsServerName with PG_ERR_TLS and alert 42
 PASS  and the server never sees a StartupMessage
 PASS  require takes a chain no root vouches for
+PASS  bytes after an N fail the query with PG_ERR_TLS and alert 0
+PASS  bytes after an S fail the query with PG_ERR_TLS and alert 10

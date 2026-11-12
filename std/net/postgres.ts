@@ -1503,7 +1503,9 @@ export class PgConnection {
    * so the caller may wipe its own; `nonce` must be at least 18 bytes from a
    * cryptographic random source (`crypto.getRandomValues`), and is fixed only
    * in a test. Panics on a `PgConfig` that is a mistake (no user, a cap out
-   * of range, a NUL in a startup parameter) or a nonce shorter than 18 bytes.
+   * of range, a NUL in a startup parameter), on one whose `tls` asks for TLS,
+   * which only `PgCarrier` speaks, so a connection driven by hand never runs
+   * in the clear when TLS was asked for, or on a nonce shorter than 18 bytes.
    * @param config The caps and startup parameters; kept, and read for the
    *   connection's life, so do not change it afterwards.
    * @param password The role's password as UTF-8 bytes, without SASLprep;
@@ -1516,6 +1518,9 @@ export class PgConnection {
       panic("nish/net/postgres: the SCRAM nonce needs at least 18 random bytes")
     }
     pgCheckConfig(config)
+    if (config.tls !== PG_TLS_DISABLE) {
+      panic("nish/net/postgres: PgConfig.tls asks for TLS, which only PgCarrier speaks")
+    }
     this.config = config
     this.text = new PgText()
     this.binary = new PgBinary()
@@ -3427,6 +3432,9 @@ export class PgPool {
   readonly size: i32
 
   private readonly config: PgConfig
+  // The cleartext copy of `config` a `PgCarrier` that runs TLS under the pool's
+  // connections has them made with; null until one takes the pool.
+  private carried: PgConfig | null = null
   private readonly password: PgPassword
   private readonly slots: PgPoolSlot[]
   private readonly queue: i32[]
@@ -3483,6 +3491,30 @@ export class PgPool {
    */
   settings(): PgConfig {
     return this.config
+  }
+
+  /**
+   * @internal Used by the `PgCarrier` constructor: marks the pool's connections
+   * as carried over TLS, so `connect` makes them with a copy of the config
+   * whose `tls` is `PG_TLS_DISABLE`; without it, a pool whose config asks for
+   * TLS refuses to connect.
+   */
+  carryTls(): void {
+    const c: PgConfig = this.config
+    const plain: PgConfig = new PgConfig()
+    plain.user = c.user
+    plain.database = c.database
+    plain.applicationName = c.applicationName
+    plain.options = c.options
+    plain.maxMessage = c.maxMessage
+    plain.maxInFlight = c.maxInFlight
+    plain.pack = c.pack
+    plain.inputSize = c.inputSize
+    plain.maxColumns = c.maxColumns
+    plain.minIterations = c.minIterations
+    plain.maxIterations = c.maxIterations
+    plain.maxOutput = c.maxOutput
+    this.carried = plain
   }
 
   /**
@@ -3665,8 +3697,9 @@ export class PgPool {
   /**
    * Makes the wanted `slot`'s connection, `nonce` as `PgConnection` takes it:
    * send its output once the socket is connected, and if the socket fails,
-   * call `connection(slot).closed()`. Panics when `slot` is not wanted or the
-   * pool is disposed.
+   * call `connection(slot).closed()`. Panics when `slot` is not wanted, the
+   * pool is disposed, or its `PgConfig.tls` asks for TLS and no `PgCarrier`
+   * drives the pool: only the carrier speaks TLS.
    *
    * @param slot The slot `wanted()` answered.
    * @param nonce At least 18 fresh random bytes for the SCRAM client nonce, as the
@@ -3679,8 +3712,12 @@ export class PgPool {
     if (this.password.gone) {
       panic("nish/net/postgres: PgPool.connect after dispose")
     }
+    const carried: PgConfig | null = this.carried
+    if (this.config.tls !== PG_TLS_DISABLE && carried === null) {
+      panic("nish/net/postgres: PgConfig.tls asks for TLS, which only PgCarrier speaks")
+    }
     const s: PgPoolSlot = this.slots[slot]
-    s.conn = new PgConnection(this.config, this.password.bytes, nonce)
+    s.conn = new PgConnection(carried !== null ? carried : this.config, this.password.bytes, nonce)
     s.state = PG_SLOT_STARTING
     s.queued = 0
     s.described = 0

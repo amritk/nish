@@ -84,7 +84,8 @@
  * **TLS.** With `PgConfig.tls` set to `PG_TLS_REQUIRE` or
  * `PG_TLS_VERIFY_FULL`, each connection opens with an SSLRequest and reads
  * exactly the one byte of its answer, so nothing the server sends in the
- * clear is kept past it. `S` goes on to a TLS 1.3 handshake
+ * clear reaches the protocol: after `N` nothing more is read, and after `S`
+ * the next bytes are the handshake's, so anything else fails it. `S` goes on to a TLS 1.3 handshake
  * (`nish/net/tls/record-client`) driven on the same loop without blocking,
  * the StartupMessage held until it is done; any other answer fails the
  * connection with `PG_ERR_TLS`. Under `PG_TLS_VERIFY_FULL` the server's chain
@@ -373,6 +374,9 @@ export class PgCarrier {
     this.tlsMode = config.tls
     if (this.tlsMode !== PG_TLS_DISABLE && target.unix) {
       panic("nish/net/postgres-carrier: PgConfig.tls asks for TLS on a Unix socket")
+    }
+    if (this.tlsMode !== PG_TLS_DISABLE) {
+      pool.carryTls()
     }
     this.tlsName = config.tlsServerName.length > 0 ? config.tlsServerName : target.host
     this.trust = this.tlsMode === PG_TLS_VERIFY_FULL ? pgCarrierTrust(config.tlsRootsPath) : null
@@ -803,9 +807,15 @@ export class PgCarrier {
   // then moved into the connection's input.
   private serviceTls(s: i32, fd: i32, conn: PgConnection): void {
     if (this.tlsPhase[s] === PG_CARRIER_TLS_ASK) {
-      // Exactly one byte: whatever follows it in the clear is never read
-      // into a buffer the handshake or the protocol would take as the
-      // server's (CVE-2021-23222).
+      if (this.tlsAsked[s] < toI32(this.sslRequest.length)) {
+        // The answer is read only once the whole SSLRequest is out.
+        return
+      }
+      // Exactly one byte, so nothing the server sends in the clear around
+      // it reaches the backend parser (CVE-2021-23222): bytes after `N` are
+      // never read, and bytes after `S` go to the record layer as the start
+      // of the handshake, which a TLS server's ServerHello must be, so
+      // anything else fails it.
       const got: i32 = netRead(fd, this.tlsAnswer, 0, 1)
       if (got === PG_CARRIER_AGAIN) {
         return

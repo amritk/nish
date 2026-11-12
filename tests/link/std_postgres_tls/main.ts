@@ -18,6 +18,11 @@
 //      address, both ways.
 //   5. require: a chain no root vouches for is taken, as libpq's
 //      `sslmode=require` takes it.
+//   6. Injection (CVE-2021-23222's shape): an AuthenticationOk and a
+//      ReadyForQuery sent in the clear right after the answer byte never
+//      reach the backend parser. After `N` they are not read; after `S` the
+//      record layer takes them as the handshake's first record and fails it
+//      with unexpected_message, so no query is answered either way.
 import { copyBytes } from "nish/bytes"
 import { HandlerLimits, HttpHandler } from "nish/net/handler"
 import { PG_ERR_TLS, PG_TLS_REQUIRE, PG_TLS_VERIFY_FULL, PgConfig, PgPool, pgTarget } from "nish/net/postgres"
@@ -35,7 +40,7 @@ import { Router, RouterLimits } from "nish/net/router"
 import { TlsServer, TlsServerConfig, tlsSignEcdsaP256 } from "nish/net/tls"
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec"
 import { TLS_RECORD_DONE, TLS_RECORD_SIGN, TlsRecordServer } from "nish/net/tls/record-server"
-import { realpathSync, writeFileSync } from "nish:fs"
+import { realpathSync, unlinkSync, writeFileSync } from "nish:fs"
 import { netClose, netLocalPort, netRead, netWrite, tcpAccept, tcpListen } from "nish:net"
 import { monotonicNanos, platform } from "nish:process"
 import { Secret, secret, wipe } from "nish:secret"
@@ -47,6 +52,13 @@ const AGAIN: i32 = -11
 const FIVE_SECONDS: i64 = 5000000000
 const ANSWER_YES: i32 = 83
 const ANSWER_NO: i32 = 78
+// The alerts the client sends: RFC 8446 section 6.
+const ALERT_UNEXPECTED_MESSAGE: i32 = 10
+const ALERT_BAD_CERTIFICATE: i32 = 42
+const ALERT_UNKNOWN_CA: i32 = 48
+// An AuthenticationOk and a ReadyForQuery (idle): what a man in the middle
+// injects after the answer byte, hoping the client reads it as the server's.
+const injection = (): u8[] => [82, 0, 0, 0, 8, 0, 0, 0, 0, 90, 0, 0, 0, 5, 73]
 
 const ascii = (text: string): u8[] => {
   const out: u8[] = new Array<u8>(text.length)
@@ -86,6 +98,8 @@ class Stand {
   chain: u8[][]
   /** The SSLRequest's bytes as read. */
   asked: u8[]
+  /** Bytes sent in the clear right after the answer byte; none sends no TLS server either. */
+  trailer: u8[]
   tls: TlsRecordServer | null = null
   wire: u8[]
   input: u8[]
@@ -115,6 +129,7 @@ class Stand {
     this.peer = new Array<u8>(32)
     this.chain = [goodLeaf()]
     this.asked = new Array<u8>(8)
+    this.trailer = []
     this.wire = new Array<u8>(17000)
     this.input = new Array<u8>(65536)
     this.output = new Array<u8>(65536)
@@ -124,6 +139,7 @@ class Stand {
   reset(answer: i32, chain: u8[][]): void {
     this.answer = answer
     this.chain = chain
+    this.trailer = []
     this.askedLen = 0
     this.startups = 0
     this.executed = 0
@@ -168,8 +184,11 @@ class Stand {
         return
       }
       const one: u8[] = [toU8(this.answer)]
-      netWrite(this.fd, one, ZERO, toI32(1))
-      if (this.answer === ANSWER_YES) {
+      for (let k: i32 = 0; k < toI32(this.trailer.length); k++) {
+        one.push(this.trailer[k])
+      }
+      netWrite(this.fd, one, ZERO, toI32(one.length))
+      if (this.answer === ANSWER_YES && this.trailer.length === 0) {
         this.tls = new TlsRecordServer(new TlsServer(configFor(this.chain), serverRandom(), serverPrivate()))
       }
     }
@@ -454,12 +473,12 @@ const verified = (app: App): void => {
   check(app, "close() ends it with a close_notify", app.stand.notified && app.stand.fd < 0)
 }
 
-/** A verify-full query against `chain` under `name`, which the client refuses. */
-const refused = (app: App, label: string, chain: u8[][], name: string): void => {
+/** A verify-full query against `chain` under `name`, which the client refuses with `alert`. */
+const refused = (app: App, label: string, chain: u8[][], name: string, alert: i32): void => {
   app.stand.reset(ANSWER_YES, chain)
   const c: PgCarrier = carrier(app, PG_TLS_VERIFY_FULL, name)
   const event: i32 = query(app, c)
-  check(app, `verify-full refuses ${label} with PG_ERR_TLS and an alert`, event === PG_CARRIER_FAILED && c.failure === PG_ERR_TLS && c.socketError > 0)
+  check(app, `verify-full refuses ${label} with PG_ERR_TLS and alert ${alert}`, event === PG_CARRIER_FAILED && c.failure === PG_ERR_TLS && c.socketError === alert)
   c.close()
   settle(app)
   check(app, "and the server never sees a StartupMessage", app.stand.startups === 0 && app.stand.executed === 0)
@@ -471,7 +490,7 @@ const named = (app: App): void => {
   check(app, "tlsServerName localhost is checked in place of the address", query(app, c) === PG_CARRIER_DONE && app.row === "ok")
   c.close()
   settle(app)
-  refused(app, "a good leaf under another tlsServerName", [goodLeaf()], "db.example")
+  refused(app, "a good leaf under another tlsServerName", [goodLeaf()], "db.example", ALERT_BAD_CERTIFICATE)
 }
 
 const required = (app: App): void => {
@@ -482,13 +501,27 @@ const required = (app: App): void => {
   settle(app)
 }
 
+/** Backend messages sent in the clear after `answer`, which the client must never parse. */
+const injected = (app: App, answer: i32, label: string, alert: i32): void => {
+  app.stand.reset(answer, [goodLeaf()])
+  app.stand.trailer = injection()
+  const c: PgCarrier = carrier(app, PG_TLS_REQUIRE, "")
+  const event: i32 = query(app, c)
+  check(app, `bytes after ${label} fail the query with PG_ERR_TLS and alert ${alert}`, event === PG_CARRIER_FAILED && c.failure === PG_ERR_TLS && c.socketError === alert)
+  c.close()
+  settle(app)
+}
+
 export const main = (): i32 => {
   const app = new App()
   refusal(app)
   verified(app)
-  refused(app, "a chain from a root the file does not hold", [strangerLeaf(), strangerRoot()], "")
-  refused(app, "a leaf for another name", [wrongHostLeaf()], "")
+  refused(app, "a chain from a root the file does not hold", [strangerLeaf(), strangerRoot()], "", ALERT_UNKNOWN_CA)
+  refused(app, "a leaf for another name", [wrongHostLeaf()], "", ALERT_BAD_CERTIFICATE)
   named(app)
   required(app)
+  injected(app, ANSWER_NO, "an N", ZERO)
+  injected(app, ANSWER_YES, "an S", ALERT_UNEXPECTED_MESSAGE)
+  unlinkSync(app.roots)
   return app.failures === 0 ? 0 : 1
 }

@@ -141,7 +141,8 @@ with no build open) panic.
 With `PgConfig.tls` set to `PG_TLS_REQUIRE` or
 `PG_TLS_VERIFY_FULL`, each connection opens with an SSLRequest and reads
 exactly the one byte of its answer, so nothing the server sends in the
-clear is kept past it. `S` goes on to a TLS 1.3 handshake
+clear reaches the protocol: after `N` nothing more is read, and after `S`
+the next bytes are the handshake's, so anything else fails it. `S` goes on to a TLS 1.3 handshake
 (`nish/net/tls/record-client`) driven on the same loop without blocking,
 the StartupMessage held until it is done; any other answer fails the
 connection with `PG_ERR_TLS`. Under `PG_TLS_VERIFY_FULL` the server's chain

@@ -484,23 +484,25 @@ struct PgPoolSlot (class) size=48 align=8
   constructor -> @nish.PgPoolSlot.constructor
   method push -> @nish.PgPoolSlot.push
   method pop -> @nish.PgPoolSlot.pop
-struct PgPool (class) size=88 align=8 exported
+struct PgPool (class) size=96 align=8 exported
   field ticket: i32 index=0 offset=0 initialized
   field size: i32 index=1 offset=4 readonly
   field config: PgConfig index=2 offset=8 readonly
-  field password: PgPassword index=3 offset=16 readonly
-  field slots: PgPoolSlot[] index=4 offset=24 readonly
-  field queue: i32[] index=5 offset=32 readonly
-  field queueHead: i32 index=6 offset=40 initialized
-  field queueCount: i32 index=7 offset=44 initialized
-  field nextTicket: i32 index=8 offset=48 initialized
-  field building: i32 index=9 offset=52 initialized
-  field started: boolean index=10 offset=56 initialized
-  field names: string[] index=11 offset=64 readonly
-  field sqls: string[] index=12 offset=72 readonly
-  field types: i32[][] index=13 offset=80 readonly
+  field carried: PgConfig | null index=3 offset=16 initialized
+  field password: PgPassword index=4 offset=24 readonly
+  field slots: PgPoolSlot[] index=5 offset=32 readonly
+  field queue: i32[] index=6 offset=40 readonly
+  field queueHead: i32 index=7 offset=48 initialized
+  field queueCount: i32 index=8 offset=52 initialized
+  field nextTicket: i32 index=9 offset=56 initialized
+  field building: i32 index=10 offset=60 initialized
+  field started: boolean index=11 offset=64 initialized
+  field names: string[] index=12 offset=72 readonly
+  field sqls: string[] index=13 offset=80 readonly
+  field types: i32[][] index=14 offset=88 readonly
   constructor -> @nish.PgPool.constructor
   method settings -> @nish.PgPool.settings
+  method carryTls -> @nish.PgPool.carryTls
   method register -> @nish.PgPool.register
   method request -> @nish.PgPool.request
   method waiting -> @nish.PgPool.waiting
@@ -1068,23 +1070,23 @@ function PgConnection.constructor(this: PgConnection, config: PgConfig, password
   pointer nonce: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   callee +0:5 pgCheckConfig -> @nish.pgCheckConfig
-  callee +4:21 new PgPassword -> @nish.PgPassword.constructor
-  local +5:11 inputSize: i32 (const)
-  local +13:11 head: u8[] (const)
-  local +14:14 i: i32 (let)
-  callee +17:24 base64StdPadEncode -> @nish.base64StdPadEncode
-  local +19:11 at: i32 (const)
-  callee +20:5 PgConnection.putI32 -> @nish.PgConnection.putI32
-  callee +21:5 PgConnection.putI32 -> @nish.PgConnection.putI32
-  callee +22:5 PgConnection.putParam -> @nish.PgConnection.putParam
-  callee +24:7 PgConnection.putParam -> @nish.PgConnection.putParam
-  callee +26:5 PgConnection.putParam -> @nish.PgConnection.putParam
-  callee +27:5 PgConnection.putParam -> @nish.PgConnection.putParam
-  callee +28:5 PgConnection.putParam -> @nish.PgConnection.putParam
-  callee +30:7 PgConnection.putParam -> @nish.PgConnection.putParam
+  callee +7:21 new PgPassword -> @nish.PgPassword.constructor
+  local +8:11 inputSize: i32 (const)
+  local +16:11 head: u8[] (const)
+  local +17:14 i: i32 (let)
+  callee +20:24 base64StdPadEncode -> @nish.base64StdPadEncode
+  local +22:11 at: i32 (const)
+  callee +23:5 PgConnection.putI32 -> @nish.PgConnection.putI32
+  callee +24:5 PgConnection.putI32 -> @nish.PgConnection.putI32
+  callee +25:5 PgConnection.putParam -> @nish.PgConnection.putParam
+  callee +27:7 PgConnection.putParam -> @nish.PgConnection.putParam
+  callee +29:5 PgConnection.putParam -> @nish.PgConnection.putParam
+  callee +30:5 PgConnection.putParam -> @nish.PgConnection.putParam
+  callee +31:5 PgConnection.putParam -> @nish.PgConnection.putParam
   callee +33:7 PgConnection.putParam -> @nish.PgConnection.putParam
-  callee +35:5 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +36:5 setI32BE -> @nish.setI32BE
+  callee +36:7 PgConnection.putParam -> @nish.PgConnection.putParam
+  callee +38:5 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +39:5 setI32BE -> @nish.setI32BE
 function PgConnection.inputBuffer(this: PgConnection): u8[] -> @nish.PgConnection.inputBuffer [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=216 writesThrough=false captured=false
@@ -2140,7 +2142,7 @@ function PgPool.constructor(this: PgPool, config: PgConfig, password: Secret<u8[
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: config queueSize size
   calls: nish.PgPassword.constructor nish.PgPoolSlot.constructor nish.pgCheckConfig nish_alloc_struct nish_array_grow nish_panic
-  pointer this: size=88 writesThrough=true captured=false
+  pointer this: size=96 writesThrough=true captured=false
   pointer config: size=88 writesThrough=true captured=true passedTo=nish.pgCheckConfig#0
   pointer password: size=8 writesThrough=false captured=false passedTo=nish.PgPassword.constructor#1
   stackSites=0 stackLocals=0
@@ -2150,14 +2152,22 @@ function PgPool.constructor(this: PgPool, config: PgConfig, password: Secret<u8[
   callee +15:23 new PgPoolSlot -> @nish.PgPoolSlot.constructor
 function PgPool.settings(this: PgPool): PgConfig -> @nish.PgPool.settings [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=88
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function PgPool.carryTls(this: PgPool): void -> @nish.PgPool.carryTls [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_alloc_struct
+  pointer this: size=96 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -14:11 c: PgConfig (const)
+  local -13:11 plain: PgConfig (const)
 function PgPool.register(this: PgPool, name: string, sql: string, paramTypes: i32[]): boolean -> @nish.PgPool.register [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: name sql
   calls: nish.pgHasNul nish_array_grow
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   pointer paramTypes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee -10:7 pgHasNul -> @nish.pgHasNul
@@ -2168,18 +2178,18 @@ function PgPool.request(this: PgPool): i32 -> @nish.PgPool.request [exported met
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=88 writesThrough=true captured=false
+  pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:11 room: i32 (const)
   local -1:11 ticket: i32 (const)
 function PgPool.waiting(this: PgPool): i32 -> @nish.PgPool.waiting [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function PgPool.inFlight(this: PgPool): i32 -> @nish.PgPool.inFlight [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (let)
   local +1:16 slot: PgPoolSlot (const)
@@ -2187,7 +2197,7 @@ function PgPool.dispatch(this: PgPool): i32 -> @nish.PgPool.dispatch [exported m
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.PgConnection.prepare nish.PgPool.connection nish.PgPoolSlot.push nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=88 writesThrough=true captured=false passedTo=nish.PgPool.connection#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.connection#0
   stackSites=0 stackLocals=0
   local -22:11 cap: i32 (const)
   local -21:11 pack: boolean (const)
@@ -2210,7 +2220,7 @@ function PgPool.send(this: PgPool): boolean -> @nish.PgPool.send [exported metho
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.PgConnection.sync nish.PgPool.connection nish_panic_index nish_panic_overflow
-  pointer this: size=88 writesThrough=true captured=false passedTo=nish.PgPool.connection#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.connection#0
   stackSites=0 stackLocals=0
   local -7:11 s: i32 (const)
   local -3:11 slot: PgPoolSlot (const)
@@ -2220,7 +2230,7 @@ function PgPool.send(this: PgPool): boolean -> @nish.PgPool.send [exported metho
 function PgPool.wanted(this: PgPool): i32 -> @nish.PgPool.wanted [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 s: i32 (let)
 function PgPool.connect(this: PgPool, slot: i32, nonce: u8[]): void -> @nish.PgPool.connect [exported method]
@@ -2228,16 +2238,17 @@ function PgPool.connect(this: PgPool, slot: i32, nonce: u8[]): void -> @nish.PgP
   sharedWrite: +0:5
   escaping: slot
   calls: nish.PgConnection.constructor nish_alloc_struct nish_panic nish_panic_index
-  pointer this: size=88 writesThrough=true captured=false
+  pointer this: size=96 writesThrough=true captured=false
   pointer nonce: size=0 writesThrough=false captured=false passedTo=nish.PgConnection.constructor#3
   stackSites=0 stackLocals=0
+  local -5:11 carried: PgConfig | null (const)
   local -1:11 s: PgPoolSlot (const)
   callee +0:14 new PgConnection -> @nish.PgConnection.constructor
 function PgPool.connection(this: PgPool, slot: i32): PgConnection -> @nish.PgPool.connection [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=216
   escaping: slot
   calls: nish_panic nish_panic_index
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 conn: PgConnection | null (const)
 function PgPool.next(this: PgPool, slot: i32): i32 -> @nish.PgPool.next [exported method]
@@ -2245,7 +2256,7 @@ function PgPool.next(this: PgPool, slot: i32): i32 -> @nish.PgPool.next [exporte
   sharedWrite: +0:7
   escaping: slot
   calls: nish.PgConnection.next nish.PgPool.anyReady nish.PgPool.connection nish.PgPoolSlot.pop nish.PgPoolSlot.push nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=88 writesThrough=true captured=false passedTo=nish.PgPool.connection#0 nish.PgPool.anyReady#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.PgPool.connection#0 nish.PgPool.anyReady#0
   stackSites=0 stackLocals=0
   local -3:11 conn: PgConnection (const)
   callee -3:32 PgPool.connection -> @nish.PgPool.connection
@@ -2258,20 +2269,20 @@ function PgPool.next(this: PgPool, slot: i32): i32 -> @nish.PgPool.next [exporte
   callee +34:7 PgPoolSlot.pop -> @nish.PgPoolSlot.pop
 function PgPool.anyReady(this: PgPool): boolean -> @nish.PgPool.anyReady [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 slot: PgPoolSlot (const)
 function PgPool.passwordWiped(this: PgPool): boolean -> @nish.PgPool.passwordWiped [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.PgPassword.wiped
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 PgPassword.wiped -> @nish.PgPassword.wiped
 function PgPool.dispose(this: PgPool): void -> @nish.PgPool.dispose [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgPassword.wipe
   calls: nish.PgConnection.dispose nish.PgPassword.wipe
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 PgPassword.wipe -> @nish.PgPassword.wipe
   local +2:16 slot: PgPoolSlot (const)
@@ -5734,7 +5745,7 @@ function Bench.constructor(this: Bench, pool: PgPool, address: u8[], socket: str
   escaping: address pool socket
   calls: Fold.constructor nish_alloc_struct nish_poll_create
   pointer this: size=72 writesThrough=true captured=false
-  pointer pool: size=88 writesThrough=true captured=true
+  pointer pool: size=96 writesThrough=true captured=true
   pointer address: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:17 new Fold -> @Fold.constructor

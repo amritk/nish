@@ -297,10 +297,11 @@ the record that found it. The notes below the table name each such finding.
     every package, are accepted and not counted, and CAPS-19 (Medium), a
     `net=<host>` grant that binds no computed host at run time, is open.
 17. PG-1 to PG-8 are the shapes a hostile server's bytes can take, checked
-    and found to hold, and are not findings. PG-9 (Medium), no TLS, PG-10
-    (Low), no way to require SCRAM, and PG-11 (Low), MD5 and cleartext
-    refused, are accepted, with the reason in their record, and are not
-    counted. PG-12 (Low), ClientKey left in a hasher, and PG-13 (Low), an
+    and found to hold, and are not findings. PG-9 (Medium), no TLS, is
+    fixed for `PgCarrier`, and every other path refuses a `PgConfig` that
+    asks for TLS. PG-10 (Low), no way to require SCRAM, and PG-11 (Low),
+    MD5 and cleartext refused, are accepted, with the reason in their
+    record, and are not counted. PG-12 (Low), ClientKey left in a hasher, and PG-13 (Low), an
     unbounded send buffer, were found by the module's first review and fixed
     before it merged.
 

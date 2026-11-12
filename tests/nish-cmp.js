@@ -2054,6 +2054,8 @@ const DECLARED = [
       "tests/link/std_postgres_receive_panic/main.ts": ["main.h", "main.ll", "postgres.ll"],
       "tests/link/std_postgres_replay/main.ts": ["main.h", "main.ll", "postgres.ll"],
       "tests/link/std_postgres_tls/main.ts": ["exit"],
+      "tests/link/std_postgres_tls_connection_panic/main.ts": ["exit"],
+      "tests/link/std_postgres_tls_pool_panic/main.ts": ["exit"],
       "tests/link/std_postgres_tls_roots_panic/main.ts": ["exit"],
       "tests/link/std_postgres_tls_unix_panic/main.ts": ["exit"],
       "tests/link/std_postgres_unix_target/main.ts": ["main.h", "postgres.ll"],
