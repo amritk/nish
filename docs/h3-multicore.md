@@ -22,9 +22,12 @@ WP42's prefork (`std/net/prefork.ts`) runs N worker processes on one port.
 With `listenPort`, the supervisor binds one `SO_REUSEPORT` socket per worker in
 index order, keeps it for the whole run, and hands socket k to every start of
 worker k (`prefork.ts:56-80`, `listen` at `:764`). Those sockets are TCP
-listeners. A QUIC server in a worker binds its own UDP socket with `udpBind`
-flag 1 (`runtime/runtime-net.c:236`), so the group is formed by whichever
-workers have bound so far.
+listeners. Nothing binds a UDP reuseport group for QUIC today:
+`Http3Server` binds with flags 0 (`std/net/http3-server.ts:17`) and
+`examples/relay` with 2 or 0. The deployment G6 enables is N workers whose
+QUIC servers share one port through `udpBind` flag 1
+(`runtime/runtime-net.c:236`). Built that way on today's code, without
+steering, it fails as follows.
 
 For UDP, Linux picks a socket in a reuseport group by hashing the datagram's
 4-tuple. A QUIC connection is not a 4-tuple. When a client's NAT rebinds, or
@@ -110,8 +113,9 @@ about the client.
 Classic BPF in a reuseport group sees the datagram from the start of the UDP
 payload (**measured**: offset 0 is QUIC byte 0). A long-header packet carries
 the DCID length at byte 5 and the DCID from byte 6. A short-header packet
-carries the DCID from byte 1. The program is seven instructions, with N
-written in when the supervisor attaches it:
+carries the DCID from byte 1. The program is seven instructions. N is its
+`mod` constant, so the runtime builds the program at attach time from the
+count the supervisor passes in `udpBind`'s flags (§8):
 
 ```
     ldb [0]          ; first byte
@@ -160,7 +164,7 @@ worker that exits closes only its own copy.
 | Which packets pay | none | none | every packet of a connection whose 4-tuple changed, for the rest of its life, plus Initials the hash put on another worker if the client's DCID byte disagreed |
 | Kernel | Linux 4.5 and later (`SO_ATTACH_REUSEPORT_CBPF`) | Linux 4.19 and later for `SK_REUSEPORT`; 5.8 and later for `CAP_BPF` | any |
 | Capability | none: a `setsockopt` on a socket the process owns | `CAP_BPF` (or `CAP_SYS_ADMIN`) to load an `SK_REUSEPORT` program whatever `kernel.unprivileged_bpf_disabled` says; the sysctl only governs socket filters. Docker's default profile grants neither capability, and its seccomp filter refuses `bpf()` without them. **Measured** here (`unprivileged_bpf_disabled=2`): both `SK_REUSEPORT` and `SOCKET_FILTER` loads gave EPERM without capabilities and succeeded as root | none |
-| Code | about 15 lines of C beside TCP flag 4 | a program and a map built by hand as bytecode, or a dependency on libbpf; the verifier's errors to report; the map kept up to date by the supervisor | a header parse in the worker, a channel per pair or one through the supervisor, the address and meta (GRO segment size, ECN; `nish_udp_recv_from`) carried across |
+| Code | about 30–40 lines of C beside TCP flag 4 (**estimate**, §8) | a program and a map built by hand as bytecode, or a dependency on libbpf; the verifier's errors to report; the map kept up to date by the supervisor | a header parse in the worker, a channel per pair or one through the supervisor, the address and meta (GRO segment size, ECN; `nish_udp_recv_from`) carried across |
 | macOS | none: Darwin does not spread a reuseport group at all (§5) | none | possible, but Darwin hands every datagram to one socket, so every packet would be forwarded |
 | Failure modes | attach refused (seccomp, gVisor, a kernel without it): the supervisor knows at bind time and falls back (§5). Index moves if the supervisor stops holding a socket (§3.1) | load refused for lack of a capability, which is the common case in containers. A map out of date sends a packet to the wrong worker, or with no socket at k, drops it | the target dead or its channel full: the packet is dropped. Service channels make prefork restart the whole group together (`prefork.ts:38-50`), so one worker's crash costs every connection |
 
@@ -299,7 +303,9 @@ so the default Docker, containerd and Kubernetes profiles allow it.
 
 **GRO is off on a steered socket.** With `udpBind` flag 2 (`UDP_GRO`), the
 kernel coalesces datagrams of one flow (one 4-tuple) into one buffer, and the
-reuseport selection runs once for it, on its first segment. A flow is not a
+reuseport selection runs once for it, on its first segment. That is an
+**estimate** from reading the kernel's UDP GRO receive path; it was not
+measured here, and the design does not depend on it, because GRO is off. A flow is not a
 connection: a client can run several QUIC connections over one UDP socket,
 and the server can have issued their IDs from different workers. Coalesced,
 the second connection's datagrams would reach the first one's worker, which
@@ -353,7 +359,7 @@ UDP attach. The record carries:
 
 | # | What | Where | Platforms |
 | --- | --- | --- | --- |
-| 1 | The flag attaches the program. A datagram whose DCID byte 0 is k reaches socket k for short and long headers. Byte 0 ≥ N reaches socket byte mod N. A runt reaches socket 0. -22 for an undefined bit and for flag 2 with flag 4; -95 on Darwin | `tests/runtime-test.c` (`test_udp_steer`) | Linux; Darwin for -95 |
+| 1 | The flag attaches the program built for the count in bits 8–15. A datagram whose DCID byte 0 is k reaches socket k for short and long headers. Byte 0 ≥ N reaches socket byte mod N. A runt reaches socket 0. -22 for an undefined bit, for flag 2 with flag 4, for flag 4 without flag 1, for flag 4 with a count of 0, and for a count without flag 4; -95 on Darwin | `tests/runtime-test.c` (`test_udp_steer`) | Linux; Darwin for -95 |
 | 2 | Every ID a worker issues carries its k: first SCID, NEW_CONNECTION_ID, Retry SCID. With no worker index, IDs are as before | a unit case over `QuicConnection` and `QuicListener` | all |
 | 3 | A short-header packet whose byte 0 names another worker gets no stateless reset; byte 0 ≥ N still does | a unit case over `QuicListener` | all |
 | 4 | **Two workers; a client completes a request, rebinds its port mid-connection, and the next response reaches the new port from the same worker** (each response names its worker) | `tests/link/net_quic_prefork` | Linux |
@@ -361,7 +367,7 @@ UDP attach. The record carries:
 | 6 | A Retry from worker 1 brings the retried Initial back to worker 1 | `net_quic_prefork` | Linux |
 | 7 | Killing worker 1: its client gets a valid stateless reset from the restarted worker 1; worker 0's client finishes its request on the same connection | `net_quic_prefork` | Linux |
 | 8 | Index stability: with three workers, kill worker 1; packets with byte 0 = 1 reach the new worker 1, not worker 2 | `net_quic_prefork` | Linux |
-| 9 | **Two connections from one client UDP socket** (one 4-tuple), their IDs issued by worker 0 and worker 1, both complete requests, each served by its own worker, under a burst that would coalesce. `udpBind` with flags 2 and 4 together answers -22 | `net_quic_prefork`; the -22 in `test_udp_steer` | Linux |
+| 9 | **Two connections on one 4-tuple** (one client UDP socket), their IDs issued by worker 0 and worker 1, both complete requests, each served by its own worker. The GRO decision is covered by the -22 check: `udpBind` with flags 2 and 4 together answers -22, so a steered socket never has GRO | `net_quic_prefork`; the -22 in `test_udp_steer` | Linux |
 | 10 | Darwin runs QUIC with one worker and says so | `net_quic_prefork` | Darwin |
 | 11 | The flag under a wasm target is refused with NL2404 | `tests/cases/reject_net_udp_steer_wasm` | wasm32 |
 
@@ -371,23 +377,45 @@ reset.
 
 ## 8. What `g6-steer` builds
 
-- **Runtime:** a `udpBind` flag 4 that, after the bind, attaches §3.1's
-  program with `SO_ATTACH_REUSEPORT_CBPF`. It requires flag 1, answers -22
-  without it or with flag 2 (§5), and -95 off Linux. This is a change to `runtime/runtime-net.c`
-  even though classic BPF, not eBPF, was chosen. The plan listed that file as
-  "only if eBPF". It is about 15 lines next to TCP flag 4. Because the flag is
-  visible to users, it also needs its `docs/LANGUAGE.md` row (`:10872`), the
-  `runtime/nish.d.ts` comment (`:1719`) and the guide page, which are outside
-  the plan's file list.
+- **Runtime: how N reaches the attach.** `udpBind(host, port, flags)` has no
+  worker count, and today it passes only `flags & 1` to `nish_net_bound` as
+  `opts` (`runtime-net.c:523-528`), so the TCP `opts & 4` attach (`:265`) is
+  never reached from UDP. Three ways were weighed: a new argument or builtin,
+  a separate attach call after all N binds, and the count packed into the
+  flags. The note chooses the **count in the flags**: flag 4 asks for
+  steering, and bits 8–15 carry N (1 to 255). This adds no builtin and no
+  signature change, so the only user-visible surface is the flag and its
+  bit layout. The GRO rule stays a per-bind check, so every member of the
+  group is covered. A separate attach call would check one socket and could
+  not see GRO on the others. `nish_udp_bind` checks the bits: -22 for an
+  undefined bit, for flag 4 without flag 1, with flag 2 (§5) or with a count
+  of 0, and for a count without flag 4. It answers -95 off Linux. After
+  `nish_net_bound` returns, it builds §3.1's seven instructions on the stack
+  with N as the `mod` constant, unlike TCP's static program, and attaches
+  them with `SO_ATTACH_REUSEPORT_CBPF`. On failure it closes the socket and
+  returns the error. Every member's bind attaches the same program. The last
+  attach wins and is identical, as with TCP flag 4. Until all N are bound, an
+  index of N or more falls back to the hash, as measured in §3.1. No datagram
+  is handled then, because the supervisor binds all N before it starts a
+  worker. This is still a change to `runtime/runtime-net.c` even though
+  classic BPF, not eBPF, was chosen; the plan listed that file as "only if
+  eBPF". It is about 30–40 lines (**estimate**): the flag checks, the built
+  program and the attach and its error path. Because the flag and its bits
+  are visible to users, it also needs its `docs/LANGUAGE.md` row (`:10872`),
+  the `runtime/nish.d.ts` comment (`:1719`) and the guide page, which are
+  outside the plan's file list.
 - **Prefork:** a way to make `listenPort` bind UDP. `PreforkConfig` gets a
   `listenUdp: boolean`. With it, `listen` binds N UDP sockets with flags 1
-  and 4 (never 2: GRO is off on a steered socket, §5), holds them, and hands socket k to
+  and 4 and N in bits 8–15 (never 2: GRO is off on a steered socket, §5), holds them, and hands socket k to
   worker k through `preforkListener`, as it does for TCP. When the attach
   fails, it falls back to one worker (§5). The names are a proposal; the
   stage chooses.
 - **QUIC:** a worker index in `QuicServerConfig` (default -1: none). With it,
-  `begin`, the NEW_CONNECTION_ID path through `deriveConnectionId`
-  (`quic.ts:3363`) and the Retry SCID write k into byte 0. `QuicListener` applies §6's reset rule. `Http3Server` passes
+  `begin` and the NEW_CONNECTION_ID path through `deriveConnectionId`
+  (`quic.ts:3363`) write k into byte 0. The Retry SCID is written by
+  `QuicListener.retry` (`quic-listener.ts:729`), not by the connection, so
+  `QuicListener` needs the worker index too: `retry` writes k into the Retry
+  SCID's byte 0, and the listener applies §6's reset rule. `Http3Server` passes
   the index through and does not change its routing: the slot index already
   keys on all 8 bytes. `quic-conn-cid.ts`'s table holds the IDs and does not
   care what byte 0 is.
