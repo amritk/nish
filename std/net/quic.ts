@@ -1685,8 +1685,8 @@ export class QuicConnection {
    * through. A new address starts again from 1200.
    *
    * `pathMtuLimit` is the carrier's to lower, for an interface whose MTU
-   * carries less than `QUIC_CONN_DATAGRAM_MAX`; 1200 or less turns
-   * discovery off. `reset` keeps it.
+   * carries less than `QUIC_CONN_DATAGRAM_MAX`, at any time: the next probe
+   * keeps under it. 1200 or less turns discovery off. `reset` keeps it.
    */
   pathMtuLimit: i32 = 1452
   /** The largest datagram validated on the current path: 1200 until a probe is acknowledged. */
@@ -2993,6 +2993,12 @@ export class QuicConnection {
       this.pmtuLow = this.pathMtu
       this.pmtuHigh = high > toI64(this.pathMtu) ? toI32(high) : this.pathMtu
       this.pmtuNext = this.pmtuHigh > this.pmtuLow ? this.pmtuHigh : 0
+    }
+    // A limit the carrier lowered after the search began holds from the next probe.
+    if (this.pmtuHigh > this.pathMtuLimit && this.pmtuHigh > this.pmtuLow) {
+      this.pmtuHigh = this.pathMtuLimit > this.pmtuLow ? this.pathMtuLimit : this.pmtuLow
+      this.pmtuNext = this.pmtuHigh > this.pmtuLow ? this.pmtuHigh : 0
+      this.pmtuTries = 0
     }
     const size: i32 = this.pmtuNext
     const sent: QuicSentPackets | null = this.recovery.space(TLS_LEVEL_APPLICATION)
