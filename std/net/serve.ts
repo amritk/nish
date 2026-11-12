@@ -596,17 +596,9 @@ const serveTask = async (
   // one into the other.
   const src: HttpRequest = st.reqs[k]
   const r: HttpRequest = new HttpRequest(-1)
-  // The kept head ends at the furthest of the target and every field span.
-  const spanCount: i32 = 4 * src.headerCount
-  let end: i32 = src.targetEnd
-  for (let i: i32 = 0; i < spanCount && i < toI32(src.spans.length); i++) {
-    if (src.spans[i] > end) {
-      end = src.spans[i]
-    }
-  }
-  const head: u8[] = new Array<u8>(end)
-  copyBytes(head, 0, src.head, 0, end)
-  const spans: i32[] = new Array<i32>(spanCount)
+  const head: u8[] = new Array<u8>(src.headLength)
+  copyBytes(head, 0, src.head, 0, src.headLength)
+  const spans: i32[] = new Array<i32>(4 * src.headerCount)
   for (let i: i32 = 0; i < toI32(spans.length) && i < toI32(src.spans.length); i++) {
     spans[i] = src.spans[i]
   }
@@ -632,6 +624,7 @@ const serveTask = async (
   r.targetStart = src.targetStart
   r.targetEnd = src.targetEnd
   r.pathEnd = src.pathEnd
+  r.headLength = src.headLength
   r.headerCount = src.headerCount
   r.bodyLength = src.bodyLength
   const res: Response = await handle(new Request(r))

@@ -158,7 +158,11 @@ export class Router {
   private deepest: i32 = 0
   /** During a match: how many segments the path has, where it ends, the method's index, and the pairs in `found`. */
   private segments: i32 = 0
-  private pathEnd: i32 = 0
+  /**
+   * Where the last `match`'s path ends in its target: the first `?`, or the target's end.
+   * @internal Read by std/net/handler.ts, so a request's path is not scanned twice.
+   */
+  pathEnd: i32 = 0
   private wanted: i32 = 0
   private foundCount: i32 = 0
   /** During a match: whether a route of another method ended at the path's end. */
@@ -449,6 +453,11 @@ export class Router {
     }
     this.visited = 0
     if (tStart === tEnd || toI32(target[tStart]) !== 47) {
+      let end: i32 = tStart
+      while (end < tEnd && toI32(target[end]) !== 63) {
+        end += 1
+      }
+      this.pathEnd = end
       return ROUTER_NOT_FOUND
     }
     // One pass over the path: where it ends, and each segment's span up to one
