@@ -2,12 +2,14 @@
 // and by `tests/link/net_quic_stream_f64` under `--number-mode f64`: a
 // multiplexed transfer in `transfer.ts`, flow control in `flow.ts`, limits,
 // endings and refusals in `refusals.ts`, a resend range acknowledged
-// before it went again in `resend.ts`, borrowed buffers in `pool.ts`, and
-// QUIC-3's arena checks in `arena.ts`.
+// before it went again in `resend.ts`, borrowed buffers in `pool.ts`,
+// QUIC-3's arena checks in `arena.ts`, and a ring whose size is not a
+// multiple of 8 in `ragged.ts`.
 import { Suite } from "nish/testing";
 import { arenaChecks } from "./arena";
 import { flowChecks } from "./flow";
 import { poolChecks } from "./pool";
+import { raggedChecks } from "./ragged";
 import { refusalChecks } from "./refusals";
 import { resendChecks } from "./resend";
 import { transferChecks } from "./transfer";
@@ -21,5 +23,6 @@ export const quicStreamChecks = (): i32 => {
   resendChecks(t);
   poolChecks(t);
   arenaChecks(t);
+  raggedChecks(t);
   return t.done();
 };
