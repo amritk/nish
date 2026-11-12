@@ -19,10 +19,14 @@
 //      of its own, slots 0, 1, 2 in order, the fourth shed with nothing more
 //      built, a closed slot taken again with its state kept; a pool of
 //      16,384 with no slot built.
+//   6. The idle timeout (TLS-4): `expire` closes the slots idle past
+//      `idleTimeout` and no other, a readable or writable socket restarts
+//      a slot's clock, and an `idleTimeout` of 0 turns it off.
 //
 // openssl s_client and Node's https drive the same server in `serve` mode from the
 // `net_tls_tcp` block of tests/run.js.
 import { Suite } from "nish/testing";
+import { monotonicNanos } from "nish:process";
 import { Secret, secret, wipe } from "nish:secret";
 import { TLS_CHACHA20_POLY1305_SHA256, TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { TLS_LEVEL_APPLICATION } from "nish/net/tls";
@@ -125,6 +129,59 @@ const acceptOrder = (t: Suite): void => {
     server.close(k);
   }
   t.ok("and every slot is free once closed", server.busy() === 0 && toI32(server.free.length) === 3);
+  for (const fd of clients) {
+    netClose(fd);
+  }
+  netClose(loop);
+  netClose(listener);
+};
+
+/** A pool of three on a listener of its own, its slots idling out under `expire`. */
+const idleExpiry = (t: Suite): void => {
+  const listener: i32 = tcpListen("127.0.0.1", ZERO, toI32(16));
+  const addr: u8[] = new Array<u8>(18);
+  netAddress(addr, "127.0.0.1", netLocalPort(listener));
+  const loop: i32 = pollCreate();
+  pollAdd(loop, listener, toI32(1), ZERO);
+  const ready: i32[] = new Array<i32>(8);
+  const random: u8[] = filled(32, 1);
+  const key: u8[] = filled(32, 2);
+  const second: i64 = toI64(1000000000);
+  const server = new TlsTcpServer(tcpConfig([]), listener, toI32(3));
+  t.eqI32("the idle timeout is a minute by default", server.idleTimeout, toI32(60000));
+  const clients: i32[] = [];
+  for (let k: i32 = 0; k < 2; k++) {
+    clients.push(tcpConnect(addr));
+    acceptWaiting(server, loop, ready, random, key);
+  }
+  const accepted: i64 = monotonicNanos();
+  t.eqI32("expire closes no slot that has been idle under a minute", server.expire(accepted + toI64(59) * second), ZERO);
+  t.ok("so both stay busy", server.busy() === 2);
+  t.eqI32("past a minute it closes both", server.expire(accepted + toI64(61) * second), toI32(2));
+  t.ok("leaving every slot free", server.busy() === 0 && toI32(server.free.length) === 2);
+
+  server.idleTimeout = toI32(1000);
+  clients.push(tcpConnect(addr));
+  const quiet: i32 = acceptWaiting(server, loop, ready, random, key);
+  clients.push(tcpConnect(addr));
+  const active: i32 = acceptWaiting(server, loop, ready, random, key);
+  const start: i64 = monotonicNanos();
+  // The quiet slot's clock is its accept, before `start`; the active one's
+  // restarts at this read, after it.
+  server.readable(active);
+  const later: i64 = start + toI64(1000000) * toI64(1000) + toI64(1);
+  t.eqI32("a readable socket restarts its slot's clock: at a second past it only the quiet slot is closed", server.expire(later), toI32(1));
+  t.ok("the active slot is still busy, the quiet one free", server.holds(active) && !server.holds(quiet));
+  clients.push(tcpConnect(addr));
+  const stale: i32 = acceptWaiting(server, loop, ready, random, key);
+  const wrote: i64 = monotonicNanos();
+  server.writable(active);
+  t.eqI32("a writable socket restarts its slot's clock too: a second after it only the slot that did not write is closed", server.expire(wrote + toI64(1000000) * toI64(1000)), toI32(1));
+  t.ok("the writing slot is still busy, the other free", server.holds(active) && !server.holds(stale));
+  server.idleTimeout = ZERO;
+  t.eqI32("an idleTimeout of 0 closes nothing however long", server.expire(later + toI64(3600) * second), ZERO);
+  t.ok("and the slot stays busy", server.holds(active));
+  server.close(active);
   for (const fd of clients) {
     netClose(fd);
   }
@@ -429,6 +486,9 @@ export const tcpChecks = (): i32 => {
   // --- 5. Slots built as they are accepted into ------------------------------------------
   acceptOrder(t);
   neverBuilt(t);
+
+  // --- 6. The idle timeout ---------------------------------------------------------------
+  idleExpiry(t);
 
   return t.done();
 };

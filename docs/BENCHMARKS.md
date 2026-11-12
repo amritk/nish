@@ -578,7 +578,7 @@ No row retires more than main's but typed, by 28 instructions in 306 million, wh
 <!-- techempower:begin -->
 ## TechEmpower json and plaintext
 
-Measured by `bash bench/techempower/run.sh` (3 interleaved rounds of 10 s, every contestant started afresh and warmed for 1 s before each count), and copied here from the report it writes to `build/tfb/results.md`. `bench/run.mjs` carries this section over between its `techempower` markers when it rewrites the file. The entry is [bench/techempower/](https://github.com/amritk/nish/blob/main/bench/techempower/README.md): one process, one thread, one `pollWait` loop on `Http1Server`. The other rows are the HTTP twins of [bench/http-twins/](https://github.com/amritk/nish/blob/main/bench/http-twins/README.md), each run as its own `serve <port>`.
+Measured by `bash bench/techempower/run.sh` (3 interleaved rounds of 10 s, every contestant started afresh and warmed for 1 s before each count), and copied here from the report it writes to `build/tfb/results.md`. `bench/run.mjs` carries this section over between its `techempower` markers when it rewrites the file. The entry is [bench/techempower/](https://github.com/amritk/nish/blob/main/bench/techempower/README.md): one `pollWait` loop on `Http1Server`, run here as one process: pinned to one CPU, it starts one worker (the multi-core figures are [below](#one-process-against-one-worker-a-core-wp39-e5)). The other rows are the HTTP twins of [bench/http-twins/](https://github.com/amritk/nish/blob/main/bench/http-twins/README.md), each run as its own `serve <port>`.
 
 `entry-copy` is a second build of the same `main.ts` that `cmp` finds byte-identical, so the gap between `entry` and `entry-copy` is the noise band every other difference is read against. `entry-nodelay0` is `entry` started with its `nodelay` argument 0, so its accepted sockets keep Nagle on. A cell marked `*` had non-2xx answers or socket errors in at least one round; `n/a` is a cell no round gave a figure for.
 
@@ -642,6 +642,47 @@ What the rows say, read against that band:
 - `rust-actix` answers about 10,000 req/s up to 1024 connections, falls to 5,632 at 4096 with timeouts in every round, and has no figure at 16384: in all three rounds wrk reported 0.00 req/s and no socket errors, so the cell is `n/a`. An earlier run of this section recorded that cell as 0, which was the failed measurement rather than a rate. Run alone, the twin shows 6.4 ms of latency per request too, so its figures are its own, reported as measured.
 - `TCP_NODELAY` (WP39 E2, `tcpListenFlags` flag 2) is the entry's default. Against `entry-nodelay0` it is faster outside the band at four levels (`/plaintext` 256 connections by 2.0% against a 1.0% band, and 4096 by 0.9% against 0.7%; `/json` 128 by 7.5% against 0.1%, and 256 by 8.2% against 0.2%) and within the band at the other six, slower outside it at none. So the flag stays on.
 - The benchmarked build is `5ee6e7c`. The head adds only the listener's pause when an accept runs out of descriptors, which this run never reached: with `ulimit -n` at 20000, no accept failed for want of one.
+
+### One process against one worker a core (WP39 E5)
+
+`main.ts` takes a fifth argument, its workers: 0, the default, runs one worker a CPU under `nish/net/prefork` on one `SO_REUSEPORT` port; 1 runs the one process the tables above measure. `run.sh --cores-compare` times both from the same build. `entry` and `entry-copy` are the byte-identical pair started with workers 1, and so give the noise band. `entry-cores` is `entry` started with workers 0. The server gets CPUs 0-1, so `entry-cores` runs two pinned workers, and wrk gets CPUs 2-3. These figures are not comparable with the one-core tables above: they come from a different machine, build and pinning.
+
+| | |
+| --- | --- |
+| Date | 2026-11-12 |
+| nish | nish 0.38.0 (commit a15917f), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores (a cloud VM) |
+| OS | linux 6.18.44-fc-v378 (x64) |
+| Client | wrk 4.1.0, `-t 2`, TFB's request headers, `--timeout 8`; `/plaintext` through `pipeline.lua` 16 deep |
+| Pinning | server on CPUs 0-1, wrk on CPUs 2-3. **Client-shared**: two wrk cores drive two server cores |
+| Limits | `ulimit -n` 20000, `net.core.somaxconn` 4096; no concurrency was clamped |
+| Command | `npm run build && bash bench/techempower/run.sh --cores-compare` |
+
+`/plaintext`, req/s, median (min) of 3 rounds of 10 s:
+
+| contestant | 256 | 1024 | 4096 | 16384 |
+| --- | ---: | ---: | ---: | ---: |
+| entry | 1359317 (1309460) | 1170871 (901448) | 964963 (941896) | 888618 (786206)* |
+| entry-copy | 1287849 (1122980) | 1235716 (1228138) | 933724 (875067) | 1020255 (858148) |
+| entry-cores | 2716939 (2684038) | 2570961 (2524748) | 2253033 (2192759) | 1689248 (1649006) |
+
+Noise band (medians): 5.3%, 5.5%, 3.2%, 14.8%. `entry-cores` against `entry`: +99.9%, +119.6%, +133.5%, +90.1%, each outside its band.
+
+`/json`, req/s, median (min) of 3 rounds of 10 s:
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 128488 (124765) | 141208 (138229) | 155871 (145938) | 160087 (157302) | 167444 (167011) | 196739 (185709) |
+| entry-copy | 126916 (124397) | 141923 (139049) | 152071 (141611) | 157385 (149838) | 170613 (169851) | 191569 (172509) |
+| entry-cores | 248324 (240201) | 272422 (258128) | 284092 (272414) | 306074 (299083) | 321831 (318143) | 341548 (328258) |
+
+Noise band (medians): 1.2%, 0.5%, 2.4%, 1.7%, 1.9%, 2.6%. `entry-cores` against `entry`: +93.3%, +92.9%, +82.3%, +91.2%, +92.2%, +73.6%, each outside its band.
+
+- Two workers on two cores serve 1.7 to 2.3 times the one process at every concurrency. A gain above 2x, as on `/plaintext` at 1024 and 4096, is not explained by these runs. One unmeasured hypothesis: the one process is not pinned inside its two CPUs, so it pays for migrations the pinned workers do not.
+- The gain shrinks at the top concurrencies: 16384 on `/plaintext` and 512 on `/json`. Two wrk cores are likely the ceiling there, since this machine is client-shared.
+- At `/plaintext` 16384, `entry` had 4,679 read errors (connections reset) in one round, which the `*` marks. The 14.8% band at that level is wide, but the +90.1% gain is several times larger.
+- The peak RSS `run.sh` reads for `entry-cores` (1.9 MiB) is the supervisor's alone, so it is left out of these tables. The one process peaked at 91 MiB on `/plaintext` and 3.1 MiB on `/json`.
+- The TechEmpower image runs one worker per core of the machine (`nish.dockerfile`). TFB's own servers have more cores than this VM, so these figures say only that the second core pays off here.
 <!-- techempower:end -->
 
 ## TechEmpower: the async entry against the explicit one (WP49 stage 6)
