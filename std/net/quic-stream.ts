@@ -255,9 +255,11 @@ export const quicStreamSetBit = (bits: u8[], k: i32, on: boolean): void => {
  * left alone.
  */
 const quicStreamSetBits = (bits: u8[], from: i32, to: i32, on: boolean): void => {
-  const length: i32 = toI32(bits.length) << 3
+  // Compared a byte at a time, so a bitmap of 2^28 bytes or more cannot wrap `bits.length << 3`
+  // negative: the shift runs only when `to` is past the array, so the bit count fits below `to`.
+  const bytes: i32 = toI32(bits.length)
   let k: i32 = from < 0 ? 0 : from
-  const top: i32 = to < length ? to : length
+  const top: i32 = to >> 3 < bytes ? to : bytes << 3
   while (k < top && (k & 7) !== 0) {
     quicStreamSetBit(bits, k, on)
     k = k + 1
@@ -288,7 +290,8 @@ const quicStreamScan = (bits: u8[], from: i32, to: i32, on: boolean): i32 => {
     k = k + 1
   }
   const bytes: i32 = toI32(bits.length)
-  const whole: i32 = (to < bytes << 3 ? to : bytes << 3) & ~7
+  // As in `quicStreamSetBits`, the shift runs only when `to` is past the array, so it cannot wrap.
+  const whole: i32 = (to >> 3 < bytes ? to : bytes << 3) & ~7
   let at: i32 = k >> 3
   // `at` is `k >> 3` and `whole` is within the array, so the bounds on `at` hold whenever `k`'s do; they
   // are what the bounds pass reads to drop the check on `bits[at]`.
@@ -1556,7 +1559,9 @@ export class QuicStreams {
     if (size > 0 && size === stream.size) {
       // The frame's bytes from the first not yet contiguous, inside `buf`; of
       // more than a buffer, the last buffer's worth, which a byte-wise copy
-      // would have left there.
+      // would have left there. Both clamps below are defensive: the credit
+      // check above caps a frame's end at `recvRead` plus a ring, so no peer
+      // frame reaches them, and they keep the copy in range if that changes.
       const skipped: i64 = quicStreamMin(stream.recvContiguous - offset, toI64(length))
       let low: i32 = skipped > 0 ? toI32(skipped) : 0
       if (low < -from) {
