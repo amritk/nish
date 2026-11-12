@@ -95,6 +95,8 @@ export const testConfig = (): Http1Config => {
   config.idleTimeout = 1000;
   // Shorter than idleTimeout, so a check can tell the head deadline from it.
   config.headTimeout = 500;
+  // Shorter than headTimeout, so a check can tell the linger deadline from both.
+  config.lingerTimeout = 300;
   return config;
 };
 
@@ -138,6 +140,8 @@ const statusFor = (lb: H1Loop, request: string): i32 => {
   lb.send(c, ascii(request));
   const r = lb.response(c, false);
   const ended: boolean = lb.awaitEnd(c);
+  // The refused slot lingers, draining, until its client hangs up.
+  lb.hangUp(c);
   return r.done && ended && r.has("Connection: close") && r.has("Content-Length: 0") ? r.status : toI32(-1);
 };
 
@@ -698,12 +702,14 @@ export const serverChecks = (): i32 => {
   const d2 = new WsDecoder(false, 1048576);
   t.ok("an unmasked frame from a client is answered with close 1002", wsEvent(lb, w2, d2) === WS_CLOSE && d2.closeCode === 1002);
   t.ok("and the connection ends, H1_ERROR telling the program", lb.awaitEnd(w2) && lb.app.errorStatus === 1002);
+  lb.hangUp(w2);
 
   const w3: i32 = lb.connect(false);
   lb.send(w3, join([ascii(handshake), clientFrame(WS_OP_BINARY, patterned(toI32(140000)))]));
   lb.response(w3, false);
   const d3 = new WsDecoder(false, 1048576);
   t.ok("a message past maxMessage is answered with close 1009", wsEvent(lb, w3, d3) === WS_CLOSE && d3.closeCode === 1009 && lb.awaitEnd(w3));
+  lb.hangUp(w3);
 
   const w4: i32 = lb.connect(false);
   lb.send(w4, ascii("GET /ws HTTP/1.1\r\nHost: a\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 8\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"));
@@ -822,6 +828,7 @@ export const serverChecks = (): i32 => {
     "a bad chunk size once the response has started: no second response, and the connection ends",
     cutShort.status === 200 && !cutShort.done && cutShort.text() === "ok" && lb.peers[midway].ended
   );
+  lb.hangUp(midway);
   t.eqI32(
     "refused with 400: Content-Length and Transfer-Encoding together (RFC 9112 §6.1)",
     statusFor(lb, "POST /echo HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n"),
@@ -847,6 +854,59 @@ export const serverChecks = (): i32 => {
   const good = lb.response(after, false);
   const bad = lb.response(after, false);
   t.ok("a refusal after a good pipelined request: the good one is answered first", good.status === 200 && bad.status === 400 && lb.awaitEnd(after));
+  lb.hangUp(after);
+
+  // H1-2: a refusal is a lingering close (RFC 9112 §9.6). Closed while the
+  // client's body was still arriving, the slot's socket answered the unread
+  // bytes with a reset, which could destroy the 413 before the client read it.
+  const pushyBody: u8[] = [];
+  for (let k: i32 = 0; k < 32768; k++) {
+    pushyBody.push(toU8(120));
+  }
+  lb.settle();
+  const pushy: i32 = lb.connect(false);
+  lb.send(pushy, join([ascii("POST /echo HTTP/1.1\r\nHost: a\r\nContent-Length: 99999999\r\n\r\n"), pushyBody]));
+  const pushyAnswer = lb.response(pushy, false);
+  t.ok(
+    "a client still sending its body reads the 413, then the end of the stream, not a reset",
+    pushyAnswer.status === 413 && lb.awaitEnd(pushy) && lb.peers[pushy].failure === 0
+  );
+  let pushySlot: i32 = toI32(-1);
+  for (let k: i32 = 0; k < toI32(lb.plain.connections.length); k++) {
+    if (lb.plain.holds(k) && lb.plain.connection(k).lingering()) {
+      pushySlot = k;
+    }
+  }
+  t.ok("and the slot lingers, draining what it still sends", lb.plain.busy() === 1 && pushySlot >= 0 && lb.plain.connection(pushySlot).lingering());
+  const pushySince: i64 = lb.plain.connection(pushySlot).lastActive;
+  lb.send(pushy, ascii("more"));
+  lb.settle();
+  t.ok(
+    "the drained bytes neither reach the program nor move the idle clock",
+    lb.plain.connection(pushySlot).lingering() && lb.plain.next(pushySlot) === H1_NEED_MORE && lb.plain.connection(pushySlot).lastActive === pushySince
+  );
+  t.eqI32("past lingerTimeout, before headTimeout and idleTimeout, it is closed", lb.plain.expire(monotonicNanos() + toI64(400000000)), toI32(1));
+  t.ok("and the slot is free", lb.plain.busy() === 0);
+  lb.hangUp(pushy);
+
+  const flooder: i32 = lb.connect(false);
+  lb.send(flooder, ascii("GET / HTTP/2.0\r\nHost: a\r\n\r\n"));
+  t.ok("a refused client that floods the linger reads its 505 first", lb.response(flooder, false).status === 505 && lb.awaitEnd(flooder));
+  const floodClosed: i32 = lb.closed;
+  const torrent: u8[] = [];
+  for (let k: i32 = 0; k < 70000; k++) {
+    torrent.push(toU8(120));
+  }
+  lb.send(flooder, torrent);
+  t.ok("past lingerBytes it is closed whatever it still sends", lb.awaitClosed(floodClosed + 1) && lb.plain.busy() === 0);
+  lb.hangUp(flooder);
+
+  const leaver: i32 = lb.connect(false);
+  lb.send(leaver, ascii("GET / HTTP/2.0\r\nHost: a\r\n\r\n"));
+  const leaverClosed: i32 = lb.closed;
+  t.ok("a refused client that hangs up ends the linger at once", lb.response(leaver, false).status === 505 && lb.awaitEnd(leaver));
+  lb.hangUp(leaver);
+  t.ok("and its slot is closed", lb.awaitClosed(leaverClosed + 1) && lb.plain.busy() === 0);
 
   // --- 5. Ends, the clock and the pool ---------------------------------------------------------------
   const closedBefore: i32 = lb.closed;
