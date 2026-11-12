@@ -133,7 +133,7 @@ for (;;) {
 export class HttpServerLimits {
   requests: i32 = 1024;          // request pool shared by all listeners
   maxBody: i32 = 1048576;        // a request body is held whole; 413 above
-  maxHead: i32 = 16384;          // copied head (method, target, fields); 431 above
+  maxHead: i32 = 32768;          // copied head (method, target, fields); 431 above
   maxFields: i32 = 100;          // fields in one request head; 431 above
   maxResponseFields: i32 = 32;   // program fields + content-length + alt-svc
   bodyTimeout: i32 = 30000;      // ms from head to whole body
@@ -147,15 +147,47 @@ export class HttpServerLimits {
 ```
 
 The constructor checks every limit and panics, with the limit's name, on
-one out of range, as `HandlerLimits` does: `requests` from 1 to 65536,
+one out of range: `requests` from 1 to 65536,
 `maxBody` from 0 to 2^30, `maxHead` from 256 to 2^20, `maxFields` from 1 to
 1024, `maxResponseFields` from 2 to 256, the three timeouts at least 1,
 `altSvcMaxAge` from 0 to 2^31 − 1, `altSvcPort` from 0 to 65535,
 `maxEvents` at least 1 and `jsonBytes` at least 256. Those ceilings keep
 every product in §6 inside an `i64` and every per-entry size inside an
-`i32`. The HTTP/1.1 carrier is configured from the same values
-(`Http1Config.maxBody`, `maxHeaderBytes` and `maxHeaders`), so it refuses
-what the façade would.
+`i32`. This is new behaviour, not parity: `HandlerLimits` sets only
+`maxBody`, and `HttpHandler`'s constructor checks four limits with one
+message that names none of them.
+
+**Carrier caps must fit the façade's.** The head copy (§3.1) goes into a
+buffer of `maxHead` bytes that never grows, and each carrier caps a head in
+its own terms. So each listen call checks the config it is given against
+`maxHead` and `maxFields`, and panics, naming both, when a head the carrier
+would accept could overrun the copy:
+
+- **`listenHttp1`.** The parser's head holds the request line and the
+  header section, and the request target has its own cap, separate from the
+  header section's. `Http1Server` bounds the whole head by
+  `maxTarget + maxHeaderBytes + 44` (`H1_LINE_OVERHEAD`, the method, version
+  and line ends; `std/net/http1-server.ts`). The check is
+  `config.maxTarget + config.maxHeaderBytes + 44 <= maxHead` and
+  `config.maxHeaders <= maxFields`. At the defaults it is
+  8192 + 16384 + 44 = 24620, under 32768; that sum is why `maxHead`
+  defaults to 32768 and not 16384.
+- **`listenH2c` and `listenHttp2Tls`.** HPACK counts each field, pseudo
+  fields included, as name + value + 32 bytes against `maxHeaderListSize`
+  (`HPACK_ENTRY_OVERHEAD`). The copy holds names and values only, and writes
+  `:authority` as the shorter `host`, so it is at most
+  `maxHeaderListSize − 32 × fields` bytes. The check is
+  `config.maxHeaderListSize <= maxHead`.
+- **`listenHttp3`.** QPACK counts `maxFieldSectionSize` the same way
+  (`QPACK_FIELD_OVERHEAD`, RFC 9114 §4.2.2). The check is
+  `config.maxFieldSectionSize <= maxHead`.
+
+With these checks no head a carrier accepts overruns the copy: the
+façade's 431 on bytes is a guard a correct carrier never reaches. Its 431
+on `maxFields` is real on h2 and h3, whose carriers count bytes, not fields
+(16384 bytes admit up to 512 fields). `maxBody` needs no check: the façade
+answers 413 past `limits.maxBody` on every version, and an
+`Http1Config.maxBody` smaller than that makes the carrier answer 413 first.
 
 ### 2.2 Listeners
 
@@ -281,13 +313,15 @@ cannot be avoided on HTTP/2 or HTTP/3:
   layout. It is valid only until the next request or trailers on the
   connection, so it is copied the same way.
 
-**A head too large to copy.** The copy never grows `head` or `spans`. On
-HTTP/2 and HTTP/3, a head whose copy would pass `maxHead` bytes or
-`maxFields` fields is answered 431 with no body, and the stream ends; it
-never reaches `take`. On HTTP/1.1 the carrier refuses it first, through
-`maxHeaderBytes` and `maxHeaders` (§2.1). The h2 carrier's own
-`maxHeaderListSize` refusal is also 431, so a client sees one status for
-one fault on every version.
+**A head too large to copy.** The copy never grows `head` or `spans`.
+Every carrier's head caps are checked against `maxHead` and `maxFields` at
+listen time (§2.1), so a head too long for the copy is refused by its
+carrier first: 414 for an HTTP/1.1 target past `maxTarget`, 431 for an
+HTTP/1.1 header section past `maxHeaderBytes` or `maxHeaders`, 431 for an h2
+list past `maxHeaderListSize` or an h3 section past `maxFieldSectionSize`.
+On HTTP/2 and HTTP/3, a head under the carrier's byte cap with more than
+`maxFields` fields is answered 431 by the façade with no body, and the
+stream ends. None of these reaches `take`.
 
 **Targets the router cannot match.** Routes start with `/`, so the router
 matches neither the authority form of a plain `CONNECT` (which passes
@@ -540,7 +574,7 @@ listen time, or on first use and then kept:
 | What | Made | Per warmed request |
 | --- | --- | --- |
 | request pool (`HttpServerRequest` × `requests`) | constructor | none |
-| each request's `head` (`maxHead` bytes), `spans` (4 × `maxFields`), `params` (the router's `maxParams`) | constructor, at their caps; never grown | none |
+| each request's `head` (`maxHead` bytes), `spans` (4 × `maxFields` `i32`s), `params` (2 × the router's `maxParams` `i32`s) | constructor, at their caps; never grown | none |
 | each request's `body` | grown in two tiers, below | none once at its tier |
 | each request's `pending` | grown to the largest remainder held, below | none once at that size |
 | HTTP/1.1 connections | `Http1Server`, reused per slot | none |
@@ -554,6 +588,18 @@ listen time, or on first use and then kept:
 | content-length digits, 20 bytes | constructor, per request | none |
 | TLS server random and ephemeral key, 32 bytes each | `listenHttp2Tls`, refilled with `crypto.getRandomValues` before each `accept` | none |
 | JSON writer, `jsonBytes` | constructor | none |
+
+**What the constructor makes.** The pool is made at its caps, so it is
+resident before the first request. At the defaults: heads
+1024 × 32 KiB = 32 MiB; spans 1024 × 400 × 4 bytes ≈ 1.56 MiB; params
+1024 × 32 × 4 bytes = 128 KiB; content-length digits 1024 × 20 bytes =
+20 KiB; the JSON writer 64 KiB. That is under 34 MiB, plus the request
+objects themselves. `HttpHandler` instead grows `head` and `spans` to the
+largest request seen (`handler.ts`, `begin`), so it starts small and
+reaches its ceiling only under load. The façade pays the memory up front so
+that no request grows a head and the listen-time checks are the whole
+story; a program that needs a smaller start lowers `requests` or `maxHead`
+(with its carriers' caps).
 
 **What the arena can hold.** Memory is a bump arena: `Arena` has no
 `release` and no `reset` (`runtime/nish.d.ts`). A grown array is a new
@@ -578,7 +624,8 @@ One entry therefore holds less than `maxBody + 3 × T` in body arrays, live
 and abandoned together. Over the pool, body memory is below
 `requests × (maxBody + 3 × T)`: at the defaults
 1024 × (1 MiB + 192 KiB) = 1.1875 GiB, reached only when every entry has
-held a body over 64 KiB. An entry that never holds more than 64 KiB stays
+held a body over 64 KiB; it sits on top of what the constructor made
+(under 34 MiB at the defaults) and the connections' own buffers. An entry that never holds more than 64 KiB stays
 under 192 KiB. Small bodies, the common case, never pay `maxBody`.
 `maxBody ≤ 2^30` and `requests ≤ 65536` keep the product in an `i64`; it is
 computed as one for the guide page, which states it beside both limits.
@@ -586,8 +633,11 @@ computed as one for the guide page, which states it beside both limits.
 **`pending`, owned by the program.** It holds the part of a response that
 flow control held back (§3.2), so its size is set by what the program
 writes, not by the client. It grows the same way, to
-`max(needed, 2 × current)`, so an entry holds less than 4 × the largest
-remainder it has held, abandoned arrays included. The façade puts no cap
+`min(2^30, max(needed, 2 × current))`, computed in `i64` so the doubling
+cannot overflow `i32` past 2^30. A remainder that would need more than
+2^30 bytes, the longest array the runtime grows to, is refused: `write`
+returns `HANDLER_DROPPED` and writes nothing. Below that, an entry holds
+less than 4 × the largest remainder it has held, abandoned arrays included. The façade puts no cap
 on it: a program that writes a 100 MiB body in one `write` to a client
 that opens no window can make `pending` hold it. A program that serves
 large responses writes them in pieces and waits for `hungUp` or the next
@@ -675,7 +725,8 @@ version.
 | the client resets the stream, or hangs up, before the answer | `hungUp` true, answer `HANDLER_DROPPED`, no bytes on a reused slot |
 | request pool full | h2: RST_STREAM REFUSED_STREAM; h3: H3_REQUEST_REJECTED; h1: back-pressure, then served |
 | body over `maxBody` | 413 on every version; h1: connection ended by the carrier; h2: RST_STREAM NO_ERROR after the 413; h3: STOP_SENDING H3_NO_ERROR after the 413, the rest dropped |
-| one h2 connection opens more than `max(1, min(maxStreams, requests / 4))` streams | the excess get RST_STREAM REFUSED_STREAM; other connections still served |
+| with `requests` 8 (cap 2, under the carrier's `maxStreams` of 100): one h2 connection opens 3 streams, a second opens 1 | the third stream gets RST_STREAM REFUSED_STREAM; the second connection's stream is served |
+| with `requests` 8: four h2 connections, 2 streams each | all 8 served; a fifth connection's stream is refused (pool full): the cap bounds a connection, not a peer (§9.2) |
 | `requests` of 1, 2 and 3, one GET on each of h2 and h3 | served (the per-connection cap is 1, not 0) |
 | `requests` of 0 | the constructor panics, naming `requests` |
 | a body that stalls past `bodyTimeout` | h1: slot closed; h2: RST_STREAM CANCEL; h3: STOP_SENDING and reset; the request never reaches `take` |
@@ -683,9 +734,12 @@ version.
 | an h2c connection that sends the preface, then nothing | closed by `idleTimeout`, not `prefaceTimeout` |
 | `altSvcMaxAge = 0`, with and without an HTTP/3 listener | `alt-svc: clear` on HTTP/1.1 and h2 over TLS; absent on h2c and h3 |
 | `altSvcPort` set | that port in the field, not the QUIC socket's own |
-| with `requests` 8: a 1 MiB body on every pool entry, then 1 MiB bodies again | `Arena.used()` grows by less than 8 × (1 MiB + 192 KiB) in the first pass and is flat in the second (§6) |
-| with `requests` 8: 1 KiB bodies on every entry | `Arena.used()` grows by less than 8 × 192 KiB; no entry makes a `maxBody` array |
-| a head over `maxHead`, or more than `maxFields` fields, on each version | 431; nothing grows |
+| with `requests` 8, four h2 connections holding 2 requests each: a 1 MiB body on every pool entry, then 1 MiB bodies again | measured from after a warm-up pass of one small request on each connection (which makes the connections, pools and field arrays): `Arena.used()` grows by less than 8 × (1 MiB + 192 KiB) in the first pass and is flat in the second (§6) |
+| the same, with 1 KiB bodies | from the same warm-up: grows by less than 8 × 192 KiB; no entry makes a `maxBody` array |
+| HTTP/1.1 at the default caps: an 8000-byte target and 16000 bytes of fields | served; the head is copied whole into 32768 bytes |
+| HTTP/1.1: the same target and 16400 bytes of fields; a 9000-byte target | 431 and 414 from the carrier; nothing grows |
+| h2 and h3: a list just under the carrier's byte cap; one with 101 small fields | served; 431 from the façade, nothing grows |
+| `listenHttp1` with `maxTarget + maxHeaderBytes + 44 > maxHead`, or `maxHeaders > maxFields`; `listenH2c`, `listenHttp2Tls` or `listenHttp3` with a byte cap over `maxHead` | panics, naming both caps |
 | a plain `CONNECT`, and `OPTIONS *`, on each version | 501, and 204 with no `Allow`; neither reaches `take` |
 | response over `maxResponseFields` | `HANDLER_DROPPED`, nothing written |
 | a window of 1 byte on h2 and h3 | the whole body arrives in order via `pending` |
@@ -735,9 +789,14 @@ in the same PR (`node scripts/security-scope.mjs`).
   façade path that cannot be reached.
 - **Cross-version starvation:** the request pool is shared, so one h2
   connection could hold up to `maxStreams` requests. A per-connection cap,
-  `max(1, min(maxStreams, requests / 4))` (§3.3), keeps one peer from
-  taking the pool once it holds 4 or more requests. The
-  record pins it with a test.
+  `max(1, min(maxStreams, requests / 4))` (§3.3), keeps one *connection*
+  from taking the pool. It does not bound a peer: one with 4 or more h2 or
+  h3 connections can hold every request, bounded only by the listeners'
+  `slots`. The façade cannot tell peers apart (behind a NAT or a proxy,
+  many clients share an address), so a per-address bound is the
+  deployment's, in front of the listeners; the record states this as open.
+  An HTTP/1.1 connection holds one request at a time, so h1 slots bound
+  h1 the same way. The record pins the per-connection cap with a test.
 - **Late answers:** slot generations and stream marks (§3.3). An answer
   never reaches a different connection or stream.
 - **Alt-Svc comes only from configuration.** No request field changes it,
