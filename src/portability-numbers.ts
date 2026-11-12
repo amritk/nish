@@ -31,6 +31,7 @@ import {
   N_CONSTRUCTOR,
   N_EMPTY,
   N_IDENT,
+  N_IMPORT_SPEC,
   N_NUMBER,
   N_PAREN,
   N_UNARY,
@@ -39,7 +40,10 @@ import {
 } from "./nodes"
 import { isBuiltinConversion } from "./bounds"
 import { Edit } from "./diagnostics"
+import { StringSet } from "./map"
+import { ParentTable } from "./parents"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
+import { CheckedProgram } from "./program"
 import { intBits, isInteger, isUnsigned, T_I32, T_U16, T_U32, T_U8 } from "./types"
 
 /**
@@ -163,7 +167,9 @@ const isConverted = (walk: PortabilityWalk, node: Node, type: i32): boolean => {
  * The conversion is the identity on its own type, so the IR does not move,
  * and under Node it truncates the exact quotient to the one written here.
  *
- * None is offered where that is not certain: a generic body, whose other
+ * None is offered where that is not certain: a module that names the
+ * conversion as anything but the builtin (`boundConversionNames`), where the
+ * edit could call the module's own; a generic body, whose other
  * instantiations the edit would change too; an operand or result not exactly
  * `type`, so a `/=` on a ranged target, whose assignment a check reads; and a
  * `/=` on anything but a plain name, which the rewrite would evaluate twice.
@@ -183,6 +189,7 @@ const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] =>
   const right = node.children[1]
   if (
     name === "" ||
+    walk.bound.has(name) ||
     walk.sig.instance !== null ||
     types[node.id] !== type ||
     types[left.id] !== type ||
@@ -203,6 +210,50 @@ const divisionReview = (walk: PortabilityWalk, node: Node, type: i32): Edit[] =>
   const divisor = bare ? walk.textOf(right) : `(${walk.textOf(right)})`
   edits.push(new Edit(left.end, right.end, ` = ${name}(${left.text} / ${divisor})`))
   return edits
+}
+
+/**
+ * Which of the conversions NL8006's edit writes, `toI32`, `toU8`, `toU16` and
+ * `toU32`, the module names as anything but the builtin: an import, a
+ * function, a `const`, a parameter or a loop variable anywhere in it, or a
+ * method or field of that name. The edit is declined for each one, since the
+ * name it writes could reach the module's own binding rather than the
+ * conversion. The whole module, not the scope at the site: a name bound
+ * elsewhere costs only the edit, and a scope walk would be one more place to
+ * get shadowing wrong.
+ */
+export const boundConversionNames = (program: CheckedProgram, parents: ParentTable): StringSet => {
+  const out = new StringSet()
+  collectBoundConversions(program, parents, program.file, out)
+  return out
+}
+
+const collectBoundConversions = (
+  program: CheckedProgram,
+  parents: ParentTable,
+  node: Node,
+  out: StringSet
+): void => {
+  const named =
+    node.text === "toI32" || node.text === "toU8" || node.text === "toU16" || node.text === "toU32"
+  // `import { half as toI32 }` binds the spec's own text; its IDENT is `half`.
+  if (named && node.kind === N_IMPORT_SPEC) {
+    out.add(node.text)
+  }
+  if (named && node.kind === N_IDENT) {
+    const call = parents.parentOf(node)
+    const builtin =
+      call !== null &&
+      call.kind === N_CALL &&
+      call.children[0] === node &&
+      isBuiltinConversion(program, call, node.text)
+    if (!builtin) {
+      out.add(node.text)
+    }
+  }
+  for (const child of node.children) {
+    collectBoundConversions(program, parents, child, out)
+  }
 }
 
 /** Whether `node` is or contains a `/` or `/=`, at any depth. */

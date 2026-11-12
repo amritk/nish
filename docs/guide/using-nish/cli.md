@@ -527,7 +527,10 @@ original text: `a / b / c` gets two edits that both insert `toI32(` at one
 place, and applied that way they nest, `toI32(toI32(a / b) / c)`. Wrapping
 arithmetic (`NL8007`) and `>>>` on an `i32` (`NL8008`) get no `review`: no
 spelling of them reads the same under Node without costing an instruction
-here.
+here. A division gets none either in a generic function, where the operand
+types differ from the conversion's, or in a file that defines or imports a
+name `toI32`, `toU8`, `toU16` or `toU32` of its own, which the edit would
+call instead of the conversion.
 
 ## Colour, and when an agent runs `nish`
 

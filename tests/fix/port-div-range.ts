@@ -2,8 +2,10 @@
 // proof: `a / 4 + 1` on i32 skips its overflow check, and `ys[a / 4]` under
 // `a < 16` its bounds check. The review edit's same-type conversion keeps the
 // quotient's range, so each reviewed form compiles to the input's IR, for
-// each conversion, a loop to `a / 4` among them: its index stays below 4, so
-// `i * 1000000` skips its overflow check.
+// each conversion, a loop to `a / 4` among them. Where the input drops a check
+// (`addI32`'s overflow, `atI32`'s bounds, `sumU8`'s `i * 1000000`, listed in
+// `.ll-lacks`) the reviewed form drops it too; an unsigned index keeps its
+// bounds check either way.
 const addI32 = (a: i32): i32 => a / 4 + 1
 const addU8 = (a: u8): u8 => a / 4 + 1
 const addU16 = (a: u16): u16 => a / 4 + 1

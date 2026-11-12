@@ -1275,9 +1275,11 @@ const convertedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
  * already of `type`, the conversion's own, or `null`. The conversion emits
  * nothing then, so the value has the quotient's range: wrapping a division as
  * NL8006's review edit does, `toI32(a / 4) + 1`, keeps the proof that lets
- * `a / 4 + 1` skip its overflow check. Only a quotient, the shape the edit
- * writes: any other argument keeps the conversion's own range, as before, so
- * no program that did not take the edit compiles differently.
+ * `a / 4 + 1` skip its overflow check. That holds for a conversion written by
+ * hand as well: `toI32(a / 4) + 1` or `ys[toI32(a / 4)]` in a program that
+ * never ran the edit now drops the check the quotient's range proves, where
+ * 0.38.0 kept it. Only a quotient, the shape the edit writes: any other
+ * argument keeps the conversion's own range, as before.
  */
 const identityConversionOf = (program: CheckedProgram, table: TypeTable, e: Node, type: i32): Node | null => {
   if (e.kind !== N_CALL) {

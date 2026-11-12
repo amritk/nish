@@ -6622,6 +6622,17 @@ if (!only || "arena_removed".includes(only)) {
         fs.existsSync(ll) && fs.existsSync(reviewedLl) && fs.readFileSync(ll).equals(fs.readFileSync(reviewedLl)),
         "the two .ll files differ"
       )
+      // `.ll-lacks` names, one `<function> <text>` per line, a check the
+      // input's IR must not hold in that function's body: a case about the
+      // edit keeping a proof lists the checks the proof drops.
+      const lacks = sidecar(path.join(fixDir, `${name}.ll-lacks`), "")
+      const irText = fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+      for (const line of lacks === "" ? [] : lacks.split("\n")) {
+        const [fn, needle] = line.split(" ")
+        const head = irText.indexOf(` @${fn}(`)
+        const body = head === -1 ? "" : irText.slice(head, irText.indexOf("\n}\n", head))
+        check(`fix ${name}: the input's IR for ${fn} holds no \`${needle}\``, body !== "" && !body.includes(needle), body || `no @${fn} in plain.ll`)
+      }
       const want = fs.readFileSync(path.join(fixDir, `${name}.stdout`), "utf8")
       if (HAS_CLANG) {
         const exe = path.join(work, "native")

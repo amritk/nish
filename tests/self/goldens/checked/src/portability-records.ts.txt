@@ -114,7 +114,7 @@ function recordFindings(walk: PortabilityWalk, node: Node, out: PortabilityFindi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via aliasedRecordElements
   calls: aliasedRecordElements copyFindings overwriteFindings
-  pointer walk: size=48 writesThrough=true captured=true passedTo=copyFindings#0 overwriteFindings#0
+  pointer walk: size=56 writesThrough=true captured=true passedTo=copyFindings#0 overwriteFindings#0
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=copyFindings#2 overwriteFindings#2
   stackSites=0 stackLocals=0
@@ -176,7 +176,7 @@ function RecordIndex.constructor(this: RecordIndex, walk: PortabilityWalk, alias
   escaping: aliased walk
   calls: CalleeEffects.constructor StringMap.constructor nish_alloc_struct
   pointer this: size=80 writesThrough=true captured=false
-  pointer walk: size=48 writesThrough=true captured=true
+  pointer walk: size=56 writesThrough=true captured=true
   pointer aliased: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:17 new StringMap -> @StringMap.constructor
@@ -504,7 +504,7 @@ function isLoop(node: Node): boolean -> @isLoop
 function repeatingLoop(walk: PortabilityWalk, node: Node, decl: Node | null): Node | null -> @repeatingLoop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ParentTable.parentOf isInside isLoop
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   pointer decl: size=40 writesThrough=false captured=false passedTo=isInside#0
   stackSites=0 stackLocals=0
@@ -525,7 +525,7 @@ function runsAfter(earlier: Node, later: Node, loop: Node | null): boolean -> @r
 function copyFinding(walk: PortabilityWalk, copy: CopySite, write: Node, seenBy: i32): PortabilityFinding -> @copyFinding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: PortabilityFinding.constructor PortabilityWalk.textOf SourceFile.lineOf nish_alloc_struct nish_str_concat nish_str_from_i32
-  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
   pointer copy: size=24 writesThrough=false captured=false
   pointer write: size=40 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#1
   stackSites=0 stackLocals=0
@@ -613,7 +613,7 @@ function copyFindings(walk: PortabilityWalk, aliased: StringSet, out: Portabilit
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: RecordIndex.at RecordIndex.constructor RecordIndex.declarationOf RecordIndex.index RecordIndex.readLimit Side.constructor StringMap.get copyFinding firstUnseen nish_array_grow nish_str_concat repeatingLoop unseenBy
-  pointer walk: size=48 writesThrough=true captured=true passedTo=RecordIndex.constructor#1 repeatingLoop#0 copyFinding#0
+  pointer walk: size=56 writesThrough=true captured=true passedTo=RecordIndex.constructor#1 repeatingLoop#0 copyFinding#0
   pointer aliased: size=8 writesThrough=true captured=true passedTo=RecordIndex.constructor#2
   pointer out: size=0 writesThrough=true captured=false
   stackSites=2 stackLocals=2
@@ -652,14 +652,14 @@ function callArguments(call: Node): Node[] -> @callArguments
 function isRecordValue(walk: PortabilityWalk, expr: Node): boolean -> @isRecordValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: inlineElementStruct nish_panic_index
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 inlineElementStruct -> @inlineElementStruct
 function writesThroughArgument(walk: PortabilityWalk, arg: Node, effect: i32): boolean -> @writesThroughArgument
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index storesInlineElements
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer arg: size=40 writesThrough=false captured=false passedTo=storesInlineElements#2
   stackSites=0 stackLocals=0
   callee +0:45 storesInlineElements -> @storesInlineElements
@@ -668,7 +668,7 @@ function arrayOfArgument(walk: PortabilityWalk, arg: Node): Node -> @arrayOfArgu
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: arg
   calls: nish_panic_index storesInlineElements unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer arg: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:27 storesInlineElements -> @storesInlineElements
@@ -676,7 +676,7 @@ function arrayOfArgument(walk: PortabilityWalk, arg: Node): Node -> @arrayOfArgu
 function copiesInto(walk: PortabilityWalk, record: Node, array: Node): boolean -> @copiesInto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.refOf nish_panic_index storesInlineElements
-  pointer walk: size=48 writesThrough=false captured=false
+  pointer walk: size=56 writesThrough=false captured=false
   pointer record: size=40 writesThrough=false captured=false
   pointer array: size=40 writesThrough=false captured=false passedTo=storesInlineElements#2
   stackSites=0 stackLocals=0
@@ -828,7 +828,7 @@ function builtinEffect(call: Node): i32 -> @builtinEffect
 function overwriteFinding(walk: PortabilityWalk, found: SlotOverwrite): PortabilityFinding -> @overwriteFinding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   calls: PortabilityFinding.constructor PortabilityWalk.textOf SourceFile.lineOf nish_alloc_struct nish_str_concat nish_str_from_i32
-  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0
   pointer found: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 new PortabilityFinding -> @PortabilityFinding.constructor
@@ -838,7 +838,7 @@ function overwriteFindings(walk: PortabilityWalk, aliased: StringSet, out: Porta
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_array_grow overwriteFinding slotOverwrites
-  pointer walk: size=48 writesThrough=false captured=false passedTo=overwriteFinding#0
+  pointer walk: size=56 writesThrough=false captured=false passedTo=overwriteFinding#0
   pointer aliased: size=8 writesThrough=true captured=true passedTo=slotOverwrites#3
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0

@@ -403,9 +403,13 @@ it: an integer `/` wrapped in its own type's conversion, `toI32(a / b)`,
 emits nothing here and truncates the double quotient under Node. It declines
 in a generic body, for `/=` on an element or field, for `/=` on a ranged
 target, for a `/=` whose divisor holds a `/` or with a comment before its
-`/=`, and for `i64` and `u64`. A ranged operand's `/` takes the edit: the
+`/=`, where an operand's type is not the conversion's, in a module that
+binds the conversion's name itself (an import, renamed or not, a function,
+`const`, parameter or loop variable, which the edit would call), and for
+`i64` and `u64`. A ranged operand's `/` takes the edit: the
 range analysis reads a quotient's conversion to its own type as the quotient, so
-`toI32(a / 4) + 1` keeps the proof that drops `a / 4 + 1`'s overflow check.
+`toI32(a / 4) + 1` keeps the proof that drops `a / 4 + 1`'s overflow check,
+whether the edit or a hand wrote it.
 Edits compose: `a / b / c` gets two, both inserting `toI32(` at one offset,
 and applied together they nest, `toI32(toI32(a / b) / c)`. NL8007 and NL8008 decline everywhere: a mask or a
 `| 0` still warns and costs an instruction, and the conversions saturate
