@@ -196,8 +196,10 @@ A top-level function can be kept in a variable, a field or an array, and
 returned, as a [function reference](function-references.md). When a function
 only needs to call the one it is given, give it a **parameter of function
 type** written out in its parameter list instead, and pass it a named
-top-level function, an arrow written right at the call, or a variable, field
-or element that holds a function reference:
+top-level function, an arrow written right at the call, or a variable that
+holds a [function reference](function-references.md#as-a-function-argument).
+A field or element is refused (`NL2741`): read it into a `const` first, as in
+`const op = ops[0]`, and pass the `const`:
 
 ```ts nish:ok
 const countWhere = (xs: i32[], keep: (x: i32) => boolean): i32 => {

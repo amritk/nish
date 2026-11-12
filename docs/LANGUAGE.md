@@ -668,9 +668,10 @@ the IR; only a computed count costs the mask
 
 ### Nullable types
 
-`T | null` is available for `T` a class, interface, array, or string
-(`tests/cases/mem_nullable`; [wp6-memory.md](wp6-memory.md#4-t--null)). It
-is the same LLVM pointer type as `T` with the constant `null` as one more
+`T | null` is available for `T` a class, interface, array, string, or
+function reference (`tests/cases/mem_nullable`;
+[wp6-memory.md](wp6-memory.md#4-t--null)). For a pointer type it is the same
+LLVM pointer type as `T` with the constant `null` as one more
 value, so nothing is boxed; `null` takes its type from context. A
 [function reference](#function-references) may be nullable too: it is an
 `i32` tag, and `null` is tag 0, which names no function
@@ -3568,7 +3569,11 @@ export const main = (): i32 => {
   `reject_fnref_arg_element_nullable`). A nullable local is passed once a
   test has narrowed it:
   `` `h` may be `null`, and `apply` calls it: pass it once a test such as `h !== null` has narrowed it ``
-  (NL2742, `tests/wordings/nl2742_fnarg_nullable_reference`). A reference of
+  (NL2742, `tests/wordings/nl2742_fnarg_nullable_reference`). A local that a
+  later argument of the same call assigns is refused, since the call reads it
+  after its arguments where JavaScript reads it before them:
+  `` `h` is assigned by a later argument of `apply`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const` ``
+  (NL2743, `reject_fnarg_ref_assigned_later`). A reference of
   another signature is refused as any other function argument is (NL2340,
   `tests/wordings/nl2340_fnarg_reference_arity`); any
   other value is refused and named by its type,
@@ -3750,8 +3755,10 @@ export const main = (): void => {
   call through what it returns dispatches over the functions stored into any
   of them (`fnref_map`, `fnref_place_set_map`); where one of those keeps a
   pointer argument the others leave alone, that call is the mixed set above
-  and refused (`reject_fnref_place_set_map`). A call whose result has no
-  place of its own can hold every function of its type. A set past
+  and refused (`reject_fnref_place_set_map`). An assignment used as a value,
+  `k((r = inc))`, stores into its target and hands the same function on
+  (`fnref_assign_value`); a value the compiler does not follow, such as a
+  module constant, can hold every function of its type. A set past
   eight members is warning NL9017, a `switch` where a direct call would not
   branch (`tests/wordings/nl9017_fnref_wide_set`). Under `--profile debug` the
   dispatcher first checks that the tag is in its set and panics with
@@ -15346,11 +15353,11 @@ messages are exact for the cases cited; other entries quote the checker
 - **a function reference to a function it cannot hold, or used other than
   called, compared, stored or passed**: NL2725, NL2726, NL2727, NL2728,
   NL2729, NL2730, NL2732, NL2733, NL2734, NL2735, NL2736, NL2737, NL2739,
-  NL2740, NL2741 and NL2742 (`reject_fnref_generic`, `_async`, `_ffi`,
+  NL2740, NL2741, NL2742 and NL2743 (`reject_fnref_generic`, `_async`, `_ffi`,
   `_rest`, `_zero_fill`, `_host`, `_host_field`, `_no_strict`, `_escape_join`,
   `_escape_join_transitive`, `_print`, `_json`, `_map_key`, `_nullable_call`,
   `_arg_effect`, `_arg_field`, `_arg_element_nullable`, `reject_fnarg_alias`,
-  `reject_mutex_guard_helper_*`; [Function references](#function-references))
+  `reject_fnarg_ref_assigned_later`, `reject_mutex_guard_helper_*`; [Function references](#function-references))
 - **a function argument that is not a function's name, an arrow or a local
   holding a reference, or does not match**:
   `` Argument 1 of `apply` must be the name of a top-level function or an arrow written at the call, ... ``

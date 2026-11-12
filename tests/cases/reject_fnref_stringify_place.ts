@@ -17,7 +17,10 @@ class Box {
 
 export const show = (n: F | null): void => {
   console.log(n)
-  console.log(`${n}`)
+}
+
+export const hole = (m: F | null): void => {
+  console.log(`${m}`)
 }
 
 export const main = (): void => {
@@ -25,4 +28,5 @@ export const main = (): void => {
   console.log(JSON.stringify(fs[0]))
   console.log(new Box(inc).show())
   show(inc)
+  hole(inc)
 }

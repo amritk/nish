@@ -3366,6 +3366,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
       // it captures like any other, so the call is through the capture.
       if (outerReference(ctx, callee.text)) {
         const held = checkExpression(ctx, callee, scope, -1)
+        if (held !== T_ERROR && nullableReference(ctx, held)) {
+          return refuseNullableCall(ctx, callee, callee.text)
+        }
         return held === T_ERROR ? T_ERROR : checkReferenceCall(ctx, expr, held, callee.text, scope)
       }
       refuseOnce(ctx, callee, outerFunctionMessage(ctx, callee.text))

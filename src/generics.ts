@@ -55,6 +55,7 @@ import {
   CAPTURE_PARALLEL,
   CAPTURE_TASK,
   CAPTURE_REGION,
+  assignsName,
   capturesNothing,
   callLetCaptureMessage,
   callThisCaptureMessage,
@@ -202,9 +203,9 @@ export const isCollectionTemplate = (template: StructTemplateInfo): boolean =>
  * identity, and an array, a nullable type and a `Result` wait for a program
  * that needs one. A value is stored as it is, so it is anything but `void` and
  * an interface, whose record would be copied in rather than shared. A function
- * reference, or an array, nullable, maybe or `Result` holding one, is refused
- * as a value until a `Map` value is a place the reference pass tracks (WP51
- * stage 2); as a key it fails the key rule.
+ * reference, or an array or nullable of one, is a value like any other: the
+ * reference pass tracks it as the element place of its type (WP51 stage 2).
+ * As a key it fails the key rule.
  */
 const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string => {
   if (args.length !== template.typeParams.length || args.length === 0) {
@@ -2226,6 +2227,24 @@ const rootedInLocal = (expr: Node, scope: Scope): boolean => {
   return root.kind === N_THIS || (root.kind === N_IDENT && scope.lookup(root.text) !== null)
 }
 
+/** Whether an argument of `call` after `arg` assigns the local `name`. */
+const laterArgumentAssigns = (call: Node, arg: Node, name: string): boolean => {
+  for (const child of call.children) {
+    if (child.kind === N_LIST) {
+      let after = false
+      for (const each of child.children) {
+        if (after && assignsName(each, name)) {
+          return true
+        }
+        if (each === arg) {
+          after = true
+        }
+      }
+    }
+  }
+  return false
+}
+
 /**
  * WP51 stage 2: the reference `written` (a local of reference type `type`) given for the function parameter at `index`,
  * rewritten in the call into the arrow `($a0, ...) => written($a0, ...)` and
@@ -2258,6 +2277,16 @@ const referenceArgument = (
       ctx,
       arg,
       `\`${shown}\` is a function reference: \`${calleeSpelling(call, template)}\` takes a top-level function or an arrow named at the call`
+    )
+    return null
+  }
+  if (written.kind === N_IDENT && laterArgumentAssigns(call, arg, written.text)) {
+    // The arrow's capture of the local is read once every argument has run,
+    // where JavaScript reads the argument at its own position.
+    refuseOnce(
+      ctx,
+      arg,
+      `\`${shown}\` is assigned by a later argument of \`${calleeSpelling(call, template)}\`, and the call reads it after its arguments where JavaScript reads it before them: read it into a \`const\` first and pass the \`const\``
     )
     return null
   }

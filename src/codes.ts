@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 900
+export const RULE_COUNT: i32 = 901
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -443,6 +443,8 @@ const diagnosticRules = (): string[] => [
   "NL2327",
   "` writes the argument `exposeWith` hands it, a channel out of `expose` its result type does not name: return what it computes instead",
   "NL2450",
+  "`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const`",
+  "NL2743",
   "`: only a value of a class or interface the program declares has fields an object spread copies one by one, so set each field by name",
   "NL2705",
   "` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself",

@@ -66,7 +66,11 @@ import {
 import { Local, Scope, STORAGE_PARAM } from "./symbols"
 import { T_ERROR, T_I32, T_VOID, TypeTable } from "./types"
 
+/** Whether `op` stores a reference into its left side: `=` or a logical assignment. */
+const isRefAssignment = (op: string): boolean => op === "=" || op === "??=" || op === "||=" || op === "&&="
+
 /** One module as the pass sees it: what it checked, its context, its tree and its parents. */
+
 export class RefModule {
   program: CheckedProgram
   ctx: CheckContext
@@ -164,7 +168,9 @@ class RefPass {
    * `Map<K, F | null>`'s `get` gives `(F | null) | undefined` (WP51 stage 2).
    */
   refType(node: Node): i32 {
-    const type = this.stripType(this.typeOf(node))
+    // An assignment used as a value, `k(r = plus1)`, is the value it stores.
+    const typed = node.kind === N_BINARY && isRefAssignment(node.text) ? node.children[1] : node
+    const type = this.stripType(this.typeOf(typed))
     return this.table.isFnRef(type) ? type : -1
   }
 
@@ -345,9 +351,21 @@ class RefPass {
           this.flow(node.children[1], target)
           return
         }
-        if (node.text === "=") {
-          this.scan(node)
-          this.flow(node.children[0], target)
+        if (isRefAssignment(node.text)) {
+          // `k(r = plus1)`: the value stored is the value passed on. Its
+          // target carries no type of its own, so the stored value goes
+          // through one place into both. `r ??= plus1` may keep what `r`
+          // held, so that is in the value too.
+          const value = this.newPlace(type)
+          this.flow(node.children[1], value)
+          const stored = this.target(node.children[0], type)
+          if (stored >= 0) {
+            this.storeFrom(stored, value, node)
+            if (node.text !== "=") {
+              this.storeFrom(value, stored, node)
+            }
+          }
+          this.storeFrom(target, value, node)
           return
         }
         break
@@ -417,7 +435,9 @@ class RefPass {
     if (!this.table.isArray(receiver)) {
       return -1
     }
-    const element = this.table.refOf(receiver)
+    // An array of `F | null` stores and yields `F`'s element place too: a
+    // `push` into it must reach the place `hs[i]` reads.
+    const element = this.stripType(this.table.refOf(receiver))
     if (!this.table.isFnRef(element)) {
       return -1
     }
@@ -570,7 +590,7 @@ class RefPass {
       }
       case N_BINARY: {
         const op = node.text
-        if ((op === "=" || op === "??=" || op === "||=" || op === "&&=") && this.isRef(node.children[1])) {
+        if (isRefAssignment(op) && this.isRef(node.children[1])) {
           const place = this.target(node.children[0], this.refType(node.children[1]))
           this.flow(node.children[1], place)
           return
@@ -615,8 +635,9 @@ class RefPass {
         if (head.kind === N_VAR && head.children.length > 0 && head.children[0].children.length > 0) {
           const decl = head.children[0].children[0]
           const local = this.locals[decl.id]
-          if (local !== null && this.table.isFnRef(local.type)) {
-            this.storeFrom(this.localPlace(local, local.type), this.elementPlace(local.type), node)
+          const type = local === null ? -1 : this.stripType(local.type)
+          if (local !== null && this.table.isFnRef(type)) {
+            this.storeFrom(this.localPlace(local, type), this.elementPlace(type), node)
           }
         }
         this.scan(node.children[1])

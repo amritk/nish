@@ -238,7 +238,8 @@ export const outerReference = (ctx: CheckContext, name: string): boolean => {
   for (const scope of ctx.arrowOuterScopes) {
     const local = scope.lookup(name)
     if (local !== null) {
-      return ctx.table.isFnRef(scope.typeOf(local))
+      // A nullable one is a reference too: the call is refused until a test narrows it.
+      return ctx.table.isFnRef(ctx.table.stripNull(scope.typeOf(local)))
     }
   }
   return false

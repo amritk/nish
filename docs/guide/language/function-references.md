@@ -240,7 +240,10 @@ A field or array element is refused (`NL2741`): the arrow would read it
 again each time the callee calls it, where JavaScript reads it once. Read it
 into a `const` first and pass the `const`, as in `const op = ops[0]` then
 `apply(op, 1)`. A variable that may be `null` is passed once a test such as
-`h !== null` has narrowed it (`NL2742`).
+`h !== null` has narrowed it (`NL2742`). And a variable that a later
+argument of the same call assigns, as in `apply(h, k((h = inc)))`, is
+refused (`NL2743`): the call would read it after that assignment, where
+JavaScript reads it before; read it into a `const` first.
 
 The builtins that check the body they are handed, such as `parallelMap`, a
 scope's `spawn`, `expose` and `region`, take only a function's name or an
