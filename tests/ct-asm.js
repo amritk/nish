@@ -61,8 +61,12 @@
  * insert or a bit-set keeps the taint already in the register. A store whose
  * width or place this cannot tell only ever adds taint to the bytes it may
  * have written, and a read it cannot place is secret if any stack byte might
- * be. The pass runs once, in order, which is exact for straight-line code; code
- * with a conditional branch has already failed. Memory other than the stack
+ * be. A `set<cc>` writes the one byte it names. A read at an index this
+ * cannot place is a stack address only if it is eight bytes wide, so an
+ * element of an array built on the stack is not mistaken for the frame's
+ * pointer to it. The pass runs once, in order, which is exact for
+ * straight-line code; code with a conditional branch has already failed,
+ * unless the fixture asks for `loops` (below). Memory other than the stack
  * is not followed byte by byte: a secret stored there makes every element read
  * from then on secret, since it could come back through another pointer. `tests/run.js` holds each of these corners to a hand-written leak the
  * check must refuse; the stack and call rules' own corners are at the foot of
@@ -85,6 +89,22 @@
  * a fixture can show the following happens rather than that LLVM inlined it.
  * `tests/cases/ct_asm_refused` holds one such function for every rule, and
  * `SEEDED` at the foot of this file is the list it must keep.
+ *
+ * **`loops` reads a loop whole.** A function marked `loops` is read with its
+ * labels (`settle`): each label's state is the join of every edge into it,
+ * back edges included, and the walk repeats until no label's state grows, so
+ * a secret carried across the back edge reaches the top of the loop. A
+ * conditional branch is then refused only if its flags are secret, so a loop
+ * on a public counter passes and one that stops on a secret does not; the
+ * callees are read the same way. A `loops` function must reach a back edge,
+ * a branch or jump to a label at or above it, in its own body or a callee it
+ * follows (`noloop`): a forward branch, as a bounds check left in an unrolled
+ * body, is no loop, and a check that read none would pass whatever the loop
+ * did. A function clang unrolls whole, its loops gone and a public guard
+ * left, is marked `branches` instead: read the same way, its branches judged
+ * by their flags, and no loop claimed for it. A call to a `nish_panic_*` runtime function ends its
+ * path: the branch that reaches it has been judged already, and a panic does
+ * not return.
  */
 
 import fs from "node:fs"
@@ -100,6 +120,7 @@ const EXPECT_KINDS = {
   call: "a call to code the check does not read",
   load: "a load or store at a secret address",
   latency: "an instruction whose latency depends on a secret",
+  noloop: "no loop where a `loops` check expects one",
 }
 
 const KINDS = Object.keys(EXPECT_KINDS).join("|")
@@ -119,16 +140,20 @@ export const ctSpecs = (source) => {
   const specs = []
   for (const line of source.split("\n").filter((l) => l.startsWith("// ct-check"))) {
     const m = line.match(
-      new RegExp(`^// ct-check: (\\w+) secret=([\\w,]+)(?: expect=(${KINDS})(?: via=(\\w+))?)?\\s*$`)
+      new RegExp(
+        `^// ct-check: (\\w+) secret=([\\w,]+)( loops| branches)?(?: expect=(${KINDS})(?: via=(\\w+))?)?\\s*$`
+      )
     )
     if (m === null) {
       specs.push({
         name: line,
-        problems: [`not \`// ct-check: <fn> secret=<names> [expect=${KINDS} [via=<callee>]]\``],
+        problems: [
+          `not \`// ct-check: <fn> secret=<names> [loops|branches] [expect=${KINDS} [via=<callee>]]\``,
+        ],
       })
       continue
     }
-    const [, name, secret, expect, via] = m
+    const [, name, secret, loops, expect, via] = m
     const signature = source.match(new RegExp(`export const ${name} = \\(([^)]*)\\)(?::\\s*([^=]+?))?\\s*=>`))
     const params = signature === null || signature[1].trim().length === 0 ? [] : signature[1].split(",")
     const names = params.map((p) => p.split(":")[0].trim())
@@ -156,6 +181,14 @@ export const ctSpecs = (source) => {
         "secret=contents, and no parameter is an array: nothing is secret, so the check proves nothing"
       )
     }
+    const promises = {
+      none: "no branch, call, secret-indexed access or secret-dependent latency",
+      " loops":
+        "loops on public bounds only; no secret branch, call, secret-indexed access or secret-dependent latency",
+      " branches":
+        "branches on public values only, no loop left; no secret branch, call, secret-indexed access or secret-dependent latency",
+    }
+    const clean = promises[loops ?? "none"]
     specs.push({
       name,
       problems,
@@ -163,12 +196,16 @@ export const ctSpecs = (source) => {
       secretArgs: secrets.map((n) => names.indexOf(n)),
       types,
       returns: signature === null || signature[2] === undefined ? "void" : signature[2].trim(),
+      loops: loops !== undefined,
+      // `branches` reads the body as `loops` does but claims no loop: clang
+      // unrolled it, and what is left is a public guard and straight code.
+      needsLoop: loops !== " branches",
       expect: expect ?? null,
       via: via ?? null,
       // What the suite names the check by: clean, or refused for its kind and where.
       promise:
         expect === undefined
-          ? "no branch, call, secret-indexed access or secret-dependent latency"
+          ? clean
           : `refused for ${EXPECT_KINDS[expect]}${via === undefined ? "" : ` inside ${via}`}`,
     })
   }
@@ -356,6 +393,11 @@ const x86Width = (mnemonic, others) => {
   if (extend !== null) {
     return [{ b: 1, w: 2, l: 4 }[extend[1]], true]
   }
+  // `set<cc>` writes one byte and carries no size suffix: `seto 7(%rsp)` is
+  // that byte, not a 64-byte smear over the spill slots beside it.
+  if (/^set[a-z]+$/.test(mnemonic)) {
+    return [1, true]
+  }
   const register = others.find((op) => !op.memory && op.registers.length > 0)
   if (register !== undefined) {
     const name = register.text.replace(/^\*/, "")
@@ -435,6 +477,11 @@ export class Taint {
     this.depth = 0
     this.found = []
     this.preciseFlags = spec.preciseFlags === true
+    // Read a callee's labels and loops too (`settle`), as a `loops` spec does.
+    this.loops = false
+    // Under a `loops` spec, the back edges reached in it and every callee it
+    // follows, shared by every copy of the state: whether a loop was read.
+    this.loopsRead = null
     this.mnemonic = ""
     // `ctSpecs` has already refused a secret that names no parameter or one
     // past the registers, so every index here is a register.
@@ -560,7 +607,21 @@ export class Taint {
     c.bytes = new Map([...this.bytes].map(([at, b]) => [at, { ...b }]))
     c.unknownSecret = this.unknownSecret
     c.listing = this.listing
+    c.depth = this.depth
+    c.loops = this.loops
+    c.loopsRead = this.loopsRead
     return c
+  }
+
+  /** Takes on `other`'s registers, stack and memory: the state a callee returned in. */
+  adopt(other) {
+    this.secret = new Set(other.secret)
+    this.loaded = new Set(other.loaded)
+    this.stackAt = new Map(other.stackAt)
+    this.sp = other.sp
+    this.bytes = new Map([...other.bytes].map(([at, b]) => [at, { ...b }]))
+    this.unknownSecret = other.unknownSecret
+    this.contents = other.contents
   }
 
   /**
@@ -637,11 +698,16 @@ export class Taint {
   /** What `width` bytes of the stack at `at` hold; exactly what was stored when one store wrote them all. */
   readStack(at, width) {
     if (at === null) {
+      // A read this cannot place may be any slot, so it is secret if any is.
+      // It is a stack address only if it is wide enough to be one: both
+      // targets' addresses are eight bytes, and a narrower read through a
+      // counted index, `keystream[w]` in an array built on the stack, is an
+      // element, not the frame's own pointer beside it.
       let secret = this.unknownSecret
       let stack = false
       for (const b of this.bytes.values()) {
         secret = secret || b.secret
-        stack = stack || b.stack !== undefined
+        stack = stack || (width >= 8 && b.stack !== undefined)
       }
       return { secret, loaded: true, stack: stack ? null : undefined }
     }
@@ -741,7 +807,16 @@ export class Taint {
   call(operands, tail) {
     const symbol = operands.length === 1 ? operands[0].replace(/@PLT$/, "") : ""
     const body =
-      this.listing === null || symbol.length === 0 ? null : functionBody(this.listing, symbol, this.target)
+      this.listing === null || symbol.length === 0
+        ? null
+        : functionBody(this.listing, symbol, this.target, { labels: this.loops })
+    // A runtime panic does not return. In a `loops` read the branch that
+    // reaches it has been judged already: a check on a public counter or
+    // length panics only on public values, and one on a secret is refused as
+    // a branch. So the path ends there, unread and unrefused.
+    if (this.loops && /^nish_panic_\w+$/.test(symbol)) {
+      return "noreturn"
+    }
     if (body === null || this.depth >= CALL_DEPTH) {
       return "call"
     }
@@ -750,7 +825,17 @@ export class Taint {
     this.depth++
     const outer = this.found
     this.found = []
-    walk(this, body)
+    if (this.loops) {
+      // The callee's loops are settled from this state, and what it returns
+      // in is where the caller goes on from.
+      const { found, exit } = settle(this, body)
+      this.found = found
+      if (exit !== null) {
+        this.adopt(exit)
+      }
+    } else {
+      walk(this, body)
+    }
     for (const v of this.found) {
       outer.push({ kind: v.kind, line: `${symbol}: ${v.line}` })
     }
@@ -1202,10 +1287,196 @@ const walk = (t, body) => {
  * callee is reported as `<kind> outside <callee>`, so that `expect=` is met
  * only by what following the call found.
  */
+/**
+ * How an instruction moves control, if it does: `{ to, conditional, on }`,
+ * where `to` is the local label it may go to and `on` the register a
+ * compare-and-branch tests (else the flags). `null` for one that falls
+ * through. `ret` ends the path; a jump anywhere but a local label is left to
+ * the step, which follows it as a tail call or refuses it.
+ */
+export const control = (target, mnemonic, operands) => {
+  const last = operands.at(-1)
+  const label = last !== undefined && /^\.L\w+$/.test(last) ? last : null
+  if (target.name === "x86-64") {
+    if (/^ret/.test(mnemonic)) {
+      return { to: null, conditional: false }
+    }
+    if (/^jmp[wlq]?$/.test(mnemonic)) {
+      return label === null ? null : { to: label, conditional: false }
+    }
+    if (/^j[a-z]+$/.test(mnemonic) && !/^j[er]?cxz$/.test(mnemonic)) {
+      return { to: label, conditional: true, on: "flags" }
+    }
+    return null
+  }
+  if (mnemonic === "ret") {
+    return { to: null, conditional: false }
+  }
+  if (mnemonic === "b") {
+    return label === null ? null : { to: label, conditional: false }
+  }
+  if (/^bc?\.\w+$/.test(mnemonic)) {
+    return { to: label, conditional: true, on: "flags" }
+  }
+  if (/^(cbn?z|tbn?z)$/.test(mnemonic)) {
+    return { to: label, conditional: true, on: operands[0] }
+  }
+  return null
+}
+
+/** Whether the condition a branch reads is secret in `t`. */
+const conditionSecret = (t, on, mnemonic) => {
+  if (on === "flags") {
+    return t.flagsSecret(mnemonic)
+  }
+  // `cbz w8` and `tbz x8, #3` test one general register, `w8` and `x8` both `r8`.
+  const m = on.match(/^[wx](\d+)$/)
+  return m === null || t.secret.has(`r${m[1]}`)
+}
+
+/**
+ * A body with its labels kept (`functionBody`'s `labels`), read from `entry`
+ * until every label's state settles. Each label keeps the join of every state
+ * that reaches it (`Taint.join`), and the body is walked again until no
+ * label's state changes, so a value a loop's back edge carries round is seen
+ * at the loop's head; the violations are those of the last walk, on the
+ * settled states. A conditional branch is refused only when its condition is
+ * secret: one on a counter, a length or an address is the loop a public bound
+ * runs. Gives `{ found, backEdges, exit }`: the violations, the back edges
+ * the last walk reached (a branch or jump to a label at or above it, so a
+ * caller can say a loop was read, not absent), and the join of the states the
+ * body returns in (`null` if it never does). A forward branch, as a bounds
+ * check's, is no loop. The back edges are also added to `entry.loopsRead`
+ * when it is set, which every copy of a caller's state shares, so a callee's
+ * loop counts for its caller. `entry` is not changed otherwise. Read with `preciseFlags`, or the first secret XOR
+ * would make every later loop test secret.
+ */
+export const settle = (entry, body) => {
+  const target = entry.target
+  /** Each label's joined state, with its key kept beside it so a join is compared once. */
+  const at = new Map()
+  /** Joins `state` into what `label` holds; whether that changed it. */
+  const reach = (label, state) => {
+    const old = at.get(label)
+    const joined = old === undefined ? state.clone() : old.state.join(state)
+    joined.depth = state.depth
+    const key = joined.key()
+    if (old !== undefined && old.key === key) {
+      return false
+    }
+    at.set(label, { state: joined, key })
+    return true
+  }
+  /** Where each label sits, so a branch to one at or above it is a back edge. */
+  const labelAt = new Map()
+  body.forEach((line, i) => {
+    if (line.endsWith(":")) {
+      labelAt.set(line.slice(0, -1), i)
+    }
+  })
+  /** One walk of the body; whether any label's state changed, and what it found. */
+  const pass = () => {
+    let changed = false
+    const found = []
+    let backEdges = 0
+    let exit = null
+    const leave = (state) => {
+      exit = exit === null ? state.clone() : exit.join(state)
+    }
+    const resume = (state) => {
+      const c = state.clone()
+      c.found = found
+      return c
+    }
+    let t = resume(entry)
+    for (const [i, line] of body.entries()) {
+      if (line.endsWith(":")) {
+        const label = line.slice(0, -1)
+        if (t !== null) {
+          changed = reach(label, t) || changed
+        }
+        t = at.has(label) ? resume(at.get(label).state) : null
+        continue
+      }
+      if (t === null) {
+        continue
+      }
+      const [mnemonic, operands] = parseInstruction(line)
+      const flow = control(target, mnemonic, operands)
+      if (flow === null) {
+        const kind = target.step(t, mnemonic, operands)
+        if (kind === "noreturn") {
+          t = null
+        } else if (kind !== null) {
+          found.push({ kind, line })
+        }
+        continue
+      }
+      if (flow.conditional) {
+        if (flow.to === null || conditionSecret(t, flow.on, mnemonic)) {
+          found.push({ kind: "branch", line })
+        }
+      }
+      if (flow.to !== null && (labelAt.get(flow.to) ?? Number.POSITIVE_INFINITY) <= i) {
+        backEdges++
+      }
+      if (flow.to !== null) {
+        changed = reach(flow.to, t) || changed
+      } else if (!flow.conditional) {
+        leave(t)
+      }
+      if (!flow.conditional) {
+        t = null
+      }
+    }
+    // Falling off the end, as after a tail call, leaves too.
+    if (t !== null) {
+      leave(t)
+    }
+    // A callee's loops count: its back edges were reached from here.
+    if (entry.loopsRead !== null) {
+      entry.loopsRead.backEdges += backEdges
+    }
+    return { changed, found, backEdges, exit }
+  }
+  // Each walk only joins more into a label, and there are finitely many
+  // registers and stack bytes, so this settles; the bound is a guard against
+  // a bug here, reported rather than looped on.
+  for (let i = 0; i < 64; i++) {
+    const { changed, found, backEdges, exit } = pass()
+    if (!changed) {
+      return { found, backEdges, exit }
+    }
+  }
+  return {
+    found: [{ kind: "unsettled", line: "the label states did not settle in 64 walks" }],
+    backEdges: 0,
+    exit: null,
+  }
+}
+
+/**
+ * Every violation in `body` under `spec`. A `loops` spec's body is read with
+ * its labels (`settle`), callees too, and must reach a back edge, in its own
+ * body or a callee's: one that reaches none read no loop (clang unrolled it,
+ * leaving at most a forward bounds check), and a check that read none would
+ * pass whatever the loop did. A `branches` spec is read the same way and need
+ * reach none.
+ */
 export const ctViolations = (body, spec, target) => {
-  const t = new Taint(spec, target)
+  const t = new Taint(spec.loops ? { ...spec, preciseFlags: true } : spec, target)
   t.listing = LISTINGS.get(body) ?? null
-  walk(t, body)
+  if (spec.loops) {
+    t.loops = true
+    t.loopsRead = { backEdges: 0 }
+    const { found } = settle(t, body)
+    t.found = found
+    if (spec.needsLoop !== false && t.loopsRead.backEdges === 0) {
+      t.found.push({ kind: "noloop", line: `${spec.name} reaches no back edge, in it or a callee` })
+    }
+  } else {
+    walk(t, body)
+  }
   if (spec.via === null || spec.via === undefined) {
     return t.found
   }
@@ -1275,6 +1546,286 @@ const STACK_CORNERS = [
   ],
   // The first slot of the same pair is the secret, and still refused.
   ["aarch64", "a", "load", ["sub sp, sp, #32", "stp x0, x1, [sp, #16]", "ldr x2, [sp, #16]", "ldr w3, [x2]"]],
+  // `seto` writes one byte (chacha20XorInto's overflow check spills one), so
+  // the public slot beside it stays public; the byte itself is secret.
+  [
+    "x86-64",
+    "a",
+    null,
+    [
+      "subq $24, %rsp",
+      "movq %rsi, 8(%rsp)",
+      "cmpl %edi, %esi",
+      "seto 7(%rsp)",
+      "movq 8(%rsp), %rax",
+      "movl (%rdx,%rax,4), %eax",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "subq $24, %rsp",
+      "movq %rsi, 8(%rsp)",
+      "cmpl %edi, %esi",
+      "seto 7(%rsp)",
+      "movzbl 7(%rsp), %eax",
+      "movl (%rdx,%rax,4), %eax",
+    ],
+  ],
+  // An element read at an index the model cannot place, from an array built
+  // on the stack beside a pointer into it: four bytes wide, it is an element,
+  // not that pointer, and may be stored anywhere; eight bytes wide, it may be
+  // the pointer, and storing it off the stack is refused.
+  [
+    "x86-64",
+    "a",
+    null,
+    [
+      "subq $40, %rsp",
+      "leaq 8(%rsp), %rax",
+      "movq %rax, (%rsp)",
+      "movl 8(%rsp,%rsi,4), %ecx",
+      "movq %rcx, (%rdx)",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "escape",
+    [
+      "subq $40, %rsp",
+      "leaq 8(%rsp), %rax",
+      "movq %rax, (%rsp)",
+      "movq 8(%rsp,%rsi,8), %rcx",
+      "movq %rcx, (%rdx)",
+    ],
+  ],
+  // The same on aarch64, where the width is the register's: `ldr w` reads
+  // four bytes, `ldr x` eight.
+  [
+    "aarch64",
+    "a",
+    null,
+    ["sub sp, sp, #48", "add x8, sp, #8", "str x8, [sp]", "ldr w9, [sp, x1, lsl #2]", "str x9, [x2]"],
+  ],
+  [
+    "aarch64",
+    "a",
+    "escape",
+    ["sub sp, sp, #48", "add x8, sp, #8", "str x8, [sp]", "ldr x9, [sp, x1, lsl #3]", "str x9, [x2]"],
+  ],
+  // Under `loops`, a bounds check's panic ends the path: one on a public index
+  // in a counted loop passes, one on a secret is refused as a branch, and any
+  // other call out is still refused.
+  [
+    "x86-64",
+    "a",
+    null,
+    [
+      "xorl %r8d, %r8d",
+      ".LBB0_1:",
+      "cmpl $16, %esi",
+      "jae .LBB0_2",
+      "movl (%rdx,%rsi,4), %eax",
+      "incl %r8d",
+      "cmpl $8, %r8d",
+      "jne .LBB0_1",
+      "retq",
+      ".LBB0_2:",
+      "callq nish_panic_index@PLT",
+    ],
+    { loops: true },
+  ],
+  [
+    "x86-64",
+    "a",
+    "branch",
+    [
+      "cmpl $16, %edi",
+      "jae .LBB0_2",
+      "movl (%rdx,%rsi,4), %eax",
+      "retq",
+      ".LBB0_2:",
+      "callq nish_panic_index@PLT",
+    ],
+    { loops: true },
+  ],
+  [
+    "x86-64",
+    "a",
+    "call",
+    ["cmpl $16, %esi", "jae .LBB0_2", "movl (%rdx,%rsi,4), %eax", "retq", ".LBB0_2:", "callq nish_abort@PLT"],
+    { loops: true },
+  ],
+  // A `nish_panic_*` call is taken to never return, by its name: the runtime
+  // defines every one as a call to `abort`. One reached on every path ends
+  // the function there, so nothing after it is read, and the loop behind it
+  // is no loop the check read.
+  [
+    "x86-64",
+    "a",
+    "noloop",
+    [
+      "callq nish_panic_index@PLT",
+      "xorl %r8d, %r8d",
+      ".LBB0_1:",
+      "movl (%rdx,%rdi,4), %eax",
+      "incl %r8d",
+      "cmpl $8, %r8d",
+      "jne .LBB0_1",
+      "retq",
+    ],
+    { loops: true },
+  ],
+  // A loop is read as one only by a back edge. An unrolled body with a forward
+  // bounds check left in it read no loop, so a `loops` spec over it is refused.
+  [
+    "x86-64",
+    "a",
+    "noloop",
+    [
+      "cmpl $16, %esi",
+      "jae .LBB0_2",
+      "movl (%rdx,%rsi,4), %eax",
+      "movl 4(%rdx,%rsi,4), %ecx",
+      "retq",
+      ".LBB0_2:",
+      "callq nish_panic_index@PLT",
+    ],
+    { loops: true },
+  ],
+  // The same body under `branches`, which claims no loop: its public guard
+  // passes, and no back edge is asked for.
+  [
+    "x86-64",
+    "a",
+    null,
+    [
+      "cmpl $16, %esi",
+      "jae .LBB0_2",
+      "movl (%rdx,%rsi,4), %eax",
+      "movl 4(%rdx,%rsi,4), %ecx",
+      "retq",
+      ".LBB0_2:",
+      "callq nish_panic_index@PLT",
+    ],
+    { loops: true, needsLoop: false },
+  ],
+  // A public counter loop: its back edge is read and its branch is public.
+  [
+    "x86-64",
+    "a",
+    null,
+    [
+      "xorl %r8d, %r8d",
+      ".LBB0_1:",
+      "movl (%rdx,%r8,4), %eax",
+      "xorl %edi, %eax",
+      "incl %r8d",
+      "cmpl $8, %r8d",
+      "jne .LBB0_1",
+      "retq",
+    ],
+    { loops: true },
+  ],
+  // `branches` claims no loop but still judges every branch: a guard on the
+  // secret is refused.
+  [
+    "x86-64",
+    "a",
+    "branch",
+    [
+      "cmpl $16, %edi",
+      "jae .LBB0_2",
+      "movl (%rdx,%rsi,4), %eax",
+      "retq",
+      ".LBB0_2:",
+      "callq nish_panic_index@PLT",
+    ],
+    { loops: true, needsLoop: false },
+  ],
+  // The back-edge rule on aarch64: public `b.ne` and `cbnz` loops are read as
+  // loops, and an unrolled body with only a forward bounds check is not.
+  [
+    "aarch64",
+    "a",
+    null,
+    [
+      "mov w8, wzr",
+      ".LBB0_1:",
+      "ldr w9, [x2, w8, uxtw #2]",
+      "eor w9, w9, w0",
+      "add w8, w8, #1",
+      "cmp w8, #8",
+      "b.ne .LBB0_1",
+      "ret",
+    ],
+    { loops: true },
+  ],
+  [
+    "aarch64",
+    "a",
+    null,
+    ["mov w8, #8", ".LBB0_1:", "ldr w9, [x2]", "eor w9, w9, w0", "sub w8, w8, #1", "cbnz w8, .LBB0_1", "ret"],
+    { loops: true },
+  ],
+  [
+    "aarch64",
+    "a",
+    "noloop",
+    [
+      "cmp w1, #16",
+      "b.hs .LBB0_2",
+      "ldr w9, [x2, w1, uxtw #2]",
+      "ldr w10, [x2, #4]",
+      "ret",
+      ".LBB0_2:",
+      "bl nish_panic_index",
+    ],
+    { loops: true },
+  ],
+  // A secret stored at the end of the body, in a stack slot and in a register,
+  // and used as an address at the head on the second pass: the label's state
+  // is the join of both edges into it, so the load is refused.
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "subq $24, %rsp",
+      "movl $0, 8(%rsp)",
+      "xorl %r8d, %r8d",
+      ".LBB0_1:",
+      "movslq 8(%rsp), %rcx",
+      "movl (%rdx,%rcx,4), %eax",
+      "movl %edi, 8(%rsp)",
+      "incl %r8d",
+      "cmpl $8, %r8d",
+      "jne .LBB0_1",
+      "addq $24, %rsp",
+      "retq",
+    ],
+    { loops: true },
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "xorl %ecx, %ecx",
+      "xorl %r8d, %r8d",
+      ".LBB0_1:",
+      "movl (%rdx,%rcx,4), %eax",
+      "movl %edi, %ecx",
+      "incl %r8d",
+      "cmpl $8, %r8d",
+      "jne .LBB0_1",
+      "retq",
+    ],
+    { loops: true },
+  ],
 ]
 
 /**
