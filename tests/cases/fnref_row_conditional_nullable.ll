@@ -33,7 +33,7 @@ entry:
   %other.addr = alloca i32, align 4
   %n.addr = alloca i32, align 4
   %sum.addr = alloca i32, align 4
-  %g.addr = alloca i32, align 8
+  %g.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   store i32 2, i32* %other.addr, align 4
   store i32 0, i32* %n.addr, align 4
@@ -70,8 +70,8 @@ cond.end.1:
 
 cond.end:
   %7 = phi i32 [ 0, %cond.true ], [ %6, %cond.end.1 ]
-  store i32 %7, i32* %g.addr, align 8
-  %8 = load i32, i32* %g.addr, align 8
+  store i32 %7, i32* %g.addr, align 4
+  %8 = load i32, i32* %g.addr, align 4
   %9 = icmp ne i32 %8, 0
   br i1 %9, label %if.then, label %if.end
 
@@ -83,7 +83,7 @@ if.then:
   br i1 %13, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %14 = load i32, i32* %g.addr, align 8
+  %14 = load i32, i32* %g.addr, align 4
   %15 = call i32 @$ref.0.fr1.i32.i32.0(i32 %14, i32 10)
   %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %15)
   %17 = extractvalue { i32, i1 } %16, 0

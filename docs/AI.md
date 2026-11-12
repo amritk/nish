@@ -976,7 +976,11 @@ export const main = (): i32 => {
   `const` and test that. A module `const` cannot hold a reference.
 - **A `Map` value, not a key.** `Map<K, Op>`, `Map<K, Op[]>` and
   `Map<K, Op | null>` work; a call through what `get` returns dispatches over
-  every function of the type. A function-type key is refused.
+  the functions stored into any `Map` value or array of that type. A
+  function-type key is refused.
+- **Not in a `Result` arm.** `Result<Op, E>`, `Result<Op | null, E>` and
+  `Result<T, Op>` are refused (NL2744); `Result<Op[], E>` works, or return a
+  class that holds the reference.
 - **Called, compared, stored, passed — nothing else.** Not printed or
   interpolated (NL2737), ordered, joined or encoded as JSON.
 - **A function argument**: a local holding one fills an inline

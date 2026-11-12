@@ -217,6 +217,28 @@ from the `Map`.
 
 A reference cannot be a `Map` key.
 
+## Not in a `Result`
+
+A reference cannot sit directly in a `Result`, in either arm, nullable or not:
+`Result<Op, string>` is refused (`NL2744`). Return an array of references
+(`Result<Op[], string>`), or a class with a reference field, instead:
+
+```ts
+type Op = (x: i32) => i32;
+
+const plus1 = (x: i32): i32 => x + 1;
+
+const pick = (): Result<Op[], string> => Ok([plus1]);
+
+export const main = (): void => {
+  const r = pick();
+  if (r.ok) {
+    const f = r.value[0];
+    console.log(`${f(10)}`);
+  }
+};
+```
+
 ## As a function argument
 
 A parameter whose function type is written out in the parameter list, as in

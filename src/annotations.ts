@@ -671,6 +671,14 @@ const rangedBound = (ctx: CheckContext, bound: Node): i64 => {
 }
 
 /**
+ * WP51: a `Result` arm is not a reference place, so `Ok(f)` would store a tag
+ * no dispatcher's set was built from. An array of references under an arm is
+ * fine, because its elements share the element place.
+ */
+const resultArmIsReference = (ctx: CheckContext, arm: i32): boolean =>
+  ctx.table.isFnRef(arm) || (ctx.table.isNullable(arm) && ctx.table.isFnRef(ctx.table.refs[arm]))
+
+/**
  * `Result<T, E>` (WP16). Written like a generic, but there are no user
  * generics in the language: this is one built-in type constructor whose two
  * arguments pick a monomorphised layout, exactly as `Array<T>` does.
@@ -708,6 +716,13 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
     return ctx.errorType(
       node,
       unionArgumentMessage(`Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`)
+    )
+  }
+  if (resultArmIsReference(ctx, ok) || resultArmIsReference(ctx, err)) {
+    const spelled = `Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`
+    return ctx.errorType(
+      node,
+      `\`${spelled}\` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array`
     )
   }
   if (err === T_VOID) {

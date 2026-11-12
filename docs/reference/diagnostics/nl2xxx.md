@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 735 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 736 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -14200,4 +14200,33 @@ export const main = (): i32 => {
 
 ```text
 `h` is assigned by a later argument of `apply`, and the call reads it after its arguments where JavaScript reads it before them: read it into a `const` first and pass the `const`
+```
+
+## NL2744
+
+The message of an error contains:
+
+```text
+…` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array
+```
+
+[`nl2744_fnref_result_arm.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2744_fnref_result_arm.ts):
+
+```ts
+// NL2744: a function reference directly in a `Result` arm, which is not a
+// place a reference's set is built from.
+type F = (x: i32) => i32;
+
+const inc = (x: i32): i32 => x + 1;
+
+const pick = (): Result<F, string> => Ok(inc);
+
+export const main = (): i32 => {
+  const r = pick();
+  return r.ok ? 1 : 0;
+};
+```
+
+```text
+`Result<(i32) => i32, string>` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array
 ```

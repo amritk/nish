@@ -1,4 +1,4 @@
-// WP51 stage 2, review B6: an arrow argument that captures a reference
+// WP51 stage 2: an arrow argument that captures a reference
 // parameter of the function it is written in. Each `outer`, `narrowed`,
 // `elements` and `via` call instantiates `apply` with an arrow that calls
 // through the captured reference's dispatcher: a parameter, a parameter

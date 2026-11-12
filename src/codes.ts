@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 901
+export const RULE_COUNT: i32 = 902
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -405,6 +405,8 @@ const diagnosticRules = (): string[] => [
   "NL2389",
   "` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many",
   "NL2682",
+  "` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array",
+  "NL2744",
   "` that this exit leaves neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2440",
   "`: a decoder finds a union's tag before it knows which variant the object is, so every variant of a union writes its tag under the same key",

@@ -262,10 +262,12 @@ cases/fnref_map_array added after R6: no rewriter to freeze it with
 cases/fnref_map_nullable added after R6: no rewriter to freeze it with
 cases/fnref_nullable added after R6: no rewriter to freeze it with
 cases/fnref_nullable_coalesce added after R6: no rewriter to freeze it with
+cases/fnref_nullable_field_align added after R6: no rewriter to freeze it with
 cases/fnref_place_set added after R6: no rewriter to freeze it with
 cases/fnref_place_set_arg added after R6: no rewriter to freeze it with
 cases/fnref_place_set_map added after R6: no rewriter to freeze it with
 cases/fnref_place_set_nullable added after R6: no rewriter to freeze it with
+cases/fnref_result_array added after R6: no rewriter to freeze it with
 cases/fnref_row_argument added after R6: no rewriter to freeze it with
 cases/fnref_row_assign added after R6: no rewriter to freeze it with
 cases/fnref_row_coalesce_nullable added after R6: no rewriter to freeze it with

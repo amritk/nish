@@ -115,7 +115,7 @@ define internal noundef i32 @run(%struct.nish_array* noundef nonnull align 8 der
 entry:
   %sum.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
-  %h.addr = alloca i32, align 8
+  %h.addr = alloca i32, align 4
   %P.obj = alloca %struct.P, align 8
   store i32 0, i32* %sum.addr, align 4
   store i32 0, i32* %i.addr, align 4
@@ -134,15 +134,15 @@ while.body:
   %6 = sext i32 %5 to i64
   %7 = bitcast i8* %1 to i32*
   %8 = getelementptr inbounds i32, i32* %7, i64 %6
-  %9 = load i32, i32* %8, align 8, !alias.scope !12, !noalias !11, !tbaa !18
-  store i32 %9, i32* %h.addr, align 8
-  %10 = load i32, i32* %h.addr, align 8
+  %9 = load i32, i32* %8, align 4, !alias.scope !12, !noalias !11, !tbaa !18
+  store i32 %9, i32* %h.addr, align 4
+  %10 = load i32, i32* %h.addr, align 4
   %11 = icmp ne i32 %10, 0
   br i1 %11, label %if.then, label %if.end
 
 if.then:
   %12 = load i32, i32* %sum.addr, align 4
-  %13 = load i32, i32* %h.addr, align 8
+  %13 = load i32, i32* %h.addr, align 4
   %14 = load i32, i32* %i.addr, align 4
   call void @P.constructor(%struct.P* %P.obj, i32 %14)
   %15 = call i32 @$ref.0.fr2.$P.$Keep.i32.0(i32 %13, %struct.P* %P.obj, %struct.Keep* %k)
@@ -187,7 +187,7 @@ entry:
   store i64 4, i64* %0, align 8, !alias.scope !11, !noalias !12, !tbaa !19
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
   store i64 4, i64* %1, align 8, !alias.scope !11, !noalias !12, !tbaa !20
-  %2 = mul i64 4, 8
+  %2 = mul i64 4, 4
   %3 = bitcast [4 x i32]* %arr.data to i8*
   call void @llvm.memset.p0i8.i64(i8* align 8 %3, i8 0, i64 %2, i1 false), !alias.scope !12, !noalias !11
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
@@ -198,19 +198,19 @@ entry:
   %7 = load i8*, i8** %6, align 8, !alias.scope !11, !noalias !12, !tbaa !16
   %8 = bitcast i8* %7 to i32*
   %9 = getelementptr inbounds i32, i32* %8, i64 0
-  store i32 1, i32* %9, align 8, !alias.scope !12, !noalias !11, !tbaa !18
+  store i32 1, i32* %9, align 4, !alias.scope !12, !noalias !11, !tbaa !18
   %10 = load %struct.nish_array*, %struct.nish_array** %hot.addr, align 8
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !11, !noalias !12, !tbaa !16
   %13 = bitcast i8* %12 to i32*
   %14 = getelementptr inbounds i32, i32* %13, i64 1
-  store i32 2, i32* %14, align 8, !alias.scope !12, !noalias !11, !tbaa !18
+  store i32 2, i32* %14, align 4, !alias.scope !12, !noalias !11, !tbaa !18
   %15 = load %struct.nish_array*, %struct.nish_array** %hot.addr, align 8
   %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
   %17 = load i8*, i8** %16, align 8, !alias.scope !11, !noalias !12, !tbaa !16
   %18 = bitcast i8* %17 to i32*
   %19 = getelementptr inbounds i32, i32* %18, i64 2
-  store i32 3, i32* %19, align 8, !alias.scope !12, !noalias !11, !tbaa !18
+  store i32 3, i32* %19, align 4, !alias.scope !12, !noalias !11, !tbaa !18
   %20 = load %struct.nish_array*, %struct.nish_array** %hot.addr, align 8
   %21 = load %struct.Keep*, %struct.Keep** %k.addr, align 8
   %22 = call i32 @run(%struct.nish_array* %20, %struct.Keep* %21)

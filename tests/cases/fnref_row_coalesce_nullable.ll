@@ -44,8 +44,8 @@ cond.end:
 define void @nish_main() #1 {
 entry:
   %other.addr = alloca i32, align 4
-  %g.addr = alloca i32, align 8
-  %h.addr = alloca i32, align 8
+  %g.addr = alloca i32, align 4
+  %h.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   store i32 2, i32* %other.addr, align 4
   %0 = call i32 @pick(i32 0)
@@ -57,7 +57,7 @@ nullish.default:
 
 nullish.end:
   %2 = phi i32 [ %0, %entry ], [ 3, %nullish.default ]
-  store i32 %2, i32* %g.addr, align 8
+  store i32 %2, i32* %g.addr, align 4
   %3 = call i32 @pick(i32 1)
   %4 = icmp ne i32 %3, 0
   br i1 %4, label %nullish.end.1, label %nullish.default.1
@@ -67,13 +67,13 @@ nullish.default.1:
 
 nullish.end.1:
   %5 = phi i32 [ %3, %nullish.end ], [ 3, %nullish.default.1 ]
-  store i32 %5, i32* %h.addr, align 8
-  %6 = load i32, i32* %g.addr, align 8
+  store i32 %5, i32* %h.addr, align 4
+  %6 = load i32, i32* %g.addr, align 4
   %7 = icmp ne i32 %6, 0
   br i1 %7, label %land.rhs, label %land.end
 
 land.rhs:
-  %8 = load i32, i32* %h.addr, align 8
+  %8 = load i32, i32* %h.addr, align 4
   %9 = icmp ne i32 %8, 0
   br label %land.end
 
@@ -82,11 +82,11 @@ land.end:
   br i1 %10, label %if.then, label %if.end
 
 if.then:
-  %11 = load i32, i32* %g.addr, align 8
+  %11 = load i32, i32* %g.addr, align 4
   %12 = call i32 @$ref.0.fr1.i32.i32.0(i32 %11, i32 10)
   %13 = call i8* @nish_str_from_i32(i32 %12)
   %14 = call i8* @nish_str_concat(i8* %13, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %15 = load i32, i32* %h.addr, align 8
+  %15 = load i32, i32* %h.addr, align 4
   %16 = call i32 @$ref.0.fr1.i32.i32.0(i32 %15, i32 10)
   %17 = call i8* @nish_str_from_i32(i32 %16)
   %18 = call i8* @nish_str_concat(i8* %14, i8* %17)

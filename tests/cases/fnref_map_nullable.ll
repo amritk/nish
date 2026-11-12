@@ -795,7 +795,7 @@ if.end:
   %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %13 = bitcast i8* %12 to i32*
   %14 = getelementptr inbounds i32, i32* %13, i64 %10
-  %15 = load i32, i32* %14, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %15 = load i32, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   ret i32 %15
 }
 
@@ -825,7 +825,7 @@ if.then:
   %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %13 = bitcast i8* %12 to i32*
   %14 = getelementptr inbounds i32, i32* %13, i64 %10
-  store i32 %value, i32* %14, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %value, i32* %14, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   br label %if.end
 
 if.end:
@@ -913,7 +913,7 @@ push.store:
   br i1 %38, label %push.grow.1, label %push.store.1
 
 push.grow.1:
-  call void @nish_array_grow(%struct.nish_array* %33, i64 8)
+  call void @nish_array_grow(%struct.nish_array* %33, i64 4)
   br label %push.store.1
 
 push.store.1:
@@ -921,7 +921,7 @@ push.store.1:
   %40 = load i8*, i8** %39, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %41 = bitcast i8* %40 to i32*
   %42 = getelementptr inbounds i32, i32* %41, i64 %35
-  store i32 %value, i32* %42, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %value, i32* %42, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %43 = add i64 %35, 1
   store i64 %43, i64* %34, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %44 = trunc i64 %43 to i32
@@ -2150,10 +2150,10 @@ if.then:
   %38 = sext i32 %37 to i64
   %39 = bitcast i8* %10 to i32*
   %40 = getelementptr inbounds i32, i32* %39, i64 %38
-  %41 = load i32, i32* %40, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %41 = load i32, i32* %40, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %42 = bitcast i8* %10 to i32*
   %43 = getelementptr inbounds i32, i32* %42, i64 %36
-  store i32 %41, i32* %43, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %41, i32* %43, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   %44 = load i32, i32* %to.addr, align 4
   %45 = add nsw i32 %44, 1
   store i32 %45, i32* %to.addr, align 4
@@ -2196,7 +2196,7 @@ pop.ok:
   %58 = load i8*, i8** %57, align 8, !alias.scope !3, !noalias !4, !tbaa !12
   %59 = bitcast i8* %58 to i32*
   %60 = getelementptr inbounds i32, i32* %59, i64 %56
-  %61 = load i32, i32* %60, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %61 = load i32, i32* %60, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   br label %while.cond
 
 while.end:

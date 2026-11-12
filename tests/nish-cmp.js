@@ -1364,6 +1364,7 @@ const DECLARED = [
     "tests/cases/fnref_place_set_arg.ts",
     "tests/cases/fnref_place_set_map.ts",
     "tests/cases/fnref_place_set_nullable.ts",
+    "tests/cases/fnref_result_array.ts",
     "tests/cases/fnref_row_argument.ts",
     "tests/cases/fnref_row_coalesce_nullable.ts",
     "tests/cases/fnref_row_conditional_nullable.ts",

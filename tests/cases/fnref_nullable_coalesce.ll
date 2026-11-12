@@ -133,10 +133,10 @@ if.then:
   ret %struct.Holder* null
 
 if.end:
-  %1 = call i8* @nish_alloc_struct(i64 8)
+  %1 = call i8* @nish_alloc_struct(i64 4)
   %2 = bitcast i8* %1 to %struct.Holder*
   %3 = getelementptr inbounds %struct.Holder, %struct.Holder* %2, i32 0, i32 0
-  store i32 0, i32* %3, align 8, !tbaa !4
+  store i32 0, i32* %3, align 4, !tbaa !4
   store %struct.Holder* %2, %struct.Holder** %h.addr, align 8
   %4 = icmp sgt i32 %k, 1
   br i1 %4, label %if.then.1, label %if.end.1
@@ -144,7 +144,7 @@ if.end:
 if.then.1:
   %5 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
   %6 = getelementptr inbounds %struct.Holder, %struct.Holder* %5, i32 0, i32 0
-  store i32 2, i32* %6, align 8, !tbaa !4
+  store i32 2, i32* %6, align 4, !tbaa !4
   br label %if.end.1
 
 if.end.1:
@@ -154,8 +154,8 @@ if.end.1:
 
 define void @nish_main() #2 {
 entry:
-  %none.addr = alloca i32, align 8
-  %some.addr = alloca i32, align 8
+  %none.addr = alloca i32, align 4
+  %some.addr = alloca i32, align 4
   %a.addr = alloca i32, align 4
   %b.addr = alloca i32, align 4
   %m.addr = alloca %struct.Map$i32$fr1.i32.i32*, align 8
@@ -166,10 +166,10 @@ entry:
   %g.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @pick(i32 0)
-  store i32 %0, i32* %none.addr, align 8
+  store i32 %0, i32* %none.addr, align 4
   %1 = call i32 @pick(i32 1)
-  store i32 %1, i32* %some.addr, align 8
-  %2 = load i32, i32* %none.addr, align 8
+  store i32 %1, i32* %some.addr, align 4
+  %2 = load i32, i32* %none.addr, align 4
   %3 = icmp ne i32 %2, 0
   br i1 %3, label %nullish.end, label %nullish.default
 
@@ -179,7 +179,7 @@ nullish.default:
 nullish.end:
   %4 = phi i32 [ %2, %entry ], [ 1, %nullish.default ]
   store i32 %4, i32* %a.addr, align 4
-  %5 = load i32, i32* %some.addr, align 8
+  %5 = load i32, i32* %some.addr, align 4
   %6 = icmp ne i32 %5, 0
   br i1 %6, label %nullish.end.1, label %nullish.default.1
 
@@ -233,7 +233,7 @@ nullish.end.3:
 
 chain.next:
   %26 = getelementptr inbounds %struct.Holder, %struct.Holder* %24, i32 0, i32 0
-  %27 = load i32, i32* %26, align 8, !tbaa !4
+  %27 = load i32, i32* %26, align 4, !tbaa !4
   %28 = icmp ne i32 %27, 0
   br i1 %28, label %nullish.end.4, label %nullish.default.4
 
@@ -249,7 +249,7 @@ nullish.end.4:
 
 chain.next.1:
   %32 = getelementptr inbounds %struct.Holder, %struct.Holder* %30, i32 0, i32 0
-  %33 = load i32, i32* %32, align 8, !tbaa !4
+  %33 = load i32, i32* %32, align 4, !tbaa !4
   %34 = icmp ne i32 %33, 0
   br i1 %34, label %nullish.end.5, label %nullish.default.5
 
@@ -265,7 +265,7 @@ nullish.end.5:
 
 chain.next.2:
   %38 = getelementptr inbounds %struct.Holder, %struct.Holder* %36, i32 0, i32 0
-  %39 = load i32, i32* %38, align 8, !tbaa !4
+  %39 = load i32, i32* %38, align 4, !tbaa !4
   %40 = icmp ne i32 %39, 0
   br i1 %40, label %nullish.end.6, label %nullish.default.6
 

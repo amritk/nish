@@ -65,7 +65,7 @@ define void @nish_main() #1 {
 entry:
   %s.addr = alloca %struct.Slot*, align 8
   %Slot.obj = alloca %struct.Slot, align 8
-  %o.addr = alloca i32, align 8
+  %o.addr = alloca i32, align 4
   %hs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [3 x i32], align 8
@@ -73,27 +73,27 @@ entry:
   %i.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.Slot, %struct.Slot* %Slot.obj, i32 0, i32 0
-  store i32 0, i32* %0, align 8, !tbaa !4
+  store i32 0, i32* %0, align 4, !tbaa !4
   store %struct.Slot* %Slot.obj, %struct.Slot** %s.addr, align 8
   %1 = load %struct.Slot*, %struct.Slot** %s.addr, align 8
   %2 = getelementptr inbounds %struct.Slot, %struct.Slot* %1, i32 0, i32 0
-  %3 = load i32, i32* %2, align 8, !tbaa !4
+  %3 = load i32, i32* %2, align 4, !tbaa !4
   %4 = icmp eq i32 %3, 0
   %5 = select i1 %4, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
   call void @nish_print(i8* %5)
   %6 = load %struct.Slot*, %struct.Slot** %s.addr, align 8
   %7 = getelementptr inbounds %struct.Slot, %struct.Slot* %6, i32 0, i32 0
-  store i32 2, i32* %7, align 8, !tbaa !4
+  store i32 2, i32* %7, align 4, !tbaa !4
   %8 = load %struct.Slot*, %struct.Slot** %s.addr, align 8
   %9 = getelementptr inbounds %struct.Slot, %struct.Slot* %8, i32 0, i32 0
-  %10 = load i32, i32* %9, align 8, !tbaa !4
-  store i32 %10, i32* %o.addr, align 8
-  %11 = load i32, i32* %o.addr, align 8
+  %10 = load i32, i32* %9, align 4, !tbaa !4
+  store i32 %10, i32* %o.addr, align 4
+  %11 = load i32, i32* %o.addr, align 4
   %12 = icmp ne i32 %11, 0
   br i1 %12, label %if.then, label %if.end
 
 if.then:
-  %13 = load i32, i32* %o.addr, align 8
+  %13 = load i32, i32* %o.addr, align 4
   %14 = call i32 @$ref.0.fr1.i32.i32.1(i32 %13, i32 4)
   %15 = call i8* @nish_str_from_i32(i32 %14)
   call void @nish_print(i8* %15)
@@ -104,7 +104,7 @@ if.end:
   store i64 3, i64* %16, align 8, !alias.scope !8, !noalias !9, !tbaa !13
   %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
   store i64 3, i64* %17, align 8, !alias.scope !8, !noalias !9, !tbaa !14
-  %18 = mul i64 3, 8
+  %18 = mul i64 3, 4
   %19 = bitcast [3 x i32]* %arr.data to i8*
   call void @llvm.memset.p0i8.i64(i8* align 8 %19, i8 0, i64 %18, i1 false), !alias.scope !9, !noalias !8
   %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
@@ -115,7 +115,7 @@ if.end:
   %23 = load i8*, i8** %22, align 8, !alias.scope !8, !noalias !9, !tbaa !15
   %24 = bitcast i8* %23 to i32*
   %25 = getelementptr inbounds i32, i32* %24, i64 1
-  store i32 1, i32* %25, align 8, !alias.scope !9, !noalias !8, !tbaa !17
+  store i32 1, i32* %25, align 4, !alias.scope !9, !noalias !8, !tbaa !17
   store i32 0, i32* %total.addr, align 4
   store i32 0, i32* %i.addr, align 4
   %26 = load %struct.nish_array*, %struct.nish_array** %hs.addr, align 8
@@ -134,7 +134,7 @@ for.body:
   %33 = sext i32 %32 to i64
   %34 = bitcast i8* %28 to i32*
   %35 = getelementptr inbounds i32, i32* %34, i64 %33
-  %36 = load i32, i32* %35, align 8, !alias.scope !9, !noalias !8, !tbaa !17
+  %36 = load i32, i32* %35, align 4, !alias.scope !9, !noalias !8, !tbaa !17
   %37 = call i32 @run(i32 %36, i32 3)
   %38 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %31, i32 %37)
   %39 = extractvalue { i32, i1 } %38, 0

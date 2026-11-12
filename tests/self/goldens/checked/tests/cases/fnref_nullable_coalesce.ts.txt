@@ -303,7 +303,7 @@ function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 import Map from "nish/collections" -> generic class Map
-struct Holder (class) size=8 align=8
+struct Holder (class) size=4 align=4
   field op: (i32) => i32 | null index=0 offset=0 initialized
 function inc(x: i32): i32 -> @inc
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false

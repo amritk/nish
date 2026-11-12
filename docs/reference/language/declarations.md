@@ -2167,7 +2167,12 @@ export const main = (): void => {
   call through what it returns dispatches over the functions stored into any
   of them (`fnref_map`, `fnref_place_set_map`); where one of those keeps a
   pointer argument the others leave alone, that call is the mixed set above
-  and refused (`reject_fnref_place_set_map`). An assignment used as a value,
+  and refused (`reject_fnref_place_set_map`). A `Result` arm is not a place,
+  so a reference directly in one — `Result<F, E>`, `Result<F | null, E>`,
+  `Result<T, F>`, including through a generic's type parameter — is refused,
+  `` `Result<(i32) => i32, string>` cannot hold a function reference in an arm: ... ``
+  (NL2744, `reject_fnref_result`, `reject_fnref_result_generic`); an array of references in an arm holds the
+  element place and compiles (`fnref_result_array`). An assignment used as a value,
   `k((r = inc))`, stores into its target and hands the same function on
   (`fnref_assign_value`); a value the compiler does not follow, such as a
   module constant, can hold every function of its type. A set past

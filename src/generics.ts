@@ -2755,8 +2755,8 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
   // A scope's task is told about itself: it runs when the scope joins.
   const task = mode === CAPTURE_TASK
   // The arrow written for a reference argument reads the reference as the call
-  // passes it, so a `let` or `this` it names is read once, at the call.
-  const passed = (ctx.arrowFns[0].decl.flags & FLAG_REFERENCE_ARROW) !== 0
+  // passes it, so a `let` it names is read once, at the call.
+  const passed = ctx.arrowFns.length > 0 && (ctx.arrowFns[0].decl.flags & FLAG_REFERENCE_ARROW) !== 0
   if (name === "this" && !passed) {
     refuseOnce(ctx, expr, thisCaptureMessageFor(mode))
     return null

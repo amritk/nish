@@ -107,7 +107,6 @@ import N_VAR from "./nodes" -> const N_VAR
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
-import FLAG_REFERENCE_ARROW from "./nodes" -> const FLAG_REFERENCE_ARROW
 import fitArguments from "./declarations" -> function @fitArguments
 import checkReferenceCall from "./fnrefs" -> function @checkReferenceCall
 import functionReference from "./fnrefs" -> function @functionReference
@@ -711,21 +710,19 @@ function refuseOuterWrite(ctx: CheckContext, target: Node): i32 -> @refuseOuterW
   callee +9:3 refuseOnce -> @refuseOnce
 function checkThis(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkThis
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: CheckContext.arrowMode CheckContext.capturesOuter CheckContext.errorType Scope.lookup captureOuter nish_panic_index refuseOnce thisCaptureMessageFor
-  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.capturesOuter#0 captureOuter#0 refuseOnce#0 CheckContext.arrowMode#0 CheckContext.errorType#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=captureOuter#1 refuseOnce#1 CheckContext.errorType#1
+  sharedWrite: +0:3
+  calls: CheckContext.arrowMode CheckContext.capturesOuter CheckContext.errorType Scope.lookup nish_panic_index refuseOnce thisCaptureMessageFor
+  pointer ctx: size=320 writesThrough=true captured=false passedTo=CheckContext.capturesOuter#0 refuseOnce#0 CheckContext.arrowMode#0 CheckContext.errorType#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=refuseOnce#1 CheckContext.errorType#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0
   stackSites=0 stackLocals=0
   local -9:9 self: Local | null (const)
   callee -9:16 Scope.lookup -> @Scope.lookup
   callee -8:24 CheckContext.capturesOuter -> @CheckContext.capturesOuter
-  local -4:13 captured: Local | null (const)
-  callee -4:24 captureOuter -> @captureOuter
-  callee +4:5 refuseOnce -> @refuseOnce
-  callee +4:27 thisCaptureMessageFor -> @thisCaptureMessageFor
-  callee +4:49 CheckContext.arrowMode -> @CheckContext.arrowMode
-  callee +8:12 CheckContext.errorType -> @CheckContext.errorType
+  callee -6:5 refuseOnce -> @refuseOnce
+  callee -6:27 thisCaptureMessageFor -> @thisCaptureMessageFor
+  callee -6:49 CheckContext.arrowMode -> @CheckContext.arrowMode
+  callee -2:12 CheckContext.errorType -> @CheckContext.errorType
 function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkUnary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

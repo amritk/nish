@@ -3797,7 +3797,7 @@ if (selects("fnref", "fnref_debug_check")) {
     gLl.split("\n").filter((l) => l.includes("Enumer") || l.includes("enumeration")).join("\n") || gLl.slice(0, 2000)
   )
   // A nullable reference's tag 0 is `null`: its enumeration names it, so a
-  // debugger prints `h = null` rather than `0` (review B9).
+  // debugger prints `h = null` rather than `0`.
   const gnSrc = path.join(fnrefDir, "fnref_gn.ts")
   fs.writeFileSync(
     gnSrc,

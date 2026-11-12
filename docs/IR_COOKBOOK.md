@@ -1622,15 +1622,15 @@ cond.end:
 
 define noundef i32 @run(i32 noundef %k, i32 noundef %x) #0 {
 entry:
-  %h.addr = alloca i32, align 8
+  %h.addr = alloca i32, align 4
   %0 = call i32 @pick(i32 %k)
-  store i32 %0, i32* %h.addr, align 8
-  %1 = load i32, i32* %h.addr, align 8
+  store i32 %0, i32* %h.addr, align 4
+  %1 = load i32, i32* %h.addr, align 4
   %2 = icmp ne i32 %1, 0
   br i1 %2, label %if.then, label %if.end
 
 if.then:
-  %3 = load i32, i32* %h.addr, align 8
+  %3 = load i32, i32* %h.addr, align 4
   %4 = call i32 @apply$fn.10.run$arrow0(i32 %x, i32 %3)
   ret i32 %4
 

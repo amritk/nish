@@ -1279,7 +1279,9 @@ program, do.
    `2477` no flow; `src/parallel.ts:1192` and `src/inline-arrays.ts:757` walk
    whatever it holds. An empty list in a `$fn.ref.<set>` instantiation would
    therefore let a region, a parallel body or an `expose` through unchecked.
-   So the reference parameter's slot holds the set's dispatcher, a checked
+   *(Superseded by "As shipped" below: the slot holds a per-call-site
+   arrow, not the set's dispatcher.)* So the reference parameter's slot
+   holds the set's dispatcher, a checked
    function with facts (§2.3): every reader then runs on it, and its facts,
    captures and calls are its arms' join. One reader looks past the callee's
    facts to its parameter list, `src/secret.ts:2094`'s `paramNames[1]`, and
@@ -1302,7 +1304,11 @@ program, do.
    stored functions include one that keeps `p`, that call is a mixed set, refused by NL2736
    (`reject_fnref_place_set_map`), where an array of the same functions
    compiles (`fnref_place_set_nullable`, `fnref_place_set_arg`). A function-type `Map` key stays
-   refused (`reject_fnref_map_key`), and NL2738 is retired.
+   refused (`reject_fnref_map_key`), and NL2738 is retired. A `Result` arm
+   is not a place, so a reference directly in one (`Result<S, E>`,
+   `Result<S | null, E>`, `Result<T, S>`) is refused (NL2744,
+   `reject_fnref_result`); `Result<S[], E>` holds the element place and
+   compiles (`fnref_result_array`).
 3. **Stage 3 — capture-free arrows in value position**, lifted to a generated
    top-level function and then a reference. Capturing arrows stay refused.
 

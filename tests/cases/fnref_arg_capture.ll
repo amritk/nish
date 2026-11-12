@@ -60,26 +60,26 @@ cond.end:
 define void @nish_main() #0 {
 entry:
   %h.addr = alloca i32, align 4
-  %g.addr = alloca i32, align 8
+  %g.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @pick(i32 1)
   store i32 %0, i32* %h.addr, align 4
   %1 = call i32 @pick(i32 0)
-  store i32 %1, i32* %g.addr, align 8
+  store i32 %1, i32* %g.addr, align 4
   %2 = load i32, i32* %h.addr, align 4
   %3 = call i32 @apply$fn.16.nish_main$arrow0(i32 3, i32 %2)
   %4 = call i8* @nish_str_from_i32(i32 %3)
   call void @nish_print(i8* %4)
-  %5 = load i32, i32* %g.addr, align 8
+  %5 = load i32, i32* %g.addr, align 4
   %6 = icmp ne i32 %5, 0
   br i1 %6, label %if.then, label %if.end
 
 if.then:
-  %7 = load i32, i32* %g.addr, align 8
+  %7 = load i32, i32* %g.addr, align 4
   %8 = call i32 @apply$fn.16.nish_main$arrow1(i32 5, i32 %7)
   %9 = call i8* @nish_str_from_i32(i32 %8)
   %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %11 = load i32, i32* %g.addr, align 8
+  %11 = load i32, i32* %g.addr, align 4
   %12 = call i32 @apply$fn.16.nish_main$arrow2(i32 5, i32 %11)
   %13 = call i8* @nish_str_from_i32(i32 %12)
   %14 = call i8* @nish_str_concat(i8* %10, i8* %13)
