@@ -74,7 +74,7 @@ k = worker index, 0 <= k < N; the rest is unchanged
   64 workers or 63 with `listenPort`, applies only when a service worker is
   configured (`prefork.ts:954-957`). Otherwise the count has no upper bound,
   and §4.4 tells a QUIC server not to configure a service worker. So the
-  `listenUdp` path checks the count itself: above 255, `listen` panics with
+  `listenUdp` path checks the count itself: above 255, `preforkSupervise` panics with
   `nish/net/prefork: listenUdp with <count> workers, above 255` before it
   binds anything (§8, §7 row 12). A panic and not a fallback to one worker,
   because a count the operator set that high is a configuration error, and
@@ -93,7 +93,15 @@ k = worker index, 0 <= k < N; the rest is unchanged
   into `QuicServerConfig.workerIndex` and `QuicServerConfig.workerCount`, and
   the connection and the listener read them only from there. The runtime
   learns N separately, from bits 8–15 of each `udpBind` the supervisor makes.
-  Nothing else re-derives either value.
+  Nothing else re-derives either value. Both readers parse the same flag:
+  `<fd>,<N>`, two runs of digits (`preforkDigits`, as `preforkListener`
+  uses) with N from 1 to 255. When the flag is absent, or present but not of
+  that shape (`=5,`, `=,2`, `=5,0`, `=5,256`, `=-1,2`, a third field), both
+  answer as outside prefork: `preforkUdpListener` -1 and `preforkUdpCount` 0.
+  The supervisor writes only well-formed flags, so a malformed one means the
+  arguments were not the supervisor's. The application then has no UDP
+  socket and leaves both QUIC fields unset (§8). It never sees a descriptor
+  without its count (§7, row 15).
 - **k is checked against N where the configuration is used.** k is written
   into a `u8`, so an index of 256 would issue byte 0, 300 would issue 44, and
   a negative index other than -1 has no meaning. The configuration is valid
@@ -331,21 +339,34 @@ those IDs carry k too.
 and returns the error, and the supervisor runs one worker for QUIC, saying so
 on stderr, the way an unusable `pin` is reported (`prefork.ts:70`). It never
 falls back to hash spreading, because hash spreading is the bug in §1. The
-fallback works as follows, all in `listen`, before any worker starts:
+fallback is settled **before anything else uses the count**. The supervisor
+binds the UDP group first, before it checks `serviceWorker` and `fdMax`,
+before `pin`'s CPU check, and before it builds the `PreforkSupervisor` with
+its slots, the TCP group and the `ready` array. All of those then see the
+final count. The steps, in `preforkSupervise` right after the count and its
+255 check:
 
-1. The supervisor binds socket 0 with flags 1, 4 and N. A refused attach
-   shows there, on the first bind.
+1. The supervisor binds UDP socket 0 with flags 1, 4 and N. A refused
+   attach shows there, on the first bind.
 2. If that bind fails, the supervisor binds socket 0 again with flag 1 alone.
-   If that bind also fails, the port is the problem, not the attach. `listen`
-   fails as it does for TCP today, with no fallback.
+   If that bind also fails, the port is the problem, not the attach. The
+   supervisor prints `nish/net/prefork: cannot bind UDP <host>:<port>
+   (<error>)` and returns `PREFORK_SPAWN_FAILED`, as `listen` does for TCP
+   today, with no fallback.
 3. If the second bind succeeds, the attach was refused. The supervisor keeps
    that one socket, prints `nish/net/prefork: QUIC steering refused (<error>),
-   running one worker`, and sets the count to 1 before it forks. It fills one
-   slot, so the TCP group (§8) has one listener too.
-4. Worker 0 gets k = 0 and `--nish-prefork-udp=<fd>,1`.
+   running one worker`, and sets the count to 1.
+4. Only then does it run the existing checks and build the supervisor with
+   that count. It builds one slot, binds one TCP listener and sizes `ready`
+   for one worker. No TCP listener is ever bound for a worker that will not
+   run.
+5. Worker 0 gets k = 0, its one TCP listener and `--nish-prefork-udp=<fd>,1`.
 
-A failure on socket i > 0, after socket 0 attached, is a bind error, so
-`listen` closes what it bound and fails. A count of 1 never asks for
+A `serviceWorker` of 1 or more then fails the existing check against the
+count of 1 with that check's panic. §4.4 already tells a QUIC server not to
+configure one. A failure on UDP socket i > 0, after socket 0 attached, is a
+bind error, so the supervisor closes the UDP sockets it bound and returns
+`PREFORK_SPAWN_FAILED`. A count of 1 never asks for
 steering. With N = 1 there is one socket and nothing to choose between, so
 the supervisor binds it with flag 1 alone. That covers `NISH_WORKERS=1`,
 Darwin's default and the fallback the same way. The worker still gets
@@ -446,9 +467,10 @@ UDP attach. The record carries:
 | 9 | **Two connections on one 4-tuple** (one client UDP socket), their IDs issued by worker 0 and worker 1, both complete requests, each served by its own worker. The GRO decision is covered by the -22 check: `udpBind` with flags 2 and 4 together answers -22, so a steered socket never has GRO | `net_quic_prefork`; the -22 in `test_udp_steer` | Linux |
 | 10 | Darwin runs QUIC with one worker and says so | `net_quic_prefork` | Darwin |
 | 11 | No new test. NL2404 refuses `udpBind` under wasm whatever its flags are, and `tests/cases/reject_net_udp_wasm` already covers that | (existing) | wasm32 |
-| 12 | `listenUdp` with `NISH_WORKERS=256` panics at `listen` with the message of §2.1, before any bind or fork; 255 starts | `net_quic_prefork` | Linux |
+| 12 | `listenUdp` with `NISH_WORKERS=256` panics in the supervisor, right after the count, with the message of §2.1, before any bind or fork; 255 starts | `net_quic_prefork` | Linux |
 | 13 | The configuration check panics with §2.1's message for `workerIndex` 2 with `workerCount` 2, for 0 with 0, for -2 with 2 and for 0 with 256. It passes for -1 with 0, for 0 with 1 and for 254 with 255 | a unit case over `QuicListener` and `Http3Server` | all |
-| 14 | A refused attach falls back to one worker. In the runtime, `test_udp_steer` forks a child that installs a seccomp filter failing `setsockopt(SO_ATTACH_REUSEPORT_CBPF)` with EPERM. The steered bind then answers -1 and leaves no socket bound, and a bind with flag 1 alone succeeds. In prefork, `NISH_WORKERS=1` binds once with flag 1 alone and worker 0 reads `--nish-prefork-udp=<fd>,1`. Prefork's own branch after a refusal is not forced in a test. A Nish program cannot install a seccomp filter. That branch is the second bind, the stderr line and the N = 1 path this row tests | `test_udp_steer`; `net_quic_prefork` | Linux |
+| 14 | A refused attach falls back to one worker. In the runtime, `test_udp_steer` forks a child that installs a seccomp filter failing `setsockopt(SO_ATTACH_REUSEPORT_CBPF)` with EPERM. The steered bind then answers -1 and leaves no socket bound, and a bind with flag 1 alone succeeds. In prefork, `NISH_WORKERS=1` binds one UDP socket with flag 1 alone and one TCP listener, and worker 0 reads `--nish-prefork-udp=<fd>,1`. Prefork's own branch after a refusal is not forced in a test. A Nish program cannot install a seccomp filter. That branch is the second bind, the stderr line and the N = 1 path this row tests | `test_udp_steer`; `net_quic_prefork` | Linux |
+| 15 | `preforkUdpListener` and `preforkUdpCount` answer -1 and 0 for no flag and for `=5,`, `=,2`, `=5,0`, `=5,256`, `=-1,2` and `=5,2,1`, and 5 and 2 for `=5,2`. `preforkArgs` strips the flag | a unit case over `std/net/prefork.ts` | all |
 
 Row 4 is the acceptance test of the stage. That it fails without steering is
 reasoning from §1, not a run: the test needs the stage's own `listenUdp`.
@@ -499,10 +521,18 @@ the other worker and answered with a reset.
   `listenUdp: boolean`, which needs `listenPort`. It **adds** a group and
   replaces nothing. An HTTP/3 server still needs its TCP listeners, because
   clients find HTTP/3 through an `Alt-Svc` header sent over HTTP/1.1 or
-  HTTP/2. The supervisor computes N, panics above 255 (§2.1), and binds the
-  TCP group as today. Then it binds N UDP sockets on `listenHost` and the
-  same port number, with flags 1 and 4 and N in bits 8–15, or flag 1 alone
-  when N is 1 (§5). It holds them, and hands worker k both its TCP listener
+  HTTP/2. The supervisor computes N and panics above 255 (§2.1). Then it binds
+  N UDP sockets on `listenHost` and `listenPort`, with flags 1 and 4 and N in
+  bits 8–15, or flag 1 alone when N is 1. It binds them **before** the TCP
+  group, so a refused attach lowers the count before any TCP listener exists
+  (§5). Then it binds the TCP group as today, on the same port number. With
+  `listenPort` 0, UDP socket 0 binds any port, and the rest of the UDP group
+  and the whole TCP group bind the port it got (`netLocalPort`, as `listen`
+  does today, `prefork.ts:776-778`). A TCP bind refused on that number, for
+  example because another process holds it, makes `listen` close the TCP
+  listeners it bound and the UDP group too, and fail as it does today. It
+  does not try another port. With a fixed `listenPort`, a UDP port that is
+  taken fails at step 2 of §5. It holds them, and hands worker k both its TCP listener
   (`--nish-prefork-listener=`, as today) and its UDP socket with N
   (`--nish-prefork-udp=<fd>,<N>`, new). The new flag goes before the
   listener flag. `preforkArgs` strips it, and the back-scan in
