@@ -772,5 +772,83 @@ const signatureSuite = (): i32 => {
   return t.done()
 }
 
+const OID_PC: string = "551d24"
+const OID_AIA: string = "2b06010505070101"
+const AIA_OCSP: string = "2b06010505073001"
+
+/** authorityKeyIdentifier's keyIdentifier `01` alone. */
+const akiKeyId = (): string => der("30", der("80", "01"))
+/** authorityKeyIdentifier with keyIdentifier `01`, an issuer of dNSName `a` and serial 1. */
+const akiAll = (): string => der("30", der("80", "01") + der("a1", der("82", "61")) + der("82", "01"))
+/** authorityKeyIdentifier with the issuer and serial and no keyIdentifier. */
+const akiNoKeyId = (): string => der("30", der("a1", der("82", "61")) + der("82", "01"))
+
+/** One AccessDescription: `method`'s contents and a uniformResourceIdentifier of `http://a`. */
+const accessDescription = (method: string): string =>
+  der("30", der("06", method) + der("86", "687474703a2f2f61"))
+
+/** The critical flag of the `k`th extension `criticalitySuite` reads. */
+const criticalFlag = (c: X509Certificate, k: i32): boolean => {
+  const flags: boolean[] = [c.sanCritical, c.bcCritical, c.kuCritical, c.ekuCritical, c.ncCritical, c.skiCritical, c.akiCritical, c.pcCritical]
+  return flags[k]
+}
+
+const criticalitySuite = (): i32 => {
+  const t = new Suite("x509 criticality, authorityKeyIdentifier fields and authorityInfoAccess")
+  // Each decoded extension's critical flag, set and clear, in criticalFlag's order.
+  const names: string[] = ["subjectAltName", "basicConstraints", "keyUsage", "extKeyUsage", "nameConstraints", "subjectKeyIdentifier", "authorityKeyIdentifier", "policyConstraints"]
+  const oids: string[] = [OID_SAN, OID_BC, OID_KU, OID_EKU, OID_NC, OID_SKI, OID_AKI, OID_PC]
+  const values: string[] = [
+    der("30", der("82", "61")),
+    der("30", ""),
+    "03020780",
+    der("30", der("06", "2b06010505070301")),
+    der("30", der("a0", der("30", der("82", "61")))),
+    "040101",
+    akiKeyId(),
+    der("30", der("80", "00")),
+  ]
+  for (let k: i32 = 0; k < toI32(names.length); k++) {
+    const on: X509Certificate | null = readOne(oids[k], true, values[k])
+    const off: X509Certificate | null = readOne(oids[k], false, values[k])
+    t.ok(`${names[k]} critical: its flag is set`, on !== null && criticalFlag(on, k))
+    t.ok(`${names[k]} not critical: its flag is clear`, off !== null && !criticalFlag(off, k))
+  }
+  const plain: X509Certificate | null = readOne(OID_SKI, false, "040101")
+  t.ok("no AKI and no policyConstraints: neither is present", plain !== null && !plain.akiPresent && !plain.pcPresent)
+  const akiCrit: X509Certificate | null = readOne(OID_AKI, true, akiKeyId())
+  t.ok("a critical decoded extension is not unknownCritical", akiCrit !== null && !akiCrit.unknownCritical)
+  const pcCrit: X509Certificate | null = readOne(OID_PC, true, "3000")
+  t.ok("policyConstraints is not decoded: critical, it is present and unknownCritical", pcCrit !== null && pcCrit.pcPresent && pcCrit.unknownCritical)
+  const pcOff: X509Certificate | null = readOne(OID_PC, false, "3000")
+  t.ok("not critical, it is present and not unknownCritical", pcOff !== null && pcOff.pcPresent && !pcOff.unknownCritical)
+
+  // authorityKeyIdentifier: present with or without a keyIdentifier, and its issuer and serial.
+  const keyOnly: X509Certificate | null = readOne(OID_AKI, false, akiKeyId())
+  t.ok("an AKI of a keyIdentifier alone: present, no issuer and serial", keyOnly !== null && keyOnly.akiPresent && keyOnly.akid !== null && !keyOnly.akiIssuerSerial)
+  const all: X509Certificate | null = readOne(OID_AKI, false, akiAll())
+  t.ok("an AKI with all three fields: the issuer and serial are noted", all !== null && all.akiPresent && all.akid !== null && all.akiIssuerSerial)
+  const noKey: X509Certificate | null = readOne(OID_AKI, false, akiNoKeyId())
+  t.ok("an AKI of the issuer and serial alone: present, no keyIdentifier", noKey !== null && noKey.akiPresent && noKey.akid === null && noKey.akiIssuerSerial)
+
+  // authorityInfoAccess is held to its shape.
+  const sound: string = der("30", accessDescription(AIA_OCSP))
+  const aia: X509Certificate | null = readOne(OID_AIA, false, sound)
+  t.ok("a sound AIA reads, not unknownCritical", aia !== null && !aia.unknownCritical)
+  t.ok("two access descriptions read", readsOne(OID_AIA, der("30", accessDescription(AIA_OCSP) + accessDescription("2b06010505073002"))))
+  t.ok("a dNSName location reads, as limbo's ee-aia has", readsOne(OID_AIA, der("30", der("30", der("06", "2b06010505073002") + der("82", "61")))))
+  const aiaCrit: X509Certificate | null = readOne(OID_AIA, true, sound)
+  t.ok("a critical AIA is still unknownCritical", aiaCrit !== null && aiaCrit.unknownCritical)
+  refuses(t, "an AIA that is not DER, as limbo's malformed-aia", readsOne(OID_AIA, sound), readsOne(OID_AIA, "6d616c666f726d6564"))
+  refuses(t, "an empty AIA", readsOne(OID_AIA, sound), readsOne(OID_AIA, "3000"))
+  refuses(t, "an AIA with bytes after it", readsOne(OID_AIA, sound), readsOne(OID_AIA, `${sound}00`))
+  refuses(t, "an access description with no location", readsOne(OID_AIA, sound), readsOne(OID_AIA, der("30", der("30", der("06", AIA_OCSP)))))
+  refuses(t, "an access description with two locations", readsOne(OID_AIA, sound), readsOne(OID_AIA, der("30", der("30", der("06", AIA_OCSP) + der("82", "61") + der("82", "61")))))
+  refuses(t, "a location that is no GeneralName", readsOne(OID_AIA, sound), readsOne(OID_AIA, der("30", der("30", der("06", AIA_OCSP) + der("04", "61")))))
+  refuses(t, "an access method that is not an OID", readsOne(OID_AIA, sound), readsOne(OID_AIA, der("30", der("30", der("04", "01") + der("82", "61")))))
+  return t.done()
+}
+
 /** Every suite here, summed. */
-export const webPkiSuites = (): i32 => fullSuite() + fixtureSuite() + algorithmSuite() + extensionSuite() + nameSuite() + signatureSuite()
+export const webPkiSuites = (): i32 =>
+  fullSuite() + fixtureSuite() + algorithmSuite() + extensionSuite() + nameSuite() + signatureSuite() + criticalitySuite()

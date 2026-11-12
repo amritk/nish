@@ -46,7 +46,7 @@ the record that found it. The notes below the table name each such finding.
 | P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, `std/crypto/ed25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
 | RSA signatures | [crypto-rsa.md](crypto-rsa.md) | `std/crypto/rsa.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²³ |
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 6 ¹ | 0 / 0 / 0 / 0 |
-| DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 11 | 0 / 0 / 0 / 2 |
+| DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 12 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 3 / 19 / 17 ⁴ | 0 / 0 / 0 / 2 |
@@ -79,7 +79,7 @@ the record that found it. The notes below the table name each such finding.
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
-| PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
+| PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 5 | 0 / 0 / 1 / 8 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²² |
 | JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
 | HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
@@ -87,7 +87,7 @@ the record that found it. The notes below the table name each such finding.
 | Upstream HTTP calls | [upstream.md](upstream.md) | `std/net/upstream.ts` | 0 / 0 / 3 / 1 | 0 / 0 / 0 / 0 ²⁶ |
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts` | 0 / 1 / 3 / 4 | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](https://github.com/amritk/nish/blob/main/docs/security/async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
-| **Total** ⁸ | | | **3 / 15 / 81 / 172** | **0 / 1 / 3 / 42** |
+| **Total** ⁸ | | | **3 / 15 / 81 / 174** | **0 / 1 / 3 / 41** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -391,16 +391,17 @@ the record that found it. The notes below the table name each such finding.
 24. PKI-18 (Medium) and PKI-21 to PKI-24 (Low) were found by running the
     module against x509-limbo and are fixed: a root's own constraints, a
     root checked as an issuer, key identifiers, the leaf's server profile and
-    its key.
+    its key. PKI-27 (Low), a root's authorityKeyIdentifier fields and a
+    malformed authorityInfoAccess, is fixed by #1028.
 
-    PKI-17 (Medium) and PKI-19, PKI-20, PKI-25 to PKI-28 and PKI-30
+    PKI-17 (Medium) and PKI-19, PKI-20, PKI-25, PKI-26, PKI-28 and PKI-30
     to PKI-32 (Low) are open and counted: no revocation, no policy
     processing, Names compared byte for byte, chains limbo accepts refused,
-    criticality not read, two extensions' parts not decoded, no Public
+    a non-critical nameConstraints bound as a critical one, no Public
     Suffix List, a leaf without extKeyUsage accepted as RFC 5280 reads it, a
     leading-period dNSName subtree read rather than refused, and a root
     without a subjectKeyIdentifier accepted, as one Mozilla ships is. #1028
-    tracks PKI-26 to PKI-28.
+    tracks PKI-26 and PKI-28.
     PKI-29 (Informational), a common name not checked against the SANs, is
     not counted. PKI-1 to PKI-16 are properties checked and found to hold.
 25. JWT-1 to JWT-5 (Low) are accepted, with the reason in their record, and
@@ -497,8 +498,7 @@ only.
 | PKI-19 | Low | `std/crypto/pki.ts` | Certificate policies are not processed: no policy tree, so a chain is not refused for its policies | — |
 | PKI-20 | Low | `std/crypto/pki.ts` | Names chain by DER byte for byte, as X509-12. Fails closed | — |
 | PKI-25 | Low | `std/crypto/pki.ts` | Six chains x509-limbo accepts are refused, each under a check kept on purpose. Fails closed | — |
-| PKI-26 | Low | `std/crypto/pki.ts` | An extension's criticality is not read, so a known extension marked against RFC 5280 §4.2 is accepted; each binds whichever way it is marked | #1028 |
-| PKI-27 | Low | `std/crypto/pki.ts` | The authorityKeyIdentifier's issuer and serial and the authorityInfoAccess extension are not decoded, so a root's malformed AKI or a malformed AIA is accepted | #1028 |
+| PKI-26 | Low | `std/crypto/pki.ts` | A nameConstraints that is not critical binds as a critical one rather than refusing the chain; every other known extension marked against RFC 5280 §4.2 is refused | #1028 |
 | PKI-28 | Low | `std/crypto/pki.ts` | A wildcard over a public suffix, such as `*.co.uk`, is accepted: no Public Suffix List ships | #1028 |
 | PKI-30 | Low | `std/crypto/pki.ts` | A leaf without extKeyUsage is accepted, as RFC 5280 reads it, where the BRs require one | — |
 | PKI-31 | Low | `std/crypto/pki.ts` | A dNSName subtree with a leading period is read as the names below it, not refused; an excluded one leaves the apex allowed | — |

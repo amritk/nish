@@ -492,3 +492,45 @@ PASS  an r of 49 octets
 PASS  a short r and s are padded
 PASS  a negative r
 x509 ECDSA signature widths: 8 passed, 0 failed, 0 skipped
+PASS  subjectAltName critical: its flag is set
+PASS  subjectAltName not critical: its flag is clear
+PASS  basicConstraints critical: its flag is set
+PASS  basicConstraints not critical: its flag is clear
+PASS  keyUsage critical: its flag is set
+PASS  keyUsage not critical: its flag is clear
+PASS  extKeyUsage critical: its flag is set
+PASS  extKeyUsage not critical: its flag is clear
+PASS  nameConstraints critical: its flag is set
+PASS  nameConstraints not critical: its flag is clear
+PASS  subjectKeyIdentifier critical: its flag is set
+PASS  subjectKeyIdentifier not critical: its flag is clear
+PASS  authorityKeyIdentifier critical: its flag is set
+PASS  authorityKeyIdentifier not critical: its flag is clear
+PASS  policyConstraints critical: its flag is set
+PASS  policyConstraints not critical: its flag is clear
+PASS  no AKI and no policyConstraints: neither is present
+PASS  a critical decoded extension is not unknownCritical
+PASS  policyConstraints is not decoded: critical, it is present and unknownCritical
+PASS  not critical, it is present and not unknownCritical
+PASS  an AKI of a keyIdentifier alone: present, no issuer and serial
+PASS  an AKI with all three fields: the issuer and serial are noted
+PASS  an AKI of the issuer and serial alone: present, no keyIdentifier
+PASS  a sound AIA reads, not unknownCritical
+PASS  two access descriptions read
+PASS  a dNSName location reads, as limbo's ee-aia has
+PASS  a critical AIA is still unknownCritical
+PASS  an AIA that is not DER, as limbo's malformed-aia: the sound encoding reads
+PASS  an AIA that is not DER, as limbo's malformed-aia: refused
+PASS  an empty AIA: the sound encoding reads
+PASS  an empty AIA: refused
+PASS  an AIA with bytes after it: the sound encoding reads
+PASS  an AIA with bytes after it: refused
+PASS  an access description with no location: the sound encoding reads
+PASS  an access description with no location: refused
+PASS  an access description with two locations: the sound encoding reads
+PASS  an access description with two locations: refused
+PASS  a location that is no GeneralName: the sound encoding reads
+PASS  a location that is no GeneralName: refused
+PASS  an access method that is not an OID: the sound encoding reads
+PASS  an access method that is not an OID: refused
+x509 criticality, authorityKeyIdentifier fields and authorityInfoAccess: 41 passed, 0 failed, 0 skipped

@@ -37,8 +37,10 @@
  *  the order of what follows the key (`[1]`, `[2]`, `[3]`), and decodes the
  *  extensions a path validator needs: subjectAltName, basicConstraints,
  *  keyUsage, extKeyUsage, nameConstraints and the two key identifiers. A
- *  duplicate or malformed one refuses the certificate, and any other critical
- *  one sets `unknownCritical`. It parses and does not validate: applying these
+ *  duplicate or malformed one refuses the certificate, and each one's critical
+ *  flag is kept. An authorityInfoAccess is held to its syntax but not kept, and
+ *  any other critical extension sets `unknownCritical`. It parses and does not
+ *  validate: applying these
  *  to a chain is RFC 5280 §6 path validation, which `nish/crypto/pki`'s
  *  `pkiVerifyServer` does. The mint writes two extensions of its own (below).
  *
@@ -2138,9 +2140,10 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
  *
  * Extensions are read: subjectAltName, basicConstraints, keyUsage,
  * extKeyUsage, nameConstraints and the two key identifiers are decoded into
- * their fields, and `null` is the answer when any of them is malformed or any
- * extension appears twice. A critical extension it does not decode sets
- * `unknownCritical`, which RFC 5280 §4.2 obliges a validator to refuse.
+ * their fields with their critical flags, and `null` is the answer when any of
+ * them, or an authorityInfoAccess, is malformed or any extension appears
+ * twice. A critical extension it does not decode sets `unknownCritical`, which
+ * RFC 5280 §4.2 obliges a validator to refuse.
  *
  * **A parser, not a validator.** It checks that the bytes are one certificate
  * and what its extensions say. It does not check the signature
