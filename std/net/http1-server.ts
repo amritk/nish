@@ -284,7 +284,7 @@ const http1ServerSame8 = (kept: readonly u8[], at: i32, bytes: readonly u8[]): b
   if (
     !(at >= 0 && at < 2147483640 && at + 8 <= toI32(kept.length)) ||
     !(e >= 0 && e < 2147483640 && e + 8 <= toI32(kept.length)) ||
-    !(8 <= toI32(bytes.length) && f >= 0 && f < 2147483640 && f + 8 <= toI32(bytes.length))
+    !(toI32(bytes.length) >= 8 && f >= 0 && f < 2147483640 && f + 8 <= toI32(bytes.length))
   ) {
     return http1ServerSameByByte(kept, at, bytes)
   }
@@ -324,7 +324,7 @@ const http1ServerSame4 = (kept: readonly u8[], at: i32, bytes: readonly u8[]): b
   if (
     !(at >= 0 && at < 2147483640 && at + 4 <= toI32(kept.length)) ||
     !(e >= 0 && e < 2147483640 && e + 4 <= toI32(kept.length)) ||
-    !(4 <= toI32(bytes.length) && f >= 0 && f < 2147483640 && f + 4 <= toI32(bytes.length))
+    !(toI32(bytes.length) >= 4 && f >= 0 && f < 2147483640 && f + 4 <= toI32(bytes.length))
   ) {
     return http1ServerSameByByte(kept, at, bytes)
   }
@@ -367,12 +367,14 @@ const http1ServerKept = (kept: u8[], at: i32, limit: i32, bytes: u8[], after: i3
     }
     return any(ne(loadU8x16(kept, at + n - 16), loadU8x16(bytes, n - 16))) ? -1 : at + n + 2
   }
-  const same: boolean =
-    n >= 8
-      ? http1ServerSame8(kept, at, bytes)
-      : n >= 4
-        ? http1ServerSame4(kept, at, bytes)
-        : http1ServerSameByByte(kept, at, bytes)
+  let same: boolean = false
+  if (n >= 8) {
+    same = http1ServerSame8(kept, at, bytes)
+  } else if (n >= 4) {
+    same = http1ServerSame4(kept, at, bytes)
+  } else {
+    same = http1ServerSameByByte(kept, at, bytes)
+  }
   return same ? at + n + 2 : -1
 }
 

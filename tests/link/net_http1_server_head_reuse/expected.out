@@ -58,6 +58,310 @@ PASS  a head of over 1 KiB, then a short one with its field three times
 PASS  the short one is copied twice
 PASS  seventeen fields twice
 PASS  written both times
+PASS  a value of 1, first
+PASS  a value of 1, first: written
+PASS  a value of 1, kept
+PASS  a value of 1, kept: written
+PASS  a value of 1, again
+PASS  a value of 1, again: copied
+PASS  a value of 1 changed at 0
+PASS  a value of 1 changed at 0: written
+PASS  a name of 1, first
+PASS  a name of 1, first: written
+PASS  a name of 1, kept
+PASS  a name of 1, kept: written
+PASS  a name of 1, again
+PASS  a name of 1, again: copied
+PASS  a name of 1 changed at 0
+PASS  a name of 1 changed at 0: written
+PASS  a value of 3, first
+PASS  a value of 3, first: written
+PASS  a value of 3, kept
+PASS  a value of 3, kept: written
+PASS  a value of 3, again
+PASS  a value of 3, again: copied
+PASS  a value of 3 changed at 0
+PASS  a value of 3 changed at 0: written
+PASS  a value of 3 changed at 1
+PASS  a value of 3 changed at 1: written
+PASS  a value of 3 changed at 2
+PASS  a value of 3 changed at 2: written
+PASS  a name of 3, first
+PASS  a name of 3, first: written
+PASS  a name of 3, kept
+PASS  a name of 3, kept: written
+PASS  a name of 3, again
+PASS  a name of 3, again: copied
+PASS  a name of 3 changed at 0
+PASS  a name of 3 changed at 0: written
+PASS  a name of 3 changed at 1
+PASS  a name of 3 changed at 1: written
+PASS  a name of 3 changed at 2
+PASS  a name of 3 changed at 2: written
+PASS  a value of 4, first
+PASS  a value of 4, first: written
+PASS  a value of 4, kept
+PASS  a value of 4, kept: written
+PASS  a value of 4, again
+PASS  a value of 4, again: copied
+PASS  a value of 4 changed at 0
+PASS  a value of 4 changed at 0: written
+PASS  a value of 4 changed at 2
+PASS  a value of 4 changed at 2: written
+PASS  a value of 4 changed at 3
+PASS  a value of 4 changed at 3: written
+PASS  a name of 4, first
+PASS  a name of 4, first: written
+PASS  a name of 4, kept
+PASS  a name of 4, kept: written
+PASS  a name of 4, again
+PASS  a name of 4, again: copied
+PASS  a name of 4 changed at 0
+PASS  a name of 4 changed at 0: written
+PASS  a name of 4 changed at 2
+PASS  a name of 4 changed at 2: written
+PASS  a name of 4 changed at 3
+PASS  a name of 4 changed at 3: written
+PASS  a value of 5, first
+PASS  a value of 5, first: written
+PASS  a value of 5, kept
+PASS  a value of 5, kept: written
+PASS  a value of 5, again
+PASS  a value of 5, again: copied
+PASS  a value of 5 changed at 0
+PASS  a value of 5 changed at 0: written
+PASS  a value of 5 changed at 2
+PASS  a value of 5 changed at 2: written
+PASS  a value of 5 changed at 4
+PASS  a value of 5 changed at 4: written
+PASS  a name of 5, first
+PASS  a name of 5, first: written
+PASS  a name of 5, kept
+PASS  a name of 5, kept: written
+PASS  a name of 5, again
+PASS  a name of 5, again: copied
+PASS  a name of 5 changed at 0
+PASS  a name of 5 changed at 0: written
+PASS  a name of 5 changed at 2
+PASS  a name of 5 changed at 2: written
+PASS  a name of 5 changed at 4
+PASS  a name of 5 changed at 4: written
+PASS  a value of 7, first
+PASS  a value of 7, first: written
+PASS  a value of 7, kept
+PASS  a value of 7, kept: written
+PASS  a value of 7, again
+PASS  a value of 7, again: copied
+PASS  a value of 7 changed at 0
+PASS  a value of 7 changed at 0: written
+PASS  a value of 7 changed at 3
+PASS  a value of 7 changed at 3: written
+PASS  a value of 7 changed at 6
+PASS  a value of 7 changed at 6: written
+PASS  a name of 7, first
+PASS  a name of 7, first: written
+PASS  a name of 7, kept
+PASS  a name of 7, kept: written
+PASS  a name of 7, again
+PASS  a name of 7, again: copied
+PASS  a name of 7 changed at 0
+PASS  a name of 7 changed at 0: written
+PASS  a name of 7 changed at 3
+PASS  a name of 7 changed at 3: written
+PASS  a name of 7 changed at 6
+PASS  a name of 7 changed at 6: written
+PASS  a value of 8, first
+PASS  a value of 8, first: written
+PASS  a value of 8, kept
+PASS  a value of 8, kept: written
+PASS  a value of 8, again
+PASS  a value of 8, again: copied
+PASS  a value of 8 changed at 0
+PASS  a value of 8 changed at 0: written
+PASS  a value of 8 changed at 4
+PASS  a value of 8 changed at 4: written
+PASS  a value of 8 changed at 7
+PASS  a value of 8 changed at 7: written
+PASS  a name of 8, first
+PASS  a name of 8, first: written
+PASS  a name of 8, kept
+PASS  a name of 8, kept: written
+PASS  a name of 8, again
+PASS  a name of 8, again: copied
+PASS  a name of 8 changed at 0
+PASS  a name of 8 changed at 0: written
+PASS  a name of 8 changed at 4
+PASS  a name of 8 changed at 4: written
+PASS  a name of 8 changed at 7
+PASS  a name of 8 changed at 7: written
+PASS  a value of 9, first
+PASS  a value of 9, first: written
+PASS  a value of 9, kept
+PASS  a value of 9, kept: written
+PASS  a value of 9, again
+PASS  a value of 9, again: copied
+PASS  a value of 9 changed at 0
+PASS  a value of 9 changed at 0: written
+PASS  a value of 9 changed at 4
+PASS  a value of 9 changed at 4: written
+PASS  a value of 9 changed at 8
+PASS  a value of 9 changed at 8: written
+PASS  a name of 9, first
+PASS  a name of 9, first: written
+PASS  a name of 9, kept
+PASS  a name of 9, kept: written
+PASS  a name of 9, again
+PASS  a name of 9, again: copied
+PASS  a name of 9 changed at 0
+PASS  a name of 9 changed at 0: written
+PASS  a name of 9 changed at 4
+PASS  a name of 9 changed at 4: written
+PASS  a name of 9 changed at 8
+PASS  a name of 9 changed at 8: written
+PASS  a value of 15, first
+PASS  a value of 15, first: written
+PASS  a value of 15, kept
+PASS  a value of 15, kept: written
+PASS  a value of 15, again
+PASS  a value of 15, again: copied
+PASS  a value of 15 changed at 0
+PASS  a value of 15 changed at 0: written
+PASS  a value of 15 changed at 7
+PASS  a value of 15 changed at 7: written
+PASS  a value of 15 changed at 14
+PASS  a value of 15 changed at 14: written
+PASS  a name of 15, first
+PASS  a name of 15, first: written
+PASS  a name of 15, kept
+PASS  a name of 15, kept: written
+PASS  a name of 15, again
+PASS  a name of 15, again: copied
+PASS  a name of 15 changed at 0
+PASS  a name of 15 changed at 0: written
+PASS  a name of 15 changed at 7
+PASS  a name of 15 changed at 7: written
+PASS  a name of 15 changed at 14
+PASS  a name of 15 changed at 14: written
+PASS  a value of 16, first
+PASS  a value of 16, first: written
+PASS  a value of 16, kept
+PASS  a value of 16, kept: written
+PASS  a value of 16, again
+PASS  a value of 16, again: copied
+PASS  a value of 16 changed at 0
+PASS  a value of 16 changed at 0: written
+PASS  a value of 16 changed at 8
+PASS  a value of 16 changed at 8: written
+PASS  a value of 16 changed at 15
+PASS  a value of 16 changed at 15: written
+PASS  a name of 16, first
+PASS  a name of 16, first: written
+PASS  a name of 16, kept
+PASS  a name of 16, kept: written
+PASS  a name of 16, again
+PASS  a name of 16, again: copied
+PASS  a name of 16 changed at 0
+PASS  a name of 16 changed at 0: written
+PASS  a name of 16 changed at 8
+PASS  a name of 16 changed at 8: written
+PASS  a name of 16 changed at 15
+PASS  a name of 16 changed at 15: written
+PASS  a value of 17, first
+PASS  a value of 17, first: written
+PASS  a value of 17, kept
+PASS  a value of 17, kept: written
+PASS  a value of 17, again
+PASS  a value of 17, again: copied
+PASS  a value of 17 changed at 0
+PASS  a value of 17 changed at 0: written
+PASS  a value of 17 changed at 8
+PASS  a value of 17 changed at 8: written
+PASS  a value of 17 changed at 16
+PASS  a value of 17 changed at 16: written
+PASS  a name of 17, first
+PASS  a name of 17, first: written
+PASS  a name of 17, kept
+PASS  a name of 17, kept: written
+PASS  a name of 17, again
+PASS  a name of 17, again: copied
+PASS  a name of 17 changed at 0
+PASS  a name of 17 changed at 0: written
+PASS  a name of 17 changed at 8
+PASS  a name of 17 changed at 8: written
+PASS  a name of 17 changed at 16
+PASS  a name of 17 changed at 16: written
+PASS  a value of 31, first
+PASS  a value of 31, first: written
+PASS  a value of 31, kept
+PASS  a value of 31, kept: written
+PASS  a value of 31, again
+PASS  a value of 31, again: copied
+PASS  a value of 31 changed at 0
+PASS  a value of 31 changed at 0: written
+PASS  a value of 31 changed at 15
+PASS  a value of 31 changed at 15: written
+PASS  a value of 31 changed at 30
+PASS  a value of 31 changed at 30: written
+PASS  a name of 31, first
+PASS  a name of 31, first: written
+PASS  a name of 31, kept
+PASS  a name of 31, kept: written
+PASS  a name of 31, again
+PASS  a name of 31, again: copied
+PASS  a name of 31 changed at 0
+PASS  a name of 31 changed at 0: written
+PASS  a name of 31 changed at 15
+PASS  a name of 31 changed at 15: written
+PASS  a name of 31 changed at 30
+PASS  a name of 31 changed at 30: written
+PASS  a value of 32, first
+PASS  a value of 32, first: written
+PASS  a value of 32, kept
+PASS  a value of 32, kept: written
+PASS  a value of 32, again
+PASS  a value of 32, again: copied
+PASS  a value of 32 changed at 0
+PASS  a value of 32 changed at 0: written
+PASS  a value of 32 changed at 16
+PASS  a value of 32 changed at 16: written
+PASS  a value of 32 changed at 31
+PASS  a value of 32 changed at 31: written
+PASS  a name of 32, first
+PASS  a name of 32, first: written
+PASS  a name of 32, kept
+PASS  a name of 32, kept: written
+PASS  a name of 32, again
+PASS  a name of 32, again: copied
+PASS  a name of 32 changed at 0
+PASS  a name of 32 changed at 0: written
+PASS  a name of 32 changed at 16
+PASS  a name of 32 changed at 16: written
+PASS  a name of 32 changed at 31
+PASS  a name of 32 changed at 31: written
+PASS  a value of 33, first
+PASS  a value of 33, first: written
+PASS  a value of 33, kept
+PASS  a value of 33, kept: written
+PASS  a value of 33, again
+PASS  a value of 33, again: copied
+PASS  a value of 33 changed at 0
+PASS  a value of 33 changed at 0: written
+PASS  a value of 33 changed at 16
+PASS  a value of 33 changed at 16: written
+PASS  a value of 33 changed at 32
+PASS  a value of 33 changed at 32: written
+PASS  a name of 33, first
+PASS  a name of 33, first: written
+PASS  a name of 33, kept
+PASS  a name of 33, kept: written
+PASS  a name of 33, again
+PASS  a name of 33, again: copied
+PASS  a name of 33 changed at 0
+PASS  a name of 33 changed at 0: written
+PASS  a name of 33 changed at 16
+PASS  a name of 33 changed at 16: written
+PASS  a name of 33 changed at 32
+PASS  a name of 33 changed at 32: written
 PASS  two hundred answers, each byte for byte
 PASS  two heads written, 198 copied
-http1 head reuse: 62 passed, 0 failed, 0 skipped
+http1 head reuse: 366 passed, 0 failed, 0 skipped

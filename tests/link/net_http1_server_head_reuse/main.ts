@@ -337,7 +337,7 @@ export const main = (): i32 => {
   for (const n of lengths) {
     const kept: string = times("v", n);
     const sizes = fed(times(GET, 6));
-    const at: i32[] = [0, n / 2, n - 1];
+    const at: i32[] = n === 1 ? [0] : [0, n / 2, n - 1];
     check(t, sizes, `a value of ${n}, first`, 200, fields(["X-L"]), fields([kept]), body, "OK", false);
     check(t, sizes, `a value of ${n}, kept`, 200, fields(["X-L"]), fields([kept]), body, "OK", false);
     check(t, sizes, `a value of ${n}, again`, 200, fields(["X-L"]), fields([kept]), body, "OK", true);
