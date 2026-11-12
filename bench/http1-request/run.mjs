@@ -68,6 +68,7 @@ const CASES = [
   { name: "json4k", requests: 1, known: "4a907f5a" },
   { name: "json16k", requests: 1, known: "c873f212" },
   { name: "json40k", requests: 1, known: "e2585b39" },
+  { name: "varied", requests: 3, known: "d2e712f9" },
 ]
 /** The nanoseconds a calibrated run aims at. */
 const TARGET_NS = 200e6
