@@ -1,0 +1,110 @@
+/** Appends `bytes[start .. end)` to an `Allow` value, after a `, ` if it is not the first. */
+const httpServerAllowAppend = (value: u8[], bytes: u8[], start: i32, end: i32): void => {
+  if (value.length > 0) {
+    value.push(toU8(44))
+    value.push(toU8(32))
+  }
+  for (let k: i32 = start; k < end; k++) {
+    if (k >= 0 && k < toI32(bytes.length)) {
+      value.push(bytes[k])
+    }
+  }
+}
+
+/** A buffer size of at least `need`: `have` doubled until it is, starting from 64. */
+const httpServerGrown = (have: i32, need: i32): i32 => {
+  let size: i32 = have < 64 ? 64 : have
+  while (size < need && size < 1073741824) {
+    size = size * 2
+  }
+  return size < need ? need : size
+}
+
+/** Whether `bytes[start .. end)` is exactly `text`. */
+const httpServerSpanIs = (bytes: u8[], start: i32, end: i32, text: string): boolean => {
+  const n: i32 = toI32(text.length)
+  if (end - start !== n || start < 0 || end > toI32(bytes.length)) {
+    return false
+  }
+  for (let k: i32 = 0; k < n; k++) {
+    if (toI32(bytes[start + k]) !== toI32(text.charCodeAt(k))) {
+      return false
+    }
+  }
+  return true
+}
+
+/** `bytes[start .. end)` as a decimal number that is not negative and fits an `i32`, or -1. */
+const httpServerDecimal = (bytes: u8[], start: i32, end: i32): i32 => {
+  if (start < 0 || end <= start || end - start > 10 || end > toI32(bytes.length)) {
+    return -1
+  }
+  let n: i64 = 0
+  for (let k: i32 = start; k < end && k < toI32(bytes.length); k++) {
+    const digit: i32 = toI32(bytes[k]) - 48
+    if (digit < 0 || digit > 9) {
+      return -1
+    }
+    n = n * toI64(10) + toI64(digit)
+  }
+  return n > toI64(2147483647) ? -1 : toI32(n)
+}
+
+/**
+ * The byte the form encoding spells at `bytes[at ..)`, before `end`, and how
+ * many bytes it took, packed as `byte | taken << 8`; -1 for a malformed escape.
+ */
+const httpServerFormByte = (bytes: u8[], at: i32, end: i32): i32 => {
+  const c: i32 = toI32(bytes[at])
+  if (c === 43) {
+    return 32 | HTTP_SERVER_TOOK_ONE
+  }
+  if (c !== 37) {
+    return c | HTTP_SERVER_TOOK_ONE
+  }
+  if (at + 2 >= end) {
+    return -1
+  }
+  const hi: i32 = http1HexValue(toI32(bytes[at + 1]))
+  const lo: i32 = http1HexValue(toI32(bytes[at + 2]))
+  if (hi < 0 || lo < 0) {
+    return -1
+  }
+  return (hi * 16 + lo) | HTTP_SERVER_TOOK_THREE
+}
+
+/** Whether `bytes[start .. end)`, form-decoded, is exactly `name`; a malformed escape matches nothing. */
+const httpServerFormIs = (bytes: u8[], start: i32, end: i32, name: string): boolean => {
+  const n: i32 = toI32(name.length)
+  let at: i32 = start
+  let k: i32 = 0
+  while (at < end) {
+    const packed: i32 = httpServerFormByte(bytes, at, end)
+    if (packed < 0 || k >= n || (packed & 255) !== toI32(name.charCodeAt(k))) {
+      return false
+    }
+    at += packed >> 8
+    k += 1
+  }
+  return k === n
+}
+
+/**
+ * `bytes[start .. end)` form-decoded into `out` from 0: its length,
+ * `ROUTER_BAD_ESCAPE`, or `ROUTER_NO_ROOM`. `%00` decodes like any byte, as a
+ * route parameter's does.
+ */
+const httpServerFormDecode = (bytes: u8[], start: i32, end: i32, out: u8[]): i32 => {
+  const length: i32 = percentDecode(
+    bytes,
+    start,
+    end - start,
+    out,
+    HTTP_SERVER_ZERO,
+    URL_DECODE_FORM | URL_DECODE_ALLOW_NUL
+  )
+  if (length === URL_DECODE_ERR_SPACE) {
+    return ROUTER_NO_ROOM
+  }
+  return length < 0 ? ROUTER_BAD_ESCAPE : length
+}
