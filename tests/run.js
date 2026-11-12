@@ -4172,6 +4172,111 @@ if (!only || "net_tls_tcp".includes(only)) {
   }
 }
 
+// ---- `nish/net/http2-cleartext`, against curl and h2load (WP39 G7) --------------
+//
+// What the Nish clients in `tests/link/net_http2_cleartext` cannot say: that an
+// HTTP/2 stack somebody else wrote speaks to the carrier by prior knowledge,
+// with no TLS and no Upgrade. The same program run as `serve 5` listens, prints
+// its port and serves five connections: one from `curl --http2-prior-knowledge`,
+// whose GET must come back 200 over HTTP/2 with the short body, then four from
+// `h2load -n 1000 -c 4`, every one of whose thousand requests must succeed. The
+// server prints one line per connection it closed; each must end with no error.
+// Either client missing is a skip, named, rather than a pass.
+if (!only || "net_http2_cleartext".includes(only)) {
+  const h2cDir = path.join(buildDir, "net-h2c")
+  fs.rmSync(h2cDir, { recursive: true, force: true })
+  fs.mkdirSync(h2cDir, { recursive: true })
+  const exe = path.join(h2cDir, "app")
+  const built = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "net_http2_cleartext", "main.ts"),
+      "-o",
+      h2cDir + path.sep,
+      "--link",
+      exe,
+      ...linkProfile("net_http2_cleartext"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  // A curl built without nghttp2 refuses --http2-prior-knowledge before it
+  // connects, and the server would wait out its timer for that connection.
+  const curlFound = has("curl")
+  const hasCurl = curlFound && /\bHTTP2\b/.test(String(spawnSync("curl", ["--version"], { encoding: "utf8" }).stdout))
+  const hasH2load = has("h2load")
+  if (!curlFound) skip("net_http2_cleartext: curl is not installed, so no third-party client speaks h2c to the carrier")
+  else if (!hasCurl) skip("net_http2_cleartext: curl was built without HTTP2 (curl --version), so it cannot speak h2c to the carrier")
+  if (!hasH2load) skip("net_http2_cleartext: h2load is not installed (nghttp2-client), so the carrier is not loaded by one")
+  if (check("net_http2_cleartext: the server links", built.status === 0, String(built.stderr)) && (hasCurl || hasH2load)) {
+    const connections = (hasCurl ? 1 : 0) + (hasH2load ? 4 : 0)
+    const server = spawn(exe, ["serve", String(connections)], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let served = ""
+    let serverErr = ""
+    const serverTimer = setTimeout(() => server.kill("SIGKILL"), 60000)
+    const serverDone = new Promise((resolve) =>
+      server.on("close", (code, signal) => {
+        clearTimeout(serverTimer)
+        resolve({ code, signal })
+      })
+    )
+    server.stderr.on("data", (chunk) => {
+      serverErr += chunk
+    })
+    const port = await new Promise((resolve) => {
+      server.stdout.on("data", (chunk) => {
+        served += chunk
+        const m = /^port (\d+)\n/.exec(served)
+        if (m !== null) {
+          resolve(Number(m[1]))
+        }
+      })
+      server.on("close", () => resolve(0))
+    })
+    // Each client runs to its end before the next, asynchronously, so that the
+    // server's output keeps arriving while it does.
+    const run = (tool, args) =>
+      new Promise((resolve) => {
+        const child = spawn(tool, args, { stdio: ["ignore", "pipe", "pipe"] })
+        let out = ""
+        const timer = setTimeout(() => child.kill("SIGKILL"), 30000)
+        child.stdout.on("data", (chunk) => {
+          out += chunk
+        })
+        child.stderr.on("data", (chunk) => {
+          out += chunk
+        })
+        child.on("close", (code, signal) => {
+          clearTimeout(timer)
+          resolve({ code, signal, out })
+        })
+      })
+    const url = `http://127.0.0.1:${port}/hello`
+    if (hasCurl) {
+      const r = port > 0 ? await run("curl", ["-sS", "--max-time", "10", "--http2-prior-knowledge", url, "-w", "\n%{http_version} %{http_code}\n"]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: curl --http2-prior-knowledge GETs the page over HTTP/2, 200 with the short body",
+        r.code === 0 && r.out === "hello from nish/net/http2\n\n2 200\n",
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    if (hasH2load) {
+      const r = port > 0 ? await run("h2load", ["-n", "1000", "-c", "4", url]) : { code: null, signal: null, out: "no port" }
+      check(
+        "net_http2_cleartext: h2load -n 1000 -c 4 over prior knowledge: every request succeeds with a 2xx",
+        r.code === 0 && /requests: 1000 total, 1000 started, 1000 done, 1000 succeeded, 0 failed, 0 errored, 0 timeout/.test(r.out) && /status codes: 1000 2xx/.test(r.out),
+        `exit ${r.code} signal ${r.signal}\n${r.out.slice(-1500)}`
+      )
+    }
+    const ended = await serverDone
+    const lines = served.replace(/^port \d+\n/, "").split("\n").filter((line) => line !== "")
+    check(
+      `net_http2_cleartext: the server closes all ${connections} connections, each with no error, and exits 0`,
+      ended.code === 0 && lines.length === connections && lines.every((line) => /^closed: streams \d+ error 0$/.test(line)),
+      `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(served)}\nstderr: ${serverErr}`
+    )
+  }
+}
+
 // ---- record_size_limit (RFC 8449) against openssl s_client (WP39 G3) ------------
 //
 // `tests/link/net_tls_record_size_limit` reads the record lengths the server

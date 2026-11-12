@@ -59,6 +59,7 @@ the record that found it. The notes below the table name each such finding.
 | Blocking HTTP client | [fetch.md](fetch.md) | `std/net/fetch.ts` | 0 / 0 / 0 / 10 | 0 / 0 / 0 / 2 |
 | Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
+| HTTP/2 over cleartext (h2c) | [http2-cleartext.md](http2-cleartext.md) | `std/net/http2-cleartext.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts`; the global `Map`'s key hashes: `std/collections.ts`, `src/emit-map.ts` | 0 / 0 / 2 / 2 | 0 / 0 / 0 / 2 ¹⁰ |
@@ -486,6 +487,7 @@ only.
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
 | HC-1 | Low | `std/net/http1-client-codec.ts` (`http1ClientFieldLine`) | In the default strings mode each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes`. Spans mode (`fieldsAsSpans`) allocates nothing per response | Move `fetch.ts` and `websocket.ts` to spans mode |
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
+| H2C-1 | Low | `std/net/http2-cleartext.ts` | Cleartext by design: no confidentiality or integrity on the path. Serve h2c only behind a TLS-terminating proxy, on loopback or a private network | — |
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
