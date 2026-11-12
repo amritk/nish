@@ -1180,6 +1180,7 @@ struct QuicConnection (class) size=752 align=8 exported
   method ackDelayOf -> @nish.QuicConnection.ackDelayOf
   method packetsLost -> @nish.QuicConnection.packetsLost
   method datagramSize -> @nish.QuicConnection.datagramSize
+  method setPathMtuLimit -> @nish.QuicConnection.setPathMtuLimit
   method pmtuReset -> @nish.QuicConnection.pmtuReset
   method pmtuDue -> @nish.QuicConnection.pmtuDue
   method buildPmtuProbe -> @nish.QuicConnection.buildPmtuProbe
@@ -1249,6 +1250,7 @@ struct QuicConnection (class) size=752 align=8 exported
   method buildCrypto -> @nish.QuicConnection.buildCrypto
   method buildPathFrames -> @nish.QuicConnection.buildPathFrames
   method buildApplication -> @nish.QuicConnection.buildApplication
+  method datagramsPassOversized -> @nish.QuicConnection.datagramsPassOversized
   method sealAt -> @nish.QuicConnection.sealAt
   method recordSent -> @nish.QuicConnection.recordSent
   method untrack -> @nish.QuicConnection.untrack
@@ -2185,12 +2187,17 @@ function QuicConnection.packetsLost(this: QuicConnection, space: QuicConnSpace, 
   callee +9:18 QuicSentPackets.sizeAt -> @nish.QuicSentPackets.sizeAt
   callee +14:7 QuicConnection.pmtuLargeLost -> @nish.QuicConnection.pmtuLargeLost
 function QuicConnection.datagramSize(this: QuicConnection): i32 -> @nish.QuicConnection.datagramSize [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=752 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function QuicConnection.setPathMtuLimit(this: QuicConnection, limit: i32): void -> @nish.QuicConnection.setPathMtuLimit [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:5
+  escaping: limit
   calls: nish.QuicRecovery.setDatagramSize
   pointer this: size=752 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee +2:7 QuicRecovery.setDatagramSize -> @nish.QuicRecovery.setDatagramSize
+  callee +4:7 QuicRecovery.setDatagramSize -> @nish.QuicRecovery.setDatagramSize
 function QuicConnection.pmtuReset(this: QuicConnection): void -> @nish.QuicConnection.pmtuReset [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -2237,8 +2244,9 @@ function QuicConnection.pmtuAcked(this: QuicConnection, sent: QuicSentPackets, s
   pointer this: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.pmtuStep#0
   pointer sent: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.probeAt#0 nish.QuicSentPackets.pnAt#0 nish.QuicSentPackets.sizeAt#0
   stackSites=0 stackLocals=0
-  callee -3:9 QuicSentPackets.probeAt -> @nish.QuicSentPackets.probeAt
-  callee -2:37 QuicSentPackets.pnAt -> @nish.QuicSentPackets.pnAt
+  callee -4:9 QuicSentPackets.probeAt -> @nish.QuicSentPackets.probeAt
+  callee -3:37 QuicSentPackets.pnAt -> @nish.QuicSentPackets.pnAt
+  local -2:15 probed: i32 (const)
   local -1:15 size: i32 (const)
   callee +4:11 QuicRecovery.setDatagramSize -> @nish.QuicRecovery.setDatagramSize
   callee +7:9 QuicConnection.pmtuStep -> @nish.QuicConnection.pmtuStep
@@ -2862,10 +2870,9 @@ function QuicConnection.writeStream(this: QuicConnection, id: i64, data: u8[], f
   local +15:11 n: i32 (const)
   callee +15:20 QuicStreams.write -> @nish.QuicStreams.write
 function QuicConnection.maxDatagramPayload(this: QuicConnection): i32 -> @nish.QuicConnection.maxDatagramPayload [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.QuicConnection.datagramSize
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicCidTable.currentPeerEntry nish.QuicConnection.datagramSize nish.QuicDatagramQueue.capacity nish_panic_overflow
-  pointer this: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.datagramSize#0
+  pointer this: size=752 writesThrough=false captured=false passedTo=nish.QuicConnection.datagramSize#0
   stackSites=0 stackLocals=0
   local +0:11 entry: QuicCidEntry | null (const)
   callee +0:40 QuicCidTable.currentPeerEntry -> @nish.QuicCidTable.currentPeerEntry
@@ -2877,10 +2884,10 @@ function QuicConnection.maxDatagramPayload(this: QuicConnection): i32 -> @nish.Q
   callee +18:27 QuicDatagramQueue.capacity -> @nish.QuicDatagramQueue.capacity
 function QuicConnection.sendDatagram(this: QuicConnection, buf: u8[], from: i32, length: i32): i32 -> @nish.QuicConnection.sendDatagram [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.QuicConnection.maxDatagramPayload
+  sharedWrite: via nish.QuicDatagramQueue.push
   escaping: from length
   calls: nish.QuicConnection.maxDatagramPayload nish.QuicDatagramQueue.capacity nish.QuicDatagramQueue.push nish.quicDatagramSize
-  pointer this: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.maxDatagramPayload#0
+  pointer this: size=752 writesThrough=false captured=false passedTo=nish.QuicConnection.maxDatagramPayload#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.QuicDatagramQueue.push#1
   stackSites=0 stackLocals=0
   callee +0:7 QuicDatagramQueue.capacity -> @nish.QuicDatagramQueue.capacity
@@ -3071,8 +3078,8 @@ function QuicConnection.buildApplication(this: QuicConnection, space: QuicConnSp
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: end start
-  calls: nish.QuicCidTable.nextUnannounced nish.QuicCidTable.takeRetire nish.QuicConnSpace.controlCount nish.QuicConnSpace.setFlags nish.QuicConnSpace.stageChunk nish.QuicConnSpace.stageControl nish.QuicConnSpace.streamCount nish.QuicConnection.buildPathFrames nish.QuicConnection.maxDatagramPayload nish.QuicDatagramQueue.dropOldest nish.QuicDatagramQueue.peekLength nish.QuicDatagramQueue.putFrame nish.QuicStreams.beginPacket nish.QuicStreams.putNextChunk nish.QuicStreams.putNextControl nish.quicPutNewConnectionId nish.quicPutTypeOnly nish.quicPutValue nish_panic_overflow
-  pointer this: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.buildPathFrames#0 nish.QuicConnection.maxDatagramPayload#0
+  calls: nish.QuicCidTable.nextUnannounced nish.QuicCidTable.takeRetire nish.QuicConnSpace.controlCount nish.QuicConnSpace.setFlags nish.QuicConnSpace.stageChunk nish.QuicConnSpace.stageControl nish.QuicConnSpace.streamCount nish.QuicConnection.buildPathFrames nish.QuicConnection.datagramsPassOversized nish.QuicConnection.maxDatagramPayload nish.QuicDatagramQueue.putFrame nish.QuicStreams.beginPacket nish.QuicStreams.putNextChunk nish.QuicStreams.putNextControl nish.quicPutNewConnectionId nish.quicPutTypeOnly nish.quicPutValue nish_panic_overflow
+  pointer this: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.buildPathFrames#0 nish.QuicConnection.maxDatagramPayload#0 nish.QuicConnection.datagramsPassOversized#0 nish.QuicConnection.datagramsPassOversized#0
   pointer space: size=296 writesThrough=true captured=false passedTo=nish.QuicConnSpace.setFlags#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.stageControl#0 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.stageControl#0 nish.QuicConnection.buildPathFrames#1 nish.QuicConnSpace.controlCount#0 nish.QuicConnSpace.stageControl#0 nish.QuicConnSpace.streamCount#0 nish.QuicConnSpace.stageChunk#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.quicPutTypeOnly#0 nish.quicPutValue#0 nish.quicPutNewConnectionId#0 nish.QuicConnection.buildPathFrames#2 nish.QuicStreams.putNextControl#1 nish.QuicDatagramQueue.putFrame#1 nish.QuicDatagramQueue.putFrame#1 nish.QuicStreams.putNextChunk#1
   stackSites=0 stackLocals=0
@@ -3097,18 +3104,29 @@ function QuicConnection.buildApplication(this: QuicConnection, space: QuicConnSp
   local +38:13 next: i32 (const)
   callee +38:25 QuicStreams.putNextControl -> @nish.QuicStreams.putNextControl
   callee +43:7 QuicConnSpace.stageControl -> @nish.QuicConnSpace.stageControl
-  local +52:13 most: i32 (const)
-  callee +52:25 QuicConnection.maxDatagramPayload -> @nish.QuicConnection.maxDatagramPayload
-  callee +53:14 QuicDatagramQueue.peekLength -> @nish.QuicDatagramQueue.peekLength
-  callee +54:9 QuicDatagramQueue.dropOldest -> @nish.QuicDatagramQueue.dropOldest
-  local +57:9 datagram: i32 (let)
-  callee +57:25 QuicDatagramQueue.putFrame -> @nish.QuicDatagramQueue.putFrame
-  callee +61:18 QuicDatagramQueue.putFrame -> @nish.QuicDatagramQueue.putFrame
-  callee +63:5 QuicStreams.beginPacket -> @nish.QuicStreams.beginPacket
-  callee +64:12 QuicConnSpace.streamCount -> @nish.QuicConnSpace.streamCount
-  local +65:13 next: i32 (const)
-  callee +65:25 QuicStreams.putNextChunk -> @nish.QuicStreams.putNextChunk
-  callee +70:7 QuicConnSpace.stageChunk -> @nish.QuicConnSpace.stageChunk
+  local +52:11 most: i32 (const)
+  callee +52:23 QuicConnection.maxDatagramPayload -> @nish.QuicConnection.maxDatagramPayload
+  callee +53:5 QuicConnection.datagramsPassOversized -> @nish.QuicConnection.datagramsPassOversized
+  local +54:9 datagram: i32 (let)
+  callee +54:25 QuicDatagramQueue.putFrame -> @nish.QuicDatagramQueue.putFrame
+  callee +58:7 QuicConnection.datagramsPassOversized -> @nish.QuicConnection.datagramsPassOversized
+  callee +59:18 QuicDatagramQueue.putFrame -> @nish.QuicDatagramQueue.putFrame
+  callee +61:5 QuicStreams.beginPacket -> @nish.QuicStreams.beginPacket
+  callee +62:12 QuicConnSpace.streamCount -> @nish.QuicConnSpace.streamCount
+  local +63:13 next: i32 (const)
+  callee +63:25 QuicStreams.putNextChunk -> @nish.QuicStreams.putNextChunk
+  callee +68:7 QuicConnSpace.stageChunk -> @nish.QuicConnSpace.stageChunk
+function QuicConnection.datagramsPassOversized(this: QuicConnection, most: i32): void -> @nish.QuicConnection.datagramsPassOversized [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.QuicDatagramQueue.deferOldest
+  calls: nish.QuicDatagramQueue.deferOldest nish.QuicDatagramQueue.dropOldest nish.QuicDatagramQueue.peekLength
+  pointer this: size=752 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 queue: QuicDatagramQueue (const)
+  local +1:9 passes: i32 (let)
+  callee +2:26 QuicDatagramQueue.peekLength -> @nish.QuicDatagramQueue.peekLength
+  callee +4:9 QuicDatagramQueue.deferOldest -> @nish.QuicDatagramQueue.deferOldest
+  callee +6:9 QuicDatagramQueue.dropOldest -> @nish.QuicDatagramQueue.dropOldest
 function QuicConnection.sealAt(this: QuicConnection, space: QuicConnSpace, out: u8[], start: i32, payloadEnd: i32): i32 -> @nish.QuicConnection.sealAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -11083,6 +11101,7 @@ struct QuicDatagramQueue (class) size=32 align=8 exported
   method push -> @nish.QuicDatagramQueue.push
   method peekLength -> @nish.QuicDatagramQueue.peekLength
   method dropOldest -> @nish.QuicDatagramQueue.dropOldest
+  method deferOldest -> @nish.QuicDatagramQueue.deferOldest
   method drop -> @nish.QuicDatagramQueue.drop
   method pop -> @nish.QuicDatagramQueue.pop
   method putFrame -> @nish.QuicDatagramQueue.putFrame
@@ -11126,6 +11145,17 @@ function QuicDatagramQueue.dropOldest(this: QuicDatagramQueue): void -> @nish.Qu
   pointer this: size=32 writesThrough=true captured=false passedTo=nish.QuicDatagramQueue.drop#0
   stackSites=0 stackLocals=0
   callee +2:5 QuicDatagramQueue.drop -> @nish.QuicDatagramQueue.drop
+function QuicDatagramQueue.deferOldest(this: QuicDatagramQueue): void -> @nish.QuicDatagramQueue.deferOldest [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.QuicDatagramQueue.capacity nish.quicPacketCopy nish_panic_div nish_panic_index nish_panic_overflow
+  pointer this: size=32 writesThrough=true captured=false passedTo=nish.QuicDatagramQueue.capacity#0
+  stackSites=0 stackLocals=0
+  local -8:11 entries: i32 (const)
+  callee -8:26 QuicDatagramQueue.capacity -> @nish.QuicDatagramQueue.capacity
+  local -3:13 k: i32 (const)
+  local -2:13 length: i32 (const)
+  callee -1:7 quicPacketCopy -> @nish.quicPacketCopy
 function QuicDatagramQueue.drop(this: QuicDatagramQueue): void -> @nish.QuicDatagramQueue.drop [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -21165,10 +21195,9 @@ function quicListenerPaceTime(conn: QuicConnection, now: i64): i64 -> @nish.quic
   stackSites=0 stackLocals=0
   callee +0:9 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
 function quicListenerQuantum(conn: QuicConnection): i32 -> @nish.quicListenerQuantum
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.QuicConnection.datagramSize
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicConnection.datagramSize nish.QuicRecovery.pacerQuantum
-  pointer conn: size=752 writesThrough=true captured=false passedTo=nish.QuicConnection.datagramSize#0
+  pointer conn: size=752 writesThrough=false captured=false passedTo=nish.QuicConnection.datagramSize#0
   stackSites=0 stackLocals=0
   callee +0:3 QuicRecovery.pacerQuantum -> @nish.QuicRecovery.pacerQuantum
   callee +0:30 QuicConnection.datagramSize -> @nish.QuicConnection.datagramSize
@@ -21177,7 +21206,7 @@ function quicListenerFlightTime(conn: QuicConnection, now: i64): i64 -> @nish.qu
   sharedWrite: via nish.QuicRecovery.pacerDelay
   escaping: now
   calls: nish.QuicRecovery.pacerDelay nish.quicListenerQuantum nish_panic_overflow
-  pointer conn: size=752 writesThrough=true captured=false passedTo=nish.quicListenerQuantum#0
+  pointer conn: size=752 writesThrough=false captured=false passedTo=nish.quicListenerQuantum#0
   stackSites=0 stackLocals=0
   callee +0:9 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
   callee +0:39 quicListenerQuantum -> @nish.quicListenerQuantum
