@@ -29213,6 +29213,7 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     ["simd_access_oob_first", "a load whose first lane is past the end", "4\n", "index out of range: 6 >= 5"],
     ["simd_access_oob_negative", "a load at a negative index", "2\n", "index out of range: 18446744073709551615 >= 5"],
     ["simd_store_oob", "a store whose last lane is past the end", "7\n", "index out of range: 5 >= 5"],
+    ["simd_access_oob_guard", "a load a too-short loop guard does not prove", "1\n2\n3\n", "index out of range: 6 >= 6"],
   ]
   for (const [name, what, stdout, words] of oobCases) {
     const exe = buildCaseIn(simdDir, name)

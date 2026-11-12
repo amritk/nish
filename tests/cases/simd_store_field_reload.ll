@@ -119,62 +119,31 @@ land.end:
 while.body:
   %22 = load i32, i32* %i.addr, align 4
   %23 = sext i32 %22 to i64
-  %24 = add i64 %23, 16
-  %25 = icmp ult i64 %23, %1
-  %26 = icmp ule i64 %24, %1
-  %27 = and i1 %25, %26
-  br i1 %27, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  %28 = add i64 %23, 15
-  %29 = select i1 %25, i64 %28, i64 %23
-  call void @nish_panic_index(i64 %29, i64 %1)
-  unreachable
-
-bounds.ok:
-  %30 = bitcast i8* %3 to i8*
-  %31 = getelementptr inbounds i8, i8* %30, i64 %23
-  %32 = bitcast i8* %31 to <16 x i8>*
-  %33 = load <16 x i8>, <16 x i8>* %32, align 1, !alias.scope !10, !noalias !9, !tbaa !19
-  store <16 x i8> %33, <16 x i8>* %v.addr, align 8
-  %34 = load <16 x i8>, <16 x i8>* %v.addr, align 8
-  %35 = load i32, i32* %i.addr, align 4
-  %36 = sext i32 %35 to i64
-  %37 = add i64 %36, 16
-  %38 = icmp ult i64 %36, %7
-  %39 = icmp ule i64 %37, %7
-  %40 = and i1 %38, %39
-  br i1 %40, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  %41 = add i64 %36, 15
-  %42 = select i1 %38, i64 %41, i64 %36
-  call void @nish_panic_index(i64 %42, i64 %7)
-  unreachable
-
-bounds.ok.1:
-  %43 = bitcast i8* %9 to i8*
-  %44 = getelementptr inbounds i8, i8* %43, i64 %36
-  %45 = bitcast i8* %44 to <16 x i8>*
-  store <16 x i8> %34, <16 x i8>* %45, align 1, !alias.scope !10, !noalias !9, !tbaa !19
-  %46 = getelementptr inbounds %struct.Sink, %struct.Sink* %this, i32 0, i32 0
-  %47 = load i32, i32* %46, align 4, !tbaa !5
-  %48 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %47, i32 1)
-  %49 = extractvalue { i32, i1 } %48, 0
-  %50 = extractvalue { i32, i1 } %48, 1
-  br i1 %50, label %ovf.fail, label %ovf.ok
+  %24 = bitcast i8* %3 to i8*
+  %25 = getelementptr inbounds i8, i8* %24, i64 %23
+  %26 = bitcast i8* %25 to <16 x i8>*
+  %27 = load <16 x i8>, <16 x i8>* %26, align 1, !alias.scope !10, !noalias !9, !tbaa !19
+  store <16 x i8> %27, <16 x i8>* %v.addr, align 8
+  %28 = load <16 x i8>, <16 x i8>* %v.addr, align 8
+  %29 = load i32, i32* %i.addr, align 4
+  %30 = sext i32 %29 to i64
+  %31 = bitcast i8* %9 to i8*
+  %32 = getelementptr inbounds i8, i8* %31, i64 %30
+  %33 = bitcast i8* %32 to <16 x i8>*
+  store <16 x i8> %28, <16 x i8>* %33, align 1, !alias.scope !10, !noalias !9, !tbaa !19
+  %34 = getelementptr inbounds %struct.Sink, %struct.Sink* %this, i32 0, i32 0
+  %35 = load i32, i32* %34, align 4, !tbaa !5
+  %36 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %35, i32 1)
+  %37 = extractvalue { i32, i1 } %36, 0
+  %38 = extractvalue { i32, i1 } %36, 1
+  br i1 %38, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %51 = getelementptr inbounds %struct.Sink, %struct.Sink* %this, i32 0, i32 0
-  store i32 %49, i32* %51, align 4, !tbaa !5
-  %52 = load i32, i32* %i.addr, align 4
-  %53 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %52, i32 16)
-  %54 = extractvalue { i32, i1 } %53, 0
-  %55 = extractvalue { i32, i1 } %53, 1
-  br i1 %55, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  store i32 %54, i32* %i.addr, align 4
+  %39 = getelementptr inbounds %struct.Sink, %struct.Sink* %this, i32 0, i32 0
+  store i32 %37, i32* %39, align 4, !tbaa !5
+  %40 = load i32, i32* %i.addr, align 4
+  %41 = add nsw i32 %40, 16
+  store i32 %41, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:

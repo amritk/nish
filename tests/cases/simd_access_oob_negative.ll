@@ -34,59 +34,44 @@ entry:
   store i32 5, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !14
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %xs.addr, align 8
   %10 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %13 = add i64 1, 4
-  %14 = icmp ult i64 1, %12
-  %15 = icmp ule i64 %13, %12
-  %16 = and i1 %14, %15
-  br i1 %16, label %bounds.ok, label %bounds.fail
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 1
+  %15 = bitcast i32* %14 to <4 x i32>*
+  %16 = load <4 x i32>, <4 x i32>* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %17 = extractelement <4 x i32> %16, i32 0
+  %18 = call i8* @nish_str_from_i32(i32 %17)
+  call void @nish_print(i8* %18)
+  %19 = sub nsw i32 0, 1
+  store i32 %19, i32* %i.addr, align 4
+  %20 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %21 = load i32, i32* %i.addr, align 4
+  %22 = sext i32 %21 to i64
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
+  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %25 = add i64 %22, 4
+  %26 = icmp ult i64 %22, %24
+  %27 = icmp ule i64 %25, %24
+  %28 = and i1 %26, %27
+  br i1 %28, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  %17 = add i64 1, 3
-  %18 = select i1 %14, i64 %17, i64 1
-  call void @nish_panic_index(i64 %18, i64 %12)
+  %29 = add i64 %22, 3
+  %30 = select i1 %26, i64 %29, i64 %22
+  call void @nish_panic_index(i64 %30, i64 %24)
   unreachable
 
 bounds.ok:
-  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
-  %20 = load i8*, i8** %19, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %21 = bitcast i8* %20 to i32*
-  %22 = getelementptr inbounds i32, i32* %21, i64 1
-  %23 = bitcast i32* %22 to <4 x i32>*
-  %24 = load <4 x i32>, <4 x i32>* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %25 = extractelement <4 x i32> %24, i32 0
-  %26 = call i8* @nish_str_from_i32(i32 %25)
-  call void @nish_print(i8* %26)
-  %27 = sub nsw i32 0, 1
-  store i32 %27, i32* %i.addr, align 4
-  %28 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %29 = load i32, i32* %i.addr, align 4
-  %30 = sext i32 %29 to i64
-  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %28, i64 0, i32 0
-  %32 = load i64, i64* %31, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %33 = add i64 %30, 4
-  %34 = icmp ult i64 %30, %32
-  %35 = icmp ule i64 %33, %32
-  %36 = and i1 %34, %35
-  br i1 %36, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  %37 = add i64 %30, 3
-  %38 = select i1 %34, i64 %37, i64 %30
-  call void @nish_panic_index(i64 %38, i64 %32)
-  unreachable
-
-bounds.ok.1:
-  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %28, i64 0, i32 2
-  %40 = load i8*, i8** %39, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %41 = bitcast i8* %40 to i32*
-  %42 = getelementptr inbounds i32, i32* %41, i64 %30
-  %43 = bitcast i32* %42 to <4 x i32>*
-  %44 = load <4 x i32>, <4 x i32>* %43, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %45 = extractelement <4 x i32> %44, i32 0
-  %46 = call i8* @nish_str_from_i32(i32 %45)
-  call void @nish_print(i8* %46)
+  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 2
+  %32 = load i8*, i8** %31, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %33 = bitcast i8* %32 to i32*
+  %34 = getelementptr inbounds i32, i32* %33, i64 %22
+  %35 = bitcast i32* %34 to <4 x i32>*
+  %36 = load <4 x i32>, <4 x i32>* %35, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %37 = extractelement <4 x i32> %36, i32 0
+  %38 = call i8* @nish_str_from_i32(i32 %37)
+  call void @nish_print(i8* %38)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

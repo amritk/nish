@@ -1384,6 +1384,30 @@ export const emitUncheckedElement = (emitter: Emitter, expr: Node, store: boolea
 }
 
 /**
+ * The one check of a vector access of `count` elements from `idx`, which the
+ * bounds walk leaves out when it proved the access (`judgeVectorAccess` in
+ * `src/bounds.ts`). Code after it runs in the block where it passed.
+ */
+const emitVectorCheck = (emitter: Emitter, base: ArrayBase, idx: string, count: i32): void => {
+  const fn = emitter.fn
+  const len = baseLength(emitter, base)
+  const end = fn.emitValue(`add i64 ${idx}, ${count}`)
+  const first = fn.emitValue(`icmp ult i64 ${idx}, ${len}`)
+  const last = fn.emitValue(`icmp ule i64 ${end}, ${len}`)
+  const inRange = fn.emitValue(`and i1 ${first}, ${last}`)
+  const failBlock = fn.newBlock("bounds.fail")
+  const okBlock = fn.newBlock("bounds.ok")
+  fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`)
+  fn.placeBlock(failBlock)
+  // The panic names a lane that is out of range: the first when it is, else the last.
+  const lastLane = fn.emitValue(`add i64 ${idx}, ${count - 1}`)
+  const shown = fn.emitValue(`select i1 ${first}, i64 ${lastLane}, i64 ${idx}`)
+  fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 ${shown}, i64 ${len})`)
+  fn.emit("unreachable")
+  fn.placeBlock(okBlock)
+}
+
+/**
  * `nish:simd`'s `loadU8x16(xs, i)` and `store(v, xs, i)` (WP38 S3): the
  * vector of elements `i` to `i + N - 1`, read or written in one access after
  * one bounds check for all of them — `i < len` and `i + N <= len`, the two
@@ -1409,21 +1433,9 @@ export const emitVectorAccess = (emitter: Emitter, expr: Node, store: boolean): 
   const base = emitArrayBase(emitter, args[at])
   const idx = emitIndex(emitter, args[at + 1])
   const fn = emitter.fn
-  const len = baseLength(emitter, base)
-  const end = fn.emitValue(`add i64 ${idx}, ${count}`)
-  const first = fn.emitValue(`icmp ult i64 ${idx}, ${len}`)
-  const last = fn.emitValue(`icmp ule i64 ${end}, ${len}`)
-  const inRange = fn.emitValue(`and i1 ${first}, ${last}`)
-  const failBlock = fn.newBlock("bounds.fail")
-  const okBlock = fn.newBlock("bounds.ok")
-  fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`)
-  fn.placeBlock(failBlock)
-  // The panic names a lane that is out of range: the first when it is, else the last.
-  const lastLane = fn.emitValue(`add i64 ${idx}, ${count - 1}`)
-  const shown = fn.emitValue(`select i1 ${first}, i64 ${lastLane}, i64 ${idx}`)
-  fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 ${shown}, i64 ${len})`)
-  fn.emit("unreachable")
-  fn.placeBlock(okBlock)
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    emitVectorCheck(emitter, base, idx, count)
+  }
   const slot = elementPointer(emitter, base, lane, idx)
   const ty = emitter.llvm(vector)
   const ptr = fn.emitValue(`bitcast ${slotType(emitter, lane)}* ${slot} to ${ty}*`)

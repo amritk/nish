@@ -624,9 +624,15 @@ check for the whole vector, `i < len` and `i + N <= len`.
 
 - *Lowering:* the bounds check branches to `nish_panic_index(i, len)`; then
   the element's address bitcast to `<N x T>*` and one `load` aligned to the
-  lane.
-- *Tests:* `simd_access`, `simd_access_oob`, `simd_access_oob_first`,
-  `simd_access_oob_negative`; `reject_simd_lane_type`.
+  lane, with the `!alias.scope`, `!noalias` and `!tbaa` of a scalar element
+  access of the lane type. The check is left out where the bounds proof
+  (`src/bounds.ts`, `judgeVectorAccess`) already knows every lane is in range:
+  `i` non-negative under a guard such as `i <= n - N` or `i + N - 1 < n` on the
+  array's length, or a literal index into an array of known length. A guard one
+  lane short proves nothing, and the access keeps its check.
+- *Tests:* `simd_access`, `simd_access_proven`, `simd_access_alias`,
+  `simd_access_oob`, `simd_access_oob_first`, `simd_access_oob_negative`,
+  `simd_access_oob_guard`; `reject_simd_lane_type`.
 
 **`store(v, xs, i)`** writes `v` back into `xs` at `i` after the same check.
 It is a statement.
