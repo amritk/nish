@@ -1179,6 +1179,11 @@
                   },
                   "/http2": { "type": "page", "title": "HTTP/2", "filepath": "docs/security/http2.md" },
                   "/http3": { "type": "page", "title": "HTTP/3", "filepath": "docs/security/http3.md" },
+                  "/quic-multicore": {
+                    "type": "page",
+                    "title": "QUIC on every core",
+                    "filepath": "docs/security/quic-multicore.md"
+                  },
                   "/webtransport": {
                     "type": "page",
                     "title": "WebTransport",
