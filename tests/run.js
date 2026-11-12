@@ -14126,6 +14126,23 @@ if (dealtHere("arrayChecks")) {
       )
     }
 
+    // A vector store cannot write a class field either: `emitVectorAccess` tags it as
+    // the element data a scalar access of its lane type is (src/emit-arrays.ts).
+    // Untagged, `opt -O3` reloads `this.count` after every `store(v, this.out, i)` in
+    // `@Sink.fill`; tagged, it promotes the field to a register for the whole loop.
+    const vectorReloadLl = path.join(buildDir, "simd_store_field_reload.ll")
+    if (has("opt") && fs.existsSync(vectorReloadLl)) {
+      const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", vectorReloadLl])
+      const body = String(o.stdout).match(/define[^\n]*@Sink\.fill\b[\s\S]*?\n}/)?.[0] ?? ""
+      const loop = body.slice(body.indexOf("\nwhile.body:"), body.indexOf("\nwhile.end:"))
+      const reloads = loop.match(/= load i32, ptr %this\b/g) ?? []
+      check(
+        "simd_store_field_reload: opt -O3 keeps the field in a register across the vector store",
+        o.status === 0 && body !== "" && loop.includes("store <16 x i8>") && reloads.length === 0,
+        o.status === 0 ? `field loads in the loop: ${reloads.length}\n${body}` : String(o.stderr)
+      )
+    }
+
     // A class-field store cannot write an array header, and the header's own `!tbaa`
     // subtree is what tells LLVM so (`headerTbaa`, src/tbaa.ts). Without it `opt -O3`
     // reloads `this.piles`'s `data` after `top.next = null` and again after

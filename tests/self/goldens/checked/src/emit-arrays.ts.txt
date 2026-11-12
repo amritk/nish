@@ -1067,8 +1067,8 @@ function emitUncheckedElement(emitter: Emitter, expr: Node, store: boolean): str
 function emitVectorAccess(emitter: Emitter, expr: Node, store: boolean): string -> @emitVectorAccess [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
-  calls: Emitter.declareType Emitter.emitExpression Emitter.llvm Emitter.typeOf Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.alignOf TypeTable.laneCount TypeTable.refOf baseLength elementPointer emitArrayBase emitIndex nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 slotType
-  pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.typeOf#0 Emitter.declareType#0 emitArrayBase#0 emitIndex#0 baseLength#0 Emitter.useRuntime#0 elementPointer#0 Emitter.llvm#0 slotType#0
+  calls: Emitter.declareType Emitter.emitExpression Emitter.llvm Emitter.typeOf Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.alignOf TypeTable.laneCount TypeTable.refOf baseLength elementPointer emitArrayBase emitIndex nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 slotType valueSlotAccess
+  pointer emitter: size=376 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.typeOf#0 Emitter.declareType#0 emitArrayBase#0 emitIndex#0 baseLength#0 Emitter.useRuntime#0 elementPointer#0 Emitter.llvm#0 slotType#0 valueSlotAccess#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
@@ -1119,8 +1119,9 @@ function emitVectorAccess(emitter: Emitter, expr: Node, store: boolean): string 
   local +27:9 ptr: string (const)
   callee +27:15 IRFunction.emitValue -> @IRFunction.emitValue
   callee +27:39 slotType -> @slotType
-  local +29:9 align: string (const)
+  local +29:9 attrs: string (const)
   callee +29:28 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +29:58 valueSlotAccess -> @valueSlotAccess
   callee +31:5 IRFunction.emit -> @IRFunction.emit
   callee +34:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitElementAssignment(emitter: Emitter, expr: Node): string -> @emitElementAssignment [exported]
