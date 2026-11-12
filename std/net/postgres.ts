@@ -3497,7 +3497,8 @@ export class PgPool {
    * @internal Used by the `PgCarrier` constructor: marks the pool's connections
    * as carried over TLS, so `connect` makes them with a copy of the config
    * whose `tls` is `PG_TLS_DISABLE`; without it, a pool whose config asks for
-   * TLS refuses to connect.
+   * TLS refuses to connect. A program that calls it by hand gets a pool in
+   * the clear, as if it had set `tls` to `PG_TLS_DISABLE`.
    */
   carryTls(): void {
     const c: PgConfig = this.config

@@ -331,7 +331,9 @@ Each connection writes the 8-byte SSLRequest (`pgSslRequest`, code
 80877103), and only once all eight bytes are out reads exactly one byte of
 answer, so bytes a server or man in the middle sends in the clear after it
 never reach the backend parser (CVE-2021-23222's shape). After an `N`
-nothing more is read. After an `S` the next bytes go to the record layer as
+nothing more is read; the test cannot tell a trailer read from one left
+unread, since either way the result is `PG_ERR_TLS` with `socketError` 0,
+so that rests on the code. After an `S` the next bytes go to the record layer as
 the handshake's first record, which must be the server's ServerHello, so
 anything else fails the handshake: a fake AuthenticationOk and
 ReadyForQuery there fail the connection with alert 10
@@ -362,7 +364,12 @@ downgrade, and so is `PG_TLS_VERIFY_FULL` with no root to read. So is a
 `tls` other than `PG_TLS_DISABLE` anywhere the carrier does not drive the
 connection: a `PgConnection` made by hand, a `pgAsyncConnect` connection,
 and `PgPool.connect` on a pool no `PgCarrier` took. A program cannot ask for
-TLS and get the clear.
+TLS and get the clear. No test reaches `pgAsyncConnect` with a TLS config:
+its refusal is pinned through the `PgConnection` constructor it calls
+(`link/std_postgres_tls_connection_panic`). The one way around is
+`PgPool.carryTls()`, which the carrier calls: it is `@internal`, and a
+program that calls it by hand has chosen the clear, as if it set `tls` to
+`PG_TLS_DISABLE`.
 
 Out of scope: TLS for the async pool (`std/net/postgres-async.ts`) and for
 `PgPool` driven by hand, whose bytes the program moves itself: both have

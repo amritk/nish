@@ -81,17 +81,17 @@
  * Programming errors (a cap out of range, an unknown batcher id, `send()`
  * with no build open) panic.
  *
- * **TLS.** With `PgConfig.tls` set to `PG_TLS_REQUIRE` or
- * `PG_TLS_VERIFY_FULL`, each connection opens with an SSLRequest and reads
- * exactly the one byte of its answer, so nothing the server sends in the
- * clear reaches the protocol: after `N` nothing more is read, and after `S`
- * the next bytes are the handshake's, so anything else fails it. `S` goes on to a TLS 1.3 handshake
- * (`nish/net/tls/record-client`) driven on the same loop without blocking,
- * the StartupMessage held until it is done; any other answer fails the
- * connection with `PG_ERR_TLS`. Under `PG_TLS_VERIFY_FULL` the server's chain
- * is checked with `nish/net/tls/verify` against `PgConfig.tlsRootsPath` (or
- * the system's store) and its name against `tlsServerName` (or the target's
- * host); `PG_TLS_REQUIRE` encrypts without checking who answered. A refused
+ * **TLS.** With `PgConfig.tls` set to `PG_TLS_REQUIRE` or `PG_TLS_VERIFY_FULL`,
+ * each connection opens with an SSLRequest and reads exactly the one byte of
+ * its answer, so nothing the server sends in the clear reaches the protocol:
+ * after `N` nothing more is read, and after `S` the next bytes are the
+ * handshake's, so anything else fails it. `S` goes on to a TLS 1.3 handshake
+ * (`nish/net/tls/record-client`) driven on the same loop without blocking, the
+ * StartupMessage held until it is done; any other answer fails the connection
+ * with `PG_ERR_TLS`. Under `PG_TLS_VERIFY_FULL` the server's chain is checked
+ * with `nish/net/tls/verify` against `PgConfig.tlsRootsPath` (or the system's
+ * store) and its name against `tlsServerName` (or the target's host);
+ * `PG_TLS_REQUIRE` encrypts without checking who answered. A refused
  * certificate or failed handshake is `PG_ERR_TLS` with `socketError` the TLS
  * alert (positive); a refused SSLRequest has `socketError` 0. TLS needs a TCP
  * target.
