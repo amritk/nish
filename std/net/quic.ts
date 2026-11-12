@@ -313,7 +313,9 @@ import {
 import { QuicAckRanges } from "nish/net/quic-conn-ack"
 import {
   QUIC_RECOVERY_APPLICATION_CAPACITY,
+  QUIC_RECOVERY_CUBIC,
   QUIC_RECOVERY_HANDSHAKE_CAPACITY,
+  QUIC_RECOVERY_NEWRENO,
   QUIC_RECOVERY_TIMEOUT_LOSS,
   QUIC_RECOVERY_TIMEOUT_PTO,
   QuicRecovery,
@@ -658,6 +660,13 @@ export interface QuicServerConfig {
    * other pair.
    */
   workerCount: i32
+  /**
+   * The congestion controller every connection runs: `QUIC_RECOVERY_NEWRENO`
+   * (RFC 9002) or `QUIC_RECOVERY_CUBIC` (RFC 9438), from
+   * `nish/net/quic-recovery`. Any other value does not fit, and a connection
+   * made with it closes at once.
+   */
+  congestion: i32
 }
 
 /**
@@ -1434,6 +1443,7 @@ const quicConnConfigFits = (config: QuicServerConfig): boolean =>
   config.maxIdleTimeout <= QUIC_MAX_VARINT &&
   config.activeConnectionIdLimit >= 2 &&
   config.activeConnectionIdLimit <= 8 &&
+  (config.congestion === QUIC_RECOVERY_NEWRENO || config.congestion === QUIC_RECOVERY_CUBIC) &&
   toI32(config.statelessResetKey.length) === QUIC_CONN_STATIC_KEY_SIZE
 
 /**
@@ -1804,6 +1814,7 @@ export class QuicConnection {
       QUIC_CONN_LOCAL_CIDS
     )
     this.recovery = new QuicRecovery()
+    this.recovery.controller = config.congestion === QUIC_RECOVERY_CUBIC ? QUIC_RECOVERY_CUBIC : QUIC_RECOVERY_NEWRENO
     this.defaultParameters = new QuicTransportParameters()
     this.peerParameters = this.defaultParameters
     // A configuration that does not fit closes the connection at once (see

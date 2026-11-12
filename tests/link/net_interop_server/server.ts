@@ -158,6 +158,7 @@ export const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConf
     retryTokenKey: randomBytes(QUIC_CONN_STATIC_KEY_SIZE),
     workerIndex: toI32(-1),
     workerCount: toI32(0),
+    congestion: toI32(0),
     retry: retry,
     retryTokenLifetime: toI64(10000),
   };

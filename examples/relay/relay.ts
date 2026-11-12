@@ -210,6 +210,7 @@ export const relayQuicConfig = (chain: u8[][], resetKey: u8[], retryKey: u8[]): 
   retryTokenKey: retryKey,
   workerIndex: toI32(-1),
   workerCount: toI32(0),
+  congestion: toI32(0),
 })
 
 /** The HTTP/3 configuration: one WebTransport session a connection, and a field section a CONNECT fits. */
