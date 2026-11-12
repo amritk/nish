@@ -2707,10 +2707,17 @@ if (connectResult(fd) === 0) {
 **`udpBind(host: string, port: i32, flags: i32): i32`** answers a datagram
 socket, non-blocking and close-on-exec, bound as `tcpListen`'s is, `"::"` and
 its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, flag `2` is
-`UDP_GRO`, and any other bit is `-22`.
+`UDP_GRO`, and flag `4`, with flag `1` and a group size N from 1 to 255 in
+bits 8 to 15, **steers QUIC**: a classic-BPF reuseport program hands each
+datagram to the port's socket number (byte 0 of the Destination Connection
+ID) mod N, in bind order ([docs/h3-multicore.md](https://github.com/amritk/nish/blob/main/docs/h3-multicore.md)). A refused
+attach closes the socket and answers the errno. Flag `4` without `1`, with
+`2` or with N `0`, N without `4`, and any other bit are `-22`; flags `2` and
+`4` are `-95` on Darwin.
 
 - *Tests:* `net_udp_calls`, `net_udp_echo`, `net_udp_offload`,
-  `net_dual_stack`; `reject_net_udp_wasm`, `reject_net_udp_parallel`.
+  `net_dual_stack`, `net_quic_prefork`; `reject_net_udp_wasm`,
+  `reject_net_udp_parallel`.
 
 **`udpSendTo(fd: i32, buf: readonly u8[], off: i32, len: i32, to: readonly u8[], segment: i32, ecn: i32): i32`**
 sends `buf[off, off + len)` to `to`, cut by the kernel into datagrams of
