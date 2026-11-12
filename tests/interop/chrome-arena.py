@@ -22,7 +22,8 @@ with build/arena/replay. It exits 1 when a check fails.
 It also checks the renderer: the page must choose the one `--expect` names
 (the note's §10 records WebGPU on swiftshader), since a silent fall back to
 WebGL 2 would soak a path the note does not claim; `--adapter` names a
-substring the WebGPU adapter's vendor / architecture string must contain.
+substring the WebGPU adapter's vendor / architecture string must contain,
+read from the adapter the page's own requestAdapter() call was given.
 
 Then two checks the note's §5.3 and §8 left to a browser, recorded in the
 same JSON, each failing the run when Chromium does not do what the note says:
@@ -83,8 +84,15 @@ WATCH = """
   if (navigator.gpu !== undefined) {
     watch.gpu = "the page never called requestAdapter()";
     const request = navigator.gpu.requestAdapter.bind(navigator.gpu);
+    // Records the last call's answer; the page makes one.
     navigator.gpu.requestAdapter = async (options) => {
-      const adapter = await request(options);
+      let adapter;
+      try {
+        adapter = await request(options);
+      } catch (e) {
+        watch.gpu = "requestAdapter() rejected: " + e;
+        throw e;
+      }
       if (adapter === null) {
         watch.gpu = "requestAdapter() answered null";
       } else {
