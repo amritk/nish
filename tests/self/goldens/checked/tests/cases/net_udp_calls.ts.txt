@@ -37,8 +37,8 @@ function main(): i32 -> @nish_main [exported entry]
   callee +17:15 receive -> @receive
   local +19:9 short: u8[] (const)
   local +20:9 one: i32[] (const)
-  local +31:9 shared: i32 (const)
-  local +32:9 again: i32 (const)
-  local +35:9 both: i32 (const)
-  callee +36:15 send -> @send$
-  callee +37:15 receive -> @receive
+  local +32:9 shared: i32 (const)
+  local +33:9 again: i32 (const)
+  local +36:9 both: i32 (const)
+  callee +37:15 send -> @send$
+  callee +38:15 receive -> @receive
