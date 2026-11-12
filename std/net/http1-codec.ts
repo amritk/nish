@@ -1205,7 +1205,7 @@ const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
         } else {
           end += 16
         }
-      } else if (end < length && head[end] !== 44) {
+      } else if (end >= 0 && end < toI32(head.length) && head[end] !== 44) {
         end += 1
       } else {
         seeking = false
@@ -1216,7 +1216,7 @@ const http1ConnectionList = (head: u8[], from: i32, to: i32): i32 => {
     }
     let a: i32 = start
     let b: i32 = end
-    while (a < b && a < length && http1IsOws(toI32(head[a]))) {
+    while (a < b && a >= 0 && a < toI32(head.length) && http1IsOws(toI32(head[a]))) {
       a += 1
     }
     while (b > a && b - 1 < length && http1IsOws(toI32(head[b - 1]))) {
@@ -1257,7 +1257,7 @@ const http1MethodOverrun = (p: Http1Parser): boolean => {
     }
   }
   const stop: i32 = p.start + HTTP1_MAX_METHOD
-  for (let k: i32 = p.start; k >= 0 && k < p.end && k < n; k += 1) {
+  for (let k: i32 = p.start; k >= 0 && k < p.end && k < toI32(buf.length); k += 1) {
     if (buf[k] === 32 || buf[k] === 13 || buf[k] === 10) {
       return false
     }
@@ -1410,7 +1410,12 @@ const http1FieldLine = (p: Http1Parser, keep: boolean, delta: i32): i32 => {
   if (keep) {
     let valueStart: i32 = nameEnd + 1
     let valueEnd: i32 = b
-    while (valueStart < valueEnd && (buf[valueStart] === 32 || buf[valueStart] === 9)) {
+    while (
+      valueStart < valueEnd &&
+      valueStart >= 0 &&
+      valueStart < toI32(buf.length) &&
+      (buf[valueStart] === 32 || buf[valueStart] === 9)
+    ) {
       valueStart += 1
     }
     while (valueEnd > valueStart && (buf[valueEnd - 1] === 32 || buf[valueEnd - 1] === 9)) {
@@ -1735,7 +1740,7 @@ const http1Section = (p: Http1Parser): i32 => {
         } else {
           // Fewer than sixteen bytes are left in `buf`: a byte at a time.
           let k: i32 = q
-          while (k >= 0 && k < stop && buf[k] >= 32 && buf[k] !== 127) {
+          while (k >= 0 && k < stop && k < toI32(buf.length) && buf[k] >= 32 && buf[k] !== 127) {
             k += 1
           }
           const last: i32 = k < stop ? k + 1 : stop
@@ -1752,13 +1757,13 @@ const http1Section = (p: Http1Parser): i32 => {
         }
       }
     }
-    if (j < 0 || j >= stop) {
+    if (j < 0 || j >= stop || j >= toI32(buf.length)) {
       i = j < 0 ? i : j
       break
     }
     const c: i32 = toI32(buf[j])
     let lf: i32 = -1
-    if (c === 13 && j + 1 < stop && buf[j + 1] === 10) {
+    if (c === 13 && j + 1 < stop && j + 1 < toI32(buf.length) && buf[j + 1] === 10) {
       lf = j + 1
     } else if (c === 10) {
       lf = j
