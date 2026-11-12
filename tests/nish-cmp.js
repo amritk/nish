@@ -2120,7 +2120,7 @@ const DECLARED = [
   ].map((program) => ({
     program,
     file: "exit",
-    changelog: "one handler for HTTP/1.1, 2 and 3 with Alt-Svc",
+    changelog: "handler for HTTP/1.1, 2 and 3 with Alt-Svc",
     why: "`nish/net/http-server` is a new module, which the 0.38.0 seed does not have, so only the candidate compiles the program",
   })),
 ]
