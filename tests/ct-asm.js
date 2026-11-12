@@ -1730,6 +1730,62 @@ const STACK_CORNERS = [
     ],
     { loops: true },
   ],
+  // `branches` claims no loop but still judges every branch: a guard on the
+  // secret is refused.
+  [
+    "x86-64",
+    "a",
+    "branch",
+    [
+      "cmpl $16, %edi",
+      "jae .LBB0_2",
+      "movl (%rdx,%rsi,4), %eax",
+      "retq",
+      ".LBB0_2:",
+      "callq nish_panic_index@PLT",
+    ],
+    { loops: true, needsLoop: false },
+  ],
+  // The back-edge rule on aarch64: public `b.ne` and `cbnz` loops are read as
+  // loops, and an unrolled body with only a forward bounds check is not.
+  [
+    "aarch64",
+    "a",
+    null,
+    [
+      "mov w8, wzr",
+      ".LBB0_1:",
+      "ldr w9, [x2, w8, uxtw #2]",
+      "eor w9, w9, w0",
+      "add w8, w8, #1",
+      "cmp w8, #8",
+      "b.ne .LBB0_1",
+      "ret",
+    ],
+    { loops: true },
+  ],
+  [
+    "aarch64",
+    "a",
+    null,
+    ["mov w8, #8", ".LBB0_1:", "ldr w9, [x2]", "eor w9, w9, w0", "sub w8, w8, #1", "cbnz w8, .LBB0_1", "ret"],
+    { loops: true },
+  ],
+  [
+    "aarch64",
+    "a",
+    "noloop",
+    [
+      "cmp w1, #16",
+      "b.hs .LBB0_2",
+      "ldr w9, [x2, w1, uxtw #2]",
+      "ldr w10, [x2, #4]",
+      "ret",
+      ".LBB0_2:",
+      "bl nish_panic_index",
+    ],
+    { loops: true },
+  ],
   // A secret stored at the end of the body, in a stack slot and in a register,
   // and used as an address at the head on the second pass: the label's state
   // is the join of both edges into it, so the load is refused.

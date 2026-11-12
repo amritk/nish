@@ -15,7 +15,7 @@
 // ct-check: fieldSub secret=contents
 // ct-check: condSwap secret=bit,contents
 // ct-check: ladderStepScratch secret=swap,contents
-// ct-check: indexAfterMul secret=contents loops expect=load
+// ct-check: indexAfterMul secret=contents expect=load
 // ct-check: fieldSquareTimes secret=contents loops
 // ct-check: fieldPow250 secret=contents loops
 // ct-check: fieldInvert secret=contents loops
