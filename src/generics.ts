@@ -456,7 +456,7 @@ const containsType = (ctx: CheckContext, inner: i32, outer: i32): boolean => {
  */
 const growingArgument = (ctx: CheckContext, previous: i32[], args: i32[]): i32 => {
   let i = 0
-  while (i < args.length) {
+  while (i < args.length && i < previous.length) {
     if (previous[i] !== args[i] && containsType(ctx, previous[i], args[i])) {
       return i
     }
@@ -2267,7 +2267,7 @@ const referenceArgument = (
     return null
   }
   let k = 0
-  while (k < wanted.length) {
+  while (k < wanted.length && k < params.length) {
     unifyAnnotation(ctx, wanted[k].children[1], params[k], names, bindings)
     k = k + 1
   }

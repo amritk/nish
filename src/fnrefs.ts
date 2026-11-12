@@ -168,10 +168,7 @@ export const nullableReference = (ctx: CheckContext, type: i32): boolean =>
  * narrows a local only, so a field or an element is read into a `const` first.
  */
 export const refuseNullableCall = (ctx: CheckContext, callee: Node, shown: string): i32 => {
-  let test = `${shown} !== null`
-  if (callee.kind !== N_IDENT) {
-    test = `const h = ${shown}; if (h !== null)`
-  }
+  const test = callee.kind === N_IDENT ? `${shown} !== null` : `const h = ${shown}; if (h !== null)`
   return ctx.errorType(
     callee,
     `\`${shown}\` may be \`null\`: a nullable function reference is called only after a test such as \`${test}\` proves it holds a function`
