@@ -133,7 +133,8 @@ for (;;) {
 export class HttpServerLimits {
   requests: i32 = 1024;          // request pool shared by all listeners
   maxBody: i32 = 1048576;        // a request body is held whole; 413 above
-  maxHead: i32 = 16384;          // copied head (method, target, fields)
+  maxHead: i32 = 16384;          // copied head (method, target, fields); 431 above
+  maxFields: i32 = 100;          // fields in one request head; 431 above
   maxResponseFields: i32 = 32;   // program fields + content-length + alt-svc
   bodyTimeout: i32 = 30000;      // ms from head to whole body
   idleTimeout: i32 = 60000;      // ms an h2/h2c connection may hold no stream
@@ -144,6 +145,17 @@ export class HttpServerLimits {
   jsonBytes: i32 = 65536;
 }
 ```
+
+The constructor checks every limit and panics, with the limit's name, on
+one out of range, as `HandlerLimits` does: `requests` from 1 to 65536,
+`maxBody` from 0 to 2^30, `maxHead` from 256 to 2^20, `maxFields` from 1 to
+1024, `maxResponseFields` from 2 to 256, the three timeouts at least 1,
+`altSvcMaxAge` from 0 to 2^31 − 1, `altSvcPort` from 0 to 65535,
+`maxEvents` at least 1 and `jsonBytes` at least 256. Those ceilings keep
+every product in §6 inside an `i64` and every per-entry size inside an
+`i32`. The HTTP/1.1 carrier is configured from the same values
+(`Http1Config.maxBody`, `maxHeaderBytes` and `maxHeaders`), so it refuses
+what the façade would.
 
 ### 2.2 Listeners
 
@@ -269,6 +281,14 @@ cannot be avoided on HTTP/2 or HTTP/3:
   layout. It is valid only until the next request or trailers on the
   connection, so it is copied the same way.
 
+**A head too large to copy.** The copy never grows `head` or `spans`. On
+HTTP/2 and HTTP/3, a head whose copy would pass `maxHead` bytes or
+`maxFields` fields is answered 431 with no body, and the stream ends; it
+never reaches `take`. On HTTP/1.1 the carrier refuses it first, through
+`maxHeaderBytes` and `maxHeaders` (§2.1). The h2 carrier's own
+`maxHeaderListSize` refusal is also 431, so a client sees one status for
+one fault on every version.
+
 **Targets the router cannot match.** Routes start with `/`, so the router
 matches neither the authority form of a plain `CONNECT` (which passes
 `readRequest` on h2 and h3 with no `:path`) nor the `*` of `OPTIONS *`
@@ -367,8 +387,12 @@ in `i32` and are widened.
   The table is made at listen time and searched linearly; at 100 entries a
   linear search beats a hash.
 - **When the pool is full.** One connection holds at most
-  `min(maxStreams, requests / 4)` requests (§9.2). If a stream opens past
-  that cap, or the request pool is empty:
+  `perConnection = max(1, min(maxStreams, requests / 4))` requests (§9.2),
+  computed once at listen time; `/` is integer division, so without the
+  floor of 1 a pool of 1 to 3 requests would refuse every h2 and h3
+  stream. With such a small pool one connection can hold all of it; that
+  is the deployment's choice. If a stream opens past that cap, or the
+  request pool is empty:
   - HTTP/1.1 back-pressures: the carrier does not read the next request.
   - HTTP/2 resets the stream with REFUSED_STREAM (RFC 9113 §8.7), which
     tells the client that the request was not processed and may be retried.
@@ -470,14 +494,20 @@ alt-svc: h3=":<port>"; ma=<altSvcMaxAge>
 - **`ma` defaults to 86400 seconds.** That is RFC 7838's own default of 24
   hours, written out so that the value is visible. A deployment that moves
   its QUIC port lowers it.
-- **`altSvcMaxAge = 0` sends no Alt-Svc.** Under RFC 7838 §3.1 `ma=0` makes
-  the alternative stale at once, so advertising it would cost bytes for
-  nothing. Zero is how a server with an HTTP/3 listener turns the
-  advertisement off.
+- **`altSvcMaxAge = 0` sends `alt-svc: clear`.** RFC 7838 §3 defines
+  `clear` as "invalidate every alternative cached for this origin", which
+  is what an operator turning HTTP/3 off needs: sending nothing would leave
+  an h3 alternative a client cached live for up to the old `ma` (24 h at
+  the default). It is sent on HTTP/1.1 and h2 over TLS whether or not an
+  HTTP/3 listener is configured, so a server that drops its QUIC socket
+  keeps `altSvcMaxAge = 0` for at least the old `ma` and then may stop.
+  `ma=0` is not used for this, because it makes only the advertised
+  alternative stale, and a client may hold an earlier one.
 - **The port** is the QUIC socket's own (`netLocalPort(fd)`), unless
   `altSvcPort` is nonzero. That covers a NAT or a load balancer in front of
   the server.
-- **The bytes are made once** in `listenHttp3`. No request builds them.
+- **The bytes are made once**: the `clear` value at the constructor, the
+  `h3` value in `listenHttp3`. No request builds them.
 - **Which responses carry it:**
   - Only final responses (status 200 or more) carry it.
   - It is never sent on h3, since the client is already there.
@@ -510,7 +540,9 @@ listen time, or on first use and then kept:
 | What | Made | Per warmed request |
 | --- | --- | --- |
 | request pool (`HttpServerRequest` × `requests`) | constructor | none |
-| each request's `head`, `spans`, `params`, `body`, `pending` | grown to the largest seen, then kept | none |
+| each request's `head` (`maxHead` bytes), `spans` (4 × `maxFields`), `params` (the router's `maxParams`) | constructor, at their caps; never grown | none |
+| each request's `body` | grown in two tiers, below | none once at its tier |
+| each request's `pending` | grown to the largest remainder held, below | none once at that size |
 | HTTP/1.1 connections | `Http1Server`, reused per slot | none |
 | HTTP/2 connections and `Http2Pools` | first accept on a slot, then `restart` | none |
 | HPACK decoding | `Http2Connection` | none ([#473](https://github.com/amritk/nish/issues/473)) |
@@ -518,32 +550,54 @@ listen time, or on first use and then kept:
 | HTTP/3 slots and `BufferPool`s | `listenHttp3`, slots reused | none |
 | stream-to-request tables | listen time | none |
 | response field arrays, one pair per length | first use of each length | none |
-| Alt-Svc bytes | `listenHttp3` | none |
-| content-length digits | per-request scratch | none |
+| Alt-Svc bytes | `clear` at the constructor, `h3` in `listenHttp3` | none |
+| content-length digits, 20 bytes | constructor, per request | none |
 | TLS server random and ephemeral key, 32 bytes each | `listenHttp2Tls`, refilled with `crypto.getRandomValues` before each `accept` | none |
-| JSON writer | constructor | none |
+| JSON writer, `jsonBytes` | constructor | none |
 
-**The body ceiling.** Memory is a bump arena: `Arena` has no `release` and
-no `reset` (`runtime/nish.d.ts`), so a body array once grown cannot be given
-back, and replacing it with a smaller one would leak the old one. The façade
-therefore keeps `HttpHandler`'s model (`handler.ts`, "The body cap"): each
-pool entry's `body` grows to the largest body it has held and is kept at
-that size. The bound is stated, not hidden:
+**What the arena can hold.** Memory is a bump arena: `Arena` has no
+`release` and no `reset` (`runtime/nish.d.ts`). A grown array is a new
+array, and the one it replaces stays in the arena for good. So a bound
+counts every array an entry ever made, not only its last. Fixed-size arrays
+(the rows above made at their caps) count once. Two arrays grow:
 
-- **Bodies can reach `requests × maxBody`**, 1 GiB at the defaults
-  (1024 × 1 MiB), after enough large uploads have passed through every
-  pool entry. No request field moves it past that: a body over `maxBody`
-  is answered 413 (§3.1) before its array grows further.
-- **A deployment sets the bound** with `requests` and `maxBody`. One that
-  takes large uploads and cannot afford the product lowers `requests`.
-  The guide page states the product beside both limits.
-- **The warmed pin is honest about it:** `Arena.used()` is flat over a run
-  whose bodies are no larger than ones already seen; the growth to the
-  high-water mark is the "first use" the table above allows.
+**`body`, in two tiers.** Let `T = min(65536, maxBody)`.
 
-A tighter bound, such as a few large-body buffers made once and a 503 or
-REFUSED_STREAM when all are taken, is possible later without an API change;
-G7 does not need it.
+1. *Small tier.* A body that fits in `T` grows the entry's array to
+   `min(T, max(needed, 2 × current))`, starting from 64 bytes; a declared
+   length (`content-length`) is used as `needed` at once, so it takes one
+   step, not many. Every step at least doubles except the one capped at
+   `T`, so the arrays before the last sum to less than twice the last
+   one before the cap, under `2 × T`, and with the capped one the tier
+   holds less than `3 × T`.
+2. *Large tier.* The first time an entry needs more than `T`, its body is
+   replaced once by an array of exactly `maxBody`, and it never grows
+   again. No rounding past `maxBody`.
+
+One entry therefore holds less than `maxBody + 3 × T` in body arrays, live
+and abandoned together. Over the pool, body memory is below
+`requests × (maxBody + 3 × T)`: at the defaults
+1024 × (1 MiB + 192 KiB) = 1.1875 GiB, reached only when every entry has
+held a body over 64 KiB. An entry that never holds more than 64 KiB stays
+under 192 KiB. Small bodies, the common case, never pay `maxBody`.
+`maxBody ≤ 2^30` and `requests ≤ 65536` keep the product in an `i64`; it is
+computed as one for the guide page, which states it beside both limits.
+
+**`pending`, owned by the program.** It holds the part of a response that
+flow control held back (§3.2), so its size is set by what the program
+writes, not by the client. It grows the same way, to
+`max(needed, 2 × current)`, so an entry holds less than 4 × the largest
+remainder it has held, abandoned arrays included. The façade puts no cap
+on it: a program that writes a 100 MiB body in one `write` to a client
+that opens no window can make `pending` hold it. A program that serves
+large responses writes them in pieces and waits for `hungUp` or the next
+turn; the guide page says so.
+
+**The warmed pin is exact about it:** `Arena.used()` is flat over a run
+whose bodies and remainders are no larger than ones the same entries have
+already held. A tighter bound, such as a few `maxBody` buffers shared by
+the pool with a 503 or REFUSED_STREAM when all are taken, is possible
+later without an API change; G7 does not need it.
 
 **TLS bytes.** `Http2TlsServer.accept(serverRandom, ephemeralPrivate)` needs
 32 fresh random bytes for each argument on every accept, and wipes
@@ -614,20 +668,24 @@ version.
 | --- | --- |
 | the same GET `/hello`, POST `/echo` and GET `/users/:id` over HTTP/1.1, h2c, h2 over TLS and HTTP/3 | identical status, body and fields on all four |
 | Alt-Svc with an HTTP/3 listener | the exact bytes on HTTP/1.1 and h2 over TLS; absent on h2c and h3 |
-| Alt-Svc without an HTTP/3 listener | absent everywhere |
+| Alt-Svc without an HTTP/3 listener, `altSvcMaxAge` > 0 | absent everywhere |
 | a program that sets its own `alt-svc` | the program's value, once |
 | `Arena.used()` over a warmed run, per version | flat on all four |
 | a deferred answer (taken in one turn, answered in the next) | delivered |
 | the client resets the stream, or hangs up, before the answer | `hungUp` true, answer `HANDLER_DROPPED`, no bytes on a reused slot |
 | request pool full | h2: RST_STREAM REFUSED_STREAM; h3: H3_REQUEST_REJECTED; h1: back-pressure, then served |
 | body over `maxBody` | 413 on every version; h1: connection ended by the carrier; h2: RST_STREAM NO_ERROR after the 413; h3: STOP_SENDING H3_NO_ERROR after the 413, the rest dropped |
-| one h2 connection opens more than `min(maxStreams, requests / 4)` streams | the excess get RST_STREAM REFUSED_STREAM; other connections still served |
+| one h2 connection opens more than `max(1, min(maxStreams, requests / 4))` streams | the excess get RST_STREAM REFUSED_STREAM; other connections still served |
+| `requests` of 1, 2 and 3, one GET on each of h2 and h3 | served (the per-connection cap is 1, not 0) |
+| `requests` of 0 | the constructor panics, naming `requests` |
 | a body that stalls past `bodyTimeout` | h1: slot closed; h2: RST_STREAM CANCEL; h3: STOP_SENDING and reset; the request never reaches `take` |
 | an h2 connection with no open stream past `idleTimeout` | closed; a connection with an open stream is not |
 | an h2c connection that sends the preface, then nothing | closed by `idleTimeout`, not `prefaceTimeout` |
-| `altSvcMaxAge = 0` with an HTTP/3 listener | no `alt-svc` field on any version |
+| `altSvcMaxAge = 0`, with and without an HTTP/3 listener | `alt-svc: clear` on HTTP/1.1 and h2 over TLS; absent on h2c and h3 |
 | `altSvcPort` set | that port in the field, not the QUIC socket's own |
-| a body of 1 MiB on every pool entry, then 1 MiB bodies again | `Arena.used()` grows by no more than `requests × maxBody` in the first pass and is flat in the second (§6) |
+| with `requests` 8: a 1 MiB body on every pool entry, then 1 MiB bodies again | `Arena.used()` grows by less than 8 × (1 MiB + 192 KiB) in the first pass and is flat in the second (§6) |
+| with `requests` 8: 1 KiB bodies on every entry | `Arena.used()` grows by less than 8 × 192 KiB; no entry makes a `maxBody` array |
+| a head over `maxHead`, or more than `maxFields` fields, on each version | 431; nothing grows |
 | a plain `CONNECT`, and `OPTIONS *`, on each version | 501, and 204 with no `Allow`; neither reaches `take` |
 | response over `maxResponseFields` | `HANDLER_DROPPED`, nothing written |
 | a window of 1 byte on h2 and h3 | the whole body arrives in order via `pending` |
@@ -677,7 +735,8 @@ in the same PR (`node scripts/security-scope.mjs`).
   façade path that cannot be reached.
 - **Cross-version starvation:** the request pool is shared, so one h2
   connection could hold up to `maxStreams` requests. A per-connection cap,
-  `min(maxStreams, requests / 4)`, keeps one peer from taking the pool. The
+  `max(1, min(maxStreams, requests / 4))` (§3.3), keeps one peer from
+  taking the pool once it holds 4 or more requests. The
   record pins it with a test.
 - **Late answers:** slot generations and stream marks (§3.3). An answer
   never reaches a different connection or stream.
