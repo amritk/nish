@@ -98,6 +98,23 @@ const scans = (log: Log, xs: i32[], n: i32): void => {
   }
 };
 
+// Adds to an array its caller passes: a call that resizes an array.
+const grow = (xs: i32[]): void => {
+  xs.push(xs.length);
+};
+
+// A local array that only the loop reads: the call in the body resizes some
+// other array, and cannot reach this one, so the walk is bounded.
+const owned = (log: Log, other: i32[]): void => {
+  const ids = [1, 2];
+  for (const id of ids) {
+    const mark = `mark ${id}`;
+    log.total = log.total + mark.length;
+    log.last = new Entry(id);
+    grow(other);
+  }
+};
+
 // Nothing a pass allocates outlives it, so each pass gets a scope.
 const scoped = (log: Log): i32 => {
   let total = 0;
@@ -120,6 +137,7 @@ export const main = (): void => {
   log.left = 2;
   const e = droppedSplit(log);
   scans(log, [1, 2], 2);
+  owned(log, [0]);
   log.left = 5;
   const k = scoped(log);
   console.log(`${log.total} ${log.last.id} ${d} ${e} ${k}`);

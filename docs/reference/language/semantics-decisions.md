@@ -638,7 +638,10 @@ by the caller.
     locals, fields (`.length` among them) and constants; or it is a
     `for...of` whose body cannot extend what it walks and that does not
     re-read a map's entry count, the test that also decides a function's
-    `willreturn`. A call to any function of the program or of `std/` anywhere
+    `willreturn`, or that walks a local array nothing else can resize: a
+    `const` the function declares with a fresh array (not a parameter or a
+    field), never passed to a call, stored or assigned, and never pushed,
+    popped or spliced by name, whatever else the body calls. A call to any function of the program or of `std/` anywhere
     in the condition makes the loop unbounded. So every other loop is
     unbounded: `while (true)` and `for (;;)`, a flag with no comparison
     (`while (running)`), equalities only (`while (a !== X && a !== Y)`), a

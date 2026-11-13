@@ -31,6 +31,7 @@ import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { StringBuilder, addJsonQuoted } from "./strings"
 import { TypeTable } from "./types"
+import { Local } from "./symbols"
 
 /** No scope of the walk encloses the node: the function's own placement decides. */
 const SCOPE_NONE: i32 = 0
@@ -353,7 +354,8 @@ const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, arou
  * True when what `loop`'s own header reads bounds its passes, so NL9018 stays
  * silent for it. A `for...of` is bounded when `isCountedLoop` counts it: its
  * body cannot extend what it walks, and it does not re-read a map's entry
- * count. A `while`, `do` or `for` is bounded when its condition, read as a
+ * count; or when it walks an array only the loop can resize (`walksOwnArray`).
+ * A `while`, `do` or `for` is bounded when its condition, read as a
  * top-level `&&` chain, has an ordering comparison among its conjuncts and
  * reads nothing a pass could decide at run time beyond its locals, fields and
  * constants (`readsOnly`). A call to any function of the program or of `std/`
@@ -363,7 +365,7 @@ const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, arou
  */
 const boundedPasses = (walk: ArenaWalk, table: TypeTable, loop: Node): boolean => {
   if (loop.kind === NodeKind.ForOf) {
-    return isCountedLoop(walk.unit, table, loop, walk.facts)
+    return isCountedLoop(walk.unit, table, loop, walk.facts) || walksOwnArray(walk.unit, loop)
   }
   // `while`: condition, body; `do`: body, condition; `for`: initializer, condition, ...
   const condition = loop.kind === NodeKind.While ? loop.children[0] : loop.children[1]
@@ -427,6 +429,84 @@ const readsOnly = (program: CheckedProgram, expr: Node): boolean => {
     return readsOnly(program, expr.children[1].children[0])
   }
   return false
+}
+
+/**
+ * True when the `for...of` `loop` walks a local array nothing but the loop can
+ * resize: a `const` this function declares with a fresh array (`Local.fresh`:
+ * not a parameter, a field or an alias), whose name the function uses only as
+ * this loop's iterable, an element read or write, or a `.length` read. Passed
+ * to a call, stored, assigned, or pushed, popped or spliced directly, it is
+ * not, and `isCountedLoop`'s extend test decides instead.
+ */
+const walksOwnArray = (unit: AnalysisUnit, loop: Node): boolean => {
+  const iterable = unwrapParens(loop.children[1])
+  if (iterable.kind !== NodeKind.Ident) {
+    return false
+  }
+  const local = unit.program.nodeLocals[iterable.id]
+  if (local === null || !local.fresh) {
+    return false
+  }
+  let fn: Node | null = unit.parents.parentOf(loop)
+  while (
+    fn !== null &&
+    fn.kind !== NodeKind.FunctionDecl &&
+    fn.kind !== NodeKind.Method &&
+    fn.kind !== NodeKind.Arrow
+  ) {
+    fn = unit.parents.parentOf(fn)
+  }
+  return fn !== null && walkedUses(unit, fn, local, iterable) === 1
+}
+
+/**
+ * How many times `node`'s subtree declares the walked array, counting the
+ * identifiers spelled as `local` is in it, or -1 when one of them is a use that could
+ * resize or alias the array. `iterable` itself, the name its declaration binds,
+ * an element access and a `.length` read are the safe uses; a shadowing
+ * binding of the same name counts against it.
+ */
+const walkedUses = (unit: AnalysisUnit, node: Node, local: Local, iterable: Node): i32 => {
+  let declarations = 0
+  if (node.kind === NodeKind.Ident && node.text === local.name && node !== iterable) {
+    const parent = unit.parents.parentOf(node)
+    if (parent === null) {
+      return -1
+    }
+    if (parent.kind === NodeKind.VarDecl && parent.children[0] === node) {
+      const bound = unit.program.nodeLocals[parent.id]
+      if (bound === null || bound !== local) {
+        return -1
+      }
+      declarations = 1
+    } else if (
+      !(parent.kind === NodeKind.Index && parent.children[0] === node) &&
+      !(parent.kind === NodeKind.Member && parent.text === "length" && !assigned(unit, parent))
+    ) {
+      return -1
+    }
+  }
+  for (const child of node.children) {
+    const inner = walkedUses(unit, child, local, iterable)
+    if (inner < 0) {
+      return -1
+    }
+    declarations = declarations + inner
+  }
+  return declarations
+}
+
+/** True when `node` is the target of an assignment or an update. */
+const assigned = (unit: AnalysisUnit, node: Node): boolean => {
+  const parent = unit.parents.parentOf(node)
+  if (parent === null) {
+    return false
+  }
+  if (parent.kind === NodeKind.Binary && isAssignmentOperator(parent.text) && parent.children[0] === node) {
+    return true
+  }
+  return parent.kind === NodeKind.Unary && (parent.text === "++" || parent.text === "--")
 }
 
 /** True when the top-level `&&` chain of `condition` has an ordering comparison (`<`, `<=`, `>`, `>=`) as a conjunct. */

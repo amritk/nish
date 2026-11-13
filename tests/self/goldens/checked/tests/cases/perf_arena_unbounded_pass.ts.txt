@@ -107,11 +107,30 @@ function accept(log: Log): void -> @accept$
   local -1:11 peer: string (const)
   callee +1:16 new Entry -> @Entry.constructor
   callee +2:12 more -> @more
+function grow(xs: i32[]): void -> @grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: nish_array_grow
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function lent(log: Log, other: i32[]): void -> @lent
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: Entry.constructor grow nish_alloc_struct nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer log: size=16 writesThrough=true captured=false
+  pointer other: size=0 writesThrough=true captured=false passedTo=grow#0
+  stackSites=1 stackLocals=1
+  local -4:9 ids: i32[] (const)
+  callee -3:3 grow -> @grow
+  local -2:14 id: i32 (const)
+  local -1:11 mark: string (const)
+  callee +1:16 new Entry -> @Entry.constructor
+  callee +2:5 grow -> @grow
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via walk
-  calls: Log.constructor accept$ drain flag nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 pair probe rounds serve walk
-  stackSites=2 stackLocals=1
+  calls: Log.constructor accept$ drain flag lent nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 pair probe rounds serve walk
+  stackSites=3 stackLocals=1
   local +0:9 log: Log (const)
   callee +0:15 new Log -> @Log.constructor
   callee +2:3 serve -> @serve
@@ -122,3 +141,4 @@ function main(): void -> @nish_main [exported entry]
   callee +12:3 probe -> @probe
   callee +14:3 flag -> @flag
   callee +16:3 accept -> @accept$
+  callee +17:3 lent -> @lent

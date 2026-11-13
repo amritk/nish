@@ -122,6 +122,24 @@ const accept = (log: Log): void => {
   }
 };
 
+// Adds to an array its caller passes: a call that resizes an array.
+const grow = (xs: i32[]): void => {
+  xs.push(xs.length);
+};
+
+// A local array the body could not resize, except that it was passed to
+// `grow`, so a call in the body may have it too.
+const lent = (log: Log, other: i32[]): void => {
+  const ids = [1, 2];
+  grow(ids);
+  for (const id of ids) {
+    const mark = `mark ${id}`;
+    log.total = log.total + mark.length;
+    log.last = new Entry(id);
+    grow(other);
+  }
+};
+
 export const main = (): void => {
   const log = new Log();
   log.left = 3;
@@ -140,5 +158,6 @@ export const main = (): void => {
   flag(log);
   log.left = 2;
   accept(log);
+  lent(log, [0]);
   console.log(`${log.total} ${log.last.id}`);
 };
