@@ -1,0 +1,3 @@
+42
+`readCString` read a NULL pointer
+absent exit 1

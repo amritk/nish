@@ -1618,7 +1618,8 @@ export const main = (): i32 => {
   freed.** `readCString(p: CPtr): string` copies the NUL-terminated bytes at
   `p` into a new string; a dangling or unterminated `p` is undefined
   behaviour, which is why it needs the import. It takes a `CPtr`, so narrow a
-  `CPtr | null` with `!== null` first.
+  `CPtr | null` with `!== null` first. A `NULL` `p` panics (`ffi-null`) before
+  the copy, so `--deny-panics` refuses the call.
 - **A struct C owns is copied out with `readStruct` from `nish:unsafe`.**
   `const lc: Lconv = readStruct(p)` copies the bytes at `p` into a new
   instance of the `declare class` the context names; write the annotation,

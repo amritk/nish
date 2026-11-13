@@ -427,7 +427,8 @@ function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite):
   callee +18:14 rangeAdvice -> @rangeAdvice
   callee +29:14 ioExitAdvice -> @ioExitAdvice
   callee +36:14 overflowAdvice -> @overflowAdvice
-  callee +43:11 calledName -> @calledName
+  local +43:13 reader: string (const)
+  callee +43:22 calledName -> @calledName
 function indexAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @indexAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via indexGuardAdvice

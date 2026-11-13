@@ -29,6 +29,10 @@
       "types": "./runtime/page.d.ts",
       "default": "./runtime/page.mjs"
     },
+    "./page/frame": {
+      "types": "./runtime/page-frame.d.ts",
+      "default": "./runtime/page-frame.mjs"
+    },
     "./runtime/*": "./runtime/*",
     "./scripts/*": "./scripts/*",
     "./*": "./std/*.ts"
