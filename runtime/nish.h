@@ -182,14 +182,14 @@ void nish_region_adopt(uint64_t r);
  * a node for a task of `kind` whose frame is `bytes` long, the frame 32 bytes
  * in, with a region of its own; `nish_async_enter` makes a node the running
  * task and enters its region, answering the task it displaced, which
- * `nish_async_leave` restores; `nish_async_done` frees a finished task's
- * region and reuses its node. `nish_async_wait_fd` (`dir` 0 readable, 1
- * writable) and `nish_async_sleep` answer a token `nish_async_poll` reads: -1
- * pending, 1 ready, 0 failed. `nish_async_next` answers the next task to
- * resume, blocking in the kernel until one is ready, or null when nothing is
- * ready and nothing waits. `nish_async_stat` answers 0: nodes allocated, 1:
- * completions dropped because their task had finished, 2: spawned tasks not yet
- * finished.
+ * `nish_async_leave` restores; `nish_async_done` empties a finished task's
+ * region and reuses its node, region and all. `nish_async_wait_fd` (`dir` 0
+ * readable, 1 writable) and `nish_async_sleep` answer a token
+ * `nish_async_poll` reads: -1 pending, 1 ready, 0 failed. `nish_async_next`
+ * answers the next task to resume, blocking in the kernel until one is ready,
+ * or null when nothing is ready and nothing waits. `nish_async_stat` answers
+ * 0: nodes allocated, 1: completions dropped because their task had finished,
+ * 2: spawned tasks not yet finished.
  *
  * Cancellation is cooperative. A task's handle (`nish_async_task_id`) is its
  * slot and generation, and `main`'s is 0. `nish_async_cancel` flags a task and

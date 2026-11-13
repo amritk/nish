@@ -11689,7 +11689,7 @@ copies it, so nothing may free it while the task runs: `start` feeds a task a
 shared argument, and it and every caller release no arena scope over what
 they allocated (no `nish_arena` mark and reset around the call), so `tally`
 lives in `main`'s arena until the program ends. What the task allocates goes
-into its own region, freed by `nish_async_done` when it finishes; the
+into its own region, emptied by `nish_async_done` when it finishes; the
 checker refuses a store of that memory into `tally` (NL2609) and growth of a
 shared array, `Map` or `Set` (NL2615), so `count` writes only numbers
 through the pointer (`tests/cases/async_spawn_shared`,
