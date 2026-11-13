@@ -1,12 +1,12 @@
-# WP55: Generators whose memory stays flat: a string builder, and a region per file
+# WP56: Generators whose memory stays flat: a string builder, and a region per file
 
 **Status: accepted (owner, 2026-11-13), design only.** Nothing here is
 built. §10 records the owner's decisions: the builder is `builder()` from
 `nish:string`, and the other five questions take this note's
 recommendations. Its stages are in §9 and on
-[the roadmap page](roadmap/wp55-flat-memory-generators.md). The plan that
+[the roadmap page](roadmap/wp56-flat-memory-generators.md). The plan that
 tracks them is
-[`.claude/plans/wp55-flat-memory-generators.plan.md`](../.claude/plans/wp55-flat-memory-generators.plan.md).
+[`.claude/plans/wp56-flat-memory-generators.plan.md`](../.claude/plans/wp56-flat-memory-generators.plan.md).
 
 Every claim about today's compiler is anchored at commit `e0a1661e`, on
 `main`. Measurements quoted here come from the documents they cite. This note
@@ -212,7 +212,7 @@ with each chunk (wp46 §7). Each shape gets a cookbook program:
 
 ## 8. The proof
 
-`bench/wp55-generator/` contains:
+`bench/wp56-generator/` contains:
 
 - `make-spec.mjs`, a deterministic synthetic OpenAPI-shaped JSON document. Its size and schema count are parameters, and the default is 25 MB with 8,000 schemas.
 - Four generators that write one `.ts` file per schema plus one index file:
@@ -241,7 +241,7 @@ Each stage is one pull request.
 
 | Stage | Lands | Done when |
 | --- | --- | --- |
-| **S0** Baseline | `bench/wp55-generator/` (spec maker, `naive.ts`, `today.ts`, `run.sh`); the table in `docs/BENCHMARKS.md` | the table has both generators at four sizes, with a noise band |
+| **S0** Baseline | `bench/wp56-generator/` (spec maker, `naive.ts`, `today.ts`, `run.sh`); the table in `docs/BENCHMARKS.md` | the table has both generators at four sizes, with a noise band |
 | **S1** The patterns with today's tools | `tests/cases`/`tests/link` for file I/O inside `enter` (read and write), and `region_per_target`; the guide page with shapes 1 to 3 written over `parts` + `join`; cookbook entries; memory.md and regions.md link to it | `node tests/run.js region` and `node tests/run.js cookbook` pass; the page's examples run under `nish:ok` |
 | **S2** `builder()` from `nish:string` | runtime (§5) with its security record rows; the checker facts and refusals (§6); the `nish:string` module and its `nish.d.ts` declarations; the emit-ts lowering; LANGUAGE.md section; golden `.ll`, `llvm-as`, native round trip, negative tests; the cookbook entry; the guide page switched to the builder; `docs/reference/` regenerated; `builder.ts` in the bench | `mem_builder_pass_scope` holds; G1 and G2 for `builder.ts`; the `wasi` and `performance` sections pass with no new NL9007; nish-cmp `DECLARED` entries if any corpus IR moves |
 | **S3** Files from a builder | `writeFileSync`/`appendFileSync` overloads; `fileCreate`, `fileWrite`, `fileWriteBytes`; capability rows; guide flush section; `flush.ts` | G2's flush bound; `tests/link` covers a short write and `EINTR` as WP44's tests do on the read side |

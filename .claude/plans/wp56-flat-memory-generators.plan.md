@@ -1,20 +1,20 @@
 ---
-name: WP55 — generators whose memory stays flat
-overview: A program that reads a large spec and writes thousands of files keeps every string it built until main returns. Measure it, document the shapes that already stay flat, then add builder() from nish:string, whose storage lives outside the arena so appends keep a loop's scope, a write handle to flush it, and diagnostics that point at it (docs/wp55-flat-memory-generators.md).
+name: WP56 — generators whose memory stays flat
+overview: A program that reads a large spec and writes thousands of files keeps every string it built until main returns. Measure it, document the shapes that already stay flat, then add builder() from nish:string, whose storage lives outside the arena so appends keep a loop's scope, a write handle to flush it, and diagnostics that point at it (docs/wp56-flat-memory-generators.md).
 stages:
   - id: s0-baseline
     title: S0 — the baseline
     goal: Peak memory of a generator written naively and written the best way today is measured at 1,000 to 8,000 files.
-    verification: docs/BENCHMARKS.md has naive.ts and today.ts at four sizes with a noise band, from bench/wp55-generator/run.sh.
+    verification: docs/BENCHMARKS.md has naive.ts and today.ts at four sizes with a noise band, from bench/wp56-generator/run.sh.
     todos:
       - id: spec-maker
-        content: Add bench/wp55-generator/make-spec.mjs, a deterministic OpenAPI-shaped JSON of a given size and schema count — see S0 the baseline
+        content: Add bench/wp56-generator/make-spec.mjs, a deterministic OpenAPI-shaped JSON of a given size and schema count — see S0 the baseline
         status: pending
       - id: generators-today
-        content: Write bench/wp55-generator/naive.ts and today.ts, one .ts file per schema plus an index — see S0 the baseline
+        content: Write bench/wp56-generator/naive.ts and today.ts, one .ts file per schema plus an index — see S0 the baseline
         status: pending
       - id: bench-runner
-        content: Add bench/wp55-generator/run.sh reporting peak RSS, bytes and wall time per size, interleaved and repeated — see S0 the baseline
+        content: Add bench/wp56-generator/run.sh reporting peak RSS, bytes and wall time per size, interleaved and repeated — see S0 the baseline
         status: pending
       - id: baseline-table
         content: Record the table in docs/BENCHMARKS.md and the reading of it in the design note §8 — see S0 the baseline
@@ -89,9 +89,9 @@ stages:
         status: pending
 ---
 
-# WP55 — generators whose memory stays flat
+# WP56 — generators whose memory stays flat
 
-The design, its reasons and its open questions are in [docs/wp55-flat-memory-generators.md](../../docs/wp55-flat-memory-generators.md). This file tracks the stages. Where the two disagree, the design note is the authority. Each stage is one pull request, and that pull request ticks its box on [docs/roadmap/wp55-flat-memory-generators.md](../../docs/roadmap/wp55-flat-memory-generators.md).
+The design, its reasons and its open questions are in [docs/wp56-flat-memory-generators.md](../../docs/wp56-flat-memory-generators.md). This file tracks the stages. Where the two disagree, the design note is the authority. Each stage is one pull request, and that pull request ticks its box on [docs/roadmap/wp56-flat-memory-generators.md](../../docs/roadmap/wp56-flat-memory-generators.md).
 
 ## Context
 
@@ -147,5 +147,5 @@ WASI_SYSROOT=/usr node tests/run.js wasi
 node tests/run.js performance
 node scripts/gen-reference.mjs --check
 node scripts/security-scope.mjs
-bash bench/wp55-generator/run.sh
+bash bench/wp56-generator/run.sh
 ```
