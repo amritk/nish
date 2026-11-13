@@ -533,6 +533,11 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_ENUM_MEMBER
   }
 
+  /** Whether `type` is a member type of the enum `enumType`. */
+  isMemberOf(type: i32, enumType: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_ENUM_MEMBER && this.refs[type] === enumType
+  }
+
   /**
    * Whether a slot of `type` is a sink its value is checked into, rather than
    * a width a literal might take: a range, which a value enters with a check,
