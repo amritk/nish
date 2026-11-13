@@ -110,6 +110,33 @@ const selfAssign = (n: i32): i32 => {
   return r.unwrapOr(-1);
 };
 
+// A pointer `Result` with a string payload built by the callee, assigned again
+// from a second call; and the old value named by a `const` before the `let`
+// moves on, whose payload is what is returned.
+const parseStr = (s: string): Result<string, string> => {
+  if (s.length === 0) {
+    return Err(`empty ${s}`);
+  }
+  return Ok(`<${s}>`);
+};
+
+const parseOr = (s: string, d: string): string => {
+  let r = parseStr(s);
+  if (r.isErr()) {
+    r = parseStr(d);
+  }
+  return r.unwrapOr("x");
+};
+
+const parseOld = (s: string, d: string): string => {
+  let r = parseStr(s);
+  const old = r;
+  if (r.isOk() || r.isErr()) {
+    r = parseStr(d);
+  }
+  return r.isOk() ? old.unwrapOr("x") : "none";
+};
+
 // Every shape that keeps nothing past the call, 100k times (`selfAssign` is
 // left out: it keeps the conservative answer). The count is read
 // right after the calls, so a pass scope of this loop cannot hide bytes a
@@ -155,5 +182,12 @@ export const main = (): void => {
   console.log(`${selfAssign(9)} ${selfAssign(2)}`);
   const labels = [label(1), label(5)];
   console.log(`${labels[0]} ${labels[1]}`);
+  const words: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const s = i === 1 ? "" : `s${i}`;
+    words.push(parseOr(s, `d${i}`));
+    words.push(parseOld(s, i === 2 ? "" : `e${i}`));
+  }
+  console.log(words.join(" "));
   console.log(flat());
 };
