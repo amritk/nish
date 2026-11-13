@@ -204,6 +204,8 @@ export class YamlJsonLoader {
   /** The nodes the last count set a size on, the first `countedTop` of them: all a count clears. */
   private counted: i32[]
   private countedTop: i32 = 0
+  /** The stamp of the `loadText` in progress. */
+  private pass: i32 = 0
   /** The count's own stack of nodes. */
   private pending: i32[]
   /** The most values the document may hold; a size saturates one past it. */
@@ -234,8 +236,6 @@ export class YamlJsonLoader {
   private entryStarts: i32[]
   private entryEnds: i32[]
   private entryBytes: i32[]
-  /** The stamp of the `loadText` in progress. */
-  private pass: i32 = 0
   /**
    * `loadText`'s facts per collection, from its first node: a pair's merge
    * mark, and what the node expands to, at least as `load` would build it:
@@ -401,14 +401,14 @@ export class YamlJsonLoader {
     const flags: i32[] = this.flags
     while (toI32(flags.length) <= n) {
       flags.push(0)
-      this.totals.push(0)
-      this.heights.push(0)
-      this.charges.push(0)
-      this.chains.push(0)
-      this.values.push(-1)
-      this.memberBase.push(0)
-      this.stamps.push(0)
-      this.bytes.push(0)
+      this.totals.push(toI32(0))
+      this.heights.push(toI32(0))
+      this.charges.push(toI32(0))
+      this.chains.push(toI32(0))
+      this.values.push(toI32(-1))
+      this.memberBase.push(toI32(0))
+      this.stamps.push(toI32(0))
+      this.bytes.push(toI32(0))
     }
     const map: boolean = stream.kind(n) === YAML_MAP
     // A stream has no more merged pairs than nodes: the budget `load` takes, or less.
@@ -443,7 +443,7 @@ export class YamlJsonLoader {
       return -1
     }
     // `valueOf` refuses a document past the byte cap.
-    return this.valueOf(root, 0)
+    return this.valueOf(root, toI32(0))
   }
 
   /**
@@ -596,7 +596,7 @@ export class YamlJsonLoader {
         return -1
       }
       size += this.lastBytes
-      this.pushEntry(-1, "", v, 0, 0, 0)
+      this.pushEntry(toI32(-1), "", v, toI32(0), toI32(0), toI32(0))
     }
     this.entryTop = base
     const a: JsonValue = doc.newArray()
@@ -606,7 +606,7 @@ export class YamlJsonLoader {
     const ax: i32 = doc.index(a)
     doc.reserve(ax, items)
     for (let e: i32 = base; e < base + items; e += 1) {
-      doc.append(ax, doc.index(this.entryValues[e]), 0, 0)
+      doc.append(ax, doc.index(this.entryValues[e]), toI32(0), toI32(0))
     }
     doc.placeRange(ax, stream.start(n), stream.end(n))
     this.bytes[n] = size
@@ -730,13 +730,13 @@ export class YamlJsonLoader {
     // `load` grows the first three arrays alone, so each pads on its own.
     while (toI32(this.entryKeys.length) <= e) {
       this.entryKeys.push("")
-      this.entryPairs.push(-1)
-      this.entryValues.push(-1)
+      this.entryPairs.push(toI32(-1))
+      this.entryValues.push(toI32(-1))
     }
     while (toI32(this.entryStarts.length) <= e) {
-      this.entryStarts.push(0)
-      this.entryEnds.push(0)
-      this.entryBytes.push(0)
+      this.entryStarts.push(toI32(0))
+      this.entryEnds.push(toI32(0))
+      this.entryBytes.push(toI32(0))
     }
     this.entryKeys[e] = key
     this.entryValues[e] = v

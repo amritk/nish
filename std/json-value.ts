@@ -1928,7 +1928,7 @@ export class JsonDocument {
     if (kind !== JSON_VALUE_ARRAY && kind !== JSON_VALUE_OBJECT) {
       return this.newNode(kind, first, n)
     }
-    const c: i32 = this.newNode(kind, this.slotTop, 0)
+    const c: i32 = this.newNode(kind, this.slotTop, toI32(0))
     if (c < 0) {
       return c
     }

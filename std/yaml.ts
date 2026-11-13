@@ -1869,8 +1869,6 @@ class YamlParser {
   private pos: i32 = 0
   private len: i32 = 0
   private depth: i32 = 0
-  /** Whether `DEPTH_LIMIT` cut the text short, so the collections it left open are not reported. */
-  private depthHit: boolean = false
   private maxDepth: i32 = 1000
   private doc: i32 = 0
   /** The indent a flow collection's continuation lines must pass. */
@@ -1889,6 +1887,8 @@ class YamlParser {
   private lineContent: i32 = 0
   /** Where the current document's `---` is, or `-1` when it has none. */
   private markerAt: i32 = -1
+  /** Whether `DEPTH_LIMIT` cut the text short, so the collections it left open are not reported. */
+  private depthHit: boolean = false
   private flowIndentReported: boolean = false
   private uniqueKeys: boolean = true
   private keepComments: boolean = false
