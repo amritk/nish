@@ -2015,7 +2015,16 @@ node bench/http1-parse/run.mjs
 <!-- http-codec-regate:begin -->
 ## HTTP/1 codec re-measured after the codec, head and codegen stages
 
-In progress: the figures land in this section before the pull request opens.
+In progress: the throughput figures land in this section before the pull request opens.
+
+Ir per request, callgrind through `bash bench/techempower/profile.sh --only plaintext` and `--only json`, both builds on one VM (Xeon @ 2.10GHz, 4 CPUs), 2026-11-13:
+
+| test | `b49794d8` | `e66cf339` | change |
+| --- | ---: | ---: | ---: |
+| explicit `/plaintext` (256, 16 pipelined) | 5,426 | 3,883 | −28.4% |
+| explicit `/json` (64) | 6,597 | 5,104 | −22.6% |
+| async `/plaintext` | 9,121 | 6,311 | −30.8% |
+| async `/json` | 11,138 | 7,825 | −29.7% |
 <!-- http-codec-regate:end -->
 
 <!-- syscall-cost:begin -->
