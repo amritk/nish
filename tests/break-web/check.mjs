@@ -1,5 +1,7 @@
 // Checks the docs hero terminal (docs/site/site.js and its shell), and the page side of the game
-// (examples/break-web/break.mjs) under Node, with a small fake DOM. Prints one
+// (examples/break-web/break.mjs) under Node, with a small fake DOM; then plays
+// the built docs/site/break/game.wasm against break_core_wasm's frames and
+// runs build.mjs --check on a copy of the build. Prints one
 // `ok <name>` or `not ok <name>\t<detail>` line per check, then `checks: <n>`;
 // the `break-web` section of tests/run.js turns each line into a check and
 // compares the count, so a run cut short is caught.
@@ -336,6 +338,138 @@ const page = await import(pathToFileURL(path.join(root, "examples", "break-web",
   check("open rejects when the module cannot start", error !== null)
   check("a failed start removes the overlay", document.body.find("nish-break") === null)
   check("a failed start hands focus back", focus.focused === 1, focus.focused)
+}
+
+// --- game.wasm: the built module plays as the terminal game does -------------
+// The committed module, loaded through break.mjs's linkLoader as the page loads
+// it, is driven with tests/link/break_core_wasm's script by writing key records
+// into GAME_INPUT as nish/page/game does. With the resolution setting at 270
+// lines both draw a 480x270 frame, so every checkpoint's hash must be the one
+// that test prints: the page runs the same game, not a lookalike.
+
+const built = path.join(root, "docs", "site", "break")
+{
+  const { ringOver } = await import(pathToFileURL(path.join(built, "nish", "page.mjs")).href)
+  const loader = await import(pathToFileURL(path.join(built, "game.mjs")).href)
+  const { linkLoader } = await import(pathToFileURL(path.join(built, "break.mjs")).href)
+  const reference = fs.readFileSync(path.join(root, "tests", "link", "break_core_wasm", "expected.out"), "utf8")
+  const wanted = Object.fromEntries([...reference.matchAll(/^([\w ]+): scene \d+, (\d+x\d+), hash (\d+)$/gm)].map((m) => [m[1], `${m[2]} ${m[3]}`]))
+  const saves = []
+  let quits = 0
+  // BreakSettings' defaults (src/break-menu.ts) but resolution 1, 270 lines, as break_core_wasm sets.
+  const settings = [0, 1, -1, 1, 1, 0, 0]
+  const game = await linkLoader(loader, settings, (w) => saves.push(w), () => quits++).load(
+    fs.readFileSync(path.join(built, "game.wasm"))
+  )
+  game.init(11)
+  const ring = ringOver(game.memory, game.layout.GAME_INPUT)
+  // runtime/page-game.mjs's EVENT_KEY, ACTION_PRESS, ACTION_RELEASE and KEY_KINDS.
+  const [PRESS, RELEASE] = [1, 3]
+  const [DOWN, RIGHT, ENTER, SPACE, ESCAPE, F4] = [3, 4, 6, 7, 8, 17]
+  const step = (events = []) => {
+    for (const [kind, action] of events) {
+      for (const word of [1, kind, 0, 0, action, 0, 0]) {
+        ring.push(word)
+      }
+    }
+    game.step(0)
+  }
+  const idle = (n) => {
+    for (let i = 0; i < n; i++) {
+      step()
+    }
+  }
+  const tap = (kind) => {
+    step([[kind, PRESS]])
+    step([[kind, RELEASE]])
+  }
+  /** Draws, then FNV-1a over the frame's size and pixels, as break_core_wasm hashes them. */
+  const frame = () => {
+    game.draw(1, 0)
+    const s = game.views().storage
+    const [w, h] = [s.GAME_INFO[0], s.GAME_INFO[1]]
+    let x = 2166136261
+    const mix = (v) => (x = Math.imul(x ^ v, 16777619) >>> 0)
+    mix(w)
+    mix(h)
+    for (let i = 0; i < w * h; i++) {
+      mix(s.GAME_FRAME[i] >>> 0)
+    }
+    return `${w}x${h} ${x}`
+  }
+  const seen = {}
+  idle(40)
+  seen.intro = frame()
+  tap(F4)
+  tap(SPACE)
+  idle(30)
+  seen.menu = frame()
+  tap(ENTER)
+  // break_core_wasm steps until the scene is the game; the menu's outro is 119 steps.
+  idle(119)
+  idle(60)
+  seen.level = frame()
+  step([[RIGHT, PRESS]])
+  idle(20)
+  step([[RIGHT, RELEASE]])
+  seen["paddle right"] = frame()
+  for (const name of ["intro", "menu", "level", "paddle right"]) {
+    check(`the built module's ${name} frame is break_core_wasm's`, wanted[name] !== undefined && seen[name] === wanted[name],
+      `${seen[name]} vs ${wanted[name]}`)
+  }
+  check("the built module synthesizes each of its 18 sounds and no more",
+    [...Array(18).keys()].every((id) => game.sound(id) > 0) && game.sound(18) === 0)
+
+  // A second run: Settings, resolution one step right, out again, then Escape on the title.
+  game.init(11)
+  idle(40)
+  tap(SPACE)
+  idle(30)
+  for (const kind of [DOWN, DOWN, DOWN, ENTER, RIGHT, ESCAPE]) {
+    tap(kind)
+  }
+  check("leaving Settings hands the changed settings to the page to keep",
+    saves.length === 1 && JSON.stringify(saves[0]) === "[0,2,-1,1,1,0,0]", JSON.stringify(saves))
+  check("the game has not quit while the player is still on the title", quits === 0, quits)
+  tap(ESCAPE)
+  idle(5)
+  check("Escape on the title quits, and the page is told once", quits === 1, quits)
+}
+
+// --- build.mjs --check: a stale or incomplete build is refused ----------------
+
+{
+  const build = path.join(root, "examples", "break-web", "build.mjs")
+  const copy = fs.mkdtempSync(path.join(os.tmpdir(), "break-web-check-"))
+  fs.cpSync(built, copy, { recursive: true })
+  const manifestFile = path.join(copy, "manifest.json")
+  const committed = fs.readFileSync(manifestFile, "utf8")
+  const verify = (...extra) => spawnSync(process.execPath, [build, "--check", "--out", copy, "--nish", nish, ...extra], { encoding: "utf8" })
+  const edited = (edit) => {
+    const m = JSON.parse(committed)
+    edit(m)
+    fs.writeFileSync(manifestFile, JSON.stringify(m))
+  }
+  const ok = verify()
+  check("--check passes on the committed build", ok.status === 0 && /is up to date/.test(ok.stdout), ok.stderr)
+  edited((m) => (m.inputs["src/break-director.ts"] = "0".repeat(64)))
+  const stale = verify()
+  check("--check names an input changed since the build", stale.status === 1 && /stale[\s\S]*src\/break-director\.ts/.test(stale.stderr),
+    stale.stderr)
+  edited((m) => (m.help = "0".repeat(64)))
+  const help = verify()
+  check("--check fails once the compiler's --help drifts from the page's", help.status === 1 && /--help/.test(help.stderr), help.stderr)
+  fs.writeFileSync(manifestFile, committed)
+  const memory = verify("--memory", "64")
+  check("--check fails on another --memory", memory.status === 1 && /--memory \(32 → 64\)/.test(memory.stderr), memory.stderr)
+  fs.rmSync(path.join(copy, "shell.mjs"))
+  const missing = verify()
+  check("--check fails on a built file gone missing", missing.status === 1 && /shell\.mjs \(missing from the build\)/.test(missing.stderr),
+    missing.stderr)
+  fs.rmSync(manifestFile)
+  const none = verify()
+  check("--check fails with no manifest", none.status === 1 && /manifest\.json is missing/.test(none.stderr), none.stderr)
+  fs.rmSync(copy, { recursive: true })
 }
 
 console.log(results.join("\n"))

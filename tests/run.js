@@ -11671,14 +11671,15 @@ if (dealtHere("fileServer")) {
 // first key, and the shell imports break.mjs when asked for the game;
 // examples/break-web/build.mjs builds that directory and it is committed.
 // tests/break-web/check.mjs runs the terminal, the shell and the page side
-// under Node with a fake DOM and prints a line per check.
+// under Node with a fake DOM, plays the built module against break_core_wasm's
+// frame hashes, runs --check and its negatives, and prints a line per check.
 if (dealtHere("breakWeb")) {
   const res = spawnSync(process.execPath, [path.join(root, "tests", "break-web", "check.mjs"), NISH], {
     cwd: root,
     encoding: "utf8",
   })
   // The count is pinned, as game-page's is: a check that goes missing is caught.
-  const BREAK_WEB_CHECKS = 37
+  const BREAK_WEB_CHECKS = 51
   const lines = res.stdout.split("\n")
   const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
   const counted = lines.find((line) => line.startsWith("checks: "))
