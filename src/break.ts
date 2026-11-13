@@ -46,7 +46,8 @@ import {
 } from "./break-director"
 import { BreakSettings, fpsChoice } from "./break-menu"
 import { breakSettingsPath, loadBreakSettings, saveBreakSettings } from "./break-settings-file"
-import { BreakSound, SOUND_HELLO, closeSound, playSound, prepareSound, soundPlayer } from "./break-sound"
+import { BreakSound, closeSound, playSound, prepareSound, soundPlayer } from "./break-sound"
+import { SOUND_HELLO } from "./break-voices"
 import { helpText } from "./cli-style"
 import { Style } from "../std/cli"
 
