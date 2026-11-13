@@ -49,6 +49,16 @@ const LINK_LOADED: i32 = 9
  */
 export const BREAK_LINK = new Int32Array(10)
 
+/** How many words BREAK_HELP_IN holds: its length, then that many UTF-16 units. */
+const HELP_IN_WORDS: i32 = 1024
+
+/**
+ * A help to break apart in place of BREAK_HELP, written before init: [0] its
+ * length in UTF-16 units (0, the default, for BREAK_HELP), then the units.
+ * The page writes none; a test hands in break_core_wasm's, to match its frames.
+ */
+export const BREAK_HELP_IN = new Int32Array(HELP_IN_WORDS)
+
 /** Everything a run keeps between calls: the director and what its host feeds it. */
 class BreakPage {
   /** The game. */
@@ -105,11 +115,24 @@ const keepSettings = (s: BreakSettings): void => {
   BREAK_LINK[LINK_SAVES] = BREAK_LINK[LINK_SAVES] + 1
 }
 
+/** The help the intro breaks apart: BREAK_HELP_IN's when it holds one, else the compiler's. */
+const startHelp = (): string => {
+  const n: i32 = BREAK_HELP_IN[0]
+  if (n <= 0 || n >= HELP_IN_WORDS) {
+    return BREAK_HELP
+  }
+  let help = ""
+  for (let i: i32 = 1; i <= n; i++) {
+    help = `${help}${String.fromCharCode(BREAK_HELP_IN[i])}`
+  }
+  return help
+}
+
 /** Start a run, with the page's saved settings when it wrote some. */
 export const init = (seed: i32): void => {
   BREAK_LINK[LINK_QUIT] = 0
   gameSetSize(GAME_MAX_WIDTH, GAME_MAX_HEIGHT)
-  ROOT[0] = new BreakPage(new BreakDirector(toI64(seed), linkedSettings(), BREAK_HELP, false))
+  ROOT[0] = new BreakPage(new BreakDirector(toI64(seed), linkedSettings(), startHelp(), false))
 }
 
 /** One sound's samples for the page; 0 past the last id. */

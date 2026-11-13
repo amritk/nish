@@ -188,6 +188,7 @@ function exportsOf(instance, state) {
   };
   const layout = {
     BREAK_LINK: { at: raw["nish_storage_0_BREAK_LINK.data"].value, length: 10, stride: 4 },
+    BREAK_HELP_IN: { at: raw["nish_storage_0_BREAK_HELP_IN.data"].value, length: 1024, stride: 4 },
     GAME_FRAME: { at: raw["nish_storage_1_GAME_FRAME.data"].value, length: 518400, stride: 4 },
     GAME_INFO: { at: raw["nish_storage_1_GAME_INFO.data"].value, length: 4, stride: 4 },
     GAME_INPUT: { at: raw["nish_storage_1_GAME_INPUT.data"].value, length: 450, stride: 4 },
@@ -213,6 +214,7 @@ function exportsOf(instance, state) {
       u64: new BigUint64Array(buffer),
       storage: {
         BREAK_LINK: new Int32Array(buffer, layout.BREAK_LINK.at, 10),
+        BREAK_HELP_IN: new Int32Array(buffer, layout.BREAK_HELP_IN.at, 1024),
         GAME_FRAME: new Int32Array(buffer, layout.GAME_FRAME.at, 518400),
         GAME_INFO: new Int32Array(buffer, layout.GAME_INFO.at, 4),
         GAME_INPUT: new Int32Array(buffer, layout.GAME_INPUT.at, 450),

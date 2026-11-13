@@ -3,9 +3,9 @@
   "help": "de7fb8b58f70d49fe7e5312c12df02de1bd58ceaa54db1c60b48182307ab25ff",
   "memory": "32",
   "inputs": {
-    "examples/break-web/break.mjs": "8d8080c508fbd93ff4cdf58e707f8eabeea9e1002a2e63faef161494aadc9421",
+    "examples/break-web/break.mjs": "494d0ae916eac106cd1f2abcd528156731ecbf24d1637d4b32e4754d8afc5eae",
     "examples/break-web/build.mjs": "36419ab174c5abe319be419e092f83798e0e1471e7b7892280601e69f7d9f445",
-    "examples/break-web/game.ts": "0a1db15ab0e5c5a1fd3d83f45006cf57b2c50d0bddaee802dd62445378cfe247",
+    "examples/break-web/game.ts": "3c090dc7292fb66047e62295fd5fc5f02230686a2e75fd6f46c82e0d8eab6de1",
     "examples/break-web/help.ts": "f73d9d9521862fbe6a1c9593c31dd96d8ec8694c44be264adea25e9cda47d63b",
     "examples/break-web/shell.mjs": "674bb6780b96888b06f99e52401c939cabe9ad759632c5ee0db38efb0bc45286",
     "runtime/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",
@@ -32,9 +32,9 @@
     "std/term.ts": "7b1f9063cc33b2739f994765d70717ce4d386878ba2db1b06af81dc60ba3a914"
   },
   "outputs": {
-    "game.wasm": "13aee801e94d10c1ee40a2fe4242cc99038dc2c993a9d824009f63943e860e46",
-    "game.mjs": "65094cacfdc64181ef0868e162789c7c2e8e765a33289bcf78ae6b4af679531c",
-    "break.mjs": "aef43b70665a957f7a481d71eb1f12e95b96c70bc6b7e0896f37332d53d2af4f",
+    "game.wasm": "c8712de75dd7c124642859dee0a85458aedd66b27c09aad88a701fba60f73eff",
+    "game.mjs": "c650782c6717bf65bf3244d82e9d6142b45acb5f8ef0b52e460615fa7ee8de74",
+    "break.mjs": "6afa0fd1fcfb52b92b2c4539c0a0931072ecb750da89c7e3f377bc9e5979216b",
     "shell.mjs": "d28c41883ebf032a7751400e9a28db6d4ca1d6846edd5abf51b6624d7bf09fe8",
     "nish/page-game.mjs": "e04a2f9298c97b0876de51794d6d912331e07b5e3d1d3e075d457c1ff987c87b",
     "nish/page-frame.mjs": "cb953a3a715022015671e0a1fcbf1b87eb7a34f705bf5462ab60da55de4fc174",

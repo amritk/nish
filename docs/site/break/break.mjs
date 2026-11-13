@@ -112,9 +112,11 @@ export const writeSettings = (storage, words) => {
 /**
  * `loader` (a generated .mjs) with its `load` wrapped: the module it loads
  * starts with `saved` settings when there are some, and after each step
- * reports a settings change to `onSave` and a quit to `onQuit`.
+ * reports a settings change to `onSave` and a quit to `onQuit`. A `help`
+ * string replaces the compiler's --help the intro breaks apart (game.ts's
+ * BREAK_HELP_IN); the page passes none.
  */
-export const linkLoader = (loader, saved, onSave, onQuit) => ({
+export const linkLoader = (loader, saved, onSave, onQuit, help = null) => ({
   load: async (source, imports) => {
     const game = await loader.load(source, imports)
     if (game.layout?.BREAK_LINK === undefined) {
@@ -125,6 +127,16 @@ export const linkLoader = (loader, saved, onSave, onQuit) => ({
     if (saved !== null) {
       link().set(saved, SETTINGS)
       link()[LOADED] = 1
+    }
+    if (help !== null) {
+      const words = game.views().storage.BREAK_HELP_IN
+      if (help.length >= words.length) {
+        throw new RangeError(`a help of ${help.length} units does not fit BREAK_HELP_IN`)
+      }
+      words[0] = help.length
+      for (let i = 0; i < help.length; i++) {
+        words[i + 1] = help.charCodeAt(i)
+      }
     }
     let saves = 0
     let quit = false

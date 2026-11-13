@@ -534,12 +534,33 @@ const overlays = (document) => [...document.body.all()].filter((n) => n.classNam
 // The committed module, loaded through break.mjs's linkLoader as the page loads
 // it, is driven with tests/link/break_core_wasm's script by writing key records
 // into GAME_INPUT as nish/page/game does. With the resolution setting at 270
-// lines both draw a 480x270 frame, so every checkpoint's hash after the intro
-// must be the one that test prints: the page runs the same game, not a
-// lookalike. The intro breaks apart the compiler's --help (help.ts), where that
-// test hands in a one-line stand-in, so its frame is the same size and differs.
+// lines both draw a 480x270 frame, so every checkpoint's hash must be the one
+// that test prints: the page runs the same game, not a lookalike. That test's
+// intro breaks apart a one-line stand-in help, handed in here through
+// linkLoader; the page hands in none, and the compiler's --help (help.ts) is
+// drawn instead.
 
 const built = path.join(root, "docs", "site", "break")
+/** FNV-1a over `game`'s frame size and pixels after a draw, as break_core_wasm hashes them. */
+const hashFrame = (game) => {
+  game.draw(1, 0)
+  const s = game.views().storage
+  const [w, h] = [s.GAME_INFO[0], s.GAME_INFO[1]]
+  let x = 2166136261
+  const mix = (v) => (x = Math.imul(x ^ v, 16777619) >>> 0)
+  mix(w)
+  mix(h)
+  for (let i = 0; i < w * h; i++) {
+    mix(s.GAME_FRAME[i] >>> 0)
+  }
+  return `${w}x${h} ${x}`
+}
+// break_core_wasm's help, as its main.ts spells it.
+const standIn = JSON.parse(
+  /const HELP: string = ("(?:[^"\\]|\\.)*")/.exec(
+    fs.readFileSync(path.join(root, "tests", "link", "break_core_wasm", "main.ts"), "utf8")
+  )?.[1] ?? "null"
+)
 {
   const { ringOver } = await import(pathToFileURL(path.join(built, "nish", "page.mjs")).href)
   const loader = await import(pathToFileURL(path.join(built, "game.mjs")).href)
@@ -550,7 +571,7 @@ const built = path.join(root, "docs", "site", "break")
   let quits = 0
   // BreakSettings' defaults (src/break-menu.ts) but resolution 1, 270 lines, as break_core_wasm sets.
   const settings = [0, 1, -1, 1, 1, 0, 0]
-  const game = await linkLoader(loader, settings, (w) => saves.push(w), () => quits++).load(
+  const game = await linkLoader(loader, settings, (w) => saves.push(w), () => quits++, standIn).load(
     fs.readFileSync(path.join(built, "game.wasm"))
   )
   game.init(11)
@@ -575,20 +596,7 @@ const built = path.join(root, "docs", "site", "break")
     step([[kind, PRESS]])
     step([[kind, RELEASE]])
   }
-  /** Draws, then FNV-1a over the frame's size and pixels, as break_core_wasm hashes them. */
-  const frame = () => {
-    game.draw(1, 0)
-    const s = game.views().storage
-    const [w, h] = [s.GAME_INFO[0], s.GAME_INFO[1]]
-    let x = 2166136261
-    const mix = (v) => (x = Math.imul(x ^ v, 16777619) >>> 0)
-    mix(w)
-    mix(h)
-    for (let i = 0; i < w * h; i++) {
-      mix(s.GAME_FRAME[i] >>> 0)
-    }
-    return `${w}x${h} ${x}`
-  }
+  const frame = () => hashFrame(game)
   const seen = {}
   idle(40)
   seen.intro = frame()
@@ -605,10 +613,7 @@ const built = path.join(root, "docs", "site", "break")
   idle(20)
   step([[RIGHT, RELEASE]])
   seen["paddle right"] = frame()
-  check("the built module's intro frame draws the compiler's help, not break_core_wasm's stand-in",
-    wanted.intro !== undefined && seen.intro.split(" ")[0] === wanted.intro.split(" ")[0] && seen.intro !== wanted.intro,
-    `${seen.intro} vs ${wanted.intro}`)
-  for (const name of ["menu", "level", "paddle right"]) {
+  for (const name of ["intro", "menu", "level", "paddle right"]) {
     check(`the built module's ${name} frame is break_core_wasm's`, wanted[name] !== undefined && seen[name] === wanted[name],
       `${seen[name]} vs ${wanted[name]}`)
   }
@@ -629,6 +634,25 @@ const built = path.join(root, "docs", "site", "break")
   tap(ESCAPE)
   idle(5)
   check("Escape on the title quits, and the page is told once", quits === 1, quits)
+}
+
+{
+  // As the page loads it, with no help handed in: the intro breaks apart the compiler's --help.
+  const loader = await import(pathToFileURL(path.join(built, "game.mjs")).href)
+  const { linkLoader } = await import(pathToFileURL(path.join(built, "break.mjs")).href)
+  const reference = fs.readFileSync(path.join(root, "tests", "link", "break_core_wasm", "expected.out"), "utf8")
+  const wanted = /^intro: scene \d+, (\d+x\d+), hash (\d+)$/m.exec(reference)
+  const game = await linkLoader(loader, [0, 1, -1, 1, 1, 0, 0], () => {}, () => {}).load(
+    fs.readFileSync(path.join(built, "game.wasm"))
+  )
+  game.init(11)
+  for (let i = 0; i < 40; i++) {
+    game.step(0)
+  }
+  const intro = hashFrame(game)
+  check("with no help handed in, the built module's intro draws the compiler's, not the stand-in",
+    standIn !== null && wanted !== null && intro.startsWith(`${wanted[1]} `) && intro !== `${wanted[1]} ${wanted[2]}`,
+    `${intro} vs ${wanted?.[1]} ${wanted?.[2]}`)
 }
 
 // --- build.mjs --check: a stale or incomplete build is refused ----------------
