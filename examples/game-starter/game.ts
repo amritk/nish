@@ -2,11 +2,37 @@
 // paddle. The page that runs it is index.html, one startGame call from
 // nish/page/game; build.mjs writes both into a directory any static server
 // can serve. Copy the directory to start a game of your own.
-import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth, gameWriteSamples } from "nish/host/game"
+import {
+  GAME_FRAME,
+  gameHeight,
+  gamePlaySound,
+  gameReadInput,
+  gameSetSize,
+  gameWidth,
+  gameWriteSamples,
+} from "nish/host/game"
 import { StepInput } from "nish/input"
-import { RASTER_SOLID, rasterDisc, rasterGradient, rasterRect, rasterText, rasterTextWidth } from "nish/raster"
+import {
+  RASTER_SOLID,
+  rasterDisc,
+  rasterGradient,
+  rasterRect,
+  rasterText,
+  rasterTextWidth,
+} from "nish/raster"
 import { SYNTH_NOISE, SYNTH_SQUARE, SYNTH_TRIANGLE, synthSilence, synthTone } from "nish/synth"
-import { ACTION_MOVE, ACTION_PRESS, EVENT_KEY, EVENT_MOUSE, KEY_ENTER, KEY_LEFT, KEY_RIGHT, KEY_SPACE, KeyState, TermEvent } from "nish/term"
+import {
+  ACTION_MOVE,
+  ACTION_PRESS,
+  EVENT_KEY,
+  EVENT_MOUSE,
+  KEY_ENTER,
+  KEY_LEFT,
+  KEY_RIGHT,
+  KEY_SPACE,
+  KeyState,
+  TermEvent,
+} from "nish/term"
 
 const WIDTH: i32 = 320
 const HEIGHT: i32 = 180
@@ -139,7 +165,12 @@ export const step = (nowMs: f64): void => {
     gamePlaySound(SOUND_WALL)
   }
   const off: f64 = BALL[X] - BALL[PADDLE]
-  if (BALL[DY] > 0.0 && BALL[Y] + BALL_R >= PADDLE_Y && BALL[Y] < PADDLE_Y + 4.0 && Math.abs(off) <= PADDLE_W / 2.0 + BALL_R) {
+  if (
+    BALL[DY] > 0.0 &&
+    BALL[Y] + BALL_R >= PADDLE_Y &&
+    BALL[Y] < PADDLE_Y + 4.0 &&
+    Math.abs(off) <= PADDLE_W / 2.0 + BALL_R
+  ) {
     BALL[DY] = -BALL[DY] * 1.04
     BALL[DX] = BALL[DX] + off * 4.0
     SCORE[0] = SCORE[0] + 1
@@ -160,7 +191,17 @@ export const draw = (alpha: f64, frameMs: f64): void => {
   rasterGradient(GAME_FRAME, w, h, 0x101830, 0x302040)
   const paddle: f64 = BALL[LAST_PADDLE] + (BALL[PADDLE] - BALL[LAST_PADDLE]) * alpha
   const left: i32 = toI32(paddle - PADDLE_W / 2.0)
-  rasterRect(GAME_FRAME, w, h, left, toI32(PADDLE_Y), left + toI32(PADDLE_W), toI32(PADDLE_Y) + 4, 0xf0f0f0, RASTER_SOLID)
+  rasterRect(
+    GAME_FRAME,
+    w,
+    h,
+    left,
+    toI32(PADDLE_Y),
+    left + toI32(PADDLE_W),
+    toI32(PADDLE_Y) + 4,
+    0xf0f0f0,
+    RASTER_SOLID
+  )
   const x: f64 = BALL[LAST_X] + (BALL[X] - BALL[LAST_X]) * alpha
   const y: f64 = BALL[LAST_Y] + (BALL[Y] - BALL[LAST_Y]) * alpha
   rasterDisc(GAME_FRAME, w, h, x, y, BALL_R, 0xffd040, 1.0)

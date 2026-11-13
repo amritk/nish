@@ -33,6 +33,10 @@
       "types": "./runtime/page-frame.d.ts",
       "default": "./runtime/page-frame.mjs"
     },
+    "./page/game": {
+      "types": "./runtime/page-game.d.ts",
+      "default": "./runtime/page-game.mjs"
+    },
     "./runtime/*": "./runtime/*",
     "./scripts/*": "./scripts/*",
     "./*": "./std/*.ts"

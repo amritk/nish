@@ -42,7 +42,7 @@ fs.mkdirSync(path.join(out, "nish"))
 // The game: game.ts and each std module it imports, one .ll each; the loader
 // is written beside the .d.ts.
 run(nish, [
-  path.join(here, "game.ts"),
+  path.relative(root, path.join(here, "game.ts")),
   "--target",
   "wasm32",
   "--emit-dts",
@@ -55,7 +55,10 @@ run(nish, [
 // the value where it is, reclaiming nothing, is the answer the native runtime
 // gives whenever its guards refuse, so it is always correct.
 const keep = path.join(ll, "arena-keep.c")
-fs.writeFileSync(keep, "#include <stdint.h>\nvoid *nish_arena_keep(uint64_t mark, void *p) { (void)mark; return p; }\n")
+fs.writeFileSync(
+  keep,
+  "#include <stdint.h>\nvoid *nish_arena_keep(uint64_t mark, void *p) { (void)mark; return p; }\n"
+)
 const modules = fs
   .readdirSync(ll)
   .filter((f) => f.endsWith(".ll"))

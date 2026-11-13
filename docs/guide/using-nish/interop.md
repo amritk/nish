@@ -124,6 +124,9 @@ under any WASI host.
 
 ### In a browser
 
+A game — a framebuffer, keys, sounds, a loop at the display's rate — has a
+page of its own: [Writing a browser game](browser-games.md).
+
 For a page, link with the `wasm-host` profile instead. It takes the same
 inputs but exports only what the loader calls: your exported functions,
 `memory`, and the arena entry points when `runtime-wasm.c` is linked. That
