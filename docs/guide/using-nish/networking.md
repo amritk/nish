@@ -119,8 +119,11 @@ A native program's first `nish:net` call that makes a descriptor
 (`tcpListen`, `tcpConnect`, `udpBind`, `unixListen`, `unixConnect`,
 `unixSocketPair` or `pollCreate`) raises the soft limit to the hard one, once
 for the whole process, as Node and Go do at start-up. On macOS it stops at
-`OPEN_MAX` (10240), the most the system takes there. A program that never
-calls `nish:net` keeps the limit it was given.
+`OPEN_MAX` (10240); where `kern.maxfilesperproc` is set lower, the raise
+fails and the program keeps the limit it had. A program that never calls
+`nish:net` keeps the limit it was given, and so does one that only accepts on
+a listener it was handed (`recvFd`, socket activation) without making a
+descriptor of its own.
 
 Past the hard limit is the operator's to set: `ulimit -Hn` in the shell that
 starts the server, `LimitNOFILE=` in a systemd unit, or the container's
