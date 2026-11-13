@@ -1,13 +1,12 @@
 /* A node keeps its region from one task to the next (runtime/runtime-async.c,
    "Regions"; docs/security/async.md, ASYNC-20): `nish_async_done` recycles
    the region instead of freeing it, so the next task on the node starts in
-   an empty arena that already holds the last one's newest chunk. What is
-   A region that grew through several chunks keeps the newest alone. What is
-   kept is bounded twice: a chunk past 64 KiB is freed, and once the free
-   nodes keep 16 MiB between them a finishing task keeps none. The probe
-   reads `nish_arena` as each task is entered, which is where the kept chunk
-   shows, and the process's peak resident size, which is what a leak would
-   move. */
+   an empty arena that already holds the last one's newest chunk. A region
+   that grew through several chunks keeps the newest alone. What is kept is
+   bounded twice: a chunk past 64 KiB is freed, and once the free nodes keep
+   16 MiB between them a finishing task keeps none. The probe reads
+   `nish_arena` as each task is entered, which is where the kept chunk shows,
+   and the process's peak resident size, which is what a leak would move. */
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -102,6 +101,12 @@ int main(void) {
 
   int entered = 0, one = 0;
   int linked = grown(&entered);
+  /* The region is still growing after that task: the next one is entered with
+     the 32 KiB chunk it kept and links a 64 KiB one, whose malloc can move the
+     peak. Measure from the first task entered with one chunk that ended with
+     one, once the region holds what it keeps from then on (16 tasks at most). */
+  for (int warm = 0; warm < 16; warm++)
+    if (grown(&entered) == 1 && entered == 1) break;
   settled = peak();
   for (int i = 0; i < 100000; i++) {
     grown(&entered);

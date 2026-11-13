@@ -1,10 +1,10 @@
 // The one task of `main.ts`, in its three roles: as `WRITE` it fills its
 // region with nonzero bytes, as `JOIN` it does so through an `awaitAll`, whose
 // calls' answers are carved into its chunk, and as `READ` it reads what the
-// language promises fresh. It is one async function on purpose: nodes, and the regions they
-// keep, are recycled per task kind (runtime/runtime-async.c, "Regions"), so
-// only a later spawn of this same function runs on the chunk an earlier one
-// wrote.
+// language promises fresh. It is one async function on purpose: nodes, and the
+// regions they keep, are recycled per task kind (runtime/runtime-async.c,
+// "Regions"), so only a later spawn of this same function runs on the chunk an
+// earlier one wrote.
 import { awaitAll, sleep, taskId } from "nish:async"
 
 export const WRITE: i32 = 0
