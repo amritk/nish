@@ -100,8 +100,8 @@ function RefModule.constructor(this: RefModule, program: CheckedProgram, ctx: Ch
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: ctx file nodeCount parents program
   pointer this: size=40 writesThrough=true captured=false
-  pointer program: size=800 writesThrough=true captured=true
-  pointer ctx: size=336 writesThrough=true captured=true
+  pointer program: size=888 writesThrough=true captured=true
+  pointer ctx: size=344 writesThrough=true captured=true
   pointer file: size=40 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -120,8 +120,8 @@ function RefPass.constructor(this: RefPass, table: TypeTable, first: CheckedProg
   escaping: first table
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=192 writesThrough=true captured=false
-  pointer table: size=112 writesThrough=true captured=true
-  pointer first: size=800 writesThrough=true captured=true
+  pointer table: size=136 writesThrough=true captured=true
+  pointer first: size=888 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:17 new StringMap -> @StringMap.constructor
 function RefPass.refType(this: RefPass, node: Node): i32 -> @RefPass.refType [method]
@@ -485,7 +485,7 @@ function RefPass.enter(this: RefPass, program: CheckedProgram, module: i32, sig:
   sharedWrite: +0:5
   escaping: module program sig
   pointer this: size=192 writesThrough=true captured=false
-  pointer program: size=800 writesThrough=true captured=true
+  pointer program: size=888 writesThrough=true captured=true
   pointer sig: size=200 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +4:9 instance: Instantiation | null (let)
@@ -643,7 +643,7 @@ function makeDispatcher(table: TypeTable, module: RefModule, name: string, type:
   sharedWrite: +0:5
   escaping: name type
   calls: Builder.arm Builder.constructor Builder.empty Builder.ident Builder.node FunctionBindings.add FunctionBindings.constructor FunctionSig.constructor Local.constructor RefModule.growTables Scope.constructor Scope.declare TypeTable.fnRefParamsOf TypeTable.fnRefResultOf checkSignatureBody nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer table: size=112 writesThrough=false captured=false passedTo=TypeTable.fnRefParamsOf#0 TypeTable.fnRefResultOf#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=TypeTable.fnRefParamsOf#0 TypeTable.fnRefResultOf#0
   pointer module: size=40 writesThrough=true captured=true passedTo=Builder.constructor#1 RefModule.growTables#0
   pointer members: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
@@ -719,7 +719,7 @@ function dispatcherFor(table: TypeTable, module: RefModule, dispatchers: StringM
   sharedWrite: +0:3
   escaping: key name type
   calls: StringMap.get StringMap.set exposeMember makeDispatcher nish_array_grow
-  pointer table: size=112 writesThrough=false captured=false passedTo=makeDispatcher#0
+  pointer table: size=136 writesThrough=false captured=false passedTo=makeDispatcher#0
   pointer module: size=40 writesThrough=true captured=true passedTo=exposeMember#0 makeDispatcher#1
   pointer dispatchers: size=40 writesThrough=true captured=false passedTo=StringMap.get#0 StringMap.set#0
   pointer made: size=0 writesThrough=true captured=false
@@ -747,7 +747,7 @@ function shapeReferenceCalls(program: CheckedProgram, written: boolean): void ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_array_grow nish_panic_index
-  pointer program: size=800 writesThrough=false captured=false
+  pointer program: size=888 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -6:7 s: i32 (let)
   local -4:11 call: Node (const)
@@ -761,7 +761,7 @@ function resolveReferences(table: TypeTable, modules: RefModule[]): boolean -> @
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: Builder.constructor Builder.ident FunctionSig.definedIn ParentTable.link RefModule.growTables RefPass.constructor RefPass.enter RefPass.solve RefPass.storeOf RefPass.walkFunction RefPass.walkModule StringMap.constructor TypeTable.fnRefMangle dispatcherFor nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 nish_str_new numberMembers storeText
-  pointer table: size=112 writesThrough=true captured=true passedTo=RefPass.constructor#1 TypeTable.fnRefMangle#0 dispatcherFor#0
+  pointer table: size=136 writesThrough=true captured=true passedTo=RefPass.constructor#1 TypeTable.fnRefMangle#0 dispatcherFor#0
   pointer modules: size=0 writesThrough=false captured=false passedTo=numberMembers#1 storeText#1
   stackSites=7 stackLocals=7
   local -73:7 any: boolean (let)

@@ -1,0 +1,16 @@
+PASS  starts in the intro
+PASS  the intro steps
+intro: scene 2, 480x270, hash 1480412695
+PASS  F4 keeps the step going
+PASS  and asks for no reopening
+PASS  and says nothing
+PASS  a key skips to the menu
+PASS  the menu knows there is no terminal
+menu: scene 0, 480x270, hash 557684319
+PASS  the menu draws other pixels than the intro
+PASS  Enter on the menu starts a level
+PASS  the game steps
+level: scene 1, 480x270, hash 713440167
+paddle right: scene 1, 480x270, hash 2175108795
+PASS  holding right changes the frame
+break_core_wasm: 11 passed, 0 failed, 0 skipped

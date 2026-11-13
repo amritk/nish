@@ -61,7 +61,8 @@ import {
   WASM_HOST_SIZE_BUDGETS,
   WASM_PLAIN_DIGESTS,
 } from "./runtime-budgets.js"
-import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
+import { linkCompiler } from "./self/compiler-cache.js"
+import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
@@ -581,9 +582,10 @@ if (RETIRED.length > 0) {
 // `--shard <i>/<n>` splits one run between `n` CI jobs, because the link programs
 // below are two thirds of the suite's wall clock and run one at a time. Every
 // shard builds the compiler and runs everything before the link programs but
-// the dealt sections there (`DEALT_SECTIONS`: term-io and --emit-ts), about
-// 200 s from the job's start with its setup steps (measured in docs/wp10-ci.md,
-// "Shards and time limits"). Shard 1 then runs every section after them that
+// the dealt sections there (`DEALT_SECTIONS`: term-io and --emit-ts) and the
+// golden cases' work past their IR check, which `caseShard` deals by position:
+// every shard compiles every case, since later sections read that compile, and
+// does the rest for its own eighth. Shard 1 then runs every section after them that
 // is not dealt, and
 // the link programs a later section reads the output of (`LINK_READ_LATER`);
 // a `pinned` group (`DEALT_SECTIONS`) runs in the shard it names. The dealt
@@ -631,11 +633,16 @@ if (seed.error !== undefined) {
   }
   summarise()
 }
+// A run before that linked the same inputs left its binary in
+// `build/cache/compiler-under-test/` (`tests/self/compiler-cache.js` says what
+// the key covers), and copying it saves the minute the link takes.
 fs.rmSync(`${NISH}.modules`, { recursive: true, force: true })
+const underTest = linkCompiler(seed, path.join("src", "compile.ts"), NISH)
 if (
   !check(
-    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test`,
-    linkWith(seed, path.join("src", "compile.ts"), NISH) !== null,
+    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test` +
+      (underTest?.reused ? ` (kept from a run with the same inputs, key ${underTest.key})` : ""),
+    underTest !== null,
     "(the seed's report is on stderr above)"
   )
 ) {
@@ -648,7 +655,9 @@ if (
 // run, one case per job and `defaultJobs()` of them at a time (`runCase`). The
 // cases are independent of each other and the sections after this one are not
 // -- a later section reads the `.ll` a case left in `build/test` -- so every
-// case has finished before the next section starts, and the checks are
+// case has finished before the next section starts; in a sharded run every
+// shard still compiles every case for that reason, and does the rest of the
+// work only for the cases `caseShard` deals it. The checks are
 // reported in corpus order, which keeps the output the same at any width.
 // The filter is the first argument that is neither a flag nor the value of
 // one (`--shard 2/4`, `--jobs 4`).
@@ -701,6 +710,48 @@ const caseEnv = (file) => {
 }
 
 const selectedCases = cases.filter((name) => !only || name.includes(only))
+
+/**
+ * The shard that does a golden case's dealt work: everything after its IR is
+ * held to the golden -- `llvm-as`, the `--warn-portability`,
+ * `--emit-capabilities`, `--emit-panics`, `--emit-arena` and
+ * `--explain-memory` compiles, and the native link and run. Every shard still
+ * compiles every case and checks its IR, because that compile is what later
+ * sections read: `build/test/<name>.ll` (the arrays, crypto, runtime and
+ * bench blocks, and shard 1's checks after the link programs, most of them
+ * behind an `existsSync` that would skip silently) and `caseResults`. None of
+ * them reads what the dealt work writes. Section A took 59 s of shard 2 in run
+ * 43369900293 and 30 s with the deal (`docs/wp10-ci.md`, "Where the wall
+ * clock goes"); what is left is mostly the compiles every shard keeps.
+ *
+ * The deal is by position, the linked cases and the compiled-only ones apart,
+ * so each shard gets an eighth of each kind whatever the corpus's order. The
+ * first linked case with and without `--threads` stays in shard 1: it is the
+ * specimen the `runtime objects:` checks replay there (`keepSpecimen`), and
+ * an unsharded run keeps the same one. A rejection or a `.stdout` case has no
+ * dealt work. A filtered run deals only the cases it selects, as it does the
+ * link programs.
+ */
+const caseShard = (() => {
+  if (SHARDS === 1) {
+    return () => SHARD
+  }
+  const exists = (name, ext) => fs.existsSync(path.join(casesDir, `${name}.${ext}`))
+  const dealt = selectedCases.filter((name) => !exists(name, "err") && !exists(name, "stdout"))
+  const linked = dealt.filter((name) => exists(name, "out"))
+  const specimens = [false, true]
+    .map((threads) => linked.find((name) => caseArgs(name).includes("--threads") === threads))
+    .filter((name) => name !== undefined)
+  const shardOf = new Map(specimens.map((name) => [name, 1]))
+  for (const group of [linked, dealt.filter((name) => !exists(name, "out"))]) {
+    let next = 0
+    for (const name of group.filter((name) => !shardOf.has(name))) {
+      shardOf.set(name, (next % SHARDS) + 1)
+      next++
+    }
+  }
+  return (name) => shardOf.get(name) ?? SHARD
+})()
 
 /**
  * Makes, in `dir`, the files the WP44 file cases open and cannot make
@@ -936,7 +987,9 @@ const runCase = async (name) => {
     steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
   const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
-  const done = { compiled: r, steps, panicFunctions: 0 }
+  const done = { compiled: r, steps, panicFunctions: 0, dealtTo: 0 }
+  // Whether this shard does the case's work past its IR check (`caseShard`).
+  const mine = caseShard(name) === SHARD
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("err"))) {
@@ -963,7 +1016,7 @@ const runCase = async (name) => {
   if (name.startsWith("port_") && !fs.existsSync(side("portability"))) {
     expect(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
   }
-  if (fs.existsSync(side("portability"))) {
+  if (mine && fs.existsSync(side("portability"))) {
     // WP33: the warnings are off by default, so the case compiles a second
     // time with the flag, and its portability objects are the golden, one per
     // line and in report order. Paths are taken back to the repository's, as
@@ -992,7 +1045,7 @@ const runCase = async (name) => {
       "the two .ll files differ"
     )
   }
-  if (fs.existsSync(side("caps.json"))) {
+  if (mine && fs.existsSync(side("caps.json"))) {
     // WP35: the capability report, compiled a second time for the same reason
     // the portability warnings are -- the flag is not in `.args`, because the
     // tools that compile `tests/cases/` with the last release would refuse it.
@@ -1055,6 +1108,10 @@ const runCase = async (name) => {
     actual === expected,
     `--- expected\n${expected}\n--- actual\n${actual}`
   )
+  if (!mine) {
+    done.dealtTo = caseShard(name)
+    return done
+  }
 
   if (HAS_LLVM_AS) {
     const as = await spawnAsync("llvm-as", [outLl, "-o", "/dev/null"])
@@ -1249,6 +1306,21 @@ await pool(selectedCases, defaultJobs(), async (name, at) => {
     reported++
   }
 })
+// What this shard left to the others, per `caseShard`: each named once, by count.
+{
+  const byShard = new Map()
+  for (const run of caseRuns) {
+    if (run.dealtTo > 0) {
+      byShard.set(run.dealtTo, (byShard.get(run.dealtTo) ?? 0) + 1)
+    }
+  }
+  for (const [i, count] of [...byShard].sort((a, b) => a[0] - b[0])) {
+    delegate(
+      `llvm-as, the side compiles and the native run of ${count} golden case(s) whose IR this shard checked`,
+      shardJob(i)
+    )
+  }
+}
 // The bound on native runs, held to what it promises with a bound of half a
 // second, because the real one takes two minutes to prove. `runNative` is the
 // helper both case loops run their programs through, so a change that drops
@@ -1335,12 +1407,15 @@ const caseResults = caseRuns.map((run) => run.compiled)
 // The oracle above passes vacuously on a function it never finds, so the run
 // says how many it read: every golden with a clean function contributes, and
 // a symbol spelling the oracle stopped recognising would take this to zero.
+// A shard reads only the cases dealt to it (`caseShard`), about an eighth of
+// the corpus's 2,861 functions, so the floor is shared out the same way.
 if (only === undefined) {
   const read = caseRuns.reduce((sum, run) => sum + run.panicFunctions, 0)
+  const floor = Math.floor(500 / SHARDS)
   check(
     `--emit-panics: the IR oracle read ${read} functions with nothing left that can panic`,
-    read >= 500,
-    "fewer than 500: the oracle is no longer finding the functions it is handed"
+    read >= floor,
+    `fewer than ${floor}: the oracle is no longer finding the functions it is handed`
   )
 }
 
@@ -11764,10 +11839,10 @@ if (dealtHere("p256Seams")) {
     })
   }
 
-  // #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
-  // and `p256SignSha256Into` use) against Fermat's (`p256ScalarInvert`, which
-  // `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
-  // 10,000 scalars. Neither inversion is exported, so the program reaches them
+  // #758: the scalar inverse by safegcd (`p256ScalarInverse`, which both
+  // signing paths and `p256Verify` use) against Fermat's a^(n-2), which the
+  // seam keeps as the reference, byte for byte, on the edges and a seeded
+  // corpus of 10,000 scalars. The inversion is not exported, so the program reaches it
   // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
   // std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
   // #1430 adds the field: `p256FieldInvert` (safegcd) against Fermat's a^(p-2)
@@ -11796,7 +11871,7 @@ if (dealtHere("p256Seams")) {
     const r = spawnSync("node", ["scripts/gen-p256-table.mjs", "--check"], { cwd: root, encoding: "utf8" })
     check(
       "p256: the comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs generates",
-      r.status === 0 && r.stdout === "gen-p256-table: 3840 limbs, as generated\n",
+      r.status === 0 && r.stdout === "gen-p256-table: 5632 limbs, as generated\n",
       shown(r)
     )
   }
@@ -14714,14 +14789,19 @@ if (dealtHere("arrayChecks")) {
         run ? String(run.stdout) + String(run.stderr) : String(cc.stderr)
       )
     }
-    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array")
-    if (fs.existsSync(scopeExe)) {
-      const run = spawnSync(scopeExe)
-      const lines = String(run.stdout).trim().split("\n")
+    // Linked here from section A's compile rather than taken from its binary:
+    // every shard compiles every case, but only the shard `caseShard` deals the
+    // case to links it, and this block runs wherever its group was dealt.
+    const scopeLl = path.join(buildDir, "mem_scope_dynamic_array.ll")
+    const scopeExe = path.join(buildDir, "mem_scope_dynamic_array_flat")
+    if (fs.existsSync(scopeLl)) {
+      const cc = linkNative(scopeExe, scopeLl, { driver: null, libm: true })
+      const run = cc.status === 0 ? spawnSync(scopeExe) : null
+      const lines = run === null ? [] : String(run.stdout).trim().split("\n")
       check(
         "mem_scope_dynamic_array: Arena.used() is identical before and after 100000 scoped calls (arena stays flat)",
-        run.status === 0 && lines.length === 4 && lines[1] === lines[3],
-        String(run.stdout) + String(run.stderr)
+        run !== null && run.status === 0 && lines.length === 4 && lines[1] === lines[3],
+        run === null ? String(cc.stderr) : String(run.stdout) + String(run.stderr)
       )
     }
   }
@@ -17233,6 +17313,165 @@ if (dealtHere("simd")) {
             !/store i64 0,|@llvm\.memset/.test(plainCtr),
           `${real.why}${plain.why}nish_aes_ctr: ${zeros("nish_aes_ctr")}, nish_aes_ghash: ${zeros("nish_aes_ghash")} volatile zeros\n--- the twin's nish_aes_ctr:\n${plainCtr}`
         )
+      }
+    }
+  }
+
+  // runtime/runtime-aes.c's four kernels end with `nish_aes_clear`, which zeroes every vector
+  // register the caller does not keep and every caller-saved general one, so no round key, H
+  // power or keystream block outlives the call in a register (docs/security/crypto-aead.md,
+  // AEAD-4). Here each kernel's `clang -O2` assembly, on x86-64, x86-64 at x86-64-v3 and
+  // aarch64, must leave through the clear: every `ret`, and every tail jump, follows only the
+  // epilogue (pops, the stack pointer, `vzeroupper`) back to a run of zeroing idioms or to a
+  // call of `nish_aes_clear`, or is a jump to it, whose body must be nothing but zeroing
+  // idioms and its `ret`. What the exit runs must zero every vector
+  // register and caller-saved general register the rest of the body names; and a vector
+  // register stored to the stack must land in a buffer the kernel wipes after the store (both
+  // 8-byte halves stored zero: ctr's keystream, ghash's padded block), never a spill no clear
+  // reaches. A twin of the file with no call of `nish_aes_clear` must have every kernel
+  // refused, and a twin whose clear skips xmm0 and v0 must have nish_aes_block refused at the
+  // baseline: the reading is register-exact.
+  if (!only || "simd runtime-aes the AES kernels clear their registers".includes(only)) {
+    if (!HAS_CLANG) {
+      skip("runtime-aes.c: no clang to show its kernels clear their registers")
+    } else {
+      const clearDir = path.join(buildDir, "aes-clear")
+      fs.rmSync(clearDir, { recursive: true, force: true })
+      fs.mkdirSync(clearDir, { recursive: true })
+      const source = fs.readFileSync(path.join(root, "runtime", "runtime-aes.c"), "utf8")
+      const call = "  nish_aes_clear();\n"
+      const noClear = path.join(clearDir, "runtime-aes-no-clear.c")
+      fs.writeFileSync(noClear, source.replaceAll(call, ""))
+      const firstZeros = ['"pxor %%xmm0, %%xmm0\\n\\t', '"movi v0.16b, #0\\n\\t']
+      const partClear = path.join(clearDir, "runtime-aes-part-clear.c")
+      fs.writeFileSync(partClear, firstZeros.reduce((text, line) => text.replace(line, '"'), source))
+      const kernels = ["nish_aes_schedule", "nish_aes_block", "nish_aes_ctr", "nish_aes_ghash"]
+      const x86Names = { a: "rax", b: "rbx", c: "rcx", d: "rdx", si: "rsi", di: "rdi", bp: "rbp", sp: "rsp" }
+      /** A register operand by its whole register: `v3` for xmm3, ymm3, q3 or d3; `rax` for eax; `x5` for w5. */
+      const whole = (operand) => {
+        let m = /^%[xyz]mm(\d+)$/.exec(operand) ?? /^[vqdsh](\d+)(\.\w+)?$/.exec(operand)
+        if (m !== null) return `v${m[1]}`
+        if ((m = /^%r(\d+)[dwb]?$/.exec(operand)) !== null) return `r${m[1]}`
+        if ((m = /^%[re]?(a|b|c|d|si|di|bp|sp)[xlh]?$/.exec(operand)) !== null) return x86Names[m[1]]
+        if ((m = /^[xw](\d+)$/.exec(operand)) !== null) return `x${m[1]}`
+        return null
+      }
+      const callerSaved = new Set(["rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"])
+      for (let i = 0; i <= 17; i++) callerSaved.add(`x${i}`)
+      /** The registers one zeroing idiom clears, or null for any other instruction. */
+      const zeroes = (line) => {
+        if (line === "vzeroall") return Array.from({ length: 16 }, (_, i) => `v${i}`)
+        let m = /^pxor\s+(%xmm\d+), (%xmm\d+)$/.exec(line) ?? /^xorl\s+(%\w+), (%\w+)$/.exec(line)
+        if (m !== null && m[1] === m[2]) return [whole(m[1])]
+        if ((m = /^movi\s+(v\d+)\.16b, #0$/.exec(line)) !== null) return [m[1]]
+        if ((m = /^mov\s+(x\d+), xzr$/.exec(line)) !== null) return [m[1]]
+        return null
+      }
+      const epilogue = /^(popq\s|vzeroupper$|add\s+sp, sp, #|addq\s+\$\d+, %rsp$|ldp\s+x(19|2\d|30), x(2\d|30), \[sp|ldr\s+x(19|2\d|30), \[sp)/
+      /** The registers `body` points into its own frame: `mov x12, sp`, `add x9, sp, #16`, `leaq 8(%rsp), %rdi`. */
+      const frameBases = (body) =>
+        new Set(body.flatMap((line) => /^(?:mov|add|sub)\s+(x\d+), (?:sp|x29)\b/.exec(line)?.[1] ?? /^leaq\s+.*\(%r[sb]p(?:,[^)]*)?\), %(\w+)$/.exec(line)?.[1] ?? []))
+      /**
+       * The stack offsets a vector store writes, or null for any other instruction. A vector store
+       * through any other base writes memory the caller passed (the output, the GHASH state), which is
+       * the kernel's result, not a spill.
+       */
+      const vectorStore = (line, bases) => {
+        let m = /^v?mov\w*\s+%([xy])mm\d+, (-?\d*)\(%rsp\)$/.exec(line)
+        if (m !== null) return Array.from({ length: m[1] === "y" ? 4 : 2 }, (_, i) => Number(m[2] || 0) + 8 * i)
+        if ((m = /^str\s+q\d+, \[sp(?:, #(\d+))?\]$/.exec(line)) !== null) return [0, 8].map((i) => Number(m[1] ?? 0) + i)
+        // Any other vector store to the stack or the frame (a pair, an unscaled or indexed offset, a
+        // register that points into the frame) is read as a spill no wipe reaches.
+        if (/^(v?mov\w*\s+%[xy]mm\d+, .*\(%r[sb]p(,[^)]*)?\)|st(r|p|ur)\s+[qd]\d+, .*\[(sp|x29)\b)/.test(line)) return [Number.NaN]
+        m = /^v?mov\w*\s+%[xy]mm\d+, .*\(%(\w+)(?:,[^)]*)?\)$/.exec(line) ?? /^st(?:r|p|ur)\s+[qd]\d+, .*\[(x\d+)\b/.exec(line)
+        return m !== null && bases.has(m[1]) ? [Number.NaN] : null
+      }
+      /** The stack offsets a zero store of 8 bytes clears, or null for any other instruction. */
+      const zeroStore = (line) => {
+        let m = /^movq\s+\$0, (-?\d*)\(%rsp\)$/.exec(line) ?? /^str\s+xzr, \[sp(?:, #(\d+))?\]$/.exec(line)
+        if (m !== null) return [Number(m[1] || 0)]
+        if ((m = /^stp\s+xzr, xzr, \[sp(?:, #(\d+))?\]$/.exec(line)) !== null) return [0, 8].map((i) => Number(m[1] ?? 0) + i)
+        return null
+      }
+      /** What is wrong with each kernel of `file` on `target`, by name: an empty list when it clears. */
+      const read = (file, target) => {
+        const o = spawnSync(
+          "clang",
+          ["-O2", "-S", "-ffreestanding", `--target=${target.triple}`, ...(target.flags ?? []), "-I", path.join(root, "runtime"), file, "-o", "-"],
+          { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+        )
+        const lines = String(o.stdout).split("\n")
+        const out = new Map()
+        // The registers `nish_aes_clear` zeroes, when its body is zeroing idioms and a `ret`.
+        const clearBody = o.status === 0 ? functionBody(lines, "nish_aes_clear", target) : null
+        const clearZeroes = clearBody?.slice(0, -1).map(zeroes) ?? [null]
+        const cleared = /^retq?$/.test(clearBody?.at(-1) ?? "") && clearZeroes.every((regs) => regs !== null) ? new Set(clearZeroes.flat()) : new Set()
+        const toClear = /^(jmp|b|callq?|bl)\s+nish_aes_clear$/
+        for (const kernel of kernels) {
+          const body = o.status === 0 ? functionBody(lines, kernel, target) : null
+          if (body === null) {
+            out.set(kernel, [`no ${kernel} in the assembly${o.stderr ? `: ${o.stderr}` : ""}`])
+            continue
+          }
+          const faults = []
+          const clears = []
+          const inClear = new Set()
+          const bases = frameBases(body)
+          body.forEach((line, at) => {
+            const wiped = new Set(body.slice(at + 1).flatMap((later) => zeroStore(later) ?? []))
+            if ((vectorStore(line, bases) ?? []).some((slot) => !wiped.has(slot))) faults.push(`a vector spill no wipe reaches: ${line}`)
+            const tail = /^(jmp|b)\s+nish_aes_clear$/.test(line)
+            if (!tail && !/^retq?$/.test(line)) return
+            let i = at - 1
+            while (i >= 0 && epilogue.test(body[i])) i--
+            const zeroed = new Set()
+            if (tail || (i >= 0 && toClear.test(body[i]))) {
+              for (const reg of cleared) zeroed.add(reg)
+              if (!tail) i--
+            }
+            for (; i >= 0 && zeroes(body[i]) !== null; i--) {
+              for (const reg of zeroes(body[i])) zeroed.add(reg)
+              inClear.add(i)
+            }
+            clears.push({ at, zeroed })
+          })
+          if (clears.length === 0) faults.push("no ret and no jump to nish_aes_clear")
+          const used = new Set()
+          body.forEach((line, at) => {
+            if (inClear.has(at)) return
+            for (const operand of line.split(/[\s,()[\]{}]+/).slice(1)) {
+              const reg = whole(operand)
+              if (reg !== null && (reg.startsWith("v") || callerSaved.has(reg))) used.add(reg)
+            }
+          })
+          for (const { at, zeroed } of clears) {
+            const left = [...used].filter((reg) => !zeroed.has(reg))
+            if (left.length > 0) faults.push(`the ret at instruction ${at} leaves ${left.join(" ")} uncleared`)
+          }
+          out.set(kernel, faults)
+        }
+        return out
+      }
+      const show = (verdicts) => [...verdicts].map(([kernel, faults]) => `${kernel}: ${faults.length === 0 ? "clears" : faults.join("; ")}`).join("\n")
+      for (const target of [...CT_TARGETS, ctAtLevel("x86-64-v3")]) {
+        const name = ctTargetName(target)
+        const real = read("runtime/runtime-aes.c", target)
+        const bare = read(noClear, target)
+        check(
+          `runtime-aes.c on ${name}: the AES kernels clear their registers at clang -O2 (each ret or tail jump reaches, past the epilogue, a run of zeroing idioms or nish_aes_clear that covers every vector and caller-saved register the kernel names, and every vector stored to the stack lands in a wiped buffer), where a twin with no nish_aes_clear call has all four refused`,
+          source.split(call).length - 1 === kernels.length &&
+            [...real.values()].every((faults) => faults.length === 0) &&
+            [...bare.values()].every((faults) => faults.length > 0),
+          `--- runtime-aes.c:\n${show(real)}\n--- the twin with no clear:\n${show(bare)}`
+        )
+        if (target.level === undefined) {
+          const part = read(partClear, target)
+          check(
+            `runtime-aes.c on ${name}: a twin whose clear skips the first vector register has nish_aes_block refused`,
+            firstZeros.every((line) => source.includes(line)) && (part.get("nish_aes_block") ?? []).some((fault) => / v0( |$)/.test(fault)),
+            show(part)
+          )
+        }
       }
     }
   }
@@ -29307,9 +29546,9 @@ if (!only || "sandbox dependency grants".includes(only)) {
       // different shape, follow where the machine has them.
       const once = "sandbox_dep_exec_once"
       const onceTo = "sandbox_dep_exec_once_to"
-      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here. */
-      const withHelper = (fixture, grants) => {
-        const copy = `${fixture}_helper`
+      /** A copy of tests/link/<fixture> in the build directory whose one `process.spawn` grant is `bin/exec-args`, built here, with `prefix` (`exec:`) before it. */
+      const withHelper = (fixture, grants, prefix = "", tag = "") => {
+        const copy = `${fixture}_helper${prefix === "" ? "" : "_exec"}${grants.length === 0 ? "" : "_more"}${tag}`
         const to = path.join(dir, copy)
         fs.cpSync(path.join(linkDir, fixture), to, { recursive: true })
         fs.mkdirSync(path.join(to, "bin"), { recursive: true })
@@ -29340,7 +29579,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
         )
         const cc = spawnSync("clang", ["-O2", src, "-o", path.join(to, "bin", "exec-args")], { encoding: "utf8" })
         const manifest = JSON.parse(fs.readFileSync(path.join(to, "package.json"), "utf8"))
-        manifest.nish.capabilities.dependencies.pkg_runner = ["process.spawn=./bin/exec-args", ...grants]
+        manifest.nish.capabilities.dependencies.pkg_runner = [`process.spawn=${prefix}./bin/exec-args`, ...grants]
         fs.writeFileSync(path.join(to, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
         return cc.status === 0 ? copy : null
       }
@@ -29618,6 +29857,123 @@ if (!only || "sandbox dependency grants".includes(only)) {
               /^12[67]\n$/.test(rOtherHeld.stdout) &&
               rTrueStill.stdout === "0\n",
             `${said(rOtherHeld)}\n--- true, spawned by the program itself\n${said(rTrueStill)}`
+          )
+        }
+        // WP40 §2a: a program granted `process.spawn=exec:<program>` keeps
+        // its subtree's reach of the allowlist (docs/security/sandbox.md,
+        // "Limits"). The compiler marks it `///` and the runtime starts it
+        // without the one-exec filter, through the same identity check: it
+        // runs another granted program and, through the loader, an ungranted
+        // binary, where the same helper granted plainly gets 111 (above). A
+        // program granted both ways is granted `exec:`. The loader named
+        // directly is refused still, and without `--sandbox` the runs agree.
+        // Beside the `exec:` grant, a second program granted plainly is held
+        // to its one exec all the same when it is a copy, a file of its own;
+        // a hard link is the `exec:` program under another name, and the
+        // runtime, which decides by file identity, starts it unheld.
+        for (const [grants, how, second] of [
+          [[], "granted exec:", null],
+          [["process.spawn=./bin/exec-args"], "granted exec: and plainly", null],
+          [["process.spawn=./bin/exec-copy"], "granted exec: beside a copy granted plainly", "copy"],
+          [["process.spawn=./bin/exec-link"], "granted exec: beside a hard link granted plainly", "link"],
+        ]) {
+          const freed = withHelper(once, grants, "exec:", second === null ? "" : `_${second}`)
+          if (freed !== null && second !== null) {
+            const from = path.join(dir, freed, "bin", "exec-args")
+            const to = path.join(dir, freed, "bin", `exec-${second}`)
+            fs.rmSync(to, { force: true })
+            if (second === "copy") {
+              fs.copyFileSync(from, to)
+              fs.chmodSync(to, 0o755)
+            } else {
+              fs.linkSync(from, to)
+            }
+          }
+          const fAllow = freed === null ? null : build(freed, ["--sandbox"], dir)
+          const fOpen = freed === null ? null : build(freed, [], dir)
+          if (fAllow === null || fOpen === null) {
+            skip(`sandbox dependency grants: clang could not build the exec-args helper ${how}; exec: is not checked`)
+            continue
+          }
+          const fHelper = fs.realpathSync(path.join(dir, freed, "bin", "exec-args"))
+          const fList = /@\.sandbox\.exec = [^"]*c"([^"]*)"/.exec(ir(freed))
+          const fEntries = fList === null ? [] : fList[1].split("\\00")
+          const rLoaderOnce = run(fAllow, ["sync", fHelper, loader, ungranted])
+          const rLoaderOpen = run(fOpen, ["sync", fHelper, loader, ungranted])
+          const rSelfOnce = run(fAllow, ["sync", fHelper, fHelper])
+          const rDirect = run(fAllow, ["sync", loader, ungranted])
+          check(
+            `sandbox dependency grants: a program ${how} starts the loader with an ungranted binary, and itself (WP40 §2a)`,
+            fEntries.includes(`//${fHelper}`) &&
+              !fEntries.includes(fHelper) &&
+              rLoaderOnce.status === 0 &&
+              rLoaderOnce.signal === null &&
+              rLoaderOnce.stdout === "sbx-1\n0\n" &&
+              rLoaderOpen.stdout === "sbx-1\n0\n" &&
+              rSelfOnce.status === 0 &&
+              rSelfOnce.stdout === "0\n" &&
+              rDirect.status === 0 &&
+              rDirect.stdout === "-1\n",
+            `${fEntries.join(" ")}\n${said(rLoaderOnce)}\n--- without --sandbox\n${said(rLoaderOpen)}\n--- itself\n${said(rSelfOnce)}\n--- the loader directly\n${said(rDirect)}`
+          )
+          if (second !== null) {
+            const fSecond = fs.realpathSync(path.join(dir, freed, "bin", `exec-${second}`))
+            const rSecondOnce = run(fAllow, ["sync", fSecond, loader, ungranted])
+            const rSecondOpen = run(fOpen, ["sync", fSecond, loader, ungranted])
+            const unheld = second === "link"
+            check(
+              unheld
+                ? "sandbox dependency grants: a hard link of a program granted exec:, granted plainly, is that program and starts unheld (WP40 §2a)"
+                : "sandbox dependency grants: a program granted plainly beside another's exec: grant is held to its one exec (WP40 §2a)",
+              fEntries.includes(fSecond) &&
+                rSecondOnce !== null &&
+                rSecondOnce.status === 0 &&
+                rSecondOnce.signal === null &&
+                (unheld
+                  ? rSecondOnce.stdout === "sbx-1\n0\n"
+                  : rSecondOnce.stdout === "111\n" && rSecondOnce.stderr.includes("exec-args: ")) &&
+                rSecondOpen !== null &&
+                rSecondOpen.stdout === "sbx-1\n0\n",
+              `${fEntries.join(" ")}\n${said(rSecondOnce)}\n--- without --sandbox\n${said(rSecondOpen)}`
+            )
+          }
+        }
+        check(
+          "sandbox dependency grants: an allowlist with no exec: grant marks nothing /// (WP40 §2a)",
+          !hList[1].split("\\00").some((p) => p.startsWith("///")),
+          hList[1]
+        )
+        // The grant written in a checked-in manifest, with the machine's own
+        // tools: `env`, granted `exec:`, runs `true`, granted plainly, where
+        // the plain `env` of sandbox_dep_exec_once could not (above). `true`
+        // run on its own only shows the plain grant still starts; it execs
+        // nothing, so the hold on a plain grant beside an `exec:` one is
+        // checked with the built helper's copy (above), not here.
+        const optin = "sandbox_dep_exec_optin"
+        const rOptinOpen = rOther === null || rOther.stdout !== "0\n" ? null : run(build(optin, []), ["sync", "env", "true"])
+        if (realOnPath("env") !== null && realOnPath("env") === realOnPath("true")) {
+          // A multicall coreutils (uutils) is one file for both, which the
+          // grant then names both ways, so `true` is `exec:` too and the
+          // allowlist has no plain entry for it to check.
+          skip(
+            `sandbox dependency grants: \`env\` and \`true\` are one file here (${realOnPath("env")}); a manifest's exec: grant is not checked with the machine's tools`
+          )
+        } else if (rOptinOpen === null || rOptinOpen.stdout !== "0\n") {
+          skip(
+            `sandbox dependency grants: \`env true\` does not run here without --sandbox (${said(rOptinOpen)}); a manifest's exec: grant is not checked with the machine's tools`
+          )
+        } else {
+          const xAllow = build(optin, ["--sandbox"])
+          const rOptin = run(xAllow, ["sync", "env", "true"])
+          const rTrueHeld = run(xAllow, ["sync", "true"])
+          check(
+            "sandbox dependency grants: env granted exec: runs another granted program (WP40 §2a)",
+            rOptin !== null &&
+              rOptin.status === 0 &&
+              rOptin.stdout === "0\n" &&
+              rTrueHeld.stdout === "0\n" &&
+              /@\.sandbox\.exec = [^"]*c"[^"]*\/\/\/[^"\\]*env\\00/.test(ir(optin)),
+            `${said(rOptin)}\n--- true\n${said(rTrueHeld)}\n${ir(optin)}`
           )
         }
       }
@@ -34817,6 +35173,104 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
       check("page: the page type-checks against main.d.ts and runtime/page.d.ts", typed.ok, typed.output)
     }
   }
+}
+
+// ---- nish/page/frame: the framebuffer presenter and the fixed-step loop ------------
+// tests/page-frame/check.mjs runs runtime/page-frame.mjs under Node against fake
+// WebGPU, WebGL 2 and Canvas 2D objects and prints a line per check. A real
+// browser is not run here: tests/page-frame/smoke-manual.cjs is the manual
+// Chromium smoke a change to the presenter is tried with.
+if (!only || "page-frame".includes(only)) {
+  const res = spawnSync(process.execPath, [path.join(root, "tests", "page-frame", "check.mjs")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  // Each line is `ok <name>` or `not ok <name>\t<detail>`, and the last
+  // `checks: <n>`: a run that stopped early prints fewer lines than it counts,
+  // or no count at all. The count is pinned, so a check that goes missing
+  // (a block skipped, a loop that ran short) is caught too; a check added or
+  // removed moves it.
+  const PAGE_FRAME_CHECKS = 114
+  const out = res.stdout.split("\n")
+  const lines = out.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
+  const counted = out.find((line) => line.startsWith("checks: "))
+  check(
+    "page-frame: the checks ran to the end",
+    res.status === 0 && counted === `checks: ${lines.length}` && lines.length === PAGE_FRAME_CHECKS,
+    shown(res)
+  )
+  for (const line of lines) {
+    const ok = line.startsWith("ok ")
+    const rest = ok ? line.slice(3) : line.slice(7)
+    const tab = rest.indexOf("\t")
+    check(`page-frame: ${tab < 0 ? rest : rest.slice(0, tab)}`, ok, tab < 0 ? "" : rest.slice(tab + 1))
+  }
+
+  // The declarations type-check, with the DOM types, against a page using every export.
+  const dir = path.join(buildDir, "page-frame")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  fs.copyFileSync(path.join(root, "runtime", "page-frame.d.ts"), path.join(dir, "nish-page-frame.d.mts"))
+  fs.writeFileSync(
+    path.join(dir, "page.ts"),
+    [
+      'import { type Backend, createPresenter, runFixedStep } from "./nish-page-frame.mjs"',
+      "",
+      "export const start = async (canvas: HTMLCanvasElement, pixels: Int32Array): Promise<number> => {",
+      "  const presenter = await createPresenter(canvas, {",
+      '    prefer: "webgl2",',
+      "    onFallback: (from: Backend, to: Backend, reason: string) => console.warn(from, to, reason),",
+      "  })",
+      "  presenter.resize(canvas.clientWidth, canvas.clientHeight, devicePixelRatio)",
+      "  const loop = runFixedStep({",
+      "    stepsPerSecond: 60,",
+      "    maxStepsPerFrame: 4,",
+      "    step: () => undefined,",
+      "    render: (alpha: number, frameMs: number) => presenter.present(pixels, 4, 2),",
+      "  })",
+      "  const reasons: string[] = presenter.attempts.map((a) => `${a.backend}: ${a.reason}`)",
+      "  const now: HTMLCanvasElement = presenter.canvas",
+      "  loop.stop()",
+      "  presenter.destroy()",
+      "  return loop.refreshHz + loop.fps + reasons.length + now.width",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const config = path.join(dir, "tsconfig.json")
+  fs.writeFileSync(
+    config,
+    JSON.stringify({
+      extends: path.join(root, "tsconfig.json"),
+      compilerOptions: { lib: ["ES2022", "DOM"], skipLibCheck: true, noUnusedParameters: false },
+      include: [],
+      files: ["nish-page-frame.d.mts", "page.ts"].map((f) => path.join(dir, f)),
+    })
+  )
+  const typed = typeCheckProject(config, root)
+  check("page-frame: a page type-checks against runtime/page-frame.d.ts", typed.ok, typed.output)
+
+  // The package ships both files, under the export a page imports.
+  const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" })
+  let packed = []
+  try {
+    packed = JSON.parse(pack.stdout)[0].files.map((f) => f.path)
+  } catch {
+    packed = []
+  }
+  check(
+    "page-frame: npm pack ships runtime/page-frame.mjs and runtime/page-frame.d.ts",
+    packed.includes("runtime/page-frame.mjs") && packed.includes("runtime/page-frame.d.ts"),
+    shown(pack)
+  )
+  const exported = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).exports["./page/frame"]
+  check(
+    "page-frame: package.json exports ./page/frame",
+    exported !== undefined &&
+      exported.types === "./runtime/page-frame.d.ts" &&
+      exported.default === "./runtime/page-frame.mjs",
+    JSON.stringify(exported)
+  )
 }
 
 // ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------

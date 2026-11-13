@@ -509,6 +509,26 @@ export const emitPanicTail = (emitter: Emitter, message: string): void => {
 }
 
 /**
+ * The `ffi-null` test a pointer C handed over is given before anything reads
+ * through it: `NULL` branches to a block that panics with `message`, and the
+ * rest of the emission continues in the block where `ptr` is not null. A
+ * `CPtr` a C function answered may be `NULL` whatever its declaration says,
+ * and address 0 is readable on wasm32, so without it a read would fault or
+ * answer garbage. `readStruct`, `readCString` and a `declare function`'s
+ * `string` result share it, so their tests cannot drift apart.
+ */
+export const emitFfiNullTest = (emitter: Emitter, ptr: string, message: string): void => {
+  const fn = emitter.fn
+  const isNull = fn.emitValue(`icmp eq i8* ${ptr}, null`)
+  const nullBlock = fn.newBlock("ffi.null")
+  const copyBlock = fn.newBlock("ffi.copy")
+  fn.emit(`br i1 ${isNull}, label %${nullBlock.label}, label %${copyBlock.label}`)
+  fn.placeBlock(nullBlock)
+  emitPanicTail(emitter, emitter.stringConstant(message))
+  fn.placeBlock(copyBlock)
+}
+
+/**
  * The check a compound assignment or an increment makes before it stores into
  * a ranged place (WP31 §7): the sum is an `i32`, and it enters the range again.
  */
@@ -840,10 +860,13 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "wrappingMul") {
     return emitWrapping(emitter, expr, "mul")
   }
-  // WP27 S3.3: the one read through a `CPtr`, the copy a `declare function`'s
-  // `string` result makes, with no null test because the type rules one out.
+  // WP27 S3.3: the copy a `declare function`'s `string` result makes, after
+  // the null test `readStruct` makes: a `CPtr` a C function answered may be
+  // `NULL` whatever its declaration says.
   if (name === "readCString") {
-    return emitCStringCopy(emitter, emitter.emitExpression(firstArgument(expr)))
+    const from = emitter.emitExpression(firstArgument(expr))
+    emitFfiNullTest(emitter, from, "`readCString` read a NULL pointer")
+    return emitCStringCopy(emitter, from)
   }
   // WP27 S4.2: the struct's bytes, copied into the arena by the layout the
   // checker typed the call with, after a null test: a `CPtr` a C function
@@ -1496,8 +1519,10 @@ export const identifierBuiltinCalleesNamed = (
     }
     return out
   }
-  // WP27 S3.3: `@nish.ffi.str`, the copy, calls `nish_str_new`.
+  // WP27 S3.3: a null test that panics, then `@nish.ffi.str`, the copy,
+  // which calls `nish_str_new`.
   if (name === "readCString") {
+    panicTailCallees(out)
     out.push("nish_str_new")
     return out
   }

@@ -9,7 +9,13 @@ typical use cases and edge cases.
 There is no unit-test framework here — no Vitest, no `bun test`, no Jest. The
 suite is `tests/run.js`, a plain Node script that `npm test` runs. It first
 builds the compiler under test from `src/` with the seed and links it at
-`build/nish-test`, then prints one `PASS` / `FAIL` line per check. Almost every
+`build/nish-test`, then prints one `PASS` / `FAIL` line per check. The link is
+a minute of one core, so a binary linked once is kept in
+`build/cache/compiler-under-test/` under a hash of everything the link reads
+(the seed and its package, the source files the seed's front end names as the
+compiler's modules, the toolchain: `tests/self/compiler-cache.js`), and a later
+run with the same inputs copies it after a three-second front-end run instead
+of a minute's link; its first check says which it did. Almost every
 test is **data, not code**: a source file next to the output it must produce.
 
 - **Golden cases live in `tests/cases/`**, one `<name>.ts` per case, discovered
@@ -265,6 +271,27 @@ because the body is not the changelog.
   head being merged, not from the pull request body. #566's entry carried
   609 / 1,424 bytes from an earlier head, while `tests/run.js` recorded
   597 / 1,403.
+
+## Checks that spawn a process
+
+A check in `tests/run.js` that spawns a process, or runs one under
+`--sandbox`, passes here and then runs on CI's ubuntu runners, which are not
+this container in two ways a check can trip on:
+
+- **Their coreutils are uutils**: one multicall binary whose messages differ
+  from GNU's. A check that matches `cat`'s or
+  `ls`'s error text, or tells two tools apart by their files, holds here and
+  fails there.
+- **Node inherits descriptors from the runner.** `/proc/self/fd` of the test
+  process counts more there than here, so a count of the test process's own
+  descriptors proves nothing about what the program under test leaked.
+
+So the check builds its own helper, a small C or Nish program that does the
+one thing being proven and reports it by exit status, and asserts on that
+status. It never matches a tool's message text and never counts the test
+process's own descriptors. Where a descriptor count is the claim, the program
+under test takes it from its own `/proc/self/fd`, before and after, and the
+check reads the difference.
 
 ## Testing a Nish program in Nish
 

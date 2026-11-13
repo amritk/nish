@@ -19,10 +19,11 @@
 //
 // Out of memory is listed (`oom`, at each arena allocation the escape analysis
 // places) but never counts: no source-level guard removes it. Nor does an
-// `unchecked` site, a `nish:unsafe` `uncheckedGet`, `uncheckedSet` or
-// `readCString`: it cannot panic, and the import its module must write is the
-// visible opt-in to the undefined behaviour an index out of range, or an
-// address that is not a C string, would be. Stack overflow
+// `unchecked` site, a `nish:unsafe` `uncheckedGet` or `uncheckedSet`: it
+// cannot panic, and the import its module must write is the visible opt-in to
+// the undefined behaviour an index out of range would be. (`readCString` and
+// `readStruct` test their pointer for `NULL`, so each is an `ffi-null` site.)
+// Stack overflow
 // is not a site at all: it has no runtime handler and no check in the IR.
 // Signed overflow is a site (`overflow`) at every checked `+ - *`, negation and
 // step, proven where the bounds walk proved the result fits and the emitter
@@ -57,10 +58,10 @@ export const PANIC_PARALLEL_LENGTH: i32 = 9
 export const PANIC_CALL: i32 = 10
 const PANIC_OOM: i32 = 11
 /**
- * `uncheckedGet`, `uncheckedSet` and `readCString` from `nish:unsafe`: no
- * check, so nothing panics, but nothing is proven either, and an index out of
- * range, or a `CPtr` that is not a live C string, is undefined behaviour.
- * (`readStruct` tests its pointer for `NULL`, so it is an `ffi-null` site.) Listed so that a reader can find every one, and
+ * `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check, so nothing
+ * panics, but nothing is proven either, and an index out of range is
+ * undefined behaviour. (`readCString` and `readStruct` test their pointer for
+ * `NULL`, so each is an `ffi-null` site.) Listed so that a reader can find every one, and
  * allowed, as `oom` is: a call is accepted only through a `nish:unsafe`
  * import (`unsafeImportMessage` in `src/builtins.ts`), and that import at the
  * top of its module is the opt-in the no-panic scope asks for.
@@ -215,11 +216,12 @@ export const builtinPanicKind = (name: string): i32 => {
   ) {
     return PANIC_IO_EXIT
   }
-  if (name === "uncheckedGet" || name === "uncheckedSet" || name === "readCString") {
+  if (name === "uncheckedGet" || name === "uncheckedSet") {
     return PANIC_UNCHECKED
   }
-  // WP27 S4.2: a `NULL` pointer panics before the copy (`emitStructCopy`).
-  if (name === "readStruct") {
+  // WP27 S3.3 / S4.2: a `NULL` pointer panics before the copy
+  // (`emitFfiNullTest`).
+  if (name === "readCString" || name === "readStruct") {
     return PANIC_FFI_NULL
   }
   // `netRead` and its siblings, `readStdin`, `writeBytes` and `fileReadAt` check
@@ -809,10 +811,11 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
         "a C function reads a string to its first NUL byte, so a string that holds one panics before the call: " +
         "pass a literal with no NUL in it, which needs no check"
       )
-    case PANIC_FFI_NULL:
-      if (calledName(program, node) === "readStruct") {
+    case PANIC_FFI_NULL: {
+      const reader = calledName(program, node)
+      if (reader === "readStruct" || reader === "readCString") {
         return (
-          "`readStruct` panics on a NULL pointer, and no proof removes that check: " +
+          `\`${reader}\` panics on a NULL pointer, and no proof removes that check: ` +
           "make the call from a module outside the scope"
         )
       }
@@ -820,6 +823,7 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
         "a C function's `const char *` result may be NULL, which a `string` cannot hold: " +
         "declare the result `string | null` and narrow it with `!== null`, which needs no check"
       )
+    }
     case PANIC_FFI_LENGTH:
       return (
         "a C function reads or writes as many bytes of the buffer as the count says, so a count larger than " +

@@ -20,7 +20,7 @@ function recordUpdateFusion(ctx: CheckContext, call: Node): void -> @recordUpdat
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via isInert
   calls: CheckedProgram.isCollections FusionTable.record collectionOwnerOf isFusableKey isFusablePlace isInert nish_panic_index sameCallTarget
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=isInert#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=isInert#0
   pointer call: size=40 writesThrough=false captured=false passedTo=collectionOwnerOf#1
   stackSites=1 stackLocals=1
   local +0:9 owner: StructInfo | null (const)
@@ -44,7 +44,7 @@ function recordGuardFusion(ctx: CheckContext, stmt: Node): void -> @recordGuardF
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via isInert
   calls: CheckedProgram.isCollections FusionTable.record collectionOwnerOf firstCallOf isFusableKey isFusablePlace isInert isMapOwner nish_panic_index nish_str_eq sameCallTarget unwrapParens
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=isInert#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=isInert#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   callee +0:7 CheckedProgram.isCollections -> @CheckedProgram.isCollections
@@ -72,7 +72,7 @@ function recordGuardFusion(ctx: CheckContext, stmt: Node): void -> @recordGuardF
 function collectionOwnerOf(program: CheckedProgram, call: Node, name: string): StructInfo | null -> @collectionOwnerOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isCollectionStruct nish_panic_index nish_str_eq
-  pointer program: size=800 writesThrough=false captured=false
+  pointer program: size=888 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 sig: FunctionSig | null (const)
@@ -90,7 +90,7 @@ function firstCallOf(branch: Node): Node | null -> @firstCallOf
 function sameCallTarget(program: CheckedProgram, call: Node, receiver: Node, key: Node): boolean -> @sameCallTarget
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index samePlace
-  pointer program: size=800 writesThrough=false captured=false passedTo=samePlace#0 samePlace#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=samePlace#0 samePlace#0
   pointer call: size=40 writesThrough=false captured=false
   pointer receiver: size=40 writesThrough=false captured=false passedTo=samePlace#2
   pointer key: size=40 writesThrough=false captured=false passedTo=samePlace#2
@@ -100,7 +100,7 @@ function sameCallTarget(program: CheckedProgram, call: Node, receiver: Node, key
 function isFusablePlace(program: CheckedProgram, node: Node): boolean -> @isFusablePlace
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isThisPath nish_panic_index
-  pointer program: size=800 writesThrough=false captured=false
+  pointer program: size=888 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=isThisPath#0
   stackSites=0 stackLocals=0
   callee +0:73 isThisPath -> @isThisPath
@@ -113,7 +113,7 @@ function isThisPath(node: Node): boolean -> @isThisPath
 function isFusableKey(program: CheckedProgram, node: Node): boolean -> @isFusableKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isFusablePlace isKeyLiteral
-  pointer program: size=800 writesThrough=false captured=false passedTo=isFusablePlace#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=isFusablePlace#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isKeyLiteral#0 isFusablePlace#1
   stackSites=0 stackLocals=0
   callee +0:3 isKeyLiteral -> @isKeyLiteral
@@ -125,7 +125,7 @@ function isKeyLiteral(node: Node): boolean -> @isKeyLiteral
 function samePlace(program: CheckedProgram, a: Node, b: Node): boolean -> @samePlace
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isKeyLiteral nish_panic_index nish_str_eq samePlace
-  pointer program: size=800 writesThrough=false captured=false passedTo=samePlace#0
+  pointer program: size=888 writesThrough=false captured=false passedTo=samePlace#0
   pointer a: size=40 writesThrough=false captured=false passedTo=isKeyLiteral#0
   pointer b: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -138,7 +138,7 @@ function isInert(ctx: CheckContext, node: Node, calls: Node[]): boolean -> @isIn
   sharedWrite: +0:7
   escaping: node
   calls: CheckedProgram.isEnumMember isAssignmentOperator isInert nish_array_grow nish_panic_index nish_str_eq
-  pointer ctx: size=336 writesThrough=false captured=false passedTo=isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0 isInert#0
   pointer node: size=40 writesThrough=true captured=true passedTo=CheckedProgram.isEnumMember#2
   pointer calls: size=0 writesThrough=true captured=false passedTo=isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2 isInert#2
   stackSites=0 stackLocals=0

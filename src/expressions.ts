@@ -98,7 +98,7 @@ import {
 } from "./fnrefs"
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
-import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
+import { CheckedProgram, FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
 import { simdCompareMessage, simdImportMessage } from "./simd"
@@ -442,8 +442,124 @@ const namesMembers = (set: i32): boolean => set >= 0 || set < MEMBERS_NONE
 
 /** `members`, two or more of one enum, as an id `memberSets` can record (`CheckedProgram.memberLists`). */
 const memberListId = (ctx: CheckContext, members: i32[]): i32 => {
-  ctx.program.memberLists.push(members)
-  return MEMBERS_NONE - ctx.program.memberLists.length
+  const program = ctx.program
+  program.memberLists.push(members)
+  program.memberListDrops.push(-1)
+  program.memberListBases.push(-1)
+  program.memberListEnums.push(-1)
+  program.memberListSizes.push(members.length)
+  return MEMBERS_NONE - program.memberLists.length
+}
+
+/**
+ * The list `set` leaves once `member` is excluded, `size` members of
+ * `enumType`, kept as that exclusion (`CheckedProgram.memberListDrops`):
+ * `set` is -1 or a list of `enumType`'s members only, and holds `member`.
+ */
+const dropMember = (ctx: CheckContext, enumType: i32, set: i32, member: i32, size: i32): i32 => {
+  const program = ctx.program
+  const unbuilt: i32[] = []
+  program.memberLists.push(unbuilt)
+  program.memberListDrops.push(member)
+  program.memberListBases.push(set)
+  program.memberListEnums.push(enumType)
+  program.memberListSizes.push(size)
+  return MEMBERS_NONE - program.memberLists.length
+}
+
+/** `values[at]`, or -1 past either end. */
+const intAt = (values: i32[], at: i32): i32 => (at >= 0 && at < values.length ? values[at] : -1)
+
+/** The index in `memberLists` of the list id `set`. */
+const listIndex = (set: i32): i32 => MEMBERS_NONE - 1 - set
+
+/** The list `memberLists` holds at `at`, empty past its end or while it is an unbuilt exclusion. */
+const listAt = (program: CheckedProgram, at: i32): i32[] => {
+  const none: i32[] = []
+  return at >= 0 && at < program.memberLists.length ? program.memberLists[at] : none
+}
+
+/**
+ * Whether the set `set` is -1, every member of `enumType`, or an exclusion
+ * from it (`dropMember`), which `setHas` answers without building it. A list
+ * built whole is not: a ternary's arms can name one member twice.
+ */
+const listOfEnum = (ctx: CheckContext, enumType: i32, set: i32): boolean => {
+  if (set === -1) {
+    return true
+  }
+  if (set >= MEMBERS_NONE) {
+    return false
+  }
+  const at = listIndex(set)
+  return intAt(ctx.program.memberListDrops, at) >= 0 && intAt(ctx.program.memberListEnums, at) === enumType
+}
+
+/** How many members `set`, -1 or a list `listOfEnum` accepts, holds. */
+const setSize = (ctx: CheckContext, enumType: i32, set: i32): i32 =>
+  set === -1 ? enumMembersOf(ctx, enumType).length : intAt(ctx.program.memberListSizes, listIndex(set))
+
+/**
+ * Whether `set`, -1 or a list `listOfEnum` accepts for `enumType`, holds
+ * `member`, one of `enumType`'s: members are interned by enum and value, so
+ * every member is in -1's list, and an exclusion holds what its base does
+ * but the member it excluded.
+ */
+const setHas = (ctx: CheckContext, set: i32, member: i32): boolean => {
+  const program = ctx.program
+  let at = set
+  while (at < MEMBERS_NONE) {
+    const index = listIndex(at)
+    const drop = intAt(program.memberListDrops, index)
+    if (drop < 0) {
+      return listAt(program, index).indexOf(member) >= 0
+    }
+    if (drop === member) {
+      return false
+    }
+    at = intAt(program.memberListBases, index)
+  }
+  return at === -1
+}
+
+/**
+ * Build the members of the exclusion at `index` in `memberLists`: those of
+ * the first set down its chain that is built — a list, or every member of its
+ * enum — less each member the chain excluded, in that set's order.
+ */
+const buildExclusion = (ctx: CheckContext, index: i32): i32[] => {
+  const program = ctx.program
+  program.memberStamp = program.memberStamp + 1
+  const stamp = program.memberStamp
+  let at = index
+  let base: i32[] = []
+  let found = false
+  while (!found) {
+    const drop = intAt(program.memberListDrops, at)
+    const built = listAt(program, at)
+    if (drop < 0 || built.length > 0) {
+      base = built
+      found = true
+    } else {
+      markMember(program.memberMarks, drop, stamp)
+      const next = intAt(program.memberListBases, at)
+      if (next >= MEMBERS_NONE) {
+        base = enumMembersOf(ctx, intAt(program.memberListEnums, index))
+        found = true
+      }
+      at = listIndex(next)
+    }
+  }
+  const members: i32[] = []
+  for (const member of base) {
+    if (!isMarked(program.memberMarks, member, stamp)) {
+      members.push(member)
+    }
+  }
+  if (index >= 0 && index < program.memberLists.length) {
+    program.memberLists[index] = members
+  }
+  return members
 }
 
 /**
@@ -455,17 +571,66 @@ export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
   const bare = unwrapParens(node)
   const members: i32[] = []
   if (ctx.program.isEnumMember(ctx.table, bare)) {
-    const type = ctx.table.enumBase(ctx.program.nodeTypes[bare.id])
-    members.push(ctx.table.enumMemberOf(type, ctx.program.nodeEnumValues[bare.id], bare.text))
+    members.push(memberConstantType(ctx, bare))
     return members
   }
   return membersOfSet(ctx, ctx.program.memberSets[bare.id])
 }
 
+/** The member type of the member constant `bare`, `Kind.A`. */
+const memberConstantType = (ctx: CheckContext, bare: Node): i32 => {
+  const read = ctx.program.nodeTypes[bare.id]
+  const value = ctx.program.nodeEnumValues[bare.id]
+  // A read still typed as its member is that member's type, which
+  // `enumMemberOf` would answer: one per enum and value.
+  const known = ctx.table.isEnumMemberType(read) && ctx.table.memberValue(read) === value
+  return known ? read : ctx.table.enumMemberOf(ctx.table.enumBase(read), value, bare.text)
+}
+
+/**
+ * Whether `memberSetOf` of `left` and of `right` are disjoint
+ * (`membersDisjoint`), answered without building an exclusion's list when
+ * one side is a member of the enum the other excludes from.
+ */
+const setsDisjoint = (ctx: CheckContext, left: Node, right: Node): boolean => {
+  const a = unwrapParens(left)
+  const b = unwrapParens(right)
+  // Each member constant's type is made here, left first, even when the
+  // answer is known without it: the first request for a value names its
+  // type, which an enum with two members of one value shows.
+  const aConstant = a.kind === NodeKind.Member && ctx.program.isEnumMember(ctx.table, a)
+  const bConstant = b.kind === NodeKind.Member && ctx.program.isEnumMember(ctx.table, b)
+  const aMember = aConstant ? memberConstantType(ctx, a) : -1
+  const bMember = bConstant ? memberConstantType(ctx, b) : -1
+  // A side that is no member constant and whose read recorded no set names no
+  // members, which no comparison is refused for: most reads, enum or not.
+  const aSet = ctx.program.memberSets[a.id]
+  if (!aConstant && !namesMembers(aSet)) {
+    return false
+  }
+  const bSet = ctx.program.memberSets[b.id]
+  if (!bConstant && !namesMembers(bSet)) {
+    return false
+  }
+  if (aConstant !== bConstant) {
+    const set = aConstant ? bSet : aSet
+    const member = aConstant ? aMember : bMember
+    const enumType = intAt(ctx.program.memberListEnums, listIndex(set))
+    if (set < MEMBERS_NONE && enumType >= 0 && ctx.table.isMemberOf(member, enumType)) {
+      return !setHas(ctx, set, member)
+    }
+  }
+  return membersDisjoint(ctx, memberSetOf(ctx, a), memberSetOf(ctx, b))
+}
+
 /** The members a `memberSets` id names: a list, a member type, a union's tags, or none. */
 export const membersOfSet = (ctx: CheckContext, set: i32): i32[] => {
   if (set < MEMBERS_NONE) {
-    return ctx.program.memberLists[MEMBERS_NONE - 1 - set]
+    const index = listIndex(set)
+    const built = listAt(ctx.program, index)
+    return built.length === 0 && intAt(ctx.program.memberListDrops, index) >= 0
+      ? buildExclusion(ctx, index)
+      : built
   }
   const members: i32[] = []
   if (ctx.table.isEnumMemberType(set)) {
@@ -1631,9 +1796,9 @@ const checkEquality = (
   if (ctx.table.isVector(left) || ctx.table.isMask(left)) {
     return ctx.errorType(expr, simdCompareMessage(op, ctx.table.typeName(left)))
   }
-  const leftSet = memberSetOf(ctx, leftNode)
-  const rightSet = memberSetOf(ctx, rightNode)
-  if (membersDisjoint(ctx, leftSet, rightSet)) {
+  if (setsDisjoint(ctx, leftNode, rightNode)) {
+    const leftSet = memberSetOf(ctx, leftNode)
+    const rightSet = memberSetOf(ctx, rightNode)
     return ctx.errorType(
       expr,
       `This \`${op}\` is always ${op === "===" ? "false" : "true"}: \`${ctx.textOf(leftNode)}\` is \`${memberSetName(ctx, leftSet)}\` and \`${ctx.textOf(rightNode)}\` is \`${memberSetName(ctx, rightSet)}\`, which share no member`
@@ -2317,6 +2482,33 @@ const pathRoot = (ctx: CheckContext, node: Node, scope: Scope): Local | null => 
 }
 
 /**
+ * Whether `node` is a chain of property reads, none optional, from a name or
+ * `this`: `h.s.kind`. Its `pathKey` is `@` and the names, so two such chains
+ * from one root are one path when their names match (`samePlainPath`).
+ */
+const plainPath = (node: Node): boolean => {
+  let read = unwrapParens(node)
+  while (read.kind === NodeKind.Member && (read.flags & FLAG_OPTIONAL) === 0) {
+    read = unwrapParens(read.children[0])
+  }
+  return read.kind === NodeKind.Ident || read.kind === NodeKind.This
+}
+
+/** Whether the plain path `read` (`plainPath`) and the path `other` read the same names in turn. */
+const samePlainPath = (read: Node, other: Node): boolean => {
+  let a = unwrapParens(read)
+  let b = unwrapParens(other)
+  while (a.kind === NodeKind.Member) {
+    if (b.kind !== NodeKind.Member || (b.flags & FLAG_OPTIONAL) !== 0 || a.text !== b.text) {
+      return false
+    }
+    a = unwrapParens(a.children[0])
+    b = unwrapParens(b.children[0])
+  }
+  return b.kind === NodeKind.Ident || b.kind === NodeKind.This
+}
+
+/**
  * The variable the property path `node` stands for when it reads an enum —
  * `h.k`, `this.k`, `h.s.kind`, `xs[0].kind` — made on its first test
  * (`create`), so that a test narrows the members the path holds as it does a
@@ -2336,20 +2528,45 @@ const pathVariable = (
   if (read.kind !== NodeKind.Member && read.kind !== NodeKind.Index) {
     return null
   }
-  if (!ctx.table.isEnum(type)) {
+  // A member constant, `Kind.A`, reads no variable: its receiver names an enum.
+  if (!ctx.table.isEnum(type) || ctx.program.isEnumMember(ctx.table, read)) {
     return null
   }
-  const key = pathKey(ctx, read, scope)
-  if (key === "") {
+  // A lookup that would make nothing answers null unless a path from this
+  // root was made: most reads, which no test before them named.
+  if (!create && ctx.pathLocals.length === 0) {
     return null
   }
   const root = pathRoot(ctx, read, scope)
   if (root === null) {
     return null
   }
+  if (!create) {
+    let at = 0
+    while (at < ctx.pathRoots.length && ctx.pathRoots[at] !== root) {
+      at = at + 1
+    }
+    if (at === ctx.pathRoots.length) {
+      return null
+    }
+  }
+  // A chain of plain property reads, the common `h.kind`, is matched node to
+  // node, so its key is spelled once, when its variable is made.
+  const plain = plainPath(read)
+  let key = ""
+  if (!plain) {
+    key = pathKey(ctx, read, scope)
+    if (key === "") {
+      return null
+    }
+  }
   let i = 0
   while (i < ctx.pathLocals.length) {
-    if (ctx.pathRoots[i] === root && ctx.pathKeys[i] === key && ctx.pathLocals[i].type === type) {
+    if (
+      ctx.pathRoots[i] === root &&
+      ctx.pathLocals[i].type === type &&
+      (plain ? samePlainPath(read, ctx.pathNodes[i]) : ctx.pathKeys[i] === key)
+    ) {
       return ctx.pathLocals[i]
     }
     i = i + 1
@@ -2357,10 +2574,14 @@ const pathVariable = (
   if (!create) {
     return null
   }
+  if (plain) {
+    key = pathKey(ctx, read, scope)
+  }
   const local = new Local(key, type, true, STORAGE_LOCAL)
   ctx.pathLocals.push(local)
   ctx.pathRoots.push(root)
   ctx.pathKeys.push(key)
+  ctx.pathNodes.push(read)
   return local
 }
 
@@ -2411,31 +2632,489 @@ const pathsCovered = (ctx: CheckContext, target: Node, scope: Scope, into: Local
   }
 }
 
-/** Every member of the enum `enumType` as member types, one per value; none when this module cannot name it. */
+/**
+ * Every member of the enum `enumType` as member types, one per value; none
+ * when this module cannot name it. Built once per enum
+ * (`CheckedProgram.enumMemberLists`), so the list is shared: read it, never
+ * change it.
+ */
 export const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
+  const program = ctx.program
+  if (enumType === program.lastListEnum) {
+    return program.enumMemberLists[program.lastListAt]
+  }
+  const at = program.enumMemberTypes.indexOf(enumType)
+  if (at >= 0) {
+    program.lastListEnum = enumType
+    program.lastListAt = at
+    return program.enumMemberLists[at]
+  }
   const members: i32[] = []
   for (const info of ctx.program.enumList) {
     if (info.type === enumType && members.length === 0) {
+      // A value the table looks up by value alone is one id whatever the
+      // name, and the first member with it names it, so ids are kept the
+      // first time they are marked; any other value is matched by value.
+      program.memberStamp = program.memberStamp + 1
+      const stamp = program.memberStamp
       const seen: i32[] = []
-      for (const value of info.memberValues) {
-        if (seen.indexOf(value) < 0) {
+      let i = 0
+      while (i < info.memberValues.length && i < info.memberNames.length) {
+        const value = info.memberValues[i]
+        if (ctx.table.internsByValue(value)) {
+          const member = ctx.table.enumMemberOf(info.type, value, info.memberNames[i])
+          if (!isMarked(program.memberMarks, member, stamp)) {
+            markMember(program.memberMarks, member, stamp)
+            members.push(member)
+          }
+        } else if (seen.indexOf(value) < 0) {
           seen.push(value)
           members.push(ctx.table.enumMemberOf(info.type, value, info.memberNameOf(value)))
         }
+        i = i + 1
       }
     }
+  }
+  if (members.length > 0) {
+    ctx.program.enumMemberTypes.push(enumType)
+    ctx.program.enumMemberLists.push(members)
   }
   return members
 }
 
-/** The members the enum variable `local` can hold here: what tests left, or every member of its enum. */
-export const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] => {
-  const held = scope.heldBy(local)
+/**
+ * Mark the members `first` and `second` name and give the stamp that marks
+ * them, which `memberMarks` then answers for a member of `current` in one
+ * read; 0 when a member of any of the three is not one of `enumType`'s.
+ * Member types are interned by enum and value, so among one enum's members
+ * the same id is the same value; a member of another enum, which only a
+ * refused comparison or store brings, is matched by value (`namedBy`).
+ */
+const stampMembers = (ctx: CheckContext, enumType: i32, current: i32[], first: i32[], second: i32[]): i32 => {
+  const program = ctx.program
+  const marks = program.memberMarks
+  if (
+    !allMembersOf(ctx, current, enumType) ||
+    !allMembersOf(ctx, first, enumType) ||
+    !allMembersOf(ctx, second, enumType)
+  ) {
+    return 0
+  }
+  program.memberStamp = program.memberStamp + 1
+  const stamp = program.memberStamp
+  for (const member of first) {
+    markMember(marks, member, stamp)
+  }
+  for (const member of second) {
+    markMember(marks, member, stamp)
+  }
+  return stamp
+}
+
+/** Whether every type in `members` is a member of the enum `enumType`. */
+const allMembersOf = (ctx: CheckContext, members: i32[], enumType: i32): boolean => {
+  for (const member of members) {
+    if (!ctx.table.isMemberOf(member, enumType)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Mark `member` with `stamp`. */
+const markMember = (marks: i32[], member: i32, stamp: i32): void => {
+  while (marks.length <= member) {
+    marks.push(0)
+  }
+  marks[member] = stamp
+}
+
+/** Whether `stampMembers` marked `member` with `stamp`. */
+const isMarked = (marks: i32[], member: i32, stamp: i32): boolean =>
+  member >= 0 && member < marks.length && marks[member] === stamp
+
+/** Whether `first` or `second` names the value `member` holds, compared value by value. */
+const namedBy = (ctx: CheckContext, member: i32, first: i32[], second: i32[]): boolean => {
+  const value = ctx.table.memberValue(member)
+  for (const other of first) {
+    if (ctx.table.memberValue(other) === value) {
+      return true
+    }
+  }
+  for (const other of second) {
+    if (ctx.table.memberValue(other) === value) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * What the enum variable `local` holds once narrowed from `current`, what it
+ * holds, to the members `first` or `second` names (`keep`), or to those
+ * neither does: a `Scope.hold` set, or -1 when that leaves it as it was.
+ * Counted before any list is built, so a test that leaves `local` as it was
+ * allocates nothing.
+ */
+const keptSet = (
+  ctx: CheckContext,
+  local: Local,
+  current: i32[],
+  first: i32[],
+  second: i32[],
+  keep: boolean
+): i32 => {
+  const stamp = stampMembers(ctx, local.type, current, first, second)
+  const marks = ctx.program.memberMarks
+  let count = 0
+  for (const member of current) {
+    if ((stamp > 0 ? isMarked(marks, member, stamp) : namedBy(ctx, member, first, second)) === keep) {
+      count = count + 1
+    }
+  }
+  if (current.length === 0 || count === current.length) {
+    return -1
+  }
+  const kept: i32[] = []
+  for (const member of current) {
+    if ((stamp > 0 ? isMarked(marks, member, stamp) : namedBy(ctx, member, first, second)) === keep) {
+      kept.push(member)
+    }
+  }
+  return keptId(ctx, kept)
+}
+
+/**
+ * `keptOne` where `current` is a set `listOfEnum` accepts, read and narrowed
+ * without building its list: a member excluded is an exclusion
+ * (`dropMember`), which the list it stands for is built from only when read.
+ */
+const keptFrom = (ctx: CheckContext, enumType: i32, current: i32, member: i32, keep: boolean): i32 => {
+  const has = setHas(ctx, current, member)
+  const size = setSize(ctx, enumType, current)
+  if (keep) {
+    if (!has) {
+      return size === 0 ? -1 : MEMBERS_NONE
+    }
+    return size === 1 ? -1 : member
+  }
+  if (!has) {
+    return -1
+  }
+  if (size === 1) {
+    return MEMBERS_NONE
+  }
+  if (size === 2) {
+    const both = heldList(ctx, enumType, current)
+    return intAt(both, 0) === member ? intAt(both, 1) : intAt(both, 0)
+  }
+  return dropMember(ctx, enumType, current, member, size - 1)
+}
+
+/**
+ * Whether `keptJoin` takes `set` as an operand: every member of `enumType`,
+ * none, one of them, or an exclusion from them (`listOfEnum`).
+ */
+const joinOperand = (ctx: CheckContext, enumType: i32, set: i32): boolean =>
+  set === MEMBERS_NONE ||
+  listOfEnum(ctx, enumType, set) ||
+  (set >= 0 && ctx.table.isEnumMemberType(set) && ctx.table.isMemberOf(set, enumType))
+
+/** The members the exclusion `set` leaves out of every member of its enum, down its chain. */
+const excludedBy = (ctx: CheckContext, set: i32): i32[] => {
+  const members: i32[] = []
+  let at = set
+  while (at < MEMBERS_NONE) {
+    const index = listIndex(at)
+    members.push(intAt(ctx.program.memberListDrops, index))
+    at = intAt(ctx.program.memberListBases, index)
+  }
+  return members
+}
+
+/**
+ * `keptSet` keeping the members of `current` that `first` or `second` names,
+ * where all three are sets `joinOperand` takes, without building a list:
+ * what is left is `current` less the members neither names, and only an
+ * exclusion among the two leaves more than two of them out.
+ */
+const keptJoin = (ctx: CheckContext, enumType: i32, current: i32, first: i32, second: i32): i32 => {
+  if (first === -1 || second === -1) {
+    return -1
+  }
+  const size = setSize(ctx, enumType, current)
+  const named: i32[] = []
+  if (first >= 0) {
+    named.push(first)
+  }
+  if (second >= 0 && second !== first) {
+    named.push(second)
+  }
+  if (first >= MEMBERS_NONE && second >= MEMBERS_NONE) {
+    const kept: i32[] = []
+    for (const member of named) {
+      if (setHas(ctx, current, member)) {
+        kept.push(member)
+      }
+    }
+    if (kept.length === size) {
+      return -1
+    }
+    // In `current`'s order, which is the enum's.
+    const order = enumMembersOf(ctx, enumType)
+    if (kept.length === 2 && order.indexOf(intAt(kept, 0)) > order.indexOf(intAt(kept, 1))) {
+      const swapped: i32[] = [intAt(kept, 1), intAt(kept, 0)]
+      return keptId(ctx, swapped)
+    }
+    return keptId(ctx, kept)
+  }
+  const exclusion = first < MEMBERS_NONE ? first : second
+  const other = first < MEMBERS_NONE ? second : first
+  const dropped: i32[] = []
+  for (const member of excludedBy(ctx, exclusion)) {
+    if (
+      named.indexOf(member) < 0 &&
+      !(other < MEMBERS_NONE && setHas(ctx, other, member)) &&
+      setHas(ctx, current, member)
+    ) {
+      dropped.push(member)
+    }
+  }
+  if (dropped.length === 0) {
+    return -1
+  }
+  if (dropped.length === size) {
+    return MEMBERS_NONE
+  }
+  let set = current
+  let left = size
+  for (const member of dropped) {
+    left = left - 1
+    set = dropMember(ctx, enumType, set, member, left)
+  }
+  return left === 1 ? intAt(membersOfSet(ctx, set), 0) : set
+}
+
+/** What `holdNamed` leaves for sets `keptFrom` and `keptJoin` do not take: built as lists. */
+const keptHeld = (
+  ctx: CheckContext,
+  local: Local,
+  current: i32,
+  first: i32,
+  second: i32,
+  keep: boolean
+): i32 => {
+  const held = heldList(ctx, local.type, current)
+  return second === MEMBERS_NONE &&
+    ctx.table.isMemberOf(first, local.type) &&
+    (current === -1 || allMembersOf(ctx, held, local.type))
+    ? keptOne(ctx, held, first, keep)
+    : keptSet(ctx, local, held, heldList(ctx, local.type, first), heldList(ctx, local.type, second), keep)
+}
+
+/**
+ * `keptSet` where the test names the one member `member` and `current` holds
+ * only members of its enum, where the same id is the same value: one pass,
+ * and the list it builds is sized before it is filled.
+ */
+const keptOne = (ctx: CheckContext, current: i32[], member: i32, keep: boolean): i32 => {
+  const at = current.indexOf(member)
+  if (keep) {
+    if (at < 0) {
+      return current.length === 0 ? -1 : MEMBERS_NONE
+    }
+    return current.length === 1 ? -1 : member
+  }
+  if (at < 0) {
+    return -1
+  }
+  if (current.length === 2) {
+    return current[1 - at]
+  }
+  const kept = new Array<i32>(current.length - 1)
+  for (let i = 0; i < kept.length; i++) {
+    const from = i < at ? i : i + 1
+    if (from >= 0 && from < current.length) {
+      kept[i] = current[from]
+    }
+  }
+  return keptId(ctx, kept)
+}
+
+/** `kept`, the members an enum variable is left, as the set `Scope.hold` records. */
+const keptId = (ctx: CheckContext, kept: i32[]): i32 => {
+  if (kept.length === 1) {
+    return kept[0]
+  }
+  return kept.length === 0 ? MEMBERS_NONE : memberListId(ctx, kept)
+}
+
+/** The members a `Scope.hold` set names, -1 being every member of `enumType`'s. */
+const heldList = (ctx: CheckContext, enumType: i32, held: i32): i32[] => {
   if (held === MEMBERS_NONE) {
     return []
   }
-  return namesMembers(held) ? membersOfSet(ctx, held) : enumMembersOf(ctx, local.type)
+  return namesMembers(held) ? membersOfSet(ctx, held) : enumMembersOf(ctx, enumType)
 }
+
+/**
+ * Narrow the enum variable `local`, which holds the set `current`, to the
+ * members the sets `first` or `second` name (`keep`), or to those neither
+ * does (`keptSet`). Sets are `Scope.hold`'s, -1 being every member; the
+ * answer depends on nothing else, and the lists sets name are never changed,
+ * so it is recalled (`CheckedProgram.narrowMemo`): a chain of tests over one
+ * enum builds each list it narrows to once, and shares its id.
+ */
+const holdNamed = (
+  ctx: CheckContext,
+  scope: Scope,
+  local: Local,
+  current: i32,
+  first: i32,
+  second: i32,
+  keep: boolean
+): void => {
+  // A join where one arm left the set as it was keeps all of it.
+  if (keep && (first === current || second === current)) {
+    return
+  }
+  const program = ctx.program
+  const at = memoSlot(program, local.type, current, first, second, keep ? 1 : 0)
+  let set = memoRead(program.narrowMemo, at + 5)
+  if (memoRead(program.narrowMemo, at) === 0) {
+    const exact = listOfEnum(ctx, local.type, current)
+    if (exact && second === MEMBERS_NONE && ctx.table.isMemberOf(first, local.type)) {
+      set = keptFrom(ctx, local.type, current, first, keep)
+    } else if (exact && keep && joinOperand(ctx, local.type, first) && joinOperand(ctx, local.type, second)) {
+      set = keptJoin(ctx, local.type, current, first, second)
+    } else {
+      set = keptHeld(ctx, local, current, first, second, keep)
+    }
+    const memo = program.narrowMemo
+    memo[at] = local.type + 1
+    memo[at + 1] = current
+    memo[at + 2] = first
+    memo[at + 3] = second
+    memo[at + 4] = keep ? 1 : 0
+    memo[at + 5] = set
+    program.narrowMemoUsed = program.narrowMemoUsed + 1
+  }
+  if (set !== -1) {
+    holdSet(scope, local, set)
+  }
+}
+
+/** The ints one `narrowMemo` entry takes: the enum plus one, the four keys, and the answer. */
+const MEMO_WIDTH: i32 = 6
+
+/** `memo[at]`, or 0, an empty entry, past its end. */
+const memoRead = (memo: i32[], at: i32): i32 => (at >= 0 && at < memo.length ? memo[at] : 0)
+
+/**
+ * `hash` with `key` mixed in: the low 15 bits are spread by a multiply that
+ * cannot overflow an i32, and the high ones folded in, where a multiply by
+ * 31 left nearby keys in nearby slots.
+ */
+const memoMix = (hash: i32, key: i32): i32 => {
+  const mixed = hash ^ key
+  return ((mixed & 0x7fff) * 40503) ^ (mixed >> 15)
+}
+
+/**
+ * Where the entry for these keys starts in `narrowMemo`, found or the empty
+ * one it goes in; the table doubles when it is half full, so there is one.
+ */
+const memoSlot = (
+  program: CheckedProgram,
+  enumType: i32,
+  current: i32,
+  first: i32,
+  second: i32,
+  keep: i32
+): i32 => {
+  if (program.narrowMemoUsed * 2 >= program.narrowMemoSlots) {
+    growMemo(program)
+  }
+  const memo = program.narrowMemo
+  const mask = program.narrowMemoSlots - 1
+  let slot = memoMix(memoMix(memoMix(memoMix(enumType, current), first), second), keep)
+  slot = (slot ^ (slot >> 15)) & mask
+  let at = slot * MEMO_WIDTH
+  while (
+    memoRead(memo, at) !== 0 &&
+    !(
+      memoRead(memo, at) === enumType + 1 &&
+      memoRead(memo, at + 1) === current &&
+      memoRead(memo, at + 2) === first &&
+      memoRead(memo, at + 3) === second &&
+      memoRead(memo, at + 4) === keep
+    )
+  ) {
+    slot = (slot + 1) & mask
+    at = slot * MEMO_WIDTH
+  }
+  return at
+}
+
+/** Double `narrowMemo`, putting each entry back where its keys now land. */
+const growMemo = (program: CheckedProgram): void => {
+  const old = program.narrowMemo
+  const slots = program.narrowMemoSlots === 0 ? 256 : program.narrowMemoSlots * 2
+  const memo = new Array<i32>(slots * MEMO_WIDTH)
+  memo.fill(0)
+  program.narrowMemo = memo
+  program.narrowMemoSlots = slots
+  program.narrowMemoUsed = 0
+  let from = 0
+  while (from + MEMO_WIDTH <= old.length) {
+    if (memoRead(old, from) !== 0) {
+      const enumType = memoRead(old, from) - 1
+      const at = memoSlot(
+        program,
+        enumType,
+        memoRead(old, from + 1),
+        memoRead(old, from + 2),
+        memoRead(old, from + 3),
+        memoRead(old, from + 4)
+      )
+      let k = 0
+      while (k < MEMO_WIDTH) {
+        memo[at + k] = memoRead(old, from + k)
+        k = k + 1
+      }
+      program.narrowMemoUsed = program.narrowMemoUsed + 1
+    }
+    from = from + MEMO_WIDTH
+  }
+}
+
+/** Record that the enum variable `local` holds `set`, a `Scope.hold` set that is not -1. */
+const holdSet = (scope: Scope, local: Local, set: i32): void => {
+  if (set >= 0) {
+    scope.hold(local, set)
+    scope.narrow(local, set)
+    return
+  }
+  // A member type an earlier test narrowed it to no longer holds.
+  scope.narrow(local, local.type)
+  scope.hold(local, set)
+}
+
+/**
+ * Make every member type of `enumType` when one of the held sets is the whole
+ * enum (-1), where listing what it holds would. The first request for a value
+ * names its type, so an enum with two members of one value is spelled by the
+ * same member whichever shortcut answers the narrowing.
+ */
+const nameMembers = (ctx: CheckContext, enumType: i32, current: i32, first: i32, second: i32): void => {
+  if (current === -1 || first === -1 || second === -1) {
+    enumMembersOf(ctx, enumType)
+  }
+}
+
+/** The members the enum variable `local` can hold here: what tests left, or every member of its enum. */
+export const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] =>
+  heldList(ctx, local.type, scope.heldBy(local))
 
 /**
  * Narrow the enum variable `local` to the members it may still hold that are
@@ -2450,35 +3129,21 @@ export const narrowHeld = (
   members: i32[],
   keep: boolean
 ): void => {
-  const current = heldMembers(ctx, scope, local)
-  const kept: i32[] = []
-  for (const member of current) {
-    let named = false
-    for (const test of members) {
-      if (ctx.table.memberValue(test) === ctx.table.memberValue(member)) {
-        named = true
-      }
-    }
-    if (named === keep) {
-      kept.push(member)
-    }
-  }
-  if (current.length === 0 || kept.length === current.length) {
+  nameMembers(ctx, local.type, scope.heldBy(local), MEMBERS_NONE, MEMBERS_NONE)
+  if (members.length === 0 || (members.length === 1 && ctx.table.isEnumMemberType(members[0]))) {
+    const named = members.length === 1 ? members[0] : MEMBERS_NONE
+    holdNamed(ctx, scope, local, scope.heldBy(local), named, MEMBERS_NONE, keep)
     return
   }
-  holdKept(ctx, scope, local, kept)
+  const set = keptSet(ctx, local, heldMembers(ctx, scope, local), members, [], keep)
+  if (set !== -1) {
+    holdSet(scope, local, set)
+  }
 }
 
 /** Record that the enum variable `local` holds one of `kept`, fewer members than it could before. */
 export const holdKept = (ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void => {
-  if (kept.length === 1) {
-    scope.hold(local, kept[0])
-    scope.narrow(local, kept[0])
-    return
-  }
-  // A member type an earlier test narrowed it to no longer holds.
-  scope.narrow(local, local.type)
-  scope.hold(local, kept.length === 0 ? MEMBERS_NONE : memberListId(ctx, kept))
+  holdSet(scope, local, keptId(ctx, kept))
 }
 
 /** A union variable read where tag tests excluded every variant. */
@@ -2496,6 +3161,10 @@ export const tagVariable = (ctx: CheckContext, node: Node, scope: Scope): Local 
   }
   const receiver = testedRead(read.children[0])
   if (receiver.kind !== NodeKind.Ident) {
+    return null
+  }
+  // A member constant, `Kind.A`, reads no variable: its receiver is no value.
+  if (ctx.program.nodeTypes[receiver.id] < 0 && ctx.program.isEnumMember(ctx.table, read)) {
     return null
   }
   const local = scope.lookup(receiver.text)
@@ -2631,30 +3300,11 @@ export const addLocals = (into: Local[], locals: Local[]): void => {
 
 /** Narrow the enum variable `local` to the members `first` or `second` leaves it, when fewer than it holds. */
 const joinHeld = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void => {
-  const current = heldMembers(ctx, scope, local)
-  const fromFirst = heldMembers(ctx, first, local)
-  const fromSecond = heldMembers(ctx, second, local)
-  const kept: i32[] = []
-  for (const member of current) {
-    let named = false
-    for (const other of fromFirst) {
-      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
-        named = true
-      }
-    }
-    for (const other of fromSecond) {
-      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
-        named = true
-      }
-    }
-    if (named) {
-      kept.push(member)
-    }
-  }
-  if (current.length === 0 || kept.length === current.length) {
-    return
-  }
-  holdKept(ctx, scope, local, kept)
+  const current = scope.heldBy(local)
+  const fromFirst = first.heldBy(local)
+  const fromSecond = second.heldBy(local)
+  nameMembers(ctx, local.type, current, fromFirst, fromSecond)
+  holdNamed(ctx, scope, local, current, fromFirst, fromSecond, true)
 }
 
 /**
@@ -3720,19 +4370,12 @@ export const heldAcross = (ctx: CheckContext, node: Node, scope: Scope): Scope =
     const written: i32[] = []
     if (ctx.table.isEnum(local.type) && collectWritten(ctx, node, local, scope, written)) {
       const kept: i32[] = []
-      for (const member of enumMembersOf(ctx, local.type)) {
-        let named = false
-        for (const other of heldMembers(ctx, scope, local)) {
-          if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
-            named = true
-          }
-        }
-        for (const other of written) {
-          if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
-            named = true
-          }
-        }
-        if (named) {
+      const before = heldMembers(ctx, scope, local)
+      const every = enumMembersOf(ctx, local.type)
+      const stamp = stampMembers(ctx, local.type, every, before, written)
+      const marks = ctx.program.memberMarks
+      for (const member of every) {
+        if (stamp > 0 ? isMarked(marks, member, stamp) : namedBy(ctx, member, before, written)) {
           kept.push(member)
         }
       }

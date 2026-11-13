@@ -1060,6 +1060,7 @@ export class Checker {
     this.ctx.pathLocals = []
     this.ctx.pathRoots = []
     this.ctx.pathKeys = []
+    this.ctx.pathNodes = []
     const scope = new Scope(null)
     let i = 0
     while (i < sig.paramNames.length) {

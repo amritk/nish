@@ -19,7 +19,7 @@
 // per family and the language has no function values to register.
 
 import { Emitter } from "./emit"
-import { emitPanicTail, emitRangedStore } from "./emit-builtins"
+import { emitFfiNullTest, emitRangedStore } from "./emit-builtins"
 import { emitPackedResult, emitResultReturningCall, privateAbi, resultTypeDecl } from "./emit-result"
 import { fieldTbaa } from "./tbaa"
 import {
@@ -313,24 +313,14 @@ export const emitNewWithoutArguments = (emitter: Emitter, info: StructInfo, site
 /**
  * `readStruct(p)` (WP27 S4.2): a fresh arena instance of the layout `info`,
  * holding a copy of the `info.size` bytes at the C address `from`, which is
- * first tested for `NULL`: the `ffi-null` panic, since a `CPtr` a C function
- * answered may be `NULL` whatever its declaration says, and address 0 is
- * readable on wasm32. One
+ * first tested for `NULL` (`emitFfiNullTest`, the `ffi-null` panic). One
  * `llvm.memcpy`, so padding is copied as C left it, and nothing of the
  * result points back into C's memory once the call returns. The source's
  * alignment is unknown (C promised the struct, not the address), so it is
  * read at `align 1`.
  */
 export const emitStructCopy = (emitter: Emitter, info: StructInfo, from: string): string => {
-  const fn = emitter.fn
-  const isNull = fn.emitValue(`icmp eq i8* ${from}, null`)
-  const nullBlock = fn.newBlock("ffi.null")
-  const copyBlock = fn.newBlock("ffi.copy")
-  fn.emit(`br i1 ${isNull}, label %${nullBlock.label}, label %${copyBlock.label}`)
-  fn.placeBlock(nullBlock)
-  const message = `\`readStruct\` read a NULL pointer into a \`${info.name}\``
-  emitPanicTail(emitter, emitter.stringConstant(message))
-  fn.placeBlock(copyBlock)
+  emitFfiNullTest(emitter, from, `\`readStruct\` read a NULL pointer into a \`${info.name}\``)
   const bytes = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${info.size})`)
   emitter.declare(
     "declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)"

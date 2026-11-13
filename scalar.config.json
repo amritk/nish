@@ -502,6 +502,7 @@
                         "title": "cli-flags",
                         "filepath": "docs/reference/cli-flags.md"
                       },
+                      "/input": { "type": "page", "title": "input", "filepath": "docs/reference/input.md" },
                       "/term": { "type": "page", "title": "term", "filepath": "docs/reference/term.md" },
                       "/term-io": {
                         "type": "page",
@@ -525,6 +526,18 @@
                       }
                     }
                   },
+                  "/graphics/..": {
+                    "type": "group",
+                    "title": "Graphics and sound",
+                    "children": {
+                      "/raster": {
+                        "type": "page",
+                        "title": "raster",
+                        "filepath": "docs/reference/raster.md"
+                      },
+                      "/synth": { "type": "page", "title": "synth", "filepath": "docs/reference/synth.md" }
+                    }
+                  },
                   "/concurrency/..": {
                     "type": "group",
                     "title": "Concurrency",
@@ -533,6 +546,11 @@
                         "type": "group",
                         "title": "host",
                         "children": {
+                          "/game": {
+                            "type": "page",
+                            "title": "game",
+                            "filepath": "docs/reference/host/game.md"
+                          },
                           "/ring": {
                             "type": "page",
                             "title": "ring",

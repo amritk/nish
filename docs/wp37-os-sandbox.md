@@ -298,10 +298,30 @@ exec allowlist. A program with no exec allowlist installs nothing.
 
 **What it costs.** A granted program cannot start a second program, granted
 or not: `find -exec`, `xargs`, `git`'s helpers and every non-builtin command
-of a granted `#!` script answer `ENOSYS`. Until a grant can say otherwise
-(a later stage of this work), a dependency that needs such a program is
-granted `process.spawn` whole, which makes no exec allowlist. Each spawn
-also costs two short-lived threads and a copy of the descriptor table.
+of a granted `#!` script answer `ENOSYS`. A dependency that needs such a
+program is granted it as `process.spawn=exec:<program>` (below), or granted
+`process.spawn` whole, which makes no exec allowlist. Each spawn also costs
+two short-lived threads and a copy of the descriptor table.
+
+**`exec:`, the opt-out for one program.** A grant
+`process.spawn=exec:<program>` lists the program with three leading
+slashes (`///usr/bin/make`): the same file to Landlock, and a mark no
+other entry carries. `narrowSandbox` reads the prefix before it resolves the
+program, so `exec:` with nothing after it is NL3046, and a program granted
+both ways is written once, marked `///`. `nish_sandbox` records the mark's
+identity beside the interpreters' (`nish_sb_keep_marks`, one table of 16, a
+build over it refusing every spawn), and a spawn whose opened target has
+that identity is started by the supervisor itself (`nish_sb_start`), with
+no spawner thread, filter or listener: the private table, the identity
+check, the `/proc/self/fd/N` exec and the descriptor rules above all still
+apply. A file marked as an interpreter and as `exec:` is refused. What the
+program's subtree may then exec is everything Landlock's EXECUTE allows,
+the loader included, so the grant reaches any binary `process.spawn`'s
+READ_FILE does; the record says to grant it only to a dependency that may
+run anything ([security/sandbox.md](security/sandbox.md#limits)). A program
+granted without `exec:` stays held and cannot borrow the reach by starting
+the `exec:` one, and a build with no `exec:` grant emits and does what it
+did before.
 
 The directions weighed, and what each leaves open:
 
