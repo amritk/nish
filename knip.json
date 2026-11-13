@@ -42,6 +42,6 @@
     "docs/site/break/**"
   ],
   "ignoreDependencies": ["cookbook-pkg", "elysia", "hono"],
-  "ignoreBinaries": ["clang", "ld.lld", "llc", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "openssl", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace", "h2load", "script", "gdb", "lldb"],
+  "ignoreBinaries": ["clang", "ld.lld", "llc", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "openssl", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace", "h2load", "script", "gdb", "lldb", "fish"],
   "ignoreExportsUsedInFile": false
 }
