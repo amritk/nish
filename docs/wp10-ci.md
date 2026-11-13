@@ -101,7 +101,11 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   Every shard builds stage1 and runs everything before the `tests/link/`
   programs but the two sections there that are dealt (`term-io` and
   `--emit-ts`): about 200 s of setup, stage1 and pre-link sections per shard
-  (measured in the paragraph on the eight-way split, below). Shard 1 runs every section after them
+  (measured in the paragraph on the eight-way split, below). Of the golden
+  cases, every shard compiles all of them and checks their IR, because later
+  sections read that compile, and only does the rest of each case's work (the
+  `llvm-as` pass, the side compiles and the native run) for the eighth that
+  `caseShard` in `tests/run.js` deals it by position. Shard 1 runs every section after them
   that is not dealt, together with the link programs whose output a later
   check reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
   `tests/run.js`: term-io, `--emit-ts`, WP14 self-hosting, crypto-bench, the
@@ -447,7 +451,9 @@ linked binary under a hash of everything the link reads, and the
 `.github/actions/compiler-cache` step restores it through the Actions cache:
 a run whose `src/`, `std/`, seed and toolchain match an earlier one copies
 stage1 instead of linking it, and a job that runs the suite more than once
-links it at most once.
+links it at most once. The golden cases are dealt too: a shard compiles
+all of them, about 10 s of four cores, and does the other work of its eighth
+only.
 
 ## Running the same steps locally
 
