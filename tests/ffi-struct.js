@@ -28,6 +28,36 @@ const LAYOUTS = [
 ].join("\n")
 
 /**
+ * `ffi_struct_param`'s `Rlimit` and `getrlimit`, printing RLIMIT_NOFILE's soft
+ * then hard limit and setting neither. `console.log` prints a `u64` above 2^53
+ * exactly, but RLIM_INFINITY (all ones, a literal Nish refuses as inexact) is
+ * printed `unlimited`, as `ulimit` prints it.
+ */
+const LIMITS = [
+  "declare class Rlimit {",
+  "  cur: u64",
+  "  max: u64",
+  "}",
+  "",
+  "declare function getrlimit(resource: i32, rlim: Rlimit): i32",
+  "",
+  "const RLIMIT_NOFILE: i32 = 7",
+  "",
+  "export const main = (): number => {",
+  "  const none: u64 = 0",
+  "  const infinity: u64 = ~none",
+  "  const limit = new Rlimit()",
+  "  if (getrlimit(RLIMIT_NOFILE, limit) !== 0) {",
+  "    return 1",
+  "  }",
+  '  console.log(limit.cur === infinity ? "unlimited" : `${limit.cur}`)',
+  '  console.log(limit.max === infinity ? "unlimited" : `${limit.max}`)',
+  "  return 0",
+  "}",
+  "",
+].join("\n")
+
+/**
  * The same structs in C, asserting the size and offsets Nish's build gave them:
  * clang refuses the file where the two disagree.
  */
@@ -190,6 +220,44 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
         )
         check(`ffi_struct: the --emit-header ${what} compiles as C`, syntax.status === 0, shown(syntax))
       }
+    }
+  }
+
+  // The criterion `ffi_struct_param` cannot pin (its `.out` is fixed and the
+  // limits are not): `getrlimit` through a `declare class` reads what `ulimit`
+  // reports. One shell lowers the soft limit, then runs the program and asks
+  // `ulimit`, so all three see the same limits whatever Node raised its own
+  // to. 123 is no platform's default, so the program cannot match by
+  // coincidence, and sits under any hard limit a runner has (Linux's default is
+  // 4096, CI's 65536 or more). RLIMIT_NOFILE is 7 on Linux only (8 on macOS
+  // and the BSDs), so elsewhere the program would read another limit.
+  if (!only || "ffi_struct checks".includes(only)) {
+    if (process.platform !== "linux") {
+      skip("skipped: ffi_struct: RLIMIT_NOFILE is 7 on Linux only: getrlimit is not compared with ulimit")
+    } else {
+      const source = write("limits.ts", LIMITS)
+      const exe = path.join(dir, "limits")
+      const built = compile(source, path.join(dir, "limits") + ".ir" + path.sep, ["--link", exe])
+      const ran =
+        built.status === 0
+          ? spawnSync("sh", ["-c", 'ulimit -Sn 123 && "$1"; ulimit -Sn; ulimit -Hn', "sh", exe], {
+              encoding: "utf8",
+            })
+          : built
+      const infinity = String(2n ** 64n - 1n)
+      const lines = (ran.stdout ?? "").split("\n").map((line) => (line === "unlimited" ? infinity : line))
+      const [cur, max, soft, hard] = lines
+      check(
+        "ffi_struct: getrlimit through a declare class reads the soft and hard RLIMIT_NOFILE ulimit -Sn / -Hn report",
+        ran.status === 0 &&
+          lines.length === 5 &&
+          lines[4] === "" &&
+          cur === "123" &&
+          soft === "123" &&
+          /^\d+$/.test(hard) &&
+          max === hard,
+        shown(ran)
+      )
     }
   }
 
