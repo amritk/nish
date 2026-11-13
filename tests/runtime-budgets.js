@@ -715,6 +715,12 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * run with every signal blocked and the child is given the calling thread's mask
  * through spawn attributes, and a thread that cannot be started prints the refusal
  * line. Measured 4,409 against 4,199, leaving 199.
+ *
+ * Unchanged for `process.spawn=exec:<program>` (WP40 §2a): the marked identities
+ * carry which kind each is, and a spawn of a program granted `exec:` is started by
+ * the supervisor itself, without the filter, through the `posix_spawn` call the
+ * spawner now shares. Measured 4,507 against 4,409 on 2026-11-13 with clang 18.1.3
+ * on linux-x64. The ceiling stands, leaving 101.
  */
 const RUNTIME_SANDBOX_TEXT_BUDGET = 4608
 /**
